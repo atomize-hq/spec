@@ -270,7 +270,7 @@ struct ResolvedSpec {
 - **`body.rust` is a verbatim Rust function definition** (signature + body, NO `use` statements — those come from `deps`). The generator wraps it with `use` statements and module structure but does not transform the code itself.
 - Write readable, formatted code
 - Output to `./generated/spec/{module}/{fn_name}.rs` by default
-- Auto-generate `mod.rs` per directory with `pub mod` declarations for each unit in that namespace
+- Auto-generate `mod.rs` per directory with `pub mod` declarations for each unit (.rs file) AND each child subdirectory in that namespace
 - **spec owns the entire output directory.** All files in `generated/spec/` are managed by spec. Do not place hand-written files there; they will be deleted on next generate.
 - **Scoped clean before generate:** Only clean files within module directories that the current generate run will produce. Stale `.rs` files in affected dirs are removed; other dirs are untouched. This supports partial workflows (e.g., `spec generate pricing/` then `spec generate money/`).
 - **Safety rails for clean:** Before deleting, verify: (1) the output dir path is inside the project root, and (2) the output dir contains a `.spec-generated` marker file. Marker is created during first generate and **recreated after each clean step**. Refuse to clean if either check fails. Error: `Refusing to clean {path}: missing .spec-generated marker`
@@ -415,7 +415,7 @@ spec validate spec/units/
 - [ ] Handle missing optional fields (contract is None)
 - [ ] Format generated code properly (indentation, braces)
 - [ ] Multiple units generate separate .rs files under correct module paths
-- [ ] mod.rs generated with pub mod declarations for each unit in namespace
+- [ ] mod.rs generated with pub mod for both unit files and child subdirectories
 - [ ] Dep use statement correct at 3+ segment depth (uses `crate::` prefix)
 - [ ] Output dir not writable → clear error with path
 - [ ] Scoped clean removes stale files in affected module dirs only
@@ -622,8 +622,8 @@ README.md
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | HOLD SCOPE. 10 decisions made. crate:: prefix fix (critical). Scoped clean. 49 tests. 3 TODOs added. |
 | Codex Review | `/codex review` | Independent 2nd opinion | 4 | CLEAR | Pass 4 (via CEO review): import path bug, clean scope, cycle detection, scope drift, release engineering. 3 acted on, 2 deferred to TODOS. |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | CLEAR (PLAN) | Pass 4: 5 issues (deps, JSON Schema, types, body.rust clarity, keyword validation). All resolved. |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 4 | CLEAR (PLAN) | Pass 5: 2 issues (mod.rs subdirectory entries, test description). Both resolved. 49/49 test paths covered. 0 critical gaps. |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 
 **UNRESOLVED:** 0
-**VERDICT:** CEO + ENG + CODEX CLEARED — 49 tests planned, all decisions resolved, architecture final.
+**VERDICT:** CEO + ENG + CODEX CLEARED — 49 tests planned, all decisions resolved, architecture final. Ready to implement.
