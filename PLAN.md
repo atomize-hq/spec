@@ -36,6 +36,7 @@
 | **Errors** | thiserror + anyhow | thiserror for typed library errors, anyhow for CLI error propagation |
 | **Generation** | Custom code writer | Small surface area, readable output |
 | **Workspace** | 2 crates (cli + types) | Avoid premature abstraction, extract libraries later |
+| **MSRV** | Rust 1.91.1 (floor: 1.89) | Pin `rust-version` in Cargo.toml. jsonschema requires ≥1.83 |
 
 ---
 
@@ -234,6 +235,7 @@ struct ResolvedSpec {
 
 ### 1. Load
 - Read `*.unit.spec` from filesystem (recursive directory walk)
+- **UTF-8 check**: Read file as bytes, verify valid UTF-8 before YAML parsing. Error: `File is not valid UTF-8: {path}`
 - Parse YAML to `serde_yaml::Value` (preserves raw author input for schema validation)
 - Track file paths for error reporting
 
@@ -245,30 +247,34 @@ struct ResolvedSpec {
 - Additional fields rejected (closed schema)
 - **Rust keyword check** (post-schema): reject IDs where any segment is a Rust reserved keyword (`type`, `mod`, `crate`, `self`, `super`, `fn`, `struct`, `enum`, `impl`, `trait`, `pub`, `use`, `let`, `mut`, `const`, `static`, `ref`, `return`, `if`, `else`, `match`, `for`, `while`, `loop`, `break`, `continue`, `move`, `async`, `await`, `dyn`, `where`, `as`, `in`, `extern`, `unsafe`). Error: `ID segment "type" is a Rust reserved keyword`
 - Dep fn_name collision check (two deps with same last segment → error)
+- **body.rust must NOT contain `use` statements** (post-schema check). All imports come from `deps` declarations. Error: `body.rust must not contain use statements; declare imports via deps instead`
+- **Duplicate ID check** (post-load): after loading all files in a directory, reject duplicate IDs across files. Error: `Duplicate ID "pricing/apply_discount" in foo.unit.spec and bar.unit.spec`
 - **Single file**: fail-fast (stop on first error within the file)
-- **Directory**: collect-all (validate every file, report all errors, aggregate status)
+- **Directory**: collect-all (validate every file, report all errors, aggregate status). **Error output format**: errors grouped by file path, summary line at end: `❌ 3 files, 7 errors`
 - After validation passes, deserialize `serde_json::Value` → `SpecStruct`
 - Schema embedded at compile time via `include_str!("../schema/unit.spec.json")` — lives at `spec-core/src/schema/unit.spec.json`, no runtime file dependency
 
 ### 3. Normalize → IR
 - Resolve defaults (`deps: []` if missing)
-- Canonicalize IDs
+- **Canonicalize IDs**: strip any leading/trailing whitespace. IDs are already constrained by regex; canonicalization ensures no invisible characters survive deserialization. Verify regex match post-normalization as a defensive check.
+- Derive `fn_name` (last segment) and `module_path` (all preceding segments)
 - Parse contract metadata
-- Build dependency graph (shallow for 0.1)
+- **Deps are trusted strings in M1.** No graph resolution, no cycle detection, no referential integrity check. Dep IDs become `use` statements directly. The Rust compiler catches missing modules. (Graph resolution and cycle detection deferred to M2.)
 
 ### 4. Generate .rs
 - Map ResolvedSpec to Rust module structure
 - Extract `body.rust` to function definitions
-- Handle deps: split ID on `/`, last segment = fn_name, all preceding segments = module path. Examples: `money/round` → `use money::round::round;`, `utils/math/round` → `use utils::math::round::round;`
+- Handle deps: split ID on `/`, last segment = fn_name, all preceding segments = module path. **All use statements use `crate::` prefix** (required for Rust 2018+ edition). Examples: `money/round` → `use crate::money::round::round;`, `utils/math/round` → `use crate::utils::math::round::round;`
 - Detect dep fn_name collisions (e.g., deps on both `money/round` and `math/round`) → error at validation, not codegen
 - **Contract metadata is stored in IR but NOT used for code generation in M1.** `body.rust` is the sole codegen input.
-- **`body.rust` is a verbatim Rust function definition** (signature + body). The generator wraps it with `use` statements and module structure but does not transform the code itself.
+- **`body.rust` is a verbatim Rust function definition** (signature + body, NO `use` statements — those come from `deps`). The generator wraps it with `use` statements and module structure but does not transform the code itself.
 - Write readable, formatted code
 - Output to `./generated/spec/{module}/{fn_name}.rs` by default
 - Auto-generate `mod.rs` per directory with `pub mod` declarations for each unit in that namespace
 - **spec owns the entire output directory.** All files in `generated/spec/` are managed by spec. Do not place hand-written files there; they will be deleted on next generate.
-- **Clean output directory** (`generated/spec/`) before each generate run to prevent stale files
-- **Safety rails for clean:** Before deleting, verify: (1) the output dir path is inside the project root, and (2) the output dir contains a `.spec-generated` marker file (written during first generate). Refuse to clean if either check fails. Error: `Refusing to clean {path}: missing .spec-generated marker`
+- **Scoped clean before generate:** Only clean files within module directories that the current generate run will produce. Stale `.rs` files in affected dirs are removed; other dirs are untouched. This supports partial workflows (e.g., `spec generate pricing/` then `spec generate money/`).
+- **Safety rails for clean:** Before deleting, verify: (1) the output dir path is inside the project root, and (2) the output dir contains a `.spec-generated` marker file. Marker is created during first generate and **recreated after each clean step**. Refuse to clean if either check fails. Error: `Refusing to clean {path}: missing .spec-generated marker`
+- **Zero files case:** If no `.unit.spec` files are found, succeed with message: `0 units found, nothing to generate.` Exit code 0.
 - Auto-creates output dir if missing; errors if not writable
 - **Does not** generate Cargo.toml or lib.rs (user provides the containing project)
 
@@ -311,7 +317,7 @@ links:
 - `intent.why` — required string; explains *why* this unit exists, not *what* it does
 - `local_tests` — atom-level tests owned by this unit; included in closed schema
 - `links` — optional; declares molecule/organism test relationships; included in schema, unused until M2
-- `deps` — unit IDs; `money/round` resolves to `use money::round::round;` in generated Rust
+- `deps` — unit IDs; `money/round` resolves to `use crate::money::round::round;` in generated Rust
 
 ---
 
@@ -365,9 +371,9 @@ spec validate spec/units/
 
 ---
 
-## Test Coverage: 45 Tests
+## Test Coverage: 49 Tests
 
-### Loader Tests (8)
+### Loader Tests (10)
 - [ ] Load valid YAML file → serde_yaml::Value → SpecStruct
 - [ ] File not found → clear error with path
 - [ ] Permission denied → clear error with path
@@ -376,8 +382,10 @@ spec validate spec/units/
 - [ ] Empty directory → empty vec (not an error)
 - [ ] Directory with mixed files (non-.unit.spec files skipped)
 - [ ] Nested subdirectories loaded recursively
+- [ ] Empty .unit.spec file → clear error (not crash)
+- [ ] Non-UTF8 / binary .unit.spec file → "File is not valid UTF-8: {path}"
 
-### Validation Tests (13)
+### Validation Tests (15)
 - [ ] Valid .unit.spec passes all checks
 - [ ] Missing required field: id → error
 - [ ] Missing required field: kind → error
@@ -391,26 +399,29 @@ spec validate spec/units/
 - [ ] Empty string values (id: "", intent.why: "") → error
 - [ ] ID segment is Rust keyword (e.g., `pricing/type`) → error
 - [ ] Embedded JSON Schema is itself valid (meta-validation of unit.spec.json)
+- [ ] body.rust containing `use` statement → error (imports come from deps)
+- [ ] Duplicate ID across files in same directory → error with both file paths
 
-### Normalizer Tests (7)
-- [ ] ID canonicalization (no leading/trailing slash)
+### Normalizer Tests (6)
+- [ ] ID canonicalization (whitespace stripped, regex re-verified)
 - [ ] fn_name derived from last path segment
 - [ ] module_path derived from prefix segments (including 3+ segment depth)
 - [ ] Missing deps defaults to empty Vec
-- [ ] Detect circular dependencies → error
 - [ ] Dep fn_name collision (two deps with same last segment) → error
 - [ ] contract, local_tests, links survive normalization (passthrough roundtrip)
 
-### Generator Tests (9)
+### Generator Tests (11)
 - [ ] Generate valid .rs from complete ResolvedSpec
 - [ ] Handle missing optional fields (contract is None)
 - [ ] Format generated code properly (indentation, braces)
 - [ ] Multiple units generate separate .rs files under correct module paths
 - [ ] mod.rs generated with pub mod declarations for each unit in namespace
-- [ ] Dep use statement correct at 3+ segment depth
+- [ ] Dep use statement correct at 3+ segment depth (uses `crate::` prefix)
 - [ ] Output dir not writable → clear error with path
-- [ ] Clean output dir removes stale files before generating new ones
+- [ ] Scoped clean removes stale files in affected module dirs only
 - [ ] Clean refuses to delete dir without `.spec-generated` marker
+- [ ] Zero .unit.spec files → succeed with message, exit code 0
+- [ ] ID-to-file-path mapping correctness (including 3+ segment depth)
 
 ### Validator Aggregate Tests (1)
 - [ ] Directory validation collects all errors across files (collect-all mode)
@@ -469,6 +480,15 @@ spec validate spec/units/
 | **Output dir safety** | `.spec-generated` marker file + path prefix check | No safety (risk of accidental deletion) |
 | **Output dir ownership** | spec owns `generated/spec/` entirely | Allow mixed hand-written + generated files |
 | **JSON Schema draft** | Draft 7 (fully supported by `jsonschema` crate) | Draft 2020-12 (partial support) |
+| **Dep resolution (M1)** | Deps are trusted strings → `use crate::` statements | Validate deps exist (requires full graph) |
+| **body.rust imports** | body.rust must NOT contain `use` statements; deps own imports | Allow use statements in body.rust (dedup complexity) |
+| **Duplicate IDs** | Error on duplicate IDs across files in same load | Last-file-wins silently (data loss risk) |
+| **Cycle detection** | Deferred to M2 with graph resolution | Include in M1 normalizer (can't work with partial runs) |
+| **Output dir clean** | Scoped clean: only affected module dirs | Full clean of entire output dir (breaks partial workflows) |
+| **Zero files** | Succeed with message, exit 0 | Error out (breaks idempotent scripts) |
+| **Error output format** | Grouped by file, summary line at end | Flat list (harder to scan) |
+| **Use statement prefix** | `crate::` prefix (Rust 2018+) | No prefix (ambiguous with external crates) |
+| **MSRV** | 1.91.1 (floor 1.89) | Unspecified (confusing build failures for users) |
 
 ---
 
@@ -514,7 +534,7 @@ data-flow: |
 1. Initialize Rust workspace
 2. Implement `spec-core` library (types, loader, validator, normalizer, generator)
 3. Implement `spec-cli` binary (commands: validate, generate, help)
-4. Write tests (39 total)
+4. Write tests (49 total)
 5. Create example project
 6. Write README
 7. Setup CI/CD (GitHub Actions)
@@ -590,9 +610,9 @@ README.md
 
 **This plan is reviewed, approved, and ready for implementation.**
 
-**Review**: `/plan-eng-review` on 2026-03-31 (fourth pass)
+**Review**: `/plan-ceo-review` on 2026-04-01 (HOLD SCOPE), `/plan-eng-review` on 2026-03-31 (fourth pass)
 **Design**: `design-20260331-001.md` (by /office-hours)
-**Status**: All decisions resolved, architecture final, 45 tests planned
+**Status**: All decisions resolved, architecture final, 49 tests planned
 
 ---
 
@@ -600,9 +620,10 @@ README.md
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 3 | CLEAR | Pass 3: Rust keyword collision, clean-dir safety, YAML coercions, schema versioning, atomic writes. 2 acted on, 2 deferred to TODOS, 1 deferred (schema catches it). |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | CLEAR (PLAN) | Pass 4: 5 issues (deps, JSON Schema, types, body.rust clarity, keyword validation). All resolved. 45 tests planned. |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | HOLD SCOPE. 10 decisions made. crate:: prefix fix (critical). Scoped clean. 49 tests. 3 TODOs added. |
+| Codex Review | `/codex review` | Independent 2nd opinion | 4 | CLEAR | Pass 4 (via CEO review): import path bug, clean scope, cycle detection, scope drift, release engineering. 3 acted on, 2 deferred to TODOS. |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | CLEAR (PLAN) | Pass 4: 5 issues (deps, JSON Schema, types, body.rust clarity, keyword validation). All resolved. |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 
-**VERDICT:** ENG + CODEX CLEARED — fourth pass complete, all findings resolved. 45 tests planned. Full JSON Schema + type definitions now in plan.
+**UNRESOLVED:** 0
+**VERDICT:** CEO + ENG + CODEX CLEARED — 49 tests planned, all decisions resolved, architecture final.
