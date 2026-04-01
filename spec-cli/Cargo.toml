@@ -1,0 +1,18 @@
+[package]
+name = "spec-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI for validating and generating Rust code from .unit.spec files"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+spec-core = { path = "../spec-core" }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.19"

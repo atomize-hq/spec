@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Unit Spec",
+  "description": "Schema for .unit.spec semantic unit files",
+  "type": "object",
+  "required": ["id", "kind", "intent", "body"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$",
+      "description": "Hierarchical unit ID. Each segment must be a valid Rust identifier (no keywords)."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["function"]
+    },
+    "intent": {
+      "type": "object",
+      "required": ["why"],
+      "additionalProperties": false,
+      "properties": {
+        "why": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "returns": {
+          "type": "string"
+        },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "deps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$"
+      }
+    },
+    "body": {
+      "type": "object",
+      "required": ["rust"],
+      "additionalProperties": false,
+      "properties": {
+        "rust": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "local_tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "expect"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expect": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "molecule_tests": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
