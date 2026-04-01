@@ -139,7 +139,7 @@ pub fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoadReport
 pub fn is_unit_spec(path: &Path) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
-        .map(|n| n.contains(".unit.spec"))
+        .map(|n| n.ends_with(".unit.spec"))
         .unwrap_or(false)
 }
 
@@ -364,6 +364,13 @@ body:
         let temp_dir = TempDir::new().unwrap();
         let specs = load_directory(temp_dir.path()).unwrap();
         assert!(specs.is_empty());
+    }
+
+    #[test]
+    fn test_is_unit_spec_requires_exact_suffix() {
+        assert!(is_unit_spec(Path::new("pricing/apply_discount.unit.spec")));
+        assert!(!is_unit_spec(Path::new("pricing/apply_discount.unit.spec.bak")));
+        assert!(!is_unit_spec(Path::new("pricing/apply_discount.spec")));
     }
 
     #[test]

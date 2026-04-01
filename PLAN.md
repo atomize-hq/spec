@@ -36,7 +36,7 @@
 | **Errors** | thiserror + anyhow | thiserror for typed library errors, anyhow for CLI error propagation |
 | **Generation** | Custom code writer | Small surface area, readable output |
 | **Workspace** | 2 crates (cli + types) | Avoid premature abstraction, extract libraries later |
-| **MSRV** | Rust 1.91.1 (floor: 1.89) | Pin `rust-version` in Cargo.toml. jsonschema requires ≥1.83 |
+| **MSRV** | Rust 1.89.0 | Pin `rust-version` in Cargo.toml. jsonschema requires ≥1.83 |
 
 ---
 
@@ -488,7 +488,7 @@ spec validate spec/units/
 | **Zero files** | Succeed with message, exit 0 | Error out (breaks idempotent scripts) |
 | **Error output format** | Grouped by file, summary line at end | Flat list (harder to scan) |
 | **Use statement prefix** | `crate::` prefix (Rust 2018+) | No prefix (ambiguous with external crates) |
-| **MSRV** | 1.91.1 (floor 1.89) | Unspecified (confusing build failures for users) |
+| **MSRV** | 1.89.0 | Unspecified (confusing build failures for users) |
 
 ---
 
