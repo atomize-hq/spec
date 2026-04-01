@@ -31,7 +31,9 @@
 |-----------|--------|-----------|
 | **Language** | Rust | Native performance, strong type system, good codegen support |
 | **Schema** | JSON Schema (static file + `jsonschema` crate) | schemars derives schemas; `jsonschema` validates YAML against a schema |
-| **YAML** | serde_yaml | Standard serializer, supports embedded code blocks |
+| **YAML** | serde_yaml_bw | Maintained fork of serde_yaml (deprecated). Panic-free, hardened against Billion Laughs. Same Value API. |
+| **Dir traversal** | walkdir | Standard recursive directory walk crate |
+| **Errors** | thiserror + anyhow | thiserror for typed library errors, anyhow for CLI error propagation |
 | **Generation** | Custom code writer | Small surface area, readable output |
 | **Workspace** | 2 crates (cli + types) | Avoid premature abstraction, extract libraries later |
 
@@ -56,6 +58,154 @@ src/
   main.rs          # CLI entrypoint
   commands.rs      # validate, generate, etc.
 ```
+
+---
+
+## JSON Schema: unit.spec.json
+
+The schema file lives at `spec-core/src/schema/unit.spec.json`, embedded at compile time via `include_str!`. Uses JSON Schema Draft 7 (fully supported by the `jsonschema` crate).
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Unit Spec",
+  "description": "Schema for .unit.spec semantic unit files",
+  "type": "object",
+  "required": ["id", "kind", "intent", "body"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$",
+      "description": "Hierarchical unit ID. Each segment must be a valid Rust identifier (no keywords)."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["function"]
+    },
+    "intent": {
+      "type": "object",
+      "required": ["why"],
+      "additionalProperties": false,
+      "properties": {
+        "why": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "returns": {
+          "type": "string"
+        },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "deps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$"
+      }
+    },
+    "body": {
+      "type": "object",
+      "required": ["rust"],
+      "additionalProperties": false,
+      "properties": {
+        "rust": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "local_tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "expect"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expect": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "molecule_tests": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+**Note:** The JSON Schema `pattern` validates regex format but does NOT check for Rust reserved keywords. Keyword validation is a post-schema check in the validator (see Pipeline Stage 2 below).
+
+---
+
+## Type Definitions
+
+### SpecStruct (raw parsed form, mirrors YAML)
+
+```rust
+struct SpecStruct {
+    id: String,
+    kind: String,
+    intent: Intent,
+    contract: Option<Contract>,
+    deps: Vec<String>,         // defaults to empty vec if absent
+    body: Body,
+    local_tests: Vec<LocalTest>, // defaults to empty vec if absent
+    links: Option<Links>,
+}
+
+struct Intent {
+    why: String,
+}
+
+struct Body {
+    rust: String,
+}
+
+struct Contract {
+    inputs: Option<HashMap<String, String>>,  // type names as strings
+    returns: Option<String>,
+    invariants: Vec<String>,                  // human-readable invariant expressions
+}
+
+struct LocalTest {
+    id: String,
+    expect: String,   // human-readable assertion expression
+}
+
+struct Links {
+    molecule_tests: Vec<String>,  // IDs of related molecule-level tests
+}
+```
+
+`SpecStruct` is deserialized from the validated JSON Value (after schema validation passes). Fields with defaults use `#[serde(default)]` in implementation.
 
 ---
 
@@ -93,6 +243,7 @@ struct ResolvedSpec {
 - ID format: snake_case segments separated by `/` — regex `[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*` — **must contain `/`**, each segment must be a valid Rust identifier (e.g., `pricing/apply_discount`)
 - Kind: enum (`function` only in 0.1)
 - Additional fields rejected (closed schema)
+- **Rust keyword check** (post-schema): reject IDs where any segment is a Rust reserved keyword (`type`, `mod`, `crate`, `self`, `super`, `fn`, `struct`, `enum`, `impl`, `trait`, `pub`, `use`, `let`, `mut`, `const`, `static`, `ref`, `return`, `if`, `else`, `match`, `for`, `while`, `loop`, `break`, `continue`, `move`, `async`, `await`, `dyn`, `where`, `as`, `in`, `extern`, `unsafe`). Error: `ID segment "type" is a Rust reserved keyword`
 - Dep fn_name collision check (two deps with same last segment → error)
 - **Single file**: fail-fast (stop on first error within the file)
 - **Directory**: collect-all (validate every file, report all errors, aggregate status)
@@ -111,10 +262,13 @@ struct ResolvedSpec {
 - Handle deps: split ID on `/`, last segment = fn_name, all preceding segments = module path. Examples: `money/round` → `use money::round::round;`, `utils/math/round` → `use utils::math::round::round;`
 - Detect dep fn_name collisions (e.g., deps on both `money/round` and `math/round`) → error at validation, not codegen
 - **Contract metadata is stored in IR but NOT used for code generation in M1.** `body.rust` is the sole codegen input.
+- **`body.rust` is a verbatim Rust function definition** (signature + body). The generator wraps it with `use` statements and module structure but does not transform the code itself.
 - Write readable, formatted code
 - Output to `./generated/spec/{module}/{fn_name}.rs` by default
 - Auto-generate `mod.rs` per directory with `pub mod` declarations for each unit in that namespace
+- **spec owns the entire output directory.** All files in `generated/spec/` are managed by spec. Do not place hand-written files there; they will be deleted on next generate.
 - **Clean output directory** (`generated/spec/`) before each generate run to prevent stale files
+- **Safety rails for clean:** Before deleting, verify: (1) the output dir path is inside the project root, and (2) the output dir contains a `.spec-generated` marker file (written during first generate). Refuse to clean if either check fails. Error: `Refusing to clean {path}: missing .spec-generated marker`
 - Auto-creates output dir if missing; errors if not writable
 - **Does not** generate Cargo.toml or lib.rs (user provides the containing project)
 
@@ -211,7 +365,7 @@ spec validate spec/units/
 
 ---
 
-## Test Coverage: 39 Tests
+## Test Coverage: 45 Tests
 
 ### Loader Tests (8)
 - [ ] Load valid YAML file → serde_yaml::Value → SpecStruct
@@ -223,7 +377,7 @@ spec validate spec/units/
 - [ ] Directory with mixed files (non-.unit.spec files skipped)
 - [ ] Nested subdirectories loaded recursively
 
-### Validation Tests (11)
+### Validation Tests (13)
 - [ ] Valid .unit.spec passes all checks
 - [ ] Missing required field: id → error
 - [ ] Missing required field: kind → error
@@ -235,16 +389,19 @@ spec validate spec/units/
 - [ ] Extra/unknown field rejected (closed schema) → error
 - [ ] body exists but missing `rust` key → error
 - [ ] Empty string values (id: "", intent.why: "") → error
+- [ ] ID segment is Rust keyword (e.g., `pricing/type`) → error
+- [ ] Embedded JSON Schema is itself valid (meta-validation of unit.spec.json)
 
-### Normalizer Tests (6)
+### Normalizer Tests (7)
 - [ ] ID canonicalization (no leading/trailing slash)
 - [ ] fn_name derived from last path segment
 - [ ] module_path derived from prefix segments (including 3+ segment depth)
 - [ ] Missing deps defaults to empty Vec
 - [ ] Detect circular dependencies → error
 - [ ] Dep fn_name collision (two deps with same last segment) → error
+- [ ] contract, local_tests, links survive normalization (passthrough roundtrip)
 
-### Generator Tests (7)
+### Generator Tests (9)
 - [ ] Generate valid .rs from complete ResolvedSpec
 - [ ] Handle missing optional fields (contract is None)
 - [ ] Format generated code properly (indentation, braces)
@@ -252,6 +409,11 @@ spec validate spec/units/
 - [ ] mod.rs generated with pub mod declarations for each unit in namespace
 - [ ] Dep use statement correct at 3+ segment depth
 - [ ] Output dir not writable → clear error with path
+- [ ] Clean output dir removes stale files before generating new ones
+- [ ] Clean refuses to delete dir without `.spec-generated` marker
+
+### Validator Aggregate Tests (1)
+- [ ] Directory validation collects all errors across files (collect-all mode)
 
 ### CLI Tests (5)
 - [ ] Validate single file success
@@ -301,6 +463,12 @@ spec validate spec/units/
 | **local_tests/links in IR** | Stored in ResolvedSpec, not executed in M1 | Stripped during normalize |
 | **Generated output** | .rs files only, user provides Cargo project | Full Cargo project (deferred — adds stale-file complexity before format is validated) |
 | **Schema location** | `spec-core/src/schema/unit.spec.json` (embedded via include_str!) | Runtime file path |
+| **YAML crate** | `serde_yaml_bw` (maintained fork, panic-free) | `serde_yaml` (deprecated), `serde-saphyr` (no Value type) |
+| **Error handling** | `thiserror` (library) + `anyhow` (CLI) | Custom error types (boilerplate) |
+| **ID keyword check** | Reject Rust reserved keywords in ID segments | Allow keywords + use r#raw identifiers in codegen |
+| **Output dir safety** | `.spec-generated` marker file + path prefix check | No safety (risk of accidental deletion) |
+| **Output dir ownership** | spec owns `generated/spec/` entirely | Allow mixed hand-written + generated files |
+| **JSON Schema draft** | Draft 7 (fully supported by `jsonschema` crate) | Draft 2020-12 (partial support) |
 
 ---
 
@@ -415,16 +583,16 @@ README.md
 ## External Dependencies
 
 - **Cargo toolchain**: rustfmt, clippy, rustc
-- **crates.io**: serde, serde_yaml, serde_json, jsonschema, clap
+- **crates.io**: serde, serde_yaml_bw, serde_json, jsonschema, clap, walkdir, thiserror, anyhow
 - **Optional (0.2)**: cue-lang/tap/cue (external binary)
 
 ---
 
 **This plan is reviewed, approved, and ready for implementation.**
 
-**Review**: `/plan-eng-review` on 2026-03-31 (third pass)
+**Review**: `/plan-eng-review` on 2026-03-31 (fourth pass)
 **Design**: `design-20260331-001.md` (by /office-hours)
-**Status**: All decisions resolved, architecture final
+**Status**: All decisions resolved, architecture final, 45 tests planned
 
 ---
 
@@ -433,8 +601,8 @@ README.md
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 2 | CLEAR | 6 findings resolved (validation pipeline, ID format, stale files, fail mode, dep collisions, mod.rs) |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | CLEAR (PLAN) | 8 issues found and resolved across 3 passes |
+| Codex Review | `/codex review` | Independent 2nd opinion | 3 | CLEAR | Pass 3: Rust keyword collision, clean-dir safety, YAML coercions, schema versioning, atomic writes. 2 acted on, 2 deferred to TODOS, 1 deferred (schema catches it). |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | CLEAR (PLAN) | Pass 4: 5 issues (deps, JSON Schema, types, body.rust clarity, keyword validation). All resolved. 45 tests planned. |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 
-**VERDICT:** ENG + CODEX CLEARED — third pass complete, all findings resolved. 39 tests planned.
+**VERDICT:** ENG + CODEX CLEARED — fourth pass complete, all findings resolved. 45 tests planned. Full JSON Schema + type definitions now in plan.

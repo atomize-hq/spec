@@ -14,11 +14,12 @@
   - Units: apply_discount, apply_tax, calculate_total
   - Cargo.toml must include runtime dependencies (e.g., rust_decimal) so `cargo check` passes on generated output
 
-- [ ] **Achieve 100% test coverage: 39 tests**
+- [ ] **Achieve 100% test coverage: 45 tests**
   - Loader: 8 tests (including recursive dir walk, empty dir, mixed files)
-  - Validation: 11 tests (including extra fields, body shape, empty strings, ID format)
-  - Normalizer: 6 tests (including 3+ segment depth, dep fn_name collision)
-  - Generator: 7 tests (including mod.rs generation, deep dep use statements)
+  - Validation: 13 tests (including extra fields, body shape, empty strings, ID format, Rust keyword check, schema meta-validation)
+  - Normalizer: 7 tests (including 3+ segment depth, dep fn_name collision, passthrough roundtrip)
+  - Generator: 9 tests (including mod.rs generation, deep dep use statements, clean-output-dir, safety marker)
+  - Validator aggregate: 1 test (collect-all error aggregation)
   - CLI: 5 integration tests
   - Integration: 3 tests (full pipeline, deps, edge cases)
 
@@ -37,3 +38,5 @@
 - [ ] Evidence collection and passports
 - [ ] Graph resolution
 - [ ] Contract-to-signature enforcement
+- [ ] **Add `spec_version` field and schema migration strategy** — When adding new fields or unit kinds in 0.2, need a way to distinguish schema versions and handle backward/forward compatibility. Codex outside-voice finding.
+- [ ] **Atomic writes for code generation** — Generate to temp dir, then rename to output dir atomically. Prevents broken output tree on crash or interrupt. Low risk at 1-10 files but matters as project scales. Codex outside-voice finding.
