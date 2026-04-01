@@ -8,11 +8,15 @@
 
 use crate::types::{LoadedSpec, SpecSource, SpecStruct};
 use crate::validator::validate_raw_yaml;
-use crate::validator::validate_semantic;
 use crate::{Result, SpecError};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(test)]
+use std::path::PathBuf;
 use walkdir::WalkDir;
+
+#[cfg(test)]
+use crate::validator::validate_semantic;
 
 /// Result of a collect-all directory load.
 #[derive(Debug, Default)]
@@ -34,12 +38,11 @@ fn read_yaml_value<P: AsRef<Path>>(path: P) -> Result<(String, serde_yaml_bw::Va
     }
 
     // Parse YAML to Value (preserves raw author input)
-    let yaml_value: serde_yaml_bw::Value = serde_yaml_bw::from_slice(&bytes).map_err(|e| {
-        SpecError::YamlParse {
+    let yaml_value: serde_yaml_bw::Value =
+        serde_yaml_bw::from_slice(&bytes).map_err(|e| SpecError::YamlParse {
             message: e.to_string(),
             path: path_str.clone(),
-        }
-    })?;
+        })?;
 
     Ok((path_str, yaml_value))
 }
@@ -55,12 +58,11 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<LoadedSpec> {
     validate_raw_yaml(&yaml_value, &path_str)?;
 
     // Deserialize to SpecStruct
-    let spec: SpecStruct = serde_yaml_bw::from_value(yaml_value).map_err(|e| {
-        SpecError::YamlParse {
+    let spec: SpecStruct =
+        serde_yaml_bw::from_value(yaml_value).map_err(|e| SpecError::YamlParse {
             message: e.to_string(),
             path: path_str.clone(),
-        }
-    })?;
+        })?;
 
     Ok(LoadedSpec {
         source: SpecSource {
@@ -85,13 +87,17 @@ pub fn load_directory<P: AsRef<Path>>(dir: P) -> Result<Vec<LoadedSpec>> {
         let path = entry.path();
 
         // Only process files with .unit.spec extension
-        if path.is_file() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                // Check if filename ends with .unit.spec
-                if name.ends_with(".unit.spec") {
-                    specs.push(load_file(path)?);
-                }
-            }
+        if !path.is_file() {
+            continue;
+        }
+
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+
+        // Check if filename ends with .unit.spec
+        if name.ends_with(".unit.spec") {
+            specs.push(load_file(path)?);
         }
     }
 
@@ -105,7 +111,8 @@ pub fn load_directory<P: AsRef<Path>>(dir: P) -> Result<Vec<LoadedSpec>> {
 ///
 /// Unlike `load_directory`, this helper continues after failures so callers can
 /// present grouped diagnostics for the full directory.
-pub fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoadReport {
+#[cfg(test)]
+pub(crate) fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoadReport {
     let dir = dir.as_ref();
     let mut report = DirectoryLoadReport::default();
 
@@ -113,25 +120,33 @@ pub fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoadReport
         match entry {
             Ok(entry) => {
                 let path = entry.path();
-                if path.is_file() {
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if name.ends_with(".unit.spec") {
-                            match load_file(path) {
-                                Ok(spec) => match validate_semantic(&spec) {
-                                    Ok(()) => report.specs.push(spec),
-                                    Err(err) => report.errors.push(err),
-                                },
-                                Err(err) => report.errors.push(err),
-                            }
-                        }
-                    }
+                if !path.is_file() {
+                    continue;
+                }
+
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+
+                if !name.ends_with(".unit.spec") {
+                    continue;
+                }
+
+                match load_file(path) {
+                    Ok(spec) => match validate_semantic(&spec) {
+                        Ok(()) => report.specs.push(spec),
+                        Err(err) => report.errors.push(err),
+                    },
+                    Err(err) => report.errors.push(err),
                 }
             }
             Err(err) => report.errors.push(err.into()),
         }
     }
 
-    report.specs.sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
+    report
+        .specs
+        .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
     report
 }
 
@@ -148,7 +163,8 @@ pub fn is_unit_spec(path: &Path) -> bool {
 /// Returns the directory path where the .rs file should be written.
 /// E.g., for ID "pricing/apply_discount" with output base "./generated/spec",
 /// returns "./generated/spec/pricing"
-pub fn output_dir_for_spec(output_base: impl AsRef<Path>, module_path: &str) -> PathBuf {
+#[cfg(test)]
+pub(crate) fn output_dir_for_spec(output_base: impl AsRef<Path>, module_path: &str) -> PathBuf {
     let mut path = output_base.as_ref().to_path_buf();
     if !module_path.is_empty() {
         path = path.join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR));
@@ -160,7 +176,8 @@ pub fn output_dir_for_spec(output_base: impl AsRef<Path>, module_path: &str) -> 
 ///
 /// E.g., for ID "pricing/apply_discount" with output base "./generated/spec",
 /// returns "./generated/spec/pricing/apply_discount.rs"
-pub fn output_file_path(output_base: impl AsRef<Path>, id: &str) -> PathBuf {
+#[cfg(test)]
+pub(crate) fn output_file_path(output_base: impl AsRef<Path>, id: &str) -> PathBuf {
     let parts: Vec<&str> = id.split('/').collect();
     let mut path = output_base.as_ref().to_path_buf();
 
@@ -182,7 +199,8 @@ pub fn output_file_path(output_base: impl AsRef<Path>, id: &str) -> PathBuf {
 ///
 /// E.g., for module path "pricing" with output base "./generated/spec",
 /// returns "./generated/spec/pricing"
-pub fn mod_rs_dir(output_base: impl AsRef<Path>, module_path: &str) -> PathBuf {
+#[cfg(test)]
+pub(crate) fn mod_rs_dir(output_base: impl AsRef<Path>, module_path: &str) -> PathBuf {
     if module_path.is_empty() {
         output_base.as_ref().to_path_buf()
     } else {
@@ -261,7 +279,9 @@ extra_field: should_fail
         let result = load_file(temp_file.path());
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("parse") || err_msg.contains("YAML") || err_msg.contains("mapping"));
+        assert!(
+            err_msg.contains("parse") || err_msg.contains("YAML") || err_msg.contains("mapping")
+        );
     }
 
     #[test]
@@ -356,7 +376,11 @@ body:
         let report = load_directory_collect_all(temp_dir.path());
         assert_eq!(report.specs.len(), 1);
         assert_eq!(report.errors.len(), 1);
-        assert!(report.errors[0].to_string().contains("Rust reserved keyword"));
+        assert!(
+            report.errors[0]
+                .to_string()
+                .contains("Rust reserved keyword")
+        );
     }
 
     #[test]
@@ -369,7 +393,9 @@ body:
     #[test]
     fn test_is_unit_spec_requires_exact_suffix() {
         assert!(is_unit_spec(Path::new("pricing/apply_discount.unit.spec")));
-        assert!(!is_unit_spec(Path::new("pricing/apply_discount.unit.spec.bak")));
+        assert!(!is_unit_spec(Path::new(
+            "pricing/apply_discount.unit.spec.bak"
+        )));
         assert!(!is_unit_spec(Path::new("pricing/apply_discount.spec")));
     }
 
@@ -378,17 +404,17 @@ body:
         let base = Path::new("./generated/spec");
 
         assert_eq!(
-            output_dir_for_spec(&base, "pricing"),
+            output_dir_for_spec(base, "pricing"),
             PathBuf::from("./generated/spec/pricing")
         );
 
         assert_eq!(
-            output_dir_for_spec(&base, "utils/math"),
+            output_dir_for_spec(base, "utils/math"),
             PathBuf::from("./generated/spec/utils/math")
         );
 
         assert_eq!(
-            output_dir_for_spec(&base, ""),
+            output_dir_for_spec(base, ""),
             PathBuf::from("./generated/spec")
         );
     }
@@ -398,12 +424,12 @@ body:
         let base = Path::new("./generated/spec");
 
         assert_eq!(
-            output_file_path(&base, "pricing/apply_discount"),
+            output_file_path(base, "pricing/apply_discount"),
             PathBuf::from("./generated/spec/pricing/apply_discount.rs")
         );
 
         assert_eq!(
-            output_file_path(&base, "utils/math/round"),
+            output_file_path(base, "utils/math/round"),
             PathBuf::from("./generated/spec/utils/math/round.rs")
         );
     }
@@ -413,14 +439,11 @@ body:
         let base = Path::new("./generated/spec");
 
         assert_eq!(
-            mod_rs_dir(&base, "pricing"),
+            mod_rs_dir(base, "pricing"),
             PathBuf::from("./generated/spec/pricing")
         );
 
-        assert_eq!(
-            mod_rs_dir(&base, ""),
-            PathBuf::from("./generated/spec")
-        );
+        assert_eq!(mod_rs_dir(base, ""), PathBuf::from("./generated/spec"));
     }
 
     #[test]
@@ -433,7 +456,10 @@ body:
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("missing") || err.contains("EOF") || err.contains("end of file") || err.contains("Unknown entry")
+            err.contains("missing")
+                || err.contains("EOF")
+                || err.contains("end of file")
+                || err.contains("Unknown entry")
                 || err.contains("Schema validation failed")
         );
     }

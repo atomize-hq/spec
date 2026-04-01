@@ -10,16 +10,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable (pinned 2026-04-01)
         with:
           toolchain: 1.89.0
           components: rustfmt, clippy
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@8cbdedb5103daa674dcf46d3590fe06a76645684 # v2.8.0
 
       - name: Format check
         run: cargo fmt --all --check
@@ -32,3 +32,93 @@ jobs:
 
       - name: Check ecommerce example
         run: cargo check --manifest-path examples/ecommerce/Cargo.toml
+
+  create_release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Create GitHub Release (if missing)
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists."
+          else
+            gh release create "$GITHUB_REF_NAME" --generate-notes
+          fi
+
+  release_build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: create_release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            use_cross: true
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            use_cross: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            use_cross: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            use_cross: false
+
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET: ${{ matrix.target }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable (pinned 2026-04-01)
+        with:
+          toolchain: 1.89.0
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@8cbdedb5103daa674dcf46d3590fe06a76645684 # v2.8.0
+
+      - name: Install cross (Linux only)
+        if: matrix.use_cross
+        run: cargo install cross --locked --version 0.2.5
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.use_cross }}" == "true" ]]; then
+            cross build -p spec-cli --bin spec --release --locked --target "$TARGET"
+          else
+            rustup target add "$TARGET"
+            cargo build -p spec-cli --bin spec --release --locked --target "$TARGET"
+          fi
+
+      - name: Package + checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          ASSET="spec-${VERSION}-${TARGET}.tar.gz"
+          CHECKSUM="${ASSET}.sha256"
+
+          tar -C "target/${TARGET}/release" -czf "${ASSET}" spec
+
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${ASSET}" > "${CHECKSUM}"
+          else
+            shasum -a 256 "${ASSET}" > "${CHECKSUM}"
+          fi
+
+          gh release upload "$GITHUB_REF_NAME" "${ASSET}" "${CHECKSUM}" --clobber

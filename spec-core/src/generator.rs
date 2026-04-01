@@ -39,7 +39,11 @@ pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| SpecError::OutputDir {
-            message: format!("Unable to create output directory {}: {}", parent.display(), err),
+            message: format!(
+                "Unable to create output directory {}: {}",
+                parent.display(),
+                err
+            ),
         })?;
     }
 
@@ -52,9 +56,10 @@ pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
             message: format!("Unable to open {} for writing: {}", path.display(), err),
         })?;
 
-    file.write_all(content.as_bytes()).map_err(|err| SpecError::Generator {
-        message: format!("Unable to write {}: {}", path.display(), err),
-    })?;
+    file.write_all(content.as_bytes())
+        .map_err(|err| SpecError::Generator {
+            message: format!("Unable to write {}: {}", path.display(), err),
+        })?;
 
     if !content.ends_with('\n') {
         file.write_all(b"\n").map_err(|err| SpecError::Generator {
@@ -100,7 +105,7 @@ pub fn clean_output_dir(output_base: &str, module_paths: &[String]) -> Result<()
             continue;
         }
 
-        for entry in WalkDir::new(&target).follow_links(true) {
+        for entry in WalkDir::new(&target).follow_links(false) {
             let entry = entry.map_err(SpecError::from)?;
             let path = entry.path();
             if path.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
@@ -232,7 +237,11 @@ fn join_module_path(base: &Path, module_path: &str) -> Result<PathBuf> {
     for segment in module_path.split('/').filter(|segment| !segment.is_empty()) {
         if segment == "." || segment == ".." {
             return Err(SpecError::OutputDir {
-                message: format!("Refusing to clean {}: invalid module path '{}'", base.display(), module_path),
+                message: format!(
+                    "Refusing to clean {}: invalid module path '{}'",
+                    base.display(),
+                    module_path
+                ),
             });
         }
         path.push(segment);
@@ -279,6 +288,8 @@ fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
 mod tests {
     use super::*;
     use crate::types::{Body, Intent, ResolvedSpec, SpecStruct};
+    #[cfg(unix)]
+    use std::os::unix::fs as unix_fs;
     use tempfile::TempDir;
 
     fn test_spec(deps: Vec<&str>, body: &str) -> ResolvedSpec {
@@ -326,7 +337,9 @@ mod tests {
     #[test]
     fn test_write_generated_file_creates_parent_dirs() {
         let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("generated/spec/pricing/apply_discount.rs");
+        let file_path = temp_dir
+            .path()
+            .join("generated/spec/pricing/apply_discount.rs");
 
         write_generated_file(
             file_path.to_str().unwrap(),
@@ -335,7 +348,10 @@ mod tests {
         .unwrap();
 
         let contents = fs::read_to_string(&file_path).unwrap();
-        assert_eq!(contents, "pub fn apply_discount() -> Decimal { Decimal::ZERO }\n");
+        assert_eq!(
+            contents,
+            "pub fn apply_discount() -> Decimal { Decimal::ZERO }\n"
+        );
     }
 
     #[test]
@@ -383,5 +399,32 @@ mod tests {
 
         let err = clean_output_dir(base.to_str().unwrap(), &[String::from("pricing")]).unwrap_err();
         assert!(matches!(err, SpecError::MissingMarker { .. }));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_clean_output_dir_does_not_follow_symlink_dirs() {
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let base = temp_dir.path().join("generated/spec");
+        let pricing = base.join("pricing");
+        fs::create_dir_all(&pricing).unwrap();
+        fs::write(base.join(GENERATED_MARKER), "").unwrap();
+        fs::write(pricing.join("apply_discount.rs"), "fn a() {}\n").unwrap();
+
+        let outside_dir = temp_dir.path().join("outside");
+        fs::create_dir_all(&outside_dir).unwrap();
+        let outside_rs = outside_dir.join("outside.rs");
+        fs::write(&outside_rs, "fn outside() {}\n").unwrap();
+
+        unix_fs::symlink(&outside_dir, pricing.join("link")).unwrap();
+
+        clean_output_dir(base.to_str().unwrap(), &[String::from("pricing")]).unwrap();
+
+        assert!(!pricing.join("apply_discount.rs").exists());
+        assert!(
+            outside_rs.exists(),
+            "clean_output_dir must not delete files through symlinks"
+        );
+        assert!(base.join(GENERATED_MARKER).exists());
     }
 }

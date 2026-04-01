@@ -1,6 +1,8 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
-use spec_core::generator::{clean_output_dir, generate_code, generate_mod_rs, write_generated_file};
+use spec_core::generator::{
+    clean_output_dir, generate_code, generate_mod_rs, write_generated_file,
+};
 use spec_core::loader::{is_unit_spec, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::types::{LoadedSpec, ResolvedSpec};
@@ -9,6 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+
+type CollectedSpecs = (Vec<LoadedSpec>, BTreeMap<String, Vec<String>>, usize);
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
@@ -51,7 +55,13 @@ fn validate_command(path: &Path) -> Result<()> {
     }
 
     print_errors(&errors);
-    bail!("❌ {} file{}, {} error{}", errors.len(), pluralize(errors.len()), count_errors(&errors), pluralize(count_errors(&errors)));
+    bail!(
+        "❌ {} file{}, {} error{}",
+        errors.len(),
+        pluralize(errors.len()),
+        count_errors(&errors),
+        pluralize(count_errors(&errors))
+    );
 }
 
 fn generate_command(path: &Path, output: &Path) -> Result<()> {
@@ -64,7 +74,13 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
     let errors = finish_validation(specs.clone(), errors);
     if !errors.is_empty() {
         print_errors(&errors);
-        bail!("❌ {} file{}, {} error{}", errors.len(), pluralize(errors.len()), count_errors(&errors), pluralize(count_errors(&errors)));
+        bail!(
+            "❌ {} file{}, {} error{}",
+            errors.len(),
+            pluralize(errors.len()),
+            count_errors(&errors),
+            pluralize(count_errors(&errors))
+        );
     }
 
     let mut resolved_specs = Vec::new();
@@ -104,14 +120,20 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
         let mod_rs_path = if module_path.is_empty() {
             output.join("mod.rs")
         } else {
-            output.join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
+            output
+                .join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
+                .join("mod.rs")
         };
 
         write_generated_file(&mod_rs_path.display().to_string(), &content)
             .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
     }
 
-    println!("Generated {} file{}", resolved_specs.len(), pluralize(resolved_specs.len()));
+    println!(
+        "Generated {} file{}",
+        resolved_specs.len(),
+        pluralize(resolved_specs.len())
+    );
     Ok(())
 }
 
@@ -167,18 +189,17 @@ fn ensure_output_marker(output: &Path) -> Result<()> {
         return Ok(());
     }
 
-    if output.exists() {
-        return Ok(());
+    if !output.exists() {
+        fs::create_dir_all(output)
+            .with_context(|| format!("Failed to create output directory {}", output.display()))?;
     }
 
-    fs::create_dir_all(output)
-        .with_context(|| format!("Failed to create output directory {}", output.display()))?;
     fs::write(&marker, "")
         .with_context(|| format!("Failed to create marker {}", marker.display()))?;
     Ok(())
 }
 
-fn collect_specs(path: &Path) -> Result<(Vec<LoadedSpec>, BTreeMap<String, Vec<String>>, usize)> {
+fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
     if path.is_file() {
         let total_files = usize::from(is_unit_spec(path));
         if !is_unit_spec(path) {

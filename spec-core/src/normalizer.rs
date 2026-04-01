@@ -2,7 +2,7 @@
 //!
 //! Phase 3: Normalize parsed specs into canonical IR for generation.
 
-use crate::types::{is_rust_keyword, ResolvedSpec, SpecStruct};
+use crate::types::{ResolvedSpec, SpecStruct, is_rust_keyword};
 use crate::{Result, SpecError};
 
 pub fn normalize_spec(mut spec: SpecStruct) -> Result<ResolvedSpec> {
@@ -12,11 +12,6 @@ pub fn normalize_spec(mut spec: SpecStruct) -> Result<ResolvedSpec> {
 
 fn canonicalize_id(id: &str) -> Result<String> {
     let trimmed = id.trim();
-    if trimmed == id {
-        validate_canonical_id(trimmed)?;
-        return Ok(trimmed.to_string());
-    }
-
     validate_canonical_id(trimmed)?;
     Ok(trimmed.to_string())
 }
@@ -104,7 +99,10 @@ mod tests {
     #[test]
     fn rejects_invalid_segments() {
         let err = normalize_spec(make_spec("pricing/ApplyDiscount")).unwrap_err();
-        assert!(err.to_string().contains("must start with a lowercase ASCII letter"));
+        assert!(
+            err.to_string()
+                .contains("must start with a lowercase ASCII letter")
+        );
     }
 
     #[test]

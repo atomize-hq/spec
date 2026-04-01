@@ -8,9 +8,12 @@ use crate::types::LoadedSpec;
 use crate::{Result, SpecError};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
+use std::sync::OnceLock;
 
 /// JSON Schema for unit.spec validation (embedded at compile time)
 const SCHEMA_JSON: &str = include_str!("schema/unit.spec.json");
+
+static COMPILED_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 
 /// Validate a single spec against the JSON Schema
 pub fn validate_schema(spec: &LoadedSpec) -> Result<()> {
@@ -29,34 +32,48 @@ pub fn validate_raw_yaml(yaml_value: &YamlValue, file_path: &str) -> Result<()> 
     validate_json_value(&spec_json, file_path)
 }
 
-fn validate_json_value(spec_json: &Value, file_path: &str) -> Result<()> {
-    let schema_json: Value = serde_json::from_str(SCHEMA_JSON)?;
-    let schema = jsonschema::draft7::new(&schema_json).map_err(|e| {
-        SpecError::SchemaValidation {
+fn compiled_schema() -> Result<&'static jsonschema::Validator> {
+    if let Some(schema) = COMPILED_SCHEMA.get() {
+        return Ok(schema);
+    }
+
+    let schema_json: Value = serde_json::from_str(SCHEMA_JSON).map_err(SpecError::Json)?;
+    let schema =
+        jsonschema::draft7::new(&schema_json).map_err(|e| SpecError::SchemaValidation {
             message: format!("Schema compilation failed: {e}"),
-            path: file_path.to_string(),
-        }
-    })?;
+            path: "<schema>".to_string(),
+        })?;
+
+    let _ = COMPILED_SCHEMA.set(schema);
+
+    Ok(COMPILED_SCHEMA
+        .get()
+        .expect("COMPILED_SCHEMA must be set after successful compilation"))
+}
+
+fn validate_json_value(spec_json: &Value, file_path: &str) -> Result<()> {
+    let schema = compiled_schema()?;
 
     // Validate against schema
-    let validation_result = schema.validate(&spec_json);
+    let validation_result = schema.validate(spec_json);
 
     match validation_result {
         Ok(()) => Ok(()),
-        Err(error) => {
-            Err(SpecError::SchemaValidation {
-                message: error.to_string(),
-                path: file_path.to_string(),
-            })
-        }
+        Err(error) => Err(SpecError::SchemaValidation {
+            message: error.to_string(),
+            path: file_path.to_string(),
+        }),
     }
 }
 
 /// Perform semantic validation (Rust keywords, deps, etc.)
 pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
     // Check if ID contains Rust reserved keywords
-    if let Err(keyword_err) = validate_rust_keywords(&spec.spec.id, &spec.source.file_path) {
-        return Err(keyword_err);
+    validate_rust_keywords(&spec.spec.id, &spec.source.file_path)?;
+
+    // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
+    for dep in &spec.spec.deps {
+        validate_rust_keywords(dep, &spec.source.file_path)?;
     }
 
     // Check for dep fn_name collisions
@@ -69,8 +86,12 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
         });
     }
 
-    // Check for use statements in body.rust
-    if spec.spec.body.rust.contains("use ") {
+    // Check for use statements in body.rust (line-start to avoid false positives in comments)
+    let has_use_stmt = spec.spec.body.rust.lines().any(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with("use ") || trimmed.starts_with("use\t")
+    });
+    if has_use_stmt {
         return Err(SpecError::UseStatementInBody {
             path: spec.source.file_path.clone(),
         });
@@ -122,7 +143,7 @@ pub fn validate_full(spec: &LoadedSpec) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Intent, SpecStruct, SpecSource};
+    use crate::types::{Body, Intent, SpecSource, SpecStruct};
 
     fn create_test_spec(id: &str, rust_body: &str) -> LoadedSpec {
         LoadedSpec {
@@ -151,7 +172,11 @@ mod tests {
     fn test_validate_schema_valid() {
         let spec = create_test_spec("pricing/apply_discount", "pub fn test() {}");
         let result = validate_schema(&spec);
-        assert!(result.is_ok(), "Schema validation should pass: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Schema validation should pass: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -260,12 +285,18 @@ extra_field: should_fail
         let result = validate_semantic(&spec);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("body.rust must not contain use statements"));
+        assert!(
+            err.to_string()
+                .contains("body.rust must not contain use statements")
+        );
     }
 
     #[test]
     fn test_validate_semantic_valid_spec() {
-        let spec = create_test_spec("pricing/apply_discount", "pub fn apply_discount(subtotal: f64, rate: f64) -> f64 { subtotal - subtotal * rate }");
+        let spec = create_test_spec(
+            "pricing/apply_discount",
+            "pub fn apply_discount(subtotal: f64, rate: f64) -> f64 { subtotal - subtotal * rate }",
+        );
         let result = validate_semantic(&spec);
         assert!(result.is_ok());
     }

@@ -6,11 +6,11 @@
 //! - Normalizing to internal representation (IR)
 //! - Generating readable Rust code
 
-pub mod types;
-pub mod loader;
-pub mod validator;
-pub mod normalizer;
 pub mod generator;
+pub mod loader;
+pub mod normalizer;
+pub mod types;
+pub mod validator;
 
 use thiserror::Error;
 
@@ -32,19 +32,34 @@ pub enum SpecError {
     #[error("Schema validation failed: {message}")]
     SchemaValidation { message: String, path: String },
 
-    #[error("Semanitic validation error: {message}")]
+    #[error("Semantic validation error: {message}")]
     SemanticValidation { message: String, path: String },
 
     #[error("ID segment '{segment}' is a Rust reserved keyword in '{id}' at {path}")]
-    RustKeyword { segment: String, id: String, path: String },
+    RustKeyword {
+        segment: String,
+        id: String,
+        path: String,
+    },
 
     #[error("Duplicate ID '{id}' in {file1} and {file2}")]
-    DuplicateId { id: String, file1: String, file2: String },
+    DuplicateId {
+        id: String,
+        file1: String,
+        file2: String,
+    },
 
     #[error("Dep fn_name collision: '{dep1}' and '{dep2}' both resolve to '{fn_name}' at {path}")]
-    DepCollision { dep1: String, dep2: String, fn_name: String, path: String },
+    DepCollision {
+        dep1: String,
+        dep2: String,
+        fn_name: String,
+        path: String,
+    },
 
-    #[error("body.rust must not contain use statements; declare imports via deps instead at {path}")]
+    #[error(
+        "body.rust must not contain use statements; declare imports via deps instead at {path}"
+    )]
     UseStatementInBody { path: String },
 
     #[error("Generator error: {message}")]
@@ -59,16 +74,7 @@ pub enum SpecError {
 
 impl From<walkdir::Error> for SpecError {
     fn from(err: walkdir::Error) -> Self {
-        SpecError::Io(std::io::Error::new(std::io::ErrorKind::Other, err))
-    }
-}
-
-impl From<jsonschema::ValidationError<'_>> for SpecError {
-    fn from(err: jsonschema::ValidationError) -> Self {
-        SpecError::SemanticValidation {
-            message: err.to_string(),
-            path: String::new(), // This should be set by the caller
-        }
+        SpecError::Io(std::io::Error::other(err))
     }
 }
 
@@ -81,7 +87,9 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = SpecError::InvalidUtf8 { path: "foo.unit.spec".to_string() };
+        let err = SpecError::InvalidUtf8 {
+            path: "foo.unit.spec".to_string(),
+        };
         assert_eq!(err.to_string(), "File is not valid UTF-8: foo.unit.spec");
 
         let err = SpecError::RustKeyword {
@@ -89,6 +97,9 @@ mod tests {
             id: "pricing/type".to_string(),
             path: "test.unit.spec".to_string(),
         };
-        assert_eq!(err.to_string(), "ID segment 'type' is a Rust reserved keyword in 'pricing/type' at test.unit.spec");
+        assert_eq!(
+            err.to_string(),
+            "ID segment 'type' is a Rust reserved keyword in 'pricing/type' at test.unit.spec"
+        );
     }
 }

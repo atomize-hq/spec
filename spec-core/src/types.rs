@@ -126,13 +126,23 @@ impl ResolvedSpec {
     /// Convert a dep ID to its Rust use statement path
     /// e.g., "money/round" -> "crate::money::round::round"
     pub fn dep_to_use_path(dep_id: &str) -> String {
-        format!("crate::{}::{};", dep_id.replace('/', "::"), dep_id.rsplit_once('/').map(|(_, name)| name).unwrap_or(dep_id))
+        format!(
+            "crate::{}::{};",
+            dep_id.replace('/', "::"),
+            dep_id
+                .rsplit_once('/')
+                .map(|(_, name)| name)
+                .unwrap_or(dep_id)
+        )
     }
 
     /// Get the fn_name (last segment) from a dep ID
     /// e.g., "money/round" -> "round"
     pub fn dep_fn_name(dep_id: &str) -> &str {
-        dep_id.rsplit_once('/').map(|(_, name)| name).unwrap_or(dep_id)
+        dep_id
+            .rsplit_once('/')
+            .map(|(_, name)| name)
+            .unwrap_or(dep_id)
     }
 
     /// Check for dep fn_name collisions
@@ -152,11 +162,10 @@ impl ResolvedSpec {
 
 /// Rust reserved keywords that cannot be used as identifiers
 pub const RUST_KEYWORDS: &[&str] = &[
-    "type", "mod", "crate", "self", "super", "fn", "struct", "enum",
-    "impl", "trait", "pub", "use", "let", "mut", "const", "static",
-    "ref", "return", "if", "else", "match", "for", "while", "loop",
-    "break", "continue", "move", "async", "await", "dyn", "where", "as",
-    "in", "extern", "unsafe", "true", "false",
+    "type", "mod", "crate", "self", "super", "fn", "struct", "enum", "impl", "trait", "pub", "use",
+    "let", "mut", "const", "static", "ref", "return", "if", "else", "match", "for", "while",
+    "loop", "break", "continue", "move", "async", "await", "dyn", "where", "as", "in", "extern",
+    "unsafe", "true", "false",
 ];
 
 /// Check if a string is a Rust reserved keyword
@@ -173,10 +182,14 @@ mod tests {
         let spec = SpecStruct {
             id: "pricing/apply_discount".to_string(),
             kind: "function".to_string(),
-            intent: Intent { why: "Apply discount".to_string() },
+            intent: Intent {
+                why: "Apply discount".to_string(),
+            },
             contract: None,
             deps: vec![],
-            body: Body { rust: "pub fn apply_discount() {}".to_string() },
+            body: Body {
+                rust: "pub fn apply_discount() {}".to_string(),
+            },
             local_tests: vec![],
             links: None,
         };
@@ -192,10 +205,14 @@ mod tests {
         let spec = SpecStruct {
             id: "utils/math/round".to_string(),
             kind: "function".to_string(),
-            intent: Intent { why: "Round numbers".to_string() },
+            intent: Intent {
+                why: "Round numbers".to_string(),
+            },
             contract: None,
             deps: vec![],
-            body: Body { rust: "pub fn round() {}".to_string() },
+            body: Body {
+                rust: "pub fn round() {}".to_string(),
+            },
             local_tests: vec![],
             links: None,
         };
