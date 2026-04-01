@@ -65,12 +65,14 @@ The normalizer produces `ResolvedSpec`, which the generator consumes. Defined in
 
 ```rust
 struct ResolvedSpec {
-    id: String,           // canonical: "pricing/apply_discount"
-    fn_name: String,      // last segment: "apply_discount"
-    module_path: String,  // everything before last segment: "pricing"
-    deps: Vec<String>,    // fully resolved dep IDs (empty vec if none)
-    body_rust: String,    // raw Rust code from body.rust block
-    contract: Option<Contract>,
+    id: String,                       // canonical: "pricing/apply_discount"
+    fn_name: String,                  // last segment: "apply_discount"
+    module_path: String,              // everything before last segment: "pricing"
+    deps: Vec<String>,                // fully resolved dep IDs (empty vec if none)
+    body_rust: String,                // raw Rust code from body.rust block
+    contract: Option<Contract>,       // metadata only, not used for codegen in M1
+    local_tests: Vec<LocalTest>,      // stored, not executed in M1 (preserved for M2)
+    links: Option<Links>,             // stored, not used in M1 (preserved for M2)
 }
 ```
 
@@ -81,16 +83,20 @@ struct ResolvedSpec {
 ## Pipeline: 4 Stages
 
 ### 1. Load
-- Read `*.unit.spec` from filesystem
-- Parse YAML using serde → SpecStruct
+- Read `*.unit.spec` from filesystem (recursive directory walk)
+- Parse YAML to `serde_yaml::Value` (preserves raw author input for schema validation)
 - Track file paths for error reporting
 
 ### 2. Validate (JSON Schema)
+- Convert `serde_yaml::Value` → `serde_json::Value` for JSON Schema validation (validates raw author input, not re-serialized struct)
 - Required fields: `id`, `kind`, `intent`, `body`
-- ID format: `[a-zA-Z0-9_/]+` (hierarchical) — **must contain `/`** (e.g., `pricing/apply_discount`)
+- ID format: snake_case segments separated by `/` — regex `[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*` — **must contain `/`**, each segment must be a valid Rust identifier (e.g., `pricing/apply_discount`)
 - Kind: enum (`function` only in 0.1)
 - Additional fields rejected (closed schema)
-- **Fail-fast**: stop on first error
+- Dep fn_name collision check (two deps with same last segment → error)
+- **Single file**: fail-fast (stop on first error within the file)
+- **Directory**: collect-all (validate every file, report all errors, aggregate status)
+- After validation passes, deserialize `serde_json::Value` → `SpecStruct`
 - Schema embedded at compile time via `include_str!("../schema/unit.spec.json")` — lives at `spec-core/src/schema/unit.spec.json`, no runtime file dependency
 
 ### 3. Normalize → IR
@@ -102,9 +108,13 @@ struct ResolvedSpec {
 ### 4. Generate .rs
 - Map ResolvedSpec to Rust module structure
 - Extract `body.rust` to function definitions
-- Handle deps: `money/round` → `use money::round::round;` (last segment = fn_name rule)
+- Handle deps: split ID on `/`, last segment = fn_name, all preceding segments = module path. Examples: `money/round` → `use money::round::round;`, `utils/math/round` → `use utils::math::round::round;`
+- Detect dep fn_name collisions (e.g., deps on both `money/round` and `math/round`) → error at validation, not codegen
+- **Contract metadata is stored in IR but NOT used for code generation in M1.** `body.rust` is the sole codegen input.
 - Write readable, formatted code
 - Output to `./generated/spec/{module}/{fn_name}.rs` by default
+- Auto-generate `mod.rs` per directory with `pub mod` declarations for each unit in that namespace
+- **Clean output directory** (`generated/spec/`) before each generate run to prevent stale files
 - Auto-creates output dir if missing; errors if not writable
 - **Does not** generate Cargo.toml or lib.rs (user provides the containing project)
 
@@ -201,37 +211,46 @@ spec validate spec/units/
 
 ---
 
-## Test Coverage: 32 Tests
+## Test Coverage: 39 Tests
 
-### Loader Tests (5)
-- [ ] Load valid YAML file → SpecStruct
+### Loader Tests (8)
+- [ ] Load valid YAML file → serde_yaml::Value → SpecStruct
 - [ ] File not found → clear error with path
 - [ ] Permission denied → clear error with path
 - [ ] Invalid YAML syntax → parse error at line X
-- [ ] Load directory → Vec<SpecStruct>
+- [ ] Load directory recursively → Vec<SpecStruct>
+- [ ] Empty directory → empty vec (not an error)
+- [ ] Directory with mixed files (non-.unit.spec files skipped)
+- [ ] Nested subdirectories loaded recursively
 
-### Validation Tests (8)
+### Validation Tests (11)
 - [ ] Valid .unit.spec passes all checks
 - [ ] Missing required field: id → error
 - [ ] Missing required field: kind → error
 - [ ] Missing required field: intent → error
 - [ ] Missing required field: body → error
-- [ ] Invalid id format (spaces, special chars) → error
+- [ ] Invalid id format (uppercase, leading digits, spaces) → error
 - [ ] ID without `/` (e.g., `id: foo`) → error: must be hierarchical
 - [ ] Unknown kind value → error
+- [ ] Extra/unknown field rejected (closed schema) → error
+- [ ] body exists but missing `rust` key → error
+- [ ] Empty string values (id: "", intent.why: "") → error
 
-### Normalizer Tests (5)
+### Normalizer Tests (6)
 - [ ] ID canonicalization (no leading/trailing slash)
 - [ ] fn_name derived from last path segment
-- [ ] module_path derived from prefix segments
+- [ ] module_path derived from prefix segments (including 3+ segment depth)
 - [ ] Missing deps defaults to empty Vec
 - [ ] Detect circular dependencies → error
+- [ ] Dep fn_name collision (two deps with same last segment) → error
 
-### Generator Tests (5)
+### Generator Tests (7)
 - [ ] Generate valid .rs from complete ResolvedSpec
 - [ ] Handle missing optional fields (contract is None)
 - [ ] Format generated code properly (indentation, braces)
 - [ ] Multiple units generate separate .rs files under correct module paths
+- [ ] mod.rs generated with pub mod declarations for each unit in namespace
+- [ ] Dep use statement correct at 3+ segment depth
 - [ ] Output dir not writable → clear error with path
 
 ### CLI Tests (5)
@@ -272,7 +291,14 @@ spec validate spec/units/
 | **Schema org** | Unified (unit.cue) | Per-kind (function.cue) |
 | **ID format** | Hierarchical `pricing/apply_discount` | Flat with metadata |
 | **intent shape** | Object `{ why: string }` | Plain string (rejected — not aligned with architecture) |
-| **deps resolution** | Last segment = fn_name (`money/round` → `round`) | Flattened `money_round` style |
+| **deps resolution** | Generalized: split on `/`, last = fn_name, prefix = module path (works at any depth) | Flattened `money_round` style |
+| **deps collision** | Error at validation if two deps share fn_name | Auto-alias (`as money_round`) |
+| **Fail mode (dir)** | Collect-all for directories, fail-fast for single files | Fail-fast everywhere |
+| **Validation pipeline** | YAML → Value → JSON Schema → SpecStruct (validate raw input) | Deserialize first, validate struct |
+| **Dir loading** | Recursive walk | Flat (immediate files only) |
+| **Stale files** | Clean output dir before each generate run | Manifest-based tracking |
+| **mod.rs** | Auto-generate with pub mod per unit in namespace | Manual wiring by user |
+| **local_tests/links in IR** | Stored in ResolvedSpec, not executed in M1 | Stripped during normalize |
 | **Generated output** | .rs files only, user provides Cargo project | Full Cargo project (deferred — adds stale-file complexity before format is validated) |
 | **Schema location** | `spec-core/src/schema/unit.spec.json` (embedded via include_str!) | Runtime file path |
 
@@ -320,11 +346,36 @@ data-flow: |
 1. Initialize Rust workspace
 2. Implement `spec-core` library (types, loader, validator, normalizer, generator)
 3. Implement `spec-cli` binary (commands: validate, generate, help)
-4. Write tests (32 total)
+4. Write tests (39 total)
 5. Create example project
 6. Write README
 7. Setup CI/CD (GitHub Actions)
 8. Release 0.1
+
+---
+
+## Worktree Parallelization Strategy
+
+| Step | Modules touched | Depends on |
+|------|----------------|------------|
+| spec-core library | spec-core/src/ | — |
+| spec-cli binary | spec-cli/src/ | spec-core (types/interfaces) |
+| Example project | examples/ | spec-core, spec-cli |
+| CI/CD + README | .github/, README.md | spec-cli (for install instructions) |
+
+**Lane A:** spec-core (types, loader, validator, normalizer, generator + all unit tests)
+**Lane B:** spec-cli (main.rs, commands.rs + CLI integration tests) — depends on Lane A's public API, not full implementation
+**Lane C:** CI/CD + README — independent, can start in parallel with Lane A
+
+```
+Time →
+Lane A: [workspace init] → [spec-core: types → loader → validator → normalizer → generator] → [unit tests]
+Lane C:                    [CI/CD scaffold + README draft]─────────────────────────────────────────────────→
+Lane B:                                        [spec-cli: commands, integration tests]────────────────────→
+Merge:                                                                                   [example project]
+```
+
+**Execution:** Launch A + C in parallel. Start B once A's public types/traits are defined (doesn't need full implementation). Example project last, needs working CLI.
 
 ---
 
@@ -371,7 +422,7 @@ README.md
 
 **This plan is reviewed, approved, and ready for implementation.**
 
-**Review**: `/plan-eng-review` on 2026-03-31 (second pass)
+**Review**: `/plan-eng-review` on 2026-03-31 (third pass)
 **Design**: `design-20260331-001.md` (by /office-hours)
 **Status**: All decisions resolved, architecture final
 
@@ -382,8 +433,8 @@ README.md
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found → all resolved | 8 issues resolved in this session |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR (PLAN) | 8 issues found and resolved |
+| Codex Review | `/codex review` | Independent 2nd opinion | 2 | CLEAR | 6 findings resolved (validation pipeline, ID format, stale files, fail mode, dep collisions, mod.rs) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | CLEAR (PLAN) | 8 issues found and resolved across 3 passes |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 
-**VERDICT:** ENG CLEARED — second pass complete, all Codex findings resolved.
+**VERDICT:** ENG + CODEX CLEARED — third pass complete, all findings resolved. 39 tests planned.
