@@ -1,4 +1,5 @@
 use std::fs;
+use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -24,6 +25,24 @@ fn run(args: &[&str]) -> std::process::Output {
         .args(args)
         .output()
         .expect("failed to run spec")
+}
+
+fn run_in(cwd: &Path, args: &[&str]) -> std::process::Output {
+    Command::new(bin())
+        .current_dir(cwd)
+        .args(args)
+        .output()
+        .expect("failed to run spec")
+}
+
+fn assert_output_success(context: &str, output: &std::process::Output) {
+    if output.status.success() {
+        return;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    panic!("{context}\n\nstdout:\n{stdout}\n\nstderr:\n{stderr}");
 }
 
 fn temp_repo_dir() -> tempfile::TempDir {
@@ -316,4 +335,133 @@ body:
 
     assert!(!output_dir.join(".spec-generated").exists());
     assert!(!output_dir.join("pricing/apply_discount.rs").exists());
+}
+
+fn cargo_available() -> bool {
+    Command::new("cargo").arg("--version").output().is_ok()
+}
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("spec-cli crate should have a parent directory (repo root)")
+        .to_path_buf()
+}
+
+fn run_cargo(cwd: &Path, args: &[&str], cargo_target_dir: &Path) -> std::process::Output {
+    Command::new("cargo")
+        .current_dir(cwd)
+        .env("CARGO_TARGET_DIR", cargo_target_dir)
+        .env("CARGO_TERM_COLOR", "never")
+        .args(args)
+        .output()
+        .expect("failed to run cargo")
+}
+
+#[test]
+fn generate_cargo_check_on_ecommerce() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+
+    let output = run_in(
+        &root,
+        &[
+            "generate",
+            "examples/ecommerce/units",
+            "--output",
+            "examples/ecommerce/src/generated",
+        ],
+    );
+    assert_output_success("spec generate failed for ecommerce example", &output);
+
+    let cargo_target_dir = tempfile::TempDir::new_in(root.join("target"))
+        .expect("failed to create temp cargo target dir under repo target/");
+
+    let output = run_cargo(
+        &ecommerce_dir,
+        &["check", "--locked"],
+        cargo_target_dir.path(),
+    );
+    assert_output_success("cargo check failed for ecommerce example", &output);
+
+    let output = run_cargo(
+        &ecommerce_dir,
+        &["test", "--locked"],
+        cargo_target_dir.path(),
+    );
+    assert_output_success("cargo test failed for ecommerce example", &output);
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
+    if src.file_name().is_some_and(|name| name == "target") {
+        return Ok(());
+    }
+
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        let dest_path = dst.join(entry.file_name());
+
+        if file_type.is_dir() {
+            copy_dir_recursive(&path, &dest_path)?;
+        } else if file_type.is_file() {
+            fs::copy(&path, &dest_path)?;
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+#[should_panic(expected = "E0412")]
+fn generate_cargo_check_test_failure_includes_cargo_stderr() {
+    if !cargo_available() {
+        panic!("cargo is required for this test");
+    }
+
+    let root = repo_root();
+    let temp_dir =
+        tempfile::TempDir::new_in(root.join("target")).expect("failed to create temp dir");
+
+    let src_ecommerce = root.join("examples/ecommerce");
+    let dst_ecommerce = temp_dir.path().join("ecommerce");
+    copy_dir_recursive(&src_ecommerce, &dst_ecommerce).expect("failed to copy ecommerce example");
+
+    // Add a unit that will generate uncompilable Rust (stable error: cannot find type `NotAType`)
+    write_spec(
+        &dst_ecommerce.join("units"),
+        "pricing/bad_type.unit.spec",
+        r#"
+id: pricing/bad_type
+kind: function
+intent:
+  why: Force a compile error so we can assert cargo stderr is surfaced.
+body:
+  rust: |
+    pub fn bad_type() -> NotAType {
+        todo!()
+    }
+"#,
+    );
+
+    let output = run_in(&dst_ecommerce, &["generate", "units", "--output", "src/generated"]);
+    assert_output_success("spec generate failed for temp ecommerce copy", &output);
+
+    let cargo_target_dir = tempfile::TempDir::new_in(root.join("target"))
+        .expect("failed to create temp cargo target dir under repo target/");
+    let output = run_cargo(
+        &dst_ecommerce,
+        &["check", "--locked"],
+        cargo_target_dir.path(),
+    );
+    assert_output_success(
+        "expected cargo check to fail; this panic should include cargo stderr",
+        &output,
+    );
 }

@@ -13,6 +13,8 @@ contract:
 deps:
   - pricing/apply_discount
   - pricing/apply_tax
+imports:
+  - rust_decimal::Decimal
 body:
   rust: |
     pub fn calculate_total(subtotal: Decimal, discount_rate: Decimal, tax_rate: Decimal) -> Decimal {

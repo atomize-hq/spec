@@ -12,6 +12,8 @@ contract:
     - output >= 0
 deps:
   - money/round
+imports:
+  - rust_decimal::Decimal
 body:
   rust: |
     pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
