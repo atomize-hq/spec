@@ -38,16 +38,13 @@
 - [ ] Evidence collection and passports
 - [ ] Graph resolution
 - [ ] Contract-to-signature enforcement
-- [ ] **Define dep-validation contract: warning vs error, defaults, and `--strict` flag shape**
-  - Decision: `validate` should warn (not error) when a dep isn't found in the loaded spec set, because deps may resolve from a separate spec library. Silent pass (current behavior) is misleading — "✅ valid" when generated code has broken `use` statements is a lie.
-  - Lock in: default behavior (warning), message format (e.g., `⚠️  dep 'money/round' not found in this spec set (may be resolved externally)`), and the flag name + semantics (`--strict`? `--check-deps`?) for treating unresolved deps as errors in CI.
-  - QA finding 2026-04-02.
-
-- [ ] **Implement cross-spec dep validation warnings and `--strict` flag**
-  - Emit a warning per unresolved dep during `validate` (dep ID not present in loaded spec set).
-  - Add `--strict` (or agreed flag) to treat these as errors — for CI sealed-graph checks.
-  - Depends on the decision task above.
-  - QA finding 2026-04-02.
+- [ ] **Implement dep validation: always strict (no flag)**
+  - Design finalized in PLAN.md D7 (Eng Review #2): unresolved internal deps are always errors in both `validate` and `generate` (exit 1). No `--no-strict` flag for M2.
+  - `finish_validation` adds a dep resolution check: build `HashSet` of all loaded spec IDs, then for each spec, verify each dep ID exists. Missing dep → `SpecError::DepNotFound { dep, path }`.
+  - Error message: `❌ dep 'money/round' not found in this spec set`
+  - `generate` with missing dep: exits 1, writes nothing.
+  - `--no-strict` flag deferred to M3 when cross-library dep composition is introduced and partial-graph workflows are defined.
+  - QA finding 2026-04-02. Strict behavior locked in CEO review 2026-04-02.
 
 - [ ] **Cycle detection in normalizer** — Requires full graph resolution (all units loaded). In M1, deps are trusted strings and partial runs don't have visibility into the full graph. Implement alongside graph resolution in M2. CEO review finding.
 - [ ] **Validate contract.inputs type names** — In M1, contract.inputs values are unvalidated strings. In M2, validate that type names are valid Rust types (Decimal, String, u64, etc.) or warn on unrecognized types. CEO review finding.
