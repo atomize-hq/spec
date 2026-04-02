@@ -1,3 +1,4 @@
 target
 generated/
 examples/ecommerce/target/
+.DS_Store
