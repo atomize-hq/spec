@@ -55,10 +55,11 @@ fn validate_command(path: &Path) -> Result<()> {
     }
 
     print_errors(&errors);
+    let file_count = count_unique_files(&errors);
     bail!(
         "❌ {} file{}, {} error{}",
-        errors.len(),
-        pluralize(errors.len()),
+        file_count,
+        pluralize(file_count),
         count_errors(&errors),
         pluralize(count_errors(&errors))
     );
@@ -74,10 +75,11 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
     let errors = finish_validation(specs.clone(), errors);
     if !errors.is_empty() {
         print_errors(&errors);
+        let file_count = count_unique_files(&errors);
         bail!(
             "❌ {} file{}, {} error{}",
-            errors.len(),
-            pluralize(errors.len()),
+            file_count,
+            pluralize(file_count),
             count_errors(&errors),
             pluralize(count_errors(&errors))
         );
@@ -281,6 +283,16 @@ fn print_errors(errors: &BTreeMap<String, Vec<String>>) {
 
 fn count_errors(errors: &BTreeMap<String, Vec<String>>) -> usize {
     errors.values().map(Vec::len).sum()
+}
+
+fn count_unique_files(errors: &BTreeMap<String, Vec<String>>) -> usize {
+    let mut files = std::collections::BTreeSet::new();
+    for key in errors.keys() {
+        for part in key.split(" | ") {
+            files.insert(part.trim());
+        }
+    }
+    files.len()
 }
 
 fn pluralize(count: usize) -> &'static str {
