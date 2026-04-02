@@ -34,7 +34,7 @@
   - Discovered via Codex outside-voice review
 
 ### Deferred to M2
-- [ ] CUE validation
+- [ ] CUE validation (candidate 0.3+; JSON Schema for 0.1/0.2 — see DECISIONS.md)
 - [ ] Evidence collection and passports
 - [ ] Graph resolution
 - [ ] Contract-to-signature enforcement
