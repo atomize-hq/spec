@@ -88,6 +88,13 @@ pub enum SpecError {
     #[error("contract.inputs contains '{input}' but body.rust has no parameter with that name at {path}")]
     ContractInputParamMismatch { input: String, path: String },
 
+    #[error("local_tests[{id}].expect is not a valid Rust expression: {message} at {path}")]
+    LocalTestExpectNotExpr {
+        id: String,
+        message: String,
+        path: String,
+    },
+
     #[error("Generator error: {message}")]
     Generator { message: String },
 

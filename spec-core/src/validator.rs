@@ -115,7 +115,22 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
     }
 
     validate_body_rust_alignment(spec)?;
+    validate_local_test_expects(spec)?;
 
+    Ok(())
+}
+
+fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
+    let path = spec.source.file_path.clone();
+    for test in &spec.spec.local_tests {
+        syn::parse_str::<syn::Expr>(test.expect.trim()).map_err(|err| {
+            SpecError::LocalTestExpectNotExpr {
+                id: test.id.clone(),
+                message: err.to_string(),
+                path: path.clone(),
+            }
+        })?;
+    }
     Ok(())
 }
 
@@ -163,7 +178,6 @@ fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
 
     if let Some(contract) = &spec.spec.contract {
         if let Some(inputs) = &contract.inputs {
-            use std::collections::HashSet;
             let mut params = HashSet::<String>::new();
             for input in &item_fn.sig.inputs {
                 let syn::FnArg::Typed(pat_type) = input else {
@@ -618,5 +632,69 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
         );
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(err.contains("free function (no self parameter)"), "{err}");
+    }
+
+    #[test]
+    fn validate_local_test_expect_rejects_non_expression() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() {}".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "injection_attempt".to_string(),
+                    expect: "true); } } mod evil { fn steal() {}".to_string(),
+                }],
+                links: None,
+            },
+        };
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("not a valid Rust expression"),
+            "expected injection to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_local_test_expect_accepts_valid_expression() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "happy_path".to_string(),
+                    expect: "apply_discount() == true".to_string(),
+                }],
+                links: None,
+            },
+        };
+        assert!(validate_semantic(&spec).is_ok());
     }
 }

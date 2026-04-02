@@ -92,7 +92,7 @@ pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
     // Write to a temp file in the same directory and rename into place (per-file atomic).
     let mut tmp = tempfile::Builder::new()
         .prefix(".spec-tmp-")
-        .suffix(".rs")
+        .suffix(".tmp")
         .tempfile_in(&parent_dir)
         .map_err(|err| SpecError::Generator {
             message: format!(
@@ -297,7 +297,7 @@ fn module_item_name(fragment: &str) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
-fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
+pub fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
     let path = path.as_ref();
     let mut normalized = if path.is_absolute() {
         PathBuf::new()

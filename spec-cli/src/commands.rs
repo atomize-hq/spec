@@ -1,7 +1,8 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use spec_core::generator::{
-    clean_output_dir, generate_code, generate_mod_rs, write_generated_file,
+    clean_output_dir, generate_code, generate_mod_rs, normalized_absolute_path,
+    write_generated_file,
 };
 use spec_core::loader::{is_unit_spec, load_file};
 use spec_core::normalizer::normalize_spec;
@@ -201,9 +202,21 @@ fn path_for_spec(spec: &ResolvedSpec) -> PathBuf {
 
 fn ensure_output_marker(output: &Path) -> Result<PathBuf> {
     let output_base = normalized_absolute_path(output);
-    let project_root = normalized_absolute_path(".");
+    // Resolve symlinks in the project root so the containment check
+    // cannot be bypassed by a symlink pointing outside the project.
+    let project_root = std::env::current_dir()
+        .and_then(|p| p.canonicalize())
+        .unwrap_or_else(|_| normalized_absolute_path("."));
+    // If the output path already exists, resolve its symlinks too.
+    let output_check = if output_base.exists() {
+        output_base
+            .canonicalize()
+            .unwrap_or_else(|_| output_base.clone())
+    } else {
+        output_base.clone()
+    };
 
-    if !output_base.starts_with(&project_root) {
+    if !output_check.starts_with(&project_root) {
         bail!(
             "Refusing to generate into {}: output path is outside the project root {}",
             output_base.display(),
@@ -247,29 +260,6 @@ fn dir_is_empty(path: &Path) -> Result<bool> {
     let mut entries =
         fs::read_dir(path).with_context(|| format!("Failed to read dir {}", path.display()))?;
     Ok(entries.next().is_none())
-}
-
-fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
-    let path = path.as_ref();
-    let mut normalized = if path.is_absolute() {
-        PathBuf::new()
-    } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-    };
-
-    for component in path.components() {
-        match component {
-            std::path::Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
-            std::path::Component::RootDir => normalized.push(component.as_os_str()),
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
-            }
-            std::path::Component::Normal(segment) => normalized.push(segment),
-        }
-    }
-
-    normalized
 }
 
 fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
