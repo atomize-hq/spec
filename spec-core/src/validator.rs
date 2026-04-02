@@ -352,6 +352,41 @@ body:
     }
 
     #[test]
+    fn validate_local_test_id_must_be_valid_identifier() {
+        let invalid = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+local_tests:
+  - id: some case!
+    expect: "true"
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(invalid).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_err(), "Expected invalid local_tests id to fail");
+
+        let valid = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+local_tests:
+  - id: happy_path
+    expect: "true"
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(valid).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_ok(), "Expected valid local_tests id to pass");
+    }
+
+    #[test]
     fn test_validate_rust_keywords_in_id() {
         let result = validate_rust_keywords("pricing/type", "test.unit.spec");
         assert!(result.is_err());

@@ -40,6 +40,28 @@ pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
 
     output.push_str(spec.body_rust.trim_end_matches('\n'));
     output.push('\n');
+
+    if !spec.local_tests.is_empty() {
+        // One blank line between the generated unit body and the tests module.
+        output.push('\n');
+        output.push_str("#[cfg(test)]\n");
+        output.push_str("mod tests {\n");
+        output.push_str("    use super::*;\n\n");
+
+        for (index, local_test) in spec.local_tests.iter().enumerate() {
+            let expect = local_test.expect.trim();
+            output.push_str("    #[test]\n");
+            output.push_str(&format!("    fn test_{}() {{\n", local_test.id));
+            output.push_str(&format!("        assert!({expect});\n"));
+            output.push_str("    }\n");
+
+            if index + 1 != spec.local_tests.len() {
+                output.push('\n');
+            }
+        }
+
+        output.push_str("}\n");
+    }
     Ok(output)
 }
 
@@ -301,7 +323,7 @@ fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Intent, ResolvedSpec, SpecStruct};
+    use crate::types::{Body, Intent, LocalTest, ResolvedSpec, SpecStruct};
     #[cfg(unix)]
     use std::os::unix::fs as unix_fs;
     use tempfile::TempDir;
@@ -430,6 +452,33 @@ mod tests {
             content,
             "pub mod apply_discount;\npub mod refund;\n\npub mod discounts;\npub mod taxes;\n"
         );
+    }
+
+    #[test]
+    fn generate_local_tests_produces_cfg_test_block() {
+        let mut spec = test_spec_with(
+            vec![],
+            vec!["rust_decimal::Decimal"],
+            "pub fn apply_discount() -> Decimal {\n    Decimal::ZERO\n}",
+        );
+        spec.local_tests = vec![LocalTest {
+            id: "happy_path".to_string(),
+            expect: "apply_discount() == Decimal::ZERO".to_string(),
+        }];
+
+        let code = generate_code(&spec).unwrap();
+        assert!(code.contains("#[cfg(test)]\nmod tests {"));
+        assert!(code.contains("use super::*;"));
+        assert!(code.contains("fn test_happy_path() {"));
+        assert!(code.contains("assert!(apply_discount() == Decimal::ZERO);"));
+    }
+
+    #[test]
+    fn generate_no_local_tests_produces_no_test_block() {
+        let spec = test_spec_with(vec![], vec![], "pub fn apply_discount() {}");
+        let code = generate_code(&spec).unwrap();
+        assert!(!code.contains("#[cfg(test)]"));
+        assert!(!code.contains("mod tests {"));
     }
 
     #[test]
