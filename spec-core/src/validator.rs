@@ -113,6 +113,80 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
         });
     }
 
+    validate_body_rust_alignment(spec)?;
+
+    Ok(())
+}
+
+fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
+    let path = spec.source.file_path.clone();
+    let expected_fn_name = spec.spec.id.rsplit('/').next().unwrap_or_default();
+
+    let file = syn::parse_file(&spec.spec.body.rust).map_err(|err| SpecError::BodyRustParseFailed {
+        message: err.to_string(),
+        path: path.clone(),
+    })?;
+
+    if file.items.len() != 1 {
+        return Err(SpecError::BodyRustMustBeSingleFn {
+            found: file.items.len(),
+            path,
+        });
+    }
+
+    let syn::Item::Fn(item_fn) = &file.items[0] else {
+        return Err(SpecError::BodyRustMustBeSingleFn { found: 1, path });
+    };
+
+    let found_name = item_fn.sig.ident.to_string();
+    if found_name != expected_fn_name {
+        return Err(SpecError::BodyRustFnNameMismatch {
+            expected: expected_fn_name.to_string(),
+            found: found_name,
+            path,
+        });
+    }
+
+    for input in &item_fn.sig.inputs {
+        match input {
+            syn::FnArg::Receiver(_) => return Err(SpecError::BodyRustMethodRejected { path }),
+            syn::FnArg::Typed(pat_type) => {
+                if let syn::Pat::Ident(pat_ident) = &*pat_type.pat {
+                    if pat_ident.ident == "self" {
+                        return Err(SpecError::BodyRustMethodRejected { path });
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(contract) = &spec.spec.contract {
+        if let Some(inputs) = &contract.inputs {
+            use std::collections::HashSet;
+            let mut params = HashSet::<String>::new();
+            for input in &item_fn.sig.inputs {
+                let syn::FnArg::Typed(pat_type) = input else {
+                    continue;
+                };
+                let syn::Pat::Ident(pat_ident) = &*pat_type.pat else {
+                    continue;
+                };
+                params.insert(pat_ident.ident.to_string());
+            }
+
+            let mut input_keys: Vec<&String> = inputs.keys().collect();
+            input_keys.sort();
+            for input in input_keys {
+                if !params.contains(input.as_str()) {
+                    return Err(SpecError::ContractInputParamMismatch {
+                        input: input.clone(),
+                        path,
+                    });
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -159,7 +233,7 @@ pub fn validate_full(spec: &LoadedSpec) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Intent, SpecSource, SpecStruct};
+    use crate::types::{Body, Contract, Intent, SpecSource, SpecStruct};
 
     fn create_test_spec(id: &str, rust_body: &str) -> LoadedSpec {
         LoadedSpec {
@@ -423,5 +497,66 @@ body:
                 .to_string()
                 .contains("Rust reserved keyword")
         );
+    }
+
+    #[test]
+    fn validate_body_fn_name_mismatch() {
+        let spec = create_test_spec("pricing/apply_discount", "pub fn wrong_name() {}");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("expected 'apply_discount'"), "{err}");
+    }
+
+    #[test]
+    fn validate_body_multiple_fns_rejected() {
+        let spec = create_test_spec(
+            "pricing/apply_discount",
+            "pub fn apply_discount() {}\npub fn other() {}",
+        );
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("exactly one top-level function"), "{err}");
+    }
+
+    #[test]
+    fn validate_contract_arg_name_mismatch() {
+        use std::collections::HashMap;
+
+        let mut spec = create_test_spec("pricing/apply_discount", "pub fn apply_discount(price: Decimal) {}");
+        let mut inputs = HashMap::new();
+        inputs.insert("subtotal".to_string(), "Decimal".to_string());
+        spec.spec.contract = Some(Contract {
+            inputs: Some(inputs),
+            returns: None,
+            invariants: vec![],
+        });
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("contract.inputs contains 'subtotal'"), "{err}");
+    }
+
+    #[test]
+    fn validate_body_with_macros_passes_fn_name_check() {
+        let spec = create_test_spec(
+            "pricing/apply_discount",
+            r#"
+#[allow(dead_code)]
+pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
+    let _v = vec![1, 2, 3];
+    assert!(true);
+    todo!()
+}
+"#,
+        );
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn validate_body_method_rejected() {
+        let spec = create_test_spec(
+            "pricing/apply_discount",
+            "pub fn apply_discount(&self, subtotal: Decimal) {}",
+        );
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("free function (no self parameter)"), "{err}");
     }
 }
