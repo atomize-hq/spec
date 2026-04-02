@@ -86,10 +86,22 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
         });
     }
 
-    // Check for use statements in body.rust (line-start to avoid false positives in comments)
+    // Check for use statements in body.rust (line-start to avoid false positives in comments).
+    // Also catches visibility-prefixed forms: `pub use`, `pub(crate) use`, etc.
     let has_use_stmt = spec.spec.body.rust.lines().any(|line| {
         let trimmed = line.trim_start();
-        trimmed.starts_with("use ") || trimmed.starts_with("use\t")
+        // Plain `use` or `use<TAB>`
+        if trimmed.starts_with("use ") || trimmed.starts_with("use\t") {
+            return true;
+        }
+        // `pub use ...` / `pub(crate) use ...` / `pub(super) use ...`
+        if let Some(rest) = trimmed.strip_prefix("pub") {
+            let rest = rest.trim_start_matches(|c: char| c == '(' || c == ')' || c.is_alphanumeric() || c == '_').trim_start();
+            if rest.starts_with("use ") || rest.starts_with("use\t") {
+                return true;
+            }
+        }
+        false
     });
     if has_use_stmt {
         return Err(SpecError::UseStatementInBody {
@@ -180,10 +192,14 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_schema_missing_required_field() {
+    fn test_validate_schema_valid_spec_passes() {
         let spec = create_test_spec("pricing/apply_discount", "pub fn test() {}");
         let result = validate_schema(&spec);
-        assert!(result.is_ok()); // This spec has all required fields
+        assert!(
+            result.is_ok(),
+            "A complete valid spec should pass schema validation: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -306,5 +322,45 @@ extra_field: should_fail
         let spec = create_test_spec("utils/round", "pub fn round(x: f64) -> f64 { x.floor() }");
         let result = validate_full(&spec);
         assert!(result.is_ok(), "Full validation should pass: {:?}", result);
+    }
+
+    #[test]
+    fn test_validate_use_statement_pub_use_in_body() {
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "test/func".to_string(),
+            },
+            spec: SpecStruct {
+                id: "test/func".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Test pub use".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                body: Body {
+                    rust: "pub use std::collections::HashMap;\npub fn func() {}".to_string(),
+                },
+                local_tests: vec![],
+                links: None,
+            },
+        };
+        let result = validate_semantic(&spec);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("body.rust must not contain use statements")
+        );
+    }
+
+    #[test]
+    fn test_validate_rust_keyword_try_in_id() {
+        // `try` is reserved since Rust 2018 and was previously missing from the list
+        let result = validate_rust_keywords("pricing/try", "test.unit.spec");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Rust reserved keyword"));
     }
 }

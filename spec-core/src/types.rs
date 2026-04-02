@@ -160,12 +160,18 @@ impl ResolvedSpec {
     }
 }
 
-/// Rust reserved keywords that cannot be used as identifiers
+/// Rust reserved keywords that cannot be used as identifiers.
+/// Covers both active keywords (Rust 2018+) and reserved-for-future-use keywords that
+/// are also invalid as identifiers in current editions.
 pub const RUST_KEYWORDS: &[&str] = &[
-    "type", "mod", "crate", "self", "super", "fn", "struct", "enum", "impl", "trait", "pub", "use",
-    "let", "mut", "const", "static", "ref", "return", "if", "else", "match", "for", "while",
-    "loop", "break", "continue", "move", "async", "await", "dyn", "where", "as", "in", "extern",
-    "unsafe", "true", "false",
+    // Active keywords
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
+    "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
+    "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait", "true", "type",
+    "unsafe", "use", "where", "while",
+    // Reserved for future use (also invalid as plain identifiers)
+    "abstract", "become", "box", "do", "final", "macro", "override", "priv", "try", "typeof",
+    "unsized", "virtual", "yield",
 ];
 
 /// Check if a string is a Rust reserved keyword
@@ -254,9 +260,16 @@ mod tests {
 
     #[test]
     fn test_rust_keywords() {
+        // Active keywords
         assert!(is_rust_keyword("type"));
         assert!(is_rust_keyword("mod"));
         assert!(is_rust_keyword("pub"));
+        // Reserved-for-future-use keywords (newly added)
+        assert!(is_rust_keyword("try"));
+        assert!(is_rust_keyword("abstract"));
+        assert!(is_rust_keyword("yield"));
+        assert!(is_rust_keyword("final"));
+        // Not keywords
         assert!(!is_rust_keyword("my_function"));
         assert!(!is_rust_keyword("pricing"));
     }

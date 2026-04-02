@@ -123,12 +123,7 @@ pub fn clean_output_dir(output_base: &str, module_paths: &[String]) -> Result<()
     Ok(())
 }
 
-pub fn generate_mod_rs(
-    _output_base: &str,
-    _module_path: &str,
-    unit_files: &[String],
-    subdirs: &[String],
-) -> Result<String> {
+pub fn generate_mod_rs(unit_files: &[String], subdirs: &[String]) -> Result<String> {
     let mut seen = HashSet::new();
     let mut unit_mods = Vec::new();
     let mut subdir_mods = Vec::new();
@@ -357,8 +352,6 @@ mod tests {
     #[test]
     fn test_generate_mod_rs_lists_units_and_subdirs() {
         let content = generate_mod_rs(
-            "./generated/spec",
-            "pricing",
             &["apply_discount.rs".to_string(), "refund.rs".to_string()],
             &["taxes".to_string(), "discounts".to_string()],
         )

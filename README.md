@@ -62,3 +62,5 @@ cargo run -p spec-cli -- generate <path> --output <dir>
 ```
 
 `validate` checks schema and semantic rules. `generate` emits `.rs` files under the output directory and manages `mod.rs` files plus the `.spec-generated` safety marker.
+
+The `--output` path must be relative to the directory where you run `spec` (i.e. your project root). Absolute paths are rejected as a safety guardrail to prevent accidental deletion of files outside the project.

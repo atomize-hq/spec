@@ -110,8 +110,6 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
 
     for (module_path, namespace) in build_namespaces(&resolved_specs) {
         let content = generate_mod_rs(
-            &output.display().to_string(),
-            &module_path,
             &namespace.unit_files.into_iter().collect::<Vec<_>>(),
             &namespace.subdirs.into_iter().collect::<Vec<_>>(),
         )
