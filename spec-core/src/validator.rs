@@ -96,7 +96,11 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
         }
         // `pub use ...` / `pub(crate) use ...` / `pub(super) use ...`
         if let Some(rest) = trimmed.strip_prefix("pub") {
-            let rest = rest.trim_start_matches(|c: char| c == '(' || c == ')' || c.is_alphanumeric() || c == '_').trim_start();
+            let rest = rest
+                .trim_start_matches(|c: char| {
+                    c == '(' || c == ')' || c.is_alphanumeric() || c == '_'
+                })
+                .trim_start();
             if rest.starts_with("use ") || rest.starts_with("use\t") {
                 return true;
             }
@@ -361,6 +365,11 @@ extra_field: should_fail
         // `try` is reserved since Rust 2018 and was previously missing from the list
         let result = validate_rust_keywords("pricing/try", "test.unit.spec");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Rust reserved keyword"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Rust reserved keyword")
+        );
     }
 }

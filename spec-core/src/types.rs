@@ -165,10 +165,10 @@ impl ResolvedSpec {
 /// are also invalid as identifiers in current editions.
 pub const RUST_KEYWORDS: &[&str] = &[
     // Active keywords
-    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
-    "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
-    "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait", "true", "type",
-    "unsafe", "use", "where", "while",
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
+    "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
+    "ref", "return", "self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use",
+    "where", "while",
     // Reserved for future use (also invalid as plain identifiers)
     "abstract", "become", "box", "do", "final", "macro", "override", "priv", "try", "typeof",
     "unsized", "virtual", "yield",
