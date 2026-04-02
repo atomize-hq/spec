@@ -17,6 +17,8 @@ pub struct SpecStruct {
     pub contract: Option<Contract>,
     #[serde(default)]
     pub deps: Vec<String>,
+    #[serde(default)]
+    pub imports: Vec<String>,
     pub body: Body,
     #[serde(default)]
     pub local_tests: Vec<LocalTest>,
@@ -72,6 +74,8 @@ pub struct ResolvedSpec {
     pub module_path: String,
     /// Fully resolved dep IDs (empty vec if none)
     pub deps: Vec<String>,
+    /// External/native Rust imports (e.g. "rust_decimal::Decimal")
+    pub imports: Vec<String>,
     /// Raw Rust code from body.rust block
     pub body_rust: String,
     /// Contract metadata (stored, not used for codegen in M1)
@@ -116,6 +120,7 @@ impl ResolvedSpec {
             fn_name,
             module_path,
             deps: spec.deps,
+            imports: spec.imports,
             body_rust: spec.body.rust,
             contract: spec.contract,
             local_tests: spec.local_tests,
@@ -193,6 +198,7 @@ mod tests {
             },
             contract: None,
             deps: vec![],
+            imports: vec![],
             body: Body {
                 rust: "pub fn apply_discount() {}".to_string(),
             },
@@ -216,6 +222,7 @@ mod tests {
             },
             contract: None,
             deps: vec![],
+            imports: vec![],
             body: Body {
                 rust: "pub fn round() {}".to_string(),
             },

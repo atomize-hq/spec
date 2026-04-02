@@ -1,7 +1,7 @@
 //! Generator module: Generate Rust code from ResolvedSpec
 //!
 //! Implements the M1 generation path from PLAN.md:
-//! - prepend `use crate::...` imports for deps
+//! - prepend `use ...` imports for imports + deps
 //! - write generated `.rs` files
 //! - generate `mod.rs` contents
 //! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
@@ -17,15 +17,24 @@ use walkdir::WalkDir;
 const GENERATED_MARKER: &str = ".spec-generated";
 
 pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
-    let use_statements = build_use_statements(spec)?;
+    let (import_statements, dep_statements) = build_use_groups(spec)?;
     let mut output = String::new();
 
-    for statement in use_statements {
+    for statement in import_statements {
         output.push_str(&statement);
         output.push('\n');
     }
 
-    if !spec.deps.is_empty() {
+    if !spec.imports.is_empty() && !spec.deps.is_empty() {
+        output.push('\n');
+    }
+
+    for statement in dep_statements {
+        output.push_str(&statement);
+        output.push('\n');
+    }
+
+    if !spec.imports.is_empty() || !spec.deps.is_empty() {
         output.push('\n');
     }
 
@@ -227,7 +236,7 @@ pub fn generate_mod_rs(unit_files: &[String], subdirs: &[String]) -> Result<Stri
     Ok(output)
 }
 
-fn build_use_statements(spec: &ResolvedSpec) -> Result<Vec<String>> {
+fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
     if let Some((dep1, dep2)) = ResolvedSpec::has_dep_collision(&spec.deps) {
         return Err(SpecError::DepCollision {
             dep1: dep1.clone(),
@@ -237,16 +246,25 @@ fn build_use_statements(spec: &ResolvedSpec) -> Result<Vec<String>> {
         });
     }
 
-    let mut seen = HashSet::new();
-    let mut statements = Vec::new();
+    let mut import_seen = HashSet::new();
+    let mut import_statements = Vec::new();
 
-    for dep in &spec.deps {
-        if seen.insert(dep.clone()) {
-            statements.push(format!("use {}", ResolvedSpec::dep_to_use_path(dep)));
+    for import_path in &spec.imports {
+        if import_seen.insert(import_path.clone()) {
+            import_statements.push(format!("use {};", import_path));
         }
     }
 
-    Ok(statements)
+    let mut dep_seen = HashSet::new();
+    let mut dep_statements = Vec::new();
+
+    for dep in &spec.deps {
+        if dep_seen.insert(dep.clone()) {
+            dep_statements.push(format!("use {}", ResolvedSpec::dep_to_use_path(dep)));
+        }
+    }
+
+    Ok((import_statements, dep_statements))
 }
 
 fn module_item_name(fragment: &str) -> Option<String> {
@@ -288,7 +306,7 @@ mod tests {
     use std::os::unix::fs as unix_fs;
     use tempfile::TempDir;
 
-    fn test_spec(deps: Vec<&str>, body: &str) -> ResolvedSpec {
+    fn test_spec_with(deps: Vec<&str>, imports: Vec<&str>, body: &str) -> ResolvedSpec {
         ResolvedSpec::from_spec(SpecStruct {
             id: "pricing/apply_discount".to_string(),
             kind: "function".to_string(),
@@ -297,12 +315,20 @@ mod tests {
             },
             contract: None,
             deps: deps.into_iter().map(|dep| dep.to_string()).collect(),
+            imports: imports
+                .into_iter()
+                .map(|import| import.to_string())
+                .collect(),
             body: Body {
                 rust: body.to_string(),
             },
             local_tests: vec![],
             links: None,
         })
+    }
+
+    fn test_spec(deps: Vec<&str>, body: &str) -> ResolvedSpec {
+        test_spec_with(deps, vec![], body)
     }
 
     #[test]
@@ -328,6 +354,48 @@ mod tests {
 
         let err = generate_code(&spec).unwrap_err();
         assert!(err.to_string().contains("Dep fn_name collision"));
+    }
+
+    #[test]
+    fn imports_field_generates_correct_use_statement() {
+        let spec = test_spec_with(
+            vec![],
+            vec!["rust_decimal::Decimal"],
+            "pub fn apply_discount() -> Decimal {\n    Decimal::ZERO\n}",
+        );
+
+        let code = generate_code(&spec).unwrap();
+        assert_eq!(
+            code,
+            "use rust_decimal::Decimal;\n\npub fn apply_discount() -> Decimal {\n    Decimal::ZERO\n}\n"
+        );
+    }
+
+    #[test]
+    fn deps_unchanged_after_imports_split() {
+        let spec = test_spec_with(
+            vec!["money/round"],
+            vec![],
+            "pub fn apply_discount() -> Decimal {\n    round(Decimal::ZERO)\n}",
+        );
+
+        let code = generate_code(&spec).unwrap();
+        assert!(code.contains("use crate::money::round::round;"));
+    }
+
+    #[test]
+    fn imports_emitted_before_deps_in_use_statements() {
+        let spec = test_spec_with(
+            vec!["money/round"],
+            vec!["rust_decimal::Decimal"],
+            "pub fn apply_discount() -> Decimal {\n    round(Decimal::ZERO)\n}",
+        );
+
+        let code = generate_code(&spec).unwrap();
+        assert_eq!(
+            code,
+            "use rust_decimal::Decimal;\n\nuse crate::money::round::round;\n\npub fn apply_discount() -> Decimal {\n    round(Decimal::ZERO)\n}\n"
+        );
     }
 
     #[test]

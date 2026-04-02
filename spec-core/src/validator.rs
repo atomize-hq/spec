@@ -175,6 +175,7 @@ mod tests {
                 },
                 contract: None,
                 deps: vec![],
+                imports: vec![],
                 body: Body {
                     rust: rust_body.to_string(),
                 },
@@ -225,6 +226,55 @@ extra_field: should_fail
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Schema validation failed"));
         assert!(err.contains("Additional properties are not allowed"));
+    }
+
+    #[test]
+    fn imports_field_validates_rust_path() {
+        let valid = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a percentage discount.
+imports:
+  - rust_decimal::Decimal
+  - std::collections::HashMap
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(valid).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_ok(), "Expected valid imports to pass: {:?}", result);
+
+        let invalid_bare = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a percentage discount.
+imports:
+  - Decimal
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(invalid_bare).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_err(), "Expected bare import to fail");
+
+        let invalid_leading = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a percentage discount.
+imports:
+  - ::Decimal
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(invalid_leading).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_err(), "Expected leading :: import to fail");
     }
 
     #[test]
@@ -294,6 +344,7 @@ extra_field: should_fail
                 },
                 contract: None,
                 deps: vec![],
+                imports: vec![],
                 body: Body {
                     rust: "use std::collections::HashMap; pub fn test() {}".to_string(),
                 },
@@ -343,6 +394,7 @@ extra_field: should_fail
                 },
                 contract: None,
                 deps: vec![],
+                imports: vec![],
                 body: Body {
                     rust: "pub use std::collections::HashMap;\npub fn func() {}".to_string(),
                 },

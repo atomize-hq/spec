@@ -58,7 +58,7 @@ pub enum SpecError {
     },
 
     #[error(
-        "body.rust must not contain use statements; declare imports via deps instead at {path}"
+        "body.rust must not contain use statements; declare external imports via imports (and internal unit deps via deps) at {path}"
     )]
     UseStatementInBody { path: String },
 
