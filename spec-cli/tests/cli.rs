@@ -176,6 +176,51 @@ body:
     assert!(root_mod.contains("pub mod pricing;"));
 }
 
+// Regression: ISSUE-001 — duplicate ID across two files showed "1 file, 1 error"
+// instead of "2 files, 1 error" because the composite key "file1 | file2" counted as one map entry.
+// Found by /qa on 2026-04-01
+// Report: .gstack/qa-reports/qa-report-spec-2026-04-01.md
+#[test]
+fn validate_duplicate_id_reports_correct_file_count() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/a.unit.spec",
+        r#"
+id: pricing/foo
+kind: function
+intent:
+  why: First definition.
+body:
+  rust: |
+    pub fn foo() {}
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/b.unit.spec",
+        r#"
+id: pricing/foo
+kind: function
+intent:
+  why: Duplicate definition.
+body:
+  rust: |
+    pub fn foo() {}
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("2 files"),
+        "expected '2 files' in error output, got: {stderr}"
+    );
+}
+
 #[test]
 fn validate_empty_directory_reports_zero_units() {
     let temp_dir = temp_repo_dir();
