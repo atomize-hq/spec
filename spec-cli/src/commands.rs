@@ -16,7 +16,9 @@ type CollectedSpecs = (Vec<LoadedSpec>, BTreeMap<String, Vec<String>>, usize);
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    #[command(about = "Validate .unit.spec files")]
     Validate(ValidateArgs),
+    #[command(about = "Generate Rust source files from .unit.spec files")]
     Generate(GenerateArgs),
 }
 
