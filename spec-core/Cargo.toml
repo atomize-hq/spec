@@ -15,6 +15,6 @@ serde_yaml_bw = { workspace = true }
 jsonschema = { workspace = true }
 thiserror = { workspace = true }
 walkdir = { workspace = true }
+tempfile = "3.19"
 
 [dev-dependencies]
-tempfile = "3.19"

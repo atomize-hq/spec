@@ -7,7 +7,7 @@ use spec_core::loader::{is_unit_spec, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::types::{LoadedSpec, ResolvedSpec};
 use spec_core::validator::{validate_full, validate_no_duplicate_ids};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -95,19 +95,27 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
         );
     }
 
-    let module_paths: Vec<String> = resolved_specs
-        .iter()
-        .map(|spec| spec.module_path.clone())
-        .collect();
+    let mut generated_rs_rel_paths = HashSet::<PathBuf>::new();
+    for spec in &resolved_specs {
+        generated_rs_rel_paths.insert(path_for_spec(spec));
+    }
 
-    ensure_output_marker(output)?;
-    clean_output_dir(&output.display().to_string(), &module_paths)
-        .with_context(|| format!("Failed to clean output directory {}", output.display()))?;
+    // Include every generated mod.rs (root + nested modules) in the owned set.
+    for (module_path, _namespace) in build_namespaces(&resolved_specs) {
+        let mod_rs_rel = if module_path.is_empty() {
+            PathBuf::from("mod.rs")
+        } else {
+            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
+        };
+        generated_rs_rel_paths.insert(mod_rs_rel);
+    }
+
+    let output_base = ensure_output_marker(output)?;
 
     for spec in &resolved_specs {
         let content = generate_code(spec)
             .with_context(|| format!("Failed to generate Rust for {}", spec.id))?;
-        let output_path = output.join(path_for_spec(spec));
+        let output_path = output_base.join(path_for_spec(spec));
         write_generated_file(&output_path.display().to_string(), &content)
             .with_context(|| format!("Failed to write {}", output_path.display()))?;
     }
@@ -119,17 +127,23 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
         )
         .with_context(|| format!("Failed to generate mod.rs for module '{module_path}'"))?;
 
-        let mod_rs_path = if module_path.is_empty() {
-            output.join("mod.rs")
+        let mod_rs_rel = if module_path.is_empty() {
+            PathBuf::from("mod.rs")
         } else {
-            output
-                .join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
-                .join("mod.rs")
+            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
         };
+        let mod_rs_path = output_base.join(mod_rs_rel);
 
         write_generated_file(&mod_rs_path.display().to_string(), &content)
             .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
     }
+
+    clean_output_dir(&output_base, &generated_rs_rel_paths).with_context(|| {
+        format!(
+            "Failed to clean output directory {}",
+            output_base.display()
+        )
+    })?;
 
     println!(
         "Generated {} file{}",
@@ -185,20 +199,77 @@ fn path_for_spec(spec: &ResolvedSpec) -> PathBuf {
     path
 }
 
-fn ensure_output_marker(output: &Path) -> Result<()> {
-    let marker = output.join(".spec-generated");
-    if marker.exists() {
-        return Ok(());
+fn ensure_output_marker(output: &Path) -> Result<PathBuf> {
+    let output_base = normalized_absolute_path(output);
+    let project_root = normalized_absolute_path(".");
+
+    if !output_base.starts_with(&project_root) {
+        bail!(
+            "Refusing to generate into {}: output path is outside the project root {}",
+            output_base.display(),
+            project_root.display()
+        );
     }
 
-    if !output.exists() {
-        fs::create_dir_all(output)
-            .with_context(|| format!("Failed to create output directory {}", output.display()))?;
+    if output_base.exists() && !output_base.is_dir() {
+        bail!(
+            "Refusing to generate into {}: output path exists and is not a directory",
+            output_base.display()
+        );
     }
 
-    fs::write(&marker, "")
-        .with_context(|| format!("Failed to create marker {}", marker.display()))?;
-    Ok(())
+    let marker = output_base.join(".spec-generated");
+    if !marker.exists() && output_base.exists() && !dir_is_empty(&output_base)? {
+        bail!(
+            "Refusing to generate into {}: non-empty directory missing .spec-generated marker",
+            output_base.display()
+        );
+    }
+
+    if !output_base.exists() {
+        fs::create_dir_all(&output_base).with_context(|| {
+            format!(
+                "Failed to create output directory {}",
+                output_base.display()
+            )
+        })?;
+    }
+
+    if !marker.exists() {
+        fs::write(&marker, "")
+            .with_context(|| format!("Failed to create marker {}", marker.display()))?;
+    }
+
+    Ok(output_base)
+}
+
+fn dir_is_empty(path: &Path) -> Result<bool> {
+    let mut entries =
+        fs::read_dir(path).with_context(|| format!("Failed to read dir {}", path.display()))?;
+    Ok(entries.next().is_none())
+}
+
+fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let path = path.as_ref();
+    let mut normalized = if path.is_absolute() {
+        PathBuf::new()
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    };
+
+    for component in path.components() {
+        match component {
+            std::path::Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            std::path::Component::RootDir => normalized.push(component.as_os_str()),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::Normal(segment) => normalized.push(segment),
+        }
+    }
+
+    normalized
 }
 
 fn collect_specs(path: &Path) -> Result<CollectedSpecs> {

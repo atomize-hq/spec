@@ -4,12 +4,12 @@
 //! - prepend `use crate::...` imports for deps
 //! - write generated `.rs` files
 //! - generate `mod.rs` contents
-//! - scoped clean with `.spec-generated` marker safety rails
+//! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
 
 use crate::types::ResolvedSpec;
 use crate::{Result, SpecError};
 use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
@@ -45,36 +45,67 @@ pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
                 err
             ),
         })?;
+    } else {
+        return Err(SpecError::Generator {
+            message: format!("Unable to write {}: missing parent directory", path.display()),
+        });
     }
 
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(path)
+    let parent_dir = path
+        .parent()
+        .ok_or_else(|| SpecError::Generator {
+            message: format!("Unable to write {}: missing parent directory", path.display()),
+        })?
+        .to_path_buf();
+
+    // Write to a temp file in the same directory and rename into place (per-file atomic).
+    let mut tmp = tempfile::Builder::new()
+        .prefix(".spec-tmp-")
+        .suffix(".rs")
+        .tempfile_in(&parent_dir)
         .map_err(|err| SpecError::Generator {
-            message: format!("Unable to open {} for writing: {}", path.display(), err),
+            message: format!(
+                "Unable to create temp file in {}: {}",
+                parent_dir.display(),
+                err
+            ),
         })?;
 
-    file.write_all(content.as_bytes())
+    tmp.write_all(content.as_bytes())
         .map_err(|err| SpecError::Generator {
-            message: format!("Unable to write {}: {}", path.display(), err),
+            message: format!("Unable to write temp file for {}: {}", path.display(), err),
         })?;
 
     if !content.ends_with('\n') {
-        file.write_all(b"\n").map_err(|err| SpecError::Generator {
-            message: format!("Unable to finalize {}: {}", path.display(), err),
+        tmp.write_all(b"\n").map_err(|err| SpecError::Generator {
+            message: format!("Unable to finalize temp file for {}: {}", path.display(), err),
         })?;
     }
 
-    file.flush().map_err(|err| SpecError::Generator {
-        message: format!("Unable to flush {}: {}", path.display(), err),
+    tmp.flush().map_err(|err| SpecError::Generator {
+        message: format!("Unable to flush temp file for {}: {}", path.display(), err),
+    })?;
+
+    // On Windows, renaming over an existing file fails; remove it first.
+    if cfg!(windows) && path.exists() {
+        fs::remove_file(path).map_err(|err| SpecError::Generator {
+            message: format!("Unable to remove existing {}: {}", path.display(), err),
+        })?;
+    }
+
+    let tmp_path = tmp.into_temp_path();
+    fs::rename(&tmp_path, path).map_err(|err| SpecError::Generator {
+        message: format!(
+            "Unable to rename temp file into {}: {}",
+            path.display(),
+            err
+        ),
     })?;
 
     Ok(())
 }
 
-pub fn clean_output_dir(output_base: &str, module_paths: &[String]) -> Result<()> {
+pub fn clean_output_dir(output_base: &Path, generated_rs_rel_paths: &HashSet<PathBuf>) -> Result<()> {
     let base = normalized_absolute_path(output_base);
     let project_root = normalized_absolute_path(".");
 
@@ -95,24 +126,53 @@ pub fn clean_output_dir(output_base: &str, module_paths: &[String]) -> Result<()
         });
     }
 
-    let mut targets = normalize_target_dirs(&base, module_paths)?;
-    targets.sort();
-    targets.dedup();
-    targets = prune_nested_targets(targets);
-
-    for target in targets {
-        if !target.exists() {
+    // Remove orphaned `.rs` files (anything not in the generated set).
+    for entry in WalkDir::new(&base).follow_links(false) {
+        let entry = entry.map_err(SpecError::from)?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
             continue;
         }
 
-        for entry in WalkDir::new(&target).follow_links(false) {
-            let entry = entry.map_err(SpecError::from)?;
-            let path = entry.path();
-            if path.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
-                fs::remove_file(path).map_err(|err| SpecError::Generator {
-                    message: format!("Unable to remove {}: {}", path.display(), err),
-                })?;
-            }
+        let rel = path.strip_prefix(&base).map_err(|err| SpecError::Generator {
+            message: format!(
+                "Unable to compute relative path for {}: {}",
+                path.display(),
+                err
+            ),
+        })?;
+
+        if !generated_rs_rel_paths.contains(rel) {
+            fs::remove_file(path).map_err(|err| SpecError::Generator {
+                message: format!("Unable to remove {}: {}", path.display(), err),
+            })?;
+        }
+    }
+
+    // Remove empty directories bottom-up (but never remove the base itself).
+    for entry in WalkDir::new(&base)
+        .follow_links(false)
+        .contents_first(true)
+    {
+        let entry = entry.map_err(SpecError::from)?;
+        if !entry.file_type().is_dir() || entry.file_type().is_symlink() {
+            continue;
+        }
+        let path = entry.path();
+        if path == base {
+            continue;
+        }
+
+        let mut entries = fs::read_dir(path).map_err(|err| SpecError::Generator {
+            message: format!("Unable to read dir {}: {}", path.display(), err),
+        })?;
+        if entries.next().is_none() {
+            fs::remove_dir(path).map_err(|err| SpecError::Generator {
+                message: format!("Unable to remove dir {}: {}", path.display(), err),
+            })?;
         }
     }
 
@@ -195,65 +255,6 @@ fn module_item_name(fragment: &str) -> Option<String> {
         .and_then(|name| name.to_str())
         .map(|name| name.trim_end_matches(".rs").to_string())
         .filter(|name| !name.is_empty())
-}
-
-fn normalize_target_dirs(base: &Path, module_paths: &[String]) -> Result<Vec<PathBuf>> {
-    let mut dirs = Vec::new();
-
-    if module_paths.is_empty() {
-        dirs.push(base.to_path_buf());
-        return Ok(dirs);
-    }
-
-    for module_path in module_paths {
-        dirs.push(join_module_path(base, module_path)?);
-    }
-
-    Ok(dirs)
-}
-
-fn prune_nested_targets(mut targets: Vec<PathBuf>) -> Vec<PathBuf> {
-    let mut pruned = Vec::new();
-
-    'outer: for target in targets.drain(..) {
-        for existing in &pruned {
-            if target.starts_with(existing) {
-                continue 'outer;
-            }
-        }
-        pruned.push(target);
-    }
-
-    pruned
-}
-
-fn join_module_path(base: &Path, module_path: &str) -> Result<PathBuf> {
-    let mut path = base.to_path_buf();
-    for segment in module_path.split('/').filter(|segment| !segment.is_empty()) {
-        if segment == "." || segment == ".." {
-            return Err(SpecError::OutputDir {
-                message: format!(
-                    "Refusing to clean {}: invalid module path '{}'",
-                    base.display(),
-                    module_path
-                ),
-            });
-        }
-        path.push(segment);
-    }
-
-    let normalized = normalized_absolute_path(path);
-    if !normalized.starts_with(base) {
-        return Err(SpecError::OutputDir {
-            message: format!(
-                "Refusing to clean {}: resolved module path '{}' escaped the output base",
-                normalized.display(),
-                module_path
-            ),
-        });
-    }
-
-    Ok(normalized)
 }
 
 fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
@@ -364,23 +365,39 @@ mod tests {
     }
 
     #[test]
-    fn test_clean_output_dir_scoped_and_marker_safe() {
+    fn clean_output_dir_removes_stale_module_from_prior_run() {
         let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
         let base = temp_dir.path().join("generated/spec");
         let pricing = base.join("pricing");
-        let money = base.join("money");
+        let test_mod = base.join("test");
         fs::create_dir_all(&pricing).unwrap();
-        fs::create_dir_all(&money).unwrap();
+        fs::create_dir_all(&test_mod).unwrap();
         fs::write(base.join(GENERATED_MARKER), "").unwrap();
+
+        // "Current run" generated files.
+        fs::write(base.join("mod.rs"), "pub mod pricing;\n").unwrap();
         fs::write(pricing.join("apply_discount.rs"), "fn a() {}\n").unwrap();
         fs::write(pricing.join("mod.rs"), "pub mod apply_discount;\n").unwrap();
-        fs::write(money.join("round.rs"), "fn r() {}\n").unwrap();
 
-        clean_output_dir(base.to_str().unwrap(), &[String::from("pricing")]).unwrap();
+        // Stale module files from a prior run should be removed (and the empty dir pruned).
+        fs::write(test_mod.join("foo.rs"), "fn stale() {}\n").unwrap();
+        fs::write(test_mod.join("mod.rs"), "pub mod foo;\n").unwrap();
 
-        assert!(!pricing.join("apply_discount.rs").exists());
-        assert!(!pricing.join("mod.rs").exists());
-        assert!(money.join("round.rs").exists());
+        let mut generated = HashSet::new();
+        generated.insert(PathBuf::from("pricing/apply_discount.rs"));
+        generated.insert(PathBuf::from("pricing/mod.rs"));
+        generated.insert(PathBuf::from("mod.rs"));
+
+        clean_output_dir(&base, &generated).unwrap();
+
+        assert!(pricing.join("apply_discount.rs").exists());
+        assert!(pricing.join("mod.rs").exists());
+
+        assert!(!test_mod.join("foo.rs").exists());
+        assert!(!test_mod.join("mod.rs").exists());
+        assert!(!test_mod.exists(), "stale module dir should be removed");
+
+        assert!(base.join("mod.rs").exists());
         assert!(base.join(GENERATED_MARKER).exists());
     }
 
@@ -390,7 +407,8 @@ mod tests {
         let base = temp_dir.path().join("generated/spec");
         fs::create_dir_all(&base).unwrap();
 
-        let err = clean_output_dir(base.to_str().unwrap(), &[String::from("pricing")]).unwrap_err();
+        let generated = HashSet::new();
+        let err = clean_output_dir(&base, &generated).unwrap_err();
         assert!(matches!(err, SpecError::MissingMarker { .. }));
     }
 
@@ -411,7 +429,8 @@ mod tests {
 
         unix_fs::symlink(&outside_dir, pricing.join("link")).unwrap();
 
-        clean_output_dir(base.to_str().unwrap(), &[String::from("pricing")]).unwrap();
+        let generated = HashSet::new();
+        clean_output_dir(&base, &generated).unwrap();
 
         assert!(!pricing.join("apply_discount.rs").exists());
         assert!(

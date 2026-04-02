@@ -247,3 +247,73 @@ fn generate_empty_directory_reports_zero_units() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("0 units found, nothing to generate"));
 }
+
+#[test]
+fn generate_rejects_non_empty_dir_without_marker() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("src");
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join("keep.txt"), "do not touch\n").unwrap();
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#,
+    );
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+
+    assert!(!output_dir.join(".spec-generated").exists());
+    assert!(output_dir.join("keep.txt").exists());
+    assert!(!output_dir.join("pricing/apply_discount.rs").exists());
+}
+
+#[test]
+fn generate_rejects_path_outside_project_root() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#,
+    );
+
+    // This output directory is created outside the cargo test current_dir, so it must be rejected.
+    let outside = tempfile::TempDir::new().unwrap();
+    let output_dir = outside.path().join("generated");
+    fs::create_dir_all(&output_dir).unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+
+    assert!(!output_dir.join(".spec-generated").exists());
+    assert!(!output_dir.join("pricing/apply_discount.rs").exists());
+}
