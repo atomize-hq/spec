@@ -8,6 +8,7 @@ use crate::types::LoadedSpec;
 use crate::{Result, SpecError};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 /// JSON Schema for unit.spec validation (embedded at compile time)
@@ -221,6 +222,30 @@ pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Validate that all internal deps referenced by loaded specs exist in the same spec set.
+///
+/// For M2, deps are always strict: any missing dep is an error.
+pub fn validate_deps_exist(specs: &[LoadedSpec]) -> Vec<SpecError> {
+    let mut ids = HashSet::<&str>::new();
+    for spec in specs {
+        ids.insert(spec.spec.id.as_str());
+    }
+
+    let mut errors = Vec::<SpecError>::new();
+    for spec in specs {
+        for dep in &spec.spec.deps {
+            if !ids.contains(dep.as_str()) {
+                errors.push(SpecError::MissingDep {
+                    dep: dep.clone(),
+                    path: spec.source.file_path.clone(),
+                });
+            }
+        }
+    }
+
+    errors
 }
 
 /// Full validation (schema + semantic)

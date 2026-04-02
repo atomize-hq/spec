@@ -114,13 +114,9 @@ id: pricing/apply_discount
 kind: function
 intent:
   why: Apply a discount.
-deps:
-  - money/round
 body:
   rust: |
-    pub fn apply_discount() -> Decimal {
-        round(Decimal::ZERO)
-    }
+    pub fn apply_discount() {}
 "#,
     );
 
@@ -138,6 +134,74 @@ body:
     assert!(output_dir.join("pricing/apply_discount.rs").exists());
     assert!(output_dir.join("pricing/mod.rs").exists());
     assert!(output_dir.join("mod.rs").exists());
+}
+
+#[test]
+fn validate_strict_errors_on_missing_dep() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+deps:
+  - money/round
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("❌ dep 'money/round' not found in this spec set"),
+        "expected missing-dep message in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn generate_strict_errors_on_missing_dep() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+deps:
+  - money/round
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#,
+    );
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("❌ dep 'money/round' not found in this spec set"),
+        "expected missing-dep message in stderr, got: {stderr}"
+    );
+    assert!(!output_dir.exists(), "expected output dir to not be created");
+    assert!(!output_dir.join(".spec-generated").exists());
 }
 
 #[test]

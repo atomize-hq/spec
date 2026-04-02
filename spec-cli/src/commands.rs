@@ -6,7 +6,7 @@ use spec_core::generator::{
 use spec_core::loader::{is_unit_spec, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::types::{LoadedSpec, ResolvedSpec};
-use spec_core::validator::{validate_full, validate_no_duplicate_ids};
+use spec_core::validator::{validate_deps_exist, validate_full, validate_no_duplicate_ids};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -45,7 +45,7 @@ pub struct GenerateArgs {
 
 fn validate_command(path: &Path) -> Result<()> {
     let (specs, errors, total_files) = collect_specs(path)?;
-    let errors = finish_validation(specs, errors);
+    let (errors, _warnings) = finish_validation(&specs, errors);
 
     if errors.is_empty() {
         if total_files == 0 {
@@ -74,7 +74,7 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
         return Ok(());
     }
 
-    let errors = finish_validation(specs.clone(), errors);
+    let (errors, _warnings) = finish_validation(&specs, errors);
     if !errors.is_empty() {
         print_errors(&errors);
         let file_count = count_unique_files(&errors);
@@ -318,16 +318,16 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
 }
 
 fn finish_validation(
-    specs: Vec<LoadedSpec>,
+    specs: &[LoadedSpec],
     mut errors: BTreeMap<String, Vec<String>>,
-) -> BTreeMap<String, Vec<String>> {
-    if let Err(err) = validate_no_duplicate_ids(&specs) {
+) -> (BTreeMap<String, Vec<String>>, Vec<String>) {
+    if let Err(err) = validate_no_duplicate_ids(specs) {
         let key = duplicate_path_key(&err);
         errors.entry(key).or_default().push(err.to_string());
     }
 
     for spec in specs {
-        if let Err(err) = validate_full(&spec) {
+        if let Err(err) = validate_full(spec) {
             errors
                 .entry(spec.source.file_path.clone())
                 .or_default()
@@ -335,7 +335,15 @@ fn finish_validation(
         }
     }
 
-    errors
+    for err in validate_deps_exist(specs) {
+        let path = match &err {
+            spec_core::SpecError::MissingDep { path, .. } => path.clone(),
+            _ => "validation".to_string(),
+        };
+        errors.entry(path).or_default().push(err.to_string());
+    }
+
+    (errors, Vec::new())
 }
 
 fn duplicate_path_key(err: &spec_core::SpecError) -> String {
@@ -399,8 +407,6 @@ id: pricing/apply_discount
 kind: function
 intent:
   why: Apply a discount.
-deps:
-  - money/round
 body:
   rust: |
     pub fn apply_discount() -> Decimal {
