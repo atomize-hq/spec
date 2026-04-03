@@ -60,6 +60,7 @@
 
 #### Architecture (Medium Priority)
 - [ ] **Defense-in-depth: validate local_tests[].expect at the sink** — `generate_code` (generator.rs:19) is a public library function that embeds `local_test.expect` verbatim with no validation. The CLI path always validates first via the loader, but a direct library API caller constructing a `ResolvedSpec` manually bypasses all expression validation. Consider: (a) validate at the `generate_code` sink, (b) use a newtype wrapper for validated expect strings, or (c) emit the generated assert!() from the validated syn::Expr AST instead of the raw string. Codex outside-voice finding, fix/change-is_safe_expect_expr review.
+- [ ] **Add recursion depth cap to `is_safe_expect_expr`** — The recursive AST walk has no depth limit. Deeply nested input like `((((x))))` or `!!!!!x` (100+ levels) could stack overflow during validation. Add a `depth: usize` parameter and return `false` above a threshold (~128). Low-urgency since `.unit.spec` files are trusted input, but the fix is trivial. Codex adversarial finding, fix/change-is_safe_expect_expr review.
 
 #### M3 Prerequisites (Design Spikes, Before Build)
 - [ ] **Define ICP: solo engineer vs. team coordination tool** — Changes M3 priority order completely. One paragraph, before M3 scoping.

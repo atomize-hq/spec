@@ -130,14 +130,17 @@ fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
                 path: path.clone(),
             }
         })?;
-        // Only allow expression kinds that produce a value within assert!().
-        // Reject scope-creating forms (Block, Unsafe, Closure, If, Match, Loop, etc.)
-        // that inject statements or alter control flow outside a value expression.
-        // A config lever for trusted workspaces is deferred to M3. See TODOS.md.
+        // Reject syntax-level injection vectors: block expressions, unsafe blocks,
+        // closures, and control-flow forms (If, Match, Loop, etc.) that introduce
+        // statements or scope inside assert!(). Note: call expressions to
+        // side-effectful functions (std::fs, std::process::Command, etc.) are not
+        // blocked — .unit.spec files are treated as trusted input, the same as
+        // body.rust. A config lever and defense-in-depth options are deferred to
+        // M3. See TODOS.md.
         if !is_safe_expect_expr(&expr) {
             return Err(SpecError::LocalTestExpectNotExpr {
                 id: test.id.clone(),
-                message: "expect must be a simple expression (binary, call, path, or literal); block, unsafe, closure, and control-flow expressions are not allowed".to_string(),
+                message: "expect must use only operators, function calls, and value access; block, unsafe, closure, and control-flow forms are not allowed".to_string(),
                 path: path.clone(),
             });
         }
@@ -782,7 +785,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
         };
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
-            err.contains("simple expression"),
+            err.contains("block, unsafe, closure"),
             "expected block expression to be rejected: {err}"
         );
     }
@@ -817,7 +820,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
 
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
-            err.contains("simple expression"),
+            err.contains("block, unsafe, closure"),
             "expected unsafe block in call arg to be rejected: {err}"
         );
     }
@@ -852,7 +855,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
 
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
-            err.contains("simple expression"),
+            err.contains("block, unsafe, closure"),
             "expected block expression in binary operand to be rejected: {err}"
         );
     }
@@ -887,8 +890,148 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
 
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
-            err.contains("simple expression"),
+            err.contains("block, unsafe, closure"),
             "expected unsafe block in method call arg to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn expect_with_unsafe_block_in_field_base_is_rejected() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "unsafe_in_field_base".to_string(),
+                    expect: "(unsafe { foo }).field".to_string(),
+                }],
+                links: None,
+            },
+        };
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("block, unsafe, closure"),
+            "expected unsafe block in field base to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn expect_with_unsafe_block_in_index_is_rejected() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "unsafe_in_index".to_string(),
+                    expect: "arr[unsafe { 0 }]".to_string(),
+                }],
+                links: None,
+            },
+        };
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("block, unsafe, closure"),
+            "expected unsafe block in index to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn expect_with_unsafe_block_in_unary_is_rejected() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "unsafe_in_unary".to_string(),
+                    expect: "!(unsafe { true })".to_string(),
+                }],
+                links: None,
+            },
+        };
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("block, unsafe, closure"),
+            "expected unsafe block in unary operand to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn expect_with_unsafe_block_in_cast_is_rejected() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "unsafe_in_cast".to_string(),
+                    expect: "(unsafe { 0 }) as u64".to_string(),
+                }],
+                links: None,
+            },
+        };
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("block, unsafe, closure"),
+            "expected unsafe block in cast to be rejected: {err}"
         );
     }
 }
