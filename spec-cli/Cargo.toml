@@ -11,7 +11,9 @@ description = "CLI for validating and generating Rust code from .unit.spec files
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+serde = { workspace = true }
 spec-core = { path = "../spec-core" }
+toml = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]

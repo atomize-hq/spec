@@ -93,6 +93,9 @@ pub enum SpecError {
         path: String,
     },
 
+    #[error("duplicate local_tests id '{id}' at {path}")]
+    DuplicateLocalTestId { id: String, path: String },
+
     #[error("Generator error: {message}")]
     Generator { message: String },
 
@@ -111,6 +114,12 @@ impl From<walkdir::Error> for SpecError {
 
 /// Result type alias for spec-core operations
 pub type Result<T> = std::result::Result<T, SpecError>;
+
+#[derive(Error, Debug)]
+pub enum SpecWarning {
+    #[error("⚠ dep '{dep}' not found in this spec set")]
+    MissingDep { dep: String, path: String },
+}
 
 #[cfg(test)]
 mod tests {

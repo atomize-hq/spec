@@ -5,7 +5,7 @@
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
 use crate::types::LoadedSpec;
-use crate::{Result, SpecError};
+use crate::{Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
 use std::collections::HashSet;
@@ -15,6 +15,21 @@ use std::sync::OnceLock;
 const SCHEMA_JSON: &str = include_str!("schema/unit.spec.json");
 
 static COMPILED_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ValidationOptions {
+    pub strict_deps: bool,
+    pub allow_unsafe_local_test_expect: bool,
+}
+
+impl ValidationOptions {
+    pub fn strict() -> Self {
+        Self {
+            strict_deps: true,
+            allow_unsafe_local_test_expect: false,
+        }
+    }
+}
 
 /// Validate a single spec against the JSON Schema
 pub fn validate_schema(spec: &LoadedSpec) -> Result<()> {
@@ -69,6 +84,14 @@ fn validate_json_value(spec_json: &Value, file_path: &str) -> Result<()> {
 
 /// Perform semantic validation (Rust keywords, deps, etc.)
 pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
+    validate_semantic_with_options(spec, &ValidationOptions::strict())
+}
+
+/// Perform semantic validation with explicit options.
+pub fn validate_semantic_with_options(
+    spec: &LoadedSpec,
+    options: &ValidationOptions,
+) -> Result<()> {
     // Check if ID contains Rust reserved keywords
     validate_rust_keywords(&spec.spec.id, &spec.source.file_path)?;
 
@@ -115,14 +138,22 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
     }
 
     validate_body_rust_alignment(spec)?;
-    validate_local_test_expects(spec)?;
+    validate_local_test_expects(spec, options)?;
 
     Ok(())
 }
 
-fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
+fn validate_local_test_expects(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
     let path = spec.source.file_path.clone();
+    let mut seen_ids = HashSet::new();
     for test in &spec.spec.local_tests {
+        if !seen_ids.insert(test.id.as_str()) {
+            return Err(SpecError::DuplicateLocalTestId {
+                id: test.id.clone(),
+                path: path.clone(),
+            });
+        }
+
         let expr = syn::parse_str::<syn::Expr>(test.expect.trim()).map_err(|err| {
             SpecError::LocalTestExpectNotExpr {
                 id: test.id.clone(),
@@ -137,7 +168,7 @@ fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
         // blocked — .unit.spec files are treated as trusted input, the same as
         // body.rust. A config lever and defense-in-depth options are deferred to
         // M3. See TODOS.md.
-        if !is_safe_expect_expr(&expr) {
+        if !options.allow_unsafe_local_test_expect && !is_safe_expect_expr(&expr) {
             return Err(SpecError::LocalTestExpectNotExpr {
                 id: test.id.clone(),
                 message: "expect must use only operators, function calls, and value access; block, unsafe, closure, and control-flow forms are not allowed".to_string(),
@@ -281,31 +312,51 @@ pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Vec<SpecError> {
 /// Validate that all internal deps referenced by loaded specs exist in the same spec set.
 ///
 /// For M2, deps are always strict: any missing dep is an error.
-pub fn validate_deps_exist(specs: &[LoadedSpec]) -> Vec<SpecError> {
+pub fn validate_deps_exist(specs: &[LoadedSpec]) -> (Vec<SpecError>, Vec<SpecWarning>) {
+    validate_deps_exist_with_options(specs, &ValidationOptions::strict())
+}
+
+pub fn validate_deps_exist_with_options(
+    specs: &[LoadedSpec],
+    options: &ValidationOptions,
+) -> (Vec<SpecError>, Vec<SpecWarning>) {
     let mut ids = HashSet::<&str>::new();
     for spec in specs {
         ids.insert(spec.spec.id.as_str());
     }
 
     let mut errors = Vec::<SpecError>::new();
+    let mut warnings = Vec::<SpecWarning>::new();
     for spec in specs {
         for dep in &spec.spec.deps {
             if !ids.contains(dep.as_str()) {
-                errors.push(SpecError::MissingDep {
-                    dep: dep.clone(),
-                    path: spec.source.file_path.clone(),
-                });
+                if options.strict_deps {
+                    errors.push(SpecError::MissingDep {
+                        dep: dep.clone(),
+                        path: spec.source.file_path.clone(),
+                    });
+                } else {
+                    warnings.push(SpecWarning::MissingDep {
+                        dep: dep.clone(),
+                        path: spec.source.file_path.clone(),
+                    });
+                }
             }
         }
     }
 
-    errors
+    (errors, warnings)
 }
 
 /// Full validation (schema + semantic)
 pub fn validate_full(spec: &LoadedSpec) -> Result<()> {
+    validate_full_with_options(spec, &ValidationOptions::strict())
+}
+
+/// Full validation (schema + semantic) with explicit options.
+pub fn validate_full_with_options(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
     validate_schema(spec)?;
-    validate_semantic(spec)?;
+    validate_semantic_with_options(spec, options)?;
     Ok(())
 }
 
@@ -754,6 +805,82 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
             },
         };
         assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn validate_local_test_expect_allows_block_expr_when_configured() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "block_allowed".to_string(),
+                    expect: "{ let ok = apply_discount(); ok }".to_string(),
+                }],
+                links: None,
+            },
+        };
+
+        let options = ValidationOptions {
+            strict_deps: true,
+            allow_unsafe_local_test_expect: true,
+        };
+        assert!(validate_semantic_with_options(&spec, &options).is_ok());
+    }
+
+    #[test]
+    fn validate_local_test_duplicate_ids_are_rejected() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![
+                    LocalTest {
+                        id: "happy_path".to_string(),
+                        expect: "apply_discount()".to_string(),
+                    },
+                    LocalTest {
+                        id: "happy_path".to_string(),
+                        expect: "apply_discount()".to_string(),
+                    },
+                ],
+                links: None,
+            },
+        };
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("duplicate local_tests id 'happy_path'"),
+            "{err}"
+        );
     }
 
     #[test]

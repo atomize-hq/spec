@@ -59,9 +59,21 @@ The CLI currently supports:
 
 ```bash
 cargo run -p spec-cli -- validate <path>
+cargo run -p spec-cli -- validate <path> --no-strict
 cargo run -p spec-cli -- generate <path> --output <dir>
 ```
 
-`validate` checks schema and semantic rules. `generate` emits `.rs` files under the output directory and manages `mod.rs` files plus the `.spec-generated` safety marker.
+`validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
 
 The `--output` path must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
+
+## Workspace Config
+
+An optional `spec.toml` at the repo root can relax `local_tests[].expect` validation for trusted workspaces:
+
+```toml
+[validation]
+allow_unsafe_local_test_expect = false
+```
+
+When `allow_unsafe_local_test_expect = true`, `local_tests[].expect` still must parse as a Rust expression, but block, unsafe, closure, and other otherwise-rejected expression forms are allowed.
