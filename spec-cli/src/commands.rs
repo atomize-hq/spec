@@ -139,12 +139,8 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
             .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
     }
 
-    clean_output_dir(&output_base, &generated_rs_rel_paths).with_context(|| {
-        format!(
-            "Failed to clean output directory {}",
-            output_base.display()
-        )
-    })?;
+    clean_output_dir(&output_base, &generated_rs_rel_paths)
+        .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
 
     println!(
         "Generated {} file{}",

@@ -78,14 +78,20 @@ pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
         })?;
     } else {
         return Err(SpecError::Generator {
-            message: format!("Unable to write {}: missing parent directory", path.display()),
+            message: format!(
+                "Unable to write {}: missing parent directory",
+                path.display()
+            ),
         });
     }
 
     let parent_dir = path
         .parent()
         .ok_or_else(|| SpecError::Generator {
-            message: format!("Unable to write {}: missing parent directory", path.display()),
+            message: format!(
+                "Unable to write {}: missing parent directory",
+                path.display()
+            ),
         })?
         .to_path_buf();
 
@@ -109,7 +115,11 @@ pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
 
     if !content.ends_with('\n') {
         tmp.write_all(b"\n").map_err(|err| SpecError::Generator {
-            message: format!("Unable to finalize temp file for {}: {}", path.display(), err),
+            message: format!(
+                "Unable to finalize temp file for {}: {}",
+                path.display(),
+                err
+            ),
         })?;
     }
 
@@ -136,7 +146,10 @@ pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn clean_output_dir(output_base: &Path, generated_rs_rel_paths: &HashSet<PathBuf>) -> Result<()> {
+pub fn clean_output_dir(
+    output_base: &Path,
+    generated_rs_rel_paths: &HashSet<PathBuf>,
+) -> Result<()> {
     let base = normalized_absolute_path(output_base);
     let project_root = normalized_absolute_path(".");
 
@@ -168,13 +181,15 @@ pub fn clean_output_dir(output_base: &Path, generated_rs_rel_paths: &HashSet<Pat
             continue;
         }
 
-        let rel = path.strip_prefix(&base).map_err(|err| SpecError::Generator {
-            message: format!(
-                "Unable to compute relative path for {}: {}",
-                path.display(),
-                err
-            ),
-        })?;
+        let rel = path
+            .strip_prefix(&base)
+            .map_err(|err| SpecError::Generator {
+                message: format!(
+                    "Unable to compute relative path for {}: {}",
+                    path.display(),
+                    err
+                ),
+            })?;
 
         if !generated_rs_rel_paths.contains(rel) {
             fs::remove_file(path).map_err(|err| SpecError::Generator {
@@ -184,10 +199,7 @@ pub fn clean_output_dir(output_base: &Path, generated_rs_rel_paths: &HashSet<Pat
     }
 
     // Remove empty directories bottom-up (but never remove the base itself).
-    for entry in WalkDir::new(&base)
-        .follow_links(false)
-        .contents_first(true)
-    {
+    for entry in WalkDir::new(&base).follow_links(false).contents_first(true) {
         let entry = entry.map_err(SpecError::from)?;
         if !entry.file_type().is_dir() || entry.file_type().is_symlink() {
             continue;

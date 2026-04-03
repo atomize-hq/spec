@@ -68,14 +68,10 @@ pub enum SpecError {
     #[error("body.rust failed to parse: {message} at {path}")]
     BodyRustParseFailed { message: String, path: String },
 
-    #[error(
-        "body.rust must contain exactly one top-level function; found {found} items at {path}"
-    )]
+    #[error("body.rust must contain exactly one top-level function; found {found} items at {path}")]
     BodyRustMustBeSingleFn { found: usize, path: String },
 
-    #[error(
-        "body.rust fn name mismatch: expected '{expected}', found '{found}' at {path}"
-    )]
+    #[error("body.rust fn name mismatch: expected '{expected}', found '{found}' at {path}")]
     BodyRustFnNameMismatch {
         expected: String,
         found: String,
@@ -85,7 +81,9 @@ pub enum SpecError {
     #[error("body.rust must be a free function (no self parameter) at {path}")]
     BodyRustMethodRejected { path: String },
 
-    #[error("contract.inputs contains '{input}' but body.rust has no parameter with that name at {path}")]
+    #[error(
+        "contract.inputs contains '{input}' but body.rust has no parameter with that name at {path}"
+    )]
     ContractInputParamMismatch { input: String, path: String },
 
     #[error("local_tests[{id}].expect is not a valid Rust expression: {message} at {path}")]

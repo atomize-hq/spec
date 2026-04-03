@@ -200,7 +200,10 @@ body:
         stderr.contains("❌ dep 'money/round' not found in this spec set"),
         "expected missing-dep message in stderr, got: {stderr}"
     );
-    assert!(!output_dir.exists(), "expected output dir to not be created");
+    assert!(
+        !output_dir.exists(),
+        "expected output dir to not be created"
+    );
     assert!(!output_dir.join(".spec-generated").exists());
 }
 
@@ -513,7 +516,10 @@ body:
 "#,
     );
 
-    let output = run_in(&dst_ecommerce, &["generate", "units", "--output", "src/generated"]);
+    let output = run_in(
+        &dst_ecommerce,
+        &["generate", "units", "--output", "src/generated"],
+    );
     assert_output_success("spec generate failed for temp ecommerce copy", &output);
 
     let cargo_target_dir = tempfile::TempDir::new_in(root.join("target"))

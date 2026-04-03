@@ -123,14 +123,13 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
 fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
     let path = spec.source.file_path.clone();
     for test in &spec.spec.local_tests {
-        let expr =
-            syn::parse_str::<syn::Expr>(test.expect.trim()).map_err(|err| {
-                SpecError::LocalTestExpectNotExpr {
-                    id: test.id.clone(),
-                    message: err.to_string(),
-                    path: path.clone(),
-                }
-            })?;
+        let expr = syn::parse_str::<syn::Expr>(test.expect.trim()).map_err(|err| {
+            SpecError::LocalTestExpectNotExpr {
+                id: test.id.clone(),
+                message: err.to_string(),
+                path: path.clone(),
+            }
+        })?;
         // Only allow expression kinds that are safe to embed verbatim into assert!().
         // Reject scope-creating forms (Block, Unsafe, Closure, If, Match, Loop, etc.)
         // that could execute arbitrary code. A config lever for trusted workspaces is
@@ -167,10 +166,11 @@ fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
     let path = spec.source.file_path.clone();
     let expected_fn_name = spec.spec.id.rsplit('/').next().unwrap_or_default();
 
-    let file = syn::parse_file(&spec.spec.body.rust).map_err(|err| SpecError::BodyRustParseFailed {
-        message: err.to_string(),
-        path: path.clone(),
-    })?;
+    let file =
+        syn::parse_file(&spec.spec.body.rust).map_err(|err| SpecError::BodyRustParseFailed {
+            message: err.to_string(),
+            path: path.clone(),
+        })?;
 
     if file.items.len() != 1 {
         return Err(SpecError::BodyRustMustBeSingleFn {
@@ -391,7 +391,11 @@ body:
 "#;
         let value: YamlValue = serde_yaml_bw::from_str(valid).unwrap();
         let result = validate_raw_yaml(&value, "test.unit.spec");
-        assert!(result.is_ok(), "Expected valid imports to pass: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Expected valid imports to pass: {:?}",
+            result
+        );
 
         let invalid_bare = r#"
 id: pricing/apply_discount
@@ -639,7 +643,10 @@ local_tests:
     fn validate_contract_arg_name_mismatch() {
         use std::collections::HashMap;
 
-        let mut spec = create_test_spec("pricing/apply_discount", "pub fn apply_discount(price: Decimal) {}");
+        let mut spec = create_test_spec(
+            "pricing/apply_discount",
+            "pub fn apply_discount(price: Decimal) {}",
+        );
         let mut inputs = HashMap::new();
         inputs.insert("subtotal".to_string(), "Decimal".to_string());
         spec.spec.contract = Some(Contract {
