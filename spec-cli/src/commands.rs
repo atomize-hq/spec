@@ -311,8 +311,13 @@ fn finish_validation(
     specs: &[LoadedSpec],
     mut errors: BTreeMap<String, Vec<String>>,
 ) -> (BTreeMap<String, Vec<String>>, Vec<String>) {
-    if let Err(err) = validate_no_duplicate_ids(specs) {
-        let key = duplicate_path_key(&err);
+    for err in validate_no_duplicate_ids(specs) {
+        let key = match &err {
+            spec_core::SpecError::DuplicateId { file1, file2, .. } => {
+                format!("{file1} | {file2}")
+            }
+            _ => "validation".to_string(),
+        };
         errors.entry(key).or_default().push(err.to_string());
     }
 
@@ -334,13 +339,6 @@ fn finish_validation(
     }
 
     (errors, Vec::new())
-}
-
-fn duplicate_path_key(err: &spec_core::SpecError) -> String {
-    match err {
-        spec_core::SpecError::DuplicateId { file1, file2, .. } => format!("{file1} | {file2}"),
-        _ => "validation".to_string(),
-    }
 }
 
 fn print_errors(errors: &BTreeMap<String, Vec<String>>) {

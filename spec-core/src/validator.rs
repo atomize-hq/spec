@@ -123,15 +123,44 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
 fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
     let path = spec.source.file_path.clone();
     for test in &spec.spec.local_tests {
-        syn::parse_str::<syn::Expr>(test.expect.trim()).map_err(|err| {
-            SpecError::LocalTestExpectNotExpr {
+        let expr =
+            syn::parse_str::<syn::Expr>(test.expect.trim()).map_err(|err| {
+                SpecError::LocalTestExpectNotExpr {
+                    id: test.id.clone(),
+                    message: err.to_string(),
+                    path: path.clone(),
+                }
+            })?;
+        // Only allow expression kinds that are safe to embed verbatim into assert!().
+        // Reject scope-creating forms (Block, Unsafe, Closure, If, Match, Loop, etc.)
+        // that could execute arbitrary code. A config lever for trusted workspaces is
+        // deferred to M3. See TODOS.md.
+        if !is_safe_expect_expr(&expr) {
+            return Err(SpecError::LocalTestExpectNotExpr {
                 id: test.id.clone(),
-                message: err.to_string(),
+                message: "expect must be a simple expression (binary, call, path, or literal); block, unsafe, closure, and control-flow expressions are not allowed".to_string(),
                 path: path.clone(),
-            }
-        })?;
+            });
+        }
     }
     Ok(())
+}
+
+fn is_safe_expect_expr(expr: &syn::Expr) -> bool {
+    match expr {
+        syn::Expr::Binary(_)
+        | syn::Expr::Call(_)
+        | syn::Expr::MethodCall(_)
+        | syn::Expr::Path(_)
+        | syn::Expr::Lit(_)
+        | syn::Expr::Field(_)
+        | syn::Expr::Index(_)
+        | syn::Expr::Unary(_) => true,
+        syn::Expr::Paren(inner) => is_safe_expect_expr(&inner.expr),
+        syn::Expr::Cast(c) => is_safe_expect_expr(&c.expr),
+        // Block, Unsafe, Closure, If, Match, Loop, ForLoop, While, Async, etc. → rejected
+        _ => false,
+    }
 }
 
 fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
@@ -151,7 +180,7 @@ fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
     }
 
     let syn::Item::Fn(item_fn) = &file.items[0] else {
-        return Err(SpecError::BodyRustMustBeSingleFn { found: 1, path });
+        return Err(SpecError::BodyRustMustBeSingleFn { found: 0, path });
     };
 
     let found_name = item_fn.sig.ident.to_string();
@@ -219,23 +248,28 @@ pub fn validate_rust_keywords(id: &str, file_path: &str) -> Result<()> {
     Ok(())
 }
 
-/// Check for duplicate IDs across all loaded specs
-pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Result<()> {
+/// Check for duplicate IDs across all loaded specs.
+///
+/// Returns all duplicate pairs, not just the first. Each additional file that
+/// shares an ID produces a separate error citing the original file as file1.
+pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Vec<SpecError> {
     use std::collections::HashMap;
     let mut seen: HashMap<String, String> = HashMap::new();
+    let mut errors = Vec::new();
 
     for spec in specs {
         if let Some(existing_file) = seen.get(&spec.spec.id) {
-            return Err(SpecError::DuplicateId {
+            errors.push(SpecError::DuplicateId {
                 id: spec.spec.id.clone(),
                 file1: existing_file.clone(),
                 file2: spec.source.file_path.clone(),
             });
+        } else {
+            seen.insert(spec.spec.id.clone(), spec.source.file_path.clone());
         }
-        seen.insert(spec.spec.id.clone(), spec.source.file_path.clone());
     }
 
-    Ok(())
+    errors
 }
 
 /// Validate that all internal deps referenced by loaded specs exist in the same spec set.
@@ -447,8 +481,8 @@ local_tests:
             create_test_spec("utils/round", "pub fn test2() {}"),
         ];
 
-        let result = validate_no_duplicate_ids(&specs);
-        assert!(result.is_ok());
+        let errors = validate_no_duplicate_ids(&specs);
+        assert!(errors.is_empty());
     }
 
     #[test]
@@ -458,11 +492,22 @@ local_tests:
             create_test_spec("pricing/apply_discount", "pub fn test2() {}"),
         ];
 
-        let result = validate_no_duplicate_ids(&specs);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("Duplicate ID"));
-        assert!(err.to_string().contains("pricing/apply_discount"));
+        let errors = validate_no_duplicate_ids(&specs);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].to_string().contains("Duplicate ID"));
+        assert!(errors[0].to_string().contains("pricing/apply_discount"));
+    }
+
+    #[test]
+    fn test_validate_duplicate_ids_all_reported() {
+        let specs = vec![
+            create_test_spec("pricing/apply_discount", "pub fn test1() {}"),
+            create_test_spec("pricing/apply_discount", "pub fn test2() {}"),
+            create_test_spec("pricing/apply_discount", "pub fn test3() {}"),
+        ];
+
+        let errors = validate_no_duplicate_ids(&specs);
+        assert_eq!(errors.len(), 2, "all duplicate pairs should be reported");
     }
 
     #[test]
@@ -696,5 +741,39 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
             },
         };
         assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn validate_local_test_expect_rejects_block_expression() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "block_attempt".to_string(),
+                    expect: "{ std::process::exit(1); true }".to_string(),
+                }],
+                links: None,
+            },
+        };
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("simple expression"),
+            "expected block expression to be rejected: {err}"
+        );
     }
 }
