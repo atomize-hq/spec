@@ -51,12 +51,15 @@
 ### Deferred from autoplan retrospective (2026-04-03)
 
 #### Security / Correctness (High Priority)
-- [ ] **Fix `is_safe_expect_expr` to recurse into sub-expressions** — Current implementation checks top-level expression variant but not children. `f({ unsafe { ... } })` passes because outer `Call` returns true without inspecting args. Fix: recurse into `Binary`, `Call`, `MethodCall`, `Field`, `Index`, `Unary`, `Cast` sub-expressions. Add tests: `expect_with_unsafe_block_in_call_arg_is_rejected`, `expect_with_block_in_binary_operand_is_rejected`. (validator.rs:148)
+- [x] **Fix `is_safe_expect_expr` to recurse into sub-expressions** — Completed fix/change-is_safe_expect_expr. `f({ unsafe { ... } })` now rejected. Added regression tests: `expect_with_unsafe_block_in_call_arg_is_rejected`, `expect_with_block_in_binary_operand_is_rejected`, `expect_with_unsafe_block_in_method_call_arg_is_rejected`. (validator.rs:148)
 
 #### Architecture Fixes (Medium Priority)
 - [ ] **Consolidate path-containment logic** — `clean_output_dir` uses `normalized_absolute_path` (lexical) and `ensure_output_marker` uses `canonicalize` (symlink-following). Divergent logic = future maintenance hazard. Extract single `safe_output_path(path) -> Result<PathBuf>` utility. (generator.rs, commands.rs)
 - [ ] **Add `local_tests[].id` uniqueness validation** — Duplicate ids within a unit → duplicate `fn test_{id}()` → compile error. Validate uniqueness in `validate_local_test_expects`. (validator.rs)
 - [ ] **Document `pub use generated::*` as required consuming-crate convention** — Internal deps generate `use crate::X` which only works if consuming crate re-exports generated modules at root. Document in README/DECISIONS.md. Not a code change.
+
+#### Architecture (Medium Priority)
+- [ ] **Defense-in-depth: validate local_tests[].expect at the sink** — `generate_code` (generator.rs:19) is a public library function that embeds `local_test.expect` verbatim with no validation. The CLI path always validates first via the loader, but a direct library API caller constructing a `ResolvedSpec` manually bypasses all expression validation. Consider: (a) validate at the `generate_code` sink, (b) use a newtype wrapper for validated expect strings, or (c) emit the generated assert!() from the validated syn::Expr AST instead of the raw string. Codex outside-voice finding, fix/change-is_safe_expect_expr review.
 
 #### M3 Prerequisites (Design Spikes, Before Build)
 - [ ] **Define ICP: solo engineer vs. team coordination tool** — Changes M3 priority order completely. One paragraph, before M3 scoping.

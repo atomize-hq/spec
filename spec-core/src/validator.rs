@@ -130,10 +130,10 @@ fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
                 path: path.clone(),
             }
         })?;
-        // Only allow expression kinds that are safe to embed verbatim into assert!().
+        // Only allow expression kinds that produce a value within assert!().
         // Reject scope-creating forms (Block, Unsafe, Closure, If, Match, Loop, etc.)
-        // that could execute arbitrary code. A config lever for trusted workspaces is
-        // deferred to M3. See TODOS.md.
+        // that inject statements or alter control flow outside a value expression.
+        // A config lever for trusted workspaces is deferred to M3. See TODOS.md.
         if !is_safe_expect_expr(&expr) {
             return Err(SpecError::LocalTestExpectNotExpr {
                 id: test.id.clone(),
@@ -854,6 +854,41 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
         assert!(
             err.contains("simple expression"),
             "expected block expression in binary operand to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn expect_with_unsafe_block_in_method_call_arg_is_rejected() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "unsafe_in_method_arg".to_string(),
+                    expect: "foo.bar(unsafe { true })".to_string(),
+                }],
+                links: None,
+            },
+        };
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("simple expression"),
+            "expected unsafe block in method call arg to be rejected: {err}"
         );
     }
 }
