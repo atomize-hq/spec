@@ -11,6 +11,8 @@ contract:
     - output >= subtotal
 deps:
   - money/round
+imports:
+  - rust_decimal::Decimal
 body:
   rust: |
     pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {

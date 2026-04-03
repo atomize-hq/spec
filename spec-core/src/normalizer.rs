@@ -74,6 +74,7 @@ mod tests {
             },
             contract: None,
             deps: vec![],
+            imports: vec![],
             body: Body {
                 rust: "pub fn apply_discount() {}".to_string(),
             },

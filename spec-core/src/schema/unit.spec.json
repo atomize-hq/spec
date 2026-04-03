@@ -50,6 +50,13 @@
         "pattern": "^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$"
       }
     },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*(::([a-zA-Z_][a-zA-Z0-9_]*))+$"
+      }
+    },
     "body": {
       "type": "object",
       "required": ["rust"],
@@ -70,7 +77,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$"
           },
           "expect": {
             "type": "string",

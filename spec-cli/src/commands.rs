@@ -1,13 +1,14 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use spec_core::generator::{
-    clean_output_dir, generate_code, generate_mod_rs, write_generated_file,
+    clean_output_dir, generate_code, generate_mod_rs, normalized_absolute_path,
+    write_generated_file,
 };
 use spec_core::loader::{is_unit_spec, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::types::{LoadedSpec, ResolvedSpec};
-use spec_core::validator::{validate_full, validate_no_duplicate_ids};
-use std::collections::{BTreeMap, BTreeSet};
+use spec_core::validator::{validate_deps_exist, validate_full, validate_no_duplicate_ids};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -45,7 +46,7 @@ pub struct GenerateArgs {
 
 fn validate_command(path: &Path) -> Result<()> {
     let (specs, errors, total_files) = collect_specs(path)?;
-    let errors = finish_validation(specs, errors);
+    let (errors, _warnings) = finish_validation(&specs, errors);
 
     if errors.is_empty() {
         if total_files == 0 {
@@ -74,7 +75,7 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
         return Ok(());
     }
 
-    let errors = finish_validation(specs.clone(), errors);
+    let (errors, _warnings) = finish_validation(&specs, errors);
     if !errors.is_empty() {
         print_errors(&errors);
         let file_count = count_unique_files(&errors);
@@ -95,19 +96,27 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
         );
     }
 
-    let module_paths: Vec<String> = resolved_specs
-        .iter()
-        .map(|spec| spec.module_path.clone())
-        .collect();
+    let mut generated_rs_rel_paths = HashSet::<PathBuf>::new();
+    for spec in &resolved_specs {
+        generated_rs_rel_paths.insert(path_for_spec(spec));
+    }
 
-    ensure_output_marker(output)?;
-    clean_output_dir(&output.display().to_string(), &module_paths)
-        .with_context(|| format!("Failed to clean output directory {}", output.display()))?;
+    // Include every generated mod.rs (root + nested modules) in the owned set.
+    for (module_path, _namespace) in build_namespaces(&resolved_specs) {
+        let mod_rs_rel = if module_path.is_empty() {
+            PathBuf::from("mod.rs")
+        } else {
+            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
+        };
+        generated_rs_rel_paths.insert(mod_rs_rel);
+    }
+
+    let output_base = ensure_output_marker(output)?;
 
     for spec in &resolved_specs {
         let content = generate_code(spec)
             .with_context(|| format!("Failed to generate Rust for {}", spec.id))?;
-        let output_path = output.join(path_for_spec(spec));
+        let output_path = output_base.join(path_for_spec(spec));
         write_generated_file(&output_path.display().to_string(), &content)
             .with_context(|| format!("Failed to write {}", output_path.display()))?;
     }
@@ -119,17 +128,19 @@ fn generate_command(path: &Path, output: &Path) -> Result<()> {
         )
         .with_context(|| format!("Failed to generate mod.rs for module '{module_path}'"))?;
 
-        let mod_rs_path = if module_path.is_empty() {
-            output.join("mod.rs")
+        let mod_rs_rel = if module_path.is_empty() {
+            PathBuf::from("mod.rs")
         } else {
-            output
-                .join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
-                .join("mod.rs")
+            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
         };
+        let mod_rs_path = output_base.join(mod_rs_rel);
 
         write_generated_file(&mod_rs_path.display().to_string(), &content)
             .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
     }
+
+    clean_output_dir(&output_base, &generated_rs_rel_paths)
+        .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
 
     println!(
         "Generated {} file{}",
@@ -185,20 +196,66 @@ fn path_for_spec(spec: &ResolvedSpec) -> PathBuf {
     path
 }
 
-fn ensure_output_marker(output: &Path) -> Result<()> {
-    let marker = output.join(".spec-generated");
-    if marker.exists() {
-        return Ok(());
+fn ensure_output_marker(output: &Path) -> Result<PathBuf> {
+    let output_base = normalized_absolute_path(output);
+    // Resolve symlinks in the project root so the containment check
+    // cannot be bypassed by a symlink pointing outside the project.
+    let project_root = std::env::current_dir()
+        .and_then(|p| p.canonicalize())
+        .unwrap_or_else(|_| normalized_absolute_path("."));
+    // If the output path already exists, resolve its symlinks too.
+    let output_check = if output_base.exists() {
+        output_base
+            .canonicalize()
+            .unwrap_or_else(|_| output_base.clone())
+    } else {
+        output_base.clone()
+    };
+
+    if !output_check.starts_with(&project_root) {
+        bail!(
+            "Refusing to generate into {}: output path is outside the project root {}",
+            output_base.display(),
+            project_root.display()
+        );
     }
 
-    if !output.exists() {
-        fs::create_dir_all(output)
-            .with_context(|| format!("Failed to create output directory {}", output.display()))?;
+    if output_base.exists() && !output_base.is_dir() {
+        bail!(
+            "Refusing to generate into {}: output path exists and is not a directory",
+            output_base.display()
+        );
     }
 
-    fs::write(&marker, "")
-        .with_context(|| format!("Failed to create marker {}", marker.display()))?;
-    Ok(())
+    let marker = output_base.join(".spec-generated");
+    if !marker.exists() && output_base.exists() && !dir_is_empty(&output_base)? {
+        bail!(
+            "Refusing to generate into {}: non-empty directory missing .spec-generated marker",
+            output_base.display()
+        );
+    }
+
+    if !output_base.exists() {
+        fs::create_dir_all(&output_base).with_context(|| {
+            format!(
+                "Failed to create output directory {}",
+                output_base.display()
+            )
+        })?;
+    }
+
+    if !marker.exists() {
+        fs::write(&marker, "")
+            .with_context(|| format!("Failed to create marker {}", marker.display()))?;
+    }
+
+    Ok(output_base)
+}
+
+fn dir_is_empty(path: &Path) -> Result<bool> {
+    let mut entries =
+        fs::read_dir(path).with_context(|| format!("Failed to read dir {}", path.display()))?;
+    Ok(entries.next().is_none())
 }
 
 fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
@@ -247,16 +304,21 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
 }
 
 fn finish_validation(
-    specs: Vec<LoadedSpec>,
+    specs: &[LoadedSpec],
     mut errors: BTreeMap<String, Vec<String>>,
-) -> BTreeMap<String, Vec<String>> {
-    if let Err(err) = validate_no_duplicate_ids(&specs) {
-        let key = duplicate_path_key(&err);
+) -> (BTreeMap<String, Vec<String>>, Vec<String>) {
+    for err in validate_no_duplicate_ids(specs) {
+        let key = match &err {
+            spec_core::SpecError::DuplicateId { file1, file2, .. } => {
+                format!("{file1} | {file2}")
+            }
+            _ => "validation".to_string(),
+        };
         errors.entry(key).or_default().push(err.to_string());
     }
 
     for spec in specs {
-        if let Err(err) = validate_full(&spec) {
+        if let Err(err) = validate_full(spec) {
             errors
                 .entry(spec.source.file_path.clone())
                 .or_default()
@@ -264,14 +326,15 @@ fn finish_validation(
         }
     }
 
-    errors
-}
-
-fn duplicate_path_key(err: &spec_core::SpecError) -> String {
-    match err {
-        spec_core::SpecError::DuplicateId { file1, file2, .. } => format!("{file1} | {file2}"),
-        _ => "validation".to_string(),
+    for err in validate_deps_exist(specs) {
+        let path = match &err {
+            spec_core::SpecError::MissingDep { path, .. } => path.clone(),
+            _ => "validation".to_string(),
+        };
+        errors.entry(path).or_default().push(err.to_string());
     }
+
+    (errors, Vec::new())
 }
 
 fn print_errors(errors: &BTreeMap<String, Vec<String>>) {
@@ -328,8 +391,6 @@ id: pricing/apply_discount
 kind: function
 intent:
   why: Apply a discount.
-deps:
-  - money/round
 body:
   rust: |
     pub fn apply_discount() -> Decimal {

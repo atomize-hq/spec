@@ -97,7 +97,7 @@ This is the foundation of the entire system. If the source model is unclear, too
 ### Capabilities
 - `*.unit.spec` and `*.test.spec` as canonical author-facing file conventions
 - YAML-by-content parsing with `.spec` as the domain-specific extension
-- CUE-backed schema validation and policy enforcement
+- JSON-Schema-backed validation and policy enforcement (0.1/0.2; see `DECISIONS.md`)
 - first-pass source loader and normalization pipeline
 - stable IDs and referential rules for units and tests
 - an initial repo shape and project configuration model
@@ -288,7 +288,7 @@ Make the source model real.
 
 ### Primary objectives
 - prove that `*.unit.spec` and `*.test.spec` are a viable authoring surface
-- prove that `.spec` files can be parsed as YAML and validated through CUE
+- prove that `.spec` files can be parsed as YAML and validated through JSON Schema (0.1/0.2; see `DECISIONS.md`)
 - define the minimum viable semantic unit and test schemas
 - establish stable normalization and deterministic diagnostics
 
@@ -296,7 +296,7 @@ Make the source model real.
 - project/repo conventions for spec
 - source loader for `*.spec` files
 - YAML parsing and normalization pipeline
-- CUE schema and policy layer v1
+- JSON Schema + semantic/policy validation rules v1 (0.1/0.2; see `DECISIONS.md`)
 - unit schema v1 for a narrow set of semantic unit kinds
 - test schema v1 for atom and broader test artifacts
 - CLI or build entrypoints for validation and normalization
@@ -478,8 +478,9 @@ The most important early tracks appear to be:
 1. **Source model track**  
    Supported unit kinds, field shapes, contract scope, ID rules, and repo conventions.
 
-2. **YAML/CUE toolchain track**  
-   `.spec` loader behavior, validation flow, editor support, schema organization, and normalization rules.
+2. **YAML/schema validation track**  
+   `.spec` loader behavior, JSON Schema validation flow (0.1/0.2; see `DECISIONS.md`), editor support, schema organization,
+   and normalization rules. CUE remains a candidate for 0.3+ when cross-file constraints and policy composition justify it.
 
 3. **Language target track**  
    Choose the first target language and first test adapter path.

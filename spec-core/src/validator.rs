@@ -8,6 +8,7 @@ use crate::types::LoadedSpec;
 use crate::{Result, SpecError};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 /// JSON Schema for unit.spec validation (embedded at compile time)
@@ -113,6 +114,123 @@ pub fn validate_semantic(spec: &LoadedSpec) -> Result<()> {
         });
     }
 
+    validate_body_rust_alignment(spec)?;
+    validate_local_test_expects(spec)?;
+
+    Ok(())
+}
+
+fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
+    let path = spec.source.file_path.clone();
+    for test in &spec.spec.local_tests {
+        let expr = syn::parse_str::<syn::Expr>(test.expect.trim()).map_err(|err| {
+            SpecError::LocalTestExpectNotExpr {
+                id: test.id.clone(),
+                message: err.to_string(),
+                path: path.clone(),
+            }
+        })?;
+        // Only allow expression kinds that are safe to embed verbatim into assert!().
+        // Reject scope-creating forms (Block, Unsafe, Closure, If, Match, Loop, etc.)
+        // that could execute arbitrary code. A config lever for trusted workspaces is
+        // deferred to M3. See TODOS.md.
+        if !is_safe_expect_expr(&expr) {
+            return Err(SpecError::LocalTestExpectNotExpr {
+                id: test.id.clone(),
+                message: "expect must be a simple expression (binary, call, path, or literal); block, unsafe, closure, and control-flow expressions are not allowed".to_string(),
+                path: path.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn is_safe_expect_expr(expr: &syn::Expr) -> bool {
+    match expr {
+        syn::Expr::Binary(_)
+        | syn::Expr::Call(_)
+        | syn::Expr::MethodCall(_)
+        | syn::Expr::Path(_)
+        | syn::Expr::Lit(_)
+        | syn::Expr::Field(_)
+        | syn::Expr::Index(_)
+        | syn::Expr::Unary(_) => true,
+        syn::Expr::Paren(inner) => is_safe_expect_expr(&inner.expr),
+        syn::Expr::Cast(c) => is_safe_expect_expr(&c.expr),
+        // Block, Unsafe, Closure, If, Match, Loop, ForLoop, While, Async, etc. → rejected
+        _ => false,
+    }
+}
+
+fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
+    let path = spec.source.file_path.clone();
+    let expected_fn_name = spec.spec.id.rsplit('/').next().unwrap_or_default();
+
+    let file =
+        syn::parse_file(&spec.spec.body.rust).map_err(|err| SpecError::BodyRustParseFailed {
+            message: err.to_string(),
+            path: path.clone(),
+        })?;
+
+    if file.items.len() != 1 {
+        return Err(SpecError::BodyRustMustBeSingleFn {
+            found: file.items.len(),
+            path,
+        });
+    }
+
+    let syn::Item::Fn(item_fn) = &file.items[0] else {
+        return Err(SpecError::BodyRustMustBeSingleFn { found: 0, path });
+    };
+
+    let found_name = item_fn.sig.ident.to_string();
+    if found_name != expected_fn_name {
+        return Err(SpecError::BodyRustFnNameMismatch {
+            expected: expected_fn_name.to_string(),
+            found: found_name,
+            path,
+        });
+    }
+
+    for input in &item_fn.sig.inputs {
+        match input {
+            syn::FnArg::Receiver(_) => return Err(SpecError::BodyRustMethodRejected { path }),
+            syn::FnArg::Typed(pat_type) => {
+                if let syn::Pat::Ident(pat_ident) = &*pat_type.pat
+                    && pat_ident.ident == "self"
+                {
+                    return Err(SpecError::BodyRustMethodRejected { path });
+                }
+            }
+        }
+    }
+
+    if let Some(contract) = &spec.spec.contract
+        && let Some(inputs) = &contract.inputs
+    {
+        let mut params = HashSet::<String>::new();
+        for input in &item_fn.sig.inputs {
+            let syn::FnArg::Typed(pat_type) = input else {
+                continue;
+            };
+            let syn::Pat::Ident(pat_ident) = &*pat_type.pat else {
+                continue;
+            };
+            params.insert(pat_ident.ident.to_string());
+        }
+
+        let mut input_keys: Vec<&String> = inputs.keys().collect();
+        input_keys.sort();
+        for input in input_keys {
+            if !params.contains(input.as_str()) {
+                return Err(SpecError::ContractInputParamMismatch {
+                    input: input.clone(),
+                    path,
+                });
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -130,23 +248,52 @@ pub fn validate_rust_keywords(id: &str, file_path: &str) -> Result<()> {
     Ok(())
 }
 
-/// Check for duplicate IDs across all loaded specs
-pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Result<()> {
+/// Check for duplicate IDs across all loaded specs.
+///
+/// Returns all duplicate pairs, not just the first. Each additional file that
+/// shares an ID produces a separate error citing the original file as file1.
+pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Vec<SpecError> {
     use std::collections::HashMap;
     let mut seen: HashMap<String, String> = HashMap::new();
+    let mut errors = Vec::new();
 
     for spec in specs {
         if let Some(existing_file) = seen.get(&spec.spec.id) {
-            return Err(SpecError::DuplicateId {
+            errors.push(SpecError::DuplicateId {
                 id: spec.spec.id.clone(),
                 file1: existing_file.clone(),
                 file2: spec.source.file_path.clone(),
             });
+        } else {
+            seen.insert(spec.spec.id.clone(), spec.source.file_path.clone());
         }
-        seen.insert(spec.spec.id.clone(), spec.source.file_path.clone());
     }
 
-    Ok(())
+    errors
+}
+
+/// Validate that all internal deps referenced by loaded specs exist in the same spec set.
+///
+/// For M2, deps are always strict: any missing dep is an error.
+pub fn validate_deps_exist(specs: &[LoadedSpec]) -> Vec<SpecError> {
+    let mut ids = HashSet::<&str>::new();
+    for spec in specs {
+        ids.insert(spec.spec.id.as_str());
+    }
+
+    let mut errors = Vec::<SpecError>::new();
+    for spec in specs {
+        for dep in &spec.spec.deps {
+            if !ids.contains(dep.as_str()) {
+                errors.push(SpecError::MissingDep {
+                    dep: dep.clone(),
+                    path: spec.source.file_path.clone(),
+                });
+            }
+        }
+    }
+
+    errors
 }
 
 /// Full validation (schema + semantic)
@@ -159,7 +306,7 @@ pub fn validate_full(spec: &LoadedSpec) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Intent, SpecSource, SpecStruct};
+    use crate::types::{Body, Contract, Intent, SpecSource, SpecStruct};
 
     fn create_test_spec(id: &str, rust_body: &str) -> LoadedSpec {
         LoadedSpec {
@@ -175,6 +322,7 @@ mod tests {
                 },
                 contract: None,
                 deps: vec![],
+                imports: vec![],
                 body: Body {
                     rust: rust_body.to_string(),
                 },
@@ -228,6 +376,94 @@ extra_field: should_fail
     }
 
     #[test]
+    fn imports_field_validates_rust_path() {
+        let valid = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a percentage discount.
+imports:
+  - rust_decimal::Decimal
+  - std::collections::HashMap
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(valid).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(
+            result.is_ok(),
+            "Expected valid imports to pass: {:?}",
+            result
+        );
+
+        let invalid_bare = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a percentage discount.
+imports:
+  - Decimal
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(invalid_bare).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_err(), "Expected bare import to fail");
+
+        let invalid_leading = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a percentage discount.
+imports:
+  - ::Decimal
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(invalid_leading).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_err(), "Expected leading :: import to fail");
+    }
+
+    #[test]
+    fn validate_local_test_id_must_be_valid_identifier() {
+        let invalid = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+local_tests:
+  - id: some case!
+    expect: "true"
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(invalid).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_err(), "Expected invalid local_tests id to fail");
+
+        let valid = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+local_tests:
+  - id: happy_path
+    expect: "true"
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(valid).unwrap();
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(result.is_ok(), "Expected valid local_tests id to pass");
+    }
+
+    #[test]
     fn test_validate_rust_keywords_in_id() {
         let result = validate_rust_keywords("pricing/type", "test.unit.spec");
         assert!(result.is_err());
@@ -249,8 +485,8 @@ extra_field: should_fail
             create_test_spec("utils/round", "pub fn test2() {}"),
         ];
 
-        let result = validate_no_duplicate_ids(&specs);
-        assert!(result.is_ok());
+        let errors = validate_no_duplicate_ids(&specs);
+        assert!(errors.is_empty());
     }
 
     #[test]
@@ -260,11 +496,22 @@ extra_field: should_fail
             create_test_spec("pricing/apply_discount", "pub fn test2() {}"),
         ];
 
-        let result = validate_no_duplicate_ids(&specs);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("Duplicate ID"));
-        assert!(err.to_string().contains("pricing/apply_discount"));
+        let errors = validate_no_duplicate_ids(&specs);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].to_string().contains("Duplicate ID"));
+        assert!(errors[0].to_string().contains("pricing/apply_discount"));
+    }
+
+    #[test]
+    fn test_validate_duplicate_ids_all_reported() {
+        let specs = vec![
+            create_test_spec("pricing/apply_discount", "pub fn test1() {}"),
+            create_test_spec("pricing/apply_discount", "pub fn test2() {}"),
+            create_test_spec("pricing/apply_discount", "pub fn test3() {}"),
+        ];
+
+        let errors = validate_no_duplicate_ids(&specs);
+        assert_eq!(errors.len(), 2, "all duplicate pairs should be reported");
     }
 
     #[test]
@@ -294,6 +541,7 @@ extra_field: should_fail
                 },
                 contract: None,
                 deps: vec![],
+                imports: vec![],
                 body: Body {
                     rust: "use std::collections::HashMap; pub fn test() {}".to_string(),
                 },
@@ -343,6 +591,7 @@ extra_field: should_fail
                 },
                 contract: None,
                 deps: vec![],
+                imports: vec![],
                 body: Body {
                     rust: "pub use std::collections::HashMap;\npub fn func() {}".to_string(),
                 },
@@ -370,6 +619,168 @@ extra_field: should_fail
                 .unwrap_err()
                 .to_string()
                 .contains("Rust reserved keyword")
+        );
+    }
+
+    #[test]
+    fn validate_body_fn_name_mismatch() {
+        let spec = create_test_spec("pricing/apply_discount", "pub fn wrong_name() {}");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("expected 'apply_discount'"), "{err}");
+    }
+
+    #[test]
+    fn validate_body_multiple_fns_rejected() {
+        let spec = create_test_spec(
+            "pricing/apply_discount",
+            "pub fn apply_discount() {}\npub fn other() {}",
+        );
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("exactly one top-level function"), "{err}");
+    }
+
+    #[test]
+    fn validate_contract_arg_name_mismatch() {
+        use std::collections::HashMap;
+
+        let mut spec = create_test_spec(
+            "pricing/apply_discount",
+            "pub fn apply_discount(price: Decimal) {}",
+        );
+        let mut inputs = HashMap::new();
+        inputs.insert("subtotal".to_string(), "Decimal".to_string());
+        spec.spec.contract = Some(Contract {
+            inputs: Some(inputs),
+            returns: None,
+            invariants: vec![],
+        });
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("contract.inputs contains 'subtotal'"), "{err}");
+    }
+
+    #[test]
+    fn validate_body_with_macros_passes_fn_name_check() {
+        let spec = create_test_spec(
+            "pricing/apply_discount",
+            r#"
+#[allow(dead_code)]
+pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
+    let _v = vec![1, 2, 3];
+    assert!(true);
+    todo!()
+}
+"#,
+        );
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn validate_body_method_rejected() {
+        let spec = create_test_spec(
+            "pricing/apply_discount",
+            "pub fn apply_discount(&self, subtotal: Decimal) {}",
+        );
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("free function (no self parameter)"), "{err}");
+    }
+
+    #[test]
+    fn validate_local_test_expect_rejects_non_expression() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() {}".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "injection_attempt".to_string(),
+                    expect: "true); } } mod evil { fn steal() {}".to_string(),
+                }],
+                links: None,
+            },
+        };
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("not a valid Rust expression"),
+            "expected injection to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_local_test_expect_accepts_valid_expression() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "happy_path".to_string(),
+                    expect: "apply_discount() == true".to_string(),
+                }],
+                links: None,
+            },
+        };
+        assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn validate_local_test_expect_rejects_block_expression() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "block_attempt".to_string(),
+                    expect: "{ std::process::exit(1); true }".to_string(),
+                }],
+                links: None,
+            },
+        };
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("simple expression"),
+            "expected block expression to be rejected: {err}"
         );
     }
 }

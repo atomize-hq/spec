@@ -1,6 +1,8 @@
 target
 generated/
 examples/ecommerce/target/
+examples/ecommerce/src/generated/
 .DS_Store
 .gstack/
 .implemented/
+spec-cli/.tmp*/

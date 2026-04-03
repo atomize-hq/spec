@@ -107,10 +107,14 @@ A plan artifact is a future-facing object that describes intended graph changes.
 ## Authoring Format
 
 ### Decision
-Use **YAML as the underlying authoring format**, **`.spec` as the domain-specific file extension**, and **CUE as the schema, validation, normalization, and policy layer**.
+Use **YAML as the underlying authoring format** and **`.spec` as the domain-specific file extension**.
+For **0.1.x–0.2.x**, validate with **JSON Schema** (see `DECISIONS.md`). **CUE** remains a candidate for **0.3+**
+when cross-file constraints and policy composition justify the complexity. Do not design against CUE until then.
 
 ### Why
-YAML gives a readable, familiar surface that works well for spec-shaped documents and embedded native code blocks. CUE provides stronger guarantees around required fields, closed shapes, defaults, constraints, and cross-file composition.
+YAML gives a readable, familiar surface that works well for spec-shaped documents and embedded native code blocks.
+JSON Schema is the currently implemented path for validation and keeps the project aligned with shipped behavior. CUE
+may become valuable later if/when the system needs stronger cross-file constraint composition.
 
 ### Practical interpretation
 Authors primarily edit:
@@ -118,15 +122,11 @@ Authors primarily edit:
 - `*.unit.spec`
 - `*.test.spec`
 
-These files are YAML documents by content. The build system should parse them as YAML, validate them against CUE definitions, and normalize them before compilation.
+These files are YAML documents by content. The build system should parse them as YAML, validate them against JSON
+Schema, and then run any additional semantic/policy validation before normalization/compilation.
 
 ### Tooling implication
-Because CUE’s CLI infers file type from filename suffix by default, a custom `.spec` suffix should be handled by either:
-
-- a source loader that reads `*.spec` files as YAML before they reach downstream stages, or
-- explicit CUE input qualifiers such as `yaml:` in CLI invocations
-
-Editor support should also associate `*.spec` with YAML syntax and schema tooling.
+Editor support should associate `*.spec` with YAML syntax and (optionally) attach JSON Schema tooling for authoring.
 
 ---
 
@@ -140,6 +140,7 @@ A semantic unit source file should contain human-authored truth:
 - `intent`
 - `contract`
 - `deps`
+- `imports`
 - `body`
 - `local_tests`
 - `links`
@@ -256,7 +257,7 @@ The semantic source layer should follow a deterministic multi-stage pipeline.
 Load unit and test spec files from configured roots.
 
 ### 2. Validate
-Apply CUE schema and policy validation.
+Apply JSON Schema validation plus any additional semantic/policy rules (0.1/0.2; see `DECISIONS.md`).
 
 Validation includes:
 
@@ -336,7 +337,7 @@ Responsibilities:
 ### B. Schema and Policy Engine
 Responsibilities:
 
-- host CUE definitions
+- host schema definitions (JSON Schema for 0.1/0.2; see `DECISIONS.md`)
 - validate source files
 - enforce closed and open shape policy
 - apply defaults and normalization hints
@@ -508,7 +509,7 @@ Reverse flow is not required in the first release, but the internal model should
 
 The first implementation should prioritize:
 
-1. `.spec` plus CUE validation for a narrow unit schema
+1. `.spec` plus JSON Schema validation for a narrow unit schema (0.1/0.2; see `DECISIONS.md`)
 2. one or two target languages only
 3. local atom tests first
 4. simple broader test linking
@@ -536,7 +537,7 @@ If every tiny helper becomes a top-level unit, the system becomes noisy and hard
 ### Risk 3: Schema logic leaks everywhere
 If validation rules are split across naming conventions, compiler code, and ad hoc scripts, the system becomes brittle.
 
-**Mitigation:** Centralize shape and policy rules in CUE and keep the compiler focused on lowering and evidence.
+**Mitigation:** Centralize shape and policy rules in the schema + validator layer and keep the compiler focused on lowering and evidence.
 
 ### Risk 4: Generated code is unreadable
 If output code is hard to inspect, trust in the system will drop.
