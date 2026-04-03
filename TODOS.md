@@ -45,8 +45,8 @@
 - [x] **Atomic writes for code generation** — Completed in D1 (v0.2.0). tempfile::Builder + rename into place (POSIX atomic per-file). Temp in same dir to avoid EXDEV cross-fs errors.
 
 ### Deferred to M3
-- [ ] **`--no-strict` flag for `validate` and `generate`** — Deferred from M2. When cross-library dep composition is introduced, partial-graph workflows need a way to downgrade missing-dep errors to warnings (exit 0). The `finish_validation` return type already scaffolds `(errors, warnings)` for this. ship adversarial review 2026-04-02.
-- [ ] **`local_tests.expect` config lever** — Currently restricted to simple expressions (binary, call, path, literal) for safety. Add a workspace config flag to allow block/unsafe expressions for trusted environments. ship adversarial review 2026-04-02.
+- [x] **`--no-strict` flag for `validate` and `generate`** — Completed v0.2.2 (2026-04-03). `spec validate --no-strict` downgrades missing-dep errors to warnings and exits 0. `spec generate --no-strict` is explicitly rejected with a helpful message. ship adversarial review 2026-04-02.
+- [x] **`local_tests.expect` config lever** — Completed v0.2.2 (2026-04-03). `spec.toml` workspace config with `[validation] allow_unsafe_local_test_expect = true` permits block/unsafe expressions in trusted environments. ship adversarial review 2026-04-02.
 
 ### Deferred from autoplan retrospective (2026-04-03)
 
@@ -54,8 +54,8 @@
 - [x] **Fix `is_safe_expect_expr` to recurse into sub-expressions** — Completed fix/change-is_safe_expect_expr. `f({ unsafe { ... } })` now rejected. Added regression tests: `expect_with_unsafe_block_in_call_arg_is_rejected`, `expect_with_block_in_binary_operand_is_rejected`, `expect_with_unsafe_block_in_method_call_arg_is_rejected`. (validator.rs:148)
 
 #### Architecture Fixes (Medium Priority)
-- [ ] **Consolidate path-containment logic** — `clean_output_dir` uses `normalized_absolute_path` (lexical) and `ensure_output_marker` uses `canonicalize` (symlink-following). Divergent logic = future maintenance hazard. Extract single `safe_output_path(path) -> Result<PathBuf>` utility. (generator.rs, commands.rs)
-- [ ] **Add `local_tests[].id` uniqueness validation** — Duplicate ids within a unit → duplicate `fn test_{id}()` → compile error. Validate uniqueness in `validate_local_test_expects`. (validator.rs)
+- [x] **Consolidate path-containment logic** — Completed v0.2.2 (2026-04-03). `safe_output_path` utility extracted; both `clean_output_dir` and `ensure_output_marker` now use it. (generator.rs, commands.rs)
+- [x] **Add `local_tests[].id` uniqueness validation** — Completed v0.2.2 (2026-04-03). Duplicate IDs within a unit caught at validation time with `DuplicateLocalTestId` error. (validator.rs)
 - [ ] **Document `pub use generated::*` as required consuming-crate convention** — Internal deps generate `use crate::X` which only works if consuming crate re-exports generated modules at root. Document in README/DECISIONS.md. Not a code change.
 
 #### Architecture (Medium Priority)
@@ -70,9 +70,9 @@
 - [ ] **Define CUE trigger condition explicitly** — Current DECISIONS.md says "CUE when we need cross-file constraints." Specify the exact constraint that triggers the switch (e.g., "when we need dep-exists validation across spec libraries"). Prevents indefinite deferral.
 
 #### Low-Priority Fixes
-- [ ] **Fix `generate` file count message** — "Generated N files" only counts unit files, not mod.rs files written. Fix: count `resolved_specs.len() + namespaces.len()`. (commands.rs:145)
-- [ ] **Fix non-fn body error message** — When body.rust has exactly 1 item that's not a fn, `BodyRustMustBeSingleFn { found: 0 }` is misleading. Should report found=1 with note "not a function". (validator.rs:175)
-- [ ] **Handle symlink cycles in collect_specs gracefully** — `WalkDir::follow_links(true)` with symlink cycle emits error that aborts entire spec collection. Log warning and skip instead. (commands.rs)
+- [x] **Fix `generate` file count message** — Completed v0.2.2 (2026-04-03). `resolved_specs.len() + namespaces.len()` used so mod.rs files are included in the count. (commands.rs)
+- [x] **Fix non-fn body error message** — Completed v0.2.2 (2026-04-03). `BodyRustSingleItemNotFn` error variant emits "found 1 item (not a function)". (validator.rs)
+- [x] **Handle symlink cycles in collect_specs gracefully** — Completed v0.2.2 (2026-04-03). `load_directory_report` emits `SpecWarning::SymlinkCycleSkipped` and continues. CLI surfaces warnings in stderr and success message. (loader.rs, commands.rs)
 - [ ] **Add fn visibility validation** — `spec validate` should warn or error when body.rust function is not `pub`/`pub(crate)` and the unit is used as a dep. Currently caught only by cargo check in D4. (validator.rs)
 - [ ] **Add generate idempotency integration test** — Two identical `spec generate` runs on same spec set produce byte-for-byte identical output. Guards against mtime changes on marker file. (cli.rs integration tests)
 

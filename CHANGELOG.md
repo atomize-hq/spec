@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.2 - 2026-04-03
+
+### Added
+
+- **`--no-strict` flag for `spec validate`** — Downgrades missing-dep errors to warnings and exits 0. Useful for partial-graph workflows where not all deps are present in the local spec set. `spec generate` explicitly rejects `--no-strict` with a helpful error.
+- **`spec.toml` workspace config** — Supports `[validation] allow_unsafe_local_test_expect = true` to permit block, unsafe, closure, and other complex Rust expressions in `local_tests[].expect` for trusted environments. Config is discovered by walking ancestors from the target path (same convention as `.gitignore`).
+- **`SpecWarning` type** — New non-fatal diagnostic type. Currently emitted for: symlink cycles skipped during directory traversal (`SymlinkCycleSkipped`) and missing deps in non-strict mode (`MissingDep`). Warnings print to stderr and appear in the success message count.
+
+### Fixed
+
+- **Symlink cycle handling** — Directory traversal no longer errors on symlink cycles. Cycles emit a `SymlinkCycleSkipped` warning and traversal continues with the rest of the tree. Previously, a cycle caused `spec validate` and `spec generate` to hard-fail.
+- **`safe_output_path` consolidation** — `clean_output_dir` and `ensure_output_marker` previously used divergent path-containment logic (`normalized_absolute_path` lexical vs `canonicalize` symlink-following). Both now use a single `safe_output_path` utility that canonicalizes existing ancestors and rejects paths outside the project root.
+- **`local_tests[].id` uniqueness** — Duplicate IDs within a single unit's `local_tests` are now caught at validation time. Previously, duplicate IDs would silently generate duplicate `fn test_{id}()` functions and cause a Rust compile error downstream.
+- **`BodyRustSingleItemNotFn` error** — When `body.rust` contains exactly one top-level item that is not a function, the error now says "found 1 item (not a function)" instead of the misleading "found 0 items".
+
+### Internal
+
+- `load_directory_report` promoted from `pub(crate)` test helper to public API. Returns `DirectoryLoadReport` with `specs`, `errors`, `warnings`, and `total_files`.
+- `validate_full`, `validate_semantic`, and `validate_deps_exist` each now have `_with_options` variants accepting `ValidationOptions`. The originals are kept as strict-mode convenience wrappers.
+
 ## 0.2.1 - 2026-04-03
 
 ### Security
