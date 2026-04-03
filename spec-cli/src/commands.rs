@@ -152,7 +152,7 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
 
     // Include every generated mod.rs (root + nested modules) in the owned set.
     let namespaces = build_namespaces(&resolved_specs);
-    for (module_path, _namespace) in &namespaces {
+    for module_path in namespaces.keys() {
         let mod_rs_rel = if module_path.is_empty() {
             PathBuf::from("mod.rs")
         } else {
