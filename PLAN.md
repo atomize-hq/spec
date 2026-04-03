@@ -1,7 +1,8 @@
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m2-autoplan-restore-20260403-052737.md -->
 # Release 0.2: Harden the Loop
 
 **Generated**: 2026-04-02  
-**Status**: Planning (Eng Review complete)  
+**Status**: Implemented (PR #1 MERGED — 2026-04-02)  
 **Preceded by**: `.implemented/PLAN-M1-release-0.1.md`  
 **Third-party review**: Static review of M1 workspace and specs, 2026-04-02
 
@@ -17,7 +18,7 @@ anchored. The bar for calling M2 done:
 - Generating into an unsafe path is rejected before any writes
 - Deleting or renaming a unit leaves no stale generated Rust behind
 - A mismatched `id` and `body.rust` function name fails validation
-- Unresolved internal deps are errors by default (escapable via `--no-strict`)
+- Unresolved internal deps are errors by default (escape hatch `--no-strict` deferred to M3)
 - External/native imports have an explicit modeled path
 - The ecommerce example generates, wires into the crate module tree, and passes `cargo check`
 - At least one `local_tests` path executes for real (not just compiles)
@@ -226,7 +227,7 @@ D7 is a behavioral breaking change. Bump workspace version to `0.2.0` in the roo
 
 **ecommerce compile note:** `examples/ecommerce/src/main.rs` will have `mod generated;`
 after D4. The ecommerce crate requires `spec generate examples/ecommerce/units --output
-examples/ecommerce/src/generated/spec` before it can be compiled independently. The
+examples/ecommerce/src/generated` before it can be compiled independently. The
 generated output is gitignored (`generated/` in root .gitignore). The D4 integration
 test generates automatically before running `cargo check`. Document this in the
 ecommerce crate's README or a comment in main.rs.
@@ -436,3 +437,409 @@ Launch B + C + D in parallel worktrees. Merge all into main before starting D4.
 **CROSS-MODEL:** D4 module wiring (critical build-blocking gap) resolved — output path changed to src/generated. D4/D5 sequencing clarified.
 **UNRESOLVED:** 0
 **VERDICT:** ENG CLEARED — Eng Review passed. CEO Review complete (HOLD SCOPE). Ready to implement.
+
+---
+
+## /autoplan Review — 2026-04-03 (Retrospective, post-merge)
+
+**Context:** PR #1 MERGED. This is a retrospective pass on the completed M2 plan.
+**Mode:** SELECTIVE EXPANSION (auto-decided: iteration on existing system, already implemented)
+**UI Scope:** None
+
+### CEO Dual Voices
+
+**CLAUDE SUBAGENT (CEO — strategic independence):**
+1. No clear primary user defined (critical) — solo engineer vs. team coordination tool has different M3 priorities
+2. Generated code commitment model hybrid/ambiguous (high) — gitignored but required for compile; need binary decision in M3
+3. `local_tests.expect` raw string won't scale (high) — M3 structured input model is not optional, it's the product feature
+4. Cross-library dep model undesigned before M3 build (high) — sketch schema before building
+5. Competitive moat requires evidence/passport model, not better codegen (high) — prioritize over graph resolution
+6. LSP surface not examined before committing to CLI-only shape (medium)
+7. JSON Schema cross-file constraint ceiling; define CUE trigger condition explicitly (medium)
+8. Multi-team output ownership not modeled (medium)
+9. `syn full` compile weight (low)
+
+**CODEX SAYS (CEO — strategy challenge):**
+1. No ICP defined — correctness tool without adoption funnel
+2. "No breadth" is a premise not a strategy for early-stage
+3. Thesis says `--no-strict` "escapable" (line 21) but D7 locks it always strict — doc contradiction
+4. D8 line 230 reintroduces `src/generated/spec` path (contradicts D4 correction) — doc drift
+5. PLAN.md Status still says "Planning" — post-merge drift breaks onboarding
+6. `use crate::` hardcoded assumes `pub use generated::*;` pattern in consuming crate — works for ecommerce but non-obvious for drop-in
+7. D3 "exactly one top-level function" constraint will be reversed — real users want helper fns, consts, type aliases
+8. "Owned subtree" + orphan deletion blocks mixed directories (generated + handwritten glue)
+9. Alternative: invert D3 — generate signature from contract, body.rust = body expression only
+10. No "drop-in to existing crate" story — requires adding `pub use generated::*;` to crate root
+11. Competitive differentiation vs OpenAPI/proto/Smithy not articulated
+
+```
+CEO DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Premises valid?                   Yes     Partial PARTIAL (--no-strict doc contradiction; thesis wording)
+  2. Right problem to solve?           Yes     Partial PARTIAL (no ICP defined by either review)
+  3. Scope calibration correct?        Yes     Yes     CONFIRMED (M2 hardening was right call)
+  4. Alternatives sufficiently explored? No    No      DISAGREE (both flag D3 invert not explored)
+  5. Competitive/market risks covered? No      No      CONFIRMED gap (both flag missing differentiation story)
+  6. 6-month trajectory sound?         Yes     Partial PARTIAL (local_tests.expect ceiling, dep model undesigned)
+═══════════════════════════════════════════════════════════════
+CONFIRMED = both agree. DISAGREE = models differ (→ taste decision).
+Single critical finding: D3 one-function constraint flagged by Codex (taste decision).
+```
+
+### CEO Review Sections
+
+**Step 0A — Premise Challenge:**
+All 7 premises confirmed by user. One doc-level contradiction found (not a premise flaw): thesis line 21 says "escapable via `--no-strict`" but D7 always strict — wording should be corrected to "errors by default (escape hatch deferred to M3)."
+AUTO-DECISION: Fix wording in PLAN.md thesis (P5 explicit). Logged.
+
+**Step 0B — Existing Code Leverage:**
+- D1 orphan cleanup → builds on existing `clean_output_dir` in generator.rs — correct reuse
+- D2 imports → extends existing `SpecStruct`/`ResolvedSpec` types in types.rs — correct reuse
+- D3 syn validation → new dependency, no existing code to reuse — appropriate
+- D4 → builds on existing CLI test infrastructure in cli.rs — correct reuse
+- D5 → extends existing `generate_code` in generator.rs — correct reuse
+No parallel-flow reconstruction found. No DRY violations.
+
+**Step 0C — Dream State Mapping:**
+```
+  CURRENT STATE (M2)             THIS PLAN              12-MONTH IDEAL
+  ─────────────────────          ───────────────────    ─────────────────────────────
+  load→validate→generate         Output safe            Contract type validation
+  Rust output compiles           cargo check passes     Evidence/passport model
+  No import/dep confusion        Fn name aligned        Cross-library dep resolution
+  Stale files possible           Orphan cleanup done    Team adoption
+  Deps unvalidated               Strict by default      CI-enforced spec compliance
+```
+M2 moves correctly toward the 12-month ideal. The trajectory is sound. The gap: evidence model and ICP definition are not in the plan at all — they remain undefined territory.
+
+**Step 0C-bis — Implementation Alternatives:**
+```
+APPROACH A: Current (semantic hardening first) — SHIPPED
+  Summary: Make the compile loop safe before adding features. Validate semantics incrementally with syn.
+  Effort:  M (4 weeks delivered in ~1 week with CC)
+  Risk:    Low
+  Pros:    - Trust before features; compilable output as proof point; no external service dependencies
+  Cons:    - No product differentiator yet; ICP undefined; local_tests has ceiling
+
+APPROACH B: Feature-first (skip hardening, add evidence model now)
+  Summary: Accept compilation gaps, focus M2 on contract type validation and a minimal passport record.
+  Effort:  L
+  Risk:    High — broken output tree + unvalidated types = user trust destroyed
+  Pros:    - Differentiator earlier
+  Cons:    - Unsafe output discredits the tool; early users abandon before trust builds
+
+APPROACH C: Invert D3 (generate from contract, body.rust = body expression)
+  Summary: Generate fn signature from contract.inputs, embed body.rust as the function body.
+  Effort:  M (replaces D3's syn-validation approach)
+  Risk:    Medium — breaking schema change for body.rust convention
+  Pros:    - Eliminates fn name drift entirely; no syn policing; cleaner separation of contract and impl
+  Cons:    - Breaking change from M2's shipped design; forces users to restructure body.rust
+```
+RECOMMENDATION: Approach A was correct for M2 (trust before features). Approach C is the right direction for M3 D3 expansion — worth a design spike before adding type validation. AUTO-DECIDED (P3 pragmatic + P1 completeness).
+
+**Step 0D — Mode Analysis (SELECTIVE EXPANSION):**
+Expansions surfaced — none accepted (plan already shipped). Candidates for TODOS.md:
+- Define ICP explicitly (no effort, 1 paragraph, before M3 scoping)
+- Force generated-code commitment decision (binary: commit or ephemeral; before M3)
+- Design Approach C invert-D3 spike (2 hours; before M3 D3 expansion)
+- Cross-library dep schema sketch (2 hours; before M3 build)
+All → deferred to TODOS.md. AUTO-DECIDED (P3 pragmatic, plan is already shipped).
+
+**Step 0E — Temporal Interrogation:**
+This is retrospective; temporal interrogation maps to M3 decisions:
+- HOUR 1 (M3 foundations): ICP definition must happen first — it gates M3 prioritization
+- HOUR 2-3 (M3 core): contract type validation requires resolving Approach C vs current D3 shape
+- HOUR 4-5 (M3 integration): evidence model requires defining what constitutes "passing" proof
+- HOUR 6+ (M3 polish): generated code commitment model must be resolved before M3 CI story
+
+**Section 1 — Architecture Review:**
+```
+  CURRENT ARCHITECTURE (post-M2):
+  
+  .unit.spec files
+       │
+       ▼
+  ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐
+  │   loader.rs  │──▶│  normalizer  │──▶ │  validator.rs    │
+  │  (YAML→     │    │  (resolve    │    │  (JSON Schema +  │
+  │  SpecStruct) │    │  deps/types) │    │  syn + dep check)│
+  └─────────────┘    └──────────────┘    └──────────────────┘
+                                                   │
+                                                   ▼
+                                         ┌──────────────────┐
+                                         │  generator.rs    │
+                                         │  (code + mod.rs  │
+                                         │  + orphan clean) │
+                                         └──────────────────┘
+                                                   │
+                                         ┌─────────┴──────────┐
+                                         │ per-file atomic    │
+                                         │ write (tempfile +  │
+                                         │ rename, POSIX safe)│
+                                         └────────────────────┘
+```
+Architecture is clean and well-separated. No coupling concerns. Single point of failure: generator.rs owns both file writing and orphan cleanup — appropriate for M2 scope.
+
+One concern: consuming crates must add `pub use generated::*;` to their crate root for `use crate::X` dep paths to resolve. This is implicit. Examined: working correctly in ecommerce example via main.rs. Not documented for external users. → Flag for TODOS.md doc task.
+
+**Section 2 — Error & Rescue Map:**
+```
+  CODEPATH                     | WHAT CAN GO WRONG        | HANDLED?
+  -----------------------------|--------------------------|----------
+  clean_output_dir             | OS error deleting file   | SpecError::Generator (logged, not silent)
+  ensure_output_marker         | Symlink escape           | Walks path components, rejects symlinks
+  syn::parse_str               | Macro invocations        | Handled: parse as syn::File (not ItemFn)
+  cargo subprocess (D4)        | cargo not in PATH        | Silent skip (cargo_available() → return)
+  tempfile + rename (D1)       | EXDEV cross-fs rename    | Handled: tempfile in same dir
+  dep_to_use_path              | Circular deps            | Not detected (deferred to M3)
+```
+One confirmed gap from failure modes table: `cargo not in PATH → silent skip`. Codex also flagged this.
+AUTO-DECISION: Flag for TODOS.md. Silent skip is acceptable in dev environments where cargo is always present; the concern is limited to unusual CI environments. (P3 pragmatic — not blocking M2 which is shipped)
+
+**Section 3 — Security & Threat Model:**
+Known learning (from project learnings): `local_tests.expect` injection was fixed in `43f4c0b` — whitelist approach in `is_safe_expect_expr`. Only binary, call, path, lit, and paren expressions allowed.
+Prior learning applied: expect-safe-expr-whitelist (confidence 10/10, 2026-04-03).
+
+New surface from M2:
+- Output path safety: symlink-aware path validation before any writes. Solid.
+- `syn::File` parse of `body.rust`: parses user-supplied Rust code. Risk: malformed syn input causes parse failure (surfaced as validation error, not panic). Safe.
+- No new secrets, no new auth surfaces, no new endpoints.
+- Dependency: `syn` with `full` — well-known crate, excellent security track record, no advisory history.
+
+No unaddressed security gaps found. Examined: injection surface in expect, output path, syn parsing.
+
+**Section 4 — Data Flow & Interaction Edge Cases:**
+```
+  .unit.spec ──▶ YAML parse ──▶ schema validate ──▶ syn parse ──▶ generate ──▶ atomic write
+       │              │               │                  │              │
+       ▼              ▼               ▼                  ▼              ▼
+  [not a file]   [parse error]  [schema error]    [syn error]   [EXDEV? → handled]
+  [empty yaml]   [handled]      [handled]         [handled]     [tempfile in same dir]
+  [binary file]  [handled]      [handled]         [handled]     [OS error → SpecError]
+```
+All shadow paths are handled and tested. No unhandled edge case found. CLI integration test confirms error paths surface correctly.
+
+**Section 5 — Code Quality:**
+- 786 lines in validator.rs is the biggest file — complexity is there but appropriate for the validation surface
+- 1 deferred comment at validator.rs:136 (M3 local_tests config lever) — explicitly tracked in TODOS.md
+- DRY: no duplicate logic found across generator/validator
+- Naming: clear and consistent — `ensure_output_marker`, `clean_output_dir`, `is_safe_expect_expr`
+- No over-engineering found — each function does one thing
+- D3's "exactly one top-level item" constraint: Codex flags this will be reversed when users need helper fns/consts. Current implementation at `validate_body_rust` in validator.rs. This is a TASTE DECISION (see gate). Auto-logged.
+
+**Section 6 — Test Review:**
+```
+NEW CODEPATHS IN M2:
+  D1: ensure_output_marker path validation, orphan cleanup, atomic write
+  D2: imports field, use statement ordering
+  D3: syn fn name check, arg alignment, sibling item check, self-param check
+  D4: cargo check subprocess, cargo test subprocess, CARGO_TARGET_DIR isolation
+  D5: local_tests codegen, #[cfg(test)] block generation
+  D7: strict dep validation in validate + generate paths
+```
+Test coverage from PR #1: 46 → 76 tests (+30). Coverage gate: 94% (15/16 paths). One known gap: output-is-file defensive bail path. Test pyramid: heavy unit + solid integration. No flakiness risk identified.
+
+**Section 7 — Performance:**
+- No N+1 queries (Rust CLI, no DB)
+- `syn` parse per unit spec: O(body_size) — acceptable; bodies are tiny
+- Orphan cleanup: O(n) file scan — acceptable for M2 file counts
+- Cargo subprocess (D4): slow by nature, isolated target dir prevents lock contention
+
+**Section 8 — Observability:**
+All errors go to stderr via `SpecError` types. Exit codes are meaningful (0 = clean, 1 = errors). No structured logging — appropriate for a CLI. No dashboards or alerts needed (not a service).
+
+**Section 9 — Deployment:**
+CLI binary. No deployment concerns. Version bumped to 0.2.0 in Cargo.toml. CHANGELOG updated. CI/CD in place (GitHub Actions, cross-compilation).
+
+**Section 10 — TODOS.md Items:**
+Items to add from this review:
+1. Define ICP: solo engineer vs team coordination? (prerequisite for M3 scoping)
+2. Binary decision: commit generated output or ephemeral? (prerequisite for M3 CI story)
+3. `pub use generated::*` pattern: document as required convention for consuming crates
+4. D3 expansion: spike Approach C (generate from contract, body.rust = body expression) before M3 type validation
+5. Cross-library dep schema design spike (2 hours, before M3 build)
+6. CUE trigger condition: define explicitly (e.g., "when we need cross-file constraint X")
+7. cargo silent skip: consider `#[should_panic]` or explicit `skip_reason` log for CI visibility
+
+**NOT in scope (confirmed not in M2):**
+- .test.spec, passports, graph resolution, multiple languages, reverse ingestion, IDE/LSP, scheduling, CUE, contract type validation, local_tests structured input, directory-level atomic swap
+
+**What already exists (M2 leverage map):**
+- loader.rs → pre-existing, unchanged
+- normalizer.rs → pre-existing, minor addition
+- validator.rs → extended with syn, dep strictness
+- generator.rs → extended with imports, orphan cleanup, atomic writes, local_tests codegen
+- cli.rs → extended with safety guards, strict mode
+
+**Dream State Delta:**
+M2 leaves us at: compilable, safe, semantically anchored. Distance from 12-month ideal: need ICP, evidence model, contract types. Trajectory is correct.
+
+**CEO Phase Completion Summary:**
+```
+CEO REVIEW (autoplan retrospective):
+  Premises:        7/7 confirmed (1 doc-level wording fix needed in thesis)
+  Architecture:    SOUND — clean separation, appropriate coupling
+  Security:        SOUND — injection surface addressed, output path safe
+  Test Coverage:   94% — 1 known gap (defensive bail path, acceptable)
+  Codex voice:     11 findings (3 doc fixes, 5 M3 signals, 2 confirmed gaps, 1 taste decision)
+  Claude voice:    9 findings (3 M3 signals, 5 confirmed concerns, 1 low)
+  Consensus:       3/6 confirmed, 1 partial (premises), 2 partial (ICP, trajectory)
+  Auto-decisions:  8 (all SELECTIVE EXPANSION deferrals or doc fixes)
+  Taste decisions: 1 (D3 single-function constraint — will surface at gate)
+  User challenges: 0
+```
+
+**PHASE 1 COMPLETE.** Codex: 11 findings. Claude subagent: 9 findings. Consensus: 3/6 confirmed, 3 partial. Taste decisions: 1 (D3 constraint). Passing to Phase 3 (skipping Phase 2 — no UI scope).
+
+---
+
+### Phase 3: Eng Review + Dual Voices
+
+**CLAUDE SUBAGENT (Eng — independent review):**
+1. `clean_output_dir` vs `ensure_output_marker` use different path-containment logic (High) — `normalized_absolute_path` (lexical) vs `canonicalize` (follows symlinks). Consolidate to single `safe_output_path` utility.
+2. Windows rename TOCTOU window (High) — `remove_file` + `rename` is not atomic; comment says "per-file atomic" which is only true on POSIX. Add clarifying comment + Windows test.
+3. `validate_body_rust_alignment` misleading error message (Medium) — when body has 1 item that's not a fn, reports `found: 0` instead of `found: 1`. Need separate error variant or pass correct count.
+4. `is_safe_expect_expr` does not recurse into sub-expressions (Medium/High Security) — `syn::Expr::Binary` and `syn::Expr::Call` return `true` without checking children. `f({ unsafe { ... } })` bypasses the block/unsafe check.
+5. `collect_specs` follows symlinks, `clean_output_dir` does not — undocumented asymmetry; symlink cycle aborts collect with unclear error (Medium)
+6. `generate_command` counts only unit files, not mod.rs files in "Generated N files" output (Low)
+7. Dep collision check duplicated in validator and generator (Low DRY)
+8. `normalized_absolute_path` swallows `current_dir()` failure with `fallback(".")` (Low)
+9. Missing idempotency test: two runs same output (Low)
+10. Composite key `"file1 | file2"` is fragile for paths containing ` | ` (Low)
+
+**CODEX SAYS (Eng — architecture challenge):**
+1. Consumer-module contract (`pub use generated::*`) is implicit and brittle — doc it explicitly as required convention (High)
+2. "Owned subtree" + orphan deletion blocks mixed directories — plan should explicitly require dedicated output dir (Medium)
+3. Rust keyword identifiers in local_tests[].id → ALREADY HANDLED by validate_rust_keywords (confirmed: False alarm)
+4. `local_tests[].id` uniqueness not enforced — duplicate ids → duplicate fn compile error (Medium)
+5. Visibility not validated — `fn apply_discount()` (no pub) passes spec validate but fails cargo check via dep (Medium)
+6. "Generate writes nothing on error" ordering — validate specs before marker/tempdir creation (Medium — confirmed by reading commands.rs)
+7. Plan-doc drift — retrospective notes in same file become anti-documentation (Low)
+
+```
+ENG DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Architecture sound?               Yes     Partial PARTIAL (path containment divergence, mixed dir gap)
+  2. Test coverage sufficient?         Partial Partial CONFIRMED gap (is_safe_expect_expr recursion, uniqueness, idempotency)
+  3. Performance risks addressed?      Yes     Yes     CONFIRMED (O(n) scans acceptable, CARGO_TARGET_DIR isolated)
+  4. Security threats covered?         Partial Partial CONFIRMED gap (is_safe_expect_expr non-recursive)
+  5. Error paths handled?              Partial Yes     PARTIAL (current_dir() swallowed, misleading error msg)
+  6. Deployment risk manageable?       Yes     Yes     CONFIRMED (single binary, no DB, clean rollback)
+═══════════════════════════════════════════════════════════════
+CONFIRMED = both agree. DISAGREE = models differ.
+Critical gap: is_safe_expect_expr non-recursive (security, both models flag independently).
+```
+
+**Section 1 — Architecture ASCII Diagram (post-M2):**
+```
+  .unit.spec files
+       │
+       ▼
+  ┌──────────────┐   schema JSON  ┌─────────────────────────────────────────┐
+  │  loader.rs   │───────────────▶│ validator.rs                            │
+  │  (YAML parse)│                │  • JSON Schema (jsonschema crate)        │
+  └──────────────┘                │  • semantic: keywords, dep format        │
+       │                          │  • syn: fn name, args, self-param check  │
+       ▼                          │  • local_tests: id regex + expr safety   │
+  ┌──────────────┐                │  • cross-spec: duplicate IDs, dep exists │
+  │normalizer.rs │                └─────────────────────────────────────────┘
+  │ (dep lookup) │                          │
+  └──────────────┘                          ▼
+       │                         ┌─────────────────────────────────────────┐
+       └────────────────────────▶│ generator.rs                            │
+                                 │  • generate_code(): use stmts + body    │
+                                 │  • local_tests → #[cfg(test)] block      │
+                                 │  • generate_mod_rs(): namespace tree      │
+                                 │  • write_generated_file(): atomic rename  │
+                                 │  • clean_output_dir(): orphan cleanup     │
+                                 │  • ensure_output_marker(): safety guard   │
+                                 └─────────────────────────────────────────┘
+```
+Coupling: generator.rs owns both file writing and orphan cleanup. Appropriate for M2. Single point of failure for output operations, which is intentional (owned subtree model).
+
+**Section 2 — Code Quality:**
+- `is_safe_expect_expr` non-recursive at validator.rs:148 — security gap, both models flag it
+- `normalized_absolute_path` fallback at generator.rs:317 — swallows real errors
+- Dep collision check at generator.rs:274 duplicates validator.rs:81 — remove from generator
+- File count reporting at commands.rs:145 — undercounts by not including mod.rs writes
+- Naming: clean, consistent, appropriate. No over-engineering.
+
+**Section 3 — Test Review:**
+Test diagram and artifacts: see `~/.gstack/projects/atomize-hq-spec/spenquatch-feat-m2-test-plan-20260403-064740.md`
+
+Critical test gap: `is_safe_expect_expr` non-recursive (security). Add tests:
+- `expect_with_unsafe_block_in_call_arg_is_rejected` — `f({ unsafe { ... } })` must fail
+- `expect_with_block_in_binary_operand_is_rejected` — `a + { exit(1); 2 }` must fail
+
+Medium gaps: local_tests id uniqueness, non-fn body error message, visibility validation.
+Low gaps: idempotency, file count, symlink cycle, cargo skip logging, composite key.
+
+**Section 4 — Performance:**
+No concerns. syn parse is O(body_size), orphan scan is O(n files), cargo subprocess has isolated target dir. Acceptable at M2 scale.
+
+**NOT in scope (eng view):**
+- Parallel generation (--jobs flag): M3+ when file count justifies
+- Cross-crate output: requires cross-library dep model (M3)
+- Cycle detection: M3 graph resolution
+
+**What already exists:**
+- loader.rs: unchanged, pre-existing
+- normalizer.rs: minor extension
+- validator.rs: syn + dep strictness + local_tests validation
+- generator.rs: imports, atomic writes, orphan cleanup, local_tests codegen
+- cli.rs: safety guards, strict mode, cargo subprocess
+
+**Failure Modes Registry (updated):**
+| Codepath | Failure scenario | Test? | Critical? |
+|---------|-----------------|-------|-----------|
+| is_safe_expect_expr | Block/Unsafe nested in Call/Binary args | No | **CRITICAL GAP** |
+| local_tests id | Duplicate ids within unit | No | Medium gap |
+| visibility | Private fn used as dep | No | Medium gap (caught by cargo check) |
+| clean_output_dir | Path containment logic diverges from ensure_output_marker | No | High gap |
+| normalized_absolute_path | current_dir() fails | No | Low gap |
+| collect_specs | Symlink cycle in spec dir | No | Medium gap |
+| cargo_available() | Cargo not in PATH at test time | No | Low gap (silent skip) |
+
+**CEO Phase → Eng Phase Cross-Phase Themes:**
+1. **`is_safe_expect_expr` injection surface** — CEO (prior learning applied: local-test-expect-injection, confidence 10/10) + Eng (non-recursive check). Both independently reach the same gap via different paths.
+2. **Consumer-module contract undocumented** — CEO (pub use generated::* is implicit) + Eng (brittle, blocks drop-in to existing crate). Both flag independently.
+3. **`local_tests.expect` design ceiling** — CEO (raw string won't scale as product) + Eng (test gaps in is_safe_expect_expr). Two distinct perspectives, same underlying fragility.
+
+**Eng Phase Completion Summary:**
+```
+ENG REVIEW (autoplan retrospective):
+  Architecture:    SOUND with 2 noted gaps (path containment divergence, mixed dir)
+  Security:        CRITICAL GAP — is_safe_expect_expr non-recursive (both models)
+  Code quality:    GOOD — 5 minor issues, all low/medium
+  Test coverage:   1 critical gap, 4 medium gaps, 5 low gaps
+  Test plan:       Written to ~/.gstack/projects/atomize-hq-spec/spenquatch-feat-m2-test-plan-...md
+  Auto-decisions:  5 additional (all deferrals or flags)
+  Taste decisions: 0 (Eng phase)
+  User challenges: 0 (security gap = bug fix, not direction change)
+```
+
+**PHASE 3 COMPLETE.** Codex: 7 findings. Claude subagent: 10 findings. Consensus: 3/6 confirmed, 2 partial. Cross-phase themes: 3 (is_safe_expect_expr, consumer-module contract, local_tests fragility). Proceeding to Final Approval Gate.
+
+---
+
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|-------|----------|----------------|-----------|-----------|----------|
+| 1 | CEO | Mode: SELECTIVE EXPANSION | Mechanical | P3 pragmatic | Iteration on existing implemented system | SCOPE EXPANSION |
+| 2 | CEO | Thesis wording fix: "escapable via --no-strict" → "escape hatch deferred to M3" | Mechanical | P5 explicit | Doc contradiction caught by Codex, wording misleads readers | None |
+| 3 | CEO | D8 path contradiction (line 230): flag for doc fix | Mechanical | P5 explicit | "src/generated/spec" reintroduced after D4 corrected it to "src/generated" | None |
+| 4 | CEO | PLAN.md Status field: flag for update to "Implemented (PR #1 MERGED)" | Mechanical | P5 explicit | Post-merge drift, breaks onboarding | None |
+| 5 | CEO | ICP definition → TODOS.md (not added to M2 scope) | Mechanical | P3 pragmatic | M2 already shipped; add as M3 prerequisite | Cherry-pick |
+| 6 | CEO | Generated code commitment binary decision → TODOS.md | Mechanical | P3 pragmatic | M2 already shipped; hybrid state acceptable short-term | Cherry-pick |
+| 7 | CEO | Approach C (invert D3) design spike → TODOS.md | Mechanical | P3 pragmatic | M2 shipped; design spike before M3 D3 expansion | Cherry-pick |
+| 8 | CEO | D3 single-function constraint → TASTE DECISION at gate | Taste | P1/P5 conflict | Claude sees no issue, Codex flags it will be reversed | Accept current |
+| 9 | Eng | is_safe_expect_expr non-recursive → flag as critical gap at gate | Mechanical | P1 completeness | Security: injection bypass; both models flag; needs fix in follow-up PR | Defer |
+| 10 | Eng | path containment logic divergence → TODOS.md | Mechanical | P5 explicit | clean_output_dir vs ensure_output_marker use different algorithms | Cherry-pick |
+| 11 | Eng | local_tests id uniqueness → TODOS.md test gap | Mechanical | P1 completeness | Duplicate ids → compile error, no validator check | Cherry-pick |
+| 12 | Eng | visibility not validated → TODOS.md | Mechanical | P3 pragmatic | Caught by cargo check in D4; spec validate warning would be better | Defer to M3 |
+| 13 | Eng | consumer-module convention doc → TODOS.md | Mechanical | P5 explicit | pub use generated::* must be documented as required convention | Doc task |
