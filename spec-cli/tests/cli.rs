@@ -98,7 +98,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() {}
+    { }
 "#,
     )
     .unwrap();
@@ -125,7 +125,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() {}
+    { }
 "#,
     );
 
@@ -191,7 +191,7 @@ deps:
   - money/round
 body:
   rust: |
-    pub fn apply_discount() {}
+    { }
 "#,
     );
 
@@ -299,9 +299,13 @@ id: money/round
 kind: function
 intent:
   why: Round monetary values.
+contract:
+  inputs:
+    value: Decimal
+  returns: Decimal
 body:
   rust: |
-    pub fn round(value: Decimal) -> Decimal {
+    {
         value
     }
 "#,
@@ -314,11 +318,13 @@ id: pricing/apply_discount
 kind: function
 intent:
   why: Apply a discount.
+contract:
+  returns: Decimal
 deps:
   - money/round
 body:
   rust: |
-    pub fn apply_discount() -> Decimal {
+    {
         round(Decimal::ZERO)
     }
 "#,
@@ -355,7 +361,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: happy_path
     expect: "apply_discount()"
@@ -389,7 +395,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: happy_path
     expect: "apply_discount()"
@@ -569,7 +575,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: unsafe_attempt
     expect: "{ let ok = apply_discount(); ok }"
@@ -601,7 +607,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: unsafe_attempt
     expect: "{ let ok = apply_discount(); ok }"
@@ -633,7 +639,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: unsafe_attempt
     expect: "{ let ok = apply_discount(); ok }"
@@ -669,7 +675,10 @@ body:
     assert!(!output.status.success());
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("found 1 item (not a function)"), "{stderr}");
+    assert!(
+        stderr.contains("body.rust must be a Rust block expression"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -690,7 +699,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() {}
+    { }
 "#,
     );
 
@@ -726,7 +735,7 @@ intent:
   why: Round money.
 body:
   rust: |
-    pub fn round() {}
+    { }
 "#,
     );
     write_spec(
@@ -741,7 +750,7 @@ deps:
   - money/round
 body:
   rust: |
-    pub fn apply_discount() {
+    {
         round();
     }
 "#,
@@ -890,9 +899,11 @@ id: pricing/bad_type
 kind: function
 intent:
   why: Force a compile error so we can assert cargo stderr is surfaced.
+contract:
+  returns: NotAType
 body:
   rust: |
-    pub fn bad_type() -> NotAType {
+    {
         todo!()
     }
 "#,

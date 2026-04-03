@@ -137,7 +137,7 @@ pub fn validate_semantic_with_options(
         });
     }
 
-    validate_body_rust_alignment(spec)?;
+    validate_body_rust_block(spec)?;
     validate_local_test_expects(spec, options)?;
 
     Ok(())
@@ -199,75 +199,18 @@ fn is_safe_expect_expr(expr: &syn::Expr) -> bool {
     }
 }
 
-fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
+fn validate_body_rust_block(spec: &LoadedSpec) -> Result<()> {
     let path = spec.source.file_path.clone();
-    let expected_fn_name = spec.spec.id.rsplit('/').next().unwrap_or_default();
-
-    let file =
-        syn::parse_file(&spec.spec.body.rust).map_err(|err| SpecError::BodyRustParseFailed {
-            message: err.to_string(),
-            path: path.clone(),
-        })?;
-
-    if file.items.len() != 1 {
-        return Err(SpecError::BodyRustMustBeSingleFn {
-            found: file.items.len(),
-            path,
-        });
-    }
-
-    let syn::Item::Fn(item_fn) = &file.items[0] else {
-        return Err(SpecError::BodyRustSingleItemNotFn { path });
-    };
-
-    let found_name = item_fn.sig.ident.to_string();
-    if found_name != expected_fn_name {
-        return Err(SpecError::BodyRustFnNameMismatch {
-            expected: expected_fn_name.to_string(),
-            found: found_name,
-            path,
-        });
-    }
-
-    for input in &item_fn.sig.inputs {
-        match input {
-            syn::FnArg::Receiver(_) => return Err(SpecError::BodyRustMethodRejected { path }),
-            syn::FnArg::Typed(pat_type) => {
-                if let syn::Pat::Ident(pat_ident) = &*pat_type.pat
-                    && pat_ident.ident == "self"
-                {
-                    return Err(SpecError::BodyRustMethodRejected { path });
-                }
+    syn::parse_str::<syn::Block>(&spec.spec.body.rust).map_err(|_| {
+        if syn::parse_str::<syn::ItemFn>(&spec.spec.body.rust).is_ok() {
+            SpecError::BodyRustLooksLikeFnDeclaration { path }
+        } else {
+            SpecError::BodyRustMustBeBlock {
+                message: "body.rust must be a Rust block expression starting with `{`".to_string(),
+                path,
             }
         }
-    }
-
-    if let Some(contract) = &spec.spec.contract
-        && let Some(inputs) = &contract.inputs
-    {
-        let mut params = HashSet::<String>::new();
-        for input in &item_fn.sig.inputs {
-            let syn::FnArg::Typed(pat_type) = input else {
-                continue;
-            };
-            let syn::Pat::Ident(pat_ident) = &*pat_type.pat else {
-                continue;
-            };
-            params.insert(pat_ident.ident.to_string());
-        }
-
-        let mut input_keys: Vec<&String> = inputs.keys().collect();
-        input_keys.sort();
-        for input in input_keys {
-            if !params.contains(input.as_str()) {
-                return Err(SpecError::ContractInputParamMismatch {
-                    input: input.clone(),
-                    path,
-                });
-            }
-        }
-    }
-
+    })?;
     Ok(())
 }
 
@@ -391,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_validate_schema_valid() {
-        let spec = create_test_spec("pricing/apply_discount", "pub fn test() {}");
+        let spec = create_test_spec("pricing/apply_discount", "{ }");
         let result = validate_schema(&spec);
         assert!(
             result.is_ok(),
@@ -402,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_validate_schema_valid_spec_passes() {
-        let spec = create_test_spec("pricing/apply_discount", "pub fn test() {}");
+        let spec = create_test_spec("pricing/apply_discount", "{ }");
         let result = validate_schema(&spec);
         assert!(
             result.is_ok(),
@@ -538,8 +481,8 @@ local_tests:
     #[test]
     fn test_validate_no_duplicate_ids() {
         let specs = vec![
-            create_test_spec("pricing/apply_discount", "pub fn test1() {}"),
-            create_test_spec("utils/round", "pub fn test2() {}"),
+            create_test_spec("pricing/apply_discount", "{ }"),
+            create_test_spec("utils/round", "{ }"),
         ];
 
         let errors = validate_no_duplicate_ids(&specs);
@@ -549,8 +492,8 @@ local_tests:
     #[test]
     fn test_validate_duplicate_ids() {
         let specs = vec![
-            create_test_spec("pricing/apply_discount", "pub fn test1() {}"),
-            create_test_spec("pricing/apply_discount", "pub fn test2() {}"),
+            create_test_spec("pricing/apply_discount", "{ }"),
+            create_test_spec("pricing/apply_discount", "{ }"),
         ];
 
         let errors = validate_no_duplicate_ids(&specs);
@@ -562,9 +505,9 @@ local_tests:
     #[test]
     fn test_validate_duplicate_ids_all_reported() {
         let specs = vec![
-            create_test_spec("pricing/apply_discount", "pub fn test1() {}"),
-            create_test_spec("pricing/apply_discount", "pub fn test2() {}"),
-            create_test_spec("pricing/apply_discount", "pub fn test3() {}"),
+            create_test_spec("pricing/apply_discount", "{ }"),
+            create_test_spec("pricing/apply_discount", "{ }"),
+            create_test_spec("pricing/apply_discount", "{ }"),
         ];
 
         let errors = validate_no_duplicate_ids(&specs);
@@ -573,7 +516,7 @@ local_tests:
 
     #[test]
     fn test_validate_dep_collision() {
-        let mut spec = create_test_spec("pricing/calculate_total", "pub fn test() { round(1.5) }");
+        let mut spec = create_test_spec("pricing/calculate_total", "{ round(1.5) }");
         spec.spec.deps = vec!["money/round".to_string(), "utils/round".to_string()];
 
         let result = validate_semantic(&spec);
@@ -620,7 +563,7 @@ local_tests:
     fn test_validate_semantic_valid_spec() {
         let spec = create_test_spec(
             "pricing/apply_discount",
-            "pub fn apply_discount(subtotal: f64, rate: f64) -> f64 { subtotal - subtotal * rate }",
+            "{ subtotal - subtotal * rate }",
         );
         let result = validate_semantic(&spec);
         assert!(result.is_ok());
@@ -628,7 +571,7 @@ local_tests:
 
     #[test]
     fn test_validate_full() {
-        let spec = create_test_spec("utils/round", "pub fn round(x: f64) -> f64 { x.floor() }");
+        let spec = create_test_spec("utils/round", "{ x.floor() }");
         let result = validate_full(&spec);
         assert!(result.is_ok(), "Full validation should pass: {:?}", result);
     }
@@ -680,67 +623,54 @@ local_tests:
     }
 
     #[test]
-    fn validate_body_fn_name_mismatch() {
-        let spec = create_test_spec("pricing/apply_discount", "pub fn wrong_name() {}");
+    fn validate_body_fn_declaration_emits_migration_error() {
+        let spec = create_test_spec("pricing/apply_discount", "pub fn apply_discount() {}");
         let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("expected 'apply_discount'"), "{err}");
+        assert!(
+            err.contains("looks like a full function declaration"),
+            "{err}"
+        );
     }
 
     #[test]
-    fn validate_body_multiple_fns_rejected() {
+    fn validate_body_fn_declaration_with_args_emits_migration_error() {
         let spec = create_test_spec(
             "pricing/apply_discount",
-            "pub fn apply_discount() {}\npub fn other() {}",
+            "pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal { subtotal }",
         );
         let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("exactly one top-level function"), "{err}");
+        assert!(
+            err.contains("looks like a full function declaration"),
+            "{err}"
+        );
     }
 
     #[test]
-    fn validate_contract_arg_name_mismatch() {
-        use std::collections::HashMap;
-
-        let mut spec = create_test_spec(
-            "pricing/apply_discount",
-            "pub fn apply_discount(price: Decimal) {}",
-        );
-        let mut inputs = HashMap::new();
-        inputs.insert("subtotal".to_string(), "Decimal".to_string());
-        spec.spec.contract = Some(Contract {
-            inputs: Some(inputs),
-            returns: None,
-            invariants: vec![],
-        });
-
-        let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("contract.inputs contains 'subtotal'"), "{err}");
-    }
-
-    #[test]
-    fn validate_body_with_macros_passes_fn_name_check() {
-        let spec = create_test_spec(
-            "pricing/apply_discount",
-            r#"
-#[allow(dead_code)]
-pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
-    let _v = vec![1, 2, 3];
-    assert!(true);
-    todo!()
-}
-"#,
-        );
+    fn validate_body_rust_block_valid() {
+        let spec = create_test_spec("pricing/apply_discount", "{ subtotal - subtotal * rate }");
         let result = validate_semantic(&spec);
         assert!(result.is_ok(), "{result:?}");
     }
 
     #[test]
-    fn validate_body_method_rejected() {
+    fn validate_body_rust_invalid_block() {
+        let spec = create_test_spec("pricing/apply_discount", "not valid rust at all !!!");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("body.rust must be a Rust block expression"), "{err}");
+    }
+
+    #[test]
+    fn validate_body_with_macros_in_block_passes() {
         let spec = create_test_spec(
             "pricing/apply_discount",
-            "pub fn apply_discount(&self, subtotal: Decimal) {}",
+            r#"{
+    let _v = vec![1, 2, 3];
+    assert!(true);
+    todo!()
+}"#,
         );
-        let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("free function (no self parameter)"), "{err}");
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
     }
 
     #[test]
@@ -761,7 +691,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() {}".to_string(),
+                    rust: "{ }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "injection_attempt".to_string(),
@@ -795,7 +725,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -825,7 +755,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "block_allowed".to_string(),
@@ -860,7 +790,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![
                     LocalTest {
@@ -901,7 +831,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "block_attempt".to_string(),
@@ -935,7 +865,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_call_arg".to_string(),
@@ -970,7 +900,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "block_in_binary_operand".to_string(),
@@ -1005,7 +935,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_method_arg".to_string(),
@@ -1040,7 +970,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_field_base".to_string(),
@@ -1075,7 +1005,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_index".to_string(),
@@ -1110,7 +1040,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_unary".to_string(),
@@ -1145,7 +1075,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_cast".to_string(),

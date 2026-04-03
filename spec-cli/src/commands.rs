@@ -381,12 +381,8 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::DepCollision { path, .. }
         | spec_core::SpecError::MissingDep { path, .. }
         | spec_core::SpecError::UseStatementInBody { path }
-        | spec_core::SpecError::BodyRustParseFailed { path, .. }
-        | spec_core::SpecError::BodyRustMustBeSingleFn { path, .. }
-        | spec_core::SpecError::BodyRustSingleItemNotFn { path }
-        | spec_core::SpecError::BodyRustFnNameMismatch { path, .. }
-        | spec_core::SpecError::BodyRustMethodRejected { path }
-        | spec_core::SpecError::ContractInputParamMismatch { path, .. }
+        | spec_core::SpecError::BodyRustMustBeBlock { path, .. }
+        | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }
         | spec_core::SpecError::LocalTestExpectNotExpr { path, .. }
         | spec_core::SpecError::DuplicateLocalTestId { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
@@ -459,7 +455,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> Decimal {
+    {
         round(Decimal::ZERO)
     }
 "#,

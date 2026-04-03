@@ -378,7 +378,7 @@ kind: function
 intent:
   why: Apply pricing.
 body:
-  rust: pub fn apply() {}
+  rust: "{ }"
 "#,
         )
         .unwrap();
@@ -391,7 +391,7 @@ kind: function
 intent:
   why: Bad keyword id.
 body:
-  rust: pub fn bad() {}
+  rust: "{ }"
 "#,
         )
         .unwrap();
@@ -424,7 +424,7 @@ kind: function
 intent:
   why: Apply pricing.
 body:
-  rust: pub fn apply() {}
+  rust: "{ }"
 "#,
         )
         .unwrap();

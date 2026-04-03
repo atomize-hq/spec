@@ -4,8 +4,8 @@
 //! - SpecStruct: Raw parsed form from YAML (mirrors schema)
 //! - ResolvedSpec: Normalized internal representation (IR) used by the generator
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Raw parsed form from YAML (mirrors schema structure)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -42,7 +42,7 @@ pub struct Body {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Contract {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub inputs: Option<HashMap<String, String>>,
+    pub inputs: Option<IndexMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub returns: Option<String>,
     #[serde(default)]
@@ -200,7 +200,7 @@ mod tests {
             deps: vec![],
             imports: vec![],
             body: Body {
-                rust: "pub fn apply_discount() {}".to_string(),
+                rust: "{ }".to_string(),
             },
             local_tests: vec![],
             links: None,
@@ -224,7 +224,7 @@ mod tests {
             deps: vec![],
             imports: vec![],
             body: Body {
-                rust: "pub fn round() {}".to_string(),
+                rust: "{ }".to_string(),
             },
             local_tests: vec![],
             links: None,

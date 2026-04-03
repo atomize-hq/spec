@@ -16,7 +16,7 @@ imports:
   - rust_decimal::Decimal
 body:
   rust: |
-    pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
+    {
         let discounted = subtotal - subtotal * rate;
         round(discounted.max(Decimal::ZERO))
     }

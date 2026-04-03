@@ -15,7 +15,7 @@ imports:
   - rust_decimal::Decimal
 body:
   rust: |
-    pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
+    {
         let taxed = subtotal + subtotal * rate;
         round(taxed)
     }
