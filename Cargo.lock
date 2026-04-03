@@ -1155,7 +1155,7 @@ dependencies = [
 
 [[package]]
 name = "spec-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1166,7 +1166,7 @@ dependencies = [
 
 [[package]]
 name = "spec-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "jsonschema",
  "serde",

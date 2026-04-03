@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 - 2026-04-03
+
+### Security
+
+- **`is_safe_expect_expr` now recurses into sub-expressions** — Previously, the expression whitelist in `spec validate` only inspected the top-level AST node. A call like `f({ unsafe { ... } })` would pass because the outer `Call` was whitelisted without checking its arguments. All Arms (Binary, Call, MethodCall, Field, Index, Unary, Paren, Cast) now recurse into every sub-expression; `unsafe`, block, closure, and control-flow forms are rejected wherever they appear in the tree. Error message updated from "simple expression" framing to "block, unsafe, closure" framing to accurately describe what is and isn't blocked.
+
+### Testing
+
+- Added 4 regression tests covering recursion through Field, Index, Unary, and Cast arms.
+
 ## 0.2.0 - 2026-04-02
 
 ### Added
