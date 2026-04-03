@@ -140,6 +140,7 @@ A semantic unit source file should contain human-authored truth:
 - `intent`
 - `contract`
 - `deps`
+- `imports`
 - `body`
 - `local_tests`
 - `links`

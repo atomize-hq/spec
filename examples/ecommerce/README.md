@@ -22,6 +22,7 @@ cargo check
 
 Files:
 
+- `units/money/round.unit.spec`
 - `units/pricing/apply_discount.unit.spec`
 - `units/pricing/apply_tax.unit.spec`
 - `units/pricing/calculate_total.unit.spec`

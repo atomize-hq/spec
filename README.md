@@ -40,12 +40,13 @@ Each unit is a YAML document with these required fields:
 - `intent.why`: why the unit exists
 - `body.rust`: verbatim Rust function body
 
-Optional fields include `contract`, `deps`, `local_tests`, and `links`.
+Optional fields include `contract`, `deps`, `imports`, `local_tests`, and `links`.
 
 ## Example
 
-The ecommerce example demonstrates three pricing units:
+The ecommerce example demonstrates four units across two modules:
 
+- `money/round`
 - `pricing/apply_discount`
 - `pricing/apply_tax`
 - `pricing/calculate_total`
@@ -63,4 +64,4 @@ cargo run -p spec-cli -- generate <path> --output <dir>
 
 `validate` checks schema and semantic rules. `generate` emits `.rs` files under the output directory and manages `mod.rs` files plus the `.spec-generated` safety marker.
 
-The `--output` path must be relative to the directory where you run `spec` (i.e. your project root). Absolute paths are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
+The `--output` path must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
