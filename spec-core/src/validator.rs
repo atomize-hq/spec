@@ -147,14 +147,17 @@ fn validate_local_test_expects(spec: &LoadedSpec) -> Result<()> {
 
 fn is_safe_expect_expr(expr: &syn::Expr) -> bool {
     match expr {
-        syn::Expr::Binary(_)
-        | syn::Expr::Call(_)
-        | syn::Expr::MethodCall(_)
-        | syn::Expr::Path(_)
-        | syn::Expr::Lit(_)
-        | syn::Expr::Field(_)
-        | syn::Expr::Index(_)
-        | syn::Expr::Unary(_) => true,
+        syn::Expr::Binary(b) => is_safe_expect_expr(&b.left) && is_safe_expect_expr(&b.right),
+        syn::Expr::Call(c) => {
+            is_safe_expect_expr(&c.func) && c.args.iter().all(is_safe_expect_expr)
+        }
+        syn::Expr::MethodCall(m) => {
+            is_safe_expect_expr(&m.receiver) && m.args.iter().all(is_safe_expect_expr)
+        }
+        syn::Expr::Field(f) => is_safe_expect_expr(&f.base),
+        syn::Expr::Index(i) => is_safe_expect_expr(&i.expr) && is_safe_expect_expr(&i.index),
+        syn::Expr::Unary(u) => is_safe_expect_expr(&u.expr),
+        syn::Expr::Path(_) | syn::Expr::Lit(_) => true,
         syn::Expr::Paren(inner) => is_safe_expect_expr(&inner.expr),
         syn::Expr::Cast(c) => is_safe_expect_expr(&c.expr),
         // Block, Unsafe, Closure, If, Match, Loop, ForLoop, While, Async, etc. → rejected
@@ -781,6 +784,76 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
         assert!(
             err.contains("simple expression"),
             "expected block expression to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn expect_with_unsafe_block_in_call_arg_is_rejected() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "unsafe_in_call_arg".to_string(),
+                    expect: "f(unsafe { true })".to_string(),
+                }],
+                links: None,
+            },
+        };
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("simple expression"),
+            "expected unsafe block in call arg to be rejected: {err}"
+        );
+    }
+
+    #[test]
+    fn expect_with_block_in_binary_operand_is_rejected() {
+        use crate::types::{Body, Intent, LocalTest, SpecSource, SpecStruct};
+        let spec = LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "block_in_binary_operand".to_string(),
+                    expect: "true && { false }".to_string(),
+                }],
+                links: None,
+            },
+        };
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("simple expression"),
+            "expected block expression in binary operand to be rejected: {err}"
         );
     }
 }
