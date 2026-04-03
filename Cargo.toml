@@ -3,7 +3,7 @@ resolver = "3"
 members = ["spec-core", "spec-cli"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.89.0"
 authors = ["Spec Authors"]
@@ -19,6 +19,7 @@ thiserror = "2.0"
 anyhow = "1.0"
 walkdir = "2.5"
 clap = { version = "4.5", features = ["derive"] }
+toml = "0.8"
 
 [profile.release]
 opt-level = 3

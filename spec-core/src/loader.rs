@@ -23,6 +23,8 @@ use crate::validator::validate_semantic;
 pub struct DirectoryLoadReport {
     pub specs: Vec<LoadedSpec>,
     pub errors: Vec<SpecError>,
+    pub warnings: Vec<crate::SpecWarning>,
+    pub total_files: usize,
 }
 
 fn read_yaml_value<P: AsRef<Path>>(path: P) -> Result<(String, serde_yaml_bw::Value)> {
@@ -79,40 +81,16 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<LoadedSpec> {
 /// Non-.unit.spec files are skipped.
 /// Empty directories return an empty vec (not an error).
 pub fn load_directory<P: AsRef<Path>>(dir: P) -> Result<Vec<LoadedSpec>> {
-    let dir = dir.as_ref();
-    let mut specs = Vec::new();
-
-    for entry in WalkDir::new(dir).follow_links(true) {
-        let entry = entry?;
-        let path = entry.path();
-
-        // Only process files with .unit.spec extension
-        if !path.is_file() {
-            continue;
-        }
-
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-
-        // Check if filename ends with .unit.spec
-        if name.ends_with(".unit.spec") {
-            specs.push(load_file(path)?);
-        }
+    let report = load_directory_report(dir);
+    if let Some(err) = report.errors.into_iter().next() {
+        return Err(err);
     }
-
-    // Sort by file path for deterministic ordering
-    specs.sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
-
-    Ok(specs)
+    Ok(report.specs)
 }
 
-/// Load all .unit.spec files from a directory recursively and collect all errors.
-///
-/// Unlike `load_directory`, this helper continues after failures so callers can
-/// present grouped diagnostics for the full directory.
-#[cfg(test)]
-pub(crate) fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoadReport {
+/// Load all .unit.spec files from a directory recursively, collecting traversal
+/// warnings and continuing past symlink cycles.
+pub fn load_directory_report<P: AsRef<Path>>(dir: P) -> DirectoryLoadReport {
     let dir = dir.as_ref();
     let mut report = DirectoryLoadReport::default();
 
@@ -120,6 +98,7 @@ pub(crate) fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoa
         match entry {
             Ok(entry) => {
                 let path = entry.path();
+
                 if !path.is_file() {
                     continue;
                 }
@@ -132,15 +111,19 @@ pub(crate) fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoa
                     continue;
                 }
 
+                report.total_files += 1;
                 match load_file(path) {
-                    Ok(spec) => match validate_semantic(&spec) {
-                        Ok(()) => report.specs.push(spec),
-                        Err(err) => report.errors.push(err),
-                    },
+                    Ok(spec) => report.specs.push(spec),
                     Err(err) => report.errors.push(err),
                 }
             }
-            Err(err) => report.errors.push(err.into()),
+            Err(err) => {
+                if let Some(warning) = walkdir_cycle_warning(&err) {
+                    report.warnings.push(warning);
+                } else {
+                    report.errors.push(walkdir_error(err));
+                }
+            }
         }
     }
 
@@ -148,6 +131,48 @@ pub(crate) fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoa
         .specs
         .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
     report
+}
+
+/// Load all .unit.spec files from a directory recursively and collect all errors.
+///
+/// Unlike `load_directory`, this helper continues after failures so callers can
+/// present grouped diagnostics for the full directory.
+#[cfg(test)]
+pub(crate) fn load_directory_collect_all<P: AsRef<Path>>(dir: P) -> DirectoryLoadReport {
+    let mut report = load_directory_report(dir);
+    let loaded_specs = std::mem::take(&mut report.specs);
+
+    for spec in loaded_specs {
+        match validate_semantic(&spec) {
+            Ok(()) => report.specs.push(spec),
+            Err(err) => report.errors.push(err),
+        }
+    }
+
+    report
+        .specs
+        .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
+    report
+}
+
+fn walkdir_cycle_warning(err: &walkdir::Error) -> Option<crate::SpecWarning> {
+    err.loop_ancestor()
+        .map(|_| crate::SpecWarning::SymlinkCycleSkipped {
+            path: err
+                .path()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "<unknown>".to_string()),
+        })
+}
+
+fn walkdir_error(err: walkdir::Error) -> SpecError {
+    SpecError::Traversal {
+        message: err.to_string(),
+        path: err
+            .path()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "<unknown>".to_string()),
+    }
 }
 
 /// Check if a path is a .unit.spec file
@@ -380,6 +405,40 @@ body:
             report.errors[0]
                 .to_string()
                 .contains("Rust reserved keyword")
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_load_directory_report_skips_symlink_cycle_with_warning() {
+        use std::os::unix::fs as unix_fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let units_dir = temp_dir.path().join("units");
+        fs::create_dir_all(units_dir.join("pricing")).unwrap();
+        fs::write(
+            units_dir.join("pricing/apply.unit.spec"),
+            r#"
+id: pricing/apply
+kind: function
+intent:
+  why: Apply pricing.
+body:
+  rust: pub fn apply() {}
+"#,
+        )
+        .unwrap();
+
+        unix_fs::symlink(&units_dir, units_dir.join("loop")).unwrap();
+
+        let report = load_directory_report(&units_dir);
+        assert_eq!(report.specs.len(), 1);
+        assert!(report.errors.is_empty());
+        assert_eq!(report.warnings.len(), 1);
+        assert!(
+            report.warnings[0]
+                .to_string()
+                .contains("skipped symlink cycle")
         );
     }
 

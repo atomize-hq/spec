@@ -71,6 +71,11 @@ pub enum SpecError {
     #[error("body.rust must contain exactly one top-level function; found {found} items at {path}")]
     BodyRustMustBeSingleFn { found: usize, path: String },
 
+    #[error(
+        "body.rust must contain exactly one top-level function; found 1 item (not a function) at {path}"
+    )]
+    BodyRustSingleItemNotFn { path: String },
+
     #[error("body.rust fn name mismatch: expected '{expected}', found '{found}' at {path}")]
     BodyRustFnNameMismatch {
         expected: String,
@@ -93,6 +98,12 @@ pub enum SpecError {
         path: String,
     },
 
+    #[error("duplicate local_tests id '{id}' at {path}")]
+    DuplicateLocalTestId { id: String, path: String },
+
+    #[error("Traversal error: {message} at {path}")]
+    Traversal { message: String, path: String },
+
     #[error("Generator error: {message}")]
     Generator { message: String },
 
@@ -111,6 +122,15 @@ impl From<walkdir::Error> for SpecError {
 
 /// Result type alias for spec-core operations
 pub type Result<T> = std::result::Result<T, SpecError>;
+
+#[derive(Error, Debug)]
+pub enum SpecWarning {
+    #[error("⚠ dep '{dep}' not found in this spec set")]
+    MissingDep { dep: String, path: String },
+
+    #[error("⚠ skipped symlink cycle at '{path}'; subtree was skipped")]
+    SymlinkCycleSkipped { path: String },
+}
 
 #[cfg(test)]
 mod tests {

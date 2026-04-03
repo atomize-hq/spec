@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use walkdir::WalkDir;
 
 fn bin() -> PathBuf {
     if let Ok(path) = std::env::var("CARGO_BIN_EXE_spec") {
@@ -50,6 +51,14 @@ fn temp_repo_dir() -> tempfile::TempDir {
 }
 
 fn write_spec(dir: &Path, relative_path: &str, body: &str) {
+    let path = dir.join(relative_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(path, body).unwrap();
+}
+
+fn write_file(dir: &Path, relative_path: &str, body: &str) {
     let path = dir.join(relative_path);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();
@@ -129,7 +138,7 @@ body:
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Generated 1 file"));
+    assert!(stdout.contains("Generated 3 files"));
     assert!(output_dir.join(".spec-generated").exists());
     assert!(output_dir.join("pricing/apply_discount.rs").exists());
     assert!(output_dir.join("pricing/mod.rs").exists());
@@ -163,6 +172,38 @@ body:
     assert!(
         stderr.contains("❌ dep 'money/round' not found in this spec set"),
         "expected missing-dep message in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn validate_no_strict_warns_on_missing_dep_and_exits_zero() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+deps:
+  - money/round
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--no-strict"]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("1 unit valid with 1 warning"), "{stdout}");
+    assert!(
+        stderr.contains("⚠ dep 'money/round' not found in this spec set"),
+        "{stderr}"
     );
 }
 
@@ -205,6 +246,44 @@ body:
         "expected output dir to not be created"
     );
     assert!(!output_dir.join(".spec-generated").exists());
+}
+
+#[test]
+fn generate_rejects_no_strict_flag() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#,
+    );
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+        "--no-strict",
+    ]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "❌ --no-strict is not valid for spec generate — use spec validate to check without strict enforcement"
+        ),
+        "{stderr}"
+    );
+    assert!(!output_dir.exists());
 }
 
 #[test]
@@ -260,6 +339,79 @@ body:
     let root_mod = fs::read_to_string(output_dir.join("mod.rs")).unwrap();
     assert!(root_mod.contains("pub mod money;"));
     assert!(root_mod.contains("pub mod pricing;"));
+}
+
+#[test]
+fn validate_duplicate_local_test_ids_fails() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() -> bool { true }
+local_tests:
+  - id: happy_path
+    expect: "apply_discount()"
+  - id: happy_path
+    expect: "apply_discount()"
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("duplicate local_tests id 'happy_path'"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn generate_duplicate_local_test_ids_fails_before_writing_output() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() -> bool { true }
+local_tests:
+  - id: happy_path
+    expect: "apply_discount()"
+  - id: happy_path
+    expect: "apply_discount()"
+"#,
+    );
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("duplicate local_tests id 'happy_path'"),
+        "{stderr}"
+    );
+    assert!(!output_dir.exists());
 }
 
 // Regression: ISSUE-001 — duplicate ID across two files showed "1 file, 1 error"
@@ -404,6 +556,218 @@ body:
     assert!(!output_dir.join("pricing/apply_discount.rs").exists());
 }
 
+#[test]
+fn validate_default_config_rejects_unsafe_expect_expression() {
+    let temp_dir = temp_repo_dir();
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() -> bool { true }
+local_tests:
+  - id: unsafe_attempt
+    expect: "{ let ok = apply_discount(); ok }"
+"#,
+    );
+
+    let output = run_in(temp_dir.path(), &["validate", "units"]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("block, unsafe, closure"), "{stderr}");
+}
+
+#[test]
+fn validate_trusted_config_allows_unsafe_expect_expression() {
+    let temp_dir = temp_repo_dir();
+    write_file(
+        temp_dir.path(),
+        "spec.toml",
+        "[validation]\nallow_unsafe_local_test_expect = true\n",
+    );
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() -> bool { true }
+local_tests:
+  - id: unsafe_attempt
+    expect: "{ let ok = apply_discount(); ok }"
+"#,
+    );
+
+    let output = run_in(temp_dir.path(), &["validate", "units/pricing"]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("1 unit valid"), "{stdout}");
+}
+
+#[test]
+fn validate_discovers_config_from_nested_unit_file_path() {
+    let temp_dir = temp_repo_dir();
+    write_file(
+        temp_dir.path(),
+        "spec.toml",
+        "[validation]\nallow_unsafe_local_test_expect = true\n",
+    );
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() -> bool { true }
+local_tests:
+  - id: unsafe_attempt
+    expect: "{ let ok = apply_discount(); ok }"
+"#,
+    );
+
+    let output = run_in(
+        temp_dir.path(),
+        &["validate", "units/pricing/apply_discount.unit.spec"],
+    );
+    assert!(output.status.success());
+}
+
+#[test]
+fn validate_non_function_body_reports_explicit_error() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    const APPLY_DISCOUNT: bool = true;
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("found 1 item (not a function)"), "{stderr}");
+}
+
+#[test]
+#[cfg(unix)]
+fn generate_skips_symlink_cycle_with_warning() {
+    use std::os::unix::fs as unix_fs;
+
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#,
+    );
+
+    unix_fs::symlink(&units_dir, units_dir.join("loop")).unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("Generated 3 files"), "{stdout}");
+    assert!(stderr.contains("skipped symlink cycle"), "{stderr}");
+    assert!(output_dir.join("pricing/apply_discount.rs").exists());
+}
+
+#[test]
+fn generate_is_idempotent_for_same_spec_tree() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money.
+body:
+  rust: |
+    pub fn round() {}
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+deps:
+  - money/round
+body:
+  rust: |
+    pub fn apply_discount() {
+        round();
+    }
+"#,
+    );
+
+    let first = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("first spec generate run failed", &first);
+    let first_snapshot = snapshot_tree(&output_dir);
+
+    let second = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("second spec generate run failed", &second);
+    let second_snapshot = snapshot_tree(&output_dir);
+
+    assert_eq!(first_snapshot, second_snapshot);
+}
+
 fn cargo_available() -> bool {
     Command::new("cargo").arg("--version").output().is_ok()
 }
@@ -483,6 +847,24 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn snapshot_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut snapshot = Vec::new();
+    for entry in WalkDir::new(root).sort_by_file_name() {
+        let entry = entry.expect("failed to walk generated tree");
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path();
+        let rel = path
+            .strip_prefix(root)
+            .expect("generated file should live under snapshot root")
+            .to_path_buf();
+        snapshot.push((rel, fs::read(path).expect("failed to read generated file")));
+    }
+    snapshot
 }
 
 #[test]

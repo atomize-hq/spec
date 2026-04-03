@@ -150,18 +150,7 @@ pub fn clean_output_dir(
     output_base: &Path,
     generated_rs_rel_paths: &HashSet<PathBuf>,
 ) -> Result<()> {
-    let base = normalized_absolute_path(output_base);
-    let project_root = normalized_absolute_path(".");
-
-    if !base.starts_with(&project_root) {
-        return Err(SpecError::OutputDir {
-            message: format!(
-                "Refusing to clean {}: output path is outside the project root {}",
-                base.display(),
-                project_root.display()
-            ),
-        });
-    }
+    let base = safe_output_path(output_base)?;
 
     let marker = base.join(GENERATED_MARKER);
     if !marker.exists() {
@@ -309,6 +298,28 @@ fn module_item_name(fragment: &str) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
+pub fn safe_output_path<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
+    let path = path.as_ref();
+    let project_root = canonicalize_existing_path(&std::env::current_dir().map_err(|err| {
+        SpecError::OutputDir {
+            message: format!("Unable to determine project root: {err}"),
+        }
+    })?)?;
+    let output_base = canonicalize_output_path(path)?;
+
+    if !output_base.starts_with(&project_root) {
+        return Err(SpecError::OutputDir {
+            message: format!(
+                "Refusing to generate into {}: output path is outside the project root {}",
+                output_base.display(),
+                project_root.display()
+            ),
+        });
+    }
+
+    Ok(output_base)
+}
+
 pub fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
     let path = path.as_ref();
     let mut normalized = if path.is_absolute() {
@@ -330,6 +341,45 @@ pub fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
     }
 
     normalized
+}
+
+fn canonicalize_output_path(path: &Path) -> Result<PathBuf> {
+    let absolute = normalized_absolute_path(path);
+    if absolute.exists() {
+        return canonicalize_existing_path(&absolute);
+    }
+
+    let mut current = absolute.as_path();
+    let mut missing_segments = Vec::new();
+
+    while !current.exists() {
+        let segment = current.file_name().ok_or_else(|| SpecError::OutputDir {
+            message: format!(
+                "Unable to resolve output path {}: no existing ancestor found",
+                absolute.display()
+            ),
+        })?;
+        missing_segments.push(segment.to_os_string());
+        current = current.parent().ok_or_else(|| SpecError::OutputDir {
+            message: format!(
+                "Unable to resolve output path {}: no existing ancestor found",
+                absolute.display()
+            ),
+        })?;
+    }
+
+    let mut resolved = canonicalize_existing_path(current)?;
+    for segment in missing_segments.iter().rev() {
+        resolved.push(segment);
+    }
+
+    Ok(resolved)
+}
+
+fn canonicalize_existing_path(path: &Path) -> Result<PathBuf> {
+    path.canonicalize().map_err(|err| SpecError::OutputDir {
+        message: format!("Unable to canonicalize {}: {}", path.display(), err),
+    })
 }
 
 #[cfg(test)]
@@ -567,5 +617,41 @@ mod tests {
             "clean_output_dir must not delete files through symlinks"
         );
         assert!(base.join(GENERATED_MARKER).exists());
+    }
+
+    #[test]
+    fn safe_output_path_accepts_existing_path_inside_project_root() {
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let path = temp_dir.path().join("generated/spec");
+        fs::create_dir_all(&path).unwrap();
+
+        let resolved = safe_output_path(&path).unwrap();
+        assert_eq!(resolved, path.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn safe_output_path_resolves_nonexistent_nested_path_from_existing_ancestor() {
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let base = temp_dir.path().join("generated");
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("spec/pricing");
+
+        let resolved = safe_output_path(&path).unwrap();
+        assert_eq!(
+            resolved,
+            base.canonicalize().unwrap().join("spec").join("pricing")
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn safe_output_path_rejects_symlink_escape_in_nonexistent_path() {
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        let link = temp_dir.path().join("escape");
+        unix_fs::symlink(outside.path(), &link).unwrap();
+
+        let err = safe_output_path(link.join("generated/spec")).unwrap_err();
+        assert!(err.to_string().contains("outside the project root"));
     }
 }
