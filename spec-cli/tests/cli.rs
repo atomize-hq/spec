@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use walkdir::WalkDir;
 
 fn bin() -> PathBuf {
     if let Ok(path) = std::env::var("CARGO_BIN_EXE_spec") {
@@ -137,7 +138,7 @@ body:
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Generated 1 file"));
+    assert!(stdout.contains("Generated 3 files"));
     assert!(output_dir.join(".spec-generated").exists());
     assert!(output_dir.join("pricing/apply_discount.rs").exists());
     assert!(output_dir.join("pricing/mod.rs").exists());
@@ -646,6 +647,127 @@ local_tests:
     assert!(output.status.success());
 }
 
+#[test]
+fn validate_non_function_body_reports_explicit_error() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    const APPLY_DISCOUNT: bool = true;
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("found 1 item (not a function)"), "{stderr}");
+}
+
+#[test]
+#[cfg(unix)]
+fn generate_skips_symlink_cycle_with_warning() {
+    use std::os::unix::fs as unix_fs;
+
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    pub fn apply_discount() {}
+"#,
+    );
+
+    unix_fs::symlink(&units_dir, units_dir.join("loop")).unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("Generated 3 files"), "{stdout}");
+    assert!(stderr.contains("skipped symlink cycle"), "{stderr}");
+    assert!(output_dir.join("pricing/apply_discount.rs").exists());
+}
+
+#[test]
+fn generate_is_idempotent_for_same_spec_tree() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money.
+body:
+  rust: |
+    pub fn round() {}
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+deps:
+  - money/round
+body:
+  rust: |
+    pub fn apply_discount() {
+        round();
+    }
+"#,
+    );
+
+    let first = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("first spec generate run failed", &first);
+    let first_snapshot = snapshot_tree(&output_dir);
+
+    let second = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("second spec generate run failed", &second);
+    let second_snapshot = snapshot_tree(&output_dir);
+
+    assert_eq!(first_snapshot, second_snapshot);
+}
+
 fn cargo_available() -> bool {
     Command::new("cargo").arg("--version").output().is_ok()
 }
@@ -725,6 +847,24 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn snapshot_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut snapshot = Vec::new();
+    for entry in WalkDir::new(root).sort_by_file_name() {
+        let entry = entry.expect("failed to walk generated tree");
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path();
+        let rel = path
+            .strip_prefix(root)
+            .expect("generated file should live under snapshot root")
+            .to_path_buf();
+        snapshot.push((rel, fs::read(path).expect("failed to read generated file")));
+    }
+    snapshot
 }
 
 #[test]

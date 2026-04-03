@@ -217,7 +217,7 @@ fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
     }
 
     let syn::Item::Fn(item_fn) = &file.items[0] else {
-        return Err(SpecError::BodyRustMustBeSingleFn { found: 0, path });
+        return Err(SpecError::BodyRustSingleItemNotFn { path });
     };
 
     let found_name = item_fn.sig.ident.to_string();

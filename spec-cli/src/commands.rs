@@ -4,7 +4,7 @@ use clap::{Args, Subcommand};
 use spec_core::generator::{
     clean_output_dir, generate_code, generate_mod_rs, safe_output_path, write_generated_file,
 };
-use spec_core::loader::{is_unit_spec, load_file};
+use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::types::{LoadedSpec, ResolvedSpec};
 use spec_core::validator::{
@@ -14,9 +14,13 @@ use spec_core::validator::{
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
-type CollectedSpecs = (Vec<LoadedSpec>, BTreeMap<String, Vec<String>>, usize);
+type CollectedSpecs = (
+    Vec<LoadedSpec>,
+    BTreeMap<String, Vec<String>>,
+    BTreeMap<String, Vec<String>>,
+    usize,
+);
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
 
 #[derive(Subcommand, Debug)]
@@ -53,13 +57,14 @@ pub struct GenerateArgs {
 }
 
 fn validate_command(path: &Path, no_strict: bool) -> Result<()> {
-    let (specs, errors, total_files) = collect_specs(path)?;
+    let (specs, errors, mut warnings, total_files) = collect_specs(path)?;
     let config = load_workspace_config(path)?;
     let validation_options = ValidationOptions {
         strict_deps: !no_strict,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (errors, warnings) = finish_validation(&specs, errors, &validation_options);
+    let (errors, validation_warnings) = finish_validation(&specs, errors, &validation_options);
+    merge_diagnostics(&mut warnings, validation_warnings);
     let warning_count = count_messages(&warnings);
 
     if !warnings.is_empty() {
@@ -101,8 +106,11 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
         );
     }
 
-    let (specs, errors, total_files) = collect_specs(path)?;
+    let (specs, errors, mut warnings, total_files) = collect_specs(path)?;
     if total_files == 0 {
+        if !warnings.is_empty() {
+            print_diagnostics(&warnings);
+        }
         println!("0 units found, nothing to generate.");
         return Ok(());
     }
@@ -112,7 +120,11 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (errors, _warnings) = finish_validation(&specs, errors, &validation_options);
+    let (errors, validation_warnings) = finish_validation(&specs, errors, &validation_options);
+    merge_diagnostics(&mut warnings, validation_warnings);
+    if !warnings.is_empty() {
+        print_diagnostics(&warnings);
+    }
     if !errors.is_empty() {
         print_diagnostics(&errors);
         let file_count = count_unique_files(&errors);
@@ -139,7 +151,8 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
     }
 
     // Include every generated mod.rs (root + nested modules) in the owned set.
-    for (module_path, _namespace) in build_namespaces(&resolved_specs) {
+    let namespaces = build_namespaces(&resolved_specs);
+    for (module_path, _namespace) in &namespaces {
         let mod_rs_rel = if module_path.is_empty() {
             PathBuf::from("mod.rs")
         } else {
@@ -158,10 +171,10 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
             .with_context(|| format!("Failed to write {}", output_path.display()))?;
     }
 
-    for (module_path, namespace) in build_namespaces(&resolved_specs) {
+    for (module_path, namespace) in &namespaces {
         let content = generate_mod_rs(
-            &namespace.unit_files.into_iter().collect::<Vec<_>>(),
-            &namespace.subdirs.into_iter().collect::<Vec<_>>(),
+            &namespace.unit_files.iter().cloned().collect::<Vec<_>>(),
+            &namespace.subdirs.iter().cloned().collect::<Vec<_>>(),
         )
         .with_context(|| format!("Failed to generate mod.rs for module '{module_path}'"))?;
 
@@ -181,8 +194,8 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
 
     println!(
         "Generated {} file{}",
-        resolved_specs.len(),
-        pluralize(resolved_specs.len())
+        resolved_specs.len() + namespaces.len(),
+        pluralize(resolved_specs.len() + namespaces.len())
     );
     Ok(())
 }
@@ -281,11 +294,11 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
             bail!("{} is not a .unit.spec file", path.display());
         }
         return match load_file(path) {
-            Ok(spec) => Ok((vec![spec], BTreeMap::new(), total_files)),
+            Ok(spec) => Ok((vec![spec], BTreeMap::new(), BTreeMap::new(), total_files)),
             Err(err) => {
                 let mut errors = BTreeMap::new();
                 errors.insert(path.display().to_string(), vec![err.to_string()]);
-                Ok((Vec::new(), errors, total_files))
+                Ok((Vec::new(), errors, BTreeMap::new(), total_files))
             }
         };
     }
@@ -294,29 +307,18 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
         bail!("{} does not exist", path.display());
     }
 
-    let mut specs = Vec::new();
+    let report = load_directory_report(path);
     let mut errors = BTreeMap::<String, Vec<String>>::new();
-    let mut total_files = 0usize;
+    let mut warnings = BTreeMap::<String, Vec<String>>::new();
 
-    for entry in WalkDir::new(path).follow_links(true) {
-        let entry = entry?;
-        let entry_path = entry.path();
-        if !entry_path.is_file() || !is_unit_spec(entry_path) {
-            continue;
-        }
-
-        total_files += 1;
-        match load_file(entry_path) {
-            Ok(spec) => specs.push(spec),
-            Err(err) => errors
-                .entry(entry_path.display().to_string())
-                .or_default()
-                .push(err.to_string()),
-        }
+    for err in report.errors {
+        push_error(&mut errors, err);
+    }
+    for warning in report.warnings {
+        push_warning(&mut warnings, warning);
     }
 
-    specs.sort_by(|left, right| left.source.file_path.cmp(&right.source.file_path));
-    Ok((specs, errors, total_files))
+    Ok((report.specs, errors, warnings, report.total_files))
 }
 
 fn finish_validation(
@@ -381,11 +383,13 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::UseStatementInBody { path }
         | spec_core::SpecError::BodyRustParseFailed { path, .. }
         | spec_core::SpecError::BodyRustMustBeSingleFn { path, .. }
+        | spec_core::SpecError::BodyRustSingleItemNotFn { path }
         | spec_core::SpecError::BodyRustFnNameMismatch { path, .. }
         | spec_core::SpecError::BodyRustMethodRejected { path }
         | spec_core::SpecError::ContractInputParamMismatch { path, .. }
         | spec_core::SpecError::LocalTestExpectNotExpr { path, .. }
         | spec_core::SpecError::DuplicateLocalTestId { path, .. }
+        | spec_core::SpecError::Traversal { path, .. }
         | spec_core::SpecError::MissingMarker { path } => path.clone(),
         spec_core::SpecError::DuplicateId { file1, file2, .. } => format!("{file1} | {file2}"),
         spec_core::SpecError::Generator { .. } | spec_core::SpecError::OutputDir { .. } => {
@@ -397,7 +401,14 @@ fn error_key(err: &spec_core::SpecError) -> String {
 
 fn warning_key(warning: &spec_core::SpecWarning) -> String {
     match warning {
-        spec_core::SpecWarning::MissingDep { path, .. } => path.clone(),
+        spec_core::SpecWarning::MissingDep { path, .. }
+        | spec_core::SpecWarning::SymlinkCycleSkipped { path } => path.clone(),
+    }
+}
+
+fn merge_diagnostics(target: &mut DiagnosticMap, source: DiagnosticMap) {
+    for (path, mut messages) in source {
+        target.entry(path).or_default().append(&mut messages);
     }
 }
 
