@@ -196,37 +196,37 @@ fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
         match input {
             syn::FnArg::Receiver(_) => return Err(SpecError::BodyRustMethodRejected { path }),
             syn::FnArg::Typed(pat_type) => {
-                if let syn::Pat::Ident(pat_ident) = &*pat_type.pat {
-                    if pat_ident.ident == "self" {
-                        return Err(SpecError::BodyRustMethodRejected { path });
-                    }
+                if let syn::Pat::Ident(pat_ident) = &*pat_type.pat
+                    && pat_ident.ident == "self"
+                {
+                    return Err(SpecError::BodyRustMethodRejected { path });
                 }
             }
         }
     }
 
-    if let Some(contract) = &spec.spec.contract {
-        if let Some(inputs) = &contract.inputs {
-            let mut params = HashSet::<String>::new();
-            for input in &item_fn.sig.inputs {
-                let syn::FnArg::Typed(pat_type) = input else {
-                    continue;
-                };
-                let syn::Pat::Ident(pat_ident) = &*pat_type.pat else {
-                    continue;
-                };
-                params.insert(pat_ident.ident.to_string());
-            }
+    if let Some(contract) = &spec.spec.contract
+        && let Some(inputs) = &contract.inputs
+    {
+        let mut params = HashSet::<String>::new();
+        for input in &item_fn.sig.inputs {
+            let syn::FnArg::Typed(pat_type) = input else {
+                continue;
+            };
+            let syn::Pat::Ident(pat_ident) = &*pat_type.pat else {
+                continue;
+            };
+            params.insert(pat_ident.ident.to_string());
+        }
 
-            let mut input_keys: Vec<&String> = inputs.keys().collect();
-            input_keys.sort();
-            for input in input_keys {
-                if !params.contains(input.as_str()) {
-                    return Err(SpecError::ContractInputParamMismatch {
-                        input: input.clone(),
-                        path,
-                    });
-                }
+        let mut input_keys: Vec<&String> = inputs.keys().collect();
+        input_keys.sort();
+        for input in input_keys {
+            if !params.contains(input.as_str()) {
+                return Err(SpecError::ContractInputParamMismatch {
+                    input: input.clone(),
+                    path,
+                });
             }
         }
     }
