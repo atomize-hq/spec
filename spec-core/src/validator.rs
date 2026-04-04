@@ -8,7 +8,7 @@ use crate::types::LoadedSpec;
 use crate::{Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 /// JSON Schema for unit.spec validation (embedded at compile time)
@@ -316,7 +316,85 @@ pub fn validate_deps_exist_with_options(
         }
     }
 
+    let cycle_errors = detect_cycles(specs);
+    errors.extend(cycle_errors);
+
     (errors, warnings)
+}
+
+/// DFS helper for cycle detection. Mutates `visited`, `in_stack`, `stack`, and `errors` in place.
+fn dfs_cycle_check<'a>(
+    node_id: &'a str,
+    id_map: &HashMap<&'a str, &'a LoadedSpec>,
+    visited: &mut HashSet<String>,
+    in_stack: &mut HashSet<String>,
+    stack: &mut Vec<String>,
+    errors: &mut Vec<SpecError>,
+) {
+    in_stack.insert(node_id.to_string());
+    stack.push(node_id.to_string());
+
+    if let Some(spec) = id_map.get(node_id) {
+        for dep in &spec.spec.deps {
+            if !id_map.contains_key(dep.as_str()) {
+                // Missing dep — already reported by validate_deps_exist; skip during DFS
+                continue;
+            }
+            if in_stack.contains(dep.as_str()) {
+                // Cycle found — reconstruct path from the point where dep appears on the stack
+                let cycle_start = stack
+                    .iter()
+                    .position(|n| n == dep)
+                    .expect("dep in in_stack must be in stack");
+                let mut cycle_path: Vec<String> = stack[cycle_start..].to_vec();
+                cycle_path.push(dep.clone());
+                errors.push(SpecError::CyclicDep {
+                    cycle_path,
+                    path: spec.source.file_path.clone(),
+                });
+            } else if !visited.contains(dep.as_str()) {
+                dfs_cycle_check(dep, id_map, visited, in_stack, stack, errors);
+            }
+        }
+    }
+
+    stack.pop();
+    in_stack.remove(node_id);
+    visited.insert(node_id.to_string());
+}
+
+/// Detect cycles in the dependency graph using depth-first search.
+///
+/// Cycles are always errors regardless of ValidationOptions — a cycle causes
+/// infinite recursion during graph resolution.
+///
+/// NOTE: Cycle detection is in-tree only. Deps that reference units outside this
+/// spec set (cross-library) are skipped during DFS — they are not in id_map.
+/// Cross-library cycle detection is deferred until the cross-library dep schema
+/// is defined (M4). See DECISIONS.md.
+pub fn detect_cycles(specs: &[LoadedSpec]) -> Vec<SpecError> {
+    let id_map: HashMap<&str, &LoadedSpec> =
+        specs.iter().map(|s| (s.spec.id.as_str(), s)).collect();
+
+    let mut visited = HashSet::<String>::new();
+    let mut errors = Vec::<SpecError>::new();
+
+    for spec in specs {
+        if !visited.contains(&spec.spec.id) {
+            let mut in_stack = HashSet::<String>::new();
+            let mut stack = Vec::<String>::new();
+            dfs_cycle_check(
+                &spec.spec.id,
+                &id_map,
+                &mut visited,
+                &mut in_stack,
+                &mut stack,
+                &mut errors,
+            );
+        }
+    }
+
+    errors
 }
 
 /// Full validation (schema + semantic)
@@ -1192,6 +1270,146 @@ local_tests:
         assert!(
             err.contains("contract.returns") && err.contains("invalid Rust type"),
             "expected ContractTypeInvalid for returns: {err}"
+        );
+    }
+
+    // --- cycle detection ---
+
+    #[test]
+    fn test_detect_cycles_no_cycle() {
+        // A → B → C (no cycle)
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let mut b = create_test_spec("b/bar", "{ }");
+        b.spec.deps = vec!["c/baz".to_string()];
+        let c = create_test_spec("c/baz", "{ }");
+        let errors = detect_cycles(&[a, b, c]);
+        assert!(errors.is_empty(), "expected no cycle errors: {:?}", errors);
+    }
+
+    #[test]
+    fn test_detect_cycles_simple_cycle() {
+        // A → B → A
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let mut b = create_test_spec("b/bar", "{ }");
+        b.spec.deps = vec!["a/foo".to_string()];
+        let errors = detect_cycles(&[a, b]);
+        assert_eq!(
+            errors.len(),
+            1,
+            "expected exactly one cycle error: {:?}",
+            errors
+        );
+        match &errors[0] {
+            SpecError::CyclicDep { cycle_path, .. } => {
+                assert_eq!(cycle_path, &["a/foo", "b/bar", "a/foo"]);
+            }
+            other => panic!("expected CyclicDep, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_self_loop() {
+        // A → A
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["a/foo".to_string()];
+        let errors = detect_cycles(&[a]);
+        assert_eq!(
+            errors.len(),
+            1,
+            "expected exactly one cycle error: {:?}",
+            errors
+        );
+        match &errors[0] {
+            SpecError::CyclicDep { cycle_path, .. } => {
+                assert_eq!(cycle_path, &["a/foo", "a/foo"]);
+            }
+            other => panic!("expected CyclicDep, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_longer_cycle() {
+        // A → B → C → A
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let mut b = create_test_spec("b/bar", "{ }");
+        b.spec.deps = vec!["c/baz".to_string()];
+        let mut c = create_test_spec("c/baz", "{ }");
+        c.spec.deps = vec!["a/foo".to_string()];
+        let errors = detect_cycles(&[a, b, c]);
+        assert_eq!(
+            errors.len(),
+            1,
+            "expected exactly one cycle error: {:?}",
+            errors
+        );
+        match &errors[0] {
+            SpecError::CyclicDep { cycle_path, .. } => {
+                assert_eq!(cycle_path, &["a/foo", "b/bar", "c/baz", "a/foo"]);
+            }
+            other => panic!("expected CyclicDep, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_missing_dep_skipped() {
+        // A deps B but B is not in the set — no cycle, just a missing dep
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let errors = detect_cycles(&[a]);
+        assert!(
+            errors.is_empty(),
+            "expected no cycle errors for missing dep: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_detect_cycles_multiple_cycles() {
+        // (A → B → A) and (C → D → C)
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let mut b = create_test_spec("b/bar", "{ }");
+        b.spec.deps = vec!["a/foo".to_string()];
+        let mut c = create_test_spec("c/baz", "{ }");
+        c.spec.deps = vec!["d/qux".to_string()];
+        let mut d = create_test_spec("d/qux", "{ }");
+        d.spec.deps = vec!["c/baz".to_string()];
+        let errors = detect_cycles(&[a, b, c, d]);
+        assert_eq!(errors.len(), 2, "expected two cycle errors: {:?}", errors);
+        for err in &errors {
+            assert!(
+                matches!(err, SpecError::CyclicDep { .. }),
+                "expected CyclicDep, got {:?}",
+                err
+            );
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_error_message_format() {
+        let mut a = create_test_spec("money/round", "{ }");
+        a.spec.deps = vec!["currency/convert".to_string()];
+        let mut b = create_test_spec("currency/convert", "{ }");
+        b.spec.deps = vec!["money/round".to_string()];
+        let errors = detect_cycles(&[a, b]);
+        assert_eq!(errors.len(), 1);
+        assert!(
+            errors[0].to_string().contains("cycle detected"),
+            "{}",
+            errors[0]
+        );
+        assert!(
+            errors[0].to_string().contains("money/round"),
+            "{}",
+            errors[0]
+        );
+        assert!(
+            errors[0].to_string().contains("currency/convert"),
+            "{}",
+            errors[0]
         );
     }
 }

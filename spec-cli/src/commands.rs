@@ -380,6 +380,7 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::RustKeyword { path, .. }
         | spec_core::SpecError::DepCollision { path, .. }
         | spec_core::SpecError::MissingDep { path, .. }
+        | spec_core::SpecError::CyclicDep { path, .. }
         | spec_core::SpecError::UseStatementInBody { path }
         | spec_core::SpecError::BodyRustMustBeBlock { path, .. }
         | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }

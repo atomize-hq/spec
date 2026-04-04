@@ -60,6 +60,12 @@ pub enum SpecError {
     #[error("❌ dep '{dep}' not found in this spec set")]
     MissingDep { dep: String, path: String },
 
+    #[error("❌ cycle detected: {}", cycle_path.join(" → "))]
+    CyclicDep {
+        cycle_path: Vec<String>,
+        path: String,
+    },
+
     #[error(
         "body.rust must not contain use statements; declare external imports via imports (and internal unit deps via deps) at {path}"
     )]

@@ -777,6 +777,59 @@ body:
     assert_eq!(first_snapshot, second_snapshot);
 }
 
+#[test]
+fn validate_detects_cycle_in_dep_graph() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "a/foo.unit.spec",
+        r#"
+id: a/foo
+kind: function
+intent:
+  why: First unit in cycle.
+deps:
+  - b/bar
+body:
+  rust: |
+    { }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "b/bar.unit.spec",
+        r#"
+id: b/bar
+kind: function
+intent:
+  why: Second unit in cycle.
+deps:
+  - a/foo
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cycle detected"),
+        "expected cycle error in stderr, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("a/foo"),
+        "expected a/foo in cycle path: {stderr}"
+    );
+    assert!(
+        stderr.contains("b/bar"),
+        "expected b/bar in cycle path: {stderr}"
+    );
+}
+
 fn cargo_available() -> bool {
     Command::new("cargo").arg("--version").output().is_ok()
 }
