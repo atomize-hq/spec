@@ -1051,7 +1051,10 @@ body:
     );
 
     let output = run(&["validate", units_dir.to_str().unwrap()]);
-    assert!(output.status.success(), "validate should exit 0 when spec_version is missing");
+    assert!(
+        output.status.success(),
+        "validate should exit 0 when spec_version is missing"
+    );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -1170,7 +1173,10 @@ body:
     );
 
     let output = run(&["validate", units_dir.to_str().unwrap()]);
-    assert!(!output.status.success(), "validate should fail for invalid contract input identifier");
+    assert!(
+        !output.status.success(),
+        "validate should fail for invalid contract input identifier"
+    );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
