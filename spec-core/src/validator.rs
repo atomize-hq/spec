@@ -231,13 +231,11 @@ fn validate_contract_input_types(spec: &LoadedSpec) -> Result<()> {
             }
         }
         if let Some(returns) = &contract.returns {
-            syn::parse_str::<syn::Type>(returns).map_err(|err| {
-                SpecError::ContractTypeInvalid {
-                    field: "returns".to_string(),
-                    type_str: returns.clone(),
-                    message: err.to_string(),
-                    path: path.clone(),
-                }
+            syn::parse_str::<syn::Type>(returns).map_err(|err| SpecError::ContractTypeInvalid {
+                field: "returns".to_string(),
+                type_str: returns.clone(),
+                message: err.to_string(),
+                path: path.clone(),
             })?;
         }
     }
@@ -591,10 +589,7 @@ local_tests:
 
     #[test]
     fn test_validate_semantic_valid_spec() {
-        let spec = create_test_spec(
-            "pricing/apply_discount",
-            "{ subtotal - subtotal * rate }",
-        );
+        let spec = create_test_spec("pricing/apply_discount", "{ subtotal - subtotal * rate }");
         let result = validate_semantic(&spec);
         assert!(result.is_ok());
     }
@@ -686,7 +681,10 @@ local_tests:
     fn validate_body_rust_invalid_block() {
         let spec = create_test_spec("pricing/apply_discount", "not valid rust at all !!!");
         let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("body.rust must be a Rust block expression"), "{err}");
+        assert!(
+            err.contains("body.rust must be a Rust block expression"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -1124,7 +1122,10 @@ local_tests:
 
     // --- contract.inputs type validation ---
 
-    fn make_spec_with_contract(inputs: Option<indexmap::IndexMap<String, String>>, returns: Option<&str>) -> LoadedSpec {
+    fn make_spec_with_contract(
+        inputs: Option<indexmap::IndexMap<String, String>>,
+        returns: Option<&str>,
+    ) -> LoadedSpec {
         LoadedSpec {
             source: SpecSource {
                 file_path: "test/pricing/apply_tax.unit.spec".to_string(),
@@ -1133,7 +1134,9 @@ local_tests:
             spec: SpecStruct {
                 id: "pricing/apply_tax".to_string(),
                 kind: "function".to_string(),
-                intent: Intent { why: "Apply tax.".to_string() },
+                intent: Intent {
+                    why: "Apply tax.".to_string(),
+                },
                 contract: Some(Contract {
                     inputs,
                     returns: returns.map(String::from),
@@ -1141,7 +1144,9 @@ local_tests:
                 }),
                 deps: vec![],
                 imports: vec![],
-                body: Body { rust: "{ () }".to_string() },
+                body: Body {
+                    rust: "{ () }".to_string(),
+                },
                 local_tests: vec![],
                 links: None,
             },

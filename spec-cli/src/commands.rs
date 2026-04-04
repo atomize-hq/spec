@@ -385,6 +385,7 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }
         | spec_core::SpecError::LocalTestExpectNotExpr { path, .. }
         | spec_core::SpecError::DuplicateLocalTestId { path, .. }
+        | spec_core::SpecError::ContractTypeInvalid { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
         | spec_core::SpecError::MissingMarker { path } => path.clone(),
         spec_core::SpecError::DuplicateId { file1, file2, .. } => format!("{file1} | {file2}"),
