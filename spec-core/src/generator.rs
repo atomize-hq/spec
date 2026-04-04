@@ -34,10 +34,12 @@ fn build_fn_signature(spec: &ResolvedSpec) -> String {
         .contract
         .as_ref()
         .and_then(|c| c.returns.as_ref())
-        .map(|r| r.as_str())
-        .unwrap_or("()");
+        .map(|r| format!(" -> {}", r));
 
-    format!("pub fn {}({}) -> {}", spec.fn_name, params, return_type)
+    match return_type {
+        Some(ret) => format!("pub fn {}({}){}", spec.fn_name, params, ret),
+        None => format!("pub fn {}({})", spec.fn_name, params),
+    }
 }
 
 pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
@@ -452,7 +454,7 @@ mod tests {
         let code = generate_code(&spec).unwrap();
         assert_eq!(
             code,
-            "use crate::money::round::round;\nuse crate::utils::math::normalize::normalize;\n\npub fn apply_discount() -> () {\n    round(Decimal::ONE)\n}\n"
+            "use crate::money::round::round;\nuse crate::utils::math::normalize::normalize;\n\npub fn apply_discount() {\n    round(Decimal::ONE)\n}\n"
         );
     }
 
@@ -478,7 +480,7 @@ mod tests {
         let code = generate_code(&spec).unwrap();
         assert_eq!(
             code,
-            "use rust_decimal::Decimal;\n\npub fn apply_discount() -> () {\n    Decimal::ZERO\n}\n"
+            "use rust_decimal::Decimal;\n\npub fn apply_discount() {\n    Decimal::ZERO\n}\n"
         );
     }
 
@@ -505,7 +507,7 @@ mod tests {
         let code = generate_code(&spec).unwrap();
         assert_eq!(
             code,
-            "use rust_decimal::Decimal;\n\nuse crate::money::round::round;\n\npub fn apply_discount() -> () {\n    round(Decimal::ZERO)\n}\n"
+            "use rust_decimal::Decimal;\n\nuse crate::money::round::round;\n\npub fn apply_discount() {\n    round(Decimal::ZERO)\n}\n"
         );
     }
 
