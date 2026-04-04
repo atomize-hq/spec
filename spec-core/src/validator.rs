@@ -220,13 +220,11 @@ fn validate_contract_input_types(spec: &LoadedSpec) -> Result<()> {
     if let Some(contract) = &spec.spec.contract {
         if let Some(inputs) = &contract.inputs {
             for (name, type_str) in inputs {
-                syn::parse_str::<syn::Ident>(name).map_err(|_| {
-                    SpecError::ContractTypeInvalid {
-                        field: format!("inputs key '{name}'"),
-                        type_str: name.clone(),
-                        message: format!("'{name}' is not a valid Rust identifier"),
-                        path: path.clone(),
-                    }
+                syn::parse_str::<syn::Ident>(name).map_err(|_| SpecError::ContractTypeInvalid {
+                    field: format!("inputs key '{name}'"),
+                    type_str: name.clone(),
+                    message: format!("'{name}' is not a valid Rust identifier"),
+                    path: path.clone(),
                 })?;
                 syn::parse_str::<syn::Type>(type_str).map_err(|err| {
                     SpecError::ContractTypeInvalid {
