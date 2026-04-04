@@ -8,7 +8,7 @@ use crate::types::LoadedSpec;
 use crate::{Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 /// JSON Schema for unit.spec validation (embedded at compile time)
@@ -137,8 +137,9 @@ pub fn validate_semantic_with_options(
         });
     }
 
-    validate_body_rust_alignment(spec)?;
+    validate_body_rust_block(spec)?;
     validate_local_test_expects(spec, options)?;
+    validate_contract_input_types(spec)?;
 
     Ok(())
 }
@@ -199,75 +200,51 @@ fn is_safe_expect_expr(expr: &syn::Expr) -> bool {
     }
 }
 
-fn validate_body_rust_alignment(spec: &LoadedSpec) -> Result<()> {
+fn validate_body_rust_block(spec: &LoadedSpec) -> Result<()> {
     let path = spec.source.file_path.clone();
-    let expected_fn_name = spec.spec.id.rsplit('/').next().unwrap_or_default();
-
-    let file =
-        syn::parse_file(&spec.spec.body.rust).map_err(|err| SpecError::BodyRustParseFailed {
-            message: err.to_string(),
-            path: path.clone(),
-        })?;
-
-    if file.items.len() != 1 {
-        return Err(SpecError::BodyRustMustBeSingleFn {
-            found: file.items.len(),
-            path,
-        });
-    }
-
-    let syn::Item::Fn(item_fn) = &file.items[0] else {
-        return Err(SpecError::BodyRustSingleItemNotFn { path });
-    };
-
-    let found_name = item_fn.sig.ident.to_string();
-    if found_name != expected_fn_name {
-        return Err(SpecError::BodyRustFnNameMismatch {
-            expected: expected_fn_name.to_string(),
-            found: found_name,
-            path,
-        });
-    }
-
-    for input in &item_fn.sig.inputs {
-        match input {
-            syn::FnArg::Receiver(_) => return Err(SpecError::BodyRustMethodRejected { path }),
-            syn::FnArg::Typed(pat_type) => {
-                if let syn::Pat::Ident(pat_ident) = &*pat_type.pat
-                    && pat_ident.ident == "self"
-                {
-                    return Err(SpecError::BodyRustMethodRejected { path });
-                }
+    syn::parse_str::<syn::Block>(&spec.spec.body.rust).map_err(|_| {
+        if syn::parse_str::<syn::ItemFn>(&spec.spec.body.rust).is_ok() {
+            SpecError::BodyRustLooksLikeFnDeclaration { path }
+        } else {
+            SpecError::BodyRustMustBeBlock {
+                message: "body.rust must be a Rust block expression starting with `{`".to_string(),
+                path,
             }
         }
-    }
+    })?;
+    Ok(())
+}
 
-    if let Some(contract) = &spec.spec.contract
-        && let Some(inputs) = &contract.inputs
-    {
-        let mut params = HashSet::<String>::new();
-        for input in &item_fn.sig.inputs {
-            let syn::FnArg::Typed(pat_type) = input else {
-                continue;
-            };
-            let syn::Pat::Ident(pat_ident) = &*pat_type.pat else {
-                continue;
-            };
-            params.insert(pat_ident.ident.to_string());
-        }
-
-        let mut input_keys: Vec<&String> = inputs.keys().collect();
-        input_keys.sort();
-        for input in input_keys {
-            if !params.contains(input.as_str()) {
-                return Err(SpecError::ContractInputParamMismatch {
-                    input: input.clone(),
-                    path,
-                });
+fn validate_contract_input_types(spec: &LoadedSpec) -> Result<()> {
+    let path = &spec.source.file_path;
+    if let Some(contract) = &spec.spec.contract {
+        if let Some(inputs) = &contract.inputs {
+            for (name, type_str) in inputs {
+                syn::parse_str::<syn::Ident>(name).map_err(|_| SpecError::ContractTypeInvalid {
+                    field: format!("inputs key '{name}'"),
+                    type_str: name.clone(),
+                    message: format!("'{name}' is not a valid Rust identifier"),
+                    path: path.clone(),
+                })?;
+                syn::parse_str::<syn::Type>(type_str).map_err(|err| {
+                    SpecError::ContractTypeInvalid {
+                        field: format!("inputs.{name}"),
+                        type_str: type_str.clone(),
+                        message: err.to_string(),
+                        path: path.clone(),
+                    }
+                })?;
             }
         }
+        if let Some(returns) = &contract.returns {
+            syn::parse_str::<syn::Type>(returns).map_err(|err| SpecError::ContractTypeInvalid {
+                field: "returns".to_string(),
+                type_str: returns.clone(),
+                message: err.to_string(),
+                path: path.clone(),
+            })?;
+        }
     }
-
     Ok(())
 }
 
@@ -309,6 +286,19 @@ pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Vec<SpecError> {
     errors
 }
 
+/// Emit a warning for each spec that lacks a spec_version field.
+///
+/// Called after per-spec semantic validation; warnings are non-fatal.
+pub fn check_spec_versions(specs: &[LoadedSpec]) -> Vec<SpecWarning> {
+    specs
+        .iter()
+        .filter(|s| s.spec.spec_version.is_none())
+        .map(|s| SpecWarning::MissingSpecVersion {
+            path: s.source.file_path.clone(),
+        })
+        .collect()
+}
+
 /// Validate that all internal deps referenced by loaded specs exist in the same spec set.
 ///
 /// For M2, deps are always strict: any missing dep is an error.
@@ -345,7 +335,85 @@ pub fn validate_deps_exist_with_options(
         }
     }
 
+    let cycle_errors = detect_cycles(specs);
+    errors.extend(cycle_errors);
+
     (errors, warnings)
+}
+
+/// DFS helper for cycle detection. Mutates `visited`, `in_stack`, `stack`, and `errors` in place.
+fn dfs_cycle_check<'a>(
+    node_id: &'a str,
+    id_map: &HashMap<&'a str, &'a LoadedSpec>,
+    visited: &mut HashSet<String>,
+    in_stack: &mut HashSet<String>,
+    stack: &mut Vec<String>,
+    errors: &mut Vec<SpecError>,
+) {
+    in_stack.insert(node_id.to_string());
+    stack.push(node_id.to_string());
+
+    if let Some(spec) = id_map.get(node_id) {
+        for dep in &spec.spec.deps {
+            if !id_map.contains_key(dep.as_str()) {
+                // Missing dep — already reported by validate_deps_exist; skip during DFS
+                continue;
+            }
+            if in_stack.contains(dep.as_str()) {
+                // Cycle found — reconstruct path from the point where dep appears on the stack
+                let cycle_start = stack
+                    .iter()
+                    .position(|n| n == dep)
+                    .expect("dep in in_stack must be in stack");
+                let mut cycle_path: Vec<String> = stack[cycle_start..].to_vec();
+                cycle_path.push(dep.clone());
+                errors.push(SpecError::CyclicDep {
+                    cycle_path,
+                    path: spec.source.file_path.clone(),
+                });
+            } else if !visited.contains(dep.as_str()) {
+                dfs_cycle_check(dep, id_map, visited, in_stack, stack, errors);
+            }
+        }
+    }
+
+    stack.pop();
+    in_stack.remove(node_id);
+    visited.insert(node_id.to_string());
+}
+
+/// Detect cycles in the dependency graph using depth-first search.
+///
+/// Cycles are always errors regardless of ValidationOptions — a cycle causes
+/// infinite recursion during graph resolution.
+///
+/// NOTE: Cycle detection is in-tree only. Deps that reference units outside this
+/// spec set (cross-library) are skipped during DFS — they are not in id_map.
+/// Cross-library cycle detection is deferred until the cross-library dep schema
+/// is defined (M4). See DECISIONS.md.
+pub fn detect_cycles(specs: &[LoadedSpec]) -> Vec<SpecError> {
+    let id_map: HashMap<&str, &LoadedSpec> =
+        specs.iter().map(|s| (s.spec.id.as_str(), s)).collect();
+
+    let mut visited = HashSet::<String>::new();
+    let mut errors = Vec::<SpecError>::new();
+
+    for spec in specs {
+        if !visited.contains(&spec.spec.id) {
+            let mut in_stack = HashSet::<String>::new();
+            let mut stack = Vec::<String>::new();
+            dfs_cycle_check(
+                &spec.spec.id,
+                &id_map,
+                &mut visited,
+                &mut in_stack,
+                &mut stack,
+                &mut errors,
+            );
+        }
+    }
+
+    errors
 }
 
 /// Full validation (schema + semantic)
@@ -385,13 +453,14 @@ mod tests {
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
             },
         }
     }
 
     #[test]
     fn test_validate_schema_valid() {
-        let spec = create_test_spec("pricing/apply_discount", "pub fn test() {}");
+        let spec = create_test_spec("pricing/apply_discount", "{ }");
         let result = validate_schema(&spec);
         assert!(
             result.is_ok(),
@@ -402,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_validate_schema_valid_spec_passes() {
-        let spec = create_test_spec("pricing/apply_discount", "pub fn test() {}");
+        let spec = create_test_spec("pricing/apply_discount", "{ }");
         let result = validate_schema(&spec);
         assert!(
             result.is_ok(),
@@ -538,8 +607,8 @@ local_tests:
     #[test]
     fn test_validate_no_duplicate_ids() {
         let specs = vec![
-            create_test_spec("pricing/apply_discount", "pub fn test1() {}"),
-            create_test_spec("utils/round", "pub fn test2() {}"),
+            create_test_spec("pricing/apply_discount", "{ }"),
+            create_test_spec("utils/round", "{ }"),
         ];
 
         let errors = validate_no_duplicate_ids(&specs);
@@ -549,8 +618,8 @@ local_tests:
     #[test]
     fn test_validate_duplicate_ids() {
         let specs = vec![
-            create_test_spec("pricing/apply_discount", "pub fn test1() {}"),
-            create_test_spec("pricing/apply_discount", "pub fn test2() {}"),
+            create_test_spec("pricing/apply_discount", "{ }"),
+            create_test_spec("pricing/apply_discount", "{ }"),
         ];
 
         let errors = validate_no_duplicate_ids(&specs);
@@ -562,9 +631,9 @@ local_tests:
     #[test]
     fn test_validate_duplicate_ids_all_reported() {
         let specs = vec![
-            create_test_spec("pricing/apply_discount", "pub fn test1() {}"),
-            create_test_spec("pricing/apply_discount", "pub fn test2() {}"),
-            create_test_spec("pricing/apply_discount", "pub fn test3() {}"),
+            create_test_spec("pricing/apply_discount", "{ }"),
+            create_test_spec("pricing/apply_discount", "{ }"),
+            create_test_spec("pricing/apply_discount", "{ }"),
         ];
 
         let errors = validate_no_duplicate_ids(&specs);
@@ -573,7 +642,7 @@ local_tests:
 
     #[test]
     fn test_validate_dep_collision() {
-        let mut spec = create_test_spec("pricing/calculate_total", "pub fn test() { round(1.5) }");
+        let mut spec = create_test_spec("pricing/calculate_total", "{ round(1.5) }");
         spec.spec.deps = vec!["money/round".to_string(), "utils/round".to_string()];
 
         let result = validate_semantic(&spec);
@@ -604,6 +673,7 @@ local_tests:
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -618,17 +688,14 @@ local_tests:
 
     #[test]
     fn test_validate_semantic_valid_spec() {
-        let spec = create_test_spec(
-            "pricing/apply_discount",
-            "pub fn apply_discount(subtotal: f64, rate: f64) -> f64 { subtotal - subtotal * rate }",
-        );
+        let spec = create_test_spec("pricing/apply_discount", "{ subtotal - subtotal * rate }");
         let result = validate_semantic(&spec);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_full() {
-        let spec = create_test_spec("utils/round", "pub fn round(x: f64) -> f64 { x.floor() }");
+        let spec = create_test_spec("utils/round", "{ x.floor() }");
         let result = validate_full(&spec);
         assert!(result.is_ok(), "Full validation should pass: {:?}", result);
     }
@@ -654,6 +721,7 @@ local_tests:
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
             },
         };
         let result = validate_semantic(&spec);
@@ -680,67 +748,57 @@ local_tests:
     }
 
     #[test]
-    fn validate_body_fn_name_mismatch() {
-        let spec = create_test_spec("pricing/apply_discount", "pub fn wrong_name() {}");
+    fn validate_body_fn_declaration_emits_migration_error() {
+        let spec = create_test_spec("pricing/apply_discount", "pub fn apply_discount() {}");
         let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("expected 'apply_discount'"), "{err}");
+        assert!(
+            err.contains("looks like a full function declaration"),
+            "{err}"
+        );
     }
 
     #[test]
-    fn validate_body_multiple_fns_rejected() {
+    fn validate_body_fn_declaration_with_args_emits_migration_error() {
         let spec = create_test_spec(
             "pricing/apply_discount",
-            "pub fn apply_discount() {}\npub fn other() {}",
+            "pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal { subtotal }",
         );
         let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("exactly one top-level function"), "{err}");
+        assert!(
+            err.contains("looks like a full function declaration"),
+            "{err}"
+        );
     }
 
     #[test]
-    fn validate_contract_arg_name_mismatch() {
-        use std::collections::HashMap;
-
-        let mut spec = create_test_spec(
-            "pricing/apply_discount",
-            "pub fn apply_discount(price: Decimal) {}",
-        );
-        let mut inputs = HashMap::new();
-        inputs.insert("subtotal".to_string(), "Decimal".to_string());
-        spec.spec.contract = Some(Contract {
-            inputs: Some(inputs),
-            returns: None,
-            invariants: vec![],
-        });
-
-        let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("contract.inputs contains 'subtotal'"), "{err}");
-    }
-
-    #[test]
-    fn validate_body_with_macros_passes_fn_name_check() {
-        let spec = create_test_spec(
-            "pricing/apply_discount",
-            r#"
-#[allow(dead_code)]
-pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
-    let _v = vec![1, 2, 3];
-    assert!(true);
-    todo!()
-}
-"#,
-        );
+    fn validate_body_rust_block_valid() {
+        let spec = create_test_spec("pricing/apply_discount", "{ subtotal - subtotal * rate }");
         let result = validate_semantic(&spec);
         assert!(result.is_ok(), "{result:?}");
     }
 
     #[test]
-    fn validate_body_method_rejected() {
+    fn validate_body_rust_invalid_block() {
+        let spec = create_test_spec("pricing/apply_discount", "not valid rust at all !!!");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("body.rust must be a Rust block expression"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn validate_body_with_macros_in_block_passes() {
         let spec = create_test_spec(
             "pricing/apply_discount",
-            "pub fn apply_discount(&self, subtotal: Decimal) {}",
+            r#"{
+    let _v = vec![1, 2, 3];
+    assert!(true);
+    todo!()
+}"#,
         );
-        let err = validate_semantic(&spec).unwrap_err().to_string();
-        assert!(err.contains("free function (no self parameter)"), "{err}");
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
     }
 
     #[test]
@@ -761,13 +819,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() {}".to_string(),
+                    rust: "{ }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "injection_attempt".to_string(),
                     expect: "true); } } mod evil { fn steal() {}".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
         let err = validate_semantic(&spec).unwrap_err().to_string();
@@ -795,13 +854,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
                     expect: "apply_discount() == true".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
         assert!(validate_semantic(&spec).is_ok());
@@ -825,13 +885,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "block_allowed".to_string(),
                     expect: "{ let ok = apply_discount(); ok }".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -860,7 +921,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![
                     LocalTest {
@@ -873,6 +934,7 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                     },
                 ],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -901,13 +963,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "block_attempt".to_string(),
                     expect: "{ std::process::exit(1); true }".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
         let err = validate_semantic(&spec).unwrap_err().to_string();
@@ -935,13 +998,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_call_arg".to_string(),
                     expect: "f(unsafe { true })".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -970,13 +1034,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "block_in_binary_operand".to_string(),
                     expect: "true && { false }".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1005,13 +1070,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_method_arg".to_string(),
                     expect: "foo.bar(unsafe { true })".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1040,13 +1106,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_field_base".to_string(),
                     expect: "(unsafe { foo }).field".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1075,13 +1142,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_index".to_string(),
                     expect: "arr[unsafe { 0 }]".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1110,13 +1178,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_unary".to_string(),
                     expect: "!(unsafe { true })".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1145,13 +1214,14 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
                 deps: vec![],
                 imports: vec![],
                 body: Body {
-                    rust: "pub fn apply_discount() -> bool { true }".to_string(),
+                    rust: "{ true }".to_string(),
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_cast".to_string(),
                     expect: "(unsafe { 0 }) as u64".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1160,5 +1230,312 @@ pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
             err.contains("block, unsafe, closure"),
             "expected unsafe block in cast to be rejected: {err}"
         );
+    }
+
+    // --- contract.inputs type validation ---
+
+    fn make_spec_with_contract(
+        inputs: Option<indexmap::IndexMap<String, String>>,
+        returns: Option<&str>,
+    ) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: "test/pricing/apply_tax.unit.spec".to_string(),
+                id: "pricing/apply_tax".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_tax".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply tax.".to_string(),
+                },
+                contract: Some(Contract {
+                    inputs,
+                    returns: returns.map(String::from),
+                    invariants: vec![],
+                }),
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "{ () }".to_string(),
+                },
+                local_tests: vec![],
+                links: None,
+                spec_version: None,
+            },
+        }
+    }
+
+    #[test]
+    fn contract_type_validation_passes_for_valid_types() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("subtotal".to_string(), "Decimal".to_string());
+        inputs.insert("rate".to_string(), "Decimal".to_string());
+        let spec = make_spec_with_contract(Some(inputs), Some("Decimal"));
+        assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn contract_type_validation_passes_with_no_contract() {
+        let spec = create_test_spec("money/round", "{ () }");
+        assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn contract_type_validation_rejects_invalid_input_type() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("amount".to_string(), "Strinng".to_string());
+        // "Strinng" is a valid identifier so syn parses it fine as a Type::Path.
+        // Use something syntactically invalid to verify the error path:
+        inputs.insert("rate".to_string(), "Vec<".to_string());
+        let spec = make_spec_with_contract(Some(inputs), Some("Decimal"));
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("contract.inputs.rate") && err.contains("invalid Rust type"),
+            "expected ContractTypeInvalid for inputs.rate: {err}"
+        );
+    }
+
+    #[test]
+    fn contract_type_validation_rejects_invalid_return_type() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("subtotal".to_string(), "Decimal".to_string());
+        let spec = make_spec_with_contract(Some(inputs), Some("Vec<"));
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("contract.returns") && err.contains("invalid Rust type"),
+            "expected ContractTypeInvalid for returns: {err}"
+        );
+    }
+
+    #[test]
+    fn contract_type_validation_rejects_keyword_input_name() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("type".to_string(), "Decimal".to_string());
+        let spec = make_spec_with_contract(Some(inputs), None);
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("'type'") && err.contains("not a valid Rust identifier"),
+            "expected ContractTypeInvalid for keyword key: {err}"
+        );
+    }
+
+    #[test]
+    fn contract_type_validation_rejects_hyphenated_input_name() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("bad-name".to_string(), "Decimal".to_string());
+        let spec = make_spec_with_contract(Some(inputs), None);
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("'bad-name'") && err.contains("not a valid Rust identifier"),
+            "expected ContractTypeInvalid for hyphenated key: {err}"
+        );
+    }
+
+    // --- cycle detection ---
+
+    #[test]
+    fn test_detect_cycles_no_cycle() {
+        // A → B → C (no cycle)
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let mut b = create_test_spec("b/bar", "{ }");
+        b.spec.deps = vec!["c/baz".to_string()];
+        let c = create_test_spec("c/baz", "{ }");
+        let errors = detect_cycles(&[a, b, c]);
+        assert!(errors.is_empty(), "expected no cycle errors: {:?}", errors);
+    }
+
+    #[test]
+    fn test_detect_cycles_simple_cycle() {
+        // A → B → A
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let mut b = create_test_spec("b/bar", "{ }");
+        b.spec.deps = vec!["a/foo".to_string()];
+        let errors = detect_cycles(&[a, b]);
+        assert_eq!(
+            errors.len(),
+            1,
+            "expected exactly one cycle error: {:?}",
+            errors
+        );
+        match &errors[0] {
+            SpecError::CyclicDep { cycle_path, .. } => {
+                assert_eq!(cycle_path, &["a/foo", "b/bar", "a/foo"]);
+            }
+            other => panic!("expected CyclicDep, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_self_loop() {
+        // A → A
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["a/foo".to_string()];
+        let errors = detect_cycles(&[a]);
+        assert_eq!(
+            errors.len(),
+            1,
+            "expected exactly one cycle error: {:?}",
+            errors
+        );
+        match &errors[0] {
+            SpecError::CyclicDep { cycle_path, .. } => {
+                assert_eq!(cycle_path, &["a/foo", "a/foo"]);
+            }
+            other => panic!("expected CyclicDep, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_longer_cycle() {
+        // A → B → C → A
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let mut b = create_test_spec("b/bar", "{ }");
+        b.spec.deps = vec!["c/baz".to_string()];
+        let mut c = create_test_spec("c/baz", "{ }");
+        c.spec.deps = vec!["a/foo".to_string()];
+        let errors = detect_cycles(&[a, b, c]);
+        assert_eq!(
+            errors.len(),
+            1,
+            "expected exactly one cycle error: {:?}",
+            errors
+        );
+        match &errors[0] {
+            SpecError::CyclicDep { cycle_path, .. } => {
+                assert_eq!(cycle_path, &["a/foo", "b/bar", "c/baz", "a/foo"]);
+            }
+            other => panic!("expected CyclicDep, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_missing_dep_skipped() {
+        // A deps B but B is not in the set — no cycle, just a missing dep
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let errors = detect_cycles(&[a]);
+        assert!(
+            errors.is_empty(),
+            "expected no cycle errors for missing dep: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_detect_cycles_multiple_cycles() {
+        // (A → B → A) and (C → D → C)
+        let mut a = create_test_spec("a/foo", "{ }");
+        a.spec.deps = vec!["b/bar".to_string()];
+        let mut b = create_test_spec("b/bar", "{ }");
+        b.spec.deps = vec!["a/foo".to_string()];
+        let mut c = create_test_spec("c/baz", "{ }");
+        c.spec.deps = vec!["d/qux".to_string()];
+        let mut d = create_test_spec("d/qux", "{ }");
+        d.spec.deps = vec!["c/baz".to_string()];
+        let errors = detect_cycles(&[a, b, c, d]);
+        assert_eq!(errors.len(), 2, "expected two cycle errors: {:?}", errors);
+        for err in &errors {
+            assert!(
+                matches!(err, SpecError::CyclicDep { .. }),
+                "expected CyclicDep, got {:?}",
+                err
+            );
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_error_message_format() {
+        let mut a = create_test_spec("money/round", "{ }");
+        a.spec.deps = vec!["currency/convert".to_string()];
+        let mut b = create_test_spec("currency/convert", "{ }");
+        b.spec.deps = vec!["money/round".to_string()];
+        let errors = detect_cycles(&[a, b]);
+        assert_eq!(errors.len(), 1);
+        assert!(
+            errors[0].to_string().contains("cycle detected"),
+            "{}",
+            errors[0]
+        );
+        assert!(
+            errors[0].to_string().contains("money/round"),
+            "{}",
+            errors[0]
+        );
+        assert!(
+            errors[0].to_string().contains("currency/convert"),
+            "{}",
+            errors[0]
+        );
+    }
+
+    // --- check_spec_versions ---
+
+    #[test]
+    fn check_spec_versions_warns_on_missing() {
+        let spec = create_test_spec("pricing/apply_discount", "{ }");
+        assert!(spec.spec.spec_version.is_none());
+        let warnings = check_spec_versions(&[spec]);
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].to_string().contains("spec_version not set"),
+            "{}",
+            warnings[0]
+        );
+    }
+
+    #[test]
+    fn check_spec_versions_no_warning_when_set() {
+        let mut spec = create_test_spec("pricing/apply_discount", "{ }");
+        spec.spec.spec_version = Some("0.3.0".to_string());
+        let warnings = check_spec_versions(&[spec]);
+        assert!(warnings.is_empty(), "expected no warnings: {:?}", warnings);
+    }
+
+    #[test]
+    fn check_spec_versions_partial_warning() {
+        let spec_with = {
+            let mut s = create_test_spec("pricing/apply_discount", "{ }");
+            s.spec.spec_version = Some("0.3.0".to_string());
+            s
+        };
+        let spec_without = create_test_spec("money/round", "{ }");
+        let warnings = check_spec_versions(&[spec_with, spec_without]);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].to_string().contains("money/round"));
+    }
+
+    #[test]
+    fn spec_version_round_trips_through_serde() {
+        let yaml = r#"
+id: pricing/apply_discount
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#;
+        let spec: crate::types::SpecStruct = serde_yaml_bw::from_str(yaml).unwrap();
+        assert_eq!(spec.spec_version, Some("0.3.0".to_string()));
+    }
+
+    #[test]
+    fn spec_version_absent_round_trips_as_none() {
+        let yaml = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#;
+        let spec: crate::types::SpecStruct = serde_yaml_bw::from_str(yaml).unwrap();
+        assert!(spec.spec_version.is_none());
     }
 }

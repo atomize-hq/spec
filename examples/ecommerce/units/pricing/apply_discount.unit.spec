@@ -1,5 +1,6 @@
 id: pricing/apply_discount
 kind: function
+spec_version: "0.3.0"
 intent:
   why: Apply a discount to a subtotal while keeping the result nonnegative.
 contract:
@@ -16,7 +17,7 @@ imports:
   - rust_decimal::Decimal
 body:
   rust: |
-    pub fn apply_discount(subtotal: Decimal, rate: Decimal) -> Decimal {
+    {
         let discounted = subtotal - subtotal * rate;
         round(discounted.max(Decimal::ZERO))
     }

@@ -1,5 +1,6 @@
 id: pricing/calculate_total
 kind: function
+spec_version: "0.3.0"
 intent:
   why: Combine discount and tax so a checkout flow can produce the final price.
 contract:
@@ -17,7 +18,7 @@ imports:
   - rust_decimal::Decimal
 body:
   rust: |
-    pub fn calculate_total(subtotal: Decimal, discount_rate: Decimal, tax_rate: Decimal) -> Decimal {
+    {
         let discounted = apply_discount(subtotal, discount_rate);
         apply_tax(discounted, tax_rate)
     }

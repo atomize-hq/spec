@@ -6,10 +6,11 @@ use spec_core::generator::{
 };
 use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
+use spec_core::passport::{build_passport, ensure_gitignore_entry, rfc3339_now, write_passport};
 use spec_core::types::{LoadedSpec, ResolvedSpec};
 use spec_core::validator::{
-    ValidationOptions, validate_deps_exist_with_options, validate_full_with_options,
-    validate_no_duplicate_ids,
+    ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
+    validate_full_with_options, validate_no_duplicate_ids,
 };
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
@@ -138,9 +139,9 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
     }
 
     let mut resolved_specs = Vec::new();
-    for spec in specs {
+    for spec in &specs {
         resolved_specs.push(
-            normalize_spec(spec.spec)
+            normalize_spec(spec.spec.clone())
                 .with_context(|| format!("Failed to normalize {}", spec.source.file_path))?,
         );
     }
@@ -191,6 +192,22 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
 
     clean_output_dir(&output_base, &generated_rs_rel_paths)
         .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
+
+    // Passport phase: only reached after all generation succeeds (atomicity guarantee).
+    let generated_at = rfc3339_now();
+    for spec in &specs {
+        let passport = build_passport(spec, &generated_at);
+        let source_path = Path::new(&spec.source.file_path);
+        write_passport(&passport, source_path)
+            .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
+    }
+    let gitignore_root = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    ensure_gitignore_entry(gitignore_root)
+        .with_context(|| "Failed to update .gitignore for passport files")?;
 
     println!(
         "Generated {} file{}",
@@ -346,6 +363,10 @@ fn finish_validation(
         push_warning(&mut warnings, warning);
     }
 
+    for warning in check_spec_versions(specs) {
+        push_warning(&mut warnings, warning);
+    }
+
     (errors, warnings)
 }
 
@@ -380,15 +401,13 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::RustKeyword { path, .. }
         | spec_core::SpecError::DepCollision { path, .. }
         | spec_core::SpecError::MissingDep { path, .. }
+        | spec_core::SpecError::CyclicDep { path, .. }
         | spec_core::SpecError::UseStatementInBody { path }
-        | spec_core::SpecError::BodyRustParseFailed { path, .. }
-        | spec_core::SpecError::BodyRustMustBeSingleFn { path, .. }
-        | spec_core::SpecError::BodyRustSingleItemNotFn { path }
-        | spec_core::SpecError::BodyRustFnNameMismatch { path, .. }
-        | spec_core::SpecError::BodyRustMethodRejected { path }
-        | spec_core::SpecError::ContractInputParamMismatch { path, .. }
+        | spec_core::SpecError::BodyRustMustBeBlock { path, .. }
+        | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }
         | spec_core::SpecError::LocalTestExpectNotExpr { path, .. }
         | spec_core::SpecError::DuplicateLocalTestId { path, .. }
+        | spec_core::SpecError::ContractTypeInvalid { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
         | spec_core::SpecError::MissingMarker { path } => path.clone(),
         spec_core::SpecError::DuplicateId { file1, file2, .. } => format!("{file1} | {file2}"),
@@ -402,7 +421,8 @@ fn error_key(err: &spec_core::SpecError) -> String {
 fn warning_key(warning: &spec_core::SpecWarning) -> String {
     match warning {
         spec_core::SpecWarning::MissingDep { path, .. }
-        | spec_core::SpecWarning::SymlinkCycleSkipped { path } => path.clone(),
+        | spec_core::SpecWarning::SymlinkCycleSkipped { path }
+        | spec_core::SpecWarning::MissingSpecVersion { path } => path.clone(),
     }
 }
 
@@ -459,7 +479,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> Decimal {
+    {
         round(Decimal::ZERO)
     }
 "#,

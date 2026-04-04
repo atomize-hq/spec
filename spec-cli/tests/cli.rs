@@ -98,7 +98,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() {}
+    { }
 "#,
     )
     .unwrap();
@@ -125,7 +125,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() {}
+    { }
 "#,
     );
 
@@ -143,6 +143,48 @@ body:
     assert!(output_dir.join("pricing/apply_discount.rs").exists());
     assert!(output_dir.join("pricing/mod.rs").exists());
     assert!(output_dir.join("mod.rs").exists());
+}
+
+#[test]
+fn generate_single_file_path_writes_gitignore_to_parent_dir() {
+    // Regression: passing a .unit.spec file path to `spec generate` must
+    // write .gitignore to the file's parent directory, not try to open
+    // "foo.unit.spec/.gitignore" (which would be ENOTDIR).
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    let spec_path = units_dir.join("pricing/apply_discount.unit.spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&[
+        "generate",
+        spec_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        output.status.success(),
+        "expected success for single-file generate, got:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    // .gitignore must land next to the spec file, not as a child of it
+    assert!(
+        units_dir.join("pricing/.gitignore").exists(),
+        "expected .gitignore in units/pricing/, not an ENOTDIR"
+    );
 }
 
 #[test]
@@ -191,7 +233,7 @@ deps:
   - money/round
 body:
   rust: |
-    pub fn apply_discount() {}
+    { }
 "#,
     );
 
@@ -200,7 +242,7 @@ body:
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stdout.contains("1 unit valid with 1 warning"), "{stdout}");
+    assert!(stdout.contains("1 unit valid with 2 warnings"), "{stdout}");
     assert!(
         stderr.contains("⚠ dep 'money/round' not found in this spec set"),
         "{stderr}"
@@ -299,9 +341,13 @@ id: money/round
 kind: function
 intent:
   why: Round monetary values.
+contract:
+  inputs:
+    value: Decimal
+  returns: Decimal
 body:
   rust: |
-    pub fn round(value: Decimal) -> Decimal {
+    {
         value
     }
 "#,
@@ -314,11 +360,13 @@ id: pricing/apply_discount
 kind: function
 intent:
   why: Apply a discount.
+contract:
+  returns: Decimal
 deps:
   - money/round
 body:
   rust: |
-    pub fn apply_discount() -> Decimal {
+    {
         round(Decimal::ZERO)
     }
 "#,
@@ -355,7 +403,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: happy_path
     expect: "apply_discount()"
@@ -389,7 +437,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: happy_path
     expect: "apply_discount()"
@@ -569,7 +617,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: unsafe_attempt
     expect: "{ let ok = apply_discount(); ok }"
@@ -601,7 +649,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: unsafe_attempt
     expect: "{ let ok = apply_discount(); ok }"
@@ -633,7 +681,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() -> bool { true }
+    { true }
 local_tests:
   - id: unsafe_attempt
     expect: "{ let ok = apply_discount(); ok }"
@@ -669,7 +717,10 @@ body:
     assert!(!output.status.success());
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("found 1 item (not a function)"), "{stderr}");
+    assert!(
+        stderr.contains("body.rust must be a Rust block expression"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -690,7 +741,7 @@ intent:
   why: Apply a discount.
 body:
   rust: |
-    pub fn apply_discount() {}
+    { }
 "#,
     );
 
@@ -726,7 +777,7 @@ intent:
   why: Round money.
 body:
   rust: |
-    pub fn round() {}
+    { }
 "#,
     );
     write_spec(
@@ -741,7 +792,7 @@ deps:
   - money/round
 body:
   rust: |
-    pub fn apply_discount() {
+    {
         round();
     }
 "#,
@@ -766,6 +817,59 @@ body:
     let second_snapshot = snapshot_tree(&output_dir);
 
     assert_eq!(first_snapshot, second_snapshot);
+}
+
+#[test]
+fn validate_detects_cycle_in_dep_graph() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "a/foo.unit.spec",
+        r#"
+id: a/foo
+kind: function
+intent:
+  why: First unit in cycle.
+deps:
+  - b/bar
+body:
+  rust: |
+    { }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "b/bar.unit.spec",
+        r#"
+id: b/bar
+kind: function
+intent:
+  why: Second unit in cycle.
+deps:
+  - a/foo
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cycle detected"),
+        "expected cycle error in stderr, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("a/foo"),
+        "expected a/foo in cycle path: {stderr}"
+    );
+    assert!(
+        stderr.contains("b/bar"),
+        "expected b/bar in cycle path: {stderr}"
+    );
 }
 
 fn cargo_available() -> bool {
@@ -890,9 +994,11 @@ id: pricing/bad_type
 kind: function
 intent:
   why: Force a compile error so we can assert cargo stderr is surfaced.
+contract:
+  returns: NotAType
 body:
   rust: |
-    pub fn bad_type() -> NotAType {
+    {
         todo!()
     }
 "#,

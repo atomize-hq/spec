@@ -38,9 +38,73 @@ Each unit is a YAML document with these required fields:
 - `id`: hierarchical unit id like `pricing/apply_discount`
 - `kind`: currently `function`
 - `intent.why`: why the unit exists
-- `body.rust`: verbatim Rust function body
+- `body.rust`: the function body as a Rust block expression (`{ ... }`, braces included)
 
 Optional fields include `contract`, `deps`, `imports`, `local_tests`, and `links`.
+
+`spec` generates the complete `pub fn` signature from `contract.inputs` and `contract.returns`. A minimal unit with a contract looks like:
+
+```yaml
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let taxed = subtotal + subtotal * rate;
+        round(taxed)
+    }
+```
+
+This generates:
+
+```rust
+pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
+    let taxed = subtotal + subtotal * rate;
+    round(taxed)
+}
+```
+
+## Migrating from 0.2.x
+
+In 0.2.x, `body.rust` contained the full function declaration:
+
+```yaml
+# 0.2.x format (no longer valid)
+body:
+  rust: |
+    pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
+        let taxed = subtotal + subtotal * rate;
+        round(taxed)
+    }
+```
+
+In 0.3.0, strip the `pub fn name(params) -> ReturnType` line and keep only the body block. Move the parameter names and types into `contract.inputs`, and the return type into `contract.returns`:
+
+```yaml
+# 0.3.0 format
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+body:
+  rust: |
+    {
+        let taxed = subtotal + subtotal * rate;
+        round(taxed)
+    }
+```
+
+Running `spec validate` on a 0.2.x unit will emit a clear migration error pointing to the file.
 
 ## Example
 

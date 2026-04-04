@@ -9,6 +9,7 @@
 pub mod generator;
 pub mod loader;
 pub mod normalizer;
+pub mod passport;
 pub mod types;
 pub mod validator;
 
@@ -60,36 +61,26 @@ pub enum SpecError {
     #[error("❌ dep '{dep}' not found in this spec set")]
     MissingDep { dep: String, path: String },
 
+    #[error("❌ cycle detected: {}", cycle_path.join(" → "))]
+    CyclicDep {
+        cycle_path: Vec<String>,
+        path: String,
+    },
+
     #[error(
         "body.rust must not contain use statements; declare external imports via imports (and internal unit deps via deps) at {path}"
     )]
     UseStatementInBody { path: String },
 
-    #[error("body.rust failed to parse: {message} at {path}")]
-    BodyRustParseFailed { message: String, path: String },
-
-    #[error("body.rust must contain exactly one top-level function; found {found} items at {path}")]
-    BodyRustMustBeSingleFn { found: usize, path: String },
+    #[error("body.rust failed to parse as a block: {message} at {path}")]
+    BodyRustMustBeBlock { message: String, path: String },
 
     #[error(
-        "body.rust must contain exactly one top-level function; found 1 item (not a function) at {path}"
+        "body.rust looks like a full function declaration — spec 0.3.0 expects only the function body block. \
+         Remove the `pub fn name(params) -> ReturnType` line and keep only the `{{ ... }}` block. \
+         See migration guide. at {path}"
     )]
-    BodyRustSingleItemNotFn { path: String },
-
-    #[error("body.rust fn name mismatch: expected '{expected}', found '{found}' at {path}")]
-    BodyRustFnNameMismatch {
-        expected: String,
-        found: String,
-        path: String,
-    },
-
-    #[error("body.rust must be a free function (no self parameter) at {path}")]
-    BodyRustMethodRejected { path: String },
-
-    #[error(
-        "contract.inputs contains '{input}' but body.rust has no parameter with that name at {path}"
-    )]
-    ContractInputParamMismatch { input: String, path: String },
+    BodyRustLooksLikeFnDeclaration { path: String },
 
     #[error("local_tests[{id}].expect is not a valid Rust expression: {message} at {path}")]
     LocalTestExpectNotExpr {
@@ -100,6 +91,14 @@ pub enum SpecError {
 
     #[error("duplicate local_tests id '{id}' at {path}")]
     DuplicateLocalTestId { id: String, path: String },
+
+    #[error("contract.{field} has invalid Rust type '{type_str}': {message} at {path}")]
+    ContractTypeInvalid {
+        field: String,
+        type_str: String,
+        message: String,
+        path: String,
+    },
 
     #[error("Traversal error: {message} at {path}")]
     Traversal { message: String, path: String },
@@ -130,6 +129,11 @@ pub enum SpecWarning {
 
     #[error("⚠ skipped symlink cycle at '{path}'; subtree was skipped")]
     SymlinkCycleSkipped { path: String },
+
+    #[error(
+        "⚠ spec_version not set in {path} — add `spec_version: \"0.3.0\"` to suppress this warning"
+    )]
+    MissingSpecVersion { path: String },
 }
 
 #[cfg(test)]

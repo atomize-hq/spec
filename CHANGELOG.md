@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0 - 2026-04-04
+
+### Added
+
+- **Passport generation** — `spec generate` now emits a `.spec.passport.json` file co-located with each `.unit.spec` source file. Passports are static knowledge artifacts containing the unit's id, intent, contract, deps, local tests, and generation timestamp. They are written atomically only after all Rust code generation succeeds, and gitignored automatically via an appended `**/*.spec.passport.json` entry.
+- **`spec_version` field** — Units can now declare `spec_version: "0.3.0"` to indicate which format version they were authored for. `spec validate` and `spec generate` emit a `MissingSpecVersion` warning for units without this field, guiding authors to add it.
+- **Cycle detection** — `spec validate` and `spec generate` now detect circular dependencies in the dep graph using DFS. A cycle like `A → B → A` is reported as `❌ cycle detected: A → B → A` and blocks generation.
+- **Contract type validation** — `contract.inputs` values and `contract.returns` are now validated as syntactically valid Rust types using `syn`. Invalid types (e.g., `Vec<`) are caught at `spec validate` time. Parameter names (keys) are validated as valid Rust identifiers, catching reserved keywords like `type` or hyphenated names like `bad-name` before they reach codegen.
+- **CUE trigger conditions** — DECISIONS.md now documents the explicit conditions under which CUE adoption is warranted, preventing indefinite deferral.
+
+### Changed
+
+- **`body.rust` is now a block expression** — The function body is now specified as a Rust block expression (`{ ... }`, braces included) rather than a complete function declaration. `spec generate` synthesizes the `pub fn` signature from `contract.inputs` and `contract.returns`. This eliminates fn name drift and makes contracts the authoritative source of the function's interface.
+- **`contract.inputs` uses ordered map** — Input parameters now preserve YAML declaration order in generated code, using `IndexMap` instead of `HashMap`.
+- **`spec generate <file.unit.spec>`** — Single-file generate now correctly writes `.gitignore` to the spec file's parent directory instead of failing with a path error.
+
+### Breaking
+
+- **`body.rust` format** — Units authored for 0.2.x with a full `pub fn` declaration will fail `spec validate` with a migration error. Strip the `pub fn name(params) -> ReturnType` line, keep only the `{ ... }` block, and move parameters into `contract.inputs` and return type into `contract.returns`. See the migration guide in README.md.
+
 ## 0.2.2 - 2026-04-03
 
 ### Added

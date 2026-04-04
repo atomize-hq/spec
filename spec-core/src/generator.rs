@@ -16,6 +16,30 @@ use walkdir::WalkDir;
 
 const GENERATED_MARKER: &str = ".spec-generated";
 
+fn build_fn_signature(spec: &ResolvedSpec) -> String {
+    let params = spec
+        .contract
+        .as_ref()
+        .and_then(|c| c.inputs.as_ref())
+        .map(|inputs| {
+            inputs
+                .iter()
+                .map(|(name, ty)| format!("{name}: {ty}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    let return_type = spec
+        .contract
+        .as_ref()
+        .and_then(|c| c.returns.as_ref())
+        .map(|r| r.as_str())
+        .unwrap_or("()");
+
+    format!("pub fn {}({}) -> {}", spec.fn_name, params, return_type)
+}
+
 pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
     let (import_statements, dep_statements) = build_use_groups(spec)?;
     let mut output = String::new();
@@ -38,7 +62,9 @@ pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
         output.push('\n');
     }
 
-    output.push_str(spec.body_rust.trim_end_matches('\n'));
+    let signature = build_fn_signature(spec);
+    let block = spec.body_rust.trim();
+    output.push_str(&format!("{signature} {block}"));
     output.push('\n');
 
     if !spec.local_tests.is_empty() {
@@ -408,6 +434,7 @@ mod tests {
             },
             local_tests: vec![],
             links: None,
+            spec_version: None,
         })
     }
 
@@ -419,13 +446,13 @@ mod tests {
     fn test_generate_code_prepends_use_statements() {
         let spec = test_spec(
             vec!["money/round", "utils/math/normalize"],
-            "pub fn apply_discount() -> Decimal {\n    round(Decimal::ONE)\n}",
+            "{\n    round(Decimal::ONE)\n}",
         );
 
         let code = generate_code(&spec).unwrap();
         assert_eq!(
             code,
-            "use crate::money::round::round;\nuse crate::utils::math::normalize::normalize;\n\npub fn apply_discount() -> Decimal {\n    round(Decimal::ONE)\n}\n"
+            "use crate::money::round::round;\nuse crate::utils::math::normalize::normalize;\n\npub fn apply_discount() -> () {\n    round(Decimal::ONE)\n}\n"
         );
     }
 
@@ -433,7 +460,7 @@ mod tests {
     fn test_generate_code_rejects_dep_collision() {
         let spec = test_spec(
             vec!["money/round", "utils/round"],
-            "pub fn apply_discount() -> Decimal {\n    round(Decimal::ONE)\n}",
+            "{\n    round(Decimal::ONE)\n}",
         );
 
         let err = generate_code(&spec).unwrap_err();
@@ -445,13 +472,13 @@ mod tests {
         let spec = test_spec_with(
             vec![],
             vec!["rust_decimal::Decimal"],
-            "pub fn apply_discount() -> Decimal {\n    Decimal::ZERO\n}",
+            "{\n    Decimal::ZERO\n}",
         );
 
         let code = generate_code(&spec).unwrap();
         assert_eq!(
             code,
-            "use rust_decimal::Decimal;\n\npub fn apply_discount() -> Decimal {\n    Decimal::ZERO\n}\n"
+            "use rust_decimal::Decimal;\n\npub fn apply_discount() -> () {\n    Decimal::ZERO\n}\n"
         );
     }
 
@@ -460,7 +487,7 @@ mod tests {
         let spec = test_spec_with(
             vec!["money/round"],
             vec![],
-            "pub fn apply_discount() -> Decimal {\n    round(Decimal::ZERO)\n}",
+            "{\n    round(Decimal::ZERO)\n}",
         );
 
         let code = generate_code(&spec).unwrap();
@@ -472,13 +499,13 @@ mod tests {
         let spec = test_spec_with(
             vec!["money/round"],
             vec!["rust_decimal::Decimal"],
-            "pub fn apply_discount() -> Decimal {\n    round(Decimal::ZERO)\n}",
+            "{\n    round(Decimal::ZERO)\n}",
         );
 
         let code = generate_code(&spec).unwrap();
         assert_eq!(
             code,
-            "use rust_decimal::Decimal;\n\nuse crate::money::round::round;\n\npub fn apply_discount() -> Decimal {\n    round(Decimal::ZERO)\n}\n"
+            "use rust_decimal::Decimal;\n\nuse crate::money::round::round;\n\npub fn apply_discount() -> () {\n    round(Decimal::ZERO)\n}\n"
         );
     }
 
@@ -521,7 +548,7 @@ mod tests {
         let mut spec = test_spec_with(
             vec![],
             vec!["rust_decimal::Decimal"],
-            "pub fn apply_discount() -> Decimal {\n    Decimal::ZERO\n}",
+            "{\n    Decimal::ZERO\n}",
         );
         spec.local_tests = vec![LocalTest {
             id: "happy_path".to_string(),
@@ -537,7 +564,7 @@ mod tests {
 
     #[test]
     fn generate_no_local_tests_produces_no_test_block() {
-        let spec = test_spec_with(vec![], vec![], "pub fn apply_discount() {}");
+        let spec = test_spec_with(vec![], vec![], "{ }");
         let code = generate_code(&spec).unwrap();
         assert!(!code.contains("#[cfg(test)]"));
         assert!(!code.contains("mod tests {"));

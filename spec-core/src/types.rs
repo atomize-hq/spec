@@ -4,8 +4,8 @@
 //! - SpecStruct: Raw parsed form from YAML (mirrors schema)
 //! - ResolvedSpec: Normalized internal representation (IR) used by the generator
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Raw parsed form from YAML (mirrors schema structure)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -24,6 +24,8 @@ pub struct SpecStruct {
     pub local_tests: Vec<LocalTest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub links: Option<Links>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_version: Option<String>,
 }
 
 /// Required intent block explaining why this unit exists
@@ -42,7 +44,7 @@ pub struct Body {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Contract {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub inputs: Option<HashMap<String, String>>,
+    pub inputs: Option<IndexMap<String, String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub returns: Option<String>,
     #[serde(default)]
@@ -84,6 +86,8 @@ pub struct ResolvedSpec {
     pub local_tests: Vec<LocalTest>,
     /// Links to molecule tests (stored, not used in M1)
     pub links: Option<Links>,
+    /// spec_version from the source unit (e.g., "0.3.0")
+    pub spec_version: Option<String>,
 }
 
 /// Source information for loaded specs (file path tracking)
@@ -125,6 +129,7 @@ impl ResolvedSpec {
             contract: spec.contract,
             local_tests: spec.local_tests,
             links: spec.links,
+            spec_version: spec.spec_version,
         }
     }
 
@@ -200,10 +205,11 @@ mod tests {
             deps: vec![],
             imports: vec![],
             body: Body {
-                rust: "pub fn apply_discount() {}".to_string(),
+                rust: "{ }".to_string(),
             },
             local_tests: vec![],
             links: None,
+            spec_version: None,
         };
 
         let resolved = ResolvedSpec::from_spec(spec);
@@ -224,10 +230,11 @@ mod tests {
             deps: vec![],
             imports: vec![],
             body: Body {
-                rust: "pub fn round() {}".to_string(),
+                rust: "{ }".to_string(),
             },
             local_tests: vec![],
             links: None,
+            spec_version: None,
         };
 
         let resolved = ResolvedSpec::from_spec(spec);

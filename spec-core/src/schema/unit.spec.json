@@ -64,7 +64,8 @@
       "properties": {
         "rust": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "A Rust block expression (syn::Block) starting with `{`. spec generates the complete fn signature from contract.inputs and contract.returns."
         }
       }
     },
@@ -96,6 +97,11 @@
           "items": { "type": "string" }
         }
       }
+    },
+    "spec_version": {
+      "type": "string",
+      "description": "The spec format version this unit was authored for. Use full semver: \"0.3.0\".",
+      "examples": ["0.3.0"]
     }
   }
 }

@@ -34,14 +34,13 @@
   - `--no-strict` flag deferred to M3
 
 - [ ] CUE validation (candidate 0.3+; JSON Schema for 0.1/0.2 — see DECISIONS.md)
-- [ ] Evidence collection and passports
+- [x] **Evidence collection and passports** — Completed v0.3.0 (2026-04-04). `spec generate` emits `.spec.passport.json` per unit, gitignored automatically. Passport contains id, intent, contract, deps, local_tests, generated_at. (passport.rs)
 - [ ] Graph resolution
 
-- [ ] Contract-to-signature enforcement
-- [ ] **Contract-to-signature enforcement (full)** — D3 in M2 covered fn name + arg names (partial). Full type validation (param types, return type, arity, async, generics) deferred to M3.
-- [ ] **Cycle detection in normalizer** — Requires full graph resolution (all units loaded). In M1, deps are trusted strings and partial runs don't have visibility into the full graph. Implement alongside graph resolution in M2. CEO review finding.
-- [ ] **Validate contract.inputs type names** — In M1, contract.inputs values are unvalidated strings. In M2, validate that type names are valid Rust types (Decimal, String, u64, etc.) or warn on unrecognized types. CEO review finding.
-- [ ] **Add `spec_version` field and schema migration strategy** — When adding new fields or unit kinds in 0.2, need a way to distinguish schema versions and handle backward/forward compatibility. Codex outside-voice finding.
+- [x] **Contract-to-signature enforcement (full)** — Completed v0.3.0 (2026-04-04). D3 inverted: `body.rust` is now a block, `spec generate` synthesizes fn signature from `contract.inputs`/`contract.returns`. `validate_contract_input_types` validates parameter names as Rust identifiers and type strings as valid Rust types. (validator.rs, generator.rs)
+- [x] **Cycle detection in normalizer** — Completed v0.3.0 (2026-04-04). `detect_cycles` DFS detects cycles across the full loaded spec set. `validate_deps_exist_with_options` runs cycle detection after missing-dep checks. (validator.rs)
+- [x] **Validate contract.inputs type names** — Completed v0.3.0 (2026-04-04). `validate_contract_input_types` validates both parameter names (as `syn::Ident`) and type strings (as `syn::Type`). (validator.rs)
+- [x] **Add `spec_version` field and schema migration strategy** — Completed v0.3.0 (2026-04-04). `spec_version` optional field added to schema and types. `check_spec_versions` emits `MissingSpecVersion` warning. Migration guide in README.md. (types.rs, validator.rs, README.md)
 - [x] **Atomic writes for code generation** — Completed in D1 (v0.2.0). tempfile::Builder + rename into place (POSIX atomic per-file). Temp in same dir to avoid EXDEV cross-fs errors.
 
 ### Deferred to M3
@@ -65,9 +64,9 @@
 #### M3 Prerequisites (Design Spikes, Before Build)
 - [ ] **Define ICP: solo engineer vs. team coordination tool** — Changes M3 priority order completely. One paragraph, before M3 scoping.
 - [ ] **Force binary decision: commit generated output vs ephemeral** — Current hybrid (gitignored but required to compile) is unstable for real adopters. Decide and document in DECISIONS.md.
-- [ ] **Approach C design spike: invert D3** — Instead of validating body.rust fn name, generate fn signature from `contract.inputs` and treat `body.rust` as the function body expression. Eliminates fn name drift entirely. 2-hour design spike before M3 D3 expansion.
+- [x] **Approach C design spike: invert D3** — Completed v0.3.0 (2026-04-04). D3 inversion shipped: `body.rust` is now a block, fn signature generated from `contract.inputs`. (validator.rs, generator.rs)
 - [ ] **Cross-library dep schema design spike** — Sketch `deps: [money/round@1.2]` or `@org/shared/money/round` schema before M3 build. 2 hours. Prevents breaking schema change.
-- [ ] **Define CUE trigger condition explicitly** — Current DECISIONS.md says "CUE when we need cross-file constraints." Specify the exact constraint that triggers the switch (e.g., "when we need dep-exists validation across spec libraries"). Prevents indefinite deferral.
+- [x] **Define CUE trigger condition explicitly** — Completed v0.3.0 (2026-04-04). DECISIONS.md documents explicit trigger conditions for CUE adoption. (DECISIONS.md)
 
 #### Low-Priority Fixes
 - [x] **Fix `generate` file count message** — Completed v0.2.2 (2026-04-03). `resolved_specs.len() + namespaces.len()` used so mod.rs files are included in the count. (commands.rs)
@@ -81,3 +80,7 @@
   - Build matrix: linux-x86_64-musl, linux-aarch64-musl, macos-x86_64, macos-aarch64
   - Uses `cross` crate for Linux targets, native rustup for macOS
   - Idempotent release creation with `gh release view` check
+
+## M4 Backlog
+
+- [ ] **Pipeline wrap: `spec build` / `spec test` config lever** — spec generates, user runs cargo (default). Add workspace config flag and/or CLI flag to enable spec-wrapped cargo execution: `spec build` = validate + generate + cargo build; `spec test` = spec build + cargo test. Default: off. Target: M4.
