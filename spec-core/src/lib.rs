@@ -85,6 +85,14 @@ pub enum SpecError {
     #[error("duplicate local_tests id '{id}' at {path}")]
     DuplicateLocalTestId { id: String, path: String },
 
+    #[error("contract.{field} has invalid Rust type '{type_str}': {message} at {path}")]
+    ContractTypeInvalid {
+        field: String,
+        type_str: String,
+        message: String,
+        path: String,
+    },
+
     #[error("Traversal error: {message} at {path}")]
     Traversal { message: String, path: String },
 

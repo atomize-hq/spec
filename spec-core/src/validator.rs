@@ -139,6 +139,7 @@ pub fn validate_semantic_with_options(
 
     validate_body_rust_block(spec)?;
     validate_local_test_expects(spec, options)?;
+    validate_contract_input_types(spec)?;
 
     Ok(())
 }
@@ -211,6 +212,35 @@ fn validate_body_rust_block(spec: &LoadedSpec) -> Result<()> {
             }
         }
     })?;
+    Ok(())
+}
+
+fn validate_contract_input_types(spec: &LoadedSpec) -> Result<()> {
+    let path = &spec.source.file_path;
+    if let Some(contract) = &spec.spec.contract {
+        if let Some(inputs) = &contract.inputs {
+            for (name, type_str) in inputs {
+                syn::parse_str::<syn::Type>(type_str).map_err(|err| {
+                    SpecError::ContractTypeInvalid {
+                        field: format!("inputs.{name}"),
+                        type_str: type_str.clone(),
+                        message: err.to_string(),
+                        path: path.clone(),
+                    }
+                })?;
+            }
+        }
+        if let Some(returns) = &contract.returns {
+            syn::parse_str::<syn::Type>(returns).map_err(|err| {
+                SpecError::ContractTypeInvalid {
+                    field: "returns".to_string(),
+                    type_str: returns.clone(),
+                    message: err.to_string(),
+                    path: path.clone(),
+                }
+            })?;
+        }
+    }
     Ok(())
 }
 
@@ -1089,6 +1119,74 @@ local_tests:
         assert!(
             err.contains("block, unsafe, closure"),
             "expected unsafe block in cast to be rejected: {err}"
+        );
+    }
+
+    // --- contract.inputs type validation ---
+
+    fn make_spec_with_contract(inputs: Option<indexmap::IndexMap<String, String>>, returns: Option<&str>) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: "test/pricing/apply_tax.unit.spec".to_string(),
+                id: "pricing/apply_tax".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_tax".to_string(),
+                kind: "function".to_string(),
+                intent: Intent { why: "Apply tax.".to_string() },
+                contract: Some(Contract {
+                    inputs,
+                    returns: returns.map(String::from),
+                    invariants: vec![],
+                }),
+                deps: vec![],
+                imports: vec![],
+                body: Body { rust: "{ () }".to_string() },
+                local_tests: vec![],
+                links: None,
+            },
+        }
+    }
+
+    #[test]
+    fn contract_type_validation_passes_for_valid_types() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("subtotal".to_string(), "Decimal".to_string());
+        inputs.insert("rate".to_string(), "Decimal".to_string());
+        let spec = make_spec_with_contract(Some(inputs), Some("Decimal"));
+        assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn contract_type_validation_passes_with_no_contract() {
+        let spec = create_test_spec("money/round", "{ () }");
+        assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn contract_type_validation_rejects_invalid_input_type() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("amount".to_string(), "Strinng".to_string());
+        // "Strinng" is a valid identifier so syn parses it fine as a Type::Path.
+        // Use something syntactically invalid to verify the error path:
+        inputs.insert("rate".to_string(), "Vec<".to_string());
+        let spec = make_spec_with_contract(Some(inputs), Some("Decimal"));
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("contract.inputs.rate") && err.contains("invalid Rust type"),
+            "expected ContractTypeInvalid for inputs.rate: {err}"
+        );
+    }
+
+    #[test]
+    fn contract_type_validation_rejects_invalid_return_type() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("subtotal".to_string(), "Decimal".to_string());
+        let spec = make_spec_with_contract(Some(inputs), Some("Vec<"));
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("contract.returns") && err.contains("invalid Rust type"),
+            "expected ContractTypeInvalid for returns: {err}"
         );
     }
 }
