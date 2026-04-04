@@ -138,9 +138,9 @@ pub enum SpecWarning {
     SymlinkCycleSkipped { path: String },
 
     #[error(
-        "⚠ spec_version not set in {path} — add `spec_version: \"0.3.0\"` to suppress this warning"
+        "⚠ spec_version not set in {path} — add `spec_version: \"{version}\"` to suppress this warning"
     )]
-    MissingSpecVersion { path: String },
+    MissingSpecVersion { path: String, version: &'static str },
 }
 
 #[cfg(test)]

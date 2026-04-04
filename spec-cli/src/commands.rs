@@ -423,7 +423,7 @@ fn warning_key(warning: &spec_core::SpecWarning) -> String {
     match warning {
         spec_core::SpecWarning::MissingDep { path, .. }
         | spec_core::SpecWarning::SymlinkCycleSkipped { path }
-        | spec_core::SpecWarning::MissingSpecVersion { path } => path.clone(),
+        | spec_core::SpecWarning::MissingSpecVersion { path, .. } => path.clone(),
     }
 }
 

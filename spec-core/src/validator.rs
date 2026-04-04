@@ -296,6 +296,7 @@ pub fn check_spec_versions(specs: &[LoadedSpec]) -> Vec<SpecWarning> {
         .filter(|s| s.spec.spec_version.is_none())
         .map(|s| SpecWarning::MissingSpecVersion {
             path: s.source.file_path.clone(),
+            version: env!("CARGO_PKG_VERSION"),
         })
         .collect()
 }

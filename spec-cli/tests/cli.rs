@@ -1066,9 +1066,11 @@ body:
         stderr.contains("spec_version not set"),
         "expected spec_version warning in stderr, got: {stderr}"
     );
+    // The warning includes the current binary version as a suggestion.
     assert!(
-        stderr.contains("0.3.0"),
-        "expected suggested version in warning, got: {stderr}"
+        stderr.contains(env!("CARGO_PKG_VERSION")),
+        "expected current version ({}) in warning, got: {stderr}",
+        env!("CARGO_PKG_VERSION")
     );
 }
 
