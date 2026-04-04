@@ -220,6 +220,14 @@ fn validate_contract_input_types(spec: &LoadedSpec) -> Result<()> {
     if let Some(contract) = &spec.spec.contract {
         if let Some(inputs) = &contract.inputs {
             for (name, type_str) in inputs {
+                syn::parse_str::<syn::Ident>(name).map_err(|_| {
+                    SpecError::ContractTypeInvalid {
+                        field: format!("inputs key '{name}'"),
+                        type_str: name.clone(),
+                        message: format!("'{name}' is not a valid Rust identifier"),
+                        path: path.clone(),
+                    }
+                })?;
                 syn::parse_str::<syn::Type>(type_str).map_err(|err| {
                     SpecError::ContractTypeInvalid {
                         field: format!("inputs.{name}"),
@@ -1299,6 +1307,30 @@ local_tests:
         assert!(
             err.contains("contract.returns") && err.contains("invalid Rust type"),
             "expected ContractTypeInvalid for returns: {err}"
+        );
+    }
+
+    #[test]
+    fn contract_type_validation_rejects_keyword_input_name() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("type".to_string(), "Decimal".to_string());
+        let spec = make_spec_with_contract(Some(inputs), None);
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("'type'") && err.contains("not a valid Rust identifier"),
+            "expected ContractTypeInvalid for keyword key: {err}"
+        );
+    }
+
+    #[test]
+    fn contract_type_validation_rejects_hyphenated_input_name() {
+        let mut inputs = indexmap::IndexMap::new();
+        inputs.insert("bad-name".to_string(), "Decimal".to_string());
+        let spec = make_spec_with_contract(Some(inputs), None);
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("'bad-name'") && err.contains("not a valid Rust identifier"),
+            "expected ContractTypeInvalid for hyphenated key: {err}"
         );
     }
 

@@ -201,7 +201,12 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
         write_passport(&passport, source_path)
             .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
     }
-    ensure_gitignore_entry(path)
+    let gitignore_root = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    ensure_gitignore_entry(gitignore_root)
         .with_context(|| "Failed to update .gitignore for passport files")?;
 
     println!(

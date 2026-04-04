@@ -146,6 +146,48 @@ body:
 }
 
 #[test]
+fn generate_single_file_path_writes_gitignore_to_parent_dir() {
+    // Regression: passing a .unit.spec file path to `spec generate` must
+    // write .gitignore to the file's parent directory, not try to open
+    // "foo.unit.spec/.gitignore" (which would be ENOTDIR).
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    let spec_path = units_dir.join("pricing/apply_discount.unit.spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&[
+        "generate",
+        spec_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        output.status.success(),
+        "expected success for single-file generate, got:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    // .gitignore must land next to the spec file, not as a child of it
+    assert!(
+        units_dir.join("pricing/.gitignore").exists(),
+        "expected .gitignore in units/pricing/, not an ENOTDIR"
+    );
+}
+
+#[test]
 fn validate_strict_errors_on_missing_dep() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
