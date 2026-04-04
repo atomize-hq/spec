@@ -73,7 +73,8 @@
 - [x] **Fix non-fn body error message** — Completed v0.2.2 (2026-04-03). `BodyRustSingleItemNotFn` error variant emits "found 1 item (not a function)". (validator.rs)
 - [x] **Handle symlink cycles in collect_specs gracefully** — Completed v0.2.2 (2026-04-03). `load_directory_report` emits `SpecWarning::SymlinkCycleSkipped` and continues. CLI surfaces warnings in stderr and success message. (loader.rs, commands.rs)
 - [ ] **Add fn visibility validation** — `spec validate` should warn or error when body.rust function is not `pub`/`pub(crate)` and the unit is used as a dep. Currently caught only by cargo check in D4. (validator.rs)
-- [ ] **Add generate idempotency integration test** — Two identical `spec generate` runs on same spec set produce byte-for-byte identical output. Guards against mtime changes on marker file. (cli.rs integration tests)
+- [x] **Add generate idempotency integration test** — Completed v0.3.0 (2026-04-04, feat/m3). `generate_is_idempotent_for_same_spec_tree` added in cli.rs.
+- [ ] **Omit `-> ()` for void functions** — `build_fn_signature` emits `-> ()` when `contract.returns` is absent, but idiomatic Rust omits the return annotation for void functions. Low priority cosmetic fix. Found by /qa on feat/m3 (2026-04-04). (generator.rs:38)
 
 ### Release Engineering
 - [x] **Cross-compilation setup for CI** — Completed v0.2.0 (2026-04-02)

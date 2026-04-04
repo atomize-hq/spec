@@ -220,11 +220,12 @@ fn validate_contract_input_types(spec: &LoadedSpec) -> Result<()> {
     if let Some(contract) = &spec.spec.contract {
         if let Some(inputs) = &contract.inputs {
             for (name, type_str) in inputs {
-                syn::parse_str::<syn::Ident>(name).map_err(|_| SpecError::ContractTypeInvalid {
-                    field: format!("inputs key '{name}'"),
-                    type_str: name.clone(),
-                    message: format!("'{name}' is not a valid Rust identifier"),
-                    path: path.clone(),
+                syn::parse_str::<syn::Ident>(name).map_err(|_| {
+                    SpecError::ContractInputNameInvalid {
+                        name: name.clone(),
+                        message: "use a snake_case identifier (e.g. my_param)".to_string(),
+                        path: path.clone(),
+                    }
                 })?;
                 syn::parse_str::<syn::Type>(type_str).map_err(|err| {
                     SpecError::ContractTypeInvalid {
@@ -295,6 +296,7 @@ pub fn check_spec_versions(specs: &[LoadedSpec]) -> Vec<SpecWarning> {
         .filter(|s| s.spec.spec_version.is_none())
         .map(|s| SpecWarning::MissingSpecVersion {
             path: s.source.file_path.clone(),
+            version: env!("CARGO_PKG_VERSION"),
         })
         .collect()
 }
@@ -1316,7 +1318,7 @@ local_tests:
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
             err.contains("'type'") && err.contains("not a valid Rust identifier"),
-            "expected ContractTypeInvalid for keyword key: {err}"
+            "expected ContractInputNameInvalid for keyword key: {err}"
         );
     }
 
@@ -1327,8 +1329,8 @@ local_tests:
         let spec = make_spec_with_contract(Some(inputs), None);
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
-            err.contains("'bad-name'") && err.contains("not a valid Rust identifier"),
-            "expected ContractTypeInvalid for hyphenated key: {err}"
+            err.contains("'bad-name'") && err.contains("snake_case"),
+            "expected ContractInputNameInvalid for hyphenated key: {err}"
         );
     }
 

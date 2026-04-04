@@ -1027,3 +1027,162 @@ body:
         "expected E0412 (cannot find type) in cargo stderr, got: {stderr}"
     );
 }
+
+// Regression: ISSUE-QA-002 — no CLI integration test for spec_version warning.
+// validate and generate must both surface a ⚠ warning when spec_version is absent
+// and still exit 0.
+// Found by /qa on 2026-04-04.
+#[test]
+fn validate_warns_on_missing_spec_version() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "validate should exit 0 when spec_version is missing"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("1 unit valid with 1 warning"),
+        "expected warning count in stdout, got: {stdout}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("spec_version not set"),
+        "expected spec_version warning in stderr, got: {stderr}"
+    );
+    // The warning includes the current binary version as a suggestion.
+    assert!(
+        stderr.contains(env!("CARGO_PKG_VERSION")),
+        "expected current version ({}) in warning, got: {stderr}",
+        env!("CARGO_PKG_VERSION")
+    );
+}
+
+// Regression: ISSUE-QA-003 — no CLI integration test for passport file creation.
+// spec generate must write a .spec.passport.json file co-located with each .unit.spec
+// and add **/*.spec.passport.json to .gitignore in the spec root.
+// Found by /qa on 2026-04-04.
+#[test]
+fn generate_emits_passport_json_and_updates_gitignore() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+spec_version: "0.3.0"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount to a subtotal.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+body:
+  rust: |
+    {
+        subtotal * (Decimal::ONE - rate)
+    }
+"#,
+    );
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(output.status.success());
+
+    // Passport is co-located with the source file, not in the output dir.
+    let passport_path = units_dir.join("pricing/apply_discount.spec.passport.json");
+    assert!(
+        passport_path.exists(),
+        "expected passport file at {}, not found",
+        passport_path.display()
+    );
+
+    let passport_content = fs::read_to_string(&passport_path).unwrap();
+    assert!(
+        passport_content.contains("\"id\": \"pricing/apply_discount\""),
+        "expected id in passport: {passport_content}"
+    );
+    assert!(
+        passport_content.contains("\"spec_version\": \"0.3.0\""),
+        "expected spec_version in passport: {passport_content}"
+    );
+    assert!(
+        passport_content.contains("\"returns\": \"Decimal\""),
+        "expected returns in passport: {passport_content}"
+    );
+
+    // .gitignore entry written to the spec root (units/), not per-namespace.
+    let gitignore_path = units_dir.join(".gitignore");
+    assert!(
+        gitignore_path.exists(),
+        "expected .gitignore in units/, not found"
+    );
+    let gitignore = fs::read_to_string(&gitignore_path).unwrap();
+    assert!(
+        gitignore.contains("**/*.spec.passport.json"),
+        "expected passport glob in .gitignore: {gitignore}"
+    );
+}
+
+// Regression: ISSUE-QA-004 — no CLI integration test for contract input identifier validation.
+// spec validate must reject parameter names that are not valid Rust identifiers with a clear error.
+// Found by /qa on 2026-04-04.
+#[test]
+fn validate_rejects_invalid_contract_input_identifier() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/bad_param.unit.spec",
+        r#"
+spec_version: "0.3.0"
+id: pricing/bad_param
+kind: function
+intent:
+  why: Test that hyphenated parameter names are rejected.
+contract:
+  inputs:
+    my-param: Decimal
+  returns: Decimal
+body:
+  rust: |
+    { Decimal::ZERO }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for invalid contract input identifier"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("'my-param'") && stderr.contains("not a valid Rust identifier"),
+        "expected identifier error in stderr, got: {stderr}"
+    );
+}

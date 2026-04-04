@@ -100,6 +100,13 @@ pub enum SpecError {
         path: String,
     },
 
+    #[error("contract.inputs key '{name}' is not a valid Rust identifier: {message} at {path}")]
+    ContractInputNameInvalid {
+        name: String,
+        message: String,
+        path: String,
+    },
+
     #[error("Traversal error: {message} at {path}")]
     Traversal { message: String, path: String },
 
@@ -131,9 +138,9 @@ pub enum SpecWarning {
     SymlinkCycleSkipped { path: String },
 
     #[error(
-        "⚠ spec_version not set in {path} — add `spec_version: \"0.3.0\"` to suppress this warning"
+        "⚠ spec_version not set in {path} — add `spec_version: \"{version}\"` to suppress this warning"
     )]
-    MissingSpecVersion { path: String },
+    MissingSpecVersion { path: String, version: &'static str },
 }
 
 #[cfg(test)]
