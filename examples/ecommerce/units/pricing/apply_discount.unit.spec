@@ -1,5 +1,6 @@
 id: pricing/apply_discount
 kind: function
+spec_version: "0.3.0"
 intent:
   why: Apply a discount to a subtotal while keeping the result nonnegative.
 contract:

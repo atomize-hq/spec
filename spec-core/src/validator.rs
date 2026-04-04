@@ -280,6 +280,19 @@ pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Vec<SpecError> {
     errors
 }
 
+/// Emit a warning for each spec that lacks a spec_version field.
+///
+/// Called after per-spec semantic validation; warnings are non-fatal.
+pub fn check_spec_versions(specs: &[LoadedSpec]) -> Vec<SpecWarning> {
+    specs
+        .iter()
+        .filter(|s| s.spec.spec_version.is_none())
+        .map(|s| SpecWarning::MissingSpecVersion {
+            path: s.source.file_path.clone(),
+        })
+        .collect()
+}
+
 /// Validate that all internal deps referenced by loaded specs exist in the same spec set.
 ///
 /// For M2, deps are always strict: any missing dep is an error.
@@ -434,6 +447,7 @@ mod tests {
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
             },
         }
     }
@@ -653,6 +667,7 @@ local_tests:
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -700,6 +715,7 @@ local_tests:
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
             },
         };
         let result = validate_semantic(&spec);
@@ -804,6 +820,7 @@ local_tests:
                     expect: "true); } } mod evil { fn steal() {}".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
         let err = validate_semantic(&spec).unwrap_err().to_string();
@@ -838,6 +855,7 @@ local_tests:
                     expect: "apply_discount() == true".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
         assert!(validate_semantic(&spec).is_ok());
@@ -868,6 +886,7 @@ local_tests:
                     expect: "{ let ok = apply_discount(); ok }".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -909,6 +928,7 @@ local_tests:
                     },
                 ],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -944,6 +964,7 @@ local_tests:
                     expect: "{ std::process::exit(1); true }".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
         let err = validate_semantic(&spec).unwrap_err().to_string();
@@ -978,6 +999,7 @@ local_tests:
                     expect: "f(unsafe { true })".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1013,6 +1035,7 @@ local_tests:
                     expect: "true && { false }".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1048,6 +1071,7 @@ local_tests:
                     expect: "foo.bar(unsafe { true })".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1083,6 +1107,7 @@ local_tests:
                     expect: "(unsafe { foo }).field".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1118,6 +1143,7 @@ local_tests:
                     expect: "arr[unsafe { 0 }]".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1153,6 +1179,7 @@ local_tests:
                     expect: "!(unsafe { true })".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1188,6 +1215,7 @@ local_tests:
                     expect: "(unsafe { 0 }) as u64".to_string(),
                 }],
                 links: None,
+                spec_version: None,
             },
         };
 
@@ -1227,6 +1255,7 @@ local_tests:
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
             },
         }
     }
@@ -1411,5 +1440,72 @@ local_tests:
             "{}",
             errors[0]
         );
+    }
+
+    // --- check_spec_versions ---
+
+    #[test]
+    fn check_spec_versions_warns_on_missing() {
+        let spec = create_test_spec("pricing/apply_discount", "{ }");
+        assert!(spec.spec.spec_version.is_none());
+        let warnings = check_spec_versions(&[spec]);
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].to_string().contains("spec_version not set"),
+            "{}",
+            warnings[0]
+        );
+    }
+
+    #[test]
+    fn check_spec_versions_no_warning_when_set() {
+        let mut spec = create_test_spec("pricing/apply_discount", "{ }");
+        spec.spec.spec_version = Some("0.3.0".to_string());
+        let warnings = check_spec_versions(&[spec]);
+        assert!(warnings.is_empty(), "expected no warnings: {:?}", warnings);
+    }
+
+    #[test]
+    fn check_spec_versions_partial_warning() {
+        let spec_with = {
+            let mut s = create_test_spec("pricing/apply_discount", "{ }");
+            s.spec.spec_version = Some("0.3.0".to_string());
+            s
+        };
+        let spec_without = create_test_spec("money/round", "{ }");
+        let warnings = check_spec_versions(&[spec_with, spec_without]);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].to_string().contains("money/round"));
+    }
+
+    #[test]
+    fn spec_version_round_trips_through_serde() {
+        let yaml = r#"
+id: pricing/apply_discount
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#;
+        let spec: crate::types::SpecStruct = serde_yaml_bw::from_str(yaml).unwrap();
+        assert_eq!(spec.spec_version, Some("0.3.0".to_string()));
+    }
+
+    #[test]
+    fn spec_version_absent_round_trips_as_none() {
+        let yaml = r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#;
+        let spec: crate::types::SpecStruct = serde_yaml_bw::from_str(yaml).unwrap();
+        assert!(spec.spec_version.is_none());
     }
 }

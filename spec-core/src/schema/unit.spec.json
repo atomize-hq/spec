@@ -97,6 +97,11 @@
           "items": { "type": "string" }
         }
       }
+    },
+    "spec_version": {
+      "type": "string",
+      "description": "The spec format version this unit was authored for. Use full semver: \"0.3.0\".",
+      "examples": ["0.3.0"]
     }
   }
 }

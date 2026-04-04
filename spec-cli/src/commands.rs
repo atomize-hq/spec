@@ -8,8 +8,8 @@ use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::types::{LoadedSpec, ResolvedSpec};
 use spec_core::validator::{
-    ValidationOptions, validate_deps_exist_with_options, validate_full_with_options,
-    validate_no_duplicate_ids,
+    ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
+    validate_full_with_options, validate_no_duplicate_ids,
 };
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
@@ -346,6 +346,10 @@ fn finish_validation(
         push_warning(&mut warnings, warning);
     }
 
+    for warning in check_spec_versions(specs) {
+        push_warning(&mut warnings, warning);
+    }
+
     (errors, warnings)
 }
 
@@ -400,7 +404,8 @@ fn error_key(err: &spec_core::SpecError) -> String {
 fn warning_key(warning: &spec_core::SpecWarning) -> String {
     match warning {
         spec_core::SpecWarning::MissingDep { path, .. }
-        | spec_core::SpecWarning::SymlinkCycleSkipped { path } => path.clone(),
+        | spec_core::SpecWarning::SymlinkCycleSkipped { path }
+        | spec_core::SpecWarning::MissingSpecVersion { path } => path.clone(),
     }
 }
 

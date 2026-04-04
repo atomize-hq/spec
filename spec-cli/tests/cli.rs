@@ -200,7 +200,7 @@ body:
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stdout.contains("1 unit valid with 1 warning"), "{stdout}");
+    assert!(stdout.contains("1 unit valid with 2 warnings"), "{stdout}");
     assert!(
         stderr.contains("⚠ dep 'money/round' not found in this spec set"),
         "{stderr}"

@@ -434,6 +434,7 @@ mod tests {
             },
             local_tests: vec![],
             links: None,
+            spec_version: None,
         })
     }
 

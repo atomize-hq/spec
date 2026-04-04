@@ -128,6 +128,11 @@ pub enum SpecWarning {
 
     #[error("⚠ skipped symlink cycle at '{path}'; subtree was skipped")]
     SymlinkCycleSkipped { path: String },
+
+    #[error(
+        "⚠ spec_version not set in {path} — add `spec_version: \"0.3.0\"` to suppress this warning"
+    )]
+    MissingSpecVersion { path: String },
 }
 
 #[cfg(test)]

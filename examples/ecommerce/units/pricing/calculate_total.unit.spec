@@ -1,5 +1,6 @@
 id: pricing/calculate_total
 kind: function
+spec_version: "0.3.0"
 intent:
   why: Combine discount and tax so a checkout flow can produce the final price.
 contract:

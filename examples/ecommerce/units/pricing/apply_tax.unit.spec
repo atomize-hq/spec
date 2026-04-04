@@ -1,5 +1,6 @@
 id: pricing/apply_tax
 kind: function
+spec_version: "0.3.0"
 intent:
   why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
 contract:

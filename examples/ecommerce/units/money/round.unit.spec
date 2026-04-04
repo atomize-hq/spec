@@ -1,5 +1,6 @@
 id: money/round
 kind: function
+spec_version: "0.3.0"
 intent:
   why: Round monetary values (placeholder for compilation proof).
 contract:
