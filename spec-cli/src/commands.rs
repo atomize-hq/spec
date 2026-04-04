@@ -6,6 +6,7 @@ use spec_core::generator::{
 };
 use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
+use spec_core::passport::{build_passport, ensure_gitignore_entry, rfc3339_now, write_passport};
 use spec_core::types::{LoadedSpec, ResolvedSpec};
 use spec_core::validator::{
     ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
@@ -138,9 +139,9 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
     }
 
     let mut resolved_specs = Vec::new();
-    for spec in specs {
+    for spec in &specs {
         resolved_specs.push(
-            normalize_spec(spec.spec)
+            normalize_spec(spec.spec.clone())
                 .with_context(|| format!("Failed to normalize {}", spec.source.file_path))?,
         );
     }
@@ -191,6 +192,17 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
 
     clean_output_dir(&output_base, &generated_rs_rel_paths)
         .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
+
+    // Passport phase: only reached after all generation succeeds (atomicity guarantee).
+    let generated_at = rfc3339_now();
+    for spec in &specs {
+        let passport = build_passport(spec, &generated_at);
+        let source_path = Path::new(&spec.source.file_path);
+        write_passport(&passport, source_path)
+            .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
+    }
+    ensure_gitignore_entry(path)
+        .with_context(|| "Failed to update .gitignore for passport files")?;
 
     println!(
         "Generated {} file{}",

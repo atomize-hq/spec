@@ -81,3 +81,7 @@
   - Build matrix: linux-x86_64-musl, linux-aarch64-musl, macos-x86_64, macos-aarch64
   - Uses `cross` crate for Linux targets, native rustup for macOS
   - Idempotent release creation with `gh release view` check
+
+## M4 Backlog
+
+- [ ] **Pipeline wrap: `spec build` / `spec test` config lever** — spec generates, user runs cargo (default). Add workspace config flag and/or CLI flag to enable spec-wrapped cargo execution: `spec build` = validate + generate + cargo build; `spec test` = spec build + cargo test. Default: off. Target: M4.
