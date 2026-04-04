@@ -24,3 +24,13 @@ for 0.3+** when cross-file constraints and policy composition justify the comple
 - We introduce **policy composition** / layered rule sets that benefit from a richer constraint language.
 - We want schema-level defaults/closures to become a central authoring UX feature (and JSON Schema becomes painful).
 
+---
+
+## 2026-04-03 — CUE Trigger Condition
+
+**Decision:** CUE remains deferred. Implement CUE when one of these triggers is met:
+(a) Cross-library dep validation requires user-configurable policy that JSON Schema cannot express, OR
+(b) Teams need team-authored constraint overlays on top of core schema.
+
+Until then: JSON Schema + semantic validation in Rust is the implementation path. Do not design against CUE until a trigger condition is explicitly met.
+
