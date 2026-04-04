@@ -59,7 +59,7 @@
 
 #### Architecture (Medium Priority)
 - [ ] **Defense-in-depth: validate local_tests[].expect at the sink** — `generate_code` (generator.rs:19) is a public library function that embeds `local_test.expect` verbatim with no validation. The CLI path always validates first via the loader, but a direct library API caller constructing a `ResolvedSpec` manually bypasses all expression validation. Consider: (a) validate at the `generate_code` sink, (b) use a newtype wrapper for validated expect strings, or (c) emit the generated assert!() from the validated syn::Expr AST instead of the raw string. Codex outside-voice finding, fix/change-is_safe_expect_expr review.
-- [ ] **Add recursion depth cap to `is_safe_expect_expr`** — The recursive AST walk has no depth limit. Deeply nested input like `((((x))))` or `!!!!!x` (100+ levels) could stack overflow during validation. Add a `depth: usize` parameter and return `false` above a threshold (~128). Low-urgency since `.unit.spec` files are trusted input, but the fix is trivial. Codex adversarial finding, fix/change-is_safe_expect_expr review.
+- [x] **Add recursion depth cap to `is_safe_expect_expr`** — Completed v0.3.0+ (2026-04-04). `MAX_EXPECT_EXPR_DEPTH=128` added; `is_safe_expect_expr_depth` returns false at threshold. Regression test added. Fixed by /qa on main (2026-04-04). (validator.rs)
 
 #### M3 Prerequisites (Design Spikes, Before Build)
 - [ ] **Define ICP: solo engineer vs. team coordination tool** — Changes M3 priority order completely. One paragraph, before M3 scoping.
@@ -72,9 +72,9 @@
 - [x] **Fix `generate` file count message** — Completed v0.2.2 (2026-04-03). `resolved_specs.len() + namespaces.len()` used so mod.rs files are included in the count. (commands.rs)
 - [x] **Fix non-fn body error message** — Completed v0.2.2 (2026-04-03). `BodyRustSingleItemNotFn` error variant emits "found 1 item (not a function)". (validator.rs)
 - [x] **Handle symlink cycles in collect_specs gracefully** — Completed v0.2.2 (2026-04-03). `load_directory_report` emits `SpecWarning::SymlinkCycleSkipped` and continues. CLI surfaces warnings in stderr and success message. (loader.rs, commands.rs)
-- [ ] **Add fn visibility validation** — `spec validate` should warn or error when body.rust function is not `pub`/`pub(crate)` and the unit is used as a dep. Currently caught only by cargo check in D4. (validator.rs)
+- [x] **Add fn visibility validation** — Obsolete as of D3 inversion (v0.3.0). `generate_code` always emits `pub fn`; there is no user-authored fn signature to validate. Closed by /qa on main (2026-04-04).
 - [x] **Add generate idempotency integration test** — Completed v0.3.0 (2026-04-04, feat/m3). `generate_is_idempotent_for_same_spec_tree` added in cli.rs.
-- [ ] **Omit `-> ()` for void functions** — `build_fn_signature` emits `-> ()` when `contract.returns` is absent, but idiomatic Rust omits the return annotation for void functions. Low priority cosmetic fix. Found by /qa on feat/m3 (2026-04-04). (generator.rs:38)
+- [x] **Omit `-> ()` for void functions** — Completed v0.3.0+ (2026-04-04). `build_fn_signature` now omits the return annotation when `contract.returns` is absent. Fixed by /qa on main (2026-04-04). (generator.rs)
 
 ### Release Engineering
 - [x] **Cross-compilation setup for CI** — Completed v0.2.0 (2026-04-02)
