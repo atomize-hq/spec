@@ -100,6 +100,9 @@ pub enum SpecError {
         path: String,
     },
 
+    #[error("contract.inputs key '{name}' is not a valid Rust identifier: {message} at {path}")]
+    ContractInputNameInvalid { name: String, message: String, path: String },
+
     #[error("Traversal error: {message} at {path}")]
     Traversal { message: String, path: String },
 
