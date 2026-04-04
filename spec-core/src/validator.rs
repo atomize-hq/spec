@@ -181,20 +181,38 @@ fn validate_local_test_expects(spec: &LoadedSpec, options: &ValidationOptions) -
 }
 
 fn is_safe_expect_expr(expr: &syn::Expr) -> bool {
+    is_safe_expect_expr_depth(expr, 0)
+}
+
+const MAX_EXPECT_EXPR_DEPTH: usize = 128;
+
+fn is_safe_expect_expr_depth(expr: &syn::Expr, depth: usize) -> bool {
+    if depth >= MAX_EXPECT_EXPR_DEPTH {
+        return false;
+    }
+    let next = depth + 1;
     match expr {
-        syn::Expr::Binary(b) => is_safe_expect_expr(&b.left) && is_safe_expect_expr(&b.right),
+        syn::Expr::Binary(b) => {
+            is_safe_expect_expr_depth(&b.left, next)
+                && is_safe_expect_expr_depth(&b.right, next)
+        }
         syn::Expr::Call(c) => {
-            is_safe_expect_expr(&c.func) && c.args.iter().all(is_safe_expect_expr)
+            is_safe_expect_expr_depth(&c.func, next)
+                && c.args.iter().all(|a| is_safe_expect_expr_depth(a, next))
         }
         syn::Expr::MethodCall(m) => {
-            is_safe_expect_expr(&m.receiver) && m.args.iter().all(is_safe_expect_expr)
+            is_safe_expect_expr_depth(&m.receiver, next)
+                && m.args.iter().all(|a| is_safe_expect_expr_depth(a, next))
         }
-        syn::Expr::Field(f) => is_safe_expect_expr(&f.base),
-        syn::Expr::Index(i) => is_safe_expect_expr(&i.expr) && is_safe_expect_expr(&i.index),
-        syn::Expr::Unary(u) => is_safe_expect_expr(&u.expr),
+        syn::Expr::Field(f) => is_safe_expect_expr_depth(&f.base, next),
+        syn::Expr::Index(i) => {
+            is_safe_expect_expr_depth(&i.expr, next)
+                && is_safe_expect_expr_depth(&i.index, next)
+        }
+        syn::Expr::Unary(u) => is_safe_expect_expr_depth(&u.expr, next),
         syn::Expr::Path(_) | syn::Expr::Lit(_) => true,
-        syn::Expr::Paren(inner) => is_safe_expect_expr(&inner.expr),
-        syn::Expr::Cast(c) => is_safe_expect_expr(&c.expr),
+        syn::Expr::Paren(inner) => is_safe_expect_expr_depth(&inner.expr, next),
+        syn::Expr::Cast(c) => is_safe_expect_expr_depth(&c.expr, next),
         // Block, Unsafe, Closure, If, Match, Loop, ForLoop, While, Async, etc. → rejected
         _ => false,
     }
@@ -1539,5 +1557,26 @@ body:
 "#;
         let spec: crate::types::SpecStruct = serde_yaml_bw::from_str(yaml).unwrap();
         assert!(spec.spec_version.is_none());
+    }
+
+    #[test]
+    fn expect_deeply_nested_parens_are_rejected_at_depth_cap() {
+        // Regression: ISSUE-002 — is_safe_expect_expr had no depth cap; deeply nested
+        // expressions could stack-overflow during validation.
+        // Found by /qa on 2026-04-04
+        // Report: .gstack/qa-reports/qa-report-spec-2026-04-04.md
+        //
+        // Construct 200 levels of Paren(Paren(...(Lit))) directly — parsing a
+        // 200-deep string would stack-overflow in syn's recursive parser itself.
+        let leaf: syn::Expr = syn::parse_str("true").expect("parse leaf");
+        let nested = (0..200).fold(leaf, |inner, _| {
+            syn::Expr::Paren(syn::ExprParen {
+                attrs: vec![],
+                paren_token: Default::default(),
+                expr: Box::new(inner),
+            })
+        });
+        // is_safe_expect_expr must return false (not panic) for depth > MAX_EXPECT_EXPR_DEPTH
+        assert!(!is_safe_expect_expr(&nested));
     }
 }
