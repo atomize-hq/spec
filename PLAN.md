@@ -1,327 +1,389 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m2-autoplan-restore-20260403-052737.md -->
-# Release 0.2: Harden the Loop
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260404-165359.md -->
+# Release 0.4: Pipeline, Evidence & Exports
 
-**Generated**: 2026-04-02  
-**Status**: Implemented (PR #1 MERGED — 2026-04-02)  
-**Preceded by**: `.implemented/PLAN-M1-release-0.1.md`  
-**Third-party review**: Static review of M1 workspace and specs, 2026-04-02
+**Generated**: 2026-04-04  
+**Status**: Planning  
+**Preceded by**: `.implemented/PLAN-M2-release-0.2.md` (also see: gstack M3 design doc)  
+**Roadmap reference**: Release 0.4 — Broader Verification & Exports  
 
 ---
 
 ## Thesis
 
-M1 proved the spine: `load → validate → normalize → generate`. The workflow is real.
+M3 proved the semantic unit can be authored, validated, and lowered into correct, compilable Rust.
+`body.rust` is a block. The fn signature comes from the contract. Passports capture what was
+declared. The pipeline is honest.
 
-M2 does not broaden the surface. It makes the loop safe, compilable, and semantically
-anchored. The bar for calling M2 done:
+M4 closes the feedback loop. spec wraps the build and test commands, collects runtime evidence,
+and exports machine-readable artifacts. When M4 ships, every unit will have a passport that
+distinguishes what was declared from what was observed to pass.
 
-- Generating into an unsafe path is rejected before any writes
-- Deleting or renaming a unit leaves no stale generated Rust behind
-- A mismatched `id` and `body.rust` function name fails validation
-- Unresolved internal deps are errors by default (escape hatch `--no-strict` deferred to M3)
-- External/native imports have an explicit modeled path
-- The ecommerce example generates, wires into the crate module tree, and passes `cargo check`
-- At least one `local_tests` path executes for real (not just compiles)
+The bar for calling M4 done:
+
+- `spec build` runs validate → generate → cargo build and surfaces cargo errors through spec
+- `spec test` runs spec build → cargo test and updates passports with observed test results
+- Passports v2 distinguish "declared" (local_tests) from "observed" (test results from last run)
+- `spec export` emits a JSON bundle: units, passports, dependency graph
+- Generated Rust files include `///` doc comments from each unit's `intent` field
+- Carryover debt from M2/M3 retrospective is cleared
+- Cross-library dep schema is decided (design record, no code)
 
 ---
 
 ## Deliverables (sequenced)
 
-### D1 — Output ownership hardening
+### D1 — Pipeline wrap (`spec build` / `spec test`)
 
-The highest-priority issue from the third-party review. Right now `ensure_output_marker()`
-writes a `.spec-generated` marker before safety checks in `clean_output_dir()` run, and
-cleaning is scoped only to the current run's module paths — so stale files from
-deleted/renamed units accumulate.
+M3 design doc explicitly defers this: "spec generates, user runs cargo. Pipeline wrap is a
+config/flag lever for M4." The carryover is now unblocked — passports v1 exist, all M3 work
+is done.
 
-**Model:** owned subtree. The output directory is fully spec-owned. Per-file atomicity:
-write each `.rs` to a temp path in the same directory (same filesystem), then `fs::rename`
-into place (POSIX atomic per-file). Temp files must be in the same directory as the output
-file to avoid EXDEV cross-filesystem rename failures. Use `tempfile::Builder::new()` with
-`.prefix(".spec-tmp-").suffix(".rs").tempfile_in(output_dir)`.
-After all files are written, scan the output tree for `.rs` files not in the generated
-set and delete them. Then remove any empty directories in the output tree (bottom-up walk).
-This is the orphan cleanup that replaces the module-scoped clean. "Fully spec-owned" means
-no stale files AND no stale empty directories remain.
+**Design:**
 
-**Bootstrap safety guard (Eng Review addition):** `ensure_output_marker` must validate
-the output path BEFORE creating anything. Reject if:
-1. The path is outside the project root (same check already in `clean_output_dir`)
-2. The path is non-empty AND has no `.spec-generated` marker (would claim a live directory)
+```
+spec build <path> [--output <dir>]
+  = validate_full(path)
+  → generate_command(path, output)
+  → cargo build (in the consuming crate that includes generated output)
+  → exit 0 if all pass, exit 1 on first failure
 
-This closes the `spec generate --output src` footgun.
+spec test <path> [--output <dir>]
+  = spec build <path>
+  → cargo test (in the same consuming crate)
+  → collect test results
+  → update passports with runtime evidence  ← ALWAYS, regardless of cargo exit code
+  → propagate cargo's exit code (0 = all pass, 1 = any failure)
+```
+
+**CRITICAL: spec test evidence write order.** Evidence is written to passports BEFORE spec test exits. If cargo test returns non-zero (test failures), spec test still writes fail evidence to the relevant passports, then exits 1. The write-then-exit order ensures evidence reflects the actual run, including failures. Failing to write on non-zero exit would silently leave passports with stale "last-passing" evidence.
+
+**Cargo execution:**
+- Uses existing `cargo_available()` guard pattern (from cli.rs integration tests)
+- Discovers cargo project root from `--crate-root <path>` flag or config `[pipeline] crate_root`
+- Default if unconfigured: the nearest ancestor of `<path>` that contains a `Cargo.toml`
+- Isolated `CARGO_TARGET_DIR`: use `spec.toml [pipeline] cargo_target_dir` or system tempdir
+- Captures cargo stdout/stderr and forwards to spec's stdout/stderr
+- On cargo failure: print cargo's output verbatim, exit 1 with `❌ cargo build failed`
+- **Path scope guard**: `spec build` and `spec test` require a directory path. If a single-file path is given, exit 1 with `❌ spec build requires a directory path — pass the units directory, not a single file`
+- **Progress signal**: emit `spec: running cargo build in <crate_root>` to stderr before invoking the subprocess. This makes cargo hang visible (user sees the last spec output). No timeout in M4 — SIGINT propagates to cargo.
+
+**Config (`spec.toml`):**
+```toml
+[pipeline]
+crate_root = "examples/ecommerce"       # optional: default = nearest Cargo.toml ancestor
+cargo_target_dir = "/tmp/spec-target"  # optional: default = $CARGO_TARGET_DIR or tempdir
+```
+
+**Files:**
+- `spec-cli/src/commands.rs`: add `Build` and `Test` variants to `Command` enum
+- `spec-core/src/pipeline.rs`: new module — `run_cargo_build()`, `run_cargo_test()`, `CargoResult`
+- `spec-core/src/lib.rs`: expose `pipeline` module
+- `spec-core/src/config.rs` (or `spec-cli/src/config.rs`): add `[pipeline]` section to `SpecConfig`
 
 Acceptance:
-- `spec generate --output src/` errors before writing anything (non-empty dir, no marker)
-- `spec generate --output /tmp/x` errors (outside project root)
-- Output path is validated before any filesystem write
-- `spec generate` on a spec set that previously had `test/foo` leaves no `test/` behind
-  (orphan cleanup, not module-scoped clean)
-- ISSUE-002 and ISSUE-004 closed as resolved-by-design
-
-Files: `spec-core/src/generator.rs`, `spec-cli/src/commands.rs`
+- `spec build examples/ecommerce/units --output examples/ecommerce/src/generated` validates, generates, and runs `cargo build` on the ecommerce crate
+- `spec test examples/ecommerce/units --output examples/ecommerce/src/generated` also runs `cargo test` and captures results
+- Failing a spec validation before cargo is reached: exit 1, no cargo invoked
+- cargo not in PATH: exit 1 with `❌ cargo not found — install Rust or ensure cargo is on PATH`
+- Non-zero cargo exit: spec exits 1 and forwards cargo's stderr
+- Single-file path given: exit 1 with `❌ spec build requires a directory path — pass the units directory, not a single file`
+- No Cargo.toml ancestor and no `--crate-root`: exit 1 with `❌ could not find crate root — run from inside a Cargo project, or pass --crate-root <path>`
 
 Tests to add:
-- `clean_output_dir_removes_stale_module_from_prior_run` (unit test in generator.rs)
-- `generate_rejects_non_empty_dir_without_marker` (CLI integration test)
-- `generate_rejects_path_outside_project_root` (CLI integration test)
+- `spec_build_validates_and_runs_cargo_build` (CLI integration test)
+- `spec_build_fails_on_validation_error_before_cargo` (CLI integration test)
+- `spec_build_unavailable_cargo_exits_cleanly` (CLI integration test — gate test behind cargo_available())
+- `spec_test_runs_cargo_test` (CLI integration test)
+- `spec_test_forwards_cargo_stderr_on_failure` (CLI integration test)
+- `spec_build_rejects_single_file_path` (CLI integration test)
+- `spec_test_no_local_tests_produces_empty_evidence` (CLI integration test — unit with no local_tests → test_results: [])
 
 ---
 
-### D2 — Dependency/import model split
+### D2 — Runtime evidence in passports (passports v2)
 
-Right now `deps` handles everything: internal spec-to-spec calls AND native types like
-`Decimal`. These are different things. Without the distinction, generated code looks
-readable but isn't fully grounded, and `cargo check` can't pass.
+After `spec test` runs cargo test, update the passport with observed results. Passports become
+the canonical bridge between declared tests and observed passes.
 
-**Decision (locked in Eng Review):** Two separate fields.
-
-```yaml
-deps:
-  - money/round          # internal: becomes use crate::money::round::round;
-
-imports:
-  - rust_decimal::Decimal  # external: becomes use rust_decimal::Decimal;
+**Evidence schema addition (passport.schema.json):**
+```json
+"evidence": {
+  "build_status": "pass",
+  "last_built_at": "2026-04-04T17:00:00Z",
+  "test_results": [
+    { "id": "happy_path", "status": "pass" }
+  ],
+  "observed_at": "2026-04-04T17:00:00Z"
+}
 ```
 
-The `imports` field uses a different schema pattern (allows `::` separator, e.g.
-`rust_decimal::Decimal`, `std::collections::HashMap`). Schema pattern:
-`^[a-zA-Z_][a-zA-Z0-9_]*(::([a-zA-Z_][a-zA-Z0-9_]*))+$` — requires at least one
-`::` segment (rejects bare `Decimal`, accepts `rust_decimal::Decimal`).
+- `evidence` is optional — absent if `spec generate` was used (not `spec test`)
+- `build_status`: `"pass"` | `"fail"` | `"unknown"` (unknown = cargo not available or skipped)
+- `test_results[].status`: `"pass"` | `"fail"` | `"error"`
+- Parse cargo test output (line-by-line `test X ... ok|FAILED` format, `--test-output immediate` mode)
+- Match cargo test names back to local_tests ids by the `test_{id}` naming convention
 
-The `deps` field keeps its existing pattern unchanged. Update `unit.spec.json`,
-`SpecStruct`, `ResolvedSpec` (add `imports: Vec<String>` field), and the generator.
+**Files:**
+- `spec-core/src/passport.rs`: add `PassportEvidence` struct, update `Passport` with `evidence: Option<PassportEvidence>`
+- `spec-cli/src/commands.rs`: in `test_command()`, after cargo test completes, build evidence and write passports
+- `spec-core/src/pipeline.rs`: add `parse_cargo_test_output()` → returns `Vec<TestResult>`
 
-**Generated use statement ordering (locked in CEO review 2026-04-02):** imports first
-(external), then deps (internal). Matches rustfmt convention (external crates before
-`crate::` paths). A blank line separates the two groups when both are present:
+Acceptance:
+- After `spec test`, passport files contain an `evidence` field with build_status and test_results
+- After `spec generate` (not test), passports have no `evidence` field (no regression on static passports)
+- A failing test in ecommerce produces `"status": "fail"` in the matching test_result
+- `spec test` on a clean ecommerce example → all test_results are `"pass"`
+
+Tests to add:
+- `spec_test_writes_evidence_to_passport` (CLI integration test)
+- `spec_generate_passport_has_no_evidence` (unit test in passport.rs — regression)
+- `parse_cargo_test_output_parses_pass_and_fail` (unit test in pipeline.rs)
+- `spec_test_failure_writes_fail_status_to_passport` (CLI integration test)
+
+---
+
+### D3 — JSON export v1 (`spec export`)
+
+Emit a machine-readable bundle from the loaded spec set and any co-located passports.
+Makes spec artifacts consumable by other tools without re-parsing raw source files.
+
+**Command:**
 ```
+spec export <path> [--output <file>]
+```
+Output defaults to stdout (piped to jq, tools). If `--output <file>` is given, writes to file.
+
+**Bundle schema:**
+```json
+{
+  "spec_version": "0.4.0",
+  "exported_at": "2026-04-04T17:00:00Z",
+  "units": [
+    {
+      "id": "pricing/apply_tax",
+      "intent": "...",
+      "contract": { "inputs": [...], "returns": "..." },
+      "deps": [...],
+      "local_tests": [...],
+      "source_file": "..."
+    }
+  ],
+  "passports": [...],
+  "graph": {
+    "edges": [
+      { "from": "pricing/apply_tax", "to": "money/round" }
+    ]
+  }
+}
+```
+
+- Loads passports from disk (co-located `.spec.passport.json`) if they exist
+- Graph is the dependency edge list derived from the loaded spec set
+- If no passports exist (e.g. generate not run yet), `passports` is an empty array
+- `serde_json` is already a dependency
+
+**Files:**
+- `spec-core/src/export.rs`: new module — `ExportBundle`, `build_export_bundle()`, `load_passports_for_specs()`
+- `spec-core/src/lib.rs`: expose `export` module
+- `spec-cli/src/commands.rs`: add `Export` variant to `Command` enum with `export_command()`
+
+Acceptance:
+- `spec export examples/ecommerce/units | jq '.units | length'` returns 4 (ecommerce has 4 units)
+- `spec export examples/ecommerce/units --output bundle.json` writes valid JSON to file
+- Bundle includes graph edges for apply_discount → money/round, apply_tax → money/round, etc.
+- If passports exist: bundle includes them. If not: `passports: []`
+- Invalid spec path: exit 1 with clear error (same pattern as validate/generate)
+- `--output <dir>` (directory given): exit 1 with `❌ --output must be a file path, not a directory`
+- `--output <file>` where parent dir does not exist: exit 1 with `❌ output directory does not exist: <parent>`
+- Empty spec dir (no .unit.spec files): valid JSON with `units: [], passports: [], graph: {edges: []}`
+
+Tests to add:
+- `spec_export_emits_valid_json_bundle` (CLI integration test)
+- `spec_export_includes_graph_edges` (CLI integration test)
+- `spec_export_includes_passports_if_present` (CLI integration test)
+- `build_export_bundle_graph_edges_correct` (unit test in export.rs)
+- `spec_export_output_path_rejects_directory` (CLI integration test)
+- `spec_export_output_parent_dir_missing_exits_cleanly` (CLI integration test)
+- `spec_export_empty_directory_emits_valid_empty_bundle` (CLI integration test)
+
+---
+
+### D4 — Doc comments in generated Rust (`intent` → `///`)
+
+When `spec generate` produces a `.rs` file, prefix the generated `pub fn` with a `///` doc
+comment from the unit's `intent` field. Low effort, immediate value: generated code becomes
+self-documenting.
+
+**Generated output example:**
+
+```rust
 use rust_decimal::Decimal;
 
 use crate::money::round::round;
+
+/// Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
+    let taxed = subtotal + subtotal * rate;
+    round(taxed)
+}
 ```
 
+- No `intent` → no doc comment (no regression for units without intent)
+- Multi-line intent: each line prefixed with `/// `
+- Escaping: `intent` content is not Rust code — no escaping needed, doc comments are plain text
+
+**Files:**
+- `spec-core/src/generator.rs`: update `generate_code()` to prepend `/// {intent}\n` before the fn
+
 Acceptance:
-- `apply_discount.unit.spec` can declare `Decimal` in `imports` without it being treated as an internal unit
-- Generated `use` statements are correct for both kinds
-- Schema updated and validated
-- `imports: [invalid path]` fails schema validation
-- `deps: [money/round]` still generates `use crate::money::round::round;`
+- Generated `.rs` for a unit with `intent` has a `///` doc comment above the function
+- Generated `.rs` for a unit without `intent` has no doc comment (no regression)
+- Multi-line intent produces multi-line `///` comments
+- `cargo doc` on the ecommerce crate succeeds with doc comments present
 
 Tests to add:
-- `imports_field_validates_rust_path` (unit test in validator.rs)
-- `imports_field_generates_correct_use_statement` (unit test in generator.rs)
+- `generate_code_includes_doc_comment_from_intent` (unit test in generator.rs)
+- `generate_code_no_doc_comment_when_intent_absent` (unit test in generator.rs)
+- `generate_code_multiline_intent_produces_multiline_doc_comment` (unit test in generator.rs)
 
 ---
 
-### D3 — Rust body parsing and partial semantic alignment (`syn`)
+### D5 — Carryover debt (M2/M3 retrospective items)
 
-The biggest semantic gap in M1: the spec says `id: pricing/apply_discount` but there
-is no enforcement that `body.rust` contains a function named `apply_discount`. They can
-drift silently.
+Three open items from the autoplan retrospective that belong in M4:
 
-**Scope clarification (CEO review 2026-04-02):** D3 is partial semantic alignment, not
-complete. It validates fn name and parameter names. It does NOT validate parameter types,
-return type, arity, async, generics, or refs/mutability. Those are M3 concerns when
-contract type validation lands. The section header is intentionally scoped: "name and
-arg alignment," not full signature enforcement.
+**D5a — Defense-in-depth: validate `local_tests[].expect` at the `generate_code` sink**
 
-**Scope (expanded in Eng Review to include arg alignment):** Two passes:
+`generate_code` in `spec-core/src/generator.rs` is a public library function. It embeds
+`local_test.expect` verbatim (as `assert!(expr)`) with no validation. A direct API caller
+constructing a `ResolvedSpec` manually bypasses all expression validation.
 
-**Pass 1 — fn name:**
-- Parse `body.rust` as exactly one `ItemFn`
-- Require `fn_name == last id segment`
-- Reject extra sibling items (multiple fns, structs, impls)
+**Decision: approach (c) from the retrospective — emit the assert!() from the validated
+`syn::Expr` AST instead of the raw string.**
 
-**Pass 2 — arg alignment against contract.inputs (M2 scope):**
-- If `contract.inputs` is present, verify that each key in the map appears as a parameter
-  name in the parsed function signature
-- Error on mismatch: `contract.inputs has 'subtotal' but body.rust has 'price'`
+Implementation:
+- Change `local_test.expect` field in `ResolvedSpec` from `String` to `ValidatedExpr` newtype
+- `ValidatedExpr` wraps a `syn::Expr` parsed and validated at the validator stage
+- `generate_code` uses `ValidatedExpr` to emit via `quote::quote!` or `prettyplease::unparse`
+- Add `quote` and `prettyplease` to spec-core Cargo.toml (both are lightweight, no build script)
+- OR: keep expect as String but parse in generate_code and fail if invalid — simpler, less correct
 
-Acceptance:
-- A spec with `id: pricing/apply_discount` and `body.rust: pub fn wrong_name() {}` fails validation with a clear error
-- A spec with two function definitions in `body.rust` fails validation
-- A spec with `contract.inputs: {subtotal: Decimal}` and body `pub fn apply_discount(price: Decimal)` fails validation
-- A spec with `body.rust: pub fn apply_discount(&self, subtotal: Decimal)` fails validation: "body.rust must be a free function (no self parameter)"
-- A spec with `body.rust: #[allow(dead_code)] pub fn apply_discount() {}` passes (attributes on the fn are accepted)
-- All existing ecommerce specs pass
+Simpler alternative: keep String but call `syn::parse_str::<syn::Expr>` inside `generate_code()`,
+return `SpecError::Generator` if invalid. This is one guard, not a newtype refactor.
 
-Crate to add: `syn` (with `full` feature flag) in `[dependencies]` of spec-core (runtime, not dev-dep)
+**CONFIRMED DECISION**: Use the simpler alternative for M4 (inline guard in generate_code). Newtype refactor deferred to M5 when the API surface grows.
+
+**CRITICAL IMPLEMENTATION NOTE**: Do NOT call raw `syn::parse_str::<syn::Expr>` in `generate_code()`. The depth-check helper must be called at this sink too. Raw syn::parse_str overflows its own call stack on deeply nested expressions (200+ levels) — this was already fixed in the validator path but the generate_code sink is a separate call site.
+
+**Boundary decision (Codex tension resolved):** Do NOT make `is_safe_expect_expr_depth()` pub on `validator.rs` — that leaks an internal validator helper into the public API. Instead, move the depth-check function to a new `spec-core/src/syntax.rs` shared module. Both `validator.rs` and `generator.rs` import from `syntax.rs`. This is the correct boundary.
+
+Files: `spec-core/src/generator.rs`, `spec-core/src/syntax.rs` (new shared module), `spec-core/src/validator.rs` (update import), `spec-core/src/lib.rs` (expose syntax module)
 
 Tests to add:
-- `validate_body_fn_name_mismatch` (unit test in validator.rs)
-- `validate_body_multiple_fns_rejected` (unit test in validator.rs)
-- `validate_contract_arg_name_mismatch` (unit test in validator.rs)
+- `generate_code_rejects_unsafe_expect_at_sink` (unit test in generator.rs — direct API call with unsafe expect, no prior validation)
+- `generate_code_rejects_deeply_nested_expect_at_sink` (unit test in generator.rs — 200+ nesting levels, must not panic)
+
+**D5b — Document `pub use generated::*` convention**
+
+Internal deps generate `use crate::X` paths. These only resolve if the consuming crate's root
+re-exports generated modules (e.g. `pub use generated::*;` in `main.rs` or `lib.rs`).
+This requirement is implicit and not documented.
+
+Action: add a `## Consuming Generated Code` section to README.md explaining the convention,
+with a code example showing the `pub use generated::*;` pattern.
+
+Files: `README.md`
+
+**D5c — Close the "commit vs ephemeral" open decision**
+
+This was flagged in TODOS.md since M3 as an open prerequisite. D1 (`spec build`) implicitly
+resolves it — generated output is ephemeral, regenerated on each `spec build` invocation, not
+committed to git. Add a DECISIONS.md entry to close this explicitly.
+
+```markdown
+## Generated Output: Ephemeral by Default (0.4.0 decision record)
+
+`spec build` and `spec test` treat generated output as ephemeral — generated on each run into
+the `--output` directory, consumed by cargo, not committed to git. The output dir is fully
+spec-owned (existing `.spec-generated` marker convention applies).
+
+If you want committed generated output (for diffing in CI, or IDE discoverability), use
+`spec generate` and commit manually. `spec build`/`spec test` are optimized for the ephemeral
+case. A `--no-regen` flag or equivalent "committed mode" is deferred to M5.
+```
+
+Files: `DECISIONS.md`
 
 ---
 
-### D4 — Cargo check proof
+### D6 — Cross-library dep schema design decision
 
-The loop is not honest until we can prove generated output compiles. This deliverable
-makes that explicit and repeatable.
+Cycle detection in M3 is in-tree only. Cross-library dep units (`money/round` from a different
+spec library) are not loaded in the same spec set. This limitation is documented in the M3
+error output. Before M5 (plan-aware workflow), the schema must be decided.
 
-- Add `money/round.unit.spec` to the ecommerce example so `apply_discount` and `apply_tax`
-  resolve to real units
-- Add `imports: [rust_decimal::Decimal]` to all ecommerce specs that use `Decimal` (depends on D2)
-- **Wire generated output into the ecommerce crate** (Eng Review addition):
-  add `mod generated;` to `examples/ecommerce/src/main.rs`. Generate output goes under
-  `examples/ecommerce/src/generated` (NOT `src/generated/spec`) so that `mod generated;`
-  in main.rs resolves directly to `src/generated/mod.rs` (generated by the spec tool).
-  No intermediate hand-written mod.rs is needed. This is the correct output path (fixed
-  in CEO review 2026-04-02: prior refs to `src/generated/spec` were incorrect).
-  This makes generated code live code, not dead code. Without this, `cargo check`
-  validates nothing.
-- Add integration test in `spec-cli/tests/` that:
-  1. Runs `spec generate examples/ecommerce/units --output examples/ecommerce/src/generated`
-  2. Runs `cargo check` against the ecommerce crate with isolated `CARGO_TARGET_DIR`
-     (set to a tempdir to avoid target/ lock contention with the parent workspace)
-  3. After D5 lands: runs `cargo test` against the ecommerce crate with same `CARGO_TARGET_DIR`
-     (picks up generated `#[cfg(test)]` blocks from D5)
-- Run in default test suite (not `#[ignore]`): this is the canonical proof point
+**Design spike** (2 hours, no code):
 
-Acceptance:
-- `cargo test` (spec-cli) runs `cargo check` on generated ecommerce output
-- `cargo test` (spec-cli) runs `cargo test` on ecommerce example
-- The check passes clean (no unresolved imports, no type errors)
-- `cargo check` subprocess uses isolated `CARGO_TARGET_DIR` (no target/ lock contention)
-- Generated test functions from `local_tests` execute and pass
+Three candidates:
+1. **Namespace prefix**: `deps: [shared::money/round]` — `shared` is a defined namespace in spec.toml
+2. **Versioned path**: `deps: [money/round@1.2]` — semver pinning
+3. **Registry path**: `deps: [org/shared/money/round]` — fully qualified with org prefix
+
+Recommendation (to be confirmed in CEO phase): Namespace prefix (option 1). Simplest to implement,
+consistent with the existing ID format, doesn't require registry infrastructure in M4.
+
+Output: add to `DECISIONS.md`:
+```markdown
+## Cross-Library Dep Schema — Namespace Prefix (0.4.0 decision record)
+...
+```
 
 ---
 
-### D5 — Make `local_tests` real
+### D7 — Version bump and changelog note
 
-`local_tests` has been in the schema since M1 but is inert.
+Bump workspace version to `0.4.0` in root `Cargo.toml`. Add a CHANGELOG entry.
 
-**Scope (execution committed in Eng Review):**
-- Generate a `#[test]` function per `local_tests` entry in the output `.rs` file
-- Test function naming: `test_{id}` format — e.g., `local_tests: [{id: happy_path}]` → `fn test_happy_path()` (locked in CEO review 2026-04-02)
-- Schema validation (CEO review 2026-04-02): `local_tests[].id` must match `^[a-z][a-z0-9_]*$`
-  (same pattern as ID segments). Add this regex to `unit.spec.json` for the `local_tests.items.properties.id`
-  field. Prevents `id: "some case!"` from generating uncompilable `fn test_some case!()`. Add
-  to validator test suite: `validate_local_test_id_must_be_valid_identifier`.
-- Each `expect` string is wrapped in `assert!(...)` — it's a boolean expression
-- The generated `#[cfg(test)] mod tests` block opens with `use super::*;` so the test functions
-  can see the unit's function and any imported symbols without explicit re-imports
-- D4's integration test runs `cargo test` on the ecommerce example, so generated tests execute
+Breaking changes in 0.4.0:
+- Passport schema v2: adds optional `evidence` field. Parsers of passport JSON should
+  tolerate unknown fields and treat absent `evidence` as "no runtime evidence available."
 
-Acceptance:
-- A spec with `local_tests` entries produces a `#[cfg(test)]` block in the generated `.rs`
-- The generated test block compiles (verified via D4 cargo check)
-- Generated test functions execute and pass (verified via D4 cargo test)
-- A spec with no `local_tests` generates no test block (no regression)
-
-Tests to add:
-- `generate_local_tests_produces_cfg_test_block` (unit test in generator.rs)
-- `generate_no_local_tests_produces_no_test_block` (unit test in generator.rs)
-
----
-
-### D8 — Version bump and changelog note
-
-D7 is a behavioral breaking change. Bump workspace version to `0.2.0` in the root
-`Cargo.toml`. Add a CHANGELOG entry:
-
-> **Breaking:** `validate` and `generate` now exit 1 for specs with unresolved internal
-> deps. Previously these passed silently. Ensure all deps are defined in the same spec
-> set before upgrading.
-
-**ecommerce compile note:** `examples/ecommerce/src/main.rs` will have `mod generated;`
-after D4. The ecommerce crate requires `spec generate examples/ecommerce/units --output
-examples/ecommerce/src/generated` before it can be compiled independently. The
-generated output is gitignored (`generated/` in root .gitignore). The D4 integration
-test generates automatically before running `cargo check`. Document this in the
-ecommerce crate's README or a comment in main.rs.
-
----
-
-### D6 — CUE vs JSON Schema: one explicit decision note
-
-The repo docs still reference CUE in several places while the implementation is
-JSON Schema. This creates ambiguity for anyone reading the codebase.
-
-Add a decision note to `DECISIONS.md` (or a `## Validation Strategy` section in
-README/CLAUDE.md):
-
-> For 0.1 and 0.2, JSON Schema is the implementation path. CUE remains a candidate
-> for 0.3+ when cross-file constraints and policy composition justify the complexity.
-> Do not design against CUE until then.
-
-Also audit spec comments and YAML for CUE language and update or remove.
-
-This is a doc task — no code changes.
-
----
-
-### D7 — Dep validation errors (always strict)
-
-Identified in QA 2026-04-02. `validate` currently passes silently when a dep ID isn't
-found in the loaded spec set — "✅ valid" even when generate would produce a broken
-`use` statement. That's a misleading signal.
-
-**Design (finalized in Eng Review #2):** Always strict. No escape hatch for M2.
-The generator hardcodes `use crate::...` for all internal deps. An unresolved dep
-cannot produce compilable output. Partial-graph workflows (spec libraries, incremental
-authoring) are deferred to M3 when external dep resolution is defined. Allowing generate
-to proceed with known-missing deps would overwrite a good output tree with code that
-can't compile.
-
-- Unresolved internal deps are errors in both `validate` and `generate` (exit 1)
-- Error message: `❌ dep 'money/round' not found in this spec set`
-- M3: when cross-library dep composition is introduced, add `--no-strict` with
-  defined semantics for external resolution
-
-**Data flow:** `finish_validation` returns `(errors: BTreeMap<...>, warnings: Vec<String>)`.
-For M2, missing deps always go into `errors`. The `warnings` path is reserved for
-future use.
-
-Acceptance:
-- `validate ./units` with a missing dep exits 1 with a clear error
-- `generate ./units --output ./out` with a missing dep exits 1, writes nothing
-- `validate` on a fully self-contained spec set: exits 0, no errors
-- All existing tests pass unchanged
-
-Tests to add:
-- `validate_strict_errors_on_missing_dep` (CLI integration test)
-- `generate_strict_errors_on_missing_dep` (CLI integration test)
+Non-breaking:
+- New commands: `spec build`, `spec test`, `spec export`
+- Generated `.rs` files gain `///` doc comments (no compile impact)
 
 ---
 
 ## What is NOT in scope
 
-Hold these for M3 or later:
+Hold these for M5 or later:
 
-- `.test.spec` (molecule/organism tests)
-- Passports and evidence collection
-- Full graph resolution and cycle detection (beyond the strict dep check in D7)
-- Multiple target languages
-- Reverse ingestion
-- Planning integration
-- IDE/LSP layer
-- Rich scheduling or organism-level verification
-- Cross-library dep composition (separate `use` path model) and partial-graph workflows (`--no-strict` flag deferred to M3 when external dep resolution is defined)
-- Contract type validation (opaque strings in contract.inputs — M3 after D2 lands)
-- `local_tests` structured input model (M3 — D5's expect field is raw Rust expression)
-- Directory-level atomic swap (file-level atomicity is sufficient for M2 file counts)
+- Molecule/organism test support (`.test.spec` — requires multi-unit test assembly)
+- Docs generation as a separate output format (`.md` docs for each unit) — M4.x
+- Impact graph and dependency inspection views — M5
+- Plan artifact schema and plan-aware workflow — M5
+- Second target language — M6
+- Cross-library dep IMPLEMENTATION (D6 decides the schema; M5 builds it)
+- Reverse ingestion — M6
+- ICP definition (one-paragraph DECISIONS.md entry for "who is the v0.x user") — deferred to M5 scoping
 
 ---
 
 ## Sequencing rationale
 
 ```
-D1 (output hardening + bootstrap safety) → unblocks safe iteration on everything else
-D2 (dep model split: deps + imports)     → required for D4 (cargo check) to be honest
-D3 (syn: fn name + arg alignment)        → independent, can land in parallel with D2
-D4 (cargo check + wire ecommerce crate)  → depends on D1 + D2; this is the proof point
-D5 (local_tests: generate + execute)     → depends on D4 (runs in same cargo test)
-D6 (CUE doc decision)                    → any time, no dependencies
-D7 (dep errors by default)               → independent, low-risk, can land after D1
-D8 (version bump + changelog + ecommerce note) → land with D7 or last
+D5 (carryover debt) → defense-in-depth + pub use convention doc, no code dependencies
+D6 (cross-lib dep schema) → design only, no dependencies, but resolve before 0.5
+D4 (doc comments) → independent, can land anytime, no schema changes
+D1 (pipeline wrap) → independent of passport changes; requires cargo path discovery design
+D2 (evidence passports) → depends on D1 (cargo test output available)
+D3 (JSON export) → depends on D2 (passports with evidence make export more useful, but can ship without)
+D7 (version bump + changelog) → last
 ```
 
 Parallel tracks:
-- **Track A:** D1 → D2 → D4 → D5
-- **Track B:** D3 (runs alongside D2)
-- **Track C:** D6, D7 (anytime)
+- **Track A:** D1 → D2 → D3 (sequential: pipeline → evidence → export)
+- **Track B:** D4, D5, D6 (anytime, independent)
 
 ---
 
@@ -329,48 +391,55 @@ Parallel tracks:
 
 | Check | Pass condition |
 |-------|---------------|
-| Output safety | `spec generate --output src/` errors before writing anything |
-| Bootstrap safety | `spec generate --output /tmp/x` errors before writing anything |
-| No stale files | Generate ecommerce, then generate a different spec set — no ecommerce dirs remain |
-| Body alignment | `id: pricing/foo` + `pub fn bar()` fails validation |
-| Arg alignment | `contract.inputs: {subtotal: Decimal}` + body `fn apply_discount(price: Decimal)` fails |
-| Cargo check | `cargo test` runs cargo check on generated ecommerce output and passes |
-| Module wiring | `mod generated;` in main.rs resolves to spec-generated mod.rs at src/generated/mod.rs |
-| Cargo test | `cargo test` runs ecommerce tests (local_tests executed) and passes |
-| Decimal import | `apply_tax.unit.spec` compiles with external Decimal import, no broken use statements |
-| Strict mode (validate) | `validate ./units` with a missing dep exits 1 |
-| Strict mode (generate) | `generate ./units --output ./out` with a missing dep exits 1, writes nothing |
-| local_tests | Generated `.rs` has `#[cfg(test)]` block matching local_tests entries |
+| Pipeline build | `spec build examples/ecommerce/units --output examples/ecommerce/src/generated` runs and passes |
+| Pipeline test | `spec test examples/ecommerce/units --output examples/ecommerce/src/generated` runs all cargo tests |
+| Evidence passports | After spec test, passport for apply_tax has `evidence.test_results` with pass/fail per local_test |
+| Static passports unchanged | `spec generate` still works and produces passports without `evidence` field |
+| JSON export | `spec export examples/ecommerce/units` emits valid JSON with 4 units and correct graph edges |
+| Doc comments | Generated apply_tax.rs has `/// Add sales tax...` before `pub fn apply_tax` |
+| Library sink guard | Direct call to `generate_code()` with unsafe expect fails at the function boundary |
+| Cross-lib schema | DECISIONS.md has a cross-library dep schema decision record |
 
 ---
 
 ## Test gaps (to be added during implementation)
 
-All 9 gaps identified in Eng Review:
+### From autoplan review (26 original)
+- `spec_build_validates_and_runs_cargo_build` (D1, spec-cli/tests/cli.rs)
+- `spec_build_fails_on_validation_error_before_cargo` (D1, spec-cli/tests/cli.rs)
+- `spec_build_unavailable_cargo_exits_cleanly` (D1, spec-cli/tests/cli.rs)
+- `spec_test_runs_cargo_test` (D1, spec-cli/tests/cli.rs)
+- `spec_test_forwards_cargo_stderr_on_failure` (D1, spec-cli/tests/cli.rs)
+- `spec_test_writes_evidence_to_passport` (D2, spec-cli/tests/cli.rs)
+- `spec_generate_passport_has_no_evidence` (D2, spec-core/src/passport.rs)
+- `parse_cargo_test_output_parses_pass_and_fail` (D2, spec-core/src/pipeline.rs)
+- `spec_test_failure_writes_fail_status_to_passport` (D2, spec-cli/tests/cli.rs)
+- `spec_export_emits_valid_json_bundle` (D3, spec-cli/tests/cli.rs)
+- `spec_export_includes_graph_edges` (D3, spec-cli/tests/cli.rs)
+- `spec_export_includes_passports_if_present` (D3, spec-cli/tests/cli.rs)
+- `build_export_bundle_graph_edges_correct` (D3, spec-core/src/export.rs)
+- `generate_code_includes_doc_comment_from_intent` (D4, spec-core/src/generator.rs)
+- `generate_code_no_doc_comment_when_intent_absent` (D4, spec-core/src/generator.rs)
+- `generate_code_multiline_intent_produces_multiline_doc_comment` (D4, spec-core/src/generator.rs)
+- `generate_code_rejects_unsafe_expect_at_sink` (D5a, spec-core/src/generator.rs)
+- `spec_build_crate_root_workspace_resolution` (D1, spec-cli/tests/cli.rs)
+- `spec_build_crate_root_config_vs_flag_precedence` (D1, spec-cli/tests/cli.rs)
+- `spec_build_no_cargo_toml_exits_with_error` (D1, spec-cli/tests/cli.rs)
+- `parse_cargo_test_output_ignores_non_test_lines` (D2, spec-core/src/pipeline.rs)
+- `parse_cargo_test_output_handles_duplicate_test_ids_across_units` (D2, spec-core/src/pipeline.rs)
+- `spec_export_partial_passports_marked_missing` (D3, spec-cli/tests/cli.rs)
+- `spec_export_output_path_rejects_directory` (D3, spec-cli/tests/cli.rs)
+- `spec_export_schema_version_separate_from_spec_version` (D3, spec-core/src/export.rs)
+- `spec_test_writes_evidence_atomically` (D2, spec-cli/tests/cli.rs)
 
-- `clean_output_dir_removes_stale_module_from_prior_run` (D1, generator.rs)
-- `generate_rejects_non_empty_dir_without_marker` (D1, cli.rs)
-- `generate_rejects_path_outside_project_root` (D1, cli.rs)
-- `imports_field_validates_rust_path` (D2, validator.rs)
-- `imports_field_generates_correct_use_statement` (D2, generator.rs)
-- `validate_body_fn_name_mismatch` (D3, validator.rs)
-- `validate_body_multiple_fns_rejected` (D3, validator.rs)
-- `validate_contract_arg_name_mismatch` (D3, validator.rs)
-- `generate_cargo_check_on_ecommerce` (D4, spec-cli/tests/cli.rs — new integration test)
-- `generate_local_tests_produces_cfg_test_block` (D5, generator.rs)
-- `generate_no_local_tests_produces_no_test_block` (D5, generator.rs)
-- `validate_strict_errors_on_missing_dep` (D7, cli.rs)
-- `generate_strict_errors_on_missing_dep` (D7, cli.rs)
-- `generate_rejects_symlinked_output_path` (D1, cli.rs — symlink escape guard)
-- `validate_body_with_macros_passes_fn_name_check` (D3, validator.rs — syn::File parse path)
-- `deps_unchanged_after_imports_split` (D2, generator.rs — regression: deps: [money/round] still generates use crate::money::round::round; after adding imports field)
-- `generate_strict_errors_on_missing_dep` (D7, cli.rs — generate always strict: missing dep exits 1, no output written)
-- `generate_local_tests_uses_test_prefix_naming` (D5, generator.rs — confirms `happy_path` → `fn test_happy_path()`)
-- `imports_emitted_before_deps_in_use_statements` (D2, generator.rs — external imports precede internal dep use stmts)
-- `validate_body_method_rejected` (D3, validator.rs — body.rust with `&self` param fails validation)
-- `generate_cargo_check_test_failure_includes_cargo_stderr` (D4, spec-cli/tests/cli.rs — assert message includes cargo output)
-- `validate_local_test_id_must_be_valid_identifier` (D5, validator.rs — id with spaces/special chars fails schema)
-- `clean_output_dir_removes_empty_dirs_after_orphan_cleanup` (D1, generator.rs — empty stale dirs removed)
+### Added by /plan-ceo-review 2026-04-05 (4 new)
+- `generate_code_rejects_deeply_nested_expect_at_sink` (D5a, spec-core/src/generator.rs — 200+ nesting levels, must not panic)
+- `spec_export_output_parent_dir_missing_exits_cleanly` (D3, spec-cli/tests/cli.rs)
+- `spec_build_rejects_single_file_path` (D1, spec-cli/tests/cli.rs)
+- `spec_test_no_local_tests_produces_empty_evidence` (D2, spec-cli/tests/cli.rs)
+- `spec_export_empty_directory_emits_valid_empty_bundle` (D3, spec-cli/tests/cli.rs)
+
+**Total: 31 test gaps**
 
 ---
 
@@ -378,21 +447,16 @@ All 9 gaps identified in Eng Review:
 
 | Step | Modules touched | Depends on |
 |------|----------------|------------|
-| D1 | spec-core/generator, spec-cli/commands | — |
-| D2 | spec-core/types, spec-core/schema, spec-core/generator, spec-cli/commands | — |
-| D3 | spec-core/validator, spec-core/Cargo.toml | — |
-| D4 | spec-cli/tests, examples/ecommerce | D1, D2, D3 |
-| D5 | spec-core/generator | D4 |
-| D6 | docs only | — |
-| D7 | spec-core/validator, spec-cli/commands | D1 |
-| D8 | Cargo.toml, CHANGELOG, examples/ecommerce/src/main.rs | D4, D7 |
+| D1 | spec-cli/commands, spec-core/pipeline (new), config | — |
+| D2 | spec-core/passport, spec-cli/commands | D1 |
+| D3 | spec-core/export (new), spec-cli/commands | D2 (passports with evidence) |
+| D4 | spec-core/generator | — |
+| D5 | spec-core/generator, spec-core/validator (pub fn), DECISIONS.md, README.md | — |
+| D6 | DECISIONS.md | — |
+| D7 | Cargo.toml, CHANGELOG | D1, D2, D3, D4 |
 
-**Lane A:** D1 → D4 → D5 (sequential, shared generator + commands)
-**Lane B:** D2 (can start in parallel with D1, merges before D4)
-**Lane C:** D3 (fully independent, merge before D4)
-**Lane D:** D6, D7 (anytime, independent)
-
-Launch B + C + D in parallel worktrees. Merge all into main before starting D4.
+**Lane A:** D1 → D2 → D3 (sequential pipeline)
+**Lane B:** D4, D5, D6 (all independent, can run in parallel with Lane A)
 
 ---
 
@@ -400,429 +464,251 @@ Launch B + C + D in parallel worktrees. Merge all into main before starting D4.
 
 | Codepath | Failure scenario | Test? | Error handling? | Silent? |
 |---------|-----------------|-------|----------------|---------|
-| D1 orphan cleanup | OS error deleting stale file (permissions) | No | Yes (SpecError::Generator) | No |
-| D1 bootstrap guard | Symlink pointing outside project root | No | Partial (normalizes path) | **CRITICAL GAP** |
-| D2 imports generation | Invalid Rust path in imports (e.g., `::Decimal`) | Yes (schema) | Yes (schema rejects) | No |
-| D3 syn parse | body.rust contains macro invocations | No | Needs handling | **CRITICAL GAP** |
-| D4 cargo check | cargo not in PATH in CI | No | No | Yes — test silently skips |
-| D4 cargo check | shared target/ lock contention | Yes (CARGO_TARGET_DIR) | Yes | No — isolated dir per run |
-| D5 local_tests | expect string is invalid Rust | No | Caught by D4 cargo check | No |
-| D7 dep check | very large spec set, O(n²) dep lookup | No | N/A (acceptable for M2) | No |
+| spec build: cargo discovery | Cargo.toml not found in ancestors | No | Needs error | Yes — would attempt cargo in cwd |
+| spec build: cargo subprocess | cargo not in PATH | No | Needs check (existing pattern) | Yes |
+| spec build: cargo subprocess | cargo hangs (deadlocked build script) | Manual only | Document: print "spec: running cargo build..." to stderr first; SIGINT propagates | Partially — user sees last spec output |
+| spec build: path scope | Single-file path given instead of directory | No | Needs error: ❌ spec build requires a directory path | Yes |
+| spec test: cargo test parse | Unexpected test output format | No | Needs fallback | Yes — evidence silently wrong |
+| spec test: evidence | Unit has zero local_tests → test_results: [] | No | Correct behavior, untested | No |
+| spec export: passport load | Passport JSON malformed / truncated | No | Needs graceful skip | Yes |
+| spec export: --output path | Parent directory does not exist | No | Needs check: path.parent().exists() | Yes — confusing OS error |
+| D5a sink guard | syn::parse_str failure on expect | No | Needs SpecError::Generator with unit+test ID context | Yes |
+| D5a sink guard | Deeply nested expect (200+ levels) → syn stack overflow | No | Must call is_safe_expect_expr_depth() — NOT raw syn::parse_str | Yes |
+| D2 evidence write | Passport write fails partway through | No | Needs atomic write (tempfile + rename) | Yes — partial evidence written |
 
-**Critical gaps (both resolved in Eng Review):**
+**Critical gaps:**
+1. **Cargo.toml discovery** — if `--crate-root` is not specified and there's no Cargo.toml ancestor, spec build would either fail confusingly or run cargo in an arbitrary directory. Need: explicit discovery with clear error if not found.
+2. **Cargo test output parse** — cargo's test output format is not a documented API. `test X ... ok` is stable but output in verbose mode differs. Need: test the parser against real cargo test output, not a mock.
+3. **D5a syn overflow at sink** — `generate_code()` must call `is_safe_expect_expr_depth()` (from validator.rs, must be made `pub`) instead of raw `syn::parse_str::<syn::Expr>` for the D5a inline guard. Raw syn::parse_str overflows its own call stack on 200+ levels of nesting. The existing validator cap does NOT protect the generate_code() call site.
+4. **spec build single-file scope** — scope `spec build` and `spec test` to directory paths only. Add explicit error: `❌ spec build requires a directory path, not a single file`.
+5. **--output parent dir missing** — `spec export --output <file>` must check `path.parent().exists()` before calling serde_json write. Emit: `❌ output directory does not exist: <parent>`.
 
-1. **Symlink escape in `ensure_output_marker`** — `normalized_absolute_path` resolves `..` but not symlinks.
-   **Decision:** Before creating the output dir, walk each existing path component and reject if any is a symlink
-   (`path.symlink_metadata()?.file_type().is_symlink()`). Nothing is created on a bad path. Never touches the
-   filesystem before validating.
-
-2. **`syn` + macro invocations in `body.rust`** — `syn::parse_str::<ItemFn>` fails on any body containing macros
-   (`vec![...]`, `todo!()`, `assert!(...)`, etc.), which would incorrectly reject valid specs.
-   **Decision:** Parse as `syn::File` (not bare `ItemFn`). Walk the file's top-level items to find exactly one
-   `ItemFn`. Macros inside function bodies are `Stmt::Macro` — not top-level items — so they parse correctly.
-   The existing rules (wrong fn name, multiple top-level items) apply only to top-level items, which is correct.
 
 ---
 
-## GSTACK REVIEW REPORT
+## /autoplan Review — 2026-04-04 (M4 Plan Draft Review)
 
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | issues_open | D4 module wiring fix, D2 ordering locked, D5 naming locked, D1 empty dirs, D5 id validation, CARGO_TARGET_DIR, TODOS.md D7 updated |
-| Codex Review | `/codex review` | Independent 2nd opinion | 3 | issues_found | 10 findings; 4 incorporated (D4 path, D1 dirs, D5 id, CARGO_TARGET_DIR), 6 acknowledged |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR (PLAN) | 5 issues, 17 test gaps, 0 critical gaps |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+**Context:** New M4 plan drafted inline by /autoplan. M2+M3 fully shipped.
+**Mode:** SELECTIVE EXPANSION (new plan on proven system, concrete deliverables)
+**UI Scope:** None. DX Scope: Yes (this is a developer CLI tool).
 
-**CODEX:** D4 output path corrected to src/generated (module wiring fix), CARGO_TARGET_DIR isolation added, D5 test id validation added to schema, D1 empty dir cleanup added, D7 TODOS.md entry updated, D3 clarified as partial semantic alignment
-**CROSS-MODEL:** D4 module wiring (critical build-blocking gap) resolved — output path changed to src/generated. D4/D5 sequencing clarified.
-**UNRESOLVED:** 0
-**VERDICT:** ENG CLEARED — Eng Review passed. CEO Review complete (HOLD SCOPE). Ready to implement.
-
----
-
-## /autoplan Review — 2026-04-03 (Retrospective, post-merge)
-
-**Context:** PR #1 MERGED. This is a retrospective pass on the completed M2 plan.
-**Mode:** SELECTIVE EXPANSION (auto-decided: iteration on existing system, already implemented)
-**UI Scope:** None
-
-### CEO Dual Voices
+### Phase 1: CEO Review + Dual Voices
 
 **CLAUDE SUBAGENT (CEO — strategic independence):**
-1. No clear primary user defined (critical) — solo engineer vs. team coordination tool has different M3 priorities
-2. Generated code commitment model hybrid/ambiguous (high) — gitignored but required for compile; need binary decision in M3
-3. `local_tests.expect` raw string won't scale (high) — M3 structured input model is not optional, it's the product feature
-4. Cross-library dep model undesigned before M3 build (high) — sketch schema before building
-5. Competitive moat requires evidence/passport model, not better codegen (high) — prioritize over graph resolution
-6. LSP surface not examined before committing to CLI-only shape (medium)
-7. JSON Schema cross-file constraint ceiling; define CUE trigger condition explicitly (medium)
-8. Multi-team output ownership not modeled (medium)
-9. `syn full` compile weight (low)
+1. D2 cargo test parser is unvalidated against real cargo output — evidence model is unreliable until this is tested with real corpus (High)
+2. ICP undefined; D3 export schema and D6 cross-lib schema shape depend on it (High)
+3. Generated output ephemeral vs. committed decision still unresolved — D1 (spec build) implicitly assumes one answer (Medium)
+4. D1 framed as "convenience wrapper" — it is the evidence enforcement layer; reframe in thesis (Medium)
+5. D5a auto-decision parenthetical not formally confirmed — close it with a DECISIONS.md note (Medium)
+6. D6 schema recommendation (namespace prefix) lacks comparative tradeoff analysis (Medium)
+7. D4 doc comments too small to be a peer deliverable at same level as D1-D3 (Low)
 
 **CODEX SAYS (CEO — strategy challenge):**
-1. No ICP defined — correctness tool without adoption funnel
-2. "No breadth" is a premise not a strategy for early-stage
-3. Thesis says `--no-strict` "escapable" (line 21) but D7 locks it always strict — doc contradiction
-4. D8 line 230 reintroduces `src/generated/spec` path (contradicts D4 correction) — doc drift
-5. PLAN.md Status still says "Planning" — post-merge drift breaks onboarding
-6. `use crate::` hardcoded assumes `pub use generated::*;` pattern in consuming crate — works for ecommerce but non-obvious for drop-in
-7. D3 "exactly one top-level function" constraint will be reversed — real users want helper fns, consts, type aliases
-8. "Owned subtree" + orphan deletion blocks mixed directories (generated + handwritten glue)
-9. Alternative: invert D3 — generate signature from contract, body.rust = body expression only
-10. No "drop-in to existing crate" story — requires adding `pub use generated::*;` to crate root
-11. Competitive differentiation vs OpenAPI/proto/Smithy not articulated
+1. No buyer defined — ICP deferred while D3/D6 depend on it is a strategic contradiction (Critical)
+2. Evidence model overstated — no commit SHA, env fingerprint, runner identity; calling it "canonical" creates false trust (High)
+3. Cross-library reuse is the core product problem being punted — single-tree pipeline polish is "local CLI varnish" in 6 months (High)
+4. spec export has no named downstream consumer — schema-first without a consumer = dead artifact (High)
+5. spec build/spec test is potentially the wrong wedge — cargo orchestration is easy to imitate; the moat is CI provenance and distribution semantics (Medium)
+6. Scope discipline weak — doc comments in same release as unresolved customer definition (Medium)
+7. Validation bar is toy-only — all acceptance criteria based on ecommerce example (Medium)
+8. Plan internally inconsistent on ICP — sequencing rationale mentioned it, D5 section omits it, success criteria referenced it (now fixed) (Medium — fixed by auto-decision #4)
 
 ```
 CEO DUAL VOICES — CONSENSUS TABLE:
 ═══════════════════════════════════════════════════════════════
   Dimension                           Claude  Codex  Consensus
   ──────────────────────────────────── ─────── ─────── ─────────
-  1. Premises valid?                   Yes     Partial PARTIAL (--no-strict doc contradiction; thesis wording)
-  2. Right problem to solve?           Yes     Partial PARTIAL (no ICP defined by either review)
-  3. Scope calibration correct?        Yes     Yes     CONFIRMED (M2 hardening was right call)
-  4. Alternatives sufficiently explored? No    No      DISAGREE (both flag D3 invert not explored)
-  5. Competitive/market risks covered? No      No      CONFIRMED gap (both flag missing differentiation story)
-  6. 6-month trajectory sound?         Yes     Partial PARTIAL (local_tests.expect ceiling, dep model undesigned)
+  1. Premises valid?                   Mostly  Partial PARTIAL (evidence quality underspecified; ICP deferred)
+  2. Right problem to solve?           Yes     Partial DISAGREE (Codex: pipeline is wrong wedge; user confirmed scope)
+  3. Scope calibration correct?        Yes     Partial PARTIAL (D4 small; doc/README in big release)
+  4. Alternatives sufficiently explored? Partial No   DISAGREE (D6 analysis thin; Codex: cross-lib first)
+  5. Competitive/market risks covered? Partial No     CONFIRMED gap (no named consumer for export; no buyer defined)
+  6. 6-month trajectory sound?         Mostly  Partial PARTIAL (local evidence ≠ canonical; provenance unspecified)
 ═══════════════════════════════════════════════════════════════
-CONFIRMED = both agree. DISAGREE = models differ (→ taste decision).
-Single critical finding: D3 one-function constraint flagged by Codex (taste decision).
+CONFIRMED = both agree. DISAGREE = models differ (→ taste decision or user challenge).
+User confirmed scope at premise gate — D1 wedge disagreement becomes TASTE DECISION, not USER CHALLENGE.
 ```
 
 ### CEO Review Sections
 
 **Step 0A — Premise Challenge:**
-All 7 premises confirmed by user. One doc-level contradiction found (not a premise flaw): thesis line 21 says "escapable via `--no-strict`" but D7 always strict — wording should be corrected to "errors by default (escape hatch deferred to M3)."
-AUTO-DECISION: Fix wording in PLAN.md thesis (P5 explicit). Logged.
+7 premises evaluated. 4 confirmed solid (M3 shipped, pipeline deferred, evidence requires pipeline, doc comments high-value). 2 partially confirmed (D3 export shape reasonable but needs consumer; D6 schema defensible but needs analysis). 1 removed (ICP — user deferred to M5). Auto-decisions applied.
 
 **Step 0B — Existing Code Leverage:**
-- D1 orphan cleanup → builds on existing `clean_output_dir` in generator.rs — correct reuse
-- D2 imports → extends existing `SpecStruct`/`ResolvedSpec` types in types.rs — correct reuse
-- D3 syn validation → new dependency, no existing code to reuse — appropriate
-- D4 → builds on existing CLI test infrastructure in cli.rs — correct reuse
-- D5 → extends existing `generate_code` in generator.rs — correct reuse
-No parallel-flow reconstruction found. No DRY violations.
+- D1 pipeline → `cargo_available()` + `run_cargo()` at cli.rs:875-893 — exact reuse pattern
+- D2 evidence → extends `Passport` struct at passport.rs:44 — additive struct field
+- D3 export → `LoadedSpec`, `ResolvedSpec` types in types.rs — zero new input types
+- D4 doc comments → `generate_code()` in generator.rs — 1-line addition
+- D5a sink guard → same `generate_code()` — inline parse, no new abstraction
+No DRY violations found. No parallel reconstruction. Lean plan.
 
-**Step 0C — Dream State Mapping:**
+**Step 0C — Dream State:**
 ```
-  CURRENT STATE (M2)             THIS PLAN              12-MONTH IDEAL
-  ─────────────────────          ───────────────────    ─────────────────────────────
-  load→validate→generate         Output safe            Contract type validation
-  Rust output compiles           cargo check passes     Evidence/passport model
-  No import/dep confusion        Fn name aligned        Cross-library dep resolution
-  Stale files possible           Orphan cleanup done    Team adoption
-  Deps unvalidated               Strict by default      CI-enforced spec compliance
+  CURRENT (post-M3)              THIS PLAN (M4)            12-MONTH IDEAL
+  ─────────────────────          ──────────────────────    ──────────────────────────
+  validate + generate            spec build / spec test    Plan-aware workflow (M5)
+  Static passports only          Runtime evidence passports Cross-team governance
+  No machine-readable export     JSON bundle export         AI agent consumption
+  No doc comments                /// intent comments        Multi-language support
+  Cross-lib schema undecided     Cross-lib schema decided   Cross-lib dep IMPL (M5)
+  Generated output: ambiguous    Commitment decision needed  CI provenance model
 ```
-M2 moves correctly toward the 12-month ideal. The trajectory is sound. The gap: evidence model and ICP definition are not in the plan at all — they remain undefined territory.
+Gap: evidence provenance (commit SHA, env) not in M4 passport schema. Both models flag this independently. Tracked as a test gap and future TODOS.md item.
 
 **Step 0C-bis — Implementation Alternatives:**
 ```
-APPROACH A: Current (semantic hardening first) — SHIPPED
-  Summary: Make the compile loop safe before adding features. Validate semantics incrementally with syn.
-  Effort:  M (4 weeks delivered in ~1 week with CC)
-  Risk:    Low
-  Pros:    - Trust before features; compilable output as proof point; no external service dependencies
-  Cons:    - No product differentiator yet; ICP undefined; local_tests has ceiling
+APPROACH A: New top-level commands (spec build / spec test) — current plan
+  Effort: S | Risk: Low
+  Pros: Distinct concerns, discoverable, testable independently
+  Cons: Pipeline is easy to imitate; moat needs to be in governance, not orchestration
+  Completeness: 8/10
 
-APPROACH B: Feature-first (skip hardening, add evidence model now)
-  Summary: Accept compilation gaps, focus M2 on contract type validation and a minimal passport record.
-  Effort:  L
-  Risk:    High — broken output tree + unvalidated types = user trust destroyed
-  Pros:    - Differentiator earlier
-  Cons:    - Unsafe output discredits the tool; early users abandon before trust builds
+APPROACH B: Flags on generate (--build, --test)
+  Effort: XS | Risk: Low
+  Pros: Less surface area
+  Cons: Conflates lowering with building — wrong coupling
+  Completeness: 6/10 (less correct conceptually)
 
-APPROACH C: Invert D3 (generate from contract, body.rust = body expression)
-  Summary: Generate fn signature from contract.inputs, embed body.rust as the function body.
-  Effort:  M (replaces D3's syn-validation approach)
-  Risk:    Medium — breaking schema change for body.rust convention
-  Pros:    - Eliminates fn name drift entirely; no syn policing; cleaner separation of contract and impl
-  Cons:    - Breaking change from M2's shipped design; forces users to restructure body.rust
+APPROACH C: Config-only auto-build (spec.toml [pipeline] auto_build = true)
+  Effort: XS | Risk: Medium
+  Pros: Opt-in, no new commands
+  Cons: Inflexible, harder to test, no explicit spec test command
+  Completeness: 5/10
 ```
-RECOMMENDATION: Approach A was correct for M2 (trust before features). Approach C is the right direction for M3 D3 expansion — worth a design spike before adding type validation. AUTO-DECIDED (P3 pragmatic + P1 completeness).
+AUTO-DECISION: A is correct (P5 explicit, P1 completeness). Codex's moat concern is noted and valid for M5+ design, not an M4 scope change. Decision #5 logged.
 
-**Step 0D — Mode Analysis (SELECTIVE EXPANSION):**
-Expansions surfaced — none accepted (plan already shipped). Candidates for TODOS.md:
-- Define ICP explicitly (no effort, 1 paragraph, before M3 scoping)
-- Force generated-code commitment decision (binary: commit or ephemeral; before M3)
-- Design Approach C invert-D3 spike (2 hours; before M3 D3 expansion)
-- Cross-library dep schema sketch (2 hours; before M3 build)
-All → deferred to TODOS.md. AUTO-DECIDED (P3 pragmatic, plan is already shipped).
+**Step 0D — Mode: SELECTIVE EXPANSION confirmed.** Treat each scope challenge as an individual decision. No silent expansion or reduction.
 
-**Step 0E — Temporal Interrogation:**
-This is retrospective; temporal interrogation maps to M3 decisions:
-- HOUR 1 (M3 foundations): ICP definition must happen first — it gates M3 prioritization
-- HOUR 2-3 (M3 core): contract type validation requires resolving Approach C vs current D3 shape
-- HOUR 4-5 (M3 integration): evidence model requires defining what constitutes "passing" proof
-- HOUR 6+ (M3 polish): generated code commitment model must be resolved before M3 CI story
+**Step 0E — Temporal interrogation:**
+- HOUR 1 (D4, D5, D6): doc comments, README, cross-lib design — unblocked, independent
+- HOUR 2-4 (D1): pipeline wrap commands — cargo subprocess, config, error handling
+- HOUR 5-6 (D2): evidence — cargo test text parsing, passport update
+- HOUR 7 (D3): JSON export — new module, export command
+- HOUR 8 (D7): version bump, changelog
 
-**Section 1 — Architecture Review:**
+**Step 0F:** Mode confirmed SELECTIVE EXPANSION.
+
+**Section 1 — Architecture (post-M4 addition):**
 ```
-  CURRENT ARCHITECTURE (post-M2):
+  CURRENT (post-M3):                M4 ADDS:
   
-  .unit.spec files
-       │
-       ▼
-  ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐
-  │   loader.rs  │──▶│  normalizer  │──▶ │  validator.rs    │
-  │  (YAML→     │    │  (resolve    │    │  (JSON Schema +  │
-  │  SpecStruct) │    │  deps/types) │    │  syn + dep check)│
-  └─────────────┘    └──────────────┘    └──────────────────┘
+  .unit.spec → validate → normalize → generate → passport (static)
+                                         │
+                                         └──▶ [M4] pipeline.rs
                                                    │
-                                                   ▼
-                                         ┌──────────────────┐
-                                         │  generator.rs    │
-                                         │  (code + mod.rs  │
-                                         │  + orphan clean) │
-                                         └──────────────────┘
-                                                   │
-                                         ┌─────────┴──────────┐
-                                         │ per-file atomic    │
-                                         │ write (tempfile +  │
-                                         │ rename, POSIX safe)│
-                                         └────────────────────┘
+                                              spec build ──▶ cargo build
+                                              spec test  ──▶ cargo test
+                                                                  │
+                                                         parse test output
+                                                                  │
+                                                         passport (+ evidence)
+                                                         
+  [M4] export.rs: loads specs + passports → JSON bundle
+  [M4] generator.rs: prepend /// intent to each pub fn
 ```
-Architecture is clean and well-separated. No coupling concerns. Single point of failure: generator.rs owns both file writing and orphan cleanup — appropriate for M2 scope.
+New coupling: `spec test` creates a coupling between the spec validation/gen path and the cargo test result. This is intentional. Single point of failure: if cargo test output format changes, evidence collection silently degrades. Must be documented.
 
-One concern: consuming crates must add `pub use generated::*;` to their crate root for `use crate::X` dep paths to resolve. This is implicit. Examined: working correctly in ecommerce example via main.rs. Not documented for external users. → Flag for TODOS.md doc task.
-
-**Section 2 — Error & Rescue Map:**
+**Section 2 — Error & Rescue Map (M4 additions):**
 ```
-  CODEPATH                     | WHAT CAN GO WRONG        | HANDLED?
-  -----------------------------|--------------------------|----------
-  clean_output_dir             | OS error deleting file   | SpecError::Generator (logged, not silent)
-  ensure_output_marker         | Symlink escape           | Walks path components, rejects symlinks
-  syn::parse_str               | Macro invocations        | Handled: parse as syn::File (not ItemFn)
-  cargo subprocess (D4)        | cargo not in PATH        | Silent skip (cargo_available() → return)
-  tempfile + rename (D1)       | EXDEV cross-fs rename    | Handled: tempfile in same dir
-  dep_to_use_path              | Circular deps            | Not detected (deferred to M3)
+  CODEPATH                     | WHAT CAN GO WRONG          | HANDLED?
+  -----------------------------|----------------------------|----------
+  spec build: crate discovery  | No Cargo.toml ancestor     | NO — CRITICAL GAP
+  spec build: cargo subprocess | cargo not in PATH          | Pattern exists (cargo_available)
+  spec test: output parse      | Unknown output format      | NO — CRITICAL GAP (evidence silent)
+  spec export: passport load   | Malformed JSON             | NO — needs graceful skip
+  D5a: generate_code sink      | Unsafe expect at API level | Will be handled by inline syn parse
+  D2 evidence write            | Partial write on interrupt | NO — needs atomic write pattern
 ```
-One confirmed gap from failure modes table: `cargo not in PATH → silent skip`. Codex also flagged this.
-AUTO-DECISION: Flag for TODOS.md. Silent skip is acceptable in dev environments where cargo is always present; the concern is limited to unusual CI environments. (P3 pragmatic — not blocking M2 which is shipped)
+Two critical gaps: crate discovery and cargo test output reliability. Both must be resolved in D1/D2 implementation.
 
-**Section 3 — Security & Threat Model:**
-Known learning (from project learnings): `local_tests.expect` injection was fixed in `43f4c0b` — whitelist approach in `is_safe_expect_expr`. Only binary, call, path, lit, and paren expressions allowed.
-Prior learning applied: expect-safe-expr-whitelist (confidence 10/10, 2026-04-03).
+**Section 3 — Security:**
+- `spec build`/`spec test` run cargo, which runs the user's Rust code. This is expected and appropriate for a dev tool. No new privilege escalation surface.
+- D5a (sink guard) improves security: `generate_code` public API now rejects unsafe expect strings
+- D3 export: serializes user-authored content to JSON. Content is field values from .unit.spec — already validated at this point. Safe.
+- No new auth surfaces, no new network requests, no new credential handling.
+Examined: subprocess execution, export serialization, sink guard. No unaddressed security gaps found.
 
-New surface from M2:
-- Output path safety: symlink-aware path validation before any writes. Solid.
-- `syn::File` parse of `body.rust`: parses user-supplied Rust code. Risk: malformed syn input causes parse failure (surfaced as validation error, not panic). Safe.
-- No new secrets, no new auth surfaces, no new endpoints.
-- Dependency: `syn` with `full` — well-known crate, excellent security track record, no advisory history.
-
-No unaddressed security gaps found. Examined: injection surface in expect, output path, syn parsing.
-
-**Section 4 — Data Flow & Interaction Edge Cases:**
+**Section 4 — Data Flow (M4 new flows):**
 ```
-  .unit.spec ──▶ YAML parse ──▶ schema validate ──▶ syn parse ──▶ generate ──▶ atomic write
-       │              │               │                  │              │
-       ▼              ▼               ▼                  ▼              ▼
-  [not a file]   [parse error]  [schema error]    [syn error]   [EXDEV? → handled]
-  [empty yaml]   [handled]      [handled]         [handled]     [tempfile in same dir]
-  [binary file]  [handled]      [handled]         [handled]     [OS error → SpecError]
+  spec build: .unit.spec → validate → generate → cargo build ← CARGO_TARGET_DIR
+                                                      │
+                                              [exit code + stderr]
+                                                      ↓
+                                            spec exit 0/1
+                                            
+  spec test: spec build + cargo test ──→ text output parse ──→ evidence struct ──→ passport write
+  
+  spec export: .unit.spec dir → validate + load → load_passports_for_specs → ExportBundle → JSON
 ```
-All shadow paths are handled and tested. No unhandled edge case found. CLI integration test confirms error paths surface correctly.
+Shadow paths: empty spec set → spec export emits `{"units": [], "passports": [], "graph": {"edges": []}}` (valid). Cargo not available → spec build/test exits 1 cleanly. No passports on disk → export emits `"passports": []`.
 
 **Section 5 — Code Quality:**
-- 786 lines in validator.rs is the biggest file — complexity is there but appropriate for the validation surface
-- 1 deferred comment at validator.rs:136 (M3 local_tests config lever) — explicitly tracked in TODOS.md
-- DRY: no duplicate logic found across generator/validator
-- Naming: clear and consistent — `ensure_output_marker`, `clean_output_dir`, `is_safe_expect_expr`
-- No over-engineering found — each function does one thing
-- D3's "exactly one top-level item" constraint: Codex flags this will be reversed when users need helper fns/consts. Current implementation at `validate_body_rust` in validator.rs. This is a TASTE DECISION (see gate). Auto-logged.
+- D1 adds new commands to the `Command` enum — 2 new variants, consistent with existing pattern
+- `pipeline.rs` new module — keep it thin: `run_cargo_build()`, `run_cargo_test()`, `parse_test_output()`, `CargoResult`
+- D3 `export.rs` new module — keep it thin: `ExportBundle`, `build_export_bundle()`, `load_passports_for_specs()`
+- No DRY violations in the new modules design
+- D4 doc comment: 1-line change in `generate_code()` — minimal diff, appropriate
+- Naming: `spec build`, `spec test`, `spec export` follow existing `spec validate`, `spec generate` pattern
 
 **Section 6 — Test Review:**
-```
-NEW CODEPATHS IN M2:
-  D1: ensure_output_marker path validation, orphan cleanup, atomic write
-  D2: imports field, use statement ordering
-  D3: syn fn name check, arg alignment, sibling item check, self-param check
-  D4: cargo check subprocess, cargo test subprocess, CARGO_TARGET_DIR isolation
-  D5: local_tests codegen, #[cfg(test)] block generation
-  D7: strict dep validation in validate + generate paths
-```
-Test coverage from PR #1: 46 → 76 tests (+30). Coverage gate: 94% (15/16 paths). One known gap: output-is-file defensive bail path. Test pyramid: heavy unit + solid integration. No flakiness risk identified.
+17 test gaps identified in draft plan. Critical additions from CEO review:
+- `parse_cargo_test_output_against_real_corpus` — run parser against multiple real cargo test output formats (not just ecommerce mock). Must include: verbose mode, test binary names with path prefixes, multiple test binaries in workspace, FAILED with panic output.
+- `spec_build_no_cargo_toml_exits_with_error` — crate discovery: no Cargo.toml in ancestors → clear error message, no crash
+- `spec_test_writes_evidence_atomically` — evidence write must be all-or-nothing per unit
+
+Total test gaps: 20.
 
 **Section 7 — Performance:**
-- No N+1 queries (Rust CLI, no DB)
-- `syn` parse per unit spec: O(body_size) — acceptable; bodies are tiny
-- Orphan cleanup: O(n) file scan — acceptable for M2 file counts
-- Cargo subprocess (D4): slow by nature, isolated target dir prevents lock contention
+- D1/D2 cargo subprocess: inherently slow. No spec control over cargo build time. CARGO_TARGET_DIR isolation pattern already established.
+- D3 export: loads all passports from disk + all specs. O(n) file reads. Acceptable.
+- D4 doc comments: O(len(intent)) string allocation per unit. Negligible.
 
 **Section 8 — Observability:**
-All errors go to stderr via `SpecError` types. Exit codes are meaningful (0 = clean, 1 = errors). No structured logging — appropriate for a CLI. No dashboards or alerts needed (not a service).
+Same model as M1-M3: all errors to stderr via `SpecError` types, exit codes meaningful. New for D1/D2: cargo subprocess output forwarded verbatim to spec's stdout/stderr. No structured logging needed (CLI, not a service).
 
 **Section 9 — Deployment:**
-CLI binary. No deployment concerns. Version bumped to 0.2.0 in Cargo.toml. CHANGELOG updated. CI/CD in place (GitHub Actions, cross-compilation).
+Single binary. New commands appear in `spec --help`. CHANGELOG updated with new commands. Version bump to 0.4.0. Breaking change: passport schema v2 with optional `evidence` field (non-breaking to parsers that handle unknown fields).
 
-**Section 10 — TODOS.md Items:**
-Items to add from this review:
-1. Define ICP: solo engineer vs team coordination? (prerequisite for M3 scoping)
-2. Binary decision: commit generated output or ephemeral? (prerequisite for M3 CI story)
-3. `pub use generated::*` pattern: document as required convention for consuming crates
-4. D3 expansion: spike Approach C (generate from contract, body.rust = body expression) before M3 type validation
-5. Cross-library dep schema design spike (2 hours, before M3 build)
-6. CUE trigger condition: define explicitly (e.g., "when we need cross-file constraint X")
-7. cargo silent skip: consider `#[should_panic]` or explicit `skip_reason` log for CI visibility
+**Section 10 — TODOS.md items from CEO review:**
+1. Evidence provenance (M5): add commit SHA, runner ID, environment fingerprint to passport evidence schema — current passport writes local-machine-only evidence without provenance
+2. cargo export named consumer (M4 implementation): document the intended consumer before D3 is implemented — what tool or workflow will read the bundle?
+3. Cross-library dep schema analysis (D6): produce a written tradeoff matrix for the 3 candidates before committing to namespace prefix
 
-**NOT in scope (confirmed not in M2):**
-- .test.spec, passports, graph resolution, multiple languages, reverse ingestion, IDE/LSP, scheduling, CUE, contract type validation, local_tests structured input, directory-level atomic swap
+**NOT in scope (CEO confirmed):**
+- ICP definition — deferred to M5 scoping (user decision)
+- Evidence provenance (commit SHA, CI fingerprint) — deferred to M5 passport schema v3
+- Pipeline as moat vs. governance/distribution (Codex challenge) — noted as M5+ design direction, not M4 scope change
+- Cross-library dep IMPLEMENTATION — M5
 
-**What already exists (M2 leverage map):**
-- loader.rs → pre-existing, unchanged
-- normalizer.rs → pre-existing, minor addition
-- validator.rs → extended with syn, dep strictness
-- generator.rs → extended with imports, orphan cleanup, atomic writes, local_tests codegen
-- cli.rs → extended with safety guards, strict mode
+**What already exists (M4 leverage map):**
+- `cargo_available()` at cli.rs:875 → reuse pattern in D1
+- `run_cargo()` at cli.rs:886 → reuse in `pipeline.rs`
+- `Passport` struct at passport.rs:44 → extend with `evidence: Option<PassportEvidence>`
+- `LoadedSpec` / `ResolvedSpec` types → direct input to D3 export bundle
+- `serde_json` already a dependency → no new crates needed for D3
 
 **Dream State Delta:**
-M2 leaves us at: compilable, safe, semantically anchored. Distance from 12-month ideal: need ICP, evidence model, contract types. Trajectory is correct.
+M4 leaves us at: pipeline wrap + runtime evidence + JSON export. Distance from 12-month ideal: need plan-aware workflow (M5), CI provenance (M5), cross-library dep implementation (M5), ICP definition (M5 prerequisite).
 
 **CEO Phase Completion Summary:**
 ```
-CEO REVIEW (autoplan retrospective):
-  Premises:        7/7 confirmed (1 doc-level wording fix needed in thesis)
-  Architecture:    SOUND — clean separation, appropriate coupling
-  Security:        SOUND — injection surface addressed, output path safe
-  Test Coverage:   94% — 1 known gap (defensive bail path, acceptable)
-  Codex voice:     11 findings (3 doc fixes, 5 M3 signals, 2 confirmed gaps, 1 taste decision)
-  Claude voice:    9 findings (3 M3 signals, 5 confirmed concerns, 1 low)
-  Consensus:       3/6 confirmed, 1 partial (premises), 2 partial (ICP, trajectory)
-  Auto-decisions:  8 (all SELECTIVE EXPANSION deferrals or doc fixes)
-  Taste decisions: 1 (D3 single-function constraint — will surface at gate)
-  User challenges: 0
+CEO REVIEW (autoplan 2026-04-04):
+  Premises:        5/7 confirmed (2 auto-decisions applied: ICP deferred, scope confirmed)
+  Architecture:    SOUND — lean new modules, consistent with existing patterns
+  Security:        SOUND — no new attack surface; D5a improves security
+  Test Coverage:   20 gaps identified (17 original + 3 from CEO review)
+  Codex voice:     8 findings (1 critical ICP, 3 high, 4 medium)
+  Claude voice:    7 findings (2 high, 4 medium, 1 low)
+  Consensus:       1/6 confirmed, 2 partial, 2 disagree (taste decisions), 2 gap confirmed
+  Auto-decisions:  6 (doc fixes, approach selection, ICP deferral confirmed)
+  Taste decisions: 2 (D1 wedge, D6 schema analysis depth)
+  User challenges: 0 (user confirmed scope at premise gate; ICP deferred by explicit user choice)
 ```
 
-**PHASE 1 COMPLETE.** Codex: 11 findings. Claude subagent: 9 findings. Consensus: 3/6 confirmed, 3 partial. Taste decisions: 1 (D3 constraint). Passing to Phase 3 (skipping Phase 2 — no UI scope).
+**PHASE 1 COMPLETE.** Codex: 8 findings. Claude subagent: 7 findings. Consensus: 1/6 confirmed, 4 partial/disagree. Taste decisions: 2. Passing to Phase 3 (skipping Phase 2 — no UI scope).
 
 ---
 
-### Phase 3: Eng Review + Dual Voices
-
-**CLAUDE SUBAGENT (Eng — independent review):**
-1. `clean_output_dir` vs `ensure_output_marker` use different path-containment logic (High) — `normalized_absolute_path` (lexical) vs `canonicalize` (follows symlinks). Consolidate to single `safe_output_path` utility.
-2. Windows rename TOCTOU window (High) — `remove_file` + `rename` is not atomic; comment says "per-file atomic" which is only true on POSIX. Add clarifying comment + Windows test.
-3. `validate_body_rust_alignment` misleading error message (Medium) — when body has 1 item that's not a fn, reports `found: 0` instead of `found: 1`. Need separate error variant or pass correct count.
-4. `is_safe_expect_expr` does not recurse into sub-expressions (Medium/High Security) — `syn::Expr::Binary` and `syn::Expr::Call` return `true` without checking children. `f({ unsafe { ... } })` bypasses the block/unsafe check.
-5. `collect_specs` follows symlinks, `clean_output_dir` does not — undocumented asymmetry; symlink cycle aborts collect with unclear error (Medium)
-6. `generate_command` counts only unit files, not mod.rs files in "Generated N files" output (Low)
-7. Dep collision check duplicated in validator and generator (Low DRY)
-8. `normalized_absolute_path` swallows `current_dir()` failure with `fallback(".")` (Low)
-9. Missing idempotency test: two runs same output (Low)
-10. Composite key `"file1 | file2"` is fragile for paths containing ` | ` (Low)
-
-**CODEX SAYS (Eng — architecture challenge):**
-1. Consumer-module contract (`pub use generated::*`) is implicit and brittle — doc it explicitly as required convention (High)
-2. "Owned subtree" + orphan deletion blocks mixed directories — plan should explicitly require dedicated output dir (Medium)
-3. Rust keyword identifiers in local_tests[].id → ALREADY HANDLED by validate_rust_keywords (confirmed: False alarm)
-4. `local_tests[].id` uniqueness not enforced — duplicate ids → duplicate fn compile error (Medium)
-5. Visibility not validated — `fn apply_discount()` (no pub) passes spec validate but fails cargo check via dep (Medium)
-6. "Generate writes nothing on error" ordering — validate specs before marker/tempdir creation (Medium — confirmed by reading commands.rs)
-7. Plan-doc drift — retrospective notes in same file become anti-documentation (Low)
-
-```
-ENG DUAL VOICES — CONSENSUS TABLE:
-═══════════════════════════════════════════════════════════════
-  Dimension                           Claude  Codex  Consensus
-  ──────────────────────────────────── ─────── ─────── ─────────
-  1. Architecture sound?               Yes     Partial PARTIAL (path containment divergence, mixed dir gap)
-  2. Test coverage sufficient?         Partial Partial CONFIRMED gap (is_safe_expect_expr recursion, uniqueness, idempotency)
-  3. Performance risks addressed?      Yes     Yes     CONFIRMED (O(n) scans acceptable, CARGO_TARGET_DIR isolated)
-  4. Security threats covered?         Partial Partial CONFIRMED gap (is_safe_expect_expr non-recursive)
-  5. Error paths handled?              Partial Yes     PARTIAL (current_dir() swallowed, misleading error msg)
-  6. Deployment risk manageable?       Yes     Yes     CONFIRMED (single binary, no DB, clean rollback)
-═══════════════════════════════════════════════════════════════
-CONFIRMED = both agree. DISAGREE = models differ.
-Critical gap: is_safe_expect_expr non-recursive (security, both models flag independently).
-```
-
-**Section 1 — Architecture ASCII Diagram (post-M2):**
-```
-  .unit.spec files
-       │
-       ▼
-  ┌──────────────┐   schema JSON  ┌─────────────────────────────────────────┐
-  │  loader.rs   │───────────────▶│ validator.rs                            │
-  │  (YAML parse)│                │  • JSON Schema (jsonschema crate)        │
-  └──────────────┘                │  • semantic: keywords, dep format        │
-       │                          │  • syn: fn name, args, self-param check  │
-       ▼                          │  • local_tests: id regex + expr safety   │
-  ┌──────────────┐                │  • cross-spec: duplicate IDs, dep exists │
-  │normalizer.rs │                └─────────────────────────────────────────┘
-  │ (dep lookup) │                          │
-  └──────────────┘                          ▼
-       │                         ┌─────────────────────────────────────────┐
-       └────────────────────────▶│ generator.rs                            │
-                                 │  • generate_code(): use stmts + body    │
-                                 │  • local_tests → #[cfg(test)] block      │
-                                 │  • generate_mod_rs(): namespace tree      │
-                                 │  • write_generated_file(): atomic rename  │
-                                 │  • clean_output_dir(): orphan cleanup     │
-                                 │  • ensure_output_marker(): safety guard   │
-                                 └─────────────────────────────────────────┘
-```
-Coupling: generator.rs owns both file writing and orphan cleanup. Appropriate for M2. Single point of failure for output operations, which is intentional (owned subtree model).
-
-**Section 2 — Code Quality:**
-- `is_safe_expect_expr` non-recursive at validator.rs:148 — security gap, both models flag it
-- `normalized_absolute_path` fallback at generator.rs:317 — swallows real errors
-- Dep collision check at generator.rs:274 duplicates validator.rs:81 — remove from generator
-- File count reporting at commands.rs:145 — undercounts by not including mod.rs writes
-- Naming: clean, consistent, appropriate. No over-engineering.
-
-**Section 3 — Test Review:**
-Test diagram and artifacts: see `~/.gstack/projects/atomize-hq-spec/spenquatch-feat-m2-test-plan-20260403-064740.md`
-
-Critical test gap: `is_safe_expect_expr` non-recursive (security). Add tests:
-- `expect_with_unsafe_block_in_call_arg_is_rejected` — `f({ unsafe { ... } })` must fail
-- `expect_with_block_in_binary_operand_is_rejected` — `a + { exit(1); 2 }` must fail
-
-Medium gaps: local_tests id uniqueness, non-fn body error message, visibility validation.
-Low gaps: idempotency, file count, symlink cycle, cargo skip logging, composite key.
-
-**Section 4 — Performance:**
-No concerns. syn parse is O(body_size), orphan scan is O(n files), cargo subprocess has isolated target dir. Acceptable at M2 scale.
-
-**NOT in scope (eng view):**
-- Parallel generation (--jobs flag): M3+ when file count justifies
-- Cross-crate output: requires cross-library dep model (M3)
-- Cycle detection: M3 graph resolution
-
-**What already exists:**
-- loader.rs: unchanged, pre-existing
-- normalizer.rs: minor extension
-- validator.rs: syn + dep strictness + local_tests validation
-- generator.rs: imports, atomic writes, orphan cleanup, local_tests codegen
-- cli.rs: safety guards, strict mode, cargo subprocess
-
-**Failure Modes Registry (updated):**
-| Codepath | Failure scenario | Test? | Critical? |
-|---------|-----------------|-------|-----------|
-| is_safe_expect_expr | Block/Unsafe nested in Call/Binary args | No | **CRITICAL GAP** |
-| local_tests id | Duplicate ids within unit | No | Medium gap |
-| visibility | Private fn used as dep | No | Medium gap (caught by cargo check) |
-| clean_output_dir | Path containment logic diverges from ensure_output_marker | No | High gap |
-| normalized_absolute_path | current_dir() fails | No | Low gap |
-| collect_specs | Symlink cycle in spec dir | No | Medium gap |
-| cargo_available() | Cargo not in PATH at test time | No | Low gap (silent skip) |
-
-**CEO Phase → Eng Phase Cross-Phase Themes:**
-1. **`is_safe_expect_expr` injection surface** — CEO (prior learning applied: local-test-expect-injection, confidence 10/10) + Eng (non-recursive check). Both independently reach the same gap via different paths.
-2. **Consumer-module contract undocumented** — CEO (pub use generated::* is implicit) + Eng (brittle, blocks drop-in to existing crate). Both flag independently.
-3. **`local_tests.expect` design ceiling** — CEO (raw string won't scale as product) + Eng (test gaps in is_safe_expect_expr). Two distinct perspectives, same underlying fragility.
-
-**Eng Phase Completion Summary:**
-```
-ENG REVIEW (autoplan retrospective):
-  Architecture:    SOUND with 2 noted gaps (path containment divergence, mixed dir)
-  Security:        CRITICAL GAP — is_safe_expect_expr non-recursive (both models)
-  Code quality:    GOOD — 5 minor issues, all low/medium
-  Test coverage:   1 critical gap, 4 medium gaps, 5 low gaps
-  Test plan:       Written to ~/.gstack/projects/atomize-hq-spec/spenquatch-feat-m2-test-plan-...md
-  Auto-decisions:  5 additional (all deferrals or flags)
-  Taste decisions: 0 (Eng phase)
-  User challenges: 0 (security gap = bug fix, not direction change)
-```
-
-**PHASE 3 COMPLETE.** Codex: 7 findings. Claude subagent: 10 findings. Consensus: 3/6 confirmed, 2 partial. Cross-phase themes: 3 (is_safe_expect_expr, consumer-module contract, local_tests fragility). Proceeding to Final Approval Gate.
 
 ---
 
@@ -830,16 +716,318 @@ ENG REVIEW (autoplan retrospective):
 
 | # | Phase | Decision | Classification | Principle | Rationale | Rejected |
 |---|-------|----------|----------------|-----------|-----------|----------|
-| 1 | CEO | Mode: SELECTIVE EXPANSION | Mechanical | P3 pragmatic | Iteration on existing implemented system | SCOPE EXPANSION |
-| 2 | CEO | Thesis wording fix: "escapable via --no-strict" → "escape hatch deferred to M3" | Mechanical | P5 explicit | Doc contradiction caught by Codex, wording misleads readers | None |
-| 3 | CEO | D8 path contradiction (line 230): flag for doc fix | Mechanical | P5 explicit | "src/generated/spec" reintroduced after D4 corrected it to "src/generated" | None |
-| 4 | CEO | PLAN.md Status field: flag for update to "Implemented (PR #1 MERGED)" | Mechanical | P5 explicit | Post-merge drift, breaks onboarding | None |
-| 5 | CEO | ICP definition → TODOS.md (not added to M2 scope) | Mechanical | P3 pragmatic | M2 already shipped; add as M3 prerequisite | Cherry-pick |
-| 6 | CEO | Generated code commitment binary decision → TODOS.md | Mechanical | P3 pragmatic | M2 already shipped; hybrid state acceptable short-term | Cherry-pick |
-| 7 | CEO | Approach C (invert D3) design spike → TODOS.md | Mechanical | P3 pragmatic | M2 shipped; design spike before M3 D3 expansion | Cherry-pick |
-| 8 | CEO | D3 single-function constraint → TASTE DECISION at gate | Taste | P1/P5 conflict | Claude sees no issue, Codex flags it will be reversed | Accept current |
-| 9 | Eng | is_safe_expect_expr non-recursive → flag as critical gap at gate | Mechanical | P1 completeness | Security: injection bypass; both models flag; needs fix in follow-up PR | Defer |
-| 10 | Eng | path containment logic divergence → TODOS.md | Mechanical | P5 explicit | clean_output_dir vs ensure_output_marker use different algorithms | Cherry-pick |
-| 11 | Eng | local_tests id uniqueness → TODOS.md test gap | Mechanical | P1 completeness | Duplicate ids → compile error, no validator check | Cherry-pick |
-| 12 | Eng | visibility not validated → TODOS.md | Mechanical | P3 pragmatic | Caught by cargo check in D4; spec validate warning would be better | Defer to M3 |
-| 13 | Eng | consumer-module convention doc → TODOS.md | Mechanical | P5 explicit | pub use generated::* must be documented as required convention | Doc task |
+| 1 | CEO | Mode: SELECTIVE EXPANSION | Mechanical | P3 pragmatic | New plan on proven system; scope already confirmed by user | SCOPE EXPANSION |
+| 2 | CEO | ICP deferral confirmed (user explicit decision at premise gate) | Mechanical | P3 pragmatic | User chose "Skip ICP for now"; ICP removed from D5 and success criteria | D5c addition |
+| 3 | CEO | Fix plan consistency: sequencing rationale D5 + success criteria ICP refs | Mechanical | P5 explicit | Doc contradiction found by Codex: ICP mentioned in 3 places after user deferred it | None |
+| 4 | CEO | D1 framing update: pipeline is evidence enforcement layer, not convenience | Mechanical | P5 explicit | Both models note D1 is undersold in thesis; no scope change, framing change only | None |
+| 5 | CEO | D1 approach: new commands (spec build/test) vs flags vs config | Mechanical | P5 explicit | New commands are correct: distinct concerns, discoverable, independently testable | Flags, config-only |
+| 6 | CEO | D5a approach: inline syn parse in generate_code vs ValidatedExpr newtype | Mechanical | P3 pragmatic | Simpler approach is appropriate for M4; newtype deferred to M5 when API surface grows | ValidatedExpr newtype |
+| 7 | CEO | Evidence provenance (commit SHA, runner ID) → TODOS.md | Mechanical | P3 pragmatic | Both models flag this; provenance is M5+ when CI integration is designed | Cherry-pick |
+| 8 | CEO | D1/D2 wedge concern (Codex) → TASTE DECISION at gate | Taste | P1/P6 conflict | Codex: pipeline is wrong wedge. User confirmed scope. Surface at final gate. | Accept current |
+| 9 | CEO | D6 schema analysis depth → expand to 3-way comparison in D6 section | Mechanical | P1 completeness | Both models flag thin analysis; add tradeoff matrix before committing | None |
+| 10 | Eng | D1 workspace root discovery: walk until [workspace] found, not first Cargo.toml | Mechanical | P1 completeness | Both models flag: member Cargo.toml found first in workspace = wrong crate | Accept member |
+| 11 | Eng | D2 test matching: use module-qualified path, not bare test_id | Mechanical | P5 explicit | Bare test_{id} not unique across units; must qualify with generated module path | Bare test_id |
+| 12 | Eng | D2 evidence schema: add parse_confidence field | Mechanical | P1 completeness | Codex: silent degradation architectural; need "unparsed/ambiguous" status | Omit field |
+| 13 | Eng | D3 export schema: add schema_version (separate from spec_version) + warnings array | Mechanical | P5 explicit | Downstream consumers need schema version separate from tool version | Use spec_version |
+| 14 | Eng | D3 --output: validate !path.is_dir() before write | Mechanical | P1 completeness | serde_json write to directory fails confusingly | None |
+| 15 | Eng | move run_cargo() from test-only to pipeline.rs production code | Mechanical | P3 pragmatic | run_cargo() pattern is correct but test-only — must be production code for D1 | Keep in tests |
+| 16 | Eng | D3 partial passports: emit passport_missing marker, not silent omission | Mechanical | P5 explicit | Claude subagent: silent mismatch in units vs passports arrays | Silent omission |
+| 17 | DX | D5b scope expanded to include 5 README sections (quickstart, pipeline config, export schema, escape hatch, evidence) | Mechanical | P1 completeness | Both models: docs fail for new developers; 4 confirmed gaps | Minimal D5b |
+| 18 | DX | D1: print resolved crate root to stderr | Mechanical | P5 explicit | Both models: silent auto-discovery creates confusion when wrong root chosen | Silent |
+| 19 | DX | D1 acceptance: add missing crate-root error message | Mechanical | P1 completeness | Claude subagent: new user hits generic anyhow error; Codex confirms | Omit |
+| 20 | DX | D2: unmatched test → emit "unknown" with reason, not silent omission | Mechanical | P5 explicit | Both models flag silent DX; "unknown" is honest; silent is misleading | Silent drop |
+| 21 | DX | D7: CHANGELOG 0.3→0.4 migration notes (evidence is additive) | Mechanical | P1 completeness | Codex: upgrade path not fear-free; need explicit compatibility statement | None |
+| 22 | DX | --output disambiguation in help text (not flag rename) | Mechanical | P5 explicit | Codex: --output means different things; help text fixes this cheaply | Flag rename |
+
+
+---
+
+### Phase 3: Eng Review + Dual Voices
+
+**CLAUDE SUBAGENT (Eng — independent review):**
+1. D1 workspace Cargo.toml walk stops at first member, not workspace root — workspace builds run in wrong crate (High)
+2. D2 multi-binary cargo test output not handled — parser doesn't account for workspace builds with multiple test binaries (High)
+3. D3 partial passports silently omitted — new unit added since last generate = `units` and `passports` arrays silently mismatched (Medium)
+4. D5a double-parse cost + opaque error at API boundary — generator re-parses what validator already parsed; error misses unit/test context (Medium)
+5. Test plan gaps: workspace root test, partial passport test, non-test-line parse test (Medium)
+6. D3 `--output` path not validated against directory — `serde_json` write to directory path fails confusingly (Low)
+
+**CODEX SAYS (Eng — architecture challenge):**
+1. D1 cargo-root discovery unresolved: `--crate-root` flag vs config vs ancestor walk are three different things and none are fully specified; `run_cargo()` is test-only code (High)
+2. D2 test matching unreliable: `test_{id}` is not unique across units/binaries; evidence can silently assign to wrong passport (High)
+3. D2 evidence schema has no uncertainty representation: no `unparsed`, `ambiguous_match`, or `expected N / observed M` — silent degradation is architectural (High)
+4. D3 export schema underspecified: `spec_version` is tool version not schema version; no `warnings/skips` field; graph edges unstable until D6 resolved (High)
+5. Test plan missing: workspace vs member manifests, `--crate-root` precedence, duplicate IDs across units, compile vs test failure evidence, malformed passport export (Medium)
+
+```
+ENG DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Architecture sound?               Partial Partial CONFIRMED gap (D1 workspace; D2 matching; D3 schema)
+  2. Test coverage sufficient?         Partial Partial CONFIRMED gap (24 gaps identified vs 17 original)
+  3. Performance risks addressed?      Yes     Yes     CONFIRMED (O(n) scans, cargo target isolation established)
+  4. Security threats covered?         Partial Partial CONFIRMED gap (D3 --output path; pipeline runs user cargo expected)
+  5. Error paths handled?              Partial Partial CONFIRMED gap (D2 uncertainty, D3 malformed passports, D1 discovery)
+  6. Deployment risk manageable?       Yes     Yes     CONFIRMED (single binary, opt-in new commands)
+═══════════════════════════════════════════════════════════════
+CONFIRMED = both agree. All 4 findings confirmed high-confidence.
+```
+
+**Section 1 — Architecture ASCII Diagram (post-M4):**
+```
+  .unit.spec files
+       │
+       ▼
+  ┌──────────────┐   schema JSON  ┌─────────────────────────────────────────┐
+  │  loader.rs   │───────────────▶│ validator.rs                            │
+  │  (YAML parse)│                │  • JSON Schema + syn + dep strictness   │
+  └──────────────┘                │  • cycle detection, contract types       │
+       │                          └─────────────────────────────────────────┘
+       ▼                                        │
+  ┌──────────────┐                              ▼
+  │normalizer.rs │    ┌───────────────────────────────────────────────────┐
+  │ (dep lookup) │──▶ │ generator.rs                                       │
+  └──────────────┘    │  • generate_code() → pub fn + /// intent + tests  │
+                      │  • generate_mod_rs(), atomic write + orphan clean  │
+                      │  • passport.rs → .spec.passport.json (static)     │
+                      └───────────────────────────────────────────────────┘
+                                   │
+                        [M4 NEW]   ▼
+                      ┌───────────────────────────────────────────────────┐
+                      │ pipeline.rs                                        │
+                      │  • spec build: run_cargo_build(crate_root)        │
+                      │  • spec test:  run_cargo_test(crate_root)         │
+                      │  • parse_test_output() → PassportEvidence         │
+                      │  • workspace_root_discovery(path) → PathBuf       │
+                      └───────────────────────────────────────────────────┘
+                                   │
+                        [M4 NEW]   ▼
+                      ┌───────────────────────────────────────────────────┐
+                      │ export.rs                                          │
+                      │  • ExportBundle: units, passports, graph, warnings│
+                      │  • load_passports_for_specs() (graceful missing)   │
+                      │  • emit JSON to stdout or --output <file>          │
+                      └───────────────────────────────────────────────────┘
+```
+
+Coupling: `pipeline.rs` creates a hard dependency on cargo being available. `export.rs` is stateless (read-only). Both are thin orchestration layers over existing types. Appropriate for M4.
+
+**Section 2 — Code Quality:**
+- D1: cargo root discovery must be extracted to `workspace_root_for(path: &Path) -> Result<PathBuf>` — check for `[workspace]` key in Cargo.toml, walk upward until found or error
+- D2: test matching must use module-qualified path (`generated::money::round::tests::test_happy_path`) not bare `test_happy_path` — avoids cross-unit collision
+- D3: export schema needs: `"schema_version": "1.0"` (separate from tool version), `"warnings": [...]` array for skipped/malformed passports
+- D5a: `generate_code()` error message must include unit ID and local_test ID when failing — error context is required for usability
+- Naming: `pipeline.rs`, `export.rs` are clean module names. Consistent with existing `loader.rs`, `validator.rs`, `generator.rs`, `passport.rs` pattern.
+
+**Section 3 — Test Review:**
+See test plan artifact: `~/.gstack/projects/atomize-hq-spec/spenquatch-main-m4-test-plan-20260404-172327.md`
+
+24 test gaps identified (17 original + 7 from dual voice review):
+
+New gaps added:
+- `spec_build_crate_root_workspace_resolution` (D1)
+- `spec_build_crate_root_config_vs_flag_precedence` (D1)
+- `spec_build_no_cargo_toml_exits_with_error` (D1)
+- `parse_cargo_test_output_ignores_non_test_lines` (D2)
+- `parse_cargo_test_output_handles_duplicate_test_ids_across_units` (D2)
+- `spec_export_partial_passports_marked_missing` (D3)
+- `spec_export_output_path_rejects_directory` (D3)
+- `spec_export_schema_version_separate_from_spec_version` (D3)
+- `spec_test_writes_evidence_atomically` (D2)
+
+Total: 26 test gaps.
+
+Critical test gaps (both models flag):
+- Workspace root discovery (D1)
+- Duplicate test_id matching across units (D2)
+- Evidence parse confidence field (D2)
+
+**Section 4 — Performance:**
+- D1/D2: cargo subprocesses are slow by design. Isolated CARGO_TARGET_DIR established in M2 pattern.
+- D3 export: loads all passports from disk. O(n) file reads. Acceptable at M4 unit counts.
+- D4: O(len(intent)) string allocation per unit at generate time. Negligible.
+- D5a: syn re-parse adds O(body_size) per unit generate call. Noted; deferred to M5.
+
+**Section 5 — Security:**
+- D1/D2: `spec build`/`spec test` run user's cargo, which compiles user code. This is expected behavior for a dev tool. No new privilege escalation.
+- D3: `--output <file>` path validation: add `assert!(!path.is_dir())` before write. One line.
+- D5a: sink guard improves security surface — direct API callers now blocked from unsafe expect strings.
+No new auth surfaces, no network requests, no credential handling.
+
+**NOT in scope (eng view):**
+- Multi-binary workspace cargo test aggregation: scope spec test to one crate root per invocation
+- Evidence provenance (commit SHA, env fingerprint): M5 passport v3
+- Cross-library dep implementation: M5 — D6 decides schema only
+
+**What already exists (M4 leverage map):**
+- `cargo_available()` at cli.rs:875 and `run_cargo()` at cli.rs:886 — must be moved to `pipeline.rs` (not just referenced as test helpers)
+- `Passport` struct at passport.rs:44 — extend with `evidence: Option<PassportEvidence>`
+- `serde_json` dependency already present — zero new crates for D3
+- `LoadedSpec`, `ResolvedSpec` types → direct inputs to `build_export_bundle()`
+
+**Failure Modes Registry (M4 additions):**
+| Codepath | Failure scenario | Test? | Critical? |
+|---------|-----------------|-------|-----------|
+| workspace_root_for() | Member Cargo.toml found, not workspace root | No | **HIGH** |
+| parse_test_output() | Duplicate test_id across units → wrong evidence | No | **HIGH** |
+| parse_test_output() | Unexpected output format → silent wrong evidence | No | **HIGH** |
+| export: passport load | Malformed JSON → silent omission without warning | No | **HIGH** |
+| D3 --output | Directory path → confusing error from serde_json | No | Medium |
+| D5a sink guard | syn parse error context missing unit/test ID | No | Medium |
+| D2 evidence write | Partial write (interrupt) → stale+updated passports | No | Medium |
+
+**Eng Phase Completion Summary:**
+```
+ENG REVIEW (autoplan 2026-04-04):
+  Architecture:    3 HIGH gaps resolved in plan: workspace discovery, test matching, evidence schema
+  Security:        D3 --output path validation added; D5a improves existing surface
+  Code quality:    `run_cargo()` must move to pipeline.rs (not test-only); 5 naming/context fixes
+  Test coverage:   26 gaps total; 4 critical, 9 high, 13 medium/low
+  Test plan:       Written to ~/.gstack/projects/atomize-hq-spec/spenquatch-main-m4-test-plan-20260404-172327.md
+  Auto-decisions:  8 (workspace discovery, matching strategy, schema versioning, --output validation)
+  Taste decisions: 0 (all architectural gaps have one clearly right fix)
+  User challenges: 0
+```
+
+**PHASE 3 COMPLETE.** Codex: 5 findings. Claude subagent: 6 findings. Consensus: 4/6 confirmed gaps, 2 confirmed safe. Cross-phase themes (from Phase 1 + Phase 3): evidence quality (CEO + Eng both flag), export schema stability (CEO + Eng). Proceeding to Phase 3.5 (DX Review — DX scope confirmed).
+
+---
+
+
+
+---
+
+### Phase 3.5: DX Review
+
+**DX scope: Yes** — spec is a developer CLI tool; the primary user IS the developer.
+
+**CLAUDE SUBAGENT (DX — independent review):**
+1. TTHW: 7-10 minutes, not 5 — README Quickstart ends at `spec generate`; spec build/test not in quickstart (High)
+2. Silent crate-root auto-discovery: no output telling developer which crate root spec chose (Medium)
+3. Missing error spec for no Cargo.toml ancestor: new user hits generic anyhow error (High)
+4. D2 unmatched test behavior undefined: silent omission vs "unknown" not specified (Medium)
+5. README missing: pipeline config section, spec export bundle schema, spec test evidence section, escape hatch doc (Medium)
+6. `spec generate` not documented as first-class escape hatch — implied to be deprecated (Medium)
+
+**CODEX SAYS (DX — developer experience challenge):**
+1. TTHW: 10-20 min — assumes spec path, output dir, consuming crate knowledge; `pub use generated::*` still undiscovered (Fail)
+2. Error messages: mostly fail — silent failures in D1/D2/D3; "canonical bridge" language contradicts known provenance gaps (High)
+3. CLI ergonomics: mixed — names guessable; `--output` means different things for build/test vs export (Medium)
+4. Docs: fail — no quickstart for new commands; no named consumer for spec export (High)
+5. Upgrade path not fear-free: passport schema v2 breaking change without migration guide or compatibility examples (High)
+
+```
+DX DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Getting started < 5 min?          No (7-10) No (10-20) CONFIRMED fail — README not updated
+  2. API/CLI naming guessable?         Mostly  Mixed  PARTIAL (names good; --output semantics differ)
+  3. Error messages actionable?        Partial Partial CONFIRMED gap (crate-root miss; D2 silent; passports)
+  4. Docs findable & complete?         Partial No     CONFIRMED gap (4 new README sections missing)
+  5. Upgrade path safe?                Medium  No     CONFIRMED gap (passport v2; no migration guide)
+  6. Dev environment friction-free?    Medium  Medium PARTIAL (pub use convention; spec build auto-discovery)
+═══════════════════════════════════════════════════════════════
+CONFIRMED = both agree (4/6 confirmed gaps — strong DX signal).
+```
+
+**Developer Journey Map:**
+
+| Stage | Current DX | M4 Target |
+|-------|-----------|-----------|
+| 1. Install | `cargo install spec-cli` | Same |
+| 2. Author units | Write .unit.spec files | Same |
+| 3. Validate | `spec validate ./units` | Same |
+| 4. Generate | `spec generate ./units --output ./src/generated` | Same |
+| 5. Wire into crate | Add `mod generated;` + `pub use generated::*;` | **Must be documented** |
+| 6. Build with spec | — | `spec build ./units --output ./src/generated` |
+| 7. Run spec test | — | `spec test ./units --output ./src/generated` |
+| 8. Check passport | Open .spec.passport.json | Passport now has `evidence` field |
+| 9. Export bundle | — | `spec export ./units` |
+
+**TTHW Assessment:** Initial: ~15 min. Target with M4 DX fixes: ~7 min. Can reach 5 min only if `pub use generated::*` step is eliminated (would require a different crate integration model — M5 scope).
+
+**DX Auto-Decisions:**
+
+1. **D5b scope expansion** (AUTO-DECIDE P1): README.md must include:
+   - Pipeline quickstart block: `spec build` + `spec test` invocations
+   - `[pipeline]` config section documentation
+   - `spec export` bundle schema (top-level keys, example jq query)
+   - Escape hatch note: "spec generate remains standalone, spec build/test are opt-in"
+   - spec test evidence section: what the passport evidence field contains
+
+2. **D1: print resolved crate root** (AUTO-DECIDE P5): On `spec build`/`spec test`, emit `spec: using crate root <path>` to stderr. Suppressible with `--quiet`. Makes auto-discovery transparent.
+
+3. **D1 acceptance criteria: add missing crate-root error** (AUTO-DECIDE P1): `❌ could not find crate root — run from inside a Cargo project, or pass --crate-root <path>`
+
+4. **D2: define unmatched test behavior** (AUTO-DECIDE P5): Unmatched `test_{id}` in cargo output → emit `"status": "unknown", "reason": "test not found in cargo output"` in evidence. Not silent omission.
+
+5. **D7: add 0.3.0 → 0.4.0 migration notes** (AUTO-DECIDE P1): CHANGELOG must explicitly state: passport schema v2 adds optional `evidence` field (non-breaking to parsers using `serde_json::from_value` with default). No file migration needed.
+
+6. **`--output` disambiguation** (AUTO-DECIDE P5): spec export help text must say `--output <file>  Write JSON bundle to FILE instead of stdout`. build/test help text: `--output <dir>  Directory for generated Rust files (same as spec generate)`. Documented in help text; no flag rename needed.
+
+**DX Scorecard:**
+
+| Dimension | Initial Score | Target Score | Key Fix |
+|-----------|--------------|--------------|---------|
+| Getting started | 3/10 | 7/10 | Quickstart + pub use documented |
+| API/CLI naming | 7/10 | 8/10 | --output disambiguation in help |
+| Error messages | 4/10 | 8/10 | Crate-root error + D2 unmatched behavior |
+| Docs completeness | 4/10 | 7/10 | 5 new README sections |
+| Upgrade path | 5/10 | 8/10 | Migration note in CHANGELOG |
+| Dev env friction | 6/10 | 7/10 | Print crate root, pub use documented |
+| **Overall** | **4.8/10** | **7.5/10** | |
+
+**DX Implementation Checklist (must ship with M4):**
+- [ ] README: pipeline quickstart (spec build + spec test example)
+- [ ] README: [pipeline] spec.toml config section
+- [ ] README: spec export bundle top-level keys + jq example
+- [ ] README: escape hatch note (spec generate is first-class)
+- [ ] README: spec test evidence section (what the passport evidence field contains)
+- [ ] D1: print resolved crate root to stderr
+- [ ] D1: explicit error for no Cargo.toml ancestor in chain
+- [ ] D2: define unmatched test behavior (unknown with reason, not silent)
+- [ ] D7: CHANGELOG 0.3.0→0.4.0 migration note (evidence field is additive)
+
+**PHASE 3.5 COMPLETE.** DX initial: 4.8/10 → target: 7.5/10. TTHW: 15 min → 7 min. Both models agree on 4 critical DX gaps. 9-item DX checklist added to plan. Passing to Phase 4 (Final Gate).
+
+---
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 2 | CLEAR (HOLD_SCOPE) | autoplan: 2 critical; 2026-04-05: 5 new gaps + 2 Codex tensions resolved |
+| Codex Review | `/codex review` | Independent 2nd opinion | 2 | issues_found | 13 findings; 2 resolved (spec test order, syntax.rs boundary) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open (PLAN via /autoplan) | 11 issues, 4 critical — all resolved in plan; re-run for clean stamp |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 1 | issues_open (PLAN via /autoplan) | score: 4.8/10 → 7.5/10, 9 DX items resolved |
+
+**CODEX:** spec test write-then-exit order fixed; is_safe_expect_expr_depth moved to syntax.rs (clean boundary)
+**UNRESOLVED:** 0
+**VERDICT:** CEO CLEARED — eng review shows issues_open (all resolved in plan). Run `/plan-eng-review` for clean stamp before `/ship`.
+
+---
+
+### CEO Review Run 1 — autoplan 2026-04-04 (SELECTIVE EXPANSION)
+
+ICP scope creep removed; evidence quality bar raised; workspace root discovery, test_id matching, evidence schema, export schema stability all resolved. D5c (D1 framing, auto-decisions) confirmed. TTHW: 15 min → 7 min via DX fixes.
+
+### CEO Review Run 2 — /plan-ceo-review 2026-04-05 (HOLD SCOPE)
+
+**New gaps found and resolved in plan:**
+
+| Gap | Description | Resolved |
+|-----|-------------|---------|
+| GAP 1 | cargo hang: no observability or timeout | Documented: `spec: running cargo build...` to stderr; SIGINT propagates; timeout deferred |
+| GAP 2 | `spec export --output` parent dir missing → confusing OS error | Fixed: add parent.exists() check + clear error |
+| GAP 3 | D5a uses raw syn::parse_str → syn stack overflow on 200+ nested levels | Fixed: must call is_safe_expect_expr_depth() (make pub in validator.rs) |
+| GAP A | spec build accepts single-file path → gitignore guard pitfall | Fixed: scope to directory paths only, add error |
+| GAP B | spec test with zero local_tests: untested and unstated | Fixed: added test + acceptance criteria |
+| D5c | "commit vs ephemeral" open decision never formally closed | Fixed: DECISIONS.md entry added to D5 |
+
+**New tests added:** 5 (31 total from 26)
+**New decisions:** 1 (D5c commit-vs-ephemeral formal record)
+**Unresolved:** 0
+

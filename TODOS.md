@@ -84,4 +84,22 @@
 
 ## M4 Backlog
 
-- [ ] **Pipeline wrap: `spec build` / `spec test` config lever** — spec generates, user runs cargo (default). Add workspace config flag and/or CLI flag to enable spec-wrapped cargo execution: `spec build` = validate + generate + cargo build; `spec test` = spec build + cargo test. Default: off. Target: M4.
+- [ ] **Pipeline wrap: `spec build` / `spec test` config lever** — spec generates, user runs cargo (default). Add workspace config flag and/or CLI flag to enable spec-wrapped cargo execution: `spec build` = validate + generate + cargo build; `spec test` = spec build + cargo test. Default: off. See PLAN.md D1 for workspace-aware crate-root discovery design.
+- [ ] **Runtime evidence in passports (D2)** — After `spec test`, update passport with observed test results: `evidence.build_status`, `evidence.test_results[{id, status, reason?}]`, `evidence.parse_confidence`. Evidence is "last observed locally" — not CI-canonical (no commit SHA or runner identity). Provenance deferred to M5.
+- [ ] **JSON export v1 (`spec export`) (D3)** — Emit machine-readable bundle: `{schema_version: "1.0", spec_version: "0.4.0", exported_at, units[], passports[], graph:{edges[]}, warnings[]}`. Passports missing = `passport_missing: true` marker, not silent omission. `--output <file>` writes to file; default stdout.
+- [ ] **Doc comments in generated Rust (D4)** — `generate_code()` prepends `/// {intent}` above each `pub fn`. 1-line change in generator.rs.
+- [ ] **D5a: Defense-in-depth sink guard** — Move `is_safe_expect_expr_depth()` to new `spec-core/src/syntax.rs` shared module. Both `validator.rs` and `generator.rs` import from it. Call it in `generate_code()` instead of raw `syn::parse_str`. Error must include unit ID + test ID in context. Raw syn::parse_str overflows on 200+ nested levels — this is the same bug fixed in the validator, now at the generate_code sink. Newtype refactor (ValidatedExpr) deferred to M5.
+- [ ] **D5b: README updates (DX checklist)** — 5 new sections: pipeline quickstart, [pipeline] spec.toml config, spec export bundle schema + jq example, escape hatch note (spec generate is first-class), spec test evidence section.
+- [ ] **D6: Cross-library dep schema decision** — Design spike (2 hrs): compare namespace prefix (`shared::money/round`), versioned path (`money/round@1.2`), registry path (`org/shared/money/round`). Output: DECISIONS.md entry with chosen schema and rationale. Must complete before M5 build.
+
+- [ ] **D5c: DECISIONS.md — "Generated Output: Ephemeral by Default"** — Close the open "commit vs ephemeral" decision from M3 TODOS. D1 (spec build) resolves it implicitly; write the formal record before M5 engineers re-litigate it. 1-paragraph entry. No code. Effort: XS. (Added by /plan-ceo-review 2026-04-05)
+- [ ] **Create spec-core/src/syntax.rs shared module** — Move `is_safe_expect_expr_depth()` from `validator.rs` to a new `syntax.rs` module (pub). Update `validator.rs` and `generator.rs` (D5a) to import from `syntax.rs`. This avoids leaking validator internals into the public API. Also expose from `lib.rs`. Effort: XS (~15 min). Depends on: D5a implementation. (Added by /plan-ceo-review 2026-04-05, Codex tension resolved)
+
+## M5 Backlog (from M4 review)
+
+- [ ] **ICP definition** — One paragraph in DECISIONS.md: who is the v0.x user? Solo engineer, small team, or broader? Gates M5 scoping. (User deferred from M4 — explicit decision 2026-04-04)
+- [ ] **Evidence provenance (passport v3)** — Add commit SHA, runner identity, env fingerprint to passport evidence schema. Makes evidence CI-trustworthy, not just locally observed.
+- [ ] **D5a newtype refactor (ValidatedExpr)** — Replace `String` expect in `ResolvedSpec` with `ValidatedExpr` newtype wrapping `syn::Expr`. Eliminates double-parse cost and gives type-safe API boundary.
+- [ ] **parse_test_output() HashMap optimization** — If implemented with a vec scan (O(lines × units)), refactor to build a HashMap of expected test IDs before the scan (O(lines)). Document as a performance note in pipeline.rs. Effort: XS. Depends on: D2 implementation. (Added by /plan-ceo-review 2026-04-05)
+- [ ] **cargo timeout support (wait_timeout)** — `spec build`/`spec test` use `std::process::Command::output()` which blocks indefinitely. Add configurable timeout via the `wait_timeout` crate or similar. For M4, the hang is documented behavior (SIGINT propagates). Effort: S. (Added by /plan-ceo-review 2026-04-05)
+- [ ] **Cross-library dep IMPLEMENTATION** — After D6 schema is decided, implement cross-library dep loading, cycle detection across libraries, and use statement generation for external spec units.
