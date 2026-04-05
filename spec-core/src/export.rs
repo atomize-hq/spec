@@ -4,9 +4,9 @@
 //! It includes authored unit metadata, any readable co-located passports,
 //! the dependency edge list, and structured warnings for skipped passports.
 
+use crate::AUTHORED_SPEC_VERSION;
 use crate::passport::{Passport, passport_path_for};
 use crate::types::{Contract, LoadedSpec, LocalTest};
-use crate::AUTHORED_SPEC_VERSION;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
