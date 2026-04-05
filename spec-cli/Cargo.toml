@@ -7,13 +7,15 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "CLI for validating and generating Rust code from .unit.spec files"
+keywords = ["code-generation", "specification", "cli"]
+categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-spec-core = { path = "../spec-core" }
+spec-core = { path = "../spec-core", version = "0.4.0" }
 tempfile = "3.19"
 toml = { workspace = true }
 walkdir = { workspace = true }

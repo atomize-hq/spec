@@ -7,6 +7,8 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Core library for parsing and generating Rust code from .unit.spec files"
+keywords = ["code-generation", "specification", "rust"]
+categories = ["development-tools"]
 
 [dependencies]
 anyhow = { workspace = true }

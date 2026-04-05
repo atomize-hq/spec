@@ -68,6 +68,44 @@ fn compiled_schema() -> Result<&'static jsonschema::Validator> {
         .expect("COMPILED_SCHEMA must be set after successful compilation"))
 }
 
+fn humanize_validation_error(error: &jsonschema::ValidationError<'_>) -> String {
+    use jsonschema::error::ValidationErrorKind;
+
+    let field_path = error.instance_path.to_string();
+    let field_label = if field_path.is_empty() || field_path == "/" {
+        String::new()
+    } else {
+        format!(" at {field_path}")
+    };
+
+    match &error.kind {
+        ValidationErrorKind::Required { property } => {
+            format!("missing required field: {}{}", property, field_label)
+        }
+        ValidationErrorKind::AdditionalProperties { unexpected } => {
+            let fields = unexpected.iter().cloned().collect::<Vec<_>>().join(", ");
+            format!("unknown field{}: {}", field_label, fields)
+        }
+        ValidationErrorKind::Enum { .. } => {
+            format!("invalid value{}: {} — check allowed values", field_label, error)
+        }
+        ValidationErrorKind::Pattern { .. } => {
+            if field_path == "/id" || field_path.ends_with("/id") {
+                format!("invalid id format{}: use \"module/name\" (e.g., \"pricing/apply_tax\")", field_label)
+            } else {
+                format!("invalid format{}: {}", field_label, error)
+            }
+        }
+        _ => {
+            if field_path.is_empty() {
+                error.to_string()
+            } else {
+                format!("{} (at {})", error, field_path)
+            }
+        }
+    }
+}
+
 fn validate_json_value(spec_json: &Value, file_path: &str) -> Result<()> {
     let schema = compiled_schema()?;
 
@@ -77,7 +115,7 @@ fn validate_json_value(spec_json: &Value, file_path: &str) -> Result<()> {
     match validation_result {
         Ok(()) => Ok(()),
         Err(error) => Err(SpecError::SchemaValidation {
-            message: error.to_string(),
+            message: humanize_validation_error(&error),
             path: file_path.to_string(),
         }),
     }
@@ -468,7 +506,7 @@ extra_field: should_fail
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Schema validation failed"));
-        assert!(err.contains("Additional properties are not allowed"));
+        assert!(err.contains("unknown field"));
     }
 
     #[test]
@@ -1547,5 +1585,46 @@ body:
         .unwrap_err();
 
         assert!(err.to_string().contains("maximum depth of 128"));
+    }
+
+    #[test]
+    fn humanize_validation_error_required_field() {
+        let yaml = r#"id: pricing/apply_tax
+kind: function
+body:
+  rust: "{ 42 }""#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+        let err = validate_raw_yaml(&value, "test.unit.spec").unwrap_err().to_string();
+        assert!(err.contains("missing required field"), "got: {err}");
+        assert!(err.contains("intent"), "got: {err}");
+    }
+
+    #[test]
+    fn humanize_validation_error_unknown_field() {
+        let yaml = r#"id: pricing/apply_tax
+kind: function
+intent:
+  why: test
+body:
+  rust: "{ 42 }"
+extra_field: bad"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+        let err = validate_raw_yaml(&value, "test.unit.spec").unwrap_err().to_string();
+        assert!(err.contains("unknown field"), "got: {err}");
+        assert!(err.contains("extra_field"), "got: {err}");
+    }
+
+    #[test]
+    fn humanize_validation_error_id_pattern() {
+        let yaml = r#"id: BAD_FORMAT
+kind: function
+intent:
+  why: test
+body:
+  rust: "{ 42 }""#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+        let err = validate_raw_yaml(&value, "test.unit.spec").unwrap_err().to_string();
+        assert!(err.contains("invalid id format"), "got: {err}");
+        assert!(err.contains("module/name"), "got: {err}");
     }
 }

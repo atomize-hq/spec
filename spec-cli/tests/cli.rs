@@ -295,22 +295,10 @@ body:
 
 #[test]
 fn generate_rejects_no_strict_flag() {
+    // --no-strict is not a valid flag for `generate` — clap rejects it at parse time
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     let output_dir = temp_dir.path().join("generated/spec");
-    write_spec(
-        &units_dir,
-        "pricing/apply_discount.unit.spec",
-        r#"
-id: pricing/apply_discount
-kind: function
-intent:
-  why: Apply a discount.
-body:
-  rust: |
-    pub fn apply_discount() {}
-"#,
-    );
 
     let output = run(&[
         "generate",
@@ -323,12 +311,36 @@ body:
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains(
-            "❌ --no-strict is not valid for spec generate — use spec validate to check without strict enforcement"
-        ),
-        "{stderr}"
+        stderr.contains("no-strict") && (stderr.contains("unexpected") || stderr.contains("unrecognized") || stderr.contains("found")),
+        "expected clap unknown-argument error for --no-strict, got: {stderr}"
     );
     assert!(!output_dir.exists());
+}
+
+#[test]
+fn validate_help_shows_path_description() {
+    let output = run(&["validate", "--help"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("PATH"),
+        "expected PATH value_name in help, got: {stdout}"
+    );
+    assert!(
+        stdout.contains(".unit.spec"),
+        "expected .unit.spec in help description, got: {stdout}"
+    );
+}
+
+#[test]
+fn generate_help_does_not_show_no_strict() {
+    let output = run(&["generate", "--help"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains("no-strict"),
+        "expected --no-strict to be absent from generate help, got: {stdout}"
+    );
 }
 
 #[test]

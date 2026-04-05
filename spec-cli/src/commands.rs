@@ -51,7 +51,7 @@ impl Command {
     pub fn run(self) -> Result<()> {
         match self {
             Self::Validate(args) => validate_command(&args.path, args.no_strict),
-            Self::Generate(args) => generate_command(&args.path, &args.output, args.no_strict),
+            Self::Generate(args) => generate_command(&args.path, &args.output),
             Self::Build(args) => {
                 let config = load_workspace_config(&args.path)?;
                 build_command(
@@ -77,22 +77,23 @@ impl Command {
 
 #[derive(Args, Debug)]
 pub struct ValidateArgs {
+    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
     pub path: PathBuf,
-    #[arg(long)]
+    #[arg(long, help = "Downgrade missing-dep errors to warnings and exit 0 (validation only)")]
     pub no_strict: bool,
 }
 
 #[derive(Args, Debug)]
 pub struct GenerateArgs {
+    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
     pub path: PathBuf,
     #[arg(long, default_value = "generated/spec")]
     pub output: PathBuf,
-    #[arg(long)]
-    pub no_strict: bool,
 }
 
 #[derive(Args, Debug)]
 pub struct BuildArgs {
+    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
     pub path: PathBuf,
     #[arg(long, default_value = "generated/spec")]
     pub output: PathBuf,
@@ -105,6 +106,7 @@ pub struct BuildArgs {
 
 #[derive(Args, Debug)]
 pub struct TestArgs {
+    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
     pub path: PathBuf,
     #[arg(long, default_value = "generated/spec")]
     pub output: PathBuf,
@@ -117,6 +119,7 @@ pub struct TestArgs {
 
 #[derive(Args, Debug)]
 pub struct ExportArgs {
+    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
     pub path: PathBuf,
     #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
     pub output: Option<PathBuf>,
@@ -207,17 +210,11 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
-    generate_specs(path, output, no_strict).map(|_| ())
+fn generate_command(path: &Path, output: &Path) -> Result<()> {
+    generate_specs(path, output).map(|_| ())
 }
 
-fn generate_specs(path: &Path, output: &Path, no_strict: bool) -> Result<GeneratedSpecs> {
-    if no_strict {
-        bail!(
-            "❌ --no-strict is not valid for spec generate — use spec validate to check without strict enforcement"
-        );
-    }
-
+fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
     let (specs, errors, mut warnings, total_files) = collect_specs(path)?;
     if total_files == 0 {
         if !warnings.is_empty() {
@@ -413,7 +410,7 @@ fn build_command(
 
     let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
 
-    generate_specs(path, output, false)?;
+    generate_specs(path, output)?;
 
     let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
     print!("{}", result.stdout);
@@ -442,7 +439,7 @@ fn test_command(
 
     let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
 
-    let generated = generate_specs(path, output, false)?;
+    let generated = generate_specs(path, output)?;
 
     let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
     print!("{}", build_result.stdout);
@@ -865,7 +862,7 @@ body:
 "#,
         );
 
-        generate_command(&units_dir, &output_dir, false).unwrap();
+        generate_command(&units_dir, &output_dir).unwrap();
 
         assert!(output_dir.join(".spec-generated").exists());
         assert!(output_dir.join("pricing/apply_discount.rs").exists());
@@ -925,7 +922,7 @@ extra_field: nope
 
         let units_dir = fixture_dst.join("units");
         let output_dir = fixture_dst.join("src/generated");
-        generate_command(&units_dir, &output_dir, false).unwrap();
+        generate_command(&units_dir, &output_dir).unwrap();
 
         let apply_tax = fs::read_to_string(output_dir.join("pricing/apply_tax.rs")).unwrap();
         assert!(apply_tax.contains(
@@ -951,7 +948,7 @@ extra_field: nope
 
         let units_dir = fixture_dst.join("units");
         let output_dir = fixture_dst.join("src/generated");
-        generate_command(&units_dir, &output_dir, false).unwrap();
+        generate_command(&units_dir, &output_dir).unwrap();
 
         let output = ProcessCommand::new("cargo")
             .current_dir(&fixture_dst)
