@@ -33,6 +33,32 @@ jobs:
       - name: Check ecommerce example
         run: cargo check --manifest-path examples/ecommerce/Cargo.toml
 
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable (pinned 2026-04-01)
+        with:
+          toolchain: 1.89.0
+
+      - name: Publish spec-core
+        run: cargo publish -p spec-core
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io indexing
+        run: sleep 60
+
+      - name: Publish spec-cli
+        run: cargo publish -p spec-cli
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
   create_release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
