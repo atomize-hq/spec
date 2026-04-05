@@ -83,15 +83,21 @@ fn humanize_validation_error(error: &jsonschema::ValidationError<'_>) -> String 
             format!("missing required field: {}{}", property, field_label)
         }
         ValidationErrorKind::AdditionalProperties { unexpected } => {
-            let fields = unexpected.iter().cloned().collect::<Vec<_>>().join(", ");
+            let fields = unexpected.to_vec().join(", ");
             format!("unknown field{}: {}", field_label, fields)
         }
         ValidationErrorKind::Enum { .. } => {
-            format!("invalid value{}: {} — check allowed values", field_label, error)
+            format!(
+                "invalid value{}: {} — check allowed values",
+                field_label, error
+            )
         }
         ValidationErrorKind::Pattern { .. } => {
             if field_path == "/id" || field_path.ends_with("/id") {
-                format!("invalid id format{}: use \"module/name\" (e.g., \"pricing/apply_tax\")", field_label)
+                format!(
+                    "invalid id format{}: use \"module/name\" (e.g., \"pricing/apply_tax\")",
+                    field_label
+                )
             } else {
                 format!("invalid format{}: {}", field_label, error)
             }
@@ -1594,7 +1600,9 @@ kind: function
 body:
   rust: "{ 42 }""#;
         let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
-        let err = validate_raw_yaml(&value, "test.unit.spec").unwrap_err().to_string();
+        let err = validate_raw_yaml(&value, "test.unit.spec")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("missing required field"), "got: {err}");
         assert!(err.contains("intent"), "got: {err}");
     }
@@ -1609,7 +1617,9 @@ body:
   rust: "{ 42 }"
 extra_field: bad"#;
         let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
-        let err = validate_raw_yaml(&value, "test.unit.spec").unwrap_err().to_string();
+        let err = validate_raw_yaml(&value, "test.unit.spec")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("unknown field"), "got: {err}");
         assert!(err.contains("extra_field"), "got: {err}");
     }
@@ -1623,7 +1633,9 @@ intent:
 body:
   rust: "{ 42 }""#;
         let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
-        let err = validate_raw_yaml(&value, "test.unit.spec").unwrap_err().to_string();
+        let err = validate_raw_yaml(&value, "test.unit.spec")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("invalid id format"), "got: {err}");
         assert!(err.contains("module/name"), "got: {err}");
     }
