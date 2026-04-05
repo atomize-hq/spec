@@ -6,7 +6,7 @@
 
 use crate::syntax::validate_expect_expr;
 use crate::types::LoadedSpec;
-use crate::{Result, SpecError, SpecWarning};
+use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
 use std::collections::{HashMap, HashSet};
@@ -263,7 +263,7 @@ pub fn check_spec_versions(specs: &[LoadedSpec]) -> Vec<SpecWarning> {
         .filter(|s| s.spec.spec_version.is_none())
         .map(|s| SpecWarning::MissingSpecVersion {
             path: s.source.file_path.clone(),
-            version: env!("CARGO_PKG_VERSION"),
+            version: AUTHORED_SPEC_VERSION,
         })
         .collect()
 }
@@ -1452,6 +1452,13 @@ local_tests:
         assert_eq!(warnings.len(), 1);
         assert!(
             warnings[0].to_string().contains("spec_version not set"),
+            "{}",
+            warnings[0]
+        );
+        assert!(
+            warnings[0]
+                .to_string()
+                .contains(&format!("spec_version: \"{AUTHORED_SPEC_VERSION}\"")),
             "{}",
             warnings[0]
         );

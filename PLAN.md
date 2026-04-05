@@ -1015,7 +1015,7 @@ CONFIRMED = both agree (4/6 confirmed gaps — strong DX signal).
 - [ ] D1: print resolved crate root to stderr
 - [ ] D1: explicit error for no Cargo.toml ancestor in chain
 - [ ] D2: define unmatched test behavior (unknown with reason, not silent)
-- [ ] D7: CHANGELOG 0.3.0→0.4.0 migration note (evidence field is additive)
+- [x] D7: CHANGELOG 0.3.0→0.4.0 migration note (evidence field is additive)
 
 **PHASE 3.5 COMPLETE.** DX initial: 4.8/10 → target: 7.5/10. TTHW: 15 min → 7 min. Both models agree on 4 critical DX gaps. 9-item DX checklist added to plan. Passing to Phase 4 (Final Gate).
 

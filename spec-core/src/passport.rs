@@ -7,7 +7,7 @@
 
 use crate::generator::write_generated_file;
 use crate::types::LoadedSpec;
-use crate::{Result, SpecError};
+use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -108,7 +108,7 @@ pub fn build_passport_with_evidence(
             .spec
             .spec_version
             .clone()
-            .unwrap_or_else(|| "0.3.0".to_string()),
+            .unwrap_or_else(|| AUTHORED_SPEC_VERSION.to_string()),
         id: spec.spec.id.clone(),
         intent: spec.spec.intent.why.clone(),
         contract,

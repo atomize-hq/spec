@@ -1,4 +1,5 @@
 use serde_json::Value;
+use spec_core::AUTHORED_SPEC_VERSION;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -1425,11 +1426,10 @@ body:
         stderr.contains("spec_version not set"),
         "expected spec_version warning in stderr, got: {stderr}"
     );
-    // The warning includes the current binary version as a suggestion.
+    // The warning should keep recommending the authored spec format version.
     assert!(
-        stderr.contains(env!("CARGO_PKG_VERSION")),
-        "expected current version ({}) in warning, got: {stderr}",
-        env!("CARGO_PKG_VERSION")
+        stderr.contains(AUTHORED_SPEC_VERSION),
+        "expected authored spec version ({AUTHORED_SPEC_VERSION}) in warning, got: {stderr}"
     );
 }
 

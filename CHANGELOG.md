@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0 - 2026-04-05
+
+### Added
+
+- **Pipeline commands** — `spec build` now runs validate → generate → `cargo build`, and `spec test` runs the same pipeline followed by `cargo test`.
+- **JSON export** — `spec export` emits a machine-readable bundle with units, passports, graph edges, and export warnings.
+
+### Changed
+
+- **Generated Rust doc comments** — `spec generate` now emits `///` doc comments from each unit's `intent.why` field above the generated function.
+- **Passport runtime evidence** — `spec test` now records observed build/test results under an optional `evidence` field in co-located passports.
+
+### Breaking
+
+- **Passport schema v2** — Passport JSON may now include an optional `evidence` field containing locally observed runtime results.
+
+### Migration
+
+- **Passport evidence is additive** — No file migration is required. Parsers should tolerate absent `evidence` and treat it as "no runtime evidence available".
+- **Authored unit format version remains `0.3.0`** — The crate release is `0.4.0`, but `.unit.spec` authors should continue using `spec_version: "0.3.0"` because the unit-file wire format did not change in this release.
+
 ## 0.3.0 - 2026-04-04
 
 ### Added
