@@ -1,4 +1,4 @@
-use crate::config::load_workspace_config;
+use crate::config::{WorkspaceConfig, load_workspace_config};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use spec_core::generator::{
@@ -7,6 +7,7 @@ use spec_core::generator::{
 use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::passport::{build_passport, ensure_gitignore_entry, rfc3339_now, write_passport};
+use spec_core::pipeline::{cargo_available, run_cargo_build, run_cargo_test, workspace_root_for};
 use spec_core::types::{LoadedSpec, ResolvedSpec};
 use spec_core::validator::{
     ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
@@ -30,6 +31,10 @@ pub enum Command {
     Validate(ValidateArgs),
     #[command(about = "Generate Rust source files from .unit.spec files")]
     Generate(GenerateArgs),
+    #[command(about = "Validate, generate, and run cargo build")]
+    Build(BuildArgs),
+    #[command(about = "Validate, generate, run cargo build and cargo test")]
+    Test(TestArgs),
 }
 
 impl Command {
@@ -37,6 +42,14 @@ impl Command {
         match self {
             Self::Validate(args) => validate_command(&args.path, args.no_strict),
             Self::Generate(args) => generate_command(&args.path, &args.output, args.no_strict),
+            Self::Build(args) => {
+                let config = load_workspace_config(&args.path)?;
+                build_command(&args.path, &args.output, args.crate_root.as_deref(), &config)
+            }
+            Self::Test(args) => {
+                let config = load_workspace_config(&args.path)?;
+                test_command(&args.path, &args.output, args.crate_root.as_deref(), &config)
+            }
         }
     }
 }
@@ -55,6 +68,24 @@ pub struct GenerateArgs {
     pub output: PathBuf,
     #[arg(long)]
     pub no_strict: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct BuildArgs {
+    pub path: PathBuf,
+    #[arg(long, default_value = "generated/spec")]
+    pub output: PathBuf,
+    #[arg(long, help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)")]
+    pub crate_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct TestArgs {
+    pub path: PathBuf,
+    #[arg(long, default_value = "generated/spec")]
+    pub output: PathBuf,
+    #[arg(long, help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)")]
+    pub crate_root: Option<PathBuf>,
 }
 
 fn validate_command(path: &Path, no_strict: bool) -> Result<()> {
@@ -214,6 +245,108 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
         resolved_specs.len() + namespaces.len(),
         pluralize(resolved_specs.len() + namespaces.len())
     );
+    Ok(())
+}
+
+struct PipelineContext {
+    crate_root: PathBuf,
+    cargo_target_dir: PathBuf,
+    // Holds the tempdir alive for the duration of the command when we own one.
+    _temp_dir: Option<tempfile::TempDir>,
+}
+
+fn resolve_pipeline_context(
+    path: &Path,
+    crate_root_flag: Option<&Path>,
+    config: &WorkspaceConfig,
+) -> Result<PipelineContext> {
+    let crate_root = match crate_root_flag.or(config.pipeline.crate_root.as_deref()) {
+        Some(p) => p.to_path_buf(),
+        None => workspace_root_for(path)?,
+    };
+
+    let mut temp_dir: Option<tempfile::TempDir> = None;
+    let cargo_target_dir = if let Some(p) = &config.pipeline.cargo_target_dir {
+        p.clone()
+    } else if let Ok(env_val) = std::env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(env_val)
+    } else {
+        let td = tempfile::TempDir::new()
+            .with_context(|| "Failed to create temporary CARGO_TARGET_DIR")?;
+        let path = td.path().to_path_buf();
+        temp_dir = Some(td);
+        path
+    };
+
+    Ok(PipelineContext {
+        crate_root,
+        cargo_target_dir,
+        _temp_dir: temp_dir,
+    })
+}
+
+fn build_command(
+    path: &Path,
+    output: &Path,
+    crate_root_flag: Option<&Path>,
+    config: &WorkspaceConfig,
+) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec build requires a directory path — pass the units directory, not a single file"
+        );
+    }
+
+    if !cargo_available() {
+        bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
+    }
+
+    let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
+
+    generate_command(path, output, false)?;
+
+    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    print!("{}", result.stdout);
+    eprint!("{}", result.stderr);
+    if result.exit_code != 0 {
+        bail!("❌ cargo build failed");
+    }
+    Ok(())
+}
+
+fn test_command(
+    path: &Path,
+    output: &Path,
+    crate_root_flag: Option<&Path>,
+    config: &WorkspaceConfig,
+) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec build requires a directory path — pass the units directory, not a single file"
+        );
+    }
+
+    if !cargo_available() {
+        bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
+    }
+
+    let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
+
+    generate_command(path, output, false)?;
+
+    let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    print!("{}", build_result.stdout);
+    eprint!("{}", build_result.stderr);
+    if build_result.exit_code != 0 {
+        bail!("❌ cargo build failed");
+    }
+
+    let test_result = run_cargo_test(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    print!("{}", test_result.stdout);
+    eprint!("{}", test_result.stderr);
+    if test_result.exit_code != 0 {
+        bail!("❌ cargo test failed");
+    }
     Ok(())
 }
 

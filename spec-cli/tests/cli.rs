@@ -1148,6 +1148,368 @@ body:
     );
 }
 
+// ── D1: Pipeline wrap (spec build / spec test) ────────────────────────────────
+
+fn write_minimal_units_dir(units_dir: &Path) {
+    write_spec(
+        units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount to a subtotal.
+contract:
+  inputs:
+    subtotal: f64
+    rate: f64
+  returns: f64
+body:
+  rust: |
+    {
+        subtotal * (1.0 - rate)
+    }
+"#,
+    );
+}
+
+#[test]
+fn spec_build_validates_and_runs_cargo_build() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+    let output = run_in(
+        &root,
+        &[
+            "build",
+            "examples/ecommerce/units",
+            "--output",
+            "examples/ecommerce/src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ],
+    );
+    assert_output_success("spec build failed for ecommerce example", &output);
+}
+
+#[test]
+fn spec_build_fails_on_validation_error_before_cargo() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    // Write a spec with a Rust reserved keyword in the id — will fail validation
+    write_spec(
+        &units_dir,
+        "pricing/type.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/type
+kind: function
+intent:
+  why: Force a validation error.
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&[
+        "build",
+        units_dir.to_str().unwrap(),
+        "--output",
+        temp_dir.path().join("out").to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 on validation error"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("reserved keyword") || stderr.contains("error"),
+        "expected validation error in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_unavailable_cargo_exits_cleanly() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_minimal_units_dir(&units_dir);
+
+    // Point PATH to an empty dir so cargo cannot be found.
+    let empty_path = temp_dir.path().join("empty_bin");
+    fs::create_dir_all(&empty_path).unwrap();
+
+    let output = Command::new(bin())
+        .env("PATH", &empty_path)
+        .args([
+            "build",
+            units_dir.to_str().unwrap(),
+            "--output",
+            temp_dir.path().join("out").to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 when cargo is unavailable"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cargo not found"),
+        "expected 'cargo not found' in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_test_runs_cargo_test() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+    let output = run_in(
+        &root,
+        &[
+            "test",
+            "examples/ecommerce/units",
+            "--output",
+            "examples/ecommerce/src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ],
+    );
+    assert_output_success("spec test failed for ecommerce example", &output);
+}
+
+#[test]
+fn spec_test_forwards_cargo_stderr_on_failure() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let temp_dir =
+        tempfile::TempDir::new_in(root.join("target")).expect("failed to create temp dir");
+
+    let src_ecommerce = root.join("examples/ecommerce");
+    let dst_ecommerce = temp_dir.path().join("ecommerce");
+    copy_dir_recursive(&src_ecommerce, &dst_ecommerce).expect("failed to copy ecommerce example");
+
+    // Add a unit that produces uncompilable Rust
+    write_spec(
+        &dst_ecommerce.join("units"),
+        "pricing/broken.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/broken
+kind: function
+intent:
+  why: Force a compile error.
+contract:
+  returns: NotARealType
+body:
+  rust: |
+    {
+        todo!()
+    }
+"#,
+    );
+
+    let output = Command::new(bin())
+        .current_dir(&dst_ecommerce)
+        .args([
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            dst_ecommerce.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 when cargo compilation fails"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cargo build failed") || stderr.contains("error"),
+        "expected cargo error in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_rejects_single_file_path() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_minimal_units_dir(&units_dir);
+    let single_file = units_dir.join("pricing/apply_discount.unit.spec");
+
+    let output = run(&[
+        "build",
+        single_file.to_str().unwrap(),
+        "--output",
+        temp_dir.path().join("out").to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 for a single-file path"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("directory path"),
+        "expected directory path error in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_crate_root_config_vs_flag_precedence() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_minimal_units_dir(&units_dir);
+
+    // Write a spec.toml with a wrong crate_root; the --crate-root flag should override it.
+    fs::write(
+        temp_dir.path().join("spec.toml"),
+        "[pipeline]\ncrate_root = \"/nonexistent_path_that_should_be_overridden\"\n",
+    )
+    .unwrap();
+
+    let output = run(&[
+        "build",
+        units_dir.to_str().unwrap(),
+        "--output",
+        temp_dir.path().join("out").to_str().unwrap(),
+        "--crate-root",
+        ecommerce_dir.to_str().unwrap(),
+    ]);
+    // The flag overrides the config, so ecommerce builds successfully.
+    assert_output_success(
+        "spec build should use --crate-root flag over spec.toml config",
+        &output,
+    );
+}
+
+#[test]
+fn spec_build_no_cargo_toml_exits_with_error() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_minimal_units_dir(&units_dir);
+
+    // No Cargo.toml anywhere under temp_dir — ancestor walk will fail.
+    // We run spec from within temp_dir and don't pass --crate-root.
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "build",
+            "units",
+            "--output",
+            "out",
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 when no Cargo.toml ancestor exists"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("could not find crate root"),
+        "expected 'could not find crate root' in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_bare_crate_no_workspace_uses_package_toml() {
+    if !cargo_available() {
+        return;
+    }
+
+    // Use system temp dir (outside the spec repo) so the ancestor walk sees only our
+    // synthetic [package] Cargo.toml and not the spec workspace root.
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let crate_dir = temp_dir.path().join("mybare");
+    let units_dir = crate_dir.join("units");
+    let src_dir = crate_dir.join("src");
+    let generated_dir = crate_dir.join("src/generated");
+    fs::create_dir_all(&src_dir).unwrap();
+
+    // Bare Cargo.toml: [package] only, no [workspace]
+    fs::write(
+        crate_dir.join("Cargo.toml"),
+        "[package]\nname = \"spec-test-bare\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+
+    // src/main.rs that re-exports the generated spec module
+    fs::write(
+        src_dir.join("main.rs"),
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    )
+    .unwrap();
+
+    write_minimal_units_dir(&units_dir);
+
+    // Run spec build with current_dir=crate_dir and WITHOUT --crate-root.
+    // workspace_root_for walks ancestors from units_dir, finds no [workspace],
+    // falls back to [package] at crate_dir. The output path is inside crate_dir,
+    // satisfying safe_output_path's project-root check.
+    let output = Command::new(bin())
+        .current_dir(&crate_dir)
+        .args([
+            "build",
+            units_dir.to_str().unwrap(),
+            "--output",
+            generated_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success(
+        "spec build bare crate (no [workspace]) should succeed via [package] fallback",
+        &output,
+    );
+}
+
+#[test]
+fn spec_build_prints_crate_root_to_stderr() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+    let output = run_in(
+        &root,
+        &[
+            "build",
+            "examples/ecommerce/units",
+            "--output",
+            "examples/ecommerce/src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ],
+    );
+    assert_output_success("spec build failed for progress signal test", &output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("spec: running cargo build in"),
+        "expected progress signal in stderr, got: {stderr}"
+    );
+}
+
+// ── End D1 ────────────────────────────────────────────────────────────────────
+
 // Regression: ISSUE-QA-004 — no CLI integration test for contract input identifier validation.
 // spec validate must reject parameter names that are not valid Rust identifiers with a clear error.
 // Found by /qa on 2026-04-04.

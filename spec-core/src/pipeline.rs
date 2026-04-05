@@ -1,0 +1,132 @@
+use anyhow::{Context, Result, bail};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+pub struct CargoResult {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+pub fn cargo_available() -> bool {
+    Command::new("cargo").arg("--version").output().is_ok()
+}
+
+/// Find the crate root for a given path.
+///
+/// Two-step walk:
+/// 1. Find the nearest ancestor `Cargo.toml` that contains `[workspace]` — workspace root.
+/// 2. If none, find the nearest ancestor `Cargo.toml` that contains `[package]` — bare crate.
+pub fn workspace_root_for(path: &Path) -> Result<PathBuf> {
+    let start = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+
+    // Step 1: workspace root (nearest ancestor Cargo.toml with [workspace])
+    for dir in start.ancestors() {
+        let candidate = dir.join("Cargo.toml");
+        if candidate.is_file() {
+            let contents = std::fs::read_to_string(&candidate)
+                .with_context(|| format!("Failed to read {}", candidate.display()))?;
+            if contents.contains("[workspace]") {
+                return Ok(dir.to_path_buf());
+            }
+        }
+    }
+
+    // Step 2: bare crate (nearest ancestor Cargo.toml with [package])
+    for dir in start.ancestors() {
+        let candidate = dir.join("Cargo.toml");
+        if candidate.is_file() {
+            let contents = std::fs::read_to_string(&candidate)
+                .with_context(|| format!("Failed to read {}", candidate.display()))?;
+            if contents.contains("[package]") {
+                return Ok(dir.to_path_buf());
+            }
+        }
+    }
+
+    bail!(
+        "❌ could not find crate root — run from inside a Cargo project, or pass --crate-root <path>"
+    )
+}
+
+pub fn run_cargo_build(crate_root: &Path, cargo_target_dir: &Path) -> Result<CargoResult> {
+    eprintln!("spec: running cargo build in {}", crate_root.display());
+    run_cargo(crate_root, &["build"], cargo_target_dir)
+}
+
+pub fn run_cargo_test(crate_root: &Path, cargo_target_dir: &Path) -> Result<CargoResult> {
+    eprintln!("spec: running cargo test in {}", crate_root.display());
+    run_cargo(crate_root, &["test"], cargo_target_dir)
+}
+
+fn run_cargo(cwd: &Path, args: &[&str], cargo_target_dir: &Path) -> Result<CargoResult> {
+    let output = Command::new("cargo")
+        .current_dir(cwd)
+        .env("CARGO_TARGET_DIR", cargo_target_dir)
+        .env("CARGO_TERM_COLOR", "never")
+        .args(args)
+        .output()
+        .with_context(|| "failed to spawn cargo")?;
+
+    Ok(CargoResult {
+        exit_code: output.status.code().unwrap_or(1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn workspace_root_for_finds_workspace_toml() {
+        let tmp = TempDir::new().unwrap();
+        let member = tmp.path().join("crates/foo");
+        fs::create_dir_all(&member).unwrap();
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/foo\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            member.join("Cargo.toml"),
+            "[package]\nname = \"foo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+
+        let root = workspace_root_for(&member).unwrap();
+        assert_eq!(root, tmp.path());
+    }
+
+    #[test]
+    fn workspace_root_for_falls_back_to_package_toml_for_bare_crate() {
+        let tmp = TempDir::new().unwrap();
+        let src = tmp.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[package]\nname = \"solo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+
+        let root = workspace_root_for(&src).unwrap();
+        assert_eq!(root, tmp.path());
+    }
+
+    #[test]
+    fn workspace_root_for_errors_with_no_cargo_toml() {
+        let tmp = TempDir::new().unwrap();
+        let nested = tmp.path().join("a/b/c");
+        fs::create_dir_all(&nested).unwrap();
+
+        let err = workspace_root_for(&nested).unwrap_err().to_string();
+        assert!(err.contains("could not find crate root"), "got: {err}");
+    }
+}

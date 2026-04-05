@@ -9,12 +9,20 @@ const CONFIG_FILE_NAME: &str = "spec.toml";
 #[serde(default, deny_unknown_fields)]
 pub struct WorkspaceConfig {
     pub validation: ValidationConfig,
+    pub pipeline: PipelineConfig,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct ValidationConfig {
     pub allow_unsafe_local_test_expect: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct PipelineConfig {
+    pub crate_root: Option<PathBuf>,
+    pub cargo_target_dir: Option<PathBuf>,
 }
 
 pub fn load_workspace_config(target: &Path) -> Result<WorkspaceConfig> {

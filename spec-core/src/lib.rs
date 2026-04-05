@@ -10,6 +10,7 @@ pub mod generator;
 pub mod loader;
 pub mod normalizer;
 pub mod passport;
+pub mod pipeline;
 pub mod types;
 pub mod validator;
 

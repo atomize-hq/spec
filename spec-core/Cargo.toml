@@ -9,6 +9,7 @@ repository.workspace = true
 description = "Core library for parsing and generating Rust code from .unit.spec files"
 
 [dependencies]
+anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml_bw = { workspace = true }
