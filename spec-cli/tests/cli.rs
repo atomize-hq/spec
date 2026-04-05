@@ -950,6 +950,79 @@ local_tests:
 }
 
 #[test]
+fn generate_trusted_config_allows_unsafe_expect_expression() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_file(
+        temp_dir.path(),
+        "spec.toml",
+        "[validation]\nallow_unsafe_local_test_expect = true\n",
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: unsafe_allowed
+    expect: "{ let ok = apply_discount(); ok }"
+"#,
+    );
+
+    let output = run_in(
+        temp_dir.path(),
+        &["generate", "units", "--output", "generated/spec"],
+    );
+    assert_output_success(
+        "spec generate should honor trusted local test config",
+        &output,
+    );
+
+    let generated = fs::read_to_string(output_dir.join("pricing/apply_discount.rs")).unwrap();
+    assert!(generated.contains("assert!({ let ok = apply_discount(); ok });"));
+}
+
+#[test]
+fn generate_without_trusted_config_rejects_unsafe_expect_expression() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: unsafe_rejected
+    expect: "{ let ok = apply_discount(); ok }"
+"#,
+    );
+
+    let output = run_in(
+        temp_dir.path(),
+        &["generate", "units", "--output", "generated/spec"],
+    );
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("pricing/apply_discount"), "{stderr}");
+    assert!(stderr.contains("unsafe_rejected"), "{stderr}");
+    assert!(stderr.contains("block, unsafe, closure"), "{stderr}");
+}
+
+#[test]
 fn validate_discovers_config_from_nested_unit_file_path() {
     let temp_dir = temp_repo_dir();
     write_file(

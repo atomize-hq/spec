@@ -34,3 +34,19 @@ for 0.3+** when cross-file constraints and policy composition justify the comple
 
 Until then: JSON Schema + semantic validation in Rust is the implementation path. Do not design against CUE until a trigger condition is explicitly met.
 
+---
+
+## 2026-04-05 — Generated Output: Ephemeral by Default (0.4.0 decision record)
+
+**Decision:** `spec build` and `spec test` treat generated Rust as ephemeral output. They regenerate into the `--output` directory on each run, assume that directory is spec-owned, and do not require the generated files to be committed.
+
+**Rationale**
+
+- The pipeline commands are optimized for validate → generate → cargo execution in one local flow.
+- The existing `.spec-generated` marker and output cleanup rules already model the output tree as spec-owned.
+- Teams that want committed generated code for diffs or IDE discoverability can continue to use `spec generate` directly and commit that output intentionally.
+
+**Revisit when**
+
+- We add an explicit committed-output mode such as `--no-regen`.
+- CI or editor workflows show that ephemeral-only pipeline behavior creates more friction than it removes.

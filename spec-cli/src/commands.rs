@@ -3,7 +3,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use spec_core::export::build_export_bundle;
 use spec_core::generator::{
-    clean_output_dir, generate_code, generate_mod_rs, safe_output_path, write_generated_file,
+    GenerateOptions, clean_output_dir, generate_code_with_options, generate_mod_rs,
+    safe_output_path, write_generated_file,
 };
 use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
@@ -276,9 +277,12 @@ fn generate_specs(path: &Path, output: &Path, no_strict: bool) -> Result<Generat
     }
 
     let output_base = ensure_output_marker(output)?;
+    let generate_options = GenerateOptions {
+        allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
+    };
 
     for spec in &resolved_specs {
-        let content = generate_code(spec)
+        let content = generate_code_with_options(spec, &generate_options)
             .with_context(|| format!("Failed to generate Rust for {}", spec.id))?;
         let output_path = output_base.join(path_for_spec(spec));
         write_generated_file(&output_path.display().to_string(), &content)

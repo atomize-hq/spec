@@ -131,6 +131,19 @@ cargo run -p spec-cli -- generate <path> --output <dir>
 
 The `--output` path must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
 
+## Consuming Generated Code
+
+Generated units import internal deps with `use crate::...` paths. The consuming crate must
+re-export the generated module tree from its root so those paths resolve consistently:
+
+```rust
+mod generated;
+pub use generated::*;
+```
+
+The ecommerce example uses this pattern in
+[`examples/ecommerce/src/main.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/examples/ecommerce/src/main.rs).
+
 ## Workspace Config
 
 An optional `spec.toml` at the repo root can relax `local_tests[].expect` validation for trusted workspaces:

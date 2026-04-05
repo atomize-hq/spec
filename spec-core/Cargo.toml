@@ -17,6 +17,7 @@ jsonschema = { workspace = true }
 thiserror = { workspace = true }
 walkdir = { workspace = true }
 tempfile = "3.19"
+proc-macro2 = "1"
 syn = { version = "2", features = ["full"] }
 indexmap = { version = "2", features = ["serde"] }
 

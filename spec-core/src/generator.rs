@@ -6,6 +6,7 @@
 //! - generate `mod.rs` contents
 //! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
 
+use crate::syntax::validate_expect_expr;
 use crate::types::ResolvedSpec;
 use crate::{Result, SpecError};
 use std::collections::HashSet;
@@ -15,6 +16,11 @@ use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
 
 const GENERATED_MARKER: &str = ".spec-generated";
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GenerateOptions {
+    pub allow_unsafe_local_test_expect: bool,
+}
 
 fn build_fn_signature(spec: &ResolvedSpec) -> String {
     let params = spec
@@ -63,6 +69,13 @@ fn build_doc_comment(intent_why: &str) -> Option<String> {
 }
 
 pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
+    generate_code_with_options(spec, &GenerateOptions::default())
+}
+
+pub fn generate_code_with_options(
+    spec: &ResolvedSpec,
+    options: &GenerateOptions,
+) -> Result<String> {
     let (import_statements, dep_statements) = build_use_groups(spec)?;
     let mut output = String::new();
 
@@ -102,6 +115,16 @@ pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
 
         for (index, local_test) in spec.local_tests.iter().enumerate() {
             let expect = local_test.expect.trim();
+            validate_expect_expr(expect, options.allow_unsafe_local_test_expect).map_err(
+                |err| SpecError::Generator {
+                    message: format!(
+                        "invalid local test expect for unit '{}' test '{}': {}",
+                        spec.id,
+                        local_test.id,
+                        err.message()
+                    ),
+                },
+            )?;
             output.push_str("    #[test]\n");
             output.push_str(&format!("    fn test_{}() {{\n", local_test.id));
             output.push_str(&format!("        assert!({expect});\n"));
@@ -437,6 +460,7 @@ fn canonicalize_existing_path(path: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::syntax::{ExpectExprErrorKind, validate_expect_expr};
     use crate::types::{Body, Intent, LocalTest, ResolvedSpec, SpecStruct};
     #[cfg(unix)]
     use std::os::unix::fs as unix_fs;
@@ -643,6 +667,79 @@ mod tests {
         let code = generate_code(&spec).unwrap();
         assert!(!code.contains("#[cfg(test)]"));
         assert!(!code.contains("mod tests {"));
+    }
+
+    #[test]
+    fn generate_code_rejects_unsafe_expect_at_sink() {
+        let mut spec = test_spec_with(vec![], vec![], "{ true }");
+        spec.local_tests = vec![LocalTest {
+            id: "unsafe_attempt".to_string(),
+            expect: "{ let ok = apply_discount(); ok }".to_string(),
+        }];
+
+        let err = generate_code(&spec).unwrap_err().to_string();
+        assert!(err.contains("pricing/apply_discount"), "{err}");
+        assert!(err.contains("unsafe_attempt"), "{err}");
+        assert!(err.contains("block, unsafe, closure"), "{err}");
+    }
+
+    #[test]
+    fn generate_code_rejects_deeply_nested_expect_at_sink() {
+        let mut spec = test_spec_with(vec![], vec![], "{ true }");
+        spec.local_tests = vec![LocalTest {
+            id: "deep".to_string(),
+            expect: format!("{}true{}", "(".repeat(200), ")".repeat(200)),
+        }];
+
+        let err = generate_code(&spec).unwrap_err().to_string();
+        assert!(err.contains("pricing/apply_discount"), "{err}");
+        assert!(err.contains("deep"), "{err}");
+        assert!(err.contains("maximum depth of 128"), "{err}");
+    }
+
+    #[test]
+    fn generate_code_sink_guard_includes_unit_and_test_id_in_error() {
+        let mut spec = test_spec_with(vec![], vec![], "{ true }");
+        spec.local_tests = vec![LocalTest {
+            id: "broken".to_string(),
+            expect: "(".to_string(),
+        }];
+
+        let err = generate_code(&spec).unwrap_err().to_string();
+        assert!(err.contains("pricing/apply_discount"), "{err}");
+        assert!(err.contains("broken"), "{err}");
+    }
+
+    #[test]
+    fn generate_code_with_options_preserves_escape_hatch() {
+        let mut spec = test_spec_with(vec![], vec![], "{ true }");
+        spec.local_tests = vec![LocalTest {
+            id: "unsafe_allowed".to_string(),
+            expect: "{ let ok = apply_discount(); ok }".to_string(),
+        }];
+
+        let code = generate_code_with_options(
+            &spec,
+            &GenerateOptions {
+                allow_unsafe_local_test_expect: true,
+            },
+        )
+        .unwrap();
+
+        assert!(code.contains("assert!({ let ok = apply_discount(); ok });"));
+    }
+
+    #[test]
+    fn shared_expect_validation_reports_too_deep_before_syn_parse() {
+        let result = validate_expect_expr(
+            &format!("{}true{}", "(".repeat(200), ")".repeat(200)),
+            false,
+        );
+        match result {
+            Err(ExpectExprErrorKind::TooDeep { max_depth }) => assert_eq!(max_depth, 128),
+            Err(other) => panic!("expected too-deep error, got {:?}", other),
+            Ok(_) => panic!("expected too-deep error, got success"),
+        }
     }
 
     #[test]
