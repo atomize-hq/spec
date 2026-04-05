@@ -24,11 +24,11 @@ pub struct PassportInput {
 /// Contract section of the passport.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PassportContract {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inputs: Vec<PassportInput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub returns: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub invariants: Vec<String>,
 }
 
@@ -421,6 +421,45 @@ mod tests {
         let parsed: Passport = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed.id, "pricing/apply_tax");
         assert_eq!(parsed.generated_at, "2026-04-04T00:00:00Z");
+    }
+
+    #[test]
+    fn write_passport_round_trips_contract_with_omitted_empty_fields() {
+        let dir = TempDir::new().unwrap();
+        let source_path = dir.path().join("apply_tax.unit.spec");
+        fs::write(&source_path, "").unwrap();
+
+        let mut inputs = IndexMap::new();
+        inputs.insert("subtotal".to_string(), "i32".to_string());
+        let spec = make_loaded_spec(
+            "pricing/apply_tax",
+            source_path.to_str().unwrap(),
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs),
+                returns: Some("i32".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+        let passport = build_passport(&spec, "2026-04-04T00:00:00Z");
+        write_passport(&passport, &source_path).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("apply_tax.spec.passport.json")).unwrap();
+        let parsed: Passport = serde_json::from_str(&content).unwrap();
+
+        assert_eq!(
+            parsed.contract.unwrap(),
+            PassportContract {
+                inputs: vec![PassportInput {
+                    name: "subtotal".to_string(),
+                    type_: "i32".to_string(),
+                }],
+                returns: Some("i32".to_string()),
+                invariants: vec![],
+            }
+        );
     }
 
     #[test]

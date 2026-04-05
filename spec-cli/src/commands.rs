@@ -1,6 +1,7 @@
 use crate::config::{WorkspaceConfig, load_workspace_config};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
+use spec_core::export::build_export_bundle;
 use spec_core::generator::{
     clean_output_dir, generate_code, generate_mod_rs, safe_output_path, write_generated_file,
 };
@@ -41,6 +42,8 @@ pub enum Command {
     Build(BuildArgs),
     #[command(about = "Validate, generate, run cargo build and cargo test")]
     Test(TestArgs),
+    #[command(about = "Export spec metadata as a JSON bundle")]
+    Export(ExportArgs),
 }
 
 impl Command {
@@ -66,6 +69,7 @@ impl Command {
                     &config,
                 )
             }
+            Self::Export(args) => export_command(&args.path, args.output.as_deref()),
         }
     }
 }
@@ -110,6 +114,13 @@ pub struct TestArgs {
     pub crate_root: Option<PathBuf>,
 }
 
+#[derive(Args, Debug)]
+pub struct ExportArgs {
+    pub path: PathBuf,
+    #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
+    pub output: Option<PathBuf>,
+}
+
 fn validate_command(path: &Path, no_strict: bool) -> Result<()> {
     let (specs, errors, mut warnings, total_files) = collect_specs(path)?;
     let config = load_workspace_config(path)?;
@@ -151,6 +162,48 @@ fn validate_command(path: &Path, no_strict: bool) -> Result<()> {
         count_messages(&errors),
         pluralize(count_messages(&errors))
     );
+}
+
+fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    let (specs, errors, mut warnings, _total_files) = collect_specs(path)?;
+    let config = load_workspace_config(path)?;
+    let validation_options = ValidationOptions {
+        strict_deps: true,
+        allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
+    };
+    let (errors, validation_warnings) = finish_validation(&specs, errors, &validation_options);
+    merge_diagnostics(&mut warnings, validation_warnings);
+
+    if !warnings.is_empty() {
+        print_diagnostics(&warnings);
+    }
+    if !errors.is_empty() {
+        print_diagnostics(&errors);
+        let file_count = count_unique_files(&errors);
+        bail!(
+            "❌ {} file{}, {} error{}",
+            file_count,
+            pluralize(file_count),
+            count_messages(&errors),
+            pluralize(count_messages(&errors))
+        );
+    }
+
+    let bundle = build_export_bundle(&specs, &rfc3339_now());
+    let json = serde_json::to_string_pretty(&bundle)?;
+
+    match output {
+        Some(path) => {
+            validate_export_output_path(path)?;
+            fs::write(path, json)
+                .with_context(|| format!("Failed to write export bundle to {}", path.display()))?;
+        }
+        None => {
+            print!("{json}");
+        }
+    }
+
+    Ok(())
 }
 
 fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
@@ -589,6 +642,20 @@ fn ensure_output_marker(output: &Path) -> Result<PathBuf> {
     Ok(output_base)
 }
 
+fn validate_export_output_path(output: &Path) -> Result<()> {
+    if output.is_dir() {
+        bail!("❌ --output must be a file path, not a directory");
+    }
+
+    if let Some(parent) = output.parent().filter(|p| !p.as_os_str().is_empty())
+        && !parent.exists()
+    {
+        bail!("❌ output directory does not exist: {}", parent.display());
+    }
+
+    Ok(())
+}
+
 fn dir_is_empty(path: &Path) -> Result<bool> {
     let mut entries =
         fs::read_dir(path).with_context(|| format!("Failed to read dir {}", path.display()))?;
@@ -746,6 +813,7 @@ fn pluralize(count: usize) -> &'static str {
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Command as ProcessCommand;
     use tempfile::TempDir;
 
     fn write_spec(dir: &Path, relative_path: &str, body: &str) {
@@ -754,6 +822,22 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, body).unwrap();
+    }
+
+    fn copy_dir_all(src: &Path, dst: &Path) {
+        fs::create_dir_all(dst).unwrap();
+
+        for entry in fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let entry_path = entry.path();
+            let dst_path = dst.join(entry.file_name());
+
+            if entry.file_type().unwrap().is_dir() {
+                copy_dir_all(&entry_path, &dst_path);
+            } else {
+                fs::copy(&entry_path, &dst_path).unwrap();
+            }
+        }
     }
 
     #[test]
@@ -822,5 +906,62 @@ extra_field: nope
         assert!(result.is_err());
         let error_text = format!("{:#}", result.unwrap_err());
         assert!(error_text.contains("error"));
+    }
+
+    #[test]
+    fn generate_command_writes_doc_comments_for_ecommerce_units() {
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let fixture_src = repo_root.join("examples/ecommerce");
+        let fixture_dst = temp_dir.path().join("ecommerce");
+        copy_dir_all(&fixture_src, &fixture_dst);
+
+        let units_dir = fixture_dst.join("units");
+        let output_dir = fixture_dst.join("src/generated");
+        generate_command(&units_dir, &output_dir, false).unwrap();
+
+        let apply_tax = fs::read_to_string(output_dir.join("pricing/apply_tax.rs")).unwrap();
+        assert!(apply_tax.contains(
+            "/// Add sales tax to a subtotal using a rate expressed as a decimal fraction.\n"
+        ));
+        assert!(apply_tax.contains("pub fn apply_tax("));
+    }
+
+    #[test]
+    fn cargo_doc_succeeds_for_generated_ecommerce_docs() {
+        if !cargo_available() {
+            return;
+        }
+
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let fixture_src = repo_root.join("examples/ecommerce");
+        let fixture_dst = temp_dir.path().join("ecommerce");
+        copy_dir_all(&fixture_src, &fixture_dst);
+
+        let units_dir = fixture_dst.join("units");
+        let output_dir = fixture_dst.join("src/generated");
+        generate_command(&units_dir, &output_dir, false).unwrap();
+
+        let output = ProcessCommand::new("cargo")
+            .current_dir(&fixture_dst)
+            .env("CARGO_TARGET_DIR", temp_dir.path().join("cargo-target"))
+            .env("CARGO_TERM_COLOR", "never")
+            .args(["doc", "--no-deps"])
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "cargo doc failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

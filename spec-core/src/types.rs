@@ -70,6 +70,8 @@ pub struct Links {
 pub struct ResolvedSpec {
     /// Canonical ID: "pricing/apply_discount"
     pub id: String,
+    /// Human-readable intent string used for generated Rust doc comments.
+    pub intent_why: String,
     /// Last segment: "apply_discount"
     pub fn_name: String,
     /// Everything before last segment: "pricing"
@@ -121,6 +123,7 @@ impl ResolvedSpec {
 
         Self {
             id: spec.id,
+            intent_why: spec.intent.why,
             fn_name,
             module_path,
             deps: spec.deps,
@@ -214,6 +217,7 @@ mod tests {
 
         let resolved = ResolvedSpec::from_spec(spec);
         assert_eq!(resolved.id, "pricing/apply_discount");
+        assert_eq!(resolved.intent_why, "Apply discount");
         assert_eq!(resolved.fn_name, "apply_discount");
         assert_eq!(resolved.module_path, "pricing");
     }

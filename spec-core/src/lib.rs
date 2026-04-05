@@ -6,6 +6,7 @@
 //! - Normalizing to internal representation (IR)
 //! - Generating readable Rust code
 
+pub mod export;
 pub mod generator;
 pub mod loader;
 pub mod normalizer;

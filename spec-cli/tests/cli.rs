@@ -1,3 +1,4 @@
+use serde_json::Value;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -74,6 +75,7 @@ fn help_lists_validate_and_generate_commands() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("validate"));
     assert!(stdout.contains("generate"));
+    assert!(stdout.contains("export"));
 }
 
 #[test]
@@ -532,6 +534,290 @@ fn generate_empty_directory_reports_zero_units() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("0 units found, nothing to generate"));
+}
+
+#[test]
+fn spec_export_emits_valid_json_bundle() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round monetary values.
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+deps:
+  - money/round
+body:
+  rust: |
+    { round(1) }
+local_tests:
+  - id: basic
+    expect: "true"
+"#,
+    );
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["schema_version"], "1.0");
+    assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
+    assert!(bundle.get("graph").is_some());
+    assert!(bundle.get("warnings").is_some());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("spec_version not set"));
+}
+
+#[test]
+fn spec_export_includes_graph_edges() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round monetary values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+contract:
+  inputs:
+    value: i32
+  returns: i32
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+deps:
+  - money/round
+body:
+  rust: |
+    { round(1) }
+"#,
+    );
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        bundle["graph"]["edges"],
+        serde_json::json!([{ "from": "pricing/apply_discount", "to": "money/round" }])
+    );
+}
+
+#[test]
+fn spec_export_includes_passports_if_present() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    subtotal: i32
+  returns: i32
+body:
+  rust: |
+    { subtotal }
+"#,
+    );
+
+    let generate = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("generate before export", &generate);
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let passports = bundle["passports"].as_array().unwrap();
+    assert_eq!(passports.len(), 1);
+    assert_eq!(passports[0]["id"], "pricing/apply_tax");
+    assert!(bundle["warnings"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn spec_export_partial_passports_marked_missing() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+deps:
+  - money/round
+contract:
+  inputs:
+    subtotal: i32
+  returns: i32
+body:
+  rust: |
+    { round(subtotal) }
+"#,
+    );
+
+    let generate = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("generate before export", &generate);
+    fs::remove_file(units_dir.join("pricing/apply_tax.spec.passport.json")).unwrap();
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["passports"].as_array().unwrap().len(), 1);
+    let warnings = bundle["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0]["code"], "passport_missing");
+    assert_eq!(warnings[0]["spec_id"], "pricing/apply_tax");
+}
+
+#[test]
+fn spec_export_output_path_rejects_directory() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let export_dir = temp_dir.path().join("bundle-dir");
+    fs::create_dir_all(&export_dir).unwrap();
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { 1 }
+"#,
+    );
+
+    let output = run(&[
+        "export",
+        units_dir.to_str().unwrap(),
+        "--output",
+        export_dir.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--output must be a file path"));
+}
+
+#[test]
+fn spec_export_output_parent_dir_missing_exits_cleanly() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_path = temp_dir.path().join("missing/bundle.json");
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { 1 }
+"#,
+    );
+
+    let output = run(&[
+        "export",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_path.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("output directory does not exist"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn spec_export_empty_directory_emits_valid_empty_bundle() {
+    let temp_dir = temp_repo_dir();
+    let output = run(&["export", temp_dir.path().to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["units"], serde_json::json!([]));
+    assert_eq!(bundle["passports"], serde_json::json!([]));
+    assert_eq!(bundle["graph"]["edges"], serde_json::json!([]));
+    assert_eq!(bundle["warnings"], serde_json::json!([]));
 }
 
 #[test]

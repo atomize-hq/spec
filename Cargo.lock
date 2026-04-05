@@ -1169,6 +1169,7 @@ dependencies = [
  "anyhow",
  "clap",
  "serde",
+ "serde_json",
  "spec-core",
  "tempfile",
  "toml",

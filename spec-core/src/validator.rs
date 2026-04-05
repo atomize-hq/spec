@@ -193,8 +193,7 @@ fn is_safe_expect_expr_depth(expr: &syn::Expr, depth: usize) -> bool {
     let next = depth + 1;
     match expr {
         syn::Expr::Binary(b) => {
-            is_safe_expect_expr_depth(&b.left, next)
-                && is_safe_expect_expr_depth(&b.right, next)
+            is_safe_expect_expr_depth(&b.left, next) && is_safe_expect_expr_depth(&b.right, next)
         }
         syn::Expr::Call(c) => {
             is_safe_expect_expr_depth(&c.func, next)
@@ -206,8 +205,7 @@ fn is_safe_expect_expr_depth(expr: &syn::Expr, depth: usize) -> bool {
         }
         syn::Expr::Field(f) => is_safe_expect_expr_depth(&f.base, next),
         syn::Expr::Index(i) => {
-            is_safe_expect_expr_depth(&i.expr, next)
-                && is_safe_expect_expr_depth(&i.index, next)
+            is_safe_expect_expr_depth(&i.expr, next) && is_safe_expect_expr_depth(&i.index, next)
         }
         syn::Expr::Unary(u) => is_safe_expect_expr_depth(&u.expr, next),
         syn::Expr::Path(_) | syn::Expr::Lit(_) => true,

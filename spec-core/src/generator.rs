@@ -42,6 +42,26 @@ fn build_fn_signature(spec: &ResolvedSpec) -> String {
     }
 }
 
+fn build_doc_comment(intent_why: &str) -> Option<String> {
+    let trimmed = intent_why.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let mut output = String::new();
+    for line in trimmed.lines() {
+        if line.trim().is_empty() {
+            output.push_str("///\n");
+        } else {
+            output.push_str("/// ");
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+
+    Some(output)
+}
+
 pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
     let (import_statements, dep_statements) = build_use_groups(spec)?;
     let mut output = String::new();
@@ -62,6 +82,10 @@ pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
 
     if !spec.imports.is_empty() || !spec.deps.is_empty() {
         output.push('\n');
+    }
+
+    if let Some(doc_comment) = build_doc_comment(&spec.intent_why) {
+        output.push_str(&doc_comment);
     }
 
     let signature = build_fn_signature(spec);
@@ -418,12 +442,17 @@ mod tests {
     use std::os::unix::fs as unix_fs;
     use tempfile::TempDir;
 
-    fn test_spec_with(deps: Vec<&str>, imports: Vec<&str>, body: &str) -> ResolvedSpec {
+    fn test_spec_with_intent(
+        deps: Vec<&str>,
+        imports: Vec<&str>,
+        body: &str,
+        intent_why: &str,
+    ) -> ResolvedSpec {
         ResolvedSpec::from_spec(SpecStruct {
             id: "pricing/apply_discount".to_string(),
             kind: "function".to_string(),
             intent: Intent {
-                why: "Apply a percentage discount.".to_string(),
+                why: intent_why.to_string(),
             },
             contract: None,
             deps: deps.into_iter().map(|dep| dep.to_string()).collect(),
@@ -440,8 +469,52 @@ mod tests {
         })
     }
 
+    fn test_spec_with(deps: Vec<&str>, imports: Vec<&str>, body: &str) -> ResolvedSpec {
+        test_spec_with_intent(deps, imports, body, " ")
+    }
+
     fn test_spec(deps: Vec<&str>, body: &str) -> ResolvedSpec {
         test_spec_with(deps, vec![], body)
+    }
+
+    #[test]
+    fn generate_code_includes_doc_comment_from_intent() {
+        let spec = test_spec_with_intent(
+            vec![],
+            vec!["rust_decimal::Decimal"],
+            "{\n    Decimal::ZERO\n}",
+            "Apply a percentage discount.",
+        );
+
+        let code = generate_code(&spec).unwrap();
+        assert_eq!(
+            code,
+            "use rust_decimal::Decimal;\n\n/// Apply a percentage discount.\npub fn apply_discount() {\n    Decimal::ZERO\n}\n"
+        );
+    }
+
+    #[test]
+    fn generate_code_multiline_intent_produces_multiline_doc_comment() {
+        let spec = test_spec_with_intent(
+            vec![],
+            vec![],
+            "{\n    Decimal::ZERO\n}",
+            "\nFirst line.\n\nSecond line.\n",
+        );
+
+        let code = generate_code(&spec).unwrap();
+        assert_eq!(
+            code,
+            "/// First line.\n///\n/// Second line.\npub fn apply_discount() {\n    Decimal::ZERO\n}\n"
+        );
+    }
+
+    #[test]
+    fn generate_code_omits_doc_comment_for_blank_intent() {
+        let spec = test_spec_with_intent(vec![], vec![], "{\n    Decimal::ZERO\n}", "   \n  ");
+
+        let code = generate_code(&spec).unwrap();
+        assert_eq!(code, "pub fn apply_discount() {\n    Decimal::ZERO\n}\n");
     }
 
     #[test]
