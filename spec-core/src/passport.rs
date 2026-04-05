@@ -39,6 +39,23 @@ pub struct PassportLocalTest {
     pub expect: String,
 }
 
+/// Observed runtime result for one declared local test.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PassportTestResult {
+    pub id: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Observed runtime evidence captured from the last `spec test` run.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PassportEvidence {
+    pub build_status: String,
+    pub test_results: Vec<PassportTestResult>,
+    pub observed_at: String,
+}
+
 /// The full passport document for one unit.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Passport {
@@ -51,6 +68,8 @@ pub struct Passport {
     pub local_tests: Vec<PassportLocalTest>,
     pub generated_at: String,
     pub source_file: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<PassportEvidence>,
 }
 
 /// Build a Passport from a LoadedSpec.
@@ -58,6 +77,15 @@ pub struct Passport {
 /// `generated_at` is injected so all passports in one run share an identical
 /// timestamp (batch consistency).
 pub fn build_passport(spec: &LoadedSpec, generated_at: &str) -> Passport {
+    build_passport_with_evidence(spec, generated_at, None)
+}
+
+/// Build a Passport from a LoadedSpec and optional observed evidence.
+pub fn build_passport_with_evidence(
+    spec: &LoadedSpec,
+    generated_at: &str,
+    evidence: Option<PassportEvidence>,
+) -> Passport {
     let contract = spec.spec.contract.as_ref().map(|c| PassportContract {
         inputs: c
             .inputs
@@ -96,6 +124,7 @@ pub fn build_passport(spec: &LoadedSpec, generated_at: &str) -> Passport {
             .collect(),
         generated_at: generated_at.to_string(),
         source_file: spec.source.file_path.clone(),
+        evidence,
     }
 }
 
@@ -298,6 +327,7 @@ mod tests {
 
         assert_eq!(passport.local_tests.len(), 1);
         assert_eq!(passport.local_tests[0].id, "basic");
+        assert!(passport.evidence.is_none());
     }
 
     #[test]
@@ -315,6 +345,7 @@ mod tests {
         assert_eq!(passport.spec_version, "0.3.0"); // default
         assert!(passport.deps.is_empty());
         assert!(passport.local_tests.is_empty());
+        assert!(passport.evidence.is_none());
     }
 
     #[test]
@@ -390,6 +421,64 @@ mod tests {
         let parsed: Passport = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed.id, "pricing/apply_tax");
         assert_eq!(parsed.generated_at, "2026-04-04T00:00:00Z");
+    }
+
+    #[test]
+    fn build_passport_with_evidence_serializes_observed_results() {
+        let spec = make_loaded_spec(
+            "pricing/apply_tax",
+            "units/pricing/apply_tax.unit.spec",
+            Some("0.3.0"),
+            None,
+            vec![],
+            vec![("basic", "apply_tax(1,2) == 3")],
+        );
+        let passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-04T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+            }),
+        );
+
+        assert_eq!(
+            passport.evidence,
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn spec_generate_passport_has_no_evidence() {
+        let spec = make_loaded_spec(
+            "money/round",
+            "units/money/round.unit.spec",
+            Some("0.3.0"),
+            None,
+            vec![],
+            vec![],
+        );
+        let passport = build_passport(&spec, "2026-04-04T00:00:00Z");
+        let json = serde_json::to_string(&passport).unwrap();
+
+        assert!(passport.evidence.is_none());
+        assert!(
+            !json.contains("\"evidence\""),
+            "static passport should not serialize evidence: {json}"
+        );
     }
 
     #[test]

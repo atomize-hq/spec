@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -6,6 +7,12 @@ pub struct CargoResult {
     pub exit_code: i32,
     pub stdout: String,
     pub stderr: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedCargoTestResult {
+    pub status: String,
+    pub reason: Option<String>,
 }
 
 pub fn cargo_available() -> bool {
@@ -61,6 +68,46 @@ pub fn run_cargo_build(crate_root: &Path, cargo_target_dir: &Path) -> Result<Car
 pub fn run_cargo_test(crate_root: &Path, cargo_target_dir: &Path) -> Result<CargoResult> {
     eprintln!("spec: running cargo test in {}", crate_root.display());
     run_cargo(crate_root, &["test"], cargo_target_dir)
+}
+
+pub fn parse_cargo_test_output(stdout: &str) -> BTreeMap<String, ParsedCargoTestResult> {
+    let mut results: BTreeMap<String, ParsedCargoTestResult> = BTreeMap::new();
+
+    for line in stdout.lines() {
+        let Some(rest) = line.strip_prefix("test ") else {
+            continue;
+        };
+        let Some((full_name, terminal_status)) = rest.split_once(" ... ") else {
+            continue;
+        };
+
+        let parsed = match terminal_status.trim() {
+            "ok" => ParsedCargoTestResult {
+                status: "pass".to_string(),
+                reason: None,
+            },
+            "FAILED" => ParsedCargoTestResult {
+                status: "fail".to_string(),
+                reason: None,
+            },
+            other => ParsedCargoTestResult {
+                status: "error".to_string(),
+                reason: Some(other.to_string()),
+            },
+        };
+
+        match results.get_mut(full_name) {
+            Some(existing) => {
+                existing.status = "error".to_string();
+                existing.reason = Some("multiple matching cargo results".to_string());
+            }
+            None => {
+                results.insert(full_name.to_string(), parsed);
+            }
+        }
+    }
+
+    results
 }
 
 fn run_cargo(cwd: &Path, args: &[&str], cargo_target_dir: &Path) -> Result<CargoResult> {
@@ -128,5 +175,125 @@ mod tests {
 
         let err = workspace_root_for(&nested).unwrap_err().to_string();
         assert!(err.contains("could not find crate root"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_cargo_test_output_parses_pass_and_fail() {
+        let stdout = "\
+running 2 tests
+test generated::pricing::apply_discount::tests::test_happy_path ... ok
+test generated::pricing::apply_tax::tests::test_basic_tax ... FAILED
+";
+
+        let parsed = parse_cargo_test_output(stdout);
+        assert_eq!(
+            parsed.get("generated::pricing::apply_discount::tests::test_happy_path"),
+            Some(&ParsedCargoTestResult {
+                status: "pass".to_string(),
+                reason: None,
+            })
+        );
+        assert_eq!(
+            parsed.get("generated::pricing::apply_tax::tests::test_basic_tax"),
+            Some(&ParsedCargoTestResult {
+                status: "fail".to_string(),
+                reason: None,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_cargo_test_output_ignores_non_test_lines() {
+        let stdout = "\
+running 1 test
+
+failures:
+
+---- generated::pricing::apply_tax::tests::test_basic_tax stdout ----
+
+thread 'generated::pricing::apply_tax::tests::test_basic_tax' panicked at src/lib.rs:10:9:
+assertion failed: false
+test result: FAILED. 0 passed; 1 failed
+";
+
+        let parsed = parse_cargo_test_output(stdout);
+        assert!(parsed.is_empty(), "got: {parsed:?}");
+    }
+
+    #[test]
+    fn parse_cargo_test_output_handles_duplicate_test_ids_across_units() {
+        let stdout = "\
+test generated::pricing::apply_discount::tests::test_happy_path ... ok
+test generated::checkout::apply_discount::tests::test_happy_path ... FAILED
+";
+
+        let parsed = parse_cargo_test_output(stdout);
+        assert_eq!(
+            parsed.get("generated::pricing::apply_discount::tests::test_happy_path"),
+            Some(&ParsedCargoTestResult {
+                status: "pass".to_string(),
+                reason: None,
+            })
+        );
+        assert_eq!(
+            parsed.get("generated::checkout::apply_discount::tests::test_happy_path"),
+            Some(&ParsedCargoTestResult {
+                status: "fail".to_string(),
+                reason: None,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_cargo_test_output_marks_duplicate_full_names_as_error() {
+        let stdout = "\
+test generated::pricing::apply_discount::tests::test_happy_path ... ok
+test generated::pricing::apply_discount::tests::test_happy_path ... FAILED
+";
+
+        let parsed = parse_cargo_test_output(stdout);
+        assert_eq!(
+            parsed.get("generated::pricing::apply_discount::tests::test_happy_path"),
+            Some(&ParsedCargoTestResult {
+                status: "error".to_string(),
+                reason: Some("multiple matching cargo results".to_string()),
+            })
+        );
+    }
+
+    #[test]
+    fn parse_cargo_test_output_marks_unrecognized_terminal_status_as_error() {
+        let stdout = "test generated::pricing::apply_tax::tests::test_basic_tax ... IGNORED\n";
+
+        let parsed = parse_cargo_test_output(stdout);
+        assert_eq!(
+            parsed.get("generated::pricing::apply_tax::tests::test_basic_tax"),
+            Some(&ParsedCargoTestResult {
+                status: "error".to_string(),
+                reason: Some("IGNORED".to_string()),
+            })
+        );
+    }
+
+    #[test]
+    fn parse_cargo_test_output_handles_real_corpus_shape() {
+        let stdout = "\
+running 3 tests
+test generated::pricing::apply_discount::tests::test_happy_path ... ok
+test generated::pricing::apply_tax::tests::test_basic_tax ... ok
+test generated::pricing::calculate_total::tests::test_combined_flow ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+        let parsed = parse_cargo_test_output(stdout);
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(
+            parsed.get("generated::pricing::calculate_total::tests::test_combined_flow"),
+            Some(&ParsedCargoTestResult {
+                status: "pass".to_string(),
+                reason: None,
+            })
+        );
     }
 }
