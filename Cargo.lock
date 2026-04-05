@@ -1164,11 +1164,12 @@ dependencies = [
 
 [[package]]
 name = "spec-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
  "serde",
+ "serde_json",
  "spec-core",
  "tempfile",
  "toml",
@@ -1177,10 +1178,12 @@ dependencies = [
 
 [[package]]
 name = "spec-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "anyhow",
  "indexmap",
  "jsonschema",
+ "proc-macro2",
  "serde",
  "serde_json",
  "serde_yaml_bw",

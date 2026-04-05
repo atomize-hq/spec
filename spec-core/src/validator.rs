@@ -4,8 +4,9 @@
 //! 1. JSON Schema validation (using embedded unit.spec.json)
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
+use crate::syntax::validate_expect_expr;
 use crate::types::LoadedSpec;
-use crate::{Result, SpecError, SpecWarning};
+use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
 use std::collections::{HashMap, HashSet};
@@ -155,67 +156,15 @@ fn validate_local_test_expects(spec: &LoadedSpec, options: &ValidationOptions) -
             });
         }
 
-        let expr = syn::parse_str::<syn::Expr>(test.expect.trim()).map_err(|err| {
-            SpecError::LocalTestExpectNotExpr {
+        validate_expect_expr(test.expect.trim(), options.allow_unsafe_local_test_expect).map_err(
+            |err| SpecError::LocalTestExpectNotExpr {
                 id: test.id.clone(),
-                message: err.to_string(),
+                message: err.message(),
                 path: path.clone(),
-            }
-        })?;
-        // Reject syntax-level injection vectors: block expressions, unsafe blocks,
-        // closures, and control-flow forms (If, Match, Loop, etc.) that introduce
-        // statements or scope inside assert!(). Note: call expressions to
-        // side-effectful functions (std::fs, std::process::Command, etc.) are not
-        // blocked — .unit.spec files are treated as trusted input, the same as
-        // body.rust. A config lever and defense-in-depth options are deferred to
-        // M3. See TODOS.md.
-        if !options.allow_unsafe_local_test_expect && !is_safe_expect_expr(&expr) {
-            return Err(SpecError::LocalTestExpectNotExpr {
-                id: test.id.clone(),
-                message: "expect must use only operators, function calls, and value access; block, unsafe, closure, and control-flow forms are not allowed".to_string(),
-                path: path.clone(),
-            });
-        }
+            },
+        )?;
     }
     Ok(())
-}
-
-fn is_safe_expect_expr(expr: &syn::Expr) -> bool {
-    is_safe_expect_expr_depth(expr, 0)
-}
-
-const MAX_EXPECT_EXPR_DEPTH: usize = 128;
-
-fn is_safe_expect_expr_depth(expr: &syn::Expr, depth: usize) -> bool {
-    if depth >= MAX_EXPECT_EXPR_DEPTH {
-        return false;
-    }
-    let next = depth + 1;
-    match expr {
-        syn::Expr::Binary(b) => {
-            is_safe_expect_expr_depth(&b.left, next)
-                && is_safe_expect_expr_depth(&b.right, next)
-        }
-        syn::Expr::Call(c) => {
-            is_safe_expect_expr_depth(&c.func, next)
-                && c.args.iter().all(|a| is_safe_expect_expr_depth(a, next))
-        }
-        syn::Expr::MethodCall(m) => {
-            is_safe_expect_expr_depth(&m.receiver, next)
-                && m.args.iter().all(|a| is_safe_expect_expr_depth(a, next))
-        }
-        syn::Expr::Field(f) => is_safe_expect_expr_depth(&f.base, next),
-        syn::Expr::Index(i) => {
-            is_safe_expect_expr_depth(&i.expr, next)
-                && is_safe_expect_expr_depth(&i.index, next)
-        }
-        syn::Expr::Unary(u) => is_safe_expect_expr_depth(&u.expr, next),
-        syn::Expr::Path(_) | syn::Expr::Lit(_) => true,
-        syn::Expr::Paren(inner) => is_safe_expect_expr_depth(&inner.expr, next),
-        syn::Expr::Cast(c) => is_safe_expect_expr_depth(&c.expr, next),
-        // Block, Unsafe, Closure, If, Match, Loop, ForLoop, While, Async, etc. → rejected
-        _ => false,
-    }
 }
 
 fn validate_body_rust_block(spec: &LoadedSpec) -> Result<()> {
@@ -314,7 +263,7 @@ pub fn check_spec_versions(specs: &[LoadedSpec]) -> Vec<SpecWarning> {
         .filter(|s| s.spec.spec_version.is_none())
         .map(|s| SpecWarning::MissingSpecVersion {
             path: s.source.file_path.clone(),
-            version: env!("CARGO_PKG_VERSION"),
+            version: AUTHORED_SPEC_VERSION,
         })
         .collect()
 }
@@ -409,8 +358,9 @@ fn dfs_cycle_check<'a>(
 ///
 /// NOTE: Cycle detection is in-tree only. Deps that reference units outside this
 /// spec set (cross-library) are skipped during DFS — they are not in id_map.
-/// Cross-library cycle detection is deferred until the cross-library dep schema
-/// is defined (M4). See DECISIONS.md.
+/// The cross-library dep schema is locked in DECISIONS.md as namespace-prefixed
+/// ids (for example `shared::money/round`), but cross-library cycle detection is
+/// still deferred until M5 implements cross-library loading and validation.
 pub fn detect_cycles(specs: &[LoadedSpec]) -> Vec<SpecError> {
     let id_map: HashMap<&str, &LoadedSpec> =
         specs.iter().map(|s| (s.spec.id.as_str(), s)).collect();
@@ -451,7 +401,7 @@ pub fn validate_full_with_options(spec: &LoadedSpec, options: &ValidationOptions
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Contract, Intent, SpecSource, SpecStruct};
+    use crate::types::{Body, Contract, Intent, LocalTest, SpecSource, SpecStruct};
 
     fn create_test_spec(id: &str, rust_body: &str) -> LoadedSpec {
         LoadedSpec {
@@ -1505,6 +1455,13 @@ local_tests:
             "{}",
             warnings[0]
         );
+        assert!(
+            warnings[0]
+                .to_string()
+                .contains(&format!("spec_version: \"{AUTHORED_SPEC_VERSION}\"")),
+            "{}",
+            warnings[0]
+        );
     }
 
     #[test]
@@ -1561,22 +1518,34 @@ body:
 
     #[test]
     fn expect_deeply_nested_parens_are_rejected_at_depth_cap() {
-        // Regression: ISSUE-002 — is_safe_expect_expr had no depth cap; deeply nested
-        // expressions could stack-overflow during validation.
-        // Found by /qa on 2026-04-04
-        // Report: .gstack/qa-reports/qa-report-spec-2026-04-04.md
-        //
-        // Construct 200 levels of Paren(Paren(...(Lit))) directly — parsing a
-        // 200-deep string would stack-overflow in syn's recursive parser itself.
-        let leaf: syn::Expr = syn::parse_str("true").expect("parse leaf");
-        let nested = (0..200).fold(leaf, |inner, _| {
-            syn::Expr::Paren(syn::ExprParen {
-                attrs: vec![],
-                paren_token: Default::default(),
-                expr: Box::new(inner),
-            })
-        });
-        // is_safe_expect_expr must return false (not panic) for depth > MAX_EXPECT_EXPR_DEPTH
-        assert!(!is_safe_expect_expr(&nested));
+        let nested = format!("{}true{}", "(".repeat(200), ")".repeat(200));
+        let err = validate_semantic(&LoadedSpec {
+            source: SpecSource {
+                file_path: "test.unit.spec".to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount.".to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: "{ true }".to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "deep".to_string(),
+                    expect: nested,
+                }],
+                links: None,
+                spec_version: None,
+            },
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("maximum depth of 128"));
     }
 }

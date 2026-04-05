@@ -1,12 +1,21 @@
-use crate::config::load_workspace_config;
+use crate::config::{WorkspaceConfig, load_workspace_config};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
+use spec_core::export::build_export_bundle;
 use spec_core::generator::{
-    clean_output_dir, generate_code, generate_mod_rs, safe_output_path, write_generated_file,
+    GenerateOptions, clean_output_dir, generate_code_with_options, generate_mod_rs,
+    safe_output_path, write_generated_file,
 };
 use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
-use spec_core::passport::{build_passport, ensure_gitignore_entry, rfc3339_now, write_passport};
+use spec_core::passport::{
+    PassportEvidence, PassportTestResult, build_passport_with_evidence, ensure_gitignore_entry,
+    rfc3339_now, write_passport,
+};
+use spec_core::pipeline::{
+    ParsedCargoTestResult, cargo_available, parse_cargo_test_output, run_cargo_build,
+    run_cargo_test, workspace_root_for,
+};
 use spec_core::types::{LoadedSpec, ResolvedSpec};
 use spec_core::validator::{
     ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
@@ -30,6 +39,12 @@ pub enum Command {
     Validate(ValidateArgs),
     #[command(about = "Generate Rust source files from .unit.spec files")]
     Generate(GenerateArgs),
+    #[command(about = "Validate, generate, and run cargo build")]
+    Build(BuildArgs),
+    #[command(about = "Validate, generate, run cargo build and cargo test")]
+    Test(TestArgs),
+    #[command(about = "Export spec metadata as a JSON bundle")]
+    Export(ExportArgs),
 }
 
 impl Command {
@@ -37,6 +52,25 @@ impl Command {
         match self {
             Self::Validate(args) => validate_command(&args.path, args.no_strict),
             Self::Generate(args) => generate_command(&args.path, &args.output, args.no_strict),
+            Self::Build(args) => {
+                let config = load_workspace_config(&args.path)?;
+                build_command(
+                    &args.path,
+                    &args.output,
+                    args.crate_root.as_deref(),
+                    &config,
+                )
+            }
+            Self::Test(args) => {
+                let config = load_workspace_config(&args.path)?;
+                test_command(
+                    &args.path,
+                    &args.output,
+                    args.crate_root.as_deref(),
+                    &config,
+                )
+            }
+            Self::Export(args) => export_command(&args.path, args.output.as_deref()),
         }
     }
 }
@@ -55,6 +89,37 @@ pub struct GenerateArgs {
     pub output: PathBuf,
     #[arg(long)]
     pub no_strict: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct BuildArgs {
+    pub path: PathBuf,
+    #[arg(long, default_value = "generated/spec")]
+    pub output: PathBuf,
+    #[arg(
+        long,
+        help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)"
+    )]
+    pub crate_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct TestArgs {
+    pub path: PathBuf,
+    #[arg(long, default_value = "generated/spec")]
+    pub output: PathBuf,
+    #[arg(
+        long,
+        help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)"
+    )]
+    pub crate_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct ExportArgs {
+    pub path: PathBuf,
+    #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
+    pub output: Option<PathBuf>,
 }
 
 fn validate_command(path: &Path, no_strict: bool) -> Result<()> {
@@ -100,7 +165,53 @@ fn validate_command(path: &Path, no_strict: bool) -> Result<()> {
     );
 }
 
+fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    let (specs, errors, mut warnings, _total_files) = collect_specs(path)?;
+    let config = load_workspace_config(path)?;
+    let validation_options = ValidationOptions {
+        strict_deps: true,
+        allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
+    };
+    let (errors, validation_warnings) = finish_validation(&specs, errors, &validation_options);
+    merge_diagnostics(&mut warnings, validation_warnings);
+
+    if !warnings.is_empty() {
+        print_diagnostics(&warnings);
+    }
+    if !errors.is_empty() {
+        print_diagnostics(&errors);
+        let file_count = count_unique_files(&errors);
+        bail!(
+            "❌ {} file{}, {} error{}",
+            file_count,
+            pluralize(file_count),
+            count_messages(&errors),
+            pluralize(count_messages(&errors))
+        );
+    }
+
+    let bundle = build_export_bundle(&specs, &rfc3339_now());
+    let json = serde_json::to_string_pretty(&bundle)?;
+
+    match output {
+        Some(path) => {
+            validate_export_output_path(path)?;
+            fs::write(path, json)
+                .with_context(|| format!("Failed to write export bundle to {}", path.display()))?;
+        }
+        None => {
+            print!("{json}");
+        }
+    }
+
+    Ok(())
+}
+
 fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
+    generate_specs(path, output, no_strict).map(|_| ())
+}
+
+fn generate_specs(path: &Path, output: &Path, no_strict: bool) -> Result<GeneratedSpecs> {
     if no_strict {
         bail!(
             "❌ --no-strict is not valid for spec generate — use spec validate to check without strict enforcement"
@@ -113,7 +224,10 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
             print_diagnostics(&warnings);
         }
         println!("0 units found, nothing to generate.");
-        return Ok(());
+        return Ok(GeneratedSpecs {
+            specs,
+            generated_at: rfc3339_now(),
+        });
     }
 
     let config = load_workspace_config(path)?;
@@ -163,9 +277,12 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
     }
 
     let output_base = ensure_output_marker(output)?;
+    let generate_options = GenerateOptions {
+        allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
+    };
 
     for spec in &resolved_specs {
-        let content = generate_code(spec)
+        let content = generate_code_with_options(spec, &generate_options)
             .with_context(|| format!("Failed to generate Rust for {}", spec.id))?;
         let output_path = output_base.join(path_for_spec(spec));
         write_generated_file(&output_path.display().to_string(), &content)
@@ -195,12 +312,7 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
 
     // Passport phase: only reached after all generation succeeds (atomicity guarantee).
     let generated_at = rfc3339_now();
-    for spec in &specs {
-        let passport = build_passport(spec, &generated_at);
-        let source_path = Path::new(&spec.source.file_path);
-        write_passport(&passport, source_path)
-            .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
-    }
+    write_passports(&specs, &generated_at, None)?;
     let gitignore_root = if path.is_file() {
         path.parent().unwrap_or(path)
     } else {
@@ -214,7 +326,243 @@ fn generate_command(path: &Path, output: &Path, no_strict: bool) -> Result<()> {
         resolved_specs.len() + namespaces.len(),
         pluralize(resolved_specs.len() + namespaces.len())
     );
+    Ok(GeneratedSpecs {
+        specs,
+        generated_at,
+    })
+}
+
+fn write_passports(
+    specs: &[LoadedSpec],
+    generated_at: &str,
+    evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
+) -> Result<()> {
+    for spec in specs {
+        let passport = build_passport_with_evidence(
+            spec,
+            generated_at,
+            evidence_by_spec
+                .and_then(|map| map.get(&spec.spec.id))
+                .cloned(),
+        );
+        let source_path = Path::new(&spec.source.file_path);
+        write_passport(&passport, source_path)
+            .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
+    }
+
     Ok(())
+}
+
+struct PipelineContext {
+    crate_root: PathBuf,
+    cargo_target_dir: PathBuf,
+    // Holds the tempdir alive for the duration of the command when we own one.
+    _temp_dir: Option<tempfile::TempDir>,
+}
+
+struct GeneratedSpecs {
+    specs: Vec<LoadedSpec>,
+    generated_at: String,
+}
+
+fn resolve_pipeline_context(
+    path: &Path,
+    crate_root_flag: Option<&Path>,
+    config: &WorkspaceConfig,
+) -> Result<PipelineContext> {
+    let crate_root = match crate_root_flag.or(config.pipeline.crate_root.as_deref()) {
+        Some(p) => p.to_path_buf(),
+        None => workspace_root_for(path)?,
+    };
+
+    let mut temp_dir: Option<tempfile::TempDir> = None;
+    let cargo_target_dir = if let Some(p) = &config.pipeline.cargo_target_dir {
+        p.clone()
+    } else if let Ok(env_val) = std::env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(env_val)
+    } else {
+        let td = tempfile::TempDir::new()
+            .with_context(|| "Failed to create temporary CARGO_TARGET_DIR")?;
+        let path = td.path().to_path_buf();
+        temp_dir = Some(td);
+        path
+    };
+
+    Ok(PipelineContext {
+        crate_root,
+        cargo_target_dir,
+        _temp_dir: temp_dir,
+    })
+}
+
+fn build_command(
+    path: &Path,
+    output: &Path,
+    crate_root_flag: Option<&Path>,
+    config: &WorkspaceConfig,
+) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec build requires a directory path — pass the units directory, not a single file"
+        );
+    }
+
+    if !cargo_available() {
+        bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
+    }
+
+    let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
+
+    generate_specs(path, output, false)?;
+
+    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    print!("{}", result.stdout);
+    eprint!("{}", result.stderr);
+    if result.exit_code != 0 {
+        bail!("❌ cargo build failed");
+    }
+    Ok(())
+}
+
+fn test_command(
+    path: &Path,
+    output: &Path,
+    crate_root_flag: Option<&Path>,
+    config: &WorkspaceConfig,
+) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec test requires a directory path — pass the units directory, not a single file"
+        );
+    }
+
+    if !cargo_available() {
+        bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
+    }
+
+    let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
+
+    let generated = generate_specs(path, output, false)?;
+
+    let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    print!("{}", build_result.stdout);
+    eprint!("{}", build_result.stderr);
+    if build_result.exit_code != 0 {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec = build_failure_evidence(&generated.specs, &observed_at);
+        write_passports(
+            &generated.specs,
+            &generated.generated_at,
+            Some(&evidence_by_spec),
+        )?;
+        bail!("❌ cargo build failed");
+    }
+
+    let test_result = run_cargo_test(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    print!("{}", test_result.stdout);
+    eprint!("{}", test_result.stderr);
+    let parsed_test_results = parse_cargo_test_output(&test_result.stdout);
+    let observed_at = rfc3339_now();
+    let evidence_by_spec =
+        build_test_evidence(&generated.specs, output, &parsed_test_results, &observed_at)?;
+    write_passports(
+        &generated.specs,
+        &generated.generated_at,
+        Some(&evidence_by_spec),
+    )?;
+    if test_result.exit_code != 0 {
+        bail!("❌ cargo test failed");
+    }
+    Ok(())
+}
+
+fn build_failure_evidence(
+    specs: &[LoadedSpec],
+    observed_at: &str,
+) -> BTreeMap<String, PassportEvidence> {
+    specs
+        .iter()
+        .map(|spec| {
+            (
+                spec.spec.id.clone(),
+                PassportEvidence {
+                    build_status: "fail".to_string(),
+                    test_results: vec![],
+                    observed_at: observed_at.to_string(),
+                },
+            )
+        })
+        .collect()
+}
+
+fn build_test_evidence(
+    specs: &[LoadedSpec],
+    output: &Path,
+    parsed_test_results: &BTreeMap<String, ParsedCargoTestResult>,
+    observed_at: &str,
+) -> Result<BTreeMap<String, PassportEvidence>> {
+    let output_prefix = output_module_prefix(output)?;
+    let mut evidence_by_spec = BTreeMap::new();
+
+    for spec in specs {
+        let resolved = ResolvedSpec::from_spec(spec.spec.clone());
+        let mut test_results = Vec::new();
+
+        for local_test in &spec.spec.local_tests {
+            let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+            let observed = parsed_test_results.get(&full_name);
+            let (status, reason) = match observed {
+                Some(result) => (result.status.clone(), result.reason.clone()),
+                None => (
+                    "unknown".to_string(),
+                    Some("test not found in cargo output".to_string()),
+                ),
+            };
+
+            test_results.push(PassportTestResult {
+                id: local_test.id.clone(),
+                status,
+                reason,
+            });
+        }
+
+        evidence_by_spec.insert(
+            spec.spec.id.clone(),
+            PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results,
+                observed_at: observed_at.to_string(),
+            },
+        );
+    }
+
+    Ok(evidence_by_spec)
+}
+
+fn output_module_prefix(output: &Path) -> Result<String> {
+    output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .map(|name| name.to_string())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "❌ could not determine output module prefix from {}",
+                output.display()
+            )
+        })
+}
+
+fn expected_cargo_test_name(spec: &ResolvedSpec, output_prefix: &str, test_id: &str) -> String {
+    if spec.module_path.is_empty() {
+        format!("{output_prefix}::{}::tests::test_{test_id}", spec.fn_name)
+    } else {
+        format!(
+            "{output_prefix}::{}::{}::tests::test_{test_id}",
+            spec.module_path.replace('/', "::"),
+            spec.fn_name
+        )
+    }
 }
 
 #[derive(Default)]
@@ -296,6 +644,20 @@ fn ensure_output_marker(output: &Path) -> Result<PathBuf> {
     }
 
     Ok(output_base)
+}
+
+fn validate_export_output_path(output: &Path) -> Result<()> {
+    if output.is_dir() {
+        bail!("❌ --output must be a file path, not a directory");
+    }
+
+    if let Some(parent) = output.parent().filter(|p| !p.as_os_str().is_empty())
+        && !parent.exists()
+    {
+        bail!("❌ output directory does not exist: {}", parent.display());
+    }
+
+    Ok(())
 }
 
 fn dir_is_empty(path: &Path) -> Result<bool> {
@@ -455,6 +817,7 @@ fn pluralize(count: usize) -> &'static str {
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Command as ProcessCommand;
     use tempfile::TempDir;
 
     fn write_spec(dir: &Path, relative_path: &str, body: &str) {
@@ -463,6 +826,22 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, body).unwrap();
+    }
+
+    fn copy_dir_all(src: &Path, dst: &Path) {
+        fs::create_dir_all(dst).unwrap();
+
+        for entry in fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let entry_path = entry.path();
+            let dst_path = dst.join(entry.file_name());
+
+            if entry.file_type().unwrap().is_dir() {
+                copy_dir_all(&entry_path, &dst_path);
+            } else {
+                fs::copy(&entry_path, &dst_path).unwrap();
+            }
+        }
     }
 
     #[test]
@@ -531,5 +910,62 @@ extra_field: nope
         assert!(result.is_err());
         let error_text = format!("{:#}", result.unwrap_err());
         assert!(error_text.contains("error"));
+    }
+
+    #[test]
+    fn generate_command_writes_doc_comments_for_ecommerce_units() {
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let fixture_src = repo_root.join("examples/ecommerce");
+        let fixture_dst = temp_dir.path().join("ecommerce");
+        copy_dir_all(&fixture_src, &fixture_dst);
+
+        let units_dir = fixture_dst.join("units");
+        let output_dir = fixture_dst.join("src/generated");
+        generate_command(&units_dir, &output_dir, false).unwrap();
+
+        let apply_tax = fs::read_to_string(output_dir.join("pricing/apply_tax.rs")).unwrap();
+        assert!(apply_tax.contains(
+            "/// Add sales tax to a subtotal using a rate expressed as a decimal fraction.\n"
+        ));
+        assert!(apply_tax.contains("pub fn apply_tax("));
+    }
+
+    #[test]
+    fn cargo_doc_succeeds_for_generated_ecommerce_docs() {
+        if !cargo_available() {
+            return;
+        }
+
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let fixture_src = repo_root.join("examples/ecommerce");
+        let fixture_dst = temp_dir.path().join("ecommerce");
+        copy_dir_all(&fixture_src, &fixture_dst);
+
+        let units_dir = fixture_dst.join("units");
+        let output_dir = fixture_dst.join("src/generated");
+        generate_command(&units_dir, &output_dir, false).unwrap();
+
+        let output = ProcessCommand::new("cargo")
+            .current_dir(&fixture_dst)
+            .env("CARGO_TARGET_DIR", temp_dir.path().join("cargo-target"))
+            .env("CARGO_TERM_COLOR", "never")
+            .args(["doc", "--no-deps"])
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "cargo doc failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

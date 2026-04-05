@@ -1,3 +1,5 @@
+use serde_json::Value;
+use spec_core::AUTHORED_SPEC_VERSION;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -74,6 +76,7 @@ fn help_lists_validate_and_generate_commands() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("validate"));
     assert!(stdout.contains("generate"));
+    assert!(stdout.contains("export"));
 }
 
 #[test]
@@ -535,6 +538,290 @@ fn generate_empty_directory_reports_zero_units() {
 }
 
 #[test]
+fn spec_export_emits_valid_json_bundle() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round monetary values.
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+deps:
+  - money/round
+body:
+  rust: |
+    { round(1) }
+local_tests:
+  - id: basic
+    expect: "true"
+"#,
+    );
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["schema_version"], "1.0");
+    assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
+    assert!(bundle.get("graph").is_some());
+    assert!(bundle.get("warnings").is_some());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("spec_version not set"));
+}
+
+#[test]
+fn spec_export_includes_graph_edges() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round monetary values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+contract:
+  inputs:
+    value: i32
+  returns: i32
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+deps:
+  - money/round
+body:
+  rust: |
+    { round(1) }
+"#,
+    );
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        bundle["graph"]["edges"],
+        serde_json::json!([{ "from": "pricing/apply_discount", "to": "money/round" }])
+    );
+}
+
+#[test]
+fn spec_export_includes_passports_if_present() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    subtotal: i32
+  returns: i32
+body:
+  rust: |
+    { subtotal }
+"#,
+    );
+
+    let generate = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("generate before export", &generate);
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let passports = bundle["passports"].as_array().unwrap();
+    assert_eq!(passports.len(), 1);
+    assert_eq!(passports[0]["id"], "pricing/apply_tax");
+    assert!(bundle["warnings"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn spec_export_partial_passports_marked_missing() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+deps:
+  - money/round
+contract:
+  inputs:
+    subtotal: i32
+  returns: i32
+body:
+  rust: |
+    { round(subtotal) }
+"#,
+    );
+
+    let generate = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("generate before export", &generate);
+    fs::remove_file(units_dir.join("pricing/apply_tax.spec.passport.json")).unwrap();
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["passports"].as_array().unwrap().len(), 1);
+    let warnings = bundle["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0]["code"], "passport_missing");
+    assert_eq!(warnings[0]["spec_id"], "pricing/apply_tax");
+}
+
+#[test]
+fn spec_export_output_path_rejects_directory() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let export_dir = temp_dir.path().join("bundle-dir");
+    fs::create_dir_all(&export_dir).unwrap();
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { 1 }
+"#,
+    );
+
+    let output = run(&[
+        "export",
+        units_dir.to_str().unwrap(),
+        "--output",
+        export_dir.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--output must be a file path"));
+}
+
+#[test]
+fn spec_export_output_parent_dir_missing_exits_cleanly() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_path = temp_dir.path().join("missing/bundle.json");
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { 1 }
+"#,
+    );
+
+    let output = run(&[
+        "export",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_path.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("output directory does not exist"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn spec_export_empty_directory_emits_valid_empty_bundle() {
+    let temp_dir = temp_repo_dir();
+    let output = run(&["export", temp_dir.path().to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["units"], serde_json::json!([]));
+    assert_eq!(bundle["passports"], serde_json::json!([]));
+    assert_eq!(bundle["graph"]["edges"], serde_json::json!([]));
+    assert_eq!(bundle["warnings"], serde_json::json!([]));
+}
+
+#[test]
 fn generate_rejects_non_empty_dir_without_marker() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -661,6 +948,79 @@ local_tests:
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("1 unit valid"), "{stdout}");
+}
+
+#[test]
+fn generate_trusted_config_allows_unsafe_expect_expression() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated/spec");
+    write_file(
+        temp_dir.path(),
+        "spec.toml",
+        "[validation]\nallow_unsafe_local_test_expect = true\n",
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: unsafe_allowed
+    expect: "{ let ok = apply_discount(); ok }"
+"#,
+    );
+
+    let output = run_in(
+        temp_dir.path(),
+        &["generate", "units", "--output", "generated/spec"],
+    );
+    assert_output_success(
+        "spec generate should honor trusted local test config",
+        &output,
+    );
+
+    let generated = fs::read_to_string(output_dir.join("pricing/apply_discount.rs")).unwrap();
+    assert!(generated.contains("assert!({ let ok = apply_discount(); ok });"));
+}
+
+#[test]
+fn generate_without_trusted_config_rejects_unsafe_expect_expression() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: unsafe_rejected
+    expect: "{ let ok = apply_discount(); ok }"
+"#,
+    );
+
+    let output = run_in(
+        temp_dir.path(),
+        &["generate", "units", "--output", "generated/spec"],
+    );
+    assert!(!output.status.success());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("pricing/apply_discount"), "{stderr}");
+    assert!(stderr.contains("unsafe_rejected"), "{stderr}");
+    assert!(stderr.contains("block, unsafe, closure"), "{stderr}");
 }
 
 #[test]
@@ -1066,11 +1426,10 @@ body:
         stderr.contains("spec_version not set"),
         "expected spec_version warning in stderr, got: {stderr}"
     );
-    // The warning includes the current binary version as a suggestion.
+    // The warning should keep recommending the authored spec format version.
     assert!(
-        stderr.contains(env!("CARGO_PKG_VERSION")),
-        "expected current version ({}) in warning, got: {stderr}",
-        env!("CARGO_PKG_VERSION")
+        stderr.contains(AUTHORED_SPEC_VERSION),
+        "expected authored spec version ({AUTHORED_SPEC_VERSION}) in warning, got: {stderr}"
     );
 }
 
@@ -1148,6 +1507,363 @@ body:
     );
 }
 
+// ── D1: Pipeline wrap (spec build / spec test) ────────────────────────────────
+
+fn write_minimal_units_dir(units_dir: &Path) {
+    write_spec(
+        units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount to a subtotal.
+contract:
+  inputs:
+    subtotal: f64
+    rate: f64
+  returns: f64
+body:
+  rust: |
+    {
+        subtotal * (1.0 - rate)
+    }
+"#,
+    );
+}
+
+#[test]
+fn spec_build_validates_and_runs_cargo_build() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+    let output = run_in(
+        &root,
+        &[
+            "build",
+            "examples/ecommerce/units",
+            "--output",
+            "examples/ecommerce/src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ],
+    );
+    assert_output_success("spec build failed for ecommerce example", &output);
+}
+
+#[test]
+fn spec_build_fails_on_validation_error_before_cargo() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    // Write a spec with a Rust reserved keyword in the id — will fail validation
+    write_spec(
+        &units_dir,
+        "pricing/type.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/type
+kind: function
+intent:
+  why: Force a validation error.
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&[
+        "build",
+        units_dir.to_str().unwrap(),
+        "--output",
+        temp_dir.path().join("out").to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 on validation error"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("reserved keyword") || stderr.contains("error"),
+        "expected validation error in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_unavailable_cargo_exits_cleanly() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_minimal_units_dir(&units_dir);
+
+    // Point PATH to an empty dir so cargo cannot be found.
+    let empty_path = temp_dir.path().join("empty_bin");
+    fs::create_dir_all(&empty_path).unwrap();
+
+    let output = Command::new(bin())
+        .env("PATH", &empty_path)
+        .args([
+            "build",
+            units_dir.to_str().unwrap(),
+            "--output",
+            temp_dir.path().join("out").to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 when cargo is unavailable"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cargo not found"),
+        "expected 'cargo not found' in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_test_runs_cargo_test() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+    let output = run_in(
+        &root,
+        &[
+            "test",
+            "examples/ecommerce/units",
+            "--output",
+            "examples/ecommerce/src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ],
+    );
+    assert_output_success("spec test failed for ecommerce example", &output);
+}
+
+#[test]
+fn spec_test_forwards_cargo_stderr_on_failure() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let temp_dir =
+        tempfile::TempDir::new_in(root.join("target")).expect("failed to create temp dir");
+
+    let src_ecommerce = root.join("examples/ecommerce");
+    let dst_ecommerce = temp_dir.path().join("ecommerce");
+    copy_dir_recursive(&src_ecommerce, &dst_ecommerce).expect("failed to copy ecommerce example");
+
+    // Add a unit that produces uncompilable Rust
+    write_spec(
+        &dst_ecommerce.join("units"),
+        "pricing/broken.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/broken
+kind: function
+intent:
+  why: Force a compile error.
+contract:
+  returns: NotARealType
+body:
+  rust: |
+    {
+        todo!()
+    }
+"#,
+    );
+
+    let output = Command::new(bin())
+        .current_dir(&dst_ecommerce)
+        .args([
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            dst_ecommerce.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 when cargo compilation fails"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cargo build failed") || stderr.contains("error"),
+        "expected cargo error in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_rejects_single_file_path() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_minimal_units_dir(&units_dir);
+    let single_file = units_dir.join("pricing/apply_discount.unit.spec");
+
+    let output = run(&[
+        "build",
+        single_file.to_str().unwrap(),
+        "--output",
+        temp_dir.path().join("out").to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 for a single-file path"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("directory path"),
+        "expected directory path error in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_crate_root_config_vs_flag_precedence() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_minimal_units_dir(&units_dir);
+
+    // Write a spec.toml with a wrong crate_root; the --crate-root flag should override it.
+    fs::write(
+        temp_dir.path().join("spec.toml"),
+        "[pipeline]\ncrate_root = \"/nonexistent_path_that_should_be_overridden\"\n",
+    )
+    .unwrap();
+
+    let output = run(&[
+        "build",
+        units_dir.to_str().unwrap(),
+        "--output",
+        temp_dir.path().join("out").to_str().unwrap(),
+        "--crate-root",
+        ecommerce_dir.to_str().unwrap(),
+    ]);
+    // The flag overrides the config, so ecommerce builds successfully.
+    assert_output_success(
+        "spec build should use --crate-root flag over spec.toml config",
+        &output,
+    );
+}
+
+#[test]
+fn spec_build_no_cargo_toml_exits_with_error() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_minimal_units_dir(&units_dir);
+
+    // No Cargo.toml anywhere under temp_dir — ancestor walk will fail.
+    // We run spec from within temp_dir and don't pass --crate-root.
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args(["build", "units", "--output", "out"])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec build should exit 1 when no Cargo.toml ancestor exists"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("could not find crate root"),
+        "expected 'could not find crate root' in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_bare_crate_no_workspace_uses_package_toml() {
+    if !cargo_available() {
+        return;
+    }
+
+    // Use system temp dir (outside the spec repo) so the ancestor walk sees only our
+    // synthetic [package] Cargo.toml and not the spec workspace root.
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let crate_dir = temp_dir.path().join("mybare");
+    let units_dir = crate_dir.join("units");
+    let src_dir = crate_dir.join("src");
+    let generated_dir = crate_dir.join("src/generated");
+    fs::create_dir_all(&src_dir).unwrap();
+
+    // Bare Cargo.toml: [package] only, no [workspace]
+    fs::write(
+        crate_dir.join("Cargo.toml"),
+        "[package]\nname = \"spec-test-bare\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+
+    // src/main.rs that re-exports the generated spec module
+    fs::write(
+        src_dir.join("main.rs"),
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    )
+    .unwrap();
+
+    write_minimal_units_dir(&units_dir);
+
+    // Run spec build with current_dir=crate_dir and WITHOUT --crate-root.
+    // workspace_root_for walks ancestors from units_dir, finds no [workspace],
+    // falls back to [package] at crate_dir. The output path is inside crate_dir,
+    // satisfying safe_output_path's project-root check.
+    let output = Command::new(bin())
+        .current_dir(&crate_dir)
+        .args([
+            "build",
+            units_dir.to_str().unwrap(),
+            "--output",
+            generated_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success(
+        "spec build bare crate (no [workspace]) should succeed via [package] fallback",
+        &output,
+    );
+}
+
+#[test]
+fn spec_build_prints_crate_root_to_stderr() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let ecommerce_dir = root.join("examples/ecommerce");
+    let output = run_in(
+        &root,
+        &[
+            "build",
+            "examples/ecommerce/units",
+            "--output",
+            "examples/ecommerce/src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ],
+    );
+    assert_output_success("spec build failed for progress signal test", &output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("spec: running cargo build in"),
+        "expected progress signal in stderr, got: {stderr}"
+    );
+}
+
+// ── End D1 ────────────────────────────────────────────────────────────────────
+
 // Regression: ISSUE-QA-004 — no CLI integration test for contract input identifier validation.
 // spec validate must reject parameter names that are not valid Rust identifiers with a clear error.
 // Found by /qa on 2026-04-04.
@@ -1185,4 +1901,331 @@ body:
         stderr.contains("'my-param'") && stderr.contains("not a valid Rust identifier"),
         "expected identifier error in stderr, got: {stderr}"
     );
+}
+
+fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
+    let root = repo_root();
+    let temp_dir =
+        tempfile::TempDir::new_in(root.join("target")).expect("failed to create temp dir");
+    let dst_ecommerce = temp_dir.path().join("ecommerce");
+    copy_dir_recursive(&root.join("examples/ecommerce"), &dst_ecommerce)
+        .expect("failed to copy ecommerce example");
+    for entry in WalkDir::new(&dst_ecommerce) {
+        let entry = entry.expect("failed to walk copied ecommerce example");
+        if entry.file_type().is_file()
+            && entry
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".spec.passport.json")
+        {
+            fs::remove_file(entry.path()).expect("failed to remove copied passport artifact");
+        }
+    }
+    (temp_dir, dst_ecommerce)
+}
+
+fn read_passport(passport_path: &Path) -> String {
+    fs::read_to_string(passport_path).unwrap()
+}
+
+// ── D2: Runtime evidence in passports ───────────────────────────────────────
+
+#[test]
+fn spec_test_writes_evidence_to_passport() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success("spec test should succeed for ecommerce example", &output);
+
+    let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(
+        passport.contains("\"build_status\": \"pass\""),
+        "{passport}"
+    );
+    assert!(passport.contains("\"id\": \"basic_tax\""), "{passport}");
+    assert!(passport.contains("\"status\": \"pass\""), "{passport}");
+    assert!(passport.contains("\"observed_at\": \""), "{passport}");
+}
+
+#[test]
+fn spec_test_failure_writes_fail_status_to_passport() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    fs::write(
+        ecommerce_dir.join("units/pricing/apply_tax.unit.spec"),
+        r#"id: pricing/apply_tax
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let taxed = subtotal + subtotal * rate;
+        round(taxed)
+    }
+local_tests:
+  - id: basic_tax
+    expect: "false"
+links:
+  molecule_tests:
+    - pricing/discount_plus_tax
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec test should exit non-zero for failing local test"
+    );
+
+    let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(
+        passport.contains("\"build_status\": \"pass\""),
+        "{passport}"
+    );
+    assert!(passport.contains("\"status\": \"fail\""), "{passport}");
+}
+
+#[test]
+fn spec_test_build_failure_writes_fail_build_status_to_passport() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    write_spec(
+        &ecommerce_dir.join("units"),
+        "pricing/broken.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/broken
+kind: function
+intent:
+  why: Force a compile error.
+contract:
+  returns: NotARealType
+body:
+  rust: |
+    {
+        todo!()
+    }
+"#,
+    );
+
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec test should exit non-zero for compile failure"
+    );
+
+    let passport =
+        read_passport(&ecommerce_dir.join("units/pricing/apply_discount.spec.passport.json"));
+    assert!(
+        passport.contains("\"build_status\": \"fail\""),
+        "{passport}"
+    );
+    assert!(passport.contains("\"test_results\": []"), "{passport}");
+}
+
+#[test]
+fn spec_test_evidence_matches_non_default_output_module_name() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let main_rs_path = ecommerce_dir.join("src/main.rs");
+    let main_rs = fs::read_to_string(&main_rs_path).unwrap();
+    let rewritten = main_rs.replace(
+        "mod generated;\npub use generated::*;",
+        "mod atomized;\npub use atomized::*;",
+    );
+    fs::write(&main_rs_path, rewritten).unwrap();
+
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/atomized",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success(
+        "spec test should succeed with non-default output module",
+        &output,
+    );
+
+    let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(passport.contains("\"status\": \"pass\""), "{passport}");
+}
+
+#[test]
+fn spec_test_no_local_tests_produces_empty_evidence() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let crate_dir = temp_dir.path().join("nolocal");
+    let units_dir = crate_dir.join("units");
+    let src_dir = crate_dir.join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(
+        crate_dir.join("Cargo.toml"),
+        "[package]\nname = \"nolocal\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    fs::write(
+        src_dir.join("main.rs"),
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    )
+    .unwrap();
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"spec_version: "0.3.0"
+id: money/round
+kind: function
+intent:
+  why: Echo the provided value.
+contract:
+  inputs:
+    value: f64
+  returns: f64
+body:
+  rust: |
+    {
+        value
+    }
+"#,
+    );
+
+    let output = Command::new(bin())
+        .current_dir(&crate_dir)
+        .args([
+            "test",
+            units_dir.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            crate_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success("spec test should succeed with no local tests", &output);
+
+    let passport = read_passport(&units_dir.join("money/round.spec.passport.json"));
+    assert!(
+        passport.contains("\"build_status\": \"pass\""),
+        "{passport}"
+    );
+    assert!(passport.contains("\"test_results\": []"), "{passport}");
+}
+
+#[test]
+fn spec_test_writes_evidence_atomically() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success(
+        "spec test should succeed for atomic passport rewrite check",
+        &output,
+    );
+
+    for entry in WalkDir::new(ecommerce_dir.join("units")) {
+        let entry = entry.unwrap();
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".spec.passport.json")
+        {
+            continue;
+        }
+
+        let passport = read_passport(entry.path());
+        assert!(
+            passport.contains("\"id\": \""),
+            "invalid passport at {}",
+            entry.path().display()
+        );
+        assert!(
+            passport.contains("\"evidence\": {"),
+            "missing evidence at {}",
+            entry.path().display()
+        );
+    }
 }

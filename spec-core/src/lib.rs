@@ -6,10 +6,15 @@
 //! - Normalizing to internal representation (IR)
 //! - Generating readable Rust code
 
+pub const AUTHORED_SPEC_VERSION: &str = "0.3.0";
+
+pub mod export;
 pub mod generator;
 pub mod loader;
 pub mod normalizer;
 pub mod passport;
+pub mod pipeline;
+mod syntax;
 pub mod types;
 pub mod validator;
 

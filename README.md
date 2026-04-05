@@ -6,13 +6,14 @@
 
 1. Author a `.unit.spec` file.
 2. Validate it with the CLI.
-3. Generate Rust output.
-4. Copy or integrate the generated `.rs` files into your Rust project.
+3. Build: `spec build` validates, generates, and compiles in one step.
+4. Test: `spec test` runs the full pipeline and writes observed evidence to passports.
+5. Export: `spec export` emits a machine-readable JSON bundle for downstream tooling.
 
 ## Workspace
 
-- `spec-core`: parsing, validation, normalization, and generation primitives
-- `spec-cli`: CLI for `validate` and `generate`
+- `spec-core`: parsing, validation, normalization, generation, pipeline, and export primitives
+- `spec-cli`: CLI for `validate`, `generate`, `build`, `test`, and `export`
 - `examples/ecommerce`: a small realistic example with pricing units
 
 ## Quickstart
@@ -119,25 +120,54 @@ The example crate is intentionally minimal. It provides a realistic place to kee
 
 ## Commands
 
-The CLI currently supports:
-
 ```bash
-cargo run -p spec-cli -- validate <path>
-cargo run -p spec-cli -- validate <path> --no-strict
-cargo run -p spec-cli -- generate <path> --output <dir>
+spec validate <path>               # schema + semantic validation
+spec validate <path> --no-strict   # downgrade missing deps to warnings
+spec generate <path> --output <dir>  # emit .rs files
+
+spec build <path> --output <dir>   # validate → generate → cargo build
+spec test  <path> --output <dir>   # spec build → cargo test, writes evidence to passports
+
+spec export <path>                 # emit JSON bundle to stdout
+spec export <path> --output <file> # write JSON bundle to file
 ```
 
 `validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
 
-The `--output` path must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
+`spec build` and `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec test` also updates each unit's `.spec.passport.json` with observed pass/fail evidence.
+
+`spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read.
+
+The `--output` path for `generate`/`build`/`test` must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
+
+Note: `spec test` parses standard `cargo test` output. If your project uses `cargo-nextest`, use `spec generate` + `cargo test` directly for now.
+
+## Consuming Generated Code
+
+Generated units import internal deps with `use crate::...` paths. The consuming crate must
+re-export the generated module tree from its root so those paths resolve consistently:
+
+```rust
+mod generated;
+pub use generated::*;
+```
+
+The ecommerce example uses this pattern in
+[`examples/ecommerce/src/main.rs`](examples/ecommerce/src/main.rs).
 
 ## Workspace Config
 
-An optional `spec.toml` at the repo root can relax `local_tests[].expect` validation for trusted workspaces:
+An optional `spec.toml` at the repo root can relax `local_tests[].expect` validation for trusted workspaces and configure pipeline defaults:
 
 ```toml
 [validation]
 allow_unsafe_local_test_expect = false
+
+[pipeline]
+crate_root = "."          # path to Cargo.toml containing your crate (default: auto-detected)
+cargo_target_dir = "target"  # cargo target dir (default: temp dir per run)
 ```
 
 When `allow_unsafe_local_test_expect = true`, `local_tests[].expect` still must parse as a Rust expression, but block, unsafe, closure, and other otherwise-rejected expression forms are allowed.
+
+`spec build` and `spec test` auto-detect the nearest member crate (`[package]` Cargo.toml without `[workspace]`) to scope cargo to the right crate in a workspace. Override with `--crate-root <path>` or `[pipeline].crate_root` in `spec.toml`.
