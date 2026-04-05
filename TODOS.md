@@ -82,18 +82,20 @@
   - Uses `cross` crate for Linux targets, native rustup for macOS
   - Idempotent release creation with `gh release view` check
 
-## M4 Backlog
+## M4 Backlog (current sprint)
 
 - [ ] **Pipeline wrap: `spec build` / `spec test` config lever** — spec generates, user runs cargo (default). Add workspace config flag and/or CLI flag to enable spec-wrapped cargo execution: `spec build` = validate + generate + cargo build; `spec test` = spec build + cargo test. Default: off. See PLAN.md D1 for workspace-aware crate-root discovery design.
 - [ ] **Runtime evidence in passports (D2)** — After `spec test`, update passport with observed test results: `evidence.build_status`, `evidence.test_results[{id, status, reason?}]`, `evidence.parse_confidence`. Evidence is "last observed locally" — not CI-canonical (no commit SHA or runner identity). Provenance deferred to M5.
 - [ ] **JSON export v1 (`spec export`) (D3)** — Emit machine-readable bundle: `{schema_version: "1.0", spec_version: "0.4.0", exported_at, units[], passports[], graph:{edges[]}, warnings[]}`. Passports missing = `passport_missing: true` marker, not silent omission. `--output <file>` writes to file; default stdout.
-- [ ] **Doc comments in generated Rust (D4)** — `generate_code()` prepends `/// {intent}` above each `pub fn`. 1-line change in generator.rs.
+- [ ] **Doc comments in generated Rust (D4)** — `generate_code()` prepends `/// {intent}` above each `pub fn`. Requires: (1) add `intent: Option<String>` to `ResolvedSpec` + update `from_loaded()` in types.rs; (2) prepend `/// {line}\n` per intent line in generator.rs. ~15 lines across 2 files.
 - [ ] **D5a: Defense-in-depth sink guard** — Move `is_safe_expect_expr_depth()` to new `spec-core/src/syntax.rs` shared module. Both `validator.rs` and `generator.rs` import from it. Call it in `generate_code()` instead of raw `syn::parse_str`. Error must include unit ID + test ID in context. Raw syn::parse_str overflows on 200+ nested levels — this is the same bug fixed in the validator, now at the generate_code sink. Newtype refactor (ValidatedExpr) deferred to M5.
 - [ ] **D5b: README updates (DX checklist)** — 5 new sections: pipeline quickstart, [pipeline] spec.toml config, spec export bundle schema + jq example, escape hatch note (spec generate is first-class), spec test evidence section.
 - [ ] **D6: Cross-library dep schema decision** — Design spike (2 hrs): compare namespace prefix (`shared::money/round`), versioned path (`money/round@1.2`), registry path (`org/shared/money/round`). Output: DECISIONS.md entry with chosen schema and rationale. Must complete before M5 build.
 
 - [ ] **D5c: DECISIONS.md — "Generated Output: Ephemeral by Default"** — Close the open "commit vs ephemeral" decision from M3 TODOS. D1 (spec build) resolves it implicitly; write the formal record before M5 engineers re-litigate it. 1-paragraph entry. No code. Effort: XS. (Added by /plan-ceo-review 2026-04-05)
 - [ ] **Create spec-core/src/syntax.rs shared module** — Move `is_safe_expect_expr_depth()` from `validator.rs` to a new `syntax.rs` module (pub). Update `validator.rs` and `generator.rs` (D5a) to import from `syntax.rs`. This avoids leaking validator internals into the public API. Also expose from `lib.rs`. Effort: XS (~15 min). Depends on: D5a implementation. (Added by /plan-ceo-review 2026-04-05, Codex tension resolved)
+- [ ] **D4: Add `intent: Option<String>` to ResolvedSpec** — `generate_code()` receives `ResolvedSpec` which has no `intent` field. Add `pub intent: Option<String>` to `ResolvedSpec` (types.rs). Update `ResolvedSpec::from_loaded()` to copy `spec.intent.description`. Enables D4 doc comment prepend in `generate_code()`. Effort: XS (~15 min, 2 files). (Added by /plan-eng-review 2026-04-05 — D4 estimate was '1-line change' but requires schema field addition)
+- [ ] **Document nextest limitation (D5b addition)** — `spec test` parses standard `cargo test` output format only. nextest uses a completely different format and is not currently supported. Document in README under `## Pipeline` section. Add: "Note: spec test parses standard cargo test output. If your project uses cargo-nextest, use spec generate + cargo test directly for now." Effort: XS. Depends on: D5b implementation. (Added by /plan-eng-review 2026-04-05)
 
 ## M5 Backlog (from M4 review)
 

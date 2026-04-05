@@ -439,7 +439,17 @@ Parallel tracks:
 - `spec_test_no_local_tests_produces_empty_evidence` (D2, spec-cli/tests/cli.rs)
 - `spec_export_empty_directory_emits_valid_empty_bundle` (D3, spec-cli/tests/cli.rs)
 
-**Total: 31 test gaps**
+### Added by /plan-eng-review 2026-04-05 (8 new)
+- `spec_build_bare_crate_no_workspace_uses_package_toml` (D1, spec-cli/tests/cli.rs — bare crate fallback in workspace_root_for())
+- `spec_export_malformed_passport_json_produces_warning_not_crash` (D3, spec-core/src/export.rs — truncated JSON → warning + skip, not panic)
+- `spec_build_prints_crate_root_to_stderr` (D1, spec-cli/tests/cli.rs — decision #18 DX requirement)
+- `generate_code_sink_guard_includes_unit_and_test_id_in_error` (D5a, spec-core/src/generator.rs — error context quality)
+- `spec_test_build_failure_writes_fail_build_status_to_passport` (D2, spec-cli/tests/cli.rs — cargo build fails before cargo test runs)
+- `spec_test_evidence_matches_non_default_output_module_name` (D2, spec-cli/tests/cli.rs — module prefix derived from --output path, not hardcoded "generated")
+- `generate_code_includes_intent_as_doc_comment` (D4, spec-core/src/generator.rs — ResolvedSpec.intent field is used)
+- `spec_build_stops_at_nearest_package_toml_not_workspace_root` (D1, spec-cli/tests/cli.rs — two-step walk correctness)
+
+**Total: 39 test gaps**
 
 ---
 
@@ -450,8 +460,8 @@ Parallel tracks:
 | D1 | spec-cli/commands, spec-core/pipeline (new), config | — |
 | D2 | spec-core/passport, spec-cli/commands | D1 |
 | D3 | spec-core/export (new), spec-cli/commands | D2 (passports with evidence) |
-| D4 | spec-core/generator | — |
-| D5 | spec-core/generator, spec-core/validator (pub fn), DECISIONS.md, README.md | — |
+| D4 | spec-core/generator, spec-core/types | — |
+| D5 | spec-core/syntax (new), spec-core/generator, spec-core/validator, spec-core/lib, DECISIONS.md, README.md | — (D5 internal order: syntax.rs → validator.rs import → generator.rs guard) |
 | D6 | DECISIONS.md | — |
 | D7 | Cargo.toml, CHANGELOG | D1, D2, D3, D4 |
 
@@ -738,6 +748,11 @@ CEO REVIEW (autoplan 2026-04-04):
 | 20 | DX | D2: unmatched test → emit "unknown" with reason, not silent omission | Mechanical | P5 explicit | Both models flag silent DX; "unknown" is honest; silent is misleading | Silent drop |
 | 21 | DX | D7: CHANGELOG 0.3→0.4 migration notes (evidence is additive) | Mechanical | P1 completeness | Codex: upgrade path not fear-free; need explicit compatibility statement | None |
 | 22 | DX | --output disambiguation in help text (not flag rename) | Mechanical | P5 explicit | Codex: --output means different things; help text fixes this cheaply | Flag rename |
+| 23 | Eng | workspace_root_for() uses two-step walk: [workspace] first, else nearest [package] — handles workspace AND bare crates | Mechanical | P1 completeness | Bare crate has no [workspace]; algorithm must fall back to nearest [package] Cargo.toml | Walk fails on bare crates |
+| 24 | Eng | D4: add intent: Option<String> to ResolvedSpec + update from_loaded() | Mechanical | P5 explicit | generate_code() receives ResolvedSpec which has no intent field; "1-line change" was wrong estimate (~15 lines, 2 files) | Add intent param to generate_code() |
+| 25 | Eng | D2 build failure: write build_status:"fail" + test_results:[] on cargo build non-zero | Mechanical | P5 explicit | cargo build failure before cargo test → passports should reflect broken build state, not be left stale | Skip evidence write on build failure |
+| 26 | Eng | D2 module prefix: derive from --output path last component, not hardcoded "generated" | Mechanical | P5 explicit | Consuming crate may mount output under any module name; prefix must match actual mount | Hardcode "generated" prefix |
+| 27 | Eng | D5b: add nextest limitation note to README | Mechanical | P5 explicit | spec test parses standard cargo test output only; nextest format is different and unsupported | No documentation |
 
 
 ---
@@ -814,10 +829,17 @@ CONFIRMED = both agree. All 4 findings confirmed high-confidence.
 Coupling: `pipeline.rs` creates a hard dependency on cargo being available. `export.rs` is stateless (read-only). Both are thin orchestration layers over existing types. Appropriate for M4.
 
 **Section 2 — Code Quality:**
-- D1: cargo root discovery must be extracted to `workspace_root_for(path: &Path) -> Result<PathBuf>` — check for `[workspace]` key in Cargo.toml, walk upward until found or error
-- D2: test matching must use module-qualified path (`generated::money::round::tests::test_happy_path`) not bare `test_happy_path` — avoids cross-unit collision
-- D3: export schema needs: `"schema_version": "1.0"` (separate from tool version), `"warnings": [...]` array for skipped/malformed passports
-- D5a: `generate_code()` error message must include unit ID and local_test ID when failing — error context is required for usability
+- D1: cargo root discovery must be extracted to `workspace_root_for(path: &Path) -> Result<PathBuf>` — two-step walk: find nearest ancestor Cargo.toml with `[workspace]`; if none found, fall back to nearest ancestor Cargo.toml with `[package]`. Handles workspace projects AND bare crates correctly. Add test: `spec_build_bare_crate_no_workspace_uses_package_toml`.
+- D2: test matching must use module-qualified path, but derive the root module prefix from the `--output` path's last component (e.g. `--output src/generated` → prefix `generated`). Not hardcoded to `"generated"`. Pattern: `{prefix}::{namespace}::{unit}::tests::test_{id}`. Add test: `spec_test_evidence_matches_non_default_output_module_name`.
+- D2: build failure evidence write — if `cargo build` exits non-zero (before cargo test runs), write `evidence.build_status: "fail"` with `test_results: []` to all passports before exiting 1. Add test: `spec_test_build_failure_writes_fail_build_status_to_passport`.
+- D3: export schema needs: `"schema_version": "1.0"` (separate from tool version), `"warnings": [...]` array for skipped/malformed passports. D3 bundle schema example must be updated to include `schema_version` alongside `spec_version`.
+- D4: **NOT a 1-line change.** `ResolvedSpec` (types.rs:70) has no `intent` field. Add `pub intent: Option<String>` to `ResolvedSpec`. Update `ResolvedSpec::from_loaded()` to copy `spec.intent.description`. Then `generate_code()` prepends `/// {line}\n` for each line of intent. Files affected: `types.rs`, `generator.rs`.
+- D5a: `generate_code()` error message must include unit ID and local_test ID when failing — error context is required for usability. Add test: `generate_code_sink_guard_includes_unit_and_test_id_in_error`.
+- D5 internal sequencing (within Track B, must follow this order):
+  1. Create `spec-core/src/syntax.rs`, move `is_safe_expect_expr_depth()` + `MAX_EXPECT_EXPR_DEPTH`, expose from `lib.rs`
+  2. Update `validator.rs` to import from `syntax.rs` (compile check: both steps together compile)
+  3. Add sink guard in `generate_code()` (generator.rs) importing from `syntax.rs`
+  Do NOT attempt all three in one diff — intermediate state won't compile.
 - Naming: `pipeline.rs`, `export.rs` are clean module names. Consistent with existing `loader.rs`, `validator.rs`, `generator.rs`, `passport.rs` pattern.
 
 **Section 3 — Test Review:**
@@ -998,15 +1020,15 @@ CONFIRMED = both agree (4/6 confirmed gaps — strong DX signal).
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 2 | CLEAR (HOLD_SCOPE) | autoplan: 2 critical; 2026-04-05: 5 new gaps + 2 Codex tensions resolved |
-| Codex Review | `/codex review` | Independent 2nd opinion | 2 | issues_found | 13 findings; 2 resolved (spec test order, syntax.rs boundary) |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open (PLAN via /autoplan) | 11 issues, 4 critical — all resolved in plan; re-run for clean stamp |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 3 | CLEAR (HOLD_SCOPE) | autoplan: 2 critical; 2026-04-05: 5 new gaps + 2 Codex tensions resolved |
+| Codex Review | `/codex review` | Independent 2nd opinion | 3 | issues_found | 7 findings; 4 substantive (D4 schema, build-fail evidence, module prefix, workspace algo) resolved |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR (PLAN) | 7 issues found + resolved: workspace bare-crate fallback, D5 ordering, D4 ResolvedSpec, build-fail evidence, module prefix, 3 new tests |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
-| DX Review | `/plan-devex-review` | Developer experience gaps | 1 | issues_open (PLAN via /autoplan) | score: 4.8/10 → 7.5/10, 9 DX items resolved |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 1 | CLEAR (PLAN via /autoplan) | score: 4.8/10 → 7.5/10, 9 DX items resolved |
 
-**CODEX:** spec test write-then-exit order fixed; is_safe_expect_expr_depth moved to syntax.rs (clean boundary)
+**CODEX (2026-04-05):** D4 requires ResolvedSpec schema change; build failure path needs evidence write spec; module prefix must derive from --output; workspace algo clarified (different repos, two-step walk correct)
 **UNRESOLVED:** 0
-**VERDICT:** CEO CLEARED — eng review shows issues_open (all resolved in plan). Run `/plan-eng-review` for clean stamp before `/ship`.
+**VERDICT:** ENG + CEO CLEARED — ready to implement. Run `/ship` when done.
 
 ---
 
