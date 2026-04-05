@@ -142,7 +142,7 @@ pub use generated::*;
 ```
 
 The ecommerce example uses this pattern in
-[`examples/ecommerce/src/main.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/examples/ecommerce/src/main.rs).
+[`examples/ecommerce/src/main.rs`](examples/ecommerce/src/main.rs).
 
 ## Workspace Config
 
