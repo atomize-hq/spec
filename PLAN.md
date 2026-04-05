@@ -320,23 +320,28 @@ Files: `DECISIONS.md`
 
 Cycle detection in M3 is in-tree only. Cross-library dep units (`money/round` from a different
 spec library) are not loaded in the same spec set. This limitation is documented in the M3
-error output. Before M5 (plan-aware workflow), the schema must be decided.
+error output. Before M5 (plan-aware workflow), the schema must be decided and written down, but
+M4 still ships no runtime behavior change for cross-library deps.
 
-**Design spike** (2 hours, no code):
+**Chosen schema** (design only, no code in M4):
 
-Three candidates:
-1. **Namespace prefix**: `deps: [shared::money/round]` — `shared` is a defined namespace in spec.toml
-2. **Versioned path**: `deps: [money/round@1.2]` — semver pinning
-3. **Registry path**: `deps: [org/shared/money/round]` — fully qualified with org prefix
+- Local dep: `money/round`
+- Cross-library dep: `shared::money/round`
 
-Recommendation (to be confirmed in CEO phase): Namespace prefix (option 1). Simplest to implement,
-consistent with the existing ID format, doesn't require registry infrastructure in M4.
+Future config contract:
 
-Output: add to `DECISIONS.md`:
-```markdown
-## Cross-Library Dep Schema — Namespace Prefix (0.4.0 decision record)
-...
+```toml
+[libraries]
+shared = "../shared-spec"
 ```
+
+`shared` is a namespace alias defined by the consuming workspace. The mapped path points at the
+root of another spec library. Version pins and registry/org-qualified paths are explicitly
+deferred.
+
+Output: add a `DECISIONS.md` record with the tradeoff matrix, chosen syntax, invalid examples, and
+an explicit note that M5 owns resolution, validation, use-path generation, and cross-library cycle
+detection.
 
 ---
 
@@ -1052,4 +1057,3 @@ ICP scope creep removed; evidence quality bar raised; workspace root discovery, 
 **New tests added:** 5 (31 total from 26)
 **New decisions:** 1 (D5c commit-vs-ephemeral formal record)
 **Unresolved:** 0
-

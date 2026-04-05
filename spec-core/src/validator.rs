@@ -358,8 +358,9 @@ fn dfs_cycle_check<'a>(
 ///
 /// NOTE: Cycle detection is in-tree only. Deps that reference units outside this
 /// spec set (cross-library) are skipped during DFS — they are not in id_map.
-/// Cross-library cycle detection is deferred until the cross-library dep schema
-/// is defined (M4). See DECISIONS.md.
+/// The cross-library dep schema is locked in DECISIONS.md as namespace-prefixed
+/// ids (for example `shared::money/round`), but cross-library cycle detection is
+/// still deferred until M5 implements cross-library loading and validation.
 pub fn detect_cycles(specs: &[LoadedSpec]) -> Vec<SpecError> {
     let id_map: HashMap<&str, &LoadedSpec> =
         specs.iter().map(|s| (s.spec.id.as_str(), s)).collect();
