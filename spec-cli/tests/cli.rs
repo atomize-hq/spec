@@ -311,7 +311,10 @@ fn generate_rejects_no_strict_flag() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("no-strict") && (stderr.contains("unexpected") || stderr.contains("unrecognized") || stderr.contains("found")),
+        stderr.contains("no-strict")
+            && (stderr.contains("unexpected")
+                || stderr.contains("unrecognized")
+                || stderr.contains("found")),
         "expected clap unknown-argument error for --no-strict, got: {stderr}"
     );
     assert!(!output_dir.exists());

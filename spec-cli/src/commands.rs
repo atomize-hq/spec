@@ -77,15 +77,24 @@ impl Command {
 
 #[derive(Args, Debug)]
 pub struct ValidateArgs {
-    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
+    #[arg(
+        value_name = "PATH",
+        help = "Directory containing .unit.spec files, or a single .unit.spec file"
+    )]
     pub path: PathBuf,
-    #[arg(long, help = "Downgrade missing-dep errors to warnings and exit 0 (validation only)")]
+    #[arg(
+        long,
+        help = "Downgrade missing-dep errors to warnings and exit 0 (validation only)"
+    )]
     pub no_strict: bool,
 }
 
 #[derive(Args, Debug)]
 pub struct GenerateArgs {
-    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
+    #[arg(
+        value_name = "PATH",
+        help = "Directory containing .unit.spec files, or a single .unit.spec file"
+    )]
     pub path: PathBuf,
     #[arg(long, default_value = "generated/spec")]
     pub output: PathBuf,
@@ -93,7 +102,10 @@ pub struct GenerateArgs {
 
 #[derive(Args, Debug)]
 pub struct BuildArgs {
-    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
+    #[arg(
+        value_name = "PATH",
+        help = "Directory containing .unit.spec files, or a single .unit.spec file"
+    )]
     pub path: PathBuf,
     #[arg(long, default_value = "generated/spec")]
     pub output: PathBuf,
@@ -106,7 +118,10 @@ pub struct BuildArgs {
 
 #[derive(Args, Debug)]
 pub struct TestArgs {
-    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
+    #[arg(
+        value_name = "PATH",
+        help = "Directory containing .unit.spec files, or a single .unit.spec file"
+    )]
     pub path: PathBuf,
     #[arg(long, default_value = "generated/spec")]
     pub output: PathBuf,
@@ -119,7 +134,10 @@ pub struct TestArgs {
 
 #[derive(Args, Debug)]
 pub struct ExportArgs {
-    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files, or a single .unit.spec file")]
+    #[arg(
+        value_name = "PATH",
+        help = "Directory containing .unit.spec files, or a single .unit.spec file"
+    )]
     pub path: PathBuf,
     #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
     pub output: Option<PathBuf>,
