@@ -21,9 +21,15 @@ pub fn cargo_available() -> bool {
 
 /// Find the crate root for a given path.
 ///
-/// Two-step walk:
-/// 1. Find the nearest ancestor `Cargo.toml` that contains `[workspace]` — workspace root.
-/// 2. If none, find the nearest ancestor `Cargo.toml` that contains `[package]` — bare crate.
+/// Prefers the nearest member crate over the workspace root so that
+/// `spec build`/`spec test` scope to a single crate rather than building
+/// the entire workspace.
+///
+/// Walk:
+/// 1. Find the nearest ancestor `Cargo.toml` that has `[package]` but not
+///    `[workspace]` — this is a workspace member or a bare crate. Return it.
+/// 2. If no such ancestor exists, fall back to the nearest `[workspace]` root.
+/// 3. Otherwise bail.
 pub fn workspace_root_for(path: &Path) -> Result<PathBuf> {
     let start = if path.is_file() {
         path.parent().unwrap_or(path)
@@ -31,28 +37,28 @@ pub fn workspace_root_for(path: &Path) -> Result<PathBuf> {
         path
     };
 
-    // Step 1: workspace root (nearest ancestor Cargo.toml with [workspace])
+    let mut workspace_root: Option<PathBuf> = None;
+
     for dir in start.ancestors() {
         let candidate = dir.join("Cargo.toml");
         if candidate.is_file() {
             let contents = std::fs::read_to_string(&candidate)
                 .with_context(|| format!("Failed to read {}", candidate.display()))?;
-            if contents.contains("[workspace]") {
+            let has_workspace = contents.contains("[workspace]");
+            let has_package = contents.contains("[package]");
+
+            if has_package && !has_workspace {
+                // Member crate or bare crate — prefer this over workspace root
                 return Ok(dir.to_path_buf());
+            }
+            if has_workspace && workspace_root.is_none() {
+                workspace_root = Some(dir.to_path_buf());
             }
         }
     }
 
-    // Step 2: bare crate (nearest ancestor Cargo.toml with [package])
-    for dir in start.ancestors() {
-        let candidate = dir.join("Cargo.toml");
-        if candidate.is_file() {
-            let contents = std::fs::read_to_string(&candidate)
-                .with_context(|| format!("Failed to read {}", candidate.display()))?;
-            if contents.contains("[package]") {
-                return Ok(dir.to_path_buf());
-            }
-        }
+    if let Some(root) = workspace_root {
+        return Ok(root);
     }
 
     bail!(
@@ -133,7 +139,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn workspace_root_for_finds_workspace_toml() {
+    fn workspace_root_for_prefers_member_crate_over_workspace() {
         let tmp = TempDir::new().unwrap();
         let member = tmp.path().join("crates/foo");
         fs::create_dir_all(&member).unwrap();
@@ -148,7 +154,25 @@ mod tests {
         )
         .unwrap();
 
+        // Should return the member crate, not the workspace root, so spec
+        // build/test scopes to this crate rather than the whole workspace.
         let root = workspace_root_for(&member).unwrap();
+        assert_eq!(root, member);
+    }
+
+    #[test]
+    fn workspace_root_for_falls_back_to_workspace_when_no_member() {
+        let tmp = TempDir::new().unwrap();
+        let units = tmp.path().join("units");
+        fs::create_dir_all(&units).unwrap();
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/foo\"]\n",
+        )
+        .unwrap();
+
+        // No member Cargo.toml in ancestors — falls back to workspace root.
+        let root = workspace_root_for(&units).unwrap();
         assert_eq!(root, tmp.path());
     }
 

@@ -6,6 +6,7 @@
 
 use crate::passport::{Passport, passport_path_for};
 use crate::types::{Contract, LoadedSpec, LocalTest};
+use crate::AUTHORED_SPEC_VERSION;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -68,7 +69,7 @@ pub fn build_export_bundle(specs: &[LoadedSpec], exported_at: &str) -> ExportBun
 
     ExportBundle {
         schema_version: EXPORT_SCHEMA_VERSION.to_string(),
-        spec_version: env!("CARGO_PKG_VERSION").to_string(),
+        spec_version: AUTHORED_SPEC_VERSION.to_string(),
         exported_at: exported_at.to_string(),
         units: specs.iter().map(ExportUnit::from).collect(),
         passports,
@@ -228,7 +229,7 @@ mod tests {
         let bundle = build_export_bundle(&[spec], "2026-04-05T00:00:00Z");
 
         assert_eq!(bundle.schema_version, "1.0");
-        assert_eq!(bundle.spec_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
         assert_ne!(bundle.schema_version, bundle.spec_version);
     }
 

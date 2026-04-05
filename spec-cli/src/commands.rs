@@ -432,7 +432,7 @@ fn test_command(
 ) -> Result<()> {
     if path.is_file() {
         bail!(
-            "❌ spec build requires a directory path — pass the units directory, not a single file"
+            "❌ spec test requires a directory path — pass the units directory, not a single file"
         );
     }
 
