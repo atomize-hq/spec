@@ -91,21 +91,35 @@ fn cargo_test_args(filter: Option<&str>) -> Vec<String> {
     args
 }
 
-/// Returns true when cargo reported a successful test run with 0 passed and 0 failed tests.
+/// Returns true when the filter matched no tests across all test binaries.
 ///
-/// This is the "filter matched nothing" case, not just "all tests passed".
+/// In a multi-binary crate, cargo emits one `test result:` summary per binary.
+/// We return true only when at least one summary exists AND none of them show
+/// a passed count > 0. This avoids false-positives where one binary matched
+/// nothing while another binary ran the filtered tests.
 pub fn zero_tests_ran(output: &str) -> bool {
-    output.lines().any(|line| {
+    let mut has_any_result = false;
+    for line in output.lines() {
         let Some(summary) = line.strip_prefix("test result: ") else {
-            return false;
+            continue;
         };
-        let Some(summary) = summary.strip_prefix("ok. ") else {
+        has_any_result = true;
+        // If any binary ran at least one test the filter matched, return false.
+        // The first `;`-delimited segment is "ok. N passed" or "FAILED. N passed";
+        // strip the status prefix before parsing.
+        let passed = summary.split(';').map(str::trim).find_map(|part| {
+            let part = part
+                .strip_prefix("ok. ")
+                .or_else(|| part.strip_prefix("FAILED. "))
+                .unwrap_or(part);
+            part.strip_suffix(" passed")
+                .and_then(|n| n.trim().parse::<u32>().ok())
+        });
+        if passed.map_or(false, |n| n > 0) {
             return false;
-        };
-
-        let mut counts = summary.split(';').map(str::trim);
-        matches!(counts.next(), Some("0 passed")) && matches!(counts.next(), Some("0 failed"))
-    })
+        }
+    }
+    has_any_result
 }
 
 pub fn parse_cargo_test_output(stdout: &str) -> BTreeMap<String, ParsedCargoTestResult> {
@@ -376,6 +390,45 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ";
 
         assert!(!zero_tests_ran(stdout));
+    }
+
+    #[test]
+    fn test_zero_tests_ran_false_when_one_binary_matches_in_multi_binary_crate() {
+        // One binary (integration tests) matched 0; the other (lib) matched the target.
+        // Should return false — the filter DID match something.
+        let stdout = "\
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+running 1 test
+test generated::pricing::apply_tax::tests::test_happy_path ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+";
+        assert!(!zero_tests_ran(stdout));
+    }
+
+    #[test]
+    fn test_zero_tests_ran_true_when_all_binaries_match_nothing() {
+        // Both binaries ran 0 matching tests — filter matched nothing anywhere.
+        let stdout = "\
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+";
+        assert!(zero_tests_ran(stdout));
+    }
+
+    #[test]
+    fn test_zero_tests_ran_false_for_no_result_lines() {
+        // No test result lines at all (empty output / build-only) — not a zero-tests-ran situation.
+        assert!(!zero_tests_ran(""));
+        assert!(!zero_tests_ran("Compiling spec-core v0.5.0\nFinished dev profile\n"));
     }
 
     #[test]

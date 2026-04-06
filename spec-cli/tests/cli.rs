@@ -2704,6 +2704,47 @@ body:
 }
 
 #[test]
+fn spec_status_json_invalid_unit() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/bad.unit.spec",
+        r#"
+id: pricing/bad
+kind: function
+intent:
+  why: Trigger a validation error.
+body:
+  rust: |
+    {
+        use std::fmt;
+    }
+"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 1);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0]["id"], "pricing/bad");
+    assert_eq!(units[0]["status"], "invalid");
+    assert!(
+        !units[0]["errors"].as_array().unwrap().is_empty(),
+        "errors array should be non-empty for invalid unit"
+    );
+    assert_eq!(units[0]["stale"], false);
+}
+
+#[test]
 fn spec_status_stale_unit() {
     if !cargo_available() {
         return;

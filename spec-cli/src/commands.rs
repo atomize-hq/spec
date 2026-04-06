@@ -348,7 +348,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         print_diagnostics(&diagnostics);
     }
 
-    if total_files == 0 && specs.is_empty() {
+    if total_files == 0 && specs.is_empty() && !has_loader_errors {
         match format {
             OutputFormat::Text => {
                 println!("0 units found, nothing to status.");
@@ -673,13 +673,6 @@ fn contract_hashes_for(specs: &[LoadedSpec]) -> Option<BTreeMap<String, String>>
     }
 }
 
-fn target_contract_hash(spec: &LoadedSpec) -> Option<BTreeMap<String, String>> {
-    compute_contract_hash(spec).map(|hash| {
-        let mut hashes = BTreeMap::new();
-        hashes.insert(spec.spec.id.clone(), hash);
-        hashes
-    })
-}
 
 fn write_passports(
     specs: &[LoadedSpec],
@@ -834,7 +827,7 @@ fn test_command(
         if let Some(target_spec) = target_spec.as_ref() {
             let evidence_by_spec =
                 build_failure_evidence(std::slice::from_ref(target_spec), &observed_at);
-            let contract_hash_by_spec = target_contract_hash(target_spec);
+            let contract_hash_by_spec = contract_hashes_for(std::slice::from_ref(target_spec));
             finalize_passports(
                 spec_root,
                 std::slice::from_ref(target_spec),
@@ -873,7 +866,7 @@ fn test_command(
             &parsed_test_results,
             &observed_at,
         )?;
-        let contract_hash_by_spec = target_contract_hash(target_spec);
+        let contract_hash_by_spec = contract_hashes_for(std::slice::from_ref(target_spec));
         finalize_passports(
             spec_root,
             std::slice::from_ref(target_spec),
@@ -1270,14 +1263,14 @@ fn spec_error_to_json_entry(
             None,
             None,
         ),
-        spec_core::SpecError::RustKeyword { path, .. } => (
+        spec_core::SpecError::RustKeyword { path, segment, id } => (
             id_by_path.get(path).cloned(),
             path.clone(),
             None,
             None,
+            Some(segment.clone()),
             None,
-            None,
-            None,
+            Some(id.clone()),
             None,
             None,
         ),
@@ -1292,15 +1285,15 @@ fn spec_error_to_json_entry(
             Some(file2.clone()),
             None,
         ),
-        spec_core::SpecError::DepCollision { dep1, path, .. } => (
+        spec_core::SpecError::DepCollision { dep1, dep2, fn_name, path } => (
             id_by_path.get(path).cloned(),
             path.clone(),
             Some(dep1.clone()),
             None,
+            Some(fn_name.clone()),
             None,
             None,
-            None,
-            None,
+            Some(dep2.clone()),
             None,
         ),
         spec_core::SpecError::MissingDep { dep, path } => (
@@ -1336,13 +1329,13 @@ fn spec_error_to_json_entry(
             None,
             None,
         ),
-        spec_core::SpecError::BodyRustMustBeBlock { path, .. } => (
+        spec_core::SpecError::BodyRustMustBeBlock { path, message } => (
             id_by_path.get(path).cloned(),
             path.clone(),
             None,
             None,
             None,
-            None,
+            Some(message.clone()),
             None,
             None,
             None,
@@ -1358,13 +1351,13 @@ fn spec_error_to_json_entry(
             None,
             None,
         ),
-        spec_core::SpecError::LocalTestExpectNotExpr { id, path, .. } => (
+        spec_core::SpecError::LocalTestExpectNotExpr { id, path, message } => (
             id_by_path.get(path).cloned(),
             path.clone(),
             None,
             None,
             None,
-            None,
+            Some(message.clone()),
             Some(id.clone()),
             None,
             None,
