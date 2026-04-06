@@ -142,6 +142,43 @@ The `--output` path for `generate`/`build`/`test` must resolve to a directory in
 
 Note: `spec test` parses standard `cargo test` output. If your project uses `cargo-nextest`, use `spec generate` + `cargo test` directly for now.
 
+## AI-Native Usage
+
+`spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport trail that records what was actually observed to pass.
+
+The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence.
+
+```bash
+spec validate examples/ecommerce/units --format json
+```
+
+```json
+{
+  "schema_version": 1,
+  "status": "invalid",
+  "errors": [
+    {
+      "unit": "shipping/calculate",
+      "code": "MissingDep",
+      "dep": "currency/convert",
+      "path": "units/shipping/calculate.unit.spec"
+    }
+  ],
+  "warnings": []
+}
+```
+
+That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose.
+
+`spec status` uses simple symbols so you can scan a whole tree quickly:
+
+- `✓` valid with evidence
+- `✗` invalid
+- `~` stale passport
+- `—` valid but no evidence yet
+
+Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/SKILL.md) when you want the full workflow spelled out for an AI coding session.
+
 ## Consuming Generated Code
 
 Generated units import internal deps with `use crate::...` paths. The consuming crate must

@@ -17,6 +17,12 @@ struct Cli {
 }
 
 fn main() -> Result<()> {
+    // Exit codes: 0 = success, 1 = validation failures, 2 = internal panic.
+    // This lets AI clients distinguish authored spec problems from tool bugs.
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("internal error: {info}");
+        std::process::exit(2);
+    }));
     let cli = Cli::parse();
     cli.command.run()
 }

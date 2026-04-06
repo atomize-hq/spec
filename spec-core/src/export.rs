@@ -285,6 +285,7 @@ mod tests {
                 }],
                 observed_at: "2026-04-05T00:00:00Z".to_string(),
             }),
+            None,
         );
         write_passport(&passport_b, Path::new(&spec_b.source.file_path)).unwrap();
 

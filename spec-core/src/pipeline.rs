@@ -71,9 +71,41 @@ pub fn run_cargo_build(crate_root: &Path, cargo_target_dir: &Path) -> Result<Car
     run_cargo(crate_root, &["build"], cargo_target_dir)
 }
 
-pub fn run_cargo_test(crate_root: &Path, cargo_target_dir: &Path) -> Result<CargoResult> {
+pub fn run_cargo_test(
+    crate_root: &Path,
+    cargo_target_dir: &Path,
+    filter: Option<&str>,
+) -> Result<CargoResult> {
     eprintln!("spec: running cargo test in {}", crate_root.display());
-    run_cargo(crate_root, &["test"], cargo_target_dir)
+    let args = cargo_test_args(filter);
+    let arg_refs = args.iter().map(|arg| arg.as_str()).collect::<Vec<_>>();
+    run_cargo(crate_root, &arg_refs, cargo_target_dir)
+}
+
+fn cargo_test_args(filter: Option<&str>) -> Vec<String> {
+    let mut args = vec!["test".to_string()];
+    if let Some(filter) = filter {
+        args.push("--".to_string());
+        args.push(filter.to_string());
+    }
+    args
+}
+
+/// Returns true when cargo reported a successful test run with 0 passed and 0 failed tests.
+///
+/// This is the "filter matched nothing" case, not just "all tests passed".
+pub fn zero_tests_ran(output: &str) -> bool {
+    output.lines().any(|line| {
+        let Some(summary) = line.strip_prefix("test result: ") else {
+            return false;
+        };
+        let Some(summary) = summary.strip_prefix("ok. ") else {
+            return false;
+        };
+
+        let mut counts = summary.split(';').map(str::trim);
+        matches!(counts.next(), Some("0 passed")) && matches!(counts.next(), Some("0 failed"))
+    })
 }
 
 pub fn parse_cargo_test_output(stdout: &str) -> BTreeMap<String, ParsedCargoTestResult> {
@@ -319,5 +351,44 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
                 reason: None,
             })
         );
+    }
+
+    #[test]
+    fn test_zero_tests_ran_detects_empty_run() {
+        let stdout = "\
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+        assert!(zero_tests_ran(stdout));
+    }
+
+    #[test]
+    fn test_zero_tests_ran_false_for_passing_tests() {
+        let stdout = "\
+running 3 tests
+test generated::pricing::apply_discount::tests::test_happy_path ... ok
+test generated::pricing::apply_tax::tests::test_basic_tax ... ok
+test generated::pricing::calculate_total::tests::test_combined_flow ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+        assert!(!zero_tests_ran(stdout));
+    }
+
+    #[test]
+    fn test_run_cargo_test_with_filter_appends_filter_arg() {
+        assert_eq!(
+            cargo_test_args(Some("generated::pricing::apply_tax::tests::")),
+            vec![
+                "test".to_string(),
+                "--".to_string(),
+                "generated::pricing::apply_tax::tests::".to_string(),
+            ]
+        );
+
+        assert_eq!(cargo_test_args(None), vec!["test".to_string()]);
     }
 }

@@ -1,6 +1,7 @@
 use crate::config::{WorkspaceConfig, load_workspace_config};
 use anyhow::{Context, Result, bail};
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
+use serde::Serialize;
 use spec_core::export::build_export_bundle;
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_code_with_options, generate_mod_rs,
@@ -9,34 +10,89 @@ use spec_core::generator::{
 use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::passport::{
-    PassportEvidence, PassportTestResult, build_passport_with_evidence, ensure_gitignore_entry,
-    rfc3339_now, write_passport,
+    PassportEvidence, PassportTestResult, build_passport_with_evidence, compute_contract_hash,
+    ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, cargo_available, parse_cargo_test_output, run_cargo_build,
-    run_cargo_test, workspace_root_for,
+    run_cargo_test, workspace_root_for, zero_tests_ran,
 };
 use spec_core::types::{LoadedSpec, ResolvedSpec};
 use spec_core::validator::{
     ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
     validate_full_with_options, validate_no_duplicate_ids,
 };
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 type CollectedSpecs = (
     Vec<LoadedSpec>,
-    BTreeMap<String, Vec<String>>,
-    BTreeMap<String, Vec<String>>,
+    Vec<spec_core::SpecError>,
+    Vec<spec_core::SpecWarning>,
     usize,
 );
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
+
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputFormat {
+    Text,
+    Json,
+}
+
+#[derive(Serialize)]
+struct JsonValidateResponse {
+    schema_version: u8,
+    status: &'static str,
+    errors: Vec<JsonErrorEntry>,
+    warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct JsonStatusResponse {
+    schema_version: u8,
+    units: Vec<JsonStatusUnit>,
+}
+
+#[derive(Serialize)]
+struct JsonStatusUnit {
+    id: String,
+    status: &'static str,
+    errors: Vec<JsonErrorEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    evidence_at: Option<String>,
+    stale: bool,
+}
+
+#[derive(Serialize)]
+struct JsonErrorEntry {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unit: Option<String>,
+    code: String,
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dep: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path2: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cycle: Option<Vec<String>>,
+}
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
     #[command(about = "Validate .unit.spec files")]
     Validate(ValidateArgs),
+    #[command(about = "Show per-unit validation, passport, and staleness status")]
+    Status(StatusArgs),
     #[command(about = "Generate Rust source files from .unit.spec files")]
     Generate(GenerateArgs),
     #[command(about = "Validate, generate, and run cargo build")]
@@ -50,7 +106,8 @@ pub enum Command {
 impl Command {
     pub fn run(self) -> Result<()> {
         match self {
-            Self::Validate(args) => validate_command(&args.path, args.no_strict),
+            Self::Validate(args) => validate_command(&args.path, args.no_strict, args.format),
+            Self::Status(args) => status_command(&args.path, args.format),
             Self::Generate(args) => generate_command(&args.path, &args.output),
             Self::Build(args) => {
                 let config = load_workspace_config(&args.path)?;
@@ -87,6 +144,19 @@ pub struct ValidateArgs {
         help = "Downgrade missing-dep errors to warnings and exit 0 (validation only)"
     )]
     pub no_strict: bool,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Args, Debug)]
+pub struct StatusArgs {
+    #[arg(
+        value_name = "PATH",
+        help = "Directory containing .unit.spec files, or a single .unit.spec file"
+    )]
+    pub path: PathBuf,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
 }
 
 #[derive(Args, Debug)]
@@ -143,58 +213,259 @@ pub struct ExportArgs {
     pub output: Option<PathBuf>,
 }
 
-fn validate_command(path: &Path, no_strict: bool) -> Result<()> {
-    let (specs, errors, mut warnings, total_files) = collect_specs(path)?;
+fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Result<()> {
+    let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
     let config = load_workspace_config(path)?;
     let validation_options = ValidationOptions {
         strict_deps: !no_strict,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (errors, validation_warnings) = finish_validation(&specs, errors, &validation_options);
-    merge_diagnostics(&mut warnings, validation_warnings);
-    let warning_count = count_messages(&warnings);
+    let (validation_errors, validation_warnings) = finish_validation(&specs, &validation_options);
 
-    if !warnings.is_empty() {
-        print_diagnostics(&warnings);
-    }
+    match format {
+        OutputFormat::Text => {
+            let mut errors = DiagnosticMap::new();
+            let mut warnings = DiagnosticMap::new();
 
-    if errors.is_empty() {
-        if total_files == 0 {
-            println!("0 units found, nothing to validate.");
-        } else {
-            println!(
-                "✅ {total_files} unit{} valid{}",
-                pluralize(total_files),
-                if warning_count == 0 {
-                    String::new()
+            for err in loader_errors {
+                push_error(&mut errors, err);
+            }
+            for err in validation_errors {
+                push_error(&mut errors, err);
+            }
+            for warning in loader_warnings {
+                push_warning(&mut warnings, warning);
+            }
+            for warning in validation_warnings {
+                push_warning(&mut warnings, warning);
+            }
+
+            let warning_count = count_messages(&warnings);
+
+            if !warnings.is_empty() {
+                print_diagnostics(&warnings);
+            }
+
+            if errors.is_empty() {
+                if total_files == 0 {
+                    println!("0 units found, nothing to validate.");
                 } else {
-                    format!(" with {warning_count} warning{}", pluralize(warning_count))
+                    println!(
+                        "✅ {total_files} unit{} valid{}",
+                        pluralize(total_files),
+                        if warning_count == 0 {
+                            String::new()
+                        } else {
+                            format!(" with {warning_count} warning{}", pluralize(warning_count))
+                        }
+                    );
                 }
+                return Ok(());
+            }
+
+            print_diagnostics(&errors);
+            let file_count = count_unique_files(&errors);
+            bail!(
+                "❌ {} file{}, {} error{}",
+                file_count,
+                pluralize(file_count),
+                count_messages(&errors),
+                pluralize(count_messages(&errors))
             );
         }
-        return Ok(());
-    }
+        OutputFormat::Json => {
+            let id_by_path: HashMap<String, String> = specs
+                .iter()
+                .map(|s| (s.source.file_path.clone(), s.spec.id.clone()))
+                .collect();
+            let mut errors = Vec::with_capacity(loader_errors.len() + validation_errors.len());
+            errors.extend(
+                loader_errors
+                    .iter()
+                    .map(|err| spec_error_to_json_entry(err, &id_by_path)),
+            );
+            errors.extend(
+                validation_errors
+                    .iter()
+                    .map(|err| spec_error_to_json_entry(err, &id_by_path)),
+            );
 
-    print_diagnostics(&errors);
-    let file_count = count_unique_files(&errors);
-    bail!(
-        "❌ {} file{}, {} error{}",
-        file_count,
-        pluralize(file_count),
-        count_messages(&errors),
-        pluralize(count_messages(&errors))
-    );
+            let warnings = loader_warnings
+                .into_iter()
+                .chain(validation_warnings)
+                .map(|warning| warning.to_string())
+                .collect();
+            let has_errors = !errors.is_empty();
+
+            let response = JsonValidateResponse {
+                schema_version: 1,
+                status: if has_errors { "invalid" } else { "valid" },
+                errors,
+                warnings,
+            };
+            let json = serde_json::to_string_pretty(&response)?;
+            print!("{json}");
+            std::io::stdout().flush()?;
+
+            if has_errors {
+                std::process::exit(1);
+            } else {
+                Ok(())
+            }
+        }
+    }
 }
 
-fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
-    let (specs, errors, mut warnings, _total_files) = collect_specs(path)?;
+fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
+    let (specs, loader_errors, _loader_warnings, total_files) = collect_specs(path)?;
     let config = load_workspace_config(path)?;
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (errors, validation_warnings) = finish_validation(&specs, errors, &validation_options);
-    merge_diagnostics(&mut warnings, validation_warnings);
+    let (validation_errors, _validation_warnings) = finish_validation(&specs, &validation_options);
+    let id_by_path: HashMap<String, String> = specs
+        .iter()
+        .map(|s| (s.source.file_path.clone(), s.spec.id.clone()))
+        .collect();
+    let has_loader_errors = !loader_errors.is_empty();
+
+    let mut errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
+    for err in &validation_errors {
+        for path in error_paths(err) {
+            errors_by_path
+                .entry(path)
+                .or_default()
+                .push(spec_error_to_json_entry(err, &id_by_path));
+        }
+    }
+
+    if has_loader_errors {
+        let mut diagnostics = DiagnosticMap::new();
+        for err in loader_errors {
+            push_error(&mut diagnostics, err);
+        }
+        print_diagnostics(&diagnostics);
+    }
+
+    if total_files == 0 && specs.is_empty() {
+        match format {
+            OutputFormat::Text => {
+                println!("0 units found, nothing to status.");
+            }
+            OutputFormat::Json => {
+                let response = JsonStatusResponse {
+                    schema_version: 1,
+                    units: vec![],
+                };
+                let json = serde_json::to_string_pretty(&response)?;
+                print!("{json}");
+                std::io::stdout().flush()?;
+            }
+        }
+        return Ok(());
+    }
+
+    let mut units = Vec::with_capacity(specs.len());
+    let mut has_invalid_or_stale = has_loader_errors;
+
+    for spec in &specs {
+        let source_path = Path::new(&spec.source.file_path);
+        let passport = match read_passport(source_path) {
+            Ok(passport) => passport,
+            Err(err) => {
+                eprintln!(
+                    "⚠ failed to read passport for {}: {err}",
+                    source_path.display()
+                );
+                None
+            }
+        };
+        let live_hash = compute_contract_hash(spec);
+        let errors = errors_by_path
+            .remove(&spec.source.file_path)
+            .unwrap_or_default();
+        let invalid = !errors.is_empty();
+        let stale = !invalid
+            && passport
+                .as_ref()
+                .and_then(|p| p.contract_hash.as_ref())
+                .is_some_and(|passport_hash| live_hash.as_deref() != Some(passport_hash.as_str()));
+        let evidence_at = if invalid {
+            None
+        } else {
+            passport
+                .as_ref()
+                .and_then(|p| p.evidence.as_ref())
+                .map(|e| e.observed_at.clone())
+        };
+        let status = if invalid {
+            "invalid"
+        } else if stale {
+            "stale"
+        } else {
+            "valid"
+        };
+
+        if invalid || stale {
+            has_invalid_or_stale = true;
+        }
+
+        units.push(JsonStatusUnit {
+            id: spec.spec.id.clone(),
+            status,
+            errors,
+            evidence_at,
+            stale,
+        });
+    }
+
+    match format {
+        OutputFormat::Text => {
+            for unit in &units {
+                print_status_unit(unit);
+            }
+        }
+        OutputFormat::Json => {
+            let response = JsonStatusResponse {
+                schema_version: 1,
+                units,
+            };
+            let json = serde_json::to_string_pretty(&response)?;
+            print!("{json}");
+            std::io::stdout().flush()?;
+        }
+    }
+
+    if has_invalid_or_stale {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    let (specs, loader_errors, loader_warnings, _total_files) = collect_specs(path)?;
+    let config = load_workspace_config(path)?;
+    let validation_options = ValidationOptions {
+        strict_deps: true,
+        allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
+    };
+    let (validation_errors, validation_warnings) = finish_validation(&specs, &validation_options);
+    let mut errors = DiagnosticMap::new();
+    let mut warnings = DiagnosticMap::new();
+    for err in loader_errors {
+        push_error(&mut errors, err);
+    }
+    for err in validation_errors {
+        push_error(&mut errors, err);
+    }
+    for warning in loader_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    for warning in validation_warnings {
+        push_warning(&mut warnings, warning);
+    }
 
     if !warnings.is_empty() {
         print_diagnostics(&warnings);
@@ -229,12 +500,31 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
 }
 
 fn generate_command(path: &Path, output: &Path) -> Result<()> {
-    generate_specs(path, output).map(|_| ())
+    let generated = generate_specs(path, output)?;
+    if !generated.specs.is_empty() {
+        let passport_root = if path.is_file() {
+            path.parent().unwrap_or(path)
+        } else {
+            path
+        };
+        finalize_passports(
+            passport_root,
+            &generated.specs,
+            &generated.generated_at,
+            None,
+            None,
+        )?;
+    }
+    Ok(())
 }
 
 fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
-    let (specs, errors, mut warnings, total_files) = collect_specs(path)?;
+    let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
     if total_files == 0 {
+        let mut warnings = DiagnosticMap::new();
+        for warning in loader_warnings {
+            push_warning(&mut warnings, warning);
+        }
         if !warnings.is_empty() {
             print_diagnostics(&warnings);
         }
@@ -250,8 +540,21 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (errors, validation_warnings) = finish_validation(&specs, errors, &validation_options);
-    merge_diagnostics(&mut warnings, validation_warnings);
+    let (validation_errors, validation_warnings) = finish_validation(&specs, &validation_options);
+    let mut errors = DiagnosticMap::new();
+    let mut warnings = DiagnosticMap::new();
+    for err in loader_errors {
+        push_error(&mut errors, err);
+    }
+    for err in validation_errors {
+        push_error(&mut errors, err);
+    }
+    for warning in loader_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    for warning in validation_warnings {
+        push_warning(&mut warnings, warning);
+    }
     if !warnings.is_empty() {
         print_diagnostics(&warnings);
     }
@@ -325,16 +628,7 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
     clean_output_dir(&output_base, &generated_rs_rel_paths)
         .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
 
-    // Passport phase: only reached after all generation succeeds (atomicity guarantee).
     let generated_at = rfc3339_now();
-    write_passports(&specs, &generated_at, None)?;
-    let gitignore_root = if path.is_file() {
-        path.parent().unwrap_or(path)
-    } else {
-        path
-    };
-    ensure_gitignore_entry(gitignore_root)
-        .with_context(|| "Failed to update .gitignore for passport files")?;
 
     println!(
         "Generated {} file{}",
@@ -347,16 +641,60 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
     })
 }
 
+fn finalize_passports(
+    passport_root: &Path,
+    specs: &[LoadedSpec],
+    generated_at: &str,
+    evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
+    contract_hash_by_spec: Option<&BTreeMap<String, String>>,
+) -> Result<()> {
+    if specs.is_empty() {
+        return Ok(());
+    }
+
+    write_passports(specs, generated_at, evidence_by_spec, contract_hash_by_spec)?;
+    ensure_gitignore_entry(passport_root)
+        .with_context(|| "Failed to update .gitignore for passport files")?;
+    Ok(())
+}
+
+fn contract_hashes_for(specs: &[LoadedSpec]) -> Option<BTreeMap<String, String>> {
+    let mut hashes = BTreeMap::new();
+    for spec in specs {
+        if let Some(hash) = compute_contract_hash(spec) {
+            hashes.insert(spec.spec.id.clone(), hash);
+        }
+    }
+
+    if hashes.is_empty() {
+        None
+    } else {
+        Some(hashes)
+    }
+}
+
+fn target_contract_hash(spec: &LoadedSpec) -> Option<BTreeMap<String, String>> {
+    compute_contract_hash(spec).map(|hash| {
+        let mut hashes = BTreeMap::new();
+        hashes.insert(spec.spec.id.clone(), hash);
+        hashes
+    })
+}
+
 fn write_passports(
     specs: &[LoadedSpec],
     generated_at: &str,
     evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
+    contract_hash_by_spec: Option<&BTreeMap<String, String>>,
 ) -> Result<()> {
     for spec in specs {
         let passport = build_passport_with_evidence(
             spec,
             generated_at,
             evidence_by_spec
+                .and_then(|map| map.get(&spec.spec.id))
+                .cloned(),
+            contract_hash_by_spec
                 .and_then(|map| map.get(&spec.spec.id))
                 .cloned(),
         );
@@ -428,7 +766,10 @@ fn build_command(
 
     let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
 
-    generate_specs(path, output)?;
+    let generated = generate_specs(path, output)?;
+    if !generated.specs.is_empty() {
+        finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
+    }
 
     let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
     print!("{}", result.stdout);
@@ -445,46 +786,113 @@ fn test_command(
     crate_root_flag: Option<&Path>,
     config: &WorkspaceConfig,
 ) -> Result<()> {
-    if path.is_file() {
-        bail!(
-            "❌ spec test requires a directory path — pass the units directory, not a single file"
-        );
-    }
-
     if !cargo_available() {
         bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
     }
 
-    let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
+    let (spec_root, target_spec) = if path.is_file() {
+        if !is_unit_spec(path) {
+            bail!("{} is not a .unit.spec file", path.display());
+        }
+        (
+            path.parent().unwrap_or(path),
+            Some(load_file(path).with_context(|| format!("Failed to load {}", path.display()))?),
+        )
+    } else {
+        (path, None)
+    };
 
-    let generated = generate_specs(path, output)?;
+    let ctx = resolve_pipeline_context(spec_root, crate_root_flag, config)?;
+
+    let generated = generate_specs(spec_root, output)?;
+    if generated.specs.is_empty() {
+        return Ok(());
+    }
+
+    if target_spec.is_none() {
+        finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
+    }
+
+    let output_prefix = if target_spec.is_some() {
+        Some(output_module_prefix(output)?)
+    } else {
+        None
+    };
+    let filter = match (target_spec.as_ref(), output_prefix.as_deref()) {
+        (Some(target), Some(prefix)) => {
+            let resolved = ResolvedSpec::from_spec(target.spec.clone());
+            Some(cargo_test_filter_for(&resolved, prefix))
+        }
+        _ => None,
+    };
 
     let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
     print!("{}", build_result.stdout);
     eprint!("{}", build_result.stderr);
     if build_result.exit_code != 0 {
         let observed_at = rfc3339_now();
-        let evidence_by_spec = build_failure_evidence(&generated.specs, &observed_at);
-        write_passports(
-            &generated.specs,
-            &generated.generated_at,
-            Some(&evidence_by_spec),
-        )?;
+        if let Some(target_spec) = target_spec.as_ref() {
+            let evidence_by_spec =
+                build_failure_evidence(std::slice::from_ref(target_spec), &observed_at);
+            let contract_hash_by_spec = target_contract_hash(target_spec);
+            finalize_passports(
+                spec_root,
+                std::slice::from_ref(target_spec),
+                &generated.generated_at,
+                Some(&evidence_by_spec),
+                contract_hash_by_spec.as_ref(),
+            )?;
+        } else {
+            let evidence_by_spec = build_failure_evidence(&generated.specs, &observed_at);
+            let contract_hash_by_spec = contract_hashes_for(&generated.specs);
+            finalize_passports(
+                path,
+                &generated.specs,
+                &generated.generated_at,
+                Some(&evidence_by_spec),
+                contract_hash_by_spec.as_ref(),
+            )?;
+        }
         bail!("❌ cargo build failed");
     }
 
-    let test_result = run_cargo_test(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    let test_result = run_cargo_test(&ctx.crate_root, &ctx.cargo_target_dir, filter.as_deref())?;
     print!("{}", test_result.stdout);
     eprint!("{}", test_result.stderr);
+
+    if target_spec.is_some() && zero_tests_ran(&test_result.stdout) {
+        bail!("❌ cargo test matched 0 tests");
+    }
+
     let parsed_test_results = parse_cargo_test_output(&test_result.stdout);
     let observed_at = rfc3339_now();
-    let evidence_by_spec =
-        build_test_evidence(&generated.specs, output, &parsed_test_results, &observed_at)?;
-    write_passports(
-        &generated.specs,
-        &generated.generated_at,
-        Some(&evidence_by_spec),
-    )?;
+    if let Some(target_spec) = target_spec.as_ref() {
+        let evidence_by_spec = build_test_evidence(
+            std::slice::from_ref(target_spec),
+            output,
+            &parsed_test_results,
+            &observed_at,
+        )?;
+        let contract_hash_by_spec = target_contract_hash(target_spec);
+        finalize_passports(
+            spec_root,
+            std::slice::from_ref(target_spec),
+            &generated.generated_at,
+            Some(&evidence_by_spec),
+            contract_hash_by_spec.as_ref(),
+        )?;
+    } else {
+        let evidence_by_spec =
+            build_test_evidence(&generated.specs, output, &parsed_test_results, &observed_at)?;
+        let contract_hash_by_spec = contract_hashes_for(&generated.specs);
+        finalize_passports(
+            path,
+            &generated.specs,
+            &generated.generated_at,
+            Some(&evidence_by_spec),
+            contract_hash_by_spec.as_ref(),
+        )?;
+    }
     if test_result.exit_code != 0 {
         bail!("❌ cargo test failed");
     }
@@ -566,6 +974,18 @@ fn output_module_prefix(output: &Path) -> Result<String> {
                 output.display()
             )
         })
+}
+
+fn cargo_test_filter_for(spec: &ResolvedSpec, output_prefix: &str) -> String {
+    if spec.module_path.is_empty() {
+        format!("{output_prefix}::{}::tests::", spec.fn_name)
+    } else {
+        format!(
+            "{output_prefix}::{}::{}::tests::",
+            spec.module_path.replace('/', "::"),
+            spec.fn_name
+        )
+    }
 }
 
 fn expected_cargo_test_name(spec: &ResolvedSpec, output_prefix: &str, test_id: &str) -> String {
@@ -688,12 +1108,8 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
             bail!("{} is not a .unit.spec file", path.display());
         }
         return match load_file(path) {
-            Ok(spec) => Ok((vec![spec], BTreeMap::new(), BTreeMap::new(), total_files)),
-            Err(err) => {
-                let mut errors = BTreeMap::new();
-                errors.insert(path.display().to_string(), vec![err.to_string()]);
-                Ok((Vec::new(), errors, BTreeMap::new(), total_files))
-            }
+            Ok(spec) => Ok((vec![spec], Vec::new(), Vec::new(), total_files)),
+            Err(err) => Ok((Vec::new(), vec![err], Vec::new(), total_files)),
         };
     }
 
@@ -702,47 +1118,33 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
     }
 
     let report = load_directory_report(path);
-    let mut errors = BTreeMap::<String, Vec<String>>::new();
-    let mut warnings = BTreeMap::<String, Vec<String>>::new();
-
-    for err in report.errors {
-        push_error(&mut errors, err);
-    }
-    for warning in report.warnings {
-        push_warning(&mut warnings, warning);
-    }
-
-    Ok((report.specs, errors, warnings, report.total_files))
+    Ok((
+        report.specs,
+        report.errors,
+        report.warnings,
+        report.total_files,
+    ))
 }
 
 fn finish_validation(
     specs: &[LoadedSpec],
-    mut errors: DiagnosticMap,
     options: &ValidationOptions,
-) -> (DiagnosticMap, DiagnosticMap) {
-    let mut warnings = DiagnosticMap::new();
+) -> (Vec<spec_core::SpecError>, Vec<spec_core::SpecWarning>) {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
 
-    for err in validate_no_duplicate_ids(specs) {
-        push_error(&mut errors, err);
-    }
+    errors.extend(validate_no_duplicate_ids(specs));
 
     for spec in specs {
         if let Err(err) = validate_full_with_options(spec, options) {
-            push_error(&mut errors, err);
+            errors.push(err);
         }
     }
 
     let (dep_errors, dep_warnings) = validate_deps_exist_with_options(specs, options);
-    for err in dep_errors {
-        push_error(&mut errors, err);
-    }
-    for warning in dep_warnings {
-        push_warning(&mut warnings, warning);
-    }
-
-    for warning in check_spec_versions(specs) {
-        push_warning(&mut warnings, warning);
-    }
+    errors.extend(dep_errors);
+    warnings.extend(dep_warnings);
+    warnings.extend(check_spec_versions(specs));
 
     (errors, warnings)
 }
@@ -767,6 +1169,395 @@ fn push_warning(diagnostics: &mut DiagnosticMap, warning: spec_core::SpecWarning
         .entry(key)
         .or_default()
         .push(warning.to_string());
+}
+
+fn spec_error_to_json_entry(
+    err: &spec_core::SpecError,
+    id_by_path: &HashMap<String, String>,
+) -> JsonErrorEntry {
+    let code = match err {
+        spec_core::SpecError::Io(_) => "Io",
+        spec_core::SpecError::InvalidUtf8 { .. } => "InvalidUtf8",
+        spec_core::SpecError::YamlParse { .. } => "YamlParse",
+        spec_core::SpecError::Json(_) => "Json",
+        spec_core::SpecError::SchemaValidation { .. } => "SchemaValidation",
+        spec_core::SpecError::SemanticValidation { .. } => "SemanticValidation",
+        spec_core::SpecError::RustKeyword { .. } => "RustKeyword",
+        spec_core::SpecError::DuplicateId { .. } => "DuplicateId",
+        spec_core::SpecError::DepCollision { .. } => "DepCollision",
+        spec_core::SpecError::MissingDep { .. } => "MissingDep",
+        spec_core::SpecError::CyclicDep { .. } => "CyclicDep",
+        spec_core::SpecError::UseStatementInBody { .. } => "UseStatementInBody",
+        spec_core::SpecError::BodyRustMustBeBlock { .. } => "BodyRustMustBeBlock",
+        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { .. } => {
+            "BodyRustLooksLikeFnDeclaration"
+        }
+        spec_core::SpecError::LocalTestExpectNotExpr { .. } => "LocalTestExpectNotExpr",
+        spec_core::SpecError::DuplicateLocalTestId { .. } => "DuplicateLocalTestId",
+        spec_core::SpecError::ContractTypeInvalid { .. } => "ContractTypeInvalid",
+        spec_core::SpecError::ContractInputNameInvalid { .. } => "ContractInputNameInvalid",
+        spec_core::SpecError::Traversal { .. } => "Traversal",
+        spec_core::SpecError::Generator { .. } => "Generator",
+        spec_core::SpecError::OutputDir { .. } => "OutputDir",
+        spec_core::SpecError::MissingMarker { .. } => "MissingMarker",
+    }
+    .to_string();
+
+    let (unit, path, dep, field, value, message, id, path2, cycle) = match err {
+        spec_core::SpecError::Io(_) => (
+            None,
+            String::new(),
+            None,
+            None,
+            None,
+            Some(err.to_string()),
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::InvalidUtf8 { path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::YamlParse { message, path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            Some(message.clone()),
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::Json(_) => (
+            None,
+            String::new(),
+            None,
+            None,
+            None,
+            Some(err.to_string()),
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::SchemaValidation { message, path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            Some(message.clone()),
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::SemanticValidation { message, path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            Some(message.clone()),
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::RustKeyword { path, .. } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::DuplicateId { id, file1, file2 } => (
+            id_by_path.get(file1).cloned(),
+            file1.clone(),
+            None,
+            None,
+            None,
+            None,
+            Some(id.clone()),
+            Some(file2.clone()),
+            None,
+        ),
+        spec_core::SpecError::DepCollision { dep1, path, .. } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            Some(dep1.clone()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::MissingDep { dep, path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            Some(dep.clone()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::CyclicDep { cycle_path, path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(cycle_path.clone()),
+        ),
+        spec_core::SpecError::UseStatementInBody { path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::BodyRustMustBeBlock { path, .. } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::LocalTestExpectNotExpr { id, path, .. } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            Some(id.clone()),
+            None,
+            None,
+        ),
+        spec_core::SpecError::DuplicateLocalTestId { id, path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            Some(id.clone()),
+            None,
+            None,
+        ),
+        spec_core::SpecError::ContractTypeInvalid {
+            field,
+            type_str,
+            path,
+            ..
+        } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            Some(format!("contract.{field}")),
+            Some(type_str.clone()),
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::ContractInputNameInvalid { name, path, .. } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            Some(format!("contract.inputs.{name}")),
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::Traversal { path, .. } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::Generator { message } => (
+            None,
+            String::new(),
+            None,
+            None,
+            None,
+            Some(message.clone()),
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::OutputDir { message } => (
+            None,
+            String::new(),
+            None,
+            None,
+            None,
+            Some(message.clone()),
+            None,
+            None,
+            None,
+        ),
+        spec_core::SpecError::MissingMarker { path } => (
+            id_by_path.get(path).cloned(),
+            path.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+    };
+
+    JsonErrorEntry {
+        unit,
+        code,
+        path,
+        dep,
+        field,
+        value,
+        message,
+        id,
+        path2,
+        cycle,
+    }
+}
+
+fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
+    match err {
+        spec_core::SpecError::DuplicateId { file1, file2, .. } => {
+            vec![file1.clone(), file2.clone()]
+        }
+        spec_core::SpecError::InvalidUtf8 { path }
+        | spec_core::SpecError::YamlParse { path, .. }
+        | spec_core::SpecError::SchemaValidation { path, .. }
+        | spec_core::SpecError::SemanticValidation { path, .. }
+        | spec_core::SpecError::RustKeyword { path, .. }
+        | spec_core::SpecError::DepCollision { path, .. }
+        | spec_core::SpecError::MissingDep { path, .. }
+        | spec_core::SpecError::CyclicDep { path, .. }
+        | spec_core::SpecError::UseStatementInBody { path }
+        | spec_core::SpecError::BodyRustMustBeBlock { path, .. }
+        | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }
+        | spec_core::SpecError::LocalTestExpectNotExpr { path, .. }
+        | spec_core::SpecError::DuplicateLocalTestId { path, .. }
+        | spec_core::SpecError::ContractTypeInvalid { path, .. }
+        | spec_core::SpecError::ContractInputNameInvalid { path, .. }
+        | spec_core::SpecError::Traversal { path, .. }
+        | spec_core::SpecError::MissingMarker { path } => vec![path.clone()],
+        spec_core::SpecError::Generator { .. }
+        | spec_core::SpecError::OutputDir { .. }
+        | spec_core::SpecError::Io(_)
+        | spec_core::SpecError::Json(_) => Vec::new(),
+    }
+}
+
+fn print_status_unit(unit: &JsonStatusUnit) {
+    let symbol = match unit.status {
+        "valid" => {
+            if unit.evidence_at.is_some() {
+                "✓"
+            } else {
+                "—"
+            }
+        }
+        "invalid" => "✗",
+        "stale" => "~",
+        _ => "?",
+    };
+
+    let detail = match unit.status {
+        "invalid" => format!(
+            "({} error{})",
+            unit.errors.len(),
+            pluralize(unit.errors.len())
+        ),
+        "stale" => match &unit.evidence_at {
+            Some(ts) => format!("evidence:{ts}  (contract changed)"),
+            None => "no-evidence  (contract changed)".to_string(),
+        },
+        _ => match &unit.evidence_at {
+            Some(ts) => format!("evidence:{ts}"),
+            None => "no-evidence".to_string(),
+        },
+    };
+
+    println!("{symbol} {:<32} {:<7} {detail}", unit.id, unit.status);
+    if unit.status == "invalid" {
+        for entry in &unit.errors {
+            println!("  · {}", json_error_entry_to_human(entry));
+        }
+    }
+}
+
+fn json_error_entry_to_human(entry: &JsonErrorEntry) -> String {
+    if let Some(message) = &entry.message {
+        return format!("{}: {message}", entry.code);
+    }
+
+    if let Some(dep) = &entry.dep {
+        return format!("{}: dep '{dep}' not found in this spec set", entry.code);
+    }
+
+    if let Some(field) = &entry.field {
+        if let Some(value) = &entry.value {
+            return format!("{}: {field}: invalid type '{value}'", entry.code);
+        }
+        return format!("{}: {field}", entry.code);
+    }
+
+    if let Some(id) = &entry.id {
+        if let Some(path2) = &entry.path2 {
+            return format!("{}: '{id}' also in {path2}", entry.code);
+        }
+        return format!("{}: {id}", entry.code);
+    }
+
+    entry.code.clone()
 }
 
 fn error_key(err: &spec_core::SpecError) -> String {
@@ -801,12 +1592,6 @@ fn warning_key(warning: &spec_core::SpecWarning) -> String {
         spec_core::SpecWarning::MissingDep { path, .. }
         | spec_core::SpecWarning::SymlinkCycleSkipped { path }
         | spec_core::SpecWarning::MissingSpecVersion { path, .. } => path.clone(),
-    }
-}
-
-fn merge_diagnostics(target: &mut DiagnosticMap, source: DiagnosticMap) {
-    for (path, mut messages) in source {
-        target.entry(path).or_default().append(&mut messages);
     }
 }
 
@@ -921,7 +1706,7 @@ extra_field: nope
 "#,
         );
 
-        let result = validate_command(&units_dir, false);
+        let result = validate_command(&units_dir, false, OutputFormat::Text);
         assert!(result.is_err());
         let error_text = format!("{:#}", result.unwrap_err());
         assert!(error_text.contains("error"));

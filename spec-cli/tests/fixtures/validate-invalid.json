@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "status": "invalid",
+  "errors": [
+    {
+      "unit": "pricing/apply_discount",
+      "code": "MissingDep",
+      "path": "units/pricing/apply_discount.unit.spec",
+      "dep": "currency/convert"
+    }
+  ],
+  "warnings": []
+}
