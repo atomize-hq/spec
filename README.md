@@ -121,15 +121,20 @@ The example crate is intentionally minimal. It provides a realistic place to kee
 ## Commands
 
 ```bash
-spec validate <path>               # schema + semantic validation
-spec validate <path> --no-strict   # downgrade missing deps to warnings
-spec generate <path> --output <dir>  # emit .rs files
+spec validate <path>                      # schema + semantic validation
+spec validate <path> --no-strict          # downgrade missing deps to warnings
+spec validate <path> --format json        # machine-readable JSON output for agents
+spec generate <path> --output <dir>       # emit .rs files
 
-spec build <path> --output <dir>   # validate → generate → cargo build
-spec test  <path> --output <dir>   # spec build → cargo test, writes evidence to passports
+spec build <path> --output <dir>          # validate → generate → cargo build
+spec test  <path> --output <dir>          # spec build → cargo test, writes evidence to passports
+spec test  <path/to/unit.unit.spec>       # scope to a single unit (filter by module path)
 
-spec export <path>                 # emit JSON bundle to stdout
-spec export <path> --output <file> # write JSON bundle to file
+spec status <path>                        # per-unit status: valid/invalid/stale/no-evidence
+spec status <path> --format json          # machine-readable status for agents
+
+spec export <path>                        # emit JSON bundle to stdout
+spec export <path> --output <file>        # write JSON bundle to file
 ```
 
 `validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
