@@ -2407,7 +2407,7 @@ links:
 }
 
 #[test]
-fn spec_generate_does_not_write_contract_hash() {
+fn spec_generate_writes_initial_contract_hash() {
     if !cargo_available() {
         return;
     }
@@ -2423,10 +2423,63 @@ fn spec_generate_does_not_write_contract_hash() {
         &output,
     );
 
+    // spec generate must write an initial contract_hash baseline so that stale
+    // detection fires if the contract changes before `spec test` is run.
     let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
     assert!(
-        !passport.contains("\"contract_hash\""),
-        "generate must not write contract_hash: {passport}"
+        passport.contains("\"contract_hash\": \"sha256:"),
+        "generate must write initial contract_hash baseline: {passport}"
+    );
+}
+
+#[test]
+fn spec_status_stale_after_generate_and_contract_change() {
+    // Regression: units with contracts that were only generated (never tested)
+    // must show as stale after the contract changes.  Before the fix,
+    // spec generate wrote contract_hash=null, so the stale check was skipped
+    // and status always showed "valid".
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_status_project(project_dir);
+
+    // Step 1: generate to establish the initial contract_hash baseline.
+    let gen_output = run_in(
+        project_dir,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success("spec generate should succeed", &gen_output);
+
+    // Step 2: change the contract (returns: bool → returns: i32).
+    fs::write(
+        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+contract:
+  returns: i32
+body:
+  rust: |
+    { 1 }
+local_tests:
+  - id: happy_path
+    expect: apply_discount() == 1
+"#,
+    )
+    .unwrap();
+
+    // Step 3: spec status must detect the stale contract — no spec test needed.
+    let output = run_in(project_dir, &["status", "units"]);
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit for stale unit"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("stale"),
+        "expected 'stale' in status output: {stdout}"
     );
 }
 

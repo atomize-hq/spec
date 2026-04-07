@@ -703,10 +703,14 @@ fn write_passports(
         let (evidence, contract_hash) = if evidence_by_spec.is_none() {
             // Non-test caller (spec generate / spec build): preserve any evidence
             // and contract_hash already on disk so we don't erase data written by
-            // a prior `spec test` run.
+            // a prior `spec test` run.  If no baseline hash exists yet (fresh
+            // project or first generate), compute one from the current contract so
+            // that stale detection works before the first `spec test` run.
             let existing = read_passport(source_path).ok().flatten();
             let ev = existing.as_ref().and_then(|p| p.evidence.clone());
-            let hash = existing.and_then(|p| p.contract_hash);
+            let hash = existing
+                .and_then(|p| p.contract_hash)
+                .or_else(|| compute_contract_hash(spec));
             (ev, hash)
         } else {
             // Test caller: always use freshly-computed values (None is correct for
