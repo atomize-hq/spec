@@ -121,15 +121,20 @@ The example crate is intentionally minimal. It provides a realistic place to kee
 ## Commands
 
 ```bash
-spec validate <path>               # schema + semantic validation
-spec validate <path> --no-strict   # downgrade missing deps to warnings
-spec generate <path> --output <dir>  # emit .rs files
+spec validate <path>                      # schema + semantic validation
+spec validate <path> --no-strict          # downgrade missing deps to warnings
+spec validate <path> --format json        # machine-readable JSON output for agents
+spec generate <path> --output <dir>       # emit .rs files
 
-spec build <path> --output <dir>   # validate → generate → cargo build
-spec test  <path> --output <dir>   # spec build → cargo test, writes evidence to passports
+spec build <path> --output <dir>          # validate → generate → cargo build
+spec test  <path> --output <dir>          # spec build → cargo test, writes evidence to passports
+spec test  <path/to/unit.unit.spec>       # scope to a single unit (filter by module path)
 
-spec export <path>                 # emit JSON bundle to stdout
-spec export <path> --output <file> # write JSON bundle to file
+spec status <path>                        # per-unit status: valid/invalid/stale/no-evidence
+spec status <path> --format json          # machine-readable status for agents
+
+spec export <path>                        # emit JSON bundle to stdout
+spec export <path> --output <file>        # write JSON bundle to file
 ```
 
 `validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
@@ -141,6 +146,43 @@ spec export <path> --output <file> # write JSON bundle to file
 The `--output` path for `generate`/`build`/`test` must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
 
 Note: `spec test` parses standard `cargo test` output. If your project uses `cargo-nextest`, use `spec generate` + `cargo test` directly for now.
+
+## AI-Native Usage
+
+`spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport trail that records what was actually observed to pass.
+
+The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence.
+
+```bash
+spec validate examples/ecommerce/units --format json
+```
+
+```json
+{
+  "schema_version": 1,
+  "status": "invalid",
+  "errors": [
+    {
+      "unit": "shipping/calculate",
+      "code": "MissingDep",
+      "dep": "currency/convert",
+      "path": "units/shipping/calculate.unit.spec"
+    }
+  ],
+  "warnings": []
+}
+```
+
+That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose.
+
+`spec status` uses simple symbols so you can scan a whole tree quickly:
+
+- `✓` valid with evidence
+- `✗` invalid
+- `~` stale passport
+- `—` valid but no evidence yet
+
+Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/SKILL.md) when you want the full workflow spelled out for an AI coding session.
 
 ## Consuming Generated Code
 

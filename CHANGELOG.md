@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.0 - 2026-04-06
+
+### Added
+
+- **`spec status [path]`** — New command showing per-unit validation, passport, and staleness status in both human-readable and `--format json` modes. AI agents read this to know what to work on.
+- **`--format json` on `validate` and `status`** — Structured JSON output on stdout with `schema_version`, `status`, `errors[]`, and `warnings[]` fields. Each error carries a `path` field pointing directly to the source `.unit.spec` file. Loader errors surface in `status --format json` via a `loader_errors` field so AI agents receive a single parseable signal even when files are malformed.
+- **`spec test [path]` single-unit scoping** — Pass a `.unit.spec` file path to `spec test` to run only that unit's cargo tests using a derived module path filter (`pricing::apply_tax::tests::`). New passport evidence is written per-run.
+- **Contract hash in passports** — `spec test` now writes a `contract_hash` (SHA-256 of the serialized contract) to the passport. `spec status` compares the live contract hash against the stored hash to detect stale units — those where the contract changed but tests haven't been re-run.
+- **AGENTS.md spec workflow** — Real agent workflow guide added to AGENTS.md: a 5-step validate → edit → build → test → check loop for AI coding agents working with spec units.
+- **Companion gstack skill** — `.claude/skills/spec/SKILL.md` teaches any Claude Code session the spec workflow, common validation errors, and how to interpret passport evidence.
+- **ICP definition** — Who spec v0.5 is for: a solo engineer or 2-5 person team using AI coding assistants daily where contract clarity and correctness matter. Written in DECISIONS.md.
+- **Golden JSON fixture tests** — `spec-cli/tests/fixtures/` contains reference JSON outputs for `spec validate --format json` and `spec status --format json`. Shape breakage = test failure.
+
+### Fixed
+
+- **Zero-tests detection** — `spec test` now correctly detects when a filter matches 0 tests in a multi-binary crate (checks all binaries, returns true only when none ran matching tests). Previously would silently write evidence with empty test results.
+- **JSON status loader errors** — `spec status --format json` no longer emits text diagnostics to stdout when loader errors occur; errors now appear in the JSON response's `loader_errors` field.
+- **`status_command` zero-unit edge case** — `spec status` no longer incorrectly prints "0 units found" when loader errors are present.
+- **JSON error field completeness** — Several `SpecError` variants (`RustKeyword`, `DepCollision`, `BodyRustMustBeBlock`, `LocalTestExpectNotExpr`) now correctly populate all JSON error fields instead of emitting `null` for known values.
+
+### Migration
+
+- **No authored unit format change** — `.unit.spec` authors should continue using `spec_version: "0.3.0"`.
+- **Passport schema v3** — Passports may now include an optional `contract_hash` field (SHA-256, prefixed `sha256:`). Parsers should tolerate its absence; missing hash means "no stale detection available for this unit."
+
 ## 0.4.0 - 2026-04-05
 
 ### Added

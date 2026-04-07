@@ -9,6 +9,7 @@ use crate::generator::write_generated_file;
 use crate::types::LoadedSpec;
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -70,6 +71,12 @@ pub struct Passport {
     pub source_file: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence: Option<PassportEvidence>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_contract_hash"
+    )]
+    pub contract_hash: Option<String>,
 }
 
 /// Build a Passport from a LoadedSpec.
@@ -77,7 +84,7 @@ pub struct Passport {
 /// `generated_at` is injected so all passports in one run share an identical
 /// timestamp (batch consistency).
 pub fn build_passport(spec: &LoadedSpec, generated_at: &str) -> Passport {
-    build_passport_with_evidence(spec, generated_at, None)
+    build_passport_with_evidence(spec, generated_at, None, None)
 }
 
 /// Build a Passport from a LoadedSpec and optional observed evidence.
@@ -85,6 +92,7 @@ pub fn build_passport_with_evidence(
     spec: &LoadedSpec,
     generated_at: &str,
     evidence: Option<PassportEvidence>,
+    contract_hash: Option<String>,
 ) -> Passport {
     let contract = spec.spec.contract.as_ref().map(|c| PassportContract {
         inputs: c
@@ -125,7 +133,19 @@ pub fn build_passport_with_evidence(
         generated_at: generated_at.to_string(),
         source_file: spec.source.file_path.clone(),
         evidence,
+        contract_hash,
     }
+}
+
+/// Compute SHA-256 of the serialized contract field.
+///
+/// Returns `None` when the spec has no contract block.
+pub fn compute_contract_hash(spec: &LoadedSpec) -> Option<String> {
+    let contract = spec.spec.contract.as_ref()?;
+    let json = serde_json::to_string(contract)
+        .expect("contract serialization cannot fail for well-formed spec");
+    let hash = Sha256::digest(json.as_bytes());
+    Some(format!("sha256:{}", hex::encode(hash)))
 }
 
 /// Return the passport file path for a given source `.unit.spec` path.
@@ -162,6 +182,22 @@ pub fn passport_path_for(source_path: &Path) -> Result<PathBuf> {
     Ok(parent.join(format!("{stem}.spec.passport.json")))
 }
 
+/// Read a passport for a given source `.unit.spec` path.
+///
+/// Returns `Ok(None)` when the passport file does not exist.
+/// Returns `Err` when the file exists but cannot be parsed.
+pub fn read_passport(source_path: &Path) -> Result<Option<Passport>> {
+    let passport_path = passport_path_for(source_path)?;
+
+    let content = match fs::read_to_string(&passport_path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+
+    Ok(Some(serde_json::from_str(&content)?))
+}
+
 /// Serialize a Passport to pretty-printed JSON and write it atomically
 /// co-located with the source `.unit.spec` file.
 pub fn write_passport(passport: &Passport, source_file_path: &Path) -> Result<()> {
@@ -170,6 +206,16 @@ pub fn write_passport(passport: &Passport, source_file_path: &Path) -> Result<()
     })?;
     let passport_path = passport_path_for(source_file_path)?;
     write_generated_file(&passport_path.display().to_string(), &json)
+}
+
+fn deserialize_contract_hash<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let contract_hash = Option::<String>::deserialize(deserializer)?;
+    Ok(contract_hash.filter(|hash| hash.starts_with("sha256:")))
 }
 
 /// Emit `**/*.spec.passport.json` to `<spec_root>/.gitignore` if not already
@@ -315,6 +361,7 @@ mod tests {
         assert_eq!(passport.deps, vec!["money/round"]);
         assert_eq!(passport.generated_at, "2026-04-04T00:00:00Z");
         assert_eq!(passport.source_file, "units/pricing/apply_tax.unit.spec");
+        assert!(passport.contract_hash.is_none());
 
         let c = passport.contract.unwrap();
         assert_eq!(c.inputs.len(), 2);
@@ -346,6 +393,7 @@ mod tests {
         assert!(passport.deps.is_empty());
         assert!(passport.local_tests.is_empty());
         assert!(passport.evidence.is_none());
+        assert!(passport.contract_hash.is_none());
     }
 
     #[test]
@@ -395,6 +443,169 @@ mod tests {
     fn passport_path_for_rejects_non_unit_spec() {
         let result = passport_path_for(Path::new("units/pricing/apply_tax.rs"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_contract_hash_absent_for_no_contract() {
+        let spec = make_loaded_spec(
+            "money/round",
+            "units/money/round.unit.spec",
+            Some("0.3.0"),
+            None,
+            vec![],
+            vec![],
+        );
+
+        assert_eq!(compute_contract_hash(&spec), None);
+    }
+
+    #[test]
+    fn test_contract_hash_present_for_contract() {
+        let mut inputs = IndexMap::new();
+        inputs.insert("subtotal".to_string(), "Decimal".to_string());
+        inputs.insert("rate".to_string(), "Decimal".to_string());
+        let spec = make_loaded_spec(
+            "pricing/apply_tax",
+            "units/pricing/apply_tax.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs),
+                returns: Some("Decimal".to_string()),
+                invariants: vec!["output >= subtotal".to_string()],
+            }),
+            vec![],
+            vec![],
+        );
+
+        let expected = {
+            let contract = spec.spec.contract.as_ref().unwrap();
+            let json = serde_json::to_string(contract).unwrap();
+            let hash = Sha256::digest(json.as_bytes());
+            format!("sha256:{}", hex::encode(hash))
+        };
+
+        assert_eq!(compute_contract_hash(&spec), Some(expected));
+    }
+
+    #[test]
+    fn test_contract_hash_changes_on_input_reorder() {
+        let mut inputs_ab = IndexMap::new();
+        inputs_ab.insert("a".to_string(), "String".to_string());
+        inputs_ab.insert("b".to_string(), "String".to_string());
+
+        let mut inputs_ba = IndexMap::new();
+        inputs_ba.insert("b".to_string(), "String".to_string());
+        inputs_ba.insert("a".to_string(), "String".to_string());
+
+        let spec_ab = make_loaded_spec(
+            "example/alpha",
+            "units/example/alpha.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs_ab),
+                returns: Some("String".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+        let spec_ba = make_loaded_spec(
+            "example/alpha",
+            "units/example/alpha.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs_ba),
+                returns: Some("String".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+
+        assert_ne!(
+            compute_contract_hash(&spec_ab),
+            compute_contract_hash(&spec_ba)
+        );
+    }
+
+    #[test]
+    fn test_read_passport_returns_none_for_missing() {
+        let dir = TempDir::new().unwrap();
+        let source_path = dir.path().join("apply_tax.unit.spec");
+
+        let passport = read_passport(&source_path).unwrap();
+        assert!(passport.is_none());
+    }
+
+    #[test]
+    fn test_read_passport_returns_err_for_malformed() {
+        let dir = TempDir::new().unwrap();
+        let source_path = dir.path().join("apply_tax.unit.spec");
+        let passport_path = passport_path_for(&source_path).unwrap();
+        fs::write(&passport_path, "{not valid json").unwrap();
+
+        let result = read_passport(&source_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_passport_discards_non_sha256_contract_hash() {
+        let dir = TempDir::new().unwrap();
+        let source_path = dir.path().join("apply_tax.unit.spec");
+        let passport_path = passport_path_for(&source_path).unwrap();
+        fs::write(
+            &passport_path,
+            r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_tax",
+  "intent": "Why pricing/apply_tax",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2026-04-04T00:00:00Z",
+  "source_file": "units/pricing/apply_tax.unit.spec",
+  "contract_hash": "deadbeef"
+}"#,
+        )
+        .unwrap();
+
+        let passport = read_passport(&source_path).unwrap().unwrap();
+        assert!(passport.contract_hash.is_none());
+    }
+
+    #[test]
+    fn test_read_passport_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        let source_path = dir.path().join("apply_tax.unit.spec");
+        fs::write(&source_path, "").unwrap();
+
+        let mut inputs = IndexMap::new();
+        inputs.insert("subtotal".to_string(), "i32".to_string());
+        let spec = make_loaded_spec(
+            "pricing/apply_tax",
+            source_path.to_str().unwrap(),
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs),
+                returns: Some("i32".to_string()),
+                invariants: vec!["output >= subtotal".to_string()],
+            }),
+            vec![],
+            vec![],
+        );
+        let passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-04T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+            }),
+            compute_contract_hash(&spec),
+        );
+        write_passport(&passport, &source_path).unwrap();
+
+        let parsed = read_passport(&source_path).unwrap().unwrap();
+        assert_eq!(parsed, passport);
     }
 
     #[test]
@@ -484,6 +695,7 @@ mod tests {
                 }],
                 observed_at: "2026-04-04T00:01:00Z".to_string(),
             }),
+            Some("sha256:abc123".to_string()),
         );
 
         assert_eq!(
@@ -498,6 +710,7 @@ mod tests {
                 observed_at: "2026-04-04T00:01:00Z".to_string(),
             })
         );
+        assert_eq!(passport.contract_hash, Some("sha256:abc123".to_string()));
     }
 
     #[test]
@@ -514,6 +727,7 @@ mod tests {
         let json = serde_json::to_string(&passport).unwrap();
 
         assert!(passport.evidence.is_none());
+        assert!(passport.contract_hash.is_none());
         assert!(
             !json.contains("\"evidence\""),
             "static passport should not serialize evidence: {json}"

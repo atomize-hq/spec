@@ -68,6 +68,78 @@ fn write_file(dir: &Path, relative_path: &str, body: &str) {
     fs::write(path, body).unwrap();
 }
 
+fn parse_stdout_json(output: &std::process::Output) -> Value {
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+fn fixture_json(name: &str) -> Value {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name);
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn assert_stdout_json_matches_fixture(output: &std::process::Output, fixture: &str) {
+    let actual = parse_stdout_json(output);
+    let expected = fixture_json(fixture);
+    assert_eq!(actual, expected);
+}
+
+fn rewrite_passport_generated_at(passport_path: &Path, generated_at: &str) {
+    let mut passport: Value = serde_json::from_str(&fs::read_to_string(passport_path).unwrap())
+        .expect("passport should be valid JSON");
+    passport["generated_at"] = Value::String(generated_at.to_string());
+    if let Some(evidence) = passport.get_mut("evidence") {
+        evidence["observed_at"] = Value::String(generated_at.to_string());
+    }
+    fs::write(
+        passport_path,
+        serde_json::to_string_pretty(&passport).unwrap(),
+    )
+    .unwrap();
+}
+
+fn write_status_project(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    let pricing_dir = units_dir.join("pricing");
+    let src_dir = project_dir.join("src");
+
+    fs::create_dir_all(&pricing_dir).unwrap();
+    fs::create_dir_all(&src_dir).unwrap();
+
+    fs::write(
+        project_dir.join("Cargo.toml"),
+        "[package]\nname = \"pricing-project\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(
+        src_dir.join("main.rs"),
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        pricing_dir.join("apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+contract:
+  returns: bool
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: happy_path
+    expect: apply_discount() == true
+"#,
+    )
+    .unwrap();
+
+    pricing_dir.join("apply_discount.unit.spec")
+}
+
 #[test]
 fn help_lists_validate_and_generate_commands() {
     let output = run(&["--help"]);
@@ -533,6 +605,183 @@ fn validate_empty_directory_reports_zero_units() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("0 units found, nothing to validate"));
+}
+
+#[test]
+fn spec_validate_json_all_valid() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run_in(temp_dir.path(), &["validate", "units", "--format", "json"]);
+    assert!(output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_stdout_json_matches_fixture(&output, "validate-valid.json");
+}
+
+#[test]
+fn spec_validate_json_missing_dep() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+deps:
+  - currency/convert
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run_in(temp_dir.path(), &["validate", "units", "--format", "json"]);
+    assert!(!output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_stdout_json_matches_fixture(&output, "validate-invalid.json");
+}
+
+#[test]
+fn spec_validate_json_contract_type_invalid() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    weight: Vec<
+  returns: i32
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"].as_array().unwrap().len(), 1);
+    assert_eq!(json["errors"][0]["code"], "ContractTypeInvalid");
+    assert_eq!(json["errors"][0]["field"], "contract.inputs.weight");
+    assert_eq!(json["errors"][0]["value"], "Vec<");
+}
+
+#[test]
+fn spec_validate_json_no_human_text_on_stdout() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(r#""status": "valid""#), "{stdout}");
+    assert!(!stdout.contains("units found"), "{stdout}");
+    assert!(!stdout.contains("unit valid"), "{stdout}");
+    assert!(
+        serde_json::from_str::<Value>(&stdout).is_ok(),
+        "stdout must be parseable JSON: {stdout}"
+    );
+}
+
+#[test]
+fn spec_validate_json_zero_units() {
+    let temp_dir = temp_repo_dir();
+    let output = run(&[
+        "validate",
+        temp_dir.path().to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    assert!(output.status.success());
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["status"], "valid");
+    assert_eq!(json["errors"], serde_json::json!([]));
+    assert_eq!(json["warnings"], serde_json::json!([]));
+}
+
+#[test]
+fn spec_validate_json_schema_version_is_1() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(output.status.success());
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 1);
 }
 
 #[test]
@@ -1943,6 +2192,92 @@ fn read_passport(passport_path: &Path) -> String {
     fs::read_to_string(passport_path).unwrap()
 }
 
+fn write_pricing_project(project_dir: &Path, target_has_tests: bool) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    let pricing_dir = units_dir.join("pricing");
+    let src_dir = project_dir.join("src");
+
+    fs::create_dir_all(&pricing_dir).unwrap();
+    fs::create_dir_all(&src_dir).unwrap();
+
+    fs::write(
+        project_dir.join("Cargo.toml"),
+        "[package]\nname = \"pricing-project\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(
+        src_dir.join("main.rs"),
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    )
+    .unwrap();
+
+    let target_spec = if target_has_tests {
+        r#"spec_version: "0.3.0"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax to a subtotal.
+contract:
+  inputs:
+    subtotal: f64
+    rate: f64
+  returns: f64
+body:
+  rust: |
+    {
+        subtotal + rate
+    }
+local_tests:
+  - id: happy_path
+    expect: "true"
+"#
+    } else {
+        r#"spec_version: "0.3.0"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax to a subtotal.
+contract:
+  inputs:
+    subtotal: f64
+    rate: f64
+  returns: f64
+body:
+  rust: |
+    {
+        subtotal + rate
+    }
+"#
+    };
+
+    fs::write(pricing_dir.join("apply_tax.unit.spec"), target_spec).unwrap();
+    fs::write(
+        pricing_dir.join("apply_discount.unit.spec"),
+        r#"spec_version: "0.3.0"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount to a subtotal.
+contract:
+  inputs:
+    subtotal: f64
+    rate: f64
+  returns: f64
+body:
+  rust: |
+    {
+        subtotal - rate
+    }
+local_tests:
+  - id: happy_path
+    expect: "true"
+"#,
+    )
+    .unwrap();
+
+    pricing_dir.join("apply_tax.unit.spec")
+}
+
 // ── D2: Runtime evidence in passports ───────────────────────────────────────
 
 #[test]
@@ -1974,6 +2309,34 @@ fn spec_test_writes_evidence_to_passport() {
     assert!(passport.contains("\"id\": \"basic_tax\""), "{passport}");
     assert!(passport.contains("\"status\": \"pass\""), "{passport}");
     assert!(passport.contains("\"observed_at\": \""), "{passport}");
+}
+
+#[test]
+fn spec_test_writes_contract_hash_to_passport() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success("spec test should succeed for ecommerce example", &output);
+
+    let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(
+        passport.contains("\"contract_hash\": \"sha256:"),
+        "{passport}"
+    );
 }
 
 #[test]
@@ -2041,6 +2404,30 @@ links:
         "{passport}"
     );
     assert!(passport.contains("\"status\": \"fail\""), "{passport}");
+}
+
+#[test]
+fn spec_generate_does_not_write_contract_hash() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args(["generate", "units", "--output", "src/generated"])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success(
+        "spec generate should succeed for ecommerce example",
+        &output,
+    );
+
+    let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(
+        !passport.contains("\"contract_hash\""),
+        "generate must not write contract_hash: {passport}"
+    );
 }
 
 #[test]
@@ -2243,4 +2630,481 @@ fn spec_test_writes_evidence_atomically() {
             entry.path().display()
         );
     }
+}
+
+// ── D4: Status command ─────────────────────────────────────────────────────
+
+#[test]
+fn spec_status_all_valid_no_evidence() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = run_in(&ecommerce_dir, &["status", "units"]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("pricing/apply_tax"), "{stdout}");
+    assert!(stdout.contains("—"), "{stdout}");
+    assert!(stdout.contains("no-evidence"), "{stdout}");
+}
+
+#[test]
+fn spec_status_after_spec_test() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let test_output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec test");
+    assert_output_success("spec test should succeed before status check", &test_output);
+
+    let output = run_in(&ecommerce_dir, &["status", "units"]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("evidence:"), "{stdout}");
+    assert!(!stdout.contains("no-evidence"), "{stdout}");
+}
+
+#[test]
+fn spec_status_invalid_unit() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/bad.unit.spec",
+        r#"
+id: pricing/bad
+kind: function
+intent:
+  why: Trigger a validation error.
+body:
+  rust: |
+    {
+        use std::fmt;
+    }
+"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap()]);
+    assert!(!output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("✗ pricing/bad"), "{stdout}");
+    assert!(stdout.contains("invalid"), "{stdout}");
+}
+
+#[test]
+fn spec_status_json_invalid_unit() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/bad.unit.spec",
+        r#"
+id: pricing/bad
+kind: function
+intent:
+  why: Trigger a validation error.
+body:
+  rust: |
+    {
+        use std::fmt;
+    }
+"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 1);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0]["id"], "pricing/bad");
+    assert_eq!(units[0]["status"], "invalid");
+    assert!(
+        !units[0]["errors"].as_array().unwrap().is_empty(),
+        "errors array should be non-empty for invalid unit"
+    );
+    assert_eq!(units[0]["stale"], false);
+}
+
+#[test]
+fn spec_status_json_loader_error_surfaces_in_response() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    std::fs::create_dir_all(&units_dir).unwrap();
+    // Write a file that is not valid YAML — triggers a loader error, not a validation error.
+    std::fs::write(
+        units_dir.join("bad.unit.spec"),
+        "not: valid: yaml: [unclosed",
+    )
+    .unwrap();
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "should exit non-zero for loader error"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "no text diagnostics on stderr in JSON mode, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 1);
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        !loader_errors.is_empty(),
+        "loader_errors must be present in JSON response when loader fails"
+    );
+}
+
+#[test]
+fn spec_status_stale_unit() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_status_project(project_dir);
+
+    let test_output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec test");
+    assert_output_success("spec test should succeed before stale check", &test_output);
+
+    rewrite_passport_generated_at(
+        &project_dir.join("units/pricing/apply_discount.spec.passport.json"),
+        "2024-01-02T03:04:05Z",
+    );
+
+    fs::write(
+        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+contract:
+  returns: i32
+body:
+  rust: |
+    { 1 }
+local_tests:
+  - id: happy_path
+    expect: apply_discount() == true
+"#,
+    )
+    .unwrap();
+
+    let output = run_in(project_dir, &["status", "units"]);
+    assert!(!output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("~ pricing/apply_discount"), "{stdout}");
+    assert!(stdout.contains("stale"), "{stdout}");
+
+    let json_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(!json_output.status.success());
+    assert_stdout_json_matches_fixture(&json_output, "status-stale.json");
+}
+
+#[test]
+fn spec_status_valid_unit() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_status_project(project_dir);
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec test");
+    assert_output_success("spec test should succeed before status check", &output);
+
+    rewrite_passport_generated_at(
+        &project_dir.join("units/pricing/apply_discount.spec.passport.json"),
+        "2024-01-02T03:04:05Z",
+    );
+
+    let output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(output.status.success());
+
+    assert_stdout_json_matches_fixture(&output, "status-valid.json");
+}
+
+#[test]
+fn spec_status_malformed_passport_warns_not_aborts() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#,
+    );
+    write_file(
+        &units_dir,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{"spec_version":"0.3.0""#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("—"), "{stdout}");
+    assert!(stderr.contains("⚠ failed to read passport"), "{stderr}");
+}
+
+#[test]
+fn spec_status_single_file_path() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir.path().join("apply_discount.unit.spec");
+    fs::write(
+        &spec_path,
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#,
+    )
+    .unwrap();
+
+    let output = run(&["status", spec_path.to_str().unwrap()]);
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("pricing/apply_discount"), "{stdout}");
+    assert!(stdout.contains("—"), "{stdout}");
+}
+
+// ── D5: Single-file spec test scope ─────────────────────────────────────────
+
+#[test]
+fn spec_test_accepts_file_path() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_pricing_project(temp_dir.path(), true);
+
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            spec_path.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success("spec test should accept a file path", &output);
+
+    let target_passport = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let sibling_passport = temp_dir
+        .path()
+        .join("units/pricing/apply_discount.spec.passport.json");
+
+    assert!(
+        target_passport.exists(),
+        "expected target passport to be written"
+    );
+    assert!(
+        !sibling_passport.exists(),
+        "expected sibling passport to remain unwritten in file-path mode"
+    );
+}
+
+#[test]
+fn spec_test_file_path_only_writes_target_passport() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_pricing_project(temp_dir.path(), true);
+
+    let seed = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to seed spec passports");
+    assert_output_success("spec test should seed pricing passports", &seed);
+
+    let target_passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let sibling_passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_discount.spec.passport.json");
+    let target_before = read_passport(&target_passport_path);
+    let sibling_before = read_passport(&sibling_passport_path);
+
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            spec_path.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success("spec test should succeed for file path mode", &output);
+
+    let target_after = read_passport(&target_passport_path);
+    let sibling_after = read_passport(&sibling_passport_path);
+    assert_ne!(
+        target_after, target_before,
+        "expected target passport to be rewritten in file-path mode"
+    );
+    assert_eq!(
+        sibling_after, sibling_before,
+        "expected sibling passport to remain unchanged in file-path mode"
+    );
+}
+
+#[test]
+fn spec_test_zero_tests_matched_exits_nonzero() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_pricing_project(temp_dir.path(), false);
+
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            spec_path.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec test should exit non-zero when the filter matches no tests"
+    );
+
+    let target_passport = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let sibling_passport = temp_dir
+        .path()
+        .join("units/pricing/apply_discount.spec.passport.json");
+    assert!(
+        !target_passport.exists(),
+        "expected target passport not to be written when zero tests ran"
+    );
+    assert!(
+        !sibling_passport.exists(),
+        "expected sibling passport not to be written when zero tests ran"
+    );
+}
+
+#[test]
+fn spec_test_directory_path_unchanged() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    write_pricing_project(temp_dir.path(), true);
+
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success(
+        "spec test should still succeed for directory paths",
+        &output,
+    );
+
+    let target_passport = read_passport(
+        &temp_dir
+            .path()
+            .join("units/pricing/apply_tax.spec.passport.json"),
+    );
+    assert!(
+        target_passport.contains("\"status\": \"pass\""),
+        "{target_passport}"
+    );
 }

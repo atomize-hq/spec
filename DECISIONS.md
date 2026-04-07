@@ -4,6 +4,10 @@ This file records project-level decisions that should remain stable across the r
 
 ---
 
+## ICP (v0.5)
+
+The ICP for v0.5 is a solo engineer or a small team of roughly 2-5 people who use AI coding assistants every day, work on systems where correctness matters, and want generated code they can trust because it is governed by explicit spec contracts and machine-readable evidence rather than terminal scraping or guesswork.
+
 ## 2026-04-02 — Validation Strategy (0.1.x–0.2.x): JSON Schema
 
 **Decision**

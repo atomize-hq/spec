@@ -15,3 +15,13 @@ Key routing rules:
 - Design system, brand → invoke design-consultation
 - Visual audit, design polish → invoke design-review
 - Architecture review → invoke plan-eng-review
+
+## spec Agent Workflow
+
+Use this workflow when editing `.unit.spec` files or responding to validation and test feedback.
+
+- Touch source specs, not generated output or passports. Edit `.unit.spec` files, then let `spec` regenerate `.rs` files and `.spec.passport.json` artifacts.
+- Follow the 5-step loop: `spec status .` to find invalid, stale, or missing-evidence units, `spec validate [path] --format json` to read machine-parsable failures, edit the `.unit.spec`, run `spec build [path]`, then run `spec test [path]` and repeat until everything is green.
+- Treat `spec validate --format json` as the primary feedback channel. Read `status`, `errors`, and `warnings` from stdout; each error object includes a machine code, the unit path, and any relevant structured fields such as `dep`, `field`, or `value`.
+- A passport is the co-located `.spec.passport.json` record for a unit. It is "done" only when the unit validates, builds, tests, and has fresh passport evidence from `spec test`.
+- A stale unit is marked with `~` in `spec status` when the passport's stored contract hash no longer matches the current spec contract. Treat stale as work to redo, not as success.
