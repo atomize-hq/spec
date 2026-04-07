@@ -2745,6 +2745,31 @@ body:
 }
 
 #[test]
+fn spec_status_json_loader_error_surfaces_in_response() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    std::fs::create_dir_all(&units_dir).unwrap();
+    // Write a file that is not valid YAML — triggers a loader error, not a validation error.
+    std::fs::write(units_dir.join("bad.unit.spec"), "not: valid: yaml: [unclosed").unwrap();
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "should exit non-zero for loader error");
+    assert!(
+        output.stderr.is_empty(),
+        "no text diagnostics on stderr in JSON mode, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 1);
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        !loader_errors.is_empty(),
+        "loader_errors must be present in JSON response when loader fails"
+    );
+}
+
+#[test]
 fn spec_status_stale_unit() {
     if !cargo_available() {
         return;

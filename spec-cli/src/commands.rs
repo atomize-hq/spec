@@ -35,6 +35,8 @@ type CollectedSpecs = (
 );
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
 
+const JSON_SCHEMA_VERSION: u8 = 1;
+
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Text,
@@ -53,6 +55,8 @@ struct JsonValidateResponse {
 struct JsonStatusResponse {
     schema_version: u8,
     units: Vec<JsonStatusUnit>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    loader_errors: Vec<JsonErrorEntry>,
 }
 
 #[derive(Serialize)]
@@ -298,7 +302,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
             let has_errors = !errors.is_empty();
 
             let response = JsonValidateResponse {
-                schema_version: 1,
+                schema_version: JSON_SCHEMA_VERSION,
                 status: if has_errors { "invalid" } else { "valid" },
                 errors,
                 warnings,
@@ -330,6 +334,13 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         .collect();
     let has_loader_errors = !loader_errors.is_empty();
 
+    // Convert loader errors to JSON entries (non-consuming borrow) so they can be
+    // surfaced in JSON mode where print_diagnostics is not called.
+    let loader_error_entries: Vec<JsonErrorEntry> = loader_errors
+        .iter()
+        .map(|err| spec_error_to_json_entry(err, &id_by_path))
+        .collect();
+
     let mut errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
     for err in &validation_errors {
         for path in error_paths(err) {
@@ -340,7 +351,9 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         }
     }
 
-    if has_loader_errors {
+    // Text mode emits loader errors as human-readable diagnostics;
+    // JSON mode surfaces them in the response's loader_errors field.
+    if has_loader_errors && matches!(format, OutputFormat::Text) {
         let mut diagnostics = DiagnosticMap::new();
         for err in loader_errors {
             push_error(&mut diagnostics, err);
@@ -355,8 +368,9 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             }
             OutputFormat::Json => {
                 let response = JsonStatusResponse {
-                    schema_version: 1,
+                    schema_version: JSON_SCHEMA_VERSION,
                     units: vec![],
+                    loader_errors: vec![],
                 };
                 let json = serde_json::to_string_pretty(&response)?;
                 print!("{json}");
@@ -374,10 +388,12 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         let passport = match read_passport(source_path) {
             Ok(passport) => passport,
             Err(err) => {
-                eprintln!(
-                    "⚠ failed to read passport for {}: {err}",
-                    source_path.display()
-                );
+                if matches!(format, OutputFormat::Text) {
+                    eprintln!(
+                        "⚠ failed to read passport for {}: {err}",
+                        source_path.display()
+                    );
+                }
                 None
             }
         };
@@ -428,8 +444,9 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         }
         OutputFormat::Json => {
             let response = JsonStatusResponse {
-                schema_version: 1,
+                schema_version: JSON_SCHEMA_VERSION,
                 units,
+                loader_errors: loader_error_entries,
             };
             let json = serde_json::to_string_pretty(&response)?;
             print!("{json}");
