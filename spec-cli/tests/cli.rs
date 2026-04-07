@@ -2431,6 +2431,125 @@ fn spec_generate_does_not_write_contract_hash() {
 }
 
 #[test]
+fn spec_generate_preserves_passport_evidence_from_prior_test() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    write_pricing_project(temp_dir.path(), true);
+
+    // Seed evidence and contract_hash via spec test.
+    let seed = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to seed spec passports");
+    assert_output_success("spec test should seed passports", &seed);
+
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let after_test = read_passport(&passport_path);
+    assert!(
+        after_test.contains("\"build_status\": \"pass\""),
+        "expected evidence after spec test: {after_test}"
+    );
+    assert!(
+        after_test.contains("\"contract_hash\": \"sha256:"),
+        "expected contract_hash after spec test: {after_test}"
+    );
+
+    // Running spec generate must not erase the evidence or contract_hash.
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args(["generate", "units/pricing", "--output", "src/generated"])
+        .output()
+        .expect("failed to run spec generate");
+    assert_output_success("spec generate should succeed after spec test", &output);
+
+    let after_generate = read_passport(&passport_path);
+    assert!(
+        after_generate.contains("\"build_status\": \"pass\""),
+        "spec generate must not erase evidence: {after_generate}"
+    );
+    assert!(
+        after_generate.contains("\"contract_hash\": \"sha256:"),
+        "spec generate must not erase contract_hash: {after_generate}"
+    );
+}
+
+#[test]
+fn spec_build_preserves_passport_evidence_from_prior_test() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    write_pricing_project(temp_dir.path(), true);
+
+    // Seed evidence and contract_hash via spec test.
+    let seed = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to seed spec passports");
+    assert_output_success("spec test should seed passports", &seed);
+
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let after_test = read_passport(&passport_path);
+    assert!(
+        after_test.contains("\"build_status\": \"pass\""),
+        "expected evidence after spec test: {after_test}"
+    );
+    assert!(
+        after_test.contains("\"contract_hash\": \"sha256:"),
+        "expected contract_hash after spec test: {after_test}"
+    );
+
+    // Running spec build must not erase the evidence or contract_hash.
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "build",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec build");
+    assert_output_success("spec build should succeed after spec test", &output);
+
+    let after_build = read_passport(&passport_path);
+    assert!(
+        after_build.contains("\"build_status\": \"pass\""),
+        "spec build must not erase evidence: {after_build}"
+    );
+    assert!(
+        after_build.contains("\"contract_hash\": \"sha256:"),
+        "spec build must not erase contract_hash: {after_build}"
+    );
+}
+
+#[test]
 fn spec_test_build_failure_writes_fail_build_status_to_passport() {
     if !cargo_available() {
         return;
@@ -3026,6 +3145,101 @@ fn spec_test_file_path_only_writes_target_passport() {
         sibling_after, sibling_before,
         "expected sibling passport to remain unchanged in file-path mode"
     );
+}
+
+#[test]
+fn spec_test_file_path_nested_output_filter() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units/pricing");
+    let src_dir = temp_dir.path().join("src");
+    let generated_dir = src_dir.join("generated");
+
+    fs::create_dir_all(&units_dir).unwrap();
+    fs::create_dir_all(&generated_dir).unwrap();
+
+    fs::write(
+        temp_dir.path().join("Cargo.toml"),
+        "[package]\nname = \"nested-output-project\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(
+        src_dir.join("main.rs"),
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    )
+    .unwrap();
+    // Rust needs generated/mod.rs to resolve the nested `spec` module
+    fs::write(generated_dir.join("mod.rs"), "pub mod spec;\n").unwrap();
+
+    let spec_content = r#"spec_version: "0.3.0"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax to a subtotal.
+contract:
+  inputs:
+    subtotal: f64
+    rate: f64
+  returns: f64
+body:
+  rust: |
+    {
+        subtotal + rate
+    }
+local_tests:
+  - id: happy_path
+    expect: "true"
+"#;
+    let spec_path = units_dir.join("apply_tax.unit.spec");
+    fs::write(&spec_path, spec_content).unwrap();
+
+    let crate_root = temp_dir.path().to_str().unwrap();
+
+    // Seed: run on the full directory so all passports are written
+    let seed = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated/spec",
+            "--crate-root",
+            crate_root,
+        ])
+        .output()
+        .expect("failed to seed passports");
+    assert_output_success("spec test should seed with nested output", &seed);
+
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let before = read_passport(&passport_path);
+
+    // Single-file run with nested output — cargo_test_filter_for must produce
+    // "generated::spec::..." not just "spec::..." for the filter to match
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            spec_path.to_str().unwrap(),
+            "--output",
+            "src/generated/spec",
+            "--crate-root",
+            crate_root,
+        ])
+        .output()
+        .expect("failed to run spec test single-file");
+    assert_output_success(
+        "spec test should pass for nested output single-file mode",
+        &output,
+    );
+
+    let after = read_passport(&passport_path);
+    assert_ne!(after, before, "expected passport to be rewritten");
+    assert!(after.contains("\"status\": \"pass\""), "{after}");
 }
 
 #[test]
