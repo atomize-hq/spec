@@ -74,7 +74,8 @@ struct JsonErrorEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     unit: Option<String>,
     code: String,
-    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     dep: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -697,17 +698,33 @@ fn write_passports(
     contract_hash_by_spec: Option<&BTreeMap<String, String>>,
 ) -> Result<()> {
     for spec in specs {
-        let passport = build_passport_with_evidence(
-            spec,
-            generated_at,
-            evidence_by_spec
-                .and_then(|map| map.get(&spec.spec.id))
-                .cloned(),
-            contract_hash_by_spec
-                .and_then(|map| map.get(&spec.spec.id))
-                .cloned(),
-        );
         let source_path = Path::new(&spec.source.file_path);
+
+        let (evidence, contract_hash) = if evidence_by_spec.is_none() {
+            // Non-test caller (spec generate / spec build): preserve any evidence
+            // and contract_hash already on disk so we don't erase data written by
+            // a prior `spec test` run.  If no baseline hash exists yet (fresh
+            // project or first generate), compute one from the current contract so
+            // that stale detection works before the first `spec test` run.
+            let existing = read_passport(source_path).ok().flatten();
+            let ev = existing.as_ref().and_then(|p| p.evidence.clone());
+            let hash = existing
+                .and_then(|p| p.contract_hash)
+                .or_else(|| compute_contract_hash(spec));
+            (ev, hash)
+        } else {
+            // Test caller: always use freshly-computed values (None is correct for
+            // specs that have no contract).
+            let ev = evidence_by_spec
+                .and_then(|map| map.get(&spec.spec.id))
+                .cloned();
+            let hash = contract_hash_by_spec
+                .and_then(|map| map.get(&spec.spec.id))
+                .cloned();
+            (ev, hash)
+        };
+
+        let passport = build_passport_with_evidence(spec, generated_at, evidence, contract_hash);
         write_passport(&passport, source_path)
             .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
     }
@@ -972,17 +989,29 @@ fn build_test_evidence(
 }
 
 fn output_module_prefix(output: &Path) -> Result<String> {
-    output
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .map(|name| name.to_string())
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "❌ could not determine output module prefix from {}",
-                output.display()
-            )
+    let parts: Vec<&str> = output
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(s) => s.to_str(),
+            _ => None,
         })
+        .collect();
+
+    // "src" is the Rust source root, not a module segment — strip it if present
+    let module_parts = if parts.first() == Some(&"src") {
+        &parts[1..]
+    } else {
+        &parts[..]
+    };
+
+    if module_parts.is_empty() {
+        return Err(anyhow::anyhow!(
+            "❌ could not determine output module prefix from {}",
+            output.display()
+        ));
+    }
+
+    Ok(module_parts.join("::"))
 }
 
 fn cargo_test_filter_for(spec: &ResolvedSpec, output_prefix: &str) -> String {
@@ -1215,7 +1244,7 @@ fn spec_error_to_json_entry(
     let (unit, path, dep, field, value, message, id, path2, cycle) = match err {
         spec_core::SpecError::Io(_) => (
             None,
-            String::new(),
+            None,
             None,
             None,
             None,
@@ -1226,7 +1255,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::InvalidUtf8 { path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1237,7 +1266,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::YamlParse { message, path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1248,7 +1277,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::Json(_) => (
             None,
-            String::new(),
+            None,
             None,
             None,
             None,
@@ -1259,7 +1288,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::SchemaValidation { message, path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1270,7 +1299,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::SemanticValidation { message, path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1281,7 +1310,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::RustKeyword { path, segment, id } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             Some(segment.clone()),
@@ -1292,7 +1321,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::DuplicateId { id, file1, file2 } => (
             id_by_path.get(file1).cloned(),
-            file1.clone(),
+            Some(file1.clone()),
             None,
             None,
             None,
@@ -1308,7 +1337,7 @@ fn spec_error_to_json_entry(
             path,
         } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             Some(dep1.clone()),
             None,
             Some(fn_name.clone()),
@@ -1319,7 +1348,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::MissingDep { dep, path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             Some(dep.clone()),
             None,
             None,
@@ -1330,7 +1359,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::CyclicDep { cycle_path, path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1341,7 +1370,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::UseStatementInBody { path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1352,7 +1381,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::BodyRustMustBeBlock { path, message } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1363,7 +1392,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1374,7 +1403,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::LocalTestExpectNotExpr { id, path, message } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1385,7 +1414,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::DuplicateLocalTestId { id, path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1401,7 +1430,7 @@ fn spec_error_to_json_entry(
             ..
         } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             Some(format!("contract.{field}")),
             Some(type_str.clone()),
@@ -1412,7 +1441,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::ContractInputNameInvalid { name, path, .. } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             Some(format!("contract.inputs.{name}")),
             None,
@@ -1423,7 +1452,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::Traversal { path, .. } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
@@ -1434,7 +1463,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::Generator { message } => (
             None,
-            String::new(),
+            None,
             None,
             None,
             None,
@@ -1445,7 +1474,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::OutputDir { message } => (
             None,
-            String::new(),
+            None,
             None,
             None,
             None,
@@ -1456,7 +1485,7 @@ fn spec_error_to_json_entry(
         ),
         spec_core::SpecError::MissingMarker { path } => (
             id_by_path.get(path).cloned(),
-            path.clone(),
+            Some(path.clone()),
             None,
             None,
             None,
