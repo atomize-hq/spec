@@ -115,7 +115,7 @@ pub fn zero_tests_ran(output: &str) -> bool {
             part.strip_suffix(" passed")
                 .and_then(|n| n.trim().parse::<u32>().ok())
         });
-        if passed.map_or(false, |n| n > 0) {
+        if passed.is_some_and(|n| n > 0) {
             return false;
         }
     }
@@ -428,7 +428,9 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
     fn test_zero_tests_ran_false_for_no_result_lines() {
         // No test result lines at all (empty output / build-only) — not a zero-tests-ran situation.
         assert!(!zero_tests_ran(""));
-        assert!(!zero_tests_ran("Compiling spec-core v0.5.0\nFinished dev profile\n"));
+        assert!(!zero_tests_ran(
+            "Compiling spec-core v0.5.0\nFinished dev profile\n"
+        ));
     }
 
     #[test]

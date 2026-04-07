@@ -690,7 +690,6 @@ fn contract_hashes_for(specs: &[LoadedSpec]) -> Option<BTreeMap<String, String>>
     }
 }
 
-
 fn write_passports(
     specs: &[LoadedSpec],
     generated_at: &str,
@@ -1302,7 +1301,12 @@ fn spec_error_to_json_entry(
             Some(file2.clone()),
             None,
         ),
-        spec_core::SpecError::DepCollision { dep1, dep2, fn_name, path } => (
+        spec_core::SpecError::DepCollision {
+            dep1,
+            dep2,
+            fn_name,
+            path,
+        } => (
             id_by_path.get(path).cloned(),
             path.clone(),
             Some(dep1.clone()),

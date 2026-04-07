@@ -2750,10 +2750,17 @@ fn spec_status_json_loader_error_surfaces_in_response() {
     let units_dir = temp_dir.path().join("units");
     std::fs::create_dir_all(&units_dir).unwrap();
     // Write a file that is not valid YAML — triggers a loader error, not a validation error.
-    std::fs::write(units_dir.join("bad.unit.spec"), "not: valid: yaml: [unclosed").unwrap();
+    std::fs::write(
+        units_dir.join("bad.unit.spec"),
+        "not: valid: yaml: [unclosed",
+    )
+    .unwrap();
 
     let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
-    assert!(!output.status.success(), "should exit non-zero for loader error");
+    assert!(
+        !output.status.success(),
+        "should exit non-zero for loader error"
+    );
     assert!(
         output.stderr.is_empty(),
         "no text diagnostics on stderr in JSON mode, got: {}",
