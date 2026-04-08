@@ -106,6 +106,8 @@ pub enum Command {
     Test(TestArgs),
     #[command(about = "Export spec metadata as a JSON bundle")]
     Export(ExportArgs),
+    #[command(about = "Print shell completion script to stdout")]
+    Completions(CompletionsArgs),
 }
 
 impl Command {
@@ -133,6 +135,7 @@ impl Command {
                 )
             }
             Self::Export(args) => export_command(&args.path, args.output.as_deref()),
+            Self::Completions(_) => unreachable!("handled in main"),
         }
     }
 }
@@ -216,6 +219,13 @@ pub struct ExportArgs {
     pub path: PathBuf,
     #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
     pub output: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct CompletionsArgs {
+    /// Shell to generate completions for
+    #[arg(value_enum)]
+    pub shell: clap_complete::Shell,
 }
 
 fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Result<()> {

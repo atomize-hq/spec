@@ -2,7 +2,8 @@ mod commands;
 mod config;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -24,5 +25,10 @@ fn main() -> Result<()> {
         std::process::exit(2);
     }));
     let cli = Cli::parse();
+    if let commands::Command::Completions(args) = &cli.command {
+        let mut cmd = Cli::command();
+        generate(args.shell, &mut cmd, "spec", &mut std::io::stdout());
+        return Ok(());
+    }
     cli.command.run()
 }
