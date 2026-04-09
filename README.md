@@ -184,6 +184,35 @@ That JSON form is meant for agents: parse `status`, `errors`, and `warnings` ins
 
 Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/SKILL.md) when you want the full workflow spelled out for an AI coding session.
 
+## Validation error codes
+
+`spec validate --format json` returns error objects with a `code` field. These are the recognized codes in v0.5:
+
+| Code | Description |
+|------|-------------|
+| `Io` | Filesystem I/O error |
+| `InvalidUtf8` | File is not valid UTF-8 |
+| `YamlParse` | YAML syntax error in the unit file |
+| `Json` | JSON serialization/deserialization error |
+| `SchemaValidation` | Unit file failed JSON Schema validation |
+| `SemanticValidation` | Unit passed schema but failed a semantic rule |
+| `RustKeyword` | An `id` segment is a Rust reserved keyword |
+| `DuplicateId` | Two unit files share the same `id` |
+| `DepCollision` | Two deps resolve to the same generated function name |
+| `MissingDep` | A declared dep has no matching unit in the spec set |
+| `CyclicDep` | Units form a dependency cycle |
+| `UseStatementInBody` | `body.rust` contains a `use` statement — move it to `imports` or `deps` |
+| `BodyRustMustBeBlock` | `body.rust` failed to parse as a Rust block expression |
+| `BodyRustLooksLikeFnDeclaration` | `body.rust` contains the full `pub fn` signature — keep only the body block (see migration guide) |
+| `LocalTestExpectNotExpr` | A `local_tests[].expect` value is not a valid Rust expression |
+| `DuplicateLocalTestId` | Two local tests in the same unit share the same `id` |
+| `ContractTypeInvalid` | A `contract.inputs` or `contract.returns` type is not valid Rust |
+| `ContractInputNameInvalid` | A `contract.inputs` key is not a valid Rust identifier |
+| `Traversal` | Error walking the units directory tree |
+| `Generator` | Code generation failure |
+| `OutputDir` | Output directory creation or safety check failed |
+| `MissingMarker` | Output dir lacks the `.spec-generated` marker — refusing to clean |
+
 ## Consuming Generated Code
 
 Generated units import internal deps with `use crate::...` paths. The consuming crate must
