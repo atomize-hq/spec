@@ -6,3 +6,4 @@ examples/ecommerce/src/generated/
 .gstack/
 .implemented/
 spec-cli/.tmp*/
+.context
