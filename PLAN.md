@@ -468,10 +468,108 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 
 #### Priority 4: Optional Improvements
 
-**parse_test_output() HashMap Optimization** (Effort: XS, ~30 minutes)
-- Build HashMap of test IDs before scanning (O(lines) vs O(lines × units))
-- Only if benchmarks show benefit for typical repos
-**Files:** `spec-cli/src/pipeline.rs`
+**Implementation Strategy:** Benchmark-first. Treat this as a performance experiment, not a guaranteed ship item. Only land the optimization if representative measurements show that cargo-test result indexing is a real contributor to `spec test` latency on large repositories.
+
+**Feature Brief**
+- **Goal:** Reduce the cost of correlating cargo test stdout with expected local test IDs, without changing any passport evidence behavior.
+- **Why now:** Priorities 1-3 address trust, provenance, and maintainability. This is the first purely performance-oriented item, so it should only ship if the measured gain justifies added complexity.
+- **Primary user:** Maintainers running `spec test` on larger repos who want faster feedback loops after the correctness and contract work is complete.
+- **In scope:** A baseline measurement pass over the current `parse_cargo_test_output` plus `build_test_evidence` lookup path, an optional hash-based lookup/indexing optimization if the baseline justifies it, a short performance note near the optimized seam, and regression coverage proving no change to duplicate-name or missing-test semantics.
+- **Out of scope:** Cargo invocation changes, passport schema changes, test naming changes, JSON contract changes, or unrelated generator/validator performance work.
+- **Success criteria:** A representative benchmark makes the ship/no-ship decision explicit; if the optimization lands, existing parse/evidence behavior remains unchanged and the benchmark shows a clear win on a larger corpus. If the gain is noise-level, Priority 4 closes as measured-but-not-implemented.
+- **Ship gate:** Proceed with the code change only if the benchmark shows at least a clear double-digit improvement on the measured parse/lookup phase for a large synthetic or corpus-shaped workload; otherwise keep the simpler implementation.
+
+**Vertical Slices**
+
+**S1. Benchmark The Current Parse/Lookup Path** (Effort: XS, ~30-45 minutes)
+- **User value:** Maintainers know whether this optional optimization is worth shipping instead of guessing based on an outdated complexity assumption.
+- **Scope in:** A reproducible measurement harness for `parse_cargo_test_output` plus downstream lookup in `build_test_evidence`, representative synthetic input sizes, and an explicit ship/no-ship threshold.
+- **Scope out:** Production code changes unless the benchmark clears the ship gate.
+- **Acceptance criteria:** The repo has one repeatable way to measure the current parse/lookup seam, and the results make it clear whether lookup cost is material on a larger workload.
+- **Verification:** Run the benchmark harness in release mode and record the before numbers used for the go/no-go decision.
+- **Rollout/flags:** No runtime flag; this is a planning/measurement gate.
+
+**Atomic Tasks**
+- **S1.T1 Build a representative benchmark harness**
+  - **Outcome:** There is one repeatable measurement path for the current cargo-test result correlation seam.
+  - **Inputs/outputs:** Input: `spec-core/src/pipeline.rs` parser and `spec-cli/src/commands.rs` evidence lookup seam. Output: a benchmark helper or ignored perf test that synthesizes representative cargo output plus expected test IDs at multiple sizes.
+  - **Implementation notes:** Keep the harness local to tests/bench code; do not introduce a new runtime dependency unless the existing test tooling is insufficient.
+  - **Acceptance criteria:** The harness exercises the same parse and lookup code paths used by `spec test`, not a toy stand-in.
+  - **Test notes:** Run locally in release mode; this harness does not need to execute in normal CI.
+  - **Risk/rollback notes:** Poorly shaped synthetic data can mislead the decision, so mirror real cargo output line shapes and duplicate-name cases.
+- **S1.T2 Make the ship/no-ship decision explicit**
+  - **Outcome:** Priority 4 has a concrete gate instead of a vague “maybe optimize later.”
+  - **Inputs/outputs:** Input: benchmark numbers from `S1.T1`. Output: a recorded decision to stop after measurement or continue to `S2`.
+  - **Implementation notes:** Use a simple threshold and compare the current path against the proposed hot-path change only; do not broaden the experiment into whole-command profiling.
+  - **Acceptance criteria:** The decision is based on measured results from the actual seam, and “no meaningful gain” is an acceptable closeout.
+  - **Test notes:** Benchmark review only.
+  - **Risk/rollback notes:** This task should prevent speculative optimization from landing on intuition alone.
+
+**S2. Optional Hash-Based Result Lookup Optimization** (Effort: XS, ~30-45 minutes)
+- **User value:** Large `spec test` runs spend less time matching cargo output to expected local tests when the benchmark shows that lookup cost is real.
+- **Scope in:** Replace the current ordered lookup structure with a hash-based lookup or similarly bounded index at the hot seam, preserve duplicate-full-name detection, and keep missing-test behavior unchanged.
+- **Scope out:** Parser format changes, broader command refactors, or public API churn outside the parser/evidence seam.
+- **Acceptance criteria:** The optimized path preserves all current parse semantics and beats the baseline from `S1` on the same workload.
+- **Verification:** Existing pipeline/CLI regressions plus a rerun of the benchmark harness used in `S1`.
+- **Rollout/flags:** No flag; only land if the ship gate was met.
+
+**Atomic Tasks**
+- **S2.T1 Replace the hot lookup path with a hash-based index**
+  - **Outcome:** The parse/evidence seam uses constant-time average lookups where the benchmark showed the current structure was costly.
+  - **Inputs/outputs:** Input: current `BTreeMap<String, ParsedCargoTestResult>` seam between `spec-core/src/pipeline.rs` and `spec-cli/src/commands.rs`. Output: an internal hash-based lookup structure or equivalent index with unchanged behavior at the call site.
+  - **Implementation notes:** Preserve the current duplicate-full-name error behavior when multiple cargo lines map to the same full test name; keep any ordering requirements out of the hot path.
+  - **Acceptance criteria:** `build_test_evidence` still reports `unknown` for missing tests, duplicate full names still degrade to the same error state, and no user-visible output changes.
+  - **Test notes:** Update type-level tests only where the internal lookup type changes; keep behavior assertions unchanged.
+  - **Risk/rollback notes:** If the optimized structure leaks complexity into unrelated code, stop and keep the current implementation.
+- **S2.T2 Lock behavior and performance together**
+  - **Outcome:** The optional optimization ships with proof that it is both safe and worthwhile.
+  - **Inputs/outputs:** Input: optimized lookup path from `S2.T1`. Output: passing regression coverage plus benchmark numbers showing improvement over the `S1` baseline.
+  - **Implementation notes:** Do not accept the change on micro-benchmark noise; require the same workload and measurement method used in `S1`.
+  - **Acceptance criteria:** Existing parser/evidence tests pass unchanged, and the measured improvement clears the ship gate.
+  - **Test notes:** Run targeted `spec-core` parser tests, relevant `spec-cli` passport-evidence tests, then re-run the perf harness.
+  - **Risk/rollback notes:** If the gain disappears after realistic measurement or forces brittle type changes, drop the optimization.
+
+**Sub-task Checklists**
+
+**S1.T1 Checklist**
+- Add one local benchmark helper or ignored perf test for the parse/evidence seam.
+- Synthesize cargo stdout lines and matching expected test IDs at small, medium, and large corpus sizes.
+- Include duplicate-full-name and missing-test cases so the benchmark still exercises real semantics.
+
+**S1.T2 Checklist**
+- Run the harness in release mode on the current implementation.
+- Record the baseline numbers and compare them against the ship gate.
+- Stop Priority 4 here if the measured gain target is not credible.
+
+**S2.T1 Checklist**
+- Replace the current ordered lookup structure only at the hot seam identified by `S1`.
+- Keep duplicate-full-name handling and missing-test behavior identical.
+- Add a short code comment or performance note near the optimized seam explaining why the hash-based lookup exists.
+
+**S2.T2 Checklist**
+- Re-run the existing parser and passport-evidence regressions.
+- Re-run the benchmark harness with the optimized path.
+- Confirm the optimized path clears the ship gate before keeping the change.
+
+**Dependency Graph (text)**
+- `S1.T1` blocks `S1.T2`.
+- `S1.T2` blocks `S2.T1`.
+- `S2.T1` blocks `S2.T2`.
+- `S1` is the gate for all of Priority 4; if it fails the ship threshold, `S2` does not start.
+
+**Risks / Unknowns**
+- The original “HashMap optimization” premise may already be partially addressed by the current code, so the benchmark must confirm the real hotspot before any change lands.
+- Synthetic benchmark data can overstate gains if it does not resemble actual cargo stdout shapes or expected test-name distributions.
+- A hash-based lookup can speed the hot path but also remove incidental ordering; keep ordering-sensitive behavior out of scope unless tests prove it matters.
+
+**Milestones**
+- **M9:** `S1` complete, so Priority 4 has an explicit measured go/no-go decision.
+- **M10:** `S2` complete, so the parse/evidence seam is faster on large corpora without behavior drift.
+
+**Workstreams**
+- **WS1: Benchmark Gate** — Touch surface: `spec-core/src/pipeline.rs`, optional perf harness/tests, and the `build_test_evidence` seam in `spec-cli/src/commands.rs`. Owns `S1.T1` and `S1.T2`.
+- **WS2: Optional Lookup Optimization** — Touch surface: `spec-core/src/pipeline.rs`, `spec-cli/src/commands.rs`, parser/evidence regression tests. Owns `S2.T1` and `S2.T2`.
+- **WS-INT: Priority 4 Integration** — Touch surface: final regression run plus benchmark comparison. Depends on `WS1` and, if the gate passes, `WS2`.
 
 #### DO NOT SHIP IN M5
 
@@ -500,7 +598,8 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 4. **Priority 2: Minimal Provenance** (adds CI metadata, low complexity)
 5. **Priority 3: Refactors** (improve code quality; note: `push_error`/`push_warning` already done — remove from scope)
 6. **Priority 3: Concurrent Process Warning** (warn on concurrent runs; success criterion = warning emitted, not data-loss prevention)
-7. **Priority 4:** Optional `parse_test_output()` optimization (performance)
+7. **Priority 4 / S1: Benchmark parsed cargo-test result lookup** (measure first; stop here if gains are noise)
+8. **Priority 4 / S2: Optional hash-based lookup optimization** (only if `S1` clears the ship gate)
 
 ### Success Criteria
 
@@ -510,6 +609,7 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 - ✅ Concurrent run warning emitted when >1 spec process detected (warn-only, not a lock)
 - ✅ No indefinite hangs during build/test
 - ✅ Type-safe error handling patterns established
+- ✅ If Priority 4 ships, the parse/evidence hot path shows a measured win without changing parser or passport semantics
 
 ### Deferred to Future Milestones
 
