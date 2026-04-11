@@ -4,7 +4,7 @@
   "errors": [
     {
       "unit": "pricing/apply_discount",
-      "code": "MissingDep",
+      "code": "SPEC_MISSING_DEP",
       "path": "units/pricing/apply_discount.unit.spec",
       "dep": "currency/convert"
     }

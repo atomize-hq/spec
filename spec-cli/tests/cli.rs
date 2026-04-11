@@ -2,6 +2,8 @@ use serde_json::Value;
 use spec_core::AUTHORED_SPEC_VERSION;
 use std::fs;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -38,6 +40,19 @@ fn run_in(cwd: &Path, args: &[&str]) -> std::process::Output {
         .expect("failed to run spec")
 }
 
+fn run_in_with_env(
+    cwd: &Path,
+    args: &[&str],
+    envs: &[(&str, &std::ffi::OsStr)],
+) -> std::process::Output {
+    let mut command = Command::new(bin());
+    command.current_dir(cwd).args(args);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.output().expect("failed to run spec")
+}
+
 fn assert_output_success(context: &str, output: &std::process::Output) {
     if output.status.success() {
         return;
@@ -66,6 +81,18 @@ fn write_file(dir: &Path, relative_path: &str, body: &str) {
         fs::create_dir_all(parent).unwrap();
     }
     fs::write(path, body).unwrap();
+}
+
+#[cfg(unix)]
+fn write_executable_file(dir: &Path, relative_path: &str, body: &str) {
+    let path = dir.join(relative_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&path, body).unwrap();
+    let mut perms = fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).unwrap();
 }
 
 fn parse_stdout_json(output: &std::process::Output) -> Value {
@@ -703,7 +730,7 @@ body:
     let json = parse_stdout_json(&output);
     assert_eq!(json["status"], "invalid");
     assert_eq!(json["errors"].as_array().unwrap().len(), 1);
-    assert_eq!(json["errors"][0]["code"], "ContractTypeInvalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_CONTRACT_TYPE_INVALID");
     assert_eq!(json["errors"][0]["field"], "contract.inputs.weight");
     assert_eq!(json["errors"][0]["value"], "Vec<");
 }
@@ -845,7 +872,7 @@ local_tests:
     assert!(output.status.success());
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], "1.0");
+    assert_eq!(bundle["schema_version"], 1);
     assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
     assert!(bundle.get("graph").is_some());
     assert!(bundle.get("warnings").is_some());
@@ -1886,6 +1913,49 @@ fn spec_build_unavailable_cargo_exits_cleanly() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn spec_build_respects_pipeline_timeout_secs() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    write_minimal_units_dir(&units_dir);
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        "[package]\nname = \"timeout-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write_file(project_dir, "spec.toml", "[pipeline]\ntimeout_secs = 1\n");
+
+    let fake_bin_dir = project_dir.join("fake-bin");
+    write_executable_file(
+        &fake_bin_dir,
+        "cargo",
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'cargo 1.89.0'\n  exit 0\nfi\n/bin/sleep 2\n",
+    );
+    let mut path_override = std::ffi::OsString::from(fake_bin_dir.as_os_str());
+    path_override.push(":");
+    path_override.push(std::env::var_os("PATH").unwrap_or_default());
+
+    let output = run_in_with_env(
+        project_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "generated/spec",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+
+    assert!(!output.status.success(), "build should fail on timeout");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("timed out after 1s"), "{stderr}");
+    assert!(stderr.contains("cargo build timed out"), "{stderr}");
+}
+
 #[test]
 fn spec_test_runs_cargo_test() {
     if !cargo_available() {
@@ -2913,6 +2983,7 @@ body:
         !units[0]["errors"].as_array().unwrap().is_empty(),
         "errors array should be non-empty for invalid unit"
     );
+    assert_eq!(units[0]["errors"][0]["code"], "SPEC_USE_STATEMENT_IN_BODY");
     assert_eq!(units[0]["stale"], false);
 }
 
@@ -2946,6 +3017,7 @@ fn spec_status_json_loader_error_surfaces_in_response() {
         !loader_errors.is_empty(),
         "loader_errors must be present in JSON response when loader fails"
     );
+    assert_eq!(loader_errors[0]["code"], "SPEC_YAML_PARSE");
 }
 
 #[test]

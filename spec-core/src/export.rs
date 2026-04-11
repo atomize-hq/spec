@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-const EXPORT_SCHEMA_VERSION: &str = "1.0";
+const EXPORT_SCHEMA_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExportBundle {
-    pub schema_version: String,
+    pub schema_version: u8,
     pub spec_version: String,
     pub exported_at: String,
     pub units: Vec<ExportUnit>,
@@ -68,7 +68,7 @@ pub fn build_export_bundle(specs: &[LoadedSpec], exported_at: &str) -> ExportBun
     edges.sort();
 
     ExportBundle {
-        schema_version: EXPORT_SCHEMA_VERSION.to_string(),
+        schema_version: EXPORT_SCHEMA_VERSION,
         spec_version: AUTHORED_SPEC_VERSION.to_string(),
         exported_at: exported_at.to_string(),
         units: specs.iter().map(ExportUnit::from).collect(),
@@ -228,9 +228,9 @@ mod tests {
 
         let bundle = build_export_bundle(&[spec], "2026-04-05T00:00:00Z");
 
-        assert_eq!(bundle.schema_version, "1.0");
+        assert_eq!(bundle.schema_version, 1);
         assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
-        assert_ne!(bundle.schema_version, bundle.spec_version);
+        assert_ne!(bundle.schema_version.to_string(), bundle.spec_version);
     }
 
     #[test]

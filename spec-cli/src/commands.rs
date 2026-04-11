@@ -26,6 +26,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 type CollectedSpecs = (
     Vec<LoadedSpec>,
@@ -745,6 +746,7 @@ fn write_passports(
 struct PipelineContext {
     crate_root: PathBuf,
     cargo_target_dir: PathBuf,
+    timeout: Option<Duration>,
     // Holds the tempdir alive for the duration of the command when we own one.
     _temp_dir: Option<tempfile::TempDir>,
 }
@@ -780,6 +782,7 @@ fn resolve_pipeline_context(
     Ok(PipelineContext {
         crate_root,
         cargo_target_dir,
+        timeout: config.pipeline.timeout_secs.map(Duration::from_secs),
         _temp_dir: temp_dir,
     })
 }
@@ -807,9 +810,12 @@ fn build_command(
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
-    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout)?;
     print!("{}", result.stdout);
     eprint!("{}", result.stderr);
+    if result.timed_out {
+        bail!("❌ cargo build timed out{}", timeout_suffix(ctx.timeout));
+    }
     if result.exit_code != 0 {
         bail!("❌ cargo build failed");
     }
@@ -862,9 +868,12 @@ fn test_command(
         _ => None,
     };
 
-    let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout)?;
     print!("{}", build_result.stdout);
     eprint!("{}", build_result.stderr);
+    if build_result.timed_out {
+        bail!("❌ cargo build timed out{}", timeout_suffix(ctx.timeout));
+    }
     if build_result.exit_code != 0 {
         let observed_at = rfc3339_now();
         if let Some(target_spec) = target_spec.as_ref() {
@@ -892,9 +901,17 @@ fn test_command(
         bail!("❌ cargo build failed");
     }
 
-    let test_result = run_cargo_test(&ctx.crate_root, &ctx.cargo_target_dir, filter.as_deref())?;
+    let test_result = run_cargo_test(
+        &ctx.crate_root,
+        &ctx.cargo_target_dir,
+        filter.as_deref(),
+        ctx.timeout,
+    )?;
     print!("{}", test_result.stdout);
     eprint!("{}", test_result.stderr);
+    if test_result.timed_out {
+        bail!("❌ cargo test timed out{}", timeout_suffix(ctx.timeout));
+    }
 
     if target_spec.is_some() && zero_tests_ran(&test_result.stdout) {
         bail!("❌ cargo test matched 0 tests");
@@ -933,6 +950,13 @@ fn test_command(
         bail!("❌ cargo test failed");
     }
     Ok(())
+}
+
+fn timeout_suffix(timeout: Option<Duration>) -> String {
+    match timeout {
+        Some(timeout) => format!(" after {}s", timeout.as_secs()),
+        None => String::new(),
+    }
 }
 
 fn build_failure_evidence(
@@ -1219,37 +1243,40 @@ fn push_warning(diagnostics: &mut DiagnosticMap, warning: spec_core::SpecWarning
         .push(warning.to_string());
 }
 
+fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
+    match err {
+        spec_core::SpecError::Io(_) => "SPEC_IO",
+        spec_core::SpecError::InvalidUtf8 { .. } => "SPEC_INVALID_UTF8",
+        spec_core::SpecError::YamlParse { .. } => "SPEC_YAML_PARSE",
+        spec_core::SpecError::Json(_) => "SPEC_JSON",
+        spec_core::SpecError::SchemaValidation { .. } => "SPEC_SCHEMA_VALIDATION",
+        spec_core::SpecError::SemanticValidation { .. } => "SPEC_SEMANTIC_VALIDATION",
+        spec_core::SpecError::RustKeyword { .. } => "SPEC_RUST_KEYWORD",
+        spec_core::SpecError::DuplicateId { .. } => "SPEC_DUPLICATE_ID",
+        spec_core::SpecError::DepCollision { .. } => "SPEC_DEP_COLLISION",
+        spec_core::SpecError::MissingDep { .. } => "SPEC_MISSING_DEP",
+        spec_core::SpecError::CyclicDep { .. } => "SPEC_CYCLIC_DEP",
+        spec_core::SpecError::UseStatementInBody { .. } => "SPEC_USE_STATEMENT_IN_BODY",
+        spec_core::SpecError::BodyRustMustBeBlock { .. } => "SPEC_BODY_RUST_MUST_BE_BLOCK",
+        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { .. } => {
+            "SPEC_BODY_RUST_LOOKS_LIKE_FN_DECLARATION"
+        }
+        spec_core::SpecError::LocalTestExpectNotExpr { .. } => "SPEC_LOCAL_TEST_EXPECT_NOT_EXPR",
+        spec_core::SpecError::DuplicateLocalTestId { .. } => "SPEC_DUPLICATE_LOCAL_TEST_ID",
+        spec_core::SpecError::ContractTypeInvalid { .. } => "SPEC_CONTRACT_TYPE_INVALID",
+        spec_core::SpecError::ContractInputNameInvalid { .. } => "SPEC_CONTRACT_INPUT_NAME_INVALID",
+        spec_core::SpecError::Traversal { .. } => "SPEC_TRAVERSAL",
+        spec_core::SpecError::Generator { .. } => "SPEC_GENERATOR",
+        spec_core::SpecError::OutputDir { .. } => "SPEC_OUTPUT_DIR",
+        spec_core::SpecError::MissingMarker { .. } => "SPEC_MISSING_MARKER",
+    }
+}
+
 fn spec_error_to_json_entry(
     err: &spec_core::SpecError,
     id_by_path: &HashMap<String, String>,
 ) -> JsonErrorEntry {
-    let code = match err {
-        spec_core::SpecError::Io(_) => "Io",
-        spec_core::SpecError::InvalidUtf8 { .. } => "InvalidUtf8",
-        spec_core::SpecError::YamlParse { .. } => "YamlParse",
-        spec_core::SpecError::Json(_) => "Json",
-        spec_core::SpecError::SchemaValidation { .. } => "SchemaValidation",
-        spec_core::SpecError::SemanticValidation { .. } => "SemanticValidation",
-        spec_core::SpecError::RustKeyword { .. } => "RustKeyword",
-        spec_core::SpecError::DuplicateId { .. } => "DuplicateId",
-        spec_core::SpecError::DepCollision { .. } => "DepCollision",
-        spec_core::SpecError::MissingDep { .. } => "MissingDep",
-        spec_core::SpecError::CyclicDep { .. } => "CyclicDep",
-        spec_core::SpecError::UseStatementInBody { .. } => "UseStatementInBody",
-        spec_core::SpecError::BodyRustMustBeBlock { .. } => "BodyRustMustBeBlock",
-        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { .. } => {
-            "BodyRustLooksLikeFnDeclaration"
-        }
-        spec_core::SpecError::LocalTestExpectNotExpr { .. } => "LocalTestExpectNotExpr",
-        spec_core::SpecError::DuplicateLocalTestId { .. } => "DuplicateLocalTestId",
-        spec_core::SpecError::ContractTypeInvalid { .. } => "ContractTypeInvalid",
-        spec_core::SpecError::ContractInputNameInvalid { .. } => "ContractInputNameInvalid",
-        spec_core::SpecError::Traversal { .. } => "Traversal",
-        spec_core::SpecError::Generator { .. } => "Generator",
-        spec_core::SpecError::OutputDir { .. } => "OutputDir",
-        spec_core::SpecError::MissingMarker { .. } => "MissingMarker",
-    }
-    .to_string();
+    let code = spec_error_code(err).to_string();
 
     let (unit, path, dep, field, value, message, id, path2, cycle) = match err {
         spec_core::SpecError::Io(_) => (
@@ -1820,5 +1847,106 @@ extra_field: nope
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    #[test]
+    fn spec_error_code_namespace_is_stable_and_exhaustive_for_current_variants() {
+        let io_error = std::io::Error::other("boom");
+        let json_error = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let errors = vec![
+            spec_core::SpecError::Io(io_error),
+            spec_core::SpecError::InvalidUtf8 {
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::YamlParse {
+                message: "bad yaml".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::Json(json_error),
+            spec_core::SpecError::SchemaValidation {
+                message: "bad schema".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::SemanticValidation {
+                message: "bad semantics".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::RustKeyword {
+                segment: "type".to_string(),
+                id: "pricing/type".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::DuplicateId {
+                id: "pricing/apply_discount".to_string(),
+                file1: "units/a.unit.spec".to_string(),
+                file2: "units/b.unit.spec".to_string(),
+            },
+            spec_core::SpecError::DepCollision {
+                dep1: "money/round".to_string(),
+                dep2: "money/format".to_string(),
+                fn_name: "money".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::MissingDep {
+                dep: "money/round".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::CyclicDep {
+                cycle_path: vec!["a".to_string(), "b".to_string()],
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::UseStatementInBody {
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::BodyRustMustBeBlock {
+                message: "expected block".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::BodyRustLooksLikeFnDeclaration {
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::LocalTestExpectNotExpr {
+                id: "happy_path".to_string(),
+                message: "not expr".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::DuplicateLocalTestId {
+                id: "happy_path".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::ContractTypeInvalid {
+                field: "contract.returns".to_string(),
+                type_str: "Vec<".to_string(),
+                message: "bad type".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::ContractInputNameInvalid {
+                name: "bad-name".to_string(),
+                message: "bad identifier".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::Traversal {
+                message: "walk failed".to_string(),
+                path: "units".to_string(),
+            },
+            spec_core::SpecError::Generator {
+                message: "gen failed".to_string(),
+            },
+            spec_core::SpecError::OutputDir {
+                message: "outside root".to_string(),
+            },
+            spec_core::SpecError::MissingMarker {
+                path: "generated/spec".to_string(),
+            },
+        ];
+
+        let codes = errors
+            .iter()
+            .map(spec_error_code)
+            .collect::<std::collections::HashSet<_>>();
+
+        assert_eq!(codes.len(), errors.len());
+        assert!(codes.iter().all(|code| code.starts_with("SPEC_")));
+        assert!(codes.iter().all(|code| !code.is_empty()));
     }
 }
