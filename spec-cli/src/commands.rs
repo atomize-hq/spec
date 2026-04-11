@@ -10,8 +10,8 @@ use spec_core::generator::{
 use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::passport::{
-    PassportEvidence, PassportTestResult, build_passport_with_evidence, compute_contract_hash,
-    ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
+    ArtifactProvenance, PassportEvidence, PassportTestResult, build_passport_with_evidence,
+    compute_contract_hash, ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, cargo_available, parse_cargo_test_output, run_cargo_build,
@@ -511,7 +511,12 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
         );
     }
 
-    let bundle = build_export_bundle(&specs, &rfc3339_now());
+    let provenance = resolve_git_provenance(if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    });
+    let bundle = build_export_bundle(&specs, &rfc3339_now(), provenance.as_ref());
     let json = serde_json::to_string_pretty(&bundle)?;
 
     match output {
@@ -876,9 +881,13 @@ fn test_command(
     }
     if build_result.exit_code != 0 {
         let observed_at = rfc3339_now();
+        let provenance = resolve_git_provenance(&ctx.crate_root);
         if let Some(target_spec) = target_spec.as_ref() {
-            let evidence_by_spec =
-                build_failure_evidence(std::slice::from_ref(target_spec), &observed_at);
+            let evidence_by_spec = build_failure_evidence(
+                std::slice::from_ref(target_spec),
+                &observed_at,
+                provenance.as_ref(),
+            );
             let contract_hash_by_spec = contract_hashes_for(std::slice::from_ref(target_spec));
             finalize_passports(
                 spec_root,
@@ -888,7 +897,8 @@ fn test_command(
                 contract_hash_by_spec.as_ref(),
             )?;
         } else {
-            let evidence_by_spec = build_failure_evidence(&generated.specs, &observed_at);
+            let evidence_by_spec =
+                build_failure_evidence(&generated.specs, &observed_at, provenance.as_ref());
             let contract_hash_by_spec = contract_hashes_for(&generated.specs);
             finalize_passports(
                 path,
@@ -919,12 +929,14 @@ fn test_command(
 
     let parsed_test_results = parse_cargo_test_output(&test_result.stdout);
     let observed_at = rfc3339_now();
+    let provenance = resolve_git_provenance(&ctx.crate_root);
     if let Some(target_spec) = target_spec.as_ref() {
         let evidence_by_spec = build_test_evidence(
             std::slice::from_ref(target_spec),
             output,
             &parsed_test_results,
             &observed_at,
+            provenance.as_ref(),
         )?;
         let contract_hash_by_spec = contract_hashes_for(std::slice::from_ref(target_spec));
         finalize_passports(
@@ -935,8 +947,13 @@ fn test_command(
             contract_hash_by_spec.as_ref(),
         )?;
     } else {
-        let evidence_by_spec =
-            build_test_evidence(&generated.specs, output, &parsed_test_results, &observed_at)?;
+        let evidence_by_spec = build_test_evidence(
+            &generated.specs,
+            output,
+            &parsed_test_results,
+            &observed_at,
+            provenance.as_ref(),
+        )?;
         let contract_hash_by_spec = contract_hashes_for(&generated.specs);
         finalize_passports(
             path,
@@ -962,6 +979,7 @@ fn timeout_suffix(timeout: Option<Duration>) -> String {
 fn build_failure_evidence(
     specs: &[LoadedSpec],
     observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
 ) -> BTreeMap<String, PassportEvidence> {
     specs
         .iter()
@@ -972,6 +990,7 @@ fn build_failure_evidence(
                     build_status: "fail".to_string(),
                     test_results: vec![],
                     observed_at: observed_at.to_string(),
+                    provenance: provenance.cloned(),
                 },
             )
         })
@@ -983,6 +1002,7 @@ fn build_test_evidence(
     output: &Path,
     parsed_test_results: &BTreeMap<String, ParsedCargoTestResult>,
     observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
 ) -> Result<BTreeMap<String, PassportEvidence>> {
     let output_prefix = output_module_prefix(output)?;
     let mut evidence_by_spec = BTreeMap::new();
@@ -1015,11 +1035,38 @@ fn build_test_evidence(
                 build_status: "pass".to_string(),
                 test_results,
                 observed_at: observed_at.to_string(),
+                provenance: provenance.cloned(),
             },
         );
     }
 
     Ok(evidence_by_spec)
+}
+
+fn resolve_git_provenance(path: &Path) -> Option<ArtifactProvenance> {
+    let sha = resolve_git_commit_sha(path)?;
+    Some(ArtifactProvenance {
+        git_commit_sha: sha,
+    })
+}
+
+fn resolve_git_commit_sha(path: &Path) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .current_dir(path)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let sha = String::from_utf8(output.stdout).ok()?;
+    let sha = sha.trim();
+    if sha.is_empty() {
+        None
+    } else {
+        Some(sha.to_string())
+    }
 }
 
 fn output_module_prefix(output: &Path) -> Result<String> {

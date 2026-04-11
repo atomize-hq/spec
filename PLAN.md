@@ -198,11 +198,120 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 
 #### Priority 2: Minimal Infrastructure
 
-**Evidence Provenance (Passport v3) - MINIMAL SCOPE** (Effort: S, ~2-3 hours)
-- Add commit SHA and timestamp to passport evidence
-- Update `spec export` to include provenance
-- Skip runner identity/env fingerprint (oversold trust gain for complexity)
-**Files:** `spec-core/src/passport.rs`, `spec-core/src/pipeline.rs`, `spec-core/src/export.rs`
+**Implementation Strategy:** Dependency-first (minimal). Add the smallest provenance contract that improves traceability for `spec test` and `spec export` without widening the trust surface into runner identity, environment fingerprinting, or other CI-only metadata.
+
+**Feature Brief**
+- **Goal:** Let downstream tooling identify which git revision produced passport evidence and export bundles.
+- **Why now:** Priority 1 makes the machine-readable surface stable; the next trust gain is being able to correlate a passing or failing passport/export artifact with a concrete repo state.
+- **Primary user:** Solo engineer or 2-5 person AI-heavy team using passports and `spec export` as machine-readable context inside local loops or CI.
+- **In scope:** One shared provenance contract carrying `git_commit_sha`, reuse of existing timestamp fields (`observed_at`, `generated_at`, `exported_at`) instead of adding duplicate timestamp keys, passport evidence wiring for `spec test`, top-level export provenance, and regression coverage for git-present and git-absent paths.
+- **Out of scope:** Runner identity, environment fingerprint, branch name, dirty-worktree status, signed attestations, process locking, and any provenance collection that can fail the primary command.
+- **Success criteria:** `spec test` writes provenance when git is available, omits it cleanly when unavailable, `spec build`/`spec generate` preserve prior evidence provenance, `spec export` emits top-level provenance, and regression tests lock both success and no-git behavior.
+- **Contract decision:** Add one shared optional object named `provenance` with the exact field `git_commit_sha`. Keep timestamps where they already live: `PassportEvidence.observed_at`, `Passport.generated_at`, and `ExportBundle.exported_at`.
+
+**Vertical Slices**
+
+**S1. Passport Evidence Provenance Contract** (Effort: XS-S, ~1-2 hours)
+- **User value:** A passport produced by `spec test` can be traced back to the commit that generated its observed evidence.
+- **Scope in:** Provenance schema in passport types, git SHA capture during `spec test`, and preservation of provenance when later `spec generate`/`spec build` rewrites the same passport.
+- **Scope out:** New timestamps, runner metadata, export bundle wiring, and any change that makes git availability mandatory.
+- **Acceptance criteria:** A successful or failing `spec test` writes `evidence.provenance.git_commit_sha` when the workspace is in git, leaves `provenance` absent when git is unavailable, and later non-test passport rewrites preserve the full `evidence` object.
+- **Verification:** Passport serde/unit tests plus CLI integration tests for success, failure, and preservation flows.
+- **Rollout/flags:** Additive schema only; no feature flag.
+
+**Atomic Tasks**
+- **S1.T1 Define the minimal provenance schema**
+  - **Outcome:** Passport evidence has one exact additive contract for provenance.
+  - **Inputs/outputs:** Input: `spec-core/src/passport.rs` current `PassportEvidence` struct. Output: a shared `provenance` object with the single field `git_commit_sha`.
+  - **Implementation notes:** Use an optional nested object, not a loose top-level string; keep `observed_at` as the only evidence timestamp and do not introduce `captured_at` or similar duplicates.
+  - **Acceptance criteria:** Existing passports without provenance continue to deserialize, new passports serialize deterministically, and no empty provenance object is emitted.
+  - **Test notes:** Extend passport round-trip and omit-empty-field tests.
+  - **Risk/rollback notes:** Low risk; additive serde-only change.
+- **S1.T2 Capture git SHA during `spec test`**
+  - **Outcome:** Test-generated evidence includes the commit SHA when the command is run inside a git repo.
+  - **Inputs/outputs:** Input: `spec-cli/src/commands.rs` test/build failure evidence flow. Output: one resolved SHA per command, threaded into success and failure evidence creation.
+  - **Implementation notes:** Resolve the SHA once per command via git, treat lookup failure as non-fatal, and use the same field name on both success and failure paths.
+  - **Acceptance criteria:** `spec test` never fails just because git lookup failed; when git is available, the emitted SHA is a full commit hash and appears on every written passport in that run.
+  - **Test notes:** Add CLI integration coverage for a git-backed temp repo and a non-git temp dir.
+  - **Risk/rollback notes:** Git-backed tests must not depend on global user config; set repo-local config in test setup.
+- **S1.T3 Preserve provenance on later non-test rewrites**
+  - **Outcome:** `spec generate` and `spec build` do not erase provenance seeded by an earlier `spec test`.
+  - **Inputs/outputs:** Input: existing evidence-preservation path in `write_passports`. Output: regression coverage proving provenance survives generate/build rewrites.
+  - **Implementation notes:** Reuse the current preserve-existing-evidence behavior rather than adding special-case provenance copying.
+  - **Acceptance criteria:** Existing preservation tests fail if provenance disappears after `spec generate` or `spec build`.
+  - **Test notes:** Extend the current passport-preservation CLI tests to assert `git_commit_sha` remains present.
+  - **Risk/rollback notes:** None if the work stays inside the existing evidence-preservation seam.
+
+**S2. Export Provenance Surface** (Effort: XS-S, ~1 hour)
+- **User value:** Consumers inspecting only the export bundle can see the revision context without first opening individual passports.
+- **Scope in:** Top-level export provenance contract, wiring from the export command, and regression tests covering export with and without git context.
+- **Scope out:** Per-unit export provenance duplication, branch metadata, and changes to warning semantics.
+- **Acceptance criteria:** `spec export` emits a top-level `provenance.git_commit_sha` when git is available, omits `provenance` when unavailable, and continues to include passport data and warnings unchanged.
+- **Verification:** Export unit tests plus CLI export integration tests.
+- **Rollout/flags:** Additive JSON field only; land with test updates.
+
+**Atomic Tasks**
+- **S2.T1 Add top-level export provenance**
+  - **Outcome:** The export bundle advertises the same minimal provenance contract as passports.
+  - **Inputs/outputs:** Input: `spec-core/src/export.rs` current `ExportBundle` and `spec-cli/src/commands.rs` export flow. Output: optional top-level `provenance` object carrying `git_commit_sha`.
+  - **Implementation notes:** Use the same field name and struct shape as the passport contract; keep `exported_at` as the export timestamp.
+  - **Acceptance criteria:** Export JSON remains stable except for the additive provenance field, and passport loading/warning behavior is unchanged.
+  - **Test notes:** Update export unit tests and CLI assertions.
+  - **Risk/rollback notes:** Low risk; most likely failure mode is passport/export field-name drift, so share the type where practical.
+- **S2.T2 Close out export regression coverage**
+  - **Outcome:** The Priority 2 contract is locked across CLI-visible success paths.
+  - **Inputs/outputs:** Input: completed passport and export provenance wiring. Output: deterministic tests proving git-present and git-absent export behavior.
+  - **Implementation notes:** Prefer existing export test helpers and temp-project fixtures over bespoke harness logic.
+  - **Acceptance criteria:** CI has one export assertion that proves provenance is present in a git repo and one that proves omission does not fail export outside git.
+  - **Test notes:** Run targeted export/passport provenance tests, then `cargo test --all`.
+  - **Risk/rollback notes:** If git setup in tests is flaky, keep the assertions focused on field presence/absence and avoid brittle commit-message assumptions.
+
+**Sub-task Checklists**
+
+**S1.T1 Checklist**
+- Add a shared provenance struct in `spec-core/src/passport.rs`.
+- Attach it to `PassportEvidence` as `provenance: Option<_>`.
+- Add serde tests proving legacy passports still parse and empty provenance is omitted.
+
+**S1.T2 Checklist**
+- Add one helper in `spec-cli/src/commands.rs` to resolve `git rev-parse HEAD`.
+- Thread the optional SHA through both success and failure evidence builders.
+- Add one git-backed CLI test and one non-git CLI test for `spec test`.
+
+**S1.T3 Checklist**
+- Extend the existing evidence-preservation tests for `spec generate`.
+- Extend the existing evidence-preservation tests for `spec build`.
+- Assert `evidence.provenance.git_commit_sha` survives both rewrites unchanged.
+
+**S2.T1 Checklist**
+- Add optional top-level `provenance` to `ExportBundle` in `spec-core/src/export.rs`.
+- Pass the optional SHA from `export_command` into `build_export_bundle`.
+- Update export unit tests so the additive field is covered without changing warning/passport expectations.
+
+**S2.T2 Checklist**
+- Extend CLI export tests for git-present provenance.
+- Add a no-git export regression test to prove omission is non-fatal.
+- Run targeted provenance tests and then `cargo test --all`.
+
+**Dependency Graph (text)**
+- `S1.T1` blocks `S1.T2` and `S2.T1`.
+- `S1.T2` blocks `S1.T3` because preservation only matters once provenance is written.
+- `S2.T1` blocks `S2.T2`.
+- `S1.T3` and `S2.T2` together close out Priority 2.
+
+**Risks / Unknowns**
+- Git-based integration tests can be flaky if they rely on global git config. De-risk by initializing the temp repo and setting local `user.name` / `user.email` in test setup.
+- Passport and export contracts could drift if they define provenance separately. De-risk by using one shared struct/field name.
+- Non-git directories are a first-class use case for local experimentation. De-risk by treating git lookup as best-effort and asserting omission, not failure.
+
+**Milestones**
+- **M4:** `S1` complete, so passport evidence carries commit provenance and preserves it across later rewrites.
+- **M5:** `S2` complete, so export bundles expose the same provenance context for downstream tooling.
+
+**Workstreams**
+- **WS1: Passport Provenance** — Touch surface: `spec-core/src/passport.rs`, `spec-cli/src/commands.rs`, passport-focused CLI tests. Owns `S1.T1`, `S1.T2`, `S1.T3`.
+- **WS2: Export Provenance** — Touch surface: `spec-core/src/export.rs`, `spec-cli/src/commands.rs`, export-focused CLI tests. Owns `S2.T1`, `S2.T2`.
+- **WS-INT: Priority 2 Integration** — Touch surface: shared CLI regression suite and final `cargo test --all` closeout. Depends on `WS1` and `WS2`.
 
 #### Priority 3: Code Quality
 
