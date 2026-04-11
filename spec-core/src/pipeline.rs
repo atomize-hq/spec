@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -132,8 +132,8 @@ pub fn zero_tests_ran(output: &str) -> bool {
     has_any_result
 }
 
-pub fn parse_cargo_test_output(stdout: &str) -> BTreeMap<String, ParsedCargoTestResult> {
-    let mut results: BTreeMap<String, ParsedCargoTestResult> = BTreeMap::new();
+pub fn parse_cargo_test_output(stdout: &str) -> HashMap<String, ParsedCargoTestResult> {
+    let mut results: HashMap<String, ParsedCargoTestResult> = HashMap::new();
 
     for line in stdout.lines() {
         let Some(rest) = line.strip_prefix("test ") else {

@@ -1154,7 +1154,7 @@ fn concurrent_passport_write_warning_message(
 fn build_test_evidence(
     specs: &[LoadedSpec],
     output: &Path,
-    parsed_test_results: &BTreeMap<String, ParsedCargoTestResult>,
+    parsed_test_results: &HashMap<String, ParsedCargoTestResult>,
     observed_at: &str,
     provenance: Option<&ArtifactProvenance>,
 ) -> Result<BTreeMap<String, PassportEvidence>> {
@@ -1167,6 +1167,9 @@ fn build_test_evidence(
 
         for local_test in &spec.spec.local_tests {
             let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+            // This lookup runs once per local test after parsing cargo stdout, so
+            // keep it on a hash-based map for large repos where thousands of test
+            // names may be correlated back into passport evidence in one command.
             let observed = parsed_test_results.get(&full_name);
             let (status, reason) = match observed {
                 Some(result) => (result.status.clone(), result.reason.clone()),
@@ -1782,6 +1785,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::process::Command as ProcessCommand;
+    use std::time::Instant;
     use tempfile::TempDir;
 
     fn write_spec(dir: &Path, relative_path: &str, body: &str) {
@@ -1806,6 +1810,151 @@ mod tests {
                 fs::copy(&entry_path, &dst_path).unwrap();
             }
         }
+    }
+
+    fn benchmark_loaded_spec(index: usize, tests_per_spec: usize) -> LoadedSpec {
+        let id = format!("pricing/bench_{index:04}");
+        LoadedSpec {
+            source: spec_core::types::SpecSource {
+                file_path: format!("units/pricing/bench_{index:04}.unit.spec"),
+                id: id.clone(),
+            },
+            spec: spec_core::types::SpecStruct {
+                id,
+                kind: "function".to_string(),
+                intent: spec_core::types::Intent {
+                    why: format!("Benchmark unit {index}"),
+                },
+                contract: None,
+                deps: Vec::new(),
+                imports: Vec::new(),
+                body: spec_core::types::Body {
+                    rust: "{ true }".to_string(),
+                },
+                local_tests: (0..tests_per_spec)
+                    .map(|test_index| spec_core::types::LocalTest {
+                        id: format!("case_{test_index:02}"),
+                        expect: "true".to_string(),
+                    })
+                    .collect(),
+                links: None,
+                spec_version: None,
+            },
+        }
+    }
+
+    fn benchmark_specs(spec_count: usize, tests_per_spec: usize) -> Vec<LoadedSpec> {
+        (0..spec_count)
+            .map(|index| benchmark_loaded_spec(index, tests_per_spec))
+            .collect()
+    }
+
+    fn benchmark_stdout(specs: &[LoadedSpec], output: &Path) -> String {
+        let output_prefix = output_module_prefix(output).unwrap();
+        let mut stdout = String::from("running synthetic benchmark tests\n");
+
+        for spec in specs {
+            let resolved = ResolvedSpec::from_spec(spec.spec.clone());
+            for (test_index, local_test) in spec.spec.local_tests.iter().enumerate() {
+                let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+                let status = if test_index % 11 == 0 { "FAILED" } else { "ok" };
+                stdout.push_str("test ");
+                stdout.push_str(&full_name);
+                stdout.push_str(" ... ");
+                stdout.push_str(status);
+                stdout.push('\n');
+            }
+        }
+
+        stdout
+    }
+
+    fn parse_cargo_test_output_btree_baseline(
+        stdout: &str,
+    ) -> BTreeMap<String, ParsedCargoTestResult> {
+        let mut results: BTreeMap<String, ParsedCargoTestResult> = BTreeMap::new();
+
+        for line in stdout.lines() {
+            let Some(rest) = line.strip_prefix("test ") else {
+                continue;
+            };
+            let Some((full_name, terminal_status)) = rest.split_once(" ... ") else {
+                continue;
+            };
+
+            let parsed = match terminal_status.trim() {
+                "ok" => ParsedCargoTestResult {
+                    status: "pass".to_string(),
+                    reason: None,
+                },
+                "FAILED" => ParsedCargoTestResult {
+                    status: "fail".to_string(),
+                    reason: None,
+                },
+                other => ParsedCargoTestResult {
+                    status: "error".to_string(),
+                    reason: Some(other.to_string()),
+                },
+            };
+
+            match results.get_mut(full_name) {
+                Some(existing) => {
+                    existing.status = "error".to_string();
+                    existing.reason = Some("multiple matching cargo results".to_string());
+                }
+                None => {
+                    results.insert(full_name.to_string(), parsed);
+                }
+            }
+        }
+
+        results
+    }
+
+    fn build_test_evidence_btree_baseline(
+        specs: &[LoadedSpec],
+        output: &Path,
+        parsed_test_results: &BTreeMap<String, ParsedCargoTestResult>,
+        observed_at: &str,
+        provenance: Option<&ArtifactProvenance>,
+    ) -> Result<BTreeMap<String, PassportEvidence>> {
+        let output_prefix = output_module_prefix(output)?;
+        let mut evidence_by_spec = BTreeMap::new();
+
+        for spec in specs {
+            let resolved = ResolvedSpec::from_spec(spec.spec.clone());
+            let mut test_results = Vec::new();
+
+            for local_test in &spec.spec.local_tests {
+                let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+                let observed = parsed_test_results.get(&full_name);
+                let (status, reason) = match observed {
+                    Some(result) => (result.status.clone(), result.reason.clone()),
+                    None => (
+                        "unknown".to_string(),
+                        Some("test not found in cargo output".to_string()),
+                    ),
+                };
+
+                test_results.push(PassportTestResult {
+                    id: local_test.id.clone(),
+                    status,
+                    reason,
+                });
+            }
+
+            evidence_by_spec.insert(
+                spec.spec.id.clone(),
+                PassportEvidence {
+                    build_status: "pass".to_string(),
+                    test_results,
+                    observed_at: observed_at.to_string(),
+                    provenance: provenance.cloned(),
+                },
+            );
+        }
+
+        Ok(evidence_by_spec)
     }
 
     #[test]
@@ -2073,6 +2222,112 @@ extra_field: nope
         assert_eq!(dep_collision.dep.as_deref(), Some("money/round"));
         assert_eq!(dep_collision.value.as_deref(), Some("money"));
         assert_eq!(dep_collision.path2.as_deref(), Some("money/format"));
+    }
+
+    #[test]
+    fn build_test_evidence_preserves_found_missing_and_duplicate_statuses() {
+        let output = Path::new("src/generated");
+        let spec = benchmark_loaded_spec(0, 3);
+        let resolved = ResolvedSpec::from_spec(spec.spec.clone());
+        let output_prefix = output_module_prefix(output).unwrap();
+
+        let mut parsed_test_results = HashMap::new();
+        parsed_test_results.insert(
+            expected_cargo_test_name(&resolved, &output_prefix, "case_00"),
+            ParsedCargoTestResult {
+                status: "pass".to_string(),
+                reason: None,
+            },
+        );
+        parsed_test_results.insert(
+            expected_cargo_test_name(&resolved, &output_prefix, "case_01"),
+            ParsedCargoTestResult {
+                status: "error".to_string(),
+                reason: Some("multiple matching cargo results".to_string()),
+            },
+        );
+
+        let evidence = build_test_evidence(
+            std::slice::from_ref(&spec),
+            output,
+            &parsed_test_results,
+            "2026-04-11T12:00:00Z",
+            None,
+        )
+        .unwrap();
+
+        let test_results = &evidence["pricing/bench_0000"].test_results;
+        assert_eq!(test_results[0].status, "pass");
+        assert_eq!(test_results[0].reason, None);
+        assert_eq!(test_results[1].status, "error");
+        assert_eq!(
+            test_results[1].reason.as_deref(),
+            Some("multiple matching cargo results")
+        );
+        assert_eq!(test_results[2].status, "unknown");
+        assert_eq!(
+            test_results[2].reason.as_deref(),
+            Some("test not found in cargo output")
+        );
+    }
+
+    #[test]
+    #[ignore = "manual benchmark for Priority 4 parse/evidence ship gate"]
+    fn benchmark_parse_and_evidence_hash_lookup_against_btree_baseline() {
+        let output = Path::new("src/generated");
+        let specs = benchmark_specs(600, 8);
+        let stdout = benchmark_stdout(&specs, output);
+        let observed_at = "2026-04-11T12:00:00Z";
+
+        let baseline_evidence = build_test_evidence_btree_baseline(
+            &specs,
+            output,
+            &parse_cargo_test_output_btree_baseline(&stdout),
+            observed_at,
+            None,
+        )
+        .unwrap();
+        let hash_evidence = build_test_evidence(
+            &specs,
+            output,
+            &parse_cargo_test_output(&stdout),
+            observed_at,
+            None,
+        )
+        .unwrap();
+        assert_eq!(hash_evidence, baseline_evidence);
+
+        const ITERS: usize = 75;
+
+        for _ in 0..5 {
+            let _ = std::hint::black_box(parse_cargo_test_output_btree_baseline(&stdout));
+            let _ = std::hint::black_box(parse_cargo_test_output(&stdout));
+        }
+
+        let btree_started = Instant::now();
+        for _ in 0..ITERS {
+            let parsed = parse_cargo_test_output_btree_baseline(std::hint::black_box(&stdout));
+            let evidence =
+                build_test_evidence_btree_baseline(&specs, output, &parsed, observed_at, None)
+                    .unwrap();
+            std::hint::black_box(evidence);
+        }
+        let btree_elapsed = btree_started.elapsed();
+
+        let hash_started = Instant::now();
+        for _ in 0..ITERS {
+            let parsed = parse_cargo_test_output(std::hint::black_box(&stdout));
+            let evidence = build_test_evidence(&specs, output, &parsed, observed_at, None).unwrap();
+            std::hint::black_box(evidence);
+        }
+        let hash_elapsed = hash_started.elapsed();
+
+        let speedup = btree_elapsed.as_secs_f64() / hash_elapsed.as_secs_f64();
+        eprintln!(
+            "Priority 4 benchmark: btree={btree_elapsed:?}, hash={hash_elapsed:?}, speedup={speedup:.2}x, specs={}, tests_per_spec={}",
+            specs.len(),
+            specs[0].spec.local_tests.len()
+        );
     }
 
     #[test]
