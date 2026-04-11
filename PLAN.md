@@ -315,18 +315,156 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 
 #### Priority 3: Code Quality
 
-**Error Handling Refactors** (Effort: XS-S, ~1-2 hours per item)
-1. ~~**push_error/push_warning helper**~~ — ✅ Already implemented at `commands.rs:1209-1220`
-2. **test_command passport finalization** - Extract ~60 line shared logic between paths
-3. **spec_error_to_json_entry** - Replace 9-tuple with `ErrorFields` struct (if time permits)
-**Files:** `spec-cli/src/commands.rs`
+**Implementation Strategy:** Maintainability-first. First collapse the duplicated passport-finalization branches in `test_command`, then replace positional JSON error assembly with a typed helper, and only then layer in the warn-only concurrent-process signal at the shared passport-finalization seam.
 
-**Concurrent Process Warning** (Effort: XS, ~30 minutes)
-- Add detection/warning when multiple spec processes may be writing passports simultaneously
-- Warn instead of implementing full locking (single-writer assumption is valid for ICP)
-- Success criterion: warning is emitted when >1 spec process detected — NOT "no data loss"
-- Note: detection is best-effort (pgrep/process enumeration is platform-specific and itself racy)
-**Files:** `spec-cli/src/commands.rs`
+**Feature Brief**
+- **Goal:** Reduce maintenance risk in `spec-cli/src/commands.rs` by removing duplicated control flow, replacing brittle tuple-based JSON assembly with named fields, and surfacing a best-effort warning when concurrent `spec` runs may rewrite passports.
+- **Why now:** Priority 1 and Priority 2 both expanded the passport/evidence and JSON-contract surfaces. Leaving the current duplication in place makes later changes error-prone, and the same finalization seam is the right place to add the concurrent-run warning without scattering process checks across commands.
+- **Primary user:** Maintainers extending `spec build`, `spec test`, `spec validate --format json`, and passport-writing behavior for solo-engineer or small-team AI-heavy workflows.
+- **In scope:** `test_command` refactor around passport finalization, `spec_error_to_json_entry` refactor from positional tuple to named `ErrorFields`, best-effort concurrent-process detection and stderr warning near `finalize_passports`, and regression coverage proving no behavioral drift.
+- **Out of scope:** `push_error` / `push_warning` helper work (already shipped), file-locking or single-writer guarantees, JSON schema or error-code renames, performance optimizations, and any platform-specific process-management behavior beyond warn-only detection.
+- **Success criteria:** `test_command` preserves current directory-mode and file-path-mode behavior while sharing one passport-finalization path, JSON error entries keep the same external contract while becoming field-name driven internally, concurrent writes produce a warning rather than an abort when detected, and normal single-process workflows remain warning-free.
+
+**Vertical Slices**
+
+**S1. `test_command` Passport Finalization Refactor** (Effort: XS-S, ~2-3 hours)
+- **User value:** Maintainers can change test/build failure evidence writing in one place instead of keeping multiple branches in sync.
+- **Scope in:** Shared helper/plan for target-spec vs directory-spec passport writes, build-failure and post-test success/failure paths, and preservation of current file-path semantics.
+- **Scope out:** Behavioral changes to cargo invocation, provenance resolution, contract-hash computation, or zero-tests handling.
+- **Acceptance criteria:** The refactor removes the duplicated `if let Some(target_spec)` / `else` passport-writing branches while preserving all current outcomes for build-fail, test-fail, test-pass, and file-path-targeted runs.
+- **Verification:** Existing CLI passport tests plus one focused regression proving directory mode and file-path mode still write the intended passport set.
+- **Rollout/flags:** No flag; pure internal refactor.
+
+**Atomic Tasks**
+- **S1.T1 Extract shared passport-write planning for `spec test`**
+  - **Outcome:** `test_command` has one internal helper or small planning struct that determines passport root, affected specs, evidence map, and contract hashes for both target-file and directory modes.
+  - **Inputs/outputs:** Input: current duplicated branches in `spec-cli/src/commands.rs`. Output: one shared seam for preparing `finalize_passports(...)` inputs.
+  - **Implementation notes:** Keep ownership/borrowing simple; prefer a small explicit helper over a generic abstraction that obscures the file-path vs directory-path behavior.
+  - **Acceptance criteria:** The helper makes the write target explicit and does not change which passports are written in single-file mode.
+  - **Test notes:** Add or tighten command-level tests around target-only passport writes.
+  - **Risk/rollback notes:** Main risk is accidentally widening single-file writes to sibling units; keep that invariant explicit in tests.
+- **S1.T2 Refactor build-failure and post-test flows onto the shared seam**
+  - **Outcome:** `test_command` uses the same passport-finalization path after cargo build failure and after test-result parsing.
+  - **Inputs/outputs:** Input: shared seam from `S1.T1`, existing `build_failure_evidence`, `build_test_evidence`, and `contract_hashes_for`. Output: one refactored `test_command` with less branch duplication and unchanged CLI-visible behavior.
+  - **Implementation notes:** Do not refactor timeout handling or cargo output printing in this slice; keep the change bounded to evidence/passport finalization.
+  - **Acceptance criteria:** Build-fail, test-pass, and test-fail flows still write the same evidence and contract hashes they do today.
+  - **Test notes:** Run the existing passport evidence/provenance/build-failure/file-path regression suite.
+  - **Risk/rollback notes:** If the helper grows beyond the passport seam, split it back down rather than turning Priority 3 into a broad command rewrite.
+- **S1.T3 Lock refactor safety with focused regression coverage**
+  - **Outcome:** The refactor is protected by tests aimed at the exact branch behavior that used to be duplicated.
+  - **Inputs/outputs:** Input: refactored `test_command`. Output: tests covering target-only writes, build failure passport writes, and zero-tests/no-passport behavior.
+  - **Implementation notes:** Prefer extending existing CLI tests over introducing a second harness.
+  - **Acceptance criteria:** CI fails if a future edit regresses file-path targeting or skips failure-passport finalization.
+  - **Test notes:** Run targeted CLI tests, then `cargo test --all`.
+  - **Risk/rollback notes:** None beyond missing a branch-specific regression; keep the coverage focused on current invariants.
+
+**S2. Typed JSON Error Entry Construction** (Effort: XS, ~1-2 hours)
+- **User value:** Maintainers can add or adjust JSON error fields without relying on tuple position discipline.
+- **Scope in:** Replace the 9-field tuple in `spec_error_to_json_entry` with a named `ErrorFields` struct or equivalent typed helper, while keeping `JsonErrorEntry` output unchanged.
+- **Scope out:** Error-code namespace changes, fixture churn unrelated to the refactor, or broader `validate`/`status` JSON redesign.
+- **Acceptance criteria:** `spec_error_to_json_entry` no longer uses the positional tuple, and existing JSON fixtures/tests remain stable unless a test is added purely to lock field mapping behavior.
+- **Verification:** Existing JSON fixture tests plus one or two focused unit tests for variants that populate multiple fields.
+- **Rollout/flags:** No flag; internal refactor only.
+
+**Atomic Tasks**
+- **S2.T1 Introduce a named field carrier for JSON error assembly**
+  - **Outcome:** `spec_error_to_json_entry` assembles data into a local `ErrorFields` struct with named fields instead of the current positional tuple.
+  - **Inputs/outputs:** Input: current 9-value tuple match in `spec-cli/src/commands.rs`. Output: a typed intermediary that maps cleanly into `JsonErrorEntry`.
+  - **Implementation notes:** Keep the carrier local to `commands.rs`; this is not a public type and should not leak into unrelated modules.
+  - **Acceptance criteria:** The code path is easier to audit because each field is assigned by name, not position.
+  - **Test notes:** Add a small unit test for representative variants such as `DuplicateId`, `DepCollision`, `ContractTypeInvalid`, or `CyclicDep`.
+  - **Risk/rollback notes:** Low risk, but tuple-order regressions can hide easily; the new tests should cover the multi-field cases.
+- **S2.T2 Prove no JSON contract drift**
+  - **Outcome:** The internal refactor ships with explicit proof that emitted JSON remains unchanged.
+  - **Inputs/outputs:** Input: typed field carrier from `S2.T1`. Output: passing fixture-backed `validate` / `status` JSON tests and any targeted unit tests.
+  - **Implementation notes:** Avoid refreshing fixtures unless a true output difference is discovered and deliberately accepted.
+  - **Acceptance criteria:** Existing machine-readable JSON remains byte-for-byte or semantically identical where current tests already pin it.
+  - **Test notes:** Run the current CLI fixture suite plus the new unit assertions.
+  - **Risk/rollback notes:** If fixtures move unexpectedly, stop and resolve whether the refactor accidentally changed behavior before accepting the diff.
+
+**S3. Warn-Only Concurrent Passport Write Detection** (Effort: XS, ~1 hour)
+- **User value:** Operators get a clear signal when overlapping `spec` runs may both rewrite passports, without falsely implying the tool now guarantees safe concurrent writes.
+- **Scope in:** Best-effort process detection, one warning emission path near `finalize_passports`, testability of the detector/warning seam, and documentation of warn-only semantics in the plan.
+- **Scope out:** Lock files, retry loops, process coordination, or any success criterion stronger than “warning emitted when concurrent activity is detected.”
+- **Acceptance criteria:** When the detector sees another likely `spec` process, the command emits a warning and continues; when detection is unavailable or reports a single process, commands behave exactly as they do today.
+- **Verification:** One deterministic test using an injectable/testable detection seam plus a manual sanity check that ordinary runs stay quiet.
+- **Rollout/flags:** No flag; best-effort warning only.
+
+**Atomic Tasks**
+- **S3.T1 Define the best-effort detection contract**
+  - **Outcome:** One helper encapsulates “are concurrent `spec` writers likely active?” and degrades safely when process enumeration is unavailable.
+  - **Inputs/outputs:** Input: `finalize_passports` write seam in `spec-cli/src/commands.rs`. Output: helper returning enough information to decide whether to warn, without aborting the command on detection failure.
+  - **Implementation notes:** Keep the detector isolated from the write logic and make it easy to substitute in tests; unsupported platforms or missing tools should resolve to “no warning,” not failure.
+  - **Acceptance criteria:** Detection failures are silent or debug-only internally; they never block passport writes.
+  - **Test notes:** Add a unit-test seam so “concurrent process present” can be simulated without racing real commands.
+  - **Risk/rollback notes:** Platform-specific process checks are inherently racy; the contract must stay explicitly best-effort.
+- **S3.T2 Emit one clear warning at the passport finalization seam**
+  - **Outcome:** Commands that call `finalize_passports` share one consistent concurrent-run warning message.
+  - **Inputs/outputs:** Input: detection helper from `S3.T1`. Output: stderr warning emitted before or around passport writes when concurrent activity is detected.
+  - **Implementation notes:** Emit the warning once per command, not once per spec file, and keep the text explicit that this is advisory rather than protective locking.
+  - **Acceptance criteria:** The warning is human-readable, non-fatal, and absent from ordinary single-process runs.
+  - **Test notes:** Cover warning emission through the injected seam and verify command success still holds.
+  - **Risk/rollback notes:** Over-warning would erode trust; keep the trigger conservative and scoped to likely concurrent writers.
+
+**Sub-task Checklists**
+
+**S1.T1 Checklist**
+- Identify the duplicated `finalize_passports(...)` branches in `test_command`.
+- Extract the minimal shared inputs needed for target-only and directory-wide writes.
+- Preserve the current `spec_root` vs `path` distinction explicitly in the helper.
+
+**S1.T2 Checklist**
+- Route build-failure passport writes through the shared seam.
+- Route post-test evidence passport writes through the same seam.
+- Confirm cargo output, timeout handling, and zero-tests checks remain untouched.
+
+**S1.T3 Checklist**
+- Extend the existing target-only passport regression tests.
+- Extend the existing build-failure or test-failure passport regression tests.
+- Run targeted CLI coverage and then `cargo test --all`.
+
+**S2.T1 Checklist**
+- Add a local `ErrorFields` carrier in `spec-cli/src/commands.rs`.
+- Replace tuple-position assignments with named field assignments in the `match`.
+- Add focused unit tests for multi-field error variants.
+
+**S2.T2 Checklist**
+- Re-run fixture-backed `validate --format json` coverage.
+- Re-run fixture-backed `status --format json` coverage.
+- Confirm no fixture refresh is needed unless behavior truly changed.
+
+**S3.T1 Checklist**
+- Add one helper dedicated to concurrent-process detection.
+- Add one test seam so process-presence can be simulated deterministically.
+- Ensure detector failure returns “no warning” instead of an error.
+
+**S3.T2 Checklist**
+- Call the detector from the shared passport-finalization seam.
+- Emit one warning per command when concurrent activity is detected.
+- Verify commands still succeed and ordinary runs do not emit the warning.
+
+**Dependency Graph (text)**
+- `S1.T1` blocks `S1.T2`.
+- `S1.T2` blocks `S1.T3`.
+- `S2.T1` blocks `S2.T2`.
+- `S3.T1` blocks `S3.T2`.
+- `S1` should land before `S3` so the concurrent warning attaches to the final shared passport seam instead of duplicated branches.
+
+**Risks / Unknowns**
+- The `test_command` refactor can easily regress single-file behavior by broadening passport writes to sibling specs. De-risk with explicit file-path-mode regression coverage before and after the refactor.
+- The `ErrorFields` refactor is low-risk externally but can silently swap field population on multi-field variants. De-risk with focused unit tests for the variants that set several optional fields.
+- Concurrent-process detection is inherently racy and platform-specific. De-risk by keeping it advisory, isolating it behind one helper, and making unsupported environments resolve to “no warning.”
+
+**Milestones**
+- **M6:** `S1` complete, so passport finalization in `spec test` has one authoritative maintenance seam.
+- **M7:** `S2` complete, so JSON error construction is field-name driven and safer to extend.
+- **M8:** `S3` complete, so overlapping `spec` runs surface a clear advisory warning without changing command success semantics.
+
+**Workstreams**
+- **WS1: Test Command Refactor** — Touch surface: `spec-cli/src/commands.rs`, passport-focused CLI tests. Owns `S1.T1`, `S1.T2`, `S1.T3`.
+- **WS2: JSON Error Entry Refactor** — Touch surface: `spec-cli/src/commands.rs`, JSON fixture/unit tests. Owns `S2.T1`, `S2.T2`.
+- **WS3: Concurrent Warning** — Touch surface: `spec-cli/src/commands.rs`, warning-focused tests. Owns `S3.T1`, `S3.T2`.
+- **WS-INT: Priority 3 Integration** — Touch surface: shared `commands.rs` integration and final `cargo test --all` closeout. Depends on `WS1`, `WS2`, and `WS3`.
 
 #### Priority 4: Optional Improvements
 
