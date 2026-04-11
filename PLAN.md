@@ -32,11 +32,14 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 #### Priority 1: Trust & Stability
 
 **Stable External Error Code Namespace** (Effort: S, ~3-4 hours)
-- Define stable external error codes (e.g., `SPEC_DEP_NOT_FOUND`) separate from Rust enum variants
-- Build mapping from `SpecError` to stable codes
-- Add JSON schema versioning strategy for breaking changes
-- Verify all variants have mappings with unit tests
-**Files:** `spec-core/src/lib.rs`, `spec-cli/src/commands.rs`
+- Rename all codes in `spec_error_to_json_entry` to SCREAMING_SNAKE_CASE with `SPEC_` prefix
+  - e.g., `MissingDep → SPEC_MISSING_DEP`, `CyclicDep → SPEC_CYCLIC_DEP`, `ContractTypeInvalid → SPEC_CONTRACT_TYPE_INVALID`
+- Update fixture files: `spec-cli/tests/fixtures/validate-invalid.json`, `validate-valid.json`, `status-stale.json`, `status-valid.json`
+- Update `AGENTS.md` line 25 to reference `SPEC_` prefixed codes
+- Fix `schema_version` type inconsistency: update `export.rs:18` to `pub schema_version: u8` (was String "1.0")
+- Verify all 20 variants have mappings with exhaustive unit test (`code.starts_with("SPEC_")` + non-empty)
+- Add first JSON format tests: `validate --format json` happy + error paths, `status --format json` happy path
+**Files:** `spec-core/src/lib.rs`, `spec-cli/src/commands.rs`, `spec-core/src/export.rs`, `spec-cli/tests/fixtures/*.json`, `AGENTS.md`
 
 #### Priority 2: Minimal Infrastructure
 
@@ -56,7 +59,7 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 #### Priority 3: Code Quality
 
 **Error Handling Refactors** (Effort: XS-S, ~1-2 hours per item)
-1. **push_error/push_warning helper** - Extract duplicated 4-line diagnostic collection pattern
+1. ~~**push_error/push_warning helper**~~ — ✅ Already implemented at `commands.rs:1209-1220`
 2. **test_command passport finalization** - Extract ~60 line shared logic between paths
 3. **spec_error_to_json_entry** - Replace 9-tuple with `ErrorFields` struct (if time permits)
 **Files:** `spec-cli/src/commands.rs`
@@ -64,6 +67,8 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 **Concurrent Process Warning** (Effort: XS, ~30 minutes)
 - Add detection/warning when multiple spec processes may be writing passports simultaneously
 - Warn instead of implementing full locking (single-writer assumption is valid for ICP)
+- Success criterion: warning is emitted when >1 spec process detected — NOT "no data loss"
+- Note: detection is best-effort (pgrep/process enumeration is platform-specific and itself racy)
 **Files:** `spec-cli/src/commands.rs`
 
 #### Priority 4: Optional Improvements
@@ -94,19 +99,20 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 
 ### Implementation Order
 
-1. **Stable Error Codes** (blocks API contract stability)
-2. **Minimal Provenance** (adds CI metadata, low complexity)
-3. **Timeout Support** (prevents CI hangs, critical for DX)
-4. **Refactors** (improve code quality)
-5. **Concurrent Process Warning** (warn on concurrent runs)
-6. Optional: `parse_test_output()` optimization (performance)
+1. **Timeout Support** (prevents CI hangs — do this first, a hung build blocks all M5 validation)
+2. **Stable Error Codes** (breaking rename: update fixtures + AGENTS.md in same commit)
+3. **schema_version type fix** (fold into stable-codes commit: export.rs → u8, not String)
+4. **Minimal Provenance** (adds CI metadata, low complexity)
+5. **Refactors** (improve code quality; note: push_error/push_warning already done — remove from scope)
+6. **Concurrent Process Warning** (warn on concurrent runs; success criterion = warning emitted, not data-loss prevention)
+7. Optional: `parse_test_output()` optimization (performance)
 
 ### Success Criteria
 
 - ✅ Zero regression in existing tests (50+ unit + integration tests)
 - ✅ New tests for all added functionality
 - ✅ JSON API contracts stable and documented
-- ✅ No passport data loss in concurrent runs
+- ✅ Concurrent run warning emitted when >1 spec process detected (warn-only, not a lock)
 - ✅ No indefinite hangs during build/test
 - ✅ Type-safe error handling patterns established
 
@@ -160,6 +166,20 @@ Status: **Implementation Ready** (pending PLAN.md corrections)
 
 ---
 
-**Document version:** 2026-04-10  
-**Review status:** Approved via /autoplan  
+**Document version:** 2026-04-11  
+**Review status:** Approved via /plan-eng-review  
 **Next review checkpoint:** Before /ship
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 4 | issues_open (stale, e533140) | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 7 | issues_found | schema_version type mismatch, impl order wrong, concurrency criterion misleading |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 8 | **CLEAR (PLAN)** | 7 issues, 1 critical gap, all resolved |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 1 | issues_open (stale) | — |
+
+**CODEX:** 4 cross-model tensions: (1) error code rename vs freeze → user chose rename; (2) schema_version integer/string inconsistency → normalize to integer everywhere; (3) concurrent warning criterion misleading → corrected to "warning emitted"; (4) impl order wrong → timeout moved to Priority 1.
+**UNRESOLVED:** 0
+**VERDICT:** ENG CLEARED — ready to implement. Run `cargo test --all` before starting, then implement in priority order: Timeout → Error Codes (+ schema_version fix + JSON tests) → Provenance → Refactors → Concurrent Warning.
