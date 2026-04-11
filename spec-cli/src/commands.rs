@@ -26,7 +26,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 type CollectedSpecs = (
     Vec<LoadedSpec>,
@@ -37,6 +37,7 @@ type CollectedSpecs = (
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
 
 const JSON_SCHEMA_VERSION: u8 = 1;
+const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -91,6 +92,85 @@ struct JsonErrorEntry {
     path2: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cycle: Option<Vec<String>>,
+}
+
+#[derive(Default)]
+struct ErrorFields {
+    unit: Option<String>,
+    path: Option<String>,
+    dep: Option<String>,
+    field: Option<String>,
+    value: Option<String>,
+    message: Option<String>,
+    id: Option<String>,
+    path2: Option<String>,
+    cycle: Option<Vec<String>>,
+}
+
+struct PassportWritePlan<'a> {
+    passport_root: &'a Path,
+    specs: &'a [LoadedSpec],
+}
+
+struct ConcurrentPassportWriteGuard {
+    marker_path: Option<PathBuf>,
+}
+
+impl ConcurrentPassportWriteGuard {
+    fn begin(passport_root: &Path) -> Self {
+        match Self::begin_in(
+            passport_root,
+            &std::env::temp_dir(),
+            std::process::id(),
+            SystemTime::now(),
+        ) {
+            Ok((guard, other_writers)) => {
+                if let Some(warning) =
+                    concurrent_passport_write_warning_message(passport_root, other_writers)
+                {
+                    eprintln!("{warning}");
+                }
+                guard
+            }
+            Err(_) => Self { marker_path: None },
+        }
+    }
+
+    fn begin_in(
+        passport_root: &Path,
+        registry_base: &Path,
+        pid: u32,
+        now: SystemTime,
+    ) -> Result<(Self, usize)> {
+        let registry_dir = concurrent_passport_writer_registry_dir(passport_root, registry_base);
+        fs::create_dir_all(&registry_dir)
+            .with_context(|| format!("Failed to create {}", registry_dir.display()))?;
+
+        let marker_path = registry_dir.join(concurrent_passport_writer_marker_name(pid, now));
+        fs::write(&marker_path, "")
+            .with_context(|| format!("Failed to write {}", marker_path.display()))?;
+
+        let other_writers = count_other_active_passport_writers(&registry_dir, pid, now)?;
+        Ok((
+            Self {
+                marker_path: Some(marker_path),
+            },
+            other_writers,
+        ))
+    }
+}
+
+impl Drop for ConcurrentPassportWriteGuard {
+    fn drop(&mut self) {
+        let Some(marker_path) = self.marker_path.take() else {
+            return;
+        };
+
+        let _ = fs::remove_file(&marker_path);
+        if let Some(parent) = marker_path.parent() {
+            let _ = fs::remove_dir(parent);
+        }
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -686,6 +766,7 @@ fn finalize_passports(
         return Ok(());
     }
 
+    let _writer_guard = ConcurrentPassportWriteGuard::begin(passport_root);
     write_passports(specs, generated_at, evidence_by_spec, contract_hash_by_spec)?;
     ensure_gitignore_entry(passport_root)
         .with_context(|| "Failed to update .gitignore for passport files")?;
@@ -860,6 +941,9 @@ fn test_command(
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
+    let passport_write_plan =
+        passport_write_plan(path, spec_root, &generated.specs, target_spec.as_ref());
+
     let output_prefix = if target_spec.is_some() {
         Some(output_module_prefix(output)?)
     } else {
@@ -882,32 +966,15 @@ fn test_command(
     if build_result.exit_code != 0 {
         let observed_at = rfc3339_now();
         let provenance = resolve_git_provenance(&ctx.crate_root);
-        if let Some(target_spec) = target_spec.as_ref() {
-            let evidence_by_spec = build_failure_evidence(
-                std::slice::from_ref(target_spec),
-                &observed_at,
-                provenance.as_ref(),
-            );
-            let contract_hash_by_spec = contract_hashes_for(std::slice::from_ref(target_spec));
-            finalize_passports(
-                spec_root,
-                std::slice::from_ref(target_spec),
-                &generated.generated_at,
-                Some(&evidence_by_spec),
-                contract_hash_by_spec.as_ref(),
-            )?;
-        } else {
-            let evidence_by_spec =
-                build_failure_evidence(&generated.specs, &observed_at, provenance.as_ref());
-            let contract_hash_by_spec = contract_hashes_for(&generated.specs);
-            finalize_passports(
-                path,
-                &generated.specs,
-                &generated.generated_at,
-                Some(&evidence_by_spec),
-                contract_hash_by_spec.as_ref(),
-            )?;
-        }
+        let evidence_by_spec =
+            build_failure_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
         bail!("❌ cargo build failed");
     }
 
@@ -930,39 +997,20 @@ fn test_command(
     let parsed_test_results = parse_cargo_test_output(&test_result.stdout);
     let observed_at = rfc3339_now();
     let provenance = resolve_git_provenance(&ctx.crate_root);
-    if let Some(target_spec) = target_spec.as_ref() {
-        let evidence_by_spec = build_test_evidence(
-            std::slice::from_ref(target_spec),
-            output,
-            &parsed_test_results,
-            &observed_at,
-            provenance.as_ref(),
-        )?;
-        let contract_hash_by_spec = contract_hashes_for(std::slice::from_ref(target_spec));
-        finalize_passports(
-            spec_root,
-            std::slice::from_ref(target_spec),
-            &generated.generated_at,
-            Some(&evidence_by_spec),
-            contract_hash_by_spec.as_ref(),
-        )?;
-    } else {
-        let evidence_by_spec = build_test_evidence(
-            &generated.specs,
-            output,
-            &parsed_test_results,
-            &observed_at,
-            provenance.as_ref(),
-        )?;
-        let contract_hash_by_spec = contract_hashes_for(&generated.specs);
-        finalize_passports(
-            path,
-            &generated.specs,
-            &generated.generated_at,
-            Some(&evidence_by_spec),
-            contract_hash_by_spec.as_ref(),
-        )?;
-    }
+    let evidence_by_spec = build_test_evidence(
+        passport_write_plan.specs,
+        output,
+        &parsed_test_results,
+        &observed_at,
+        provenance.as_ref(),
+    )?;
+    let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+    finalize_test_passports(
+        &passport_write_plan,
+        &generated.generated_at,
+        &evidence_by_spec,
+        contract_hash_by_spec.as_ref(),
+    )?;
     if test_result.exit_code != 0 {
         bail!("❌ cargo test failed");
     }
@@ -995,6 +1043,112 @@ fn build_failure_evidence(
             )
         })
         .collect()
+}
+
+fn passport_write_plan<'a>(
+    requested_path: &'a Path,
+    spec_root: &'a Path,
+    generated_specs: &'a [LoadedSpec],
+    target_spec: Option<&'a LoadedSpec>,
+) -> PassportWritePlan<'a> {
+    if let Some(target_spec) = target_spec {
+        PassportWritePlan {
+            passport_root: spec_root,
+            specs: std::slice::from_ref(target_spec),
+        }
+    } else {
+        PassportWritePlan {
+            passport_root: requested_path,
+            specs: generated_specs,
+        }
+    }
+}
+
+fn finalize_test_passports(
+    plan: &PassportWritePlan<'_>,
+    generated_at: &str,
+    evidence_by_spec: &BTreeMap<String, PassportEvidence>,
+    contract_hash_by_spec: Option<&BTreeMap<String, String>>,
+) -> Result<()> {
+    finalize_passports(
+        plan.passport_root,
+        plan.specs,
+        generated_at,
+        Some(evidence_by_spec),
+        contract_hash_by_spec,
+    )
+}
+
+fn concurrent_passport_writer_registry_dir(passport_root: &Path, registry_base: &Path) -> PathBuf {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let canonical_root = passport_root
+        .canonicalize()
+        .unwrap_or_else(|_| passport_root.to_path_buf());
+    let mut hasher = DefaultHasher::new();
+    canonical_root.hash(&mut hasher);
+    let hash = hasher.finish();
+    registry_base.join(format!("spec-passport-writers-{hash:016x}"))
+}
+
+fn concurrent_passport_writer_marker_name(pid: u32, now: SystemTime) -> String {
+    let now_secs = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    format!("{pid}-{now_secs}.active")
+}
+
+fn parse_concurrent_passport_writer_marker(file_name: &str) -> Option<(u32, u64)> {
+    let file_name = file_name.strip_suffix(".active")?;
+    let (pid, started_at) = file_name.split_once('-')?;
+    Some((pid.parse().ok()?, started_at.parse().ok()?))
+}
+
+fn count_other_active_passport_writers(
+    registry_dir: &Path,
+    current_pid: u32,
+    now: SystemTime,
+) -> Result<usize> {
+    let now_secs = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let mut other_writers = HashSet::new();
+
+    for entry in fs::read_dir(registry_dir)
+        .with_context(|| format!("Failed to read {}", registry_dir.display()))?
+    {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some((pid, started_at)) = parse_concurrent_passport_writer_marker(file_name) else {
+            continue;
+        };
+
+        if now_secs.saturating_sub(started_at) > CONCURRENT_PASSPORT_WRITER_TTL_SECS {
+            let _ = fs::remove_file(entry.path());
+            continue;
+        }
+
+        if pid != current_pid {
+            other_writers.insert(pid);
+        }
+    }
+
+    Ok(other_writers.len())
+}
+
+fn concurrent_passport_write_warning_message(
+    passport_root: &Path,
+    other_writers: usize,
+) -> Option<String> {
+    if other_writers == 0 {
+        return None;
+    }
+
+    Some(format!(
+        "⚠ detected {other_writers} other spec process{} writing passports under {}; concurrent passport writes are best-effort only (no locking)",
+        pluralize(other_writers),
+        passport_root.display()
+    ))
 }
 
 fn build_test_evidence(
@@ -1325,272 +1479,155 @@ fn spec_error_to_json_entry(
 ) -> JsonErrorEntry {
     let code = spec_error_code(err).to_string();
 
-    let (unit, path, dep, field, value, message, id, path2, cycle) = match err {
-        spec_core::SpecError::Io(_) => (
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(err.to_string()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::InvalidUtf8 { path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::YamlParse { message, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::Json(_) => (
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(err.to_string()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::SchemaValidation { message, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::SemanticValidation { message, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::RustKeyword { path, segment, id } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            Some(segment.clone()),
-            None,
-            Some(id.clone()),
-            None,
-            None,
-        ),
-        spec_core::SpecError::DuplicateId { id, file1, file2 } => (
-            id_by_path.get(file1).cloned(),
-            Some(file1.clone()),
-            None,
-            None,
-            None,
-            None,
-            Some(id.clone()),
-            Some(file2.clone()),
-            None,
-        ),
+    let fields = match err {
+        spec_core::SpecError::Io(_) => ErrorFields {
+            message: Some(err.to_string()),
+            ..Default::default()
+        },
+        spec_core::SpecError::InvalidUtf8 { path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::YamlParse { message, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::Json(_) => ErrorFields {
+            message: Some(err.to_string()),
+            ..Default::default()
+        },
+        spec_core::SpecError::SchemaValidation { message, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::SemanticValidation { message, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::RustKeyword { path, segment, id } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            value: Some(segment.clone()),
+            id: Some(id.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::DuplicateId { id, file1, file2 } => ErrorFields {
+            unit: id_by_path.get(file1).cloned(),
+            path: Some(file1.clone()),
+            id: Some(id.clone()),
+            path2: Some(file2.clone()),
+            ..Default::default()
+        },
         spec_core::SpecError::DepCollision {
             dep1,
             dep2,
             fn_name,
             path,
-        } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            Some(dep1.clone()),
-            None,
-            Some(fn_name.clone()),
-            None,
-            None,
-            Some(dep2.clone()),
-            None,
-        ),
-        spec_core::SpecError::MissingDep { dep, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            Some(dep.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::CyclicDep { cycle_path, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(cycle_path.clone()),
-        ),
-        spec_core::SpecError::UseStatementInBody { path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::BodyRustMustBeBlock { path, message } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::LocalTestExpectNotExpr { id, path, message } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            Some(id.clone()),
-            None,
-            None,
-        ),
-        spec_core::SpecError::DuplicateLocalTestId { id, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            Some(id.clone()),
-            None,
-            None,
-        ),
+        } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            dep: Some(dep1.clone()),
+            value: Some(fn_name.clone()),
+            path2: Some(dep2.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::MissingDep { dep, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            dep: Some(dep.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::CyclicDep { cycle_path, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            cycle: Some(cycle_path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::UseStatementInBody { path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::BodyRustMustBeBlock { path, message } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::LocalTestExpectNotExpr { id, path, message } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            id: Some(id.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::DuplicateLocalTestId { id, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            id: Some(id.clone()),
+            ..Default::default()
+        },
         spec_core::SpecError::ContractTypeInvalid {
             field,
             type_str,
             path,
             ..
-        } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            Some(format!("contract.{field}")),
-            Some(type_str.clone()),
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::ContractInputNameInvalid { name, path, .. } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            Some(format!("contract.inputs.{name}")),
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::Traversal { path, .. } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::Generator { message } => (
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::OutputDir { message } => (
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::MissingMarker { path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
+        } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            field: Some(format!("contract.{field}")),
+            value: Some(type_str.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::ContractInputNameInvalid { name, path, .. } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            field: Some(format!("contract.inputs.{name}")),
+            ..Default::default()
+        },
+        spec_core::SpecError::Traversal { path, .. } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::Generator { message } => ErrorFields {
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::OutputDir { message } => ErrorFields {
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::MissingMarker { path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
     };
 
     JsonErrorEntry {
-        unit,
+        unit: fields.unit,
         code,
-        path,
-        dep,
-        field,
-        value,
-        message,
-        id,
-        path2,
-        cycle,
+        path: fields.path,
+        dep: fields.dep,
+        field: fields.field,
+        value: fields.value,
+        message: fields.message,
+        id: fields.id,
+        path2: fields.path2,
+        cycle: fields.cycle,
     }
 }
 
@@ -1995,5 +2032,104 @@ extra_field: nope
         assert_eq!(codes.len(), errors.len());
         assert!(codes.iter().all(|code| code.starts_with("SPEC_")));
         assert!(codes.iter().all(|code| !code.is_empty()));
+    }
+
+    #[test]
+    fn spec_error_to_json_entry_preserves_multi_field_variants() {
+        let mut id_by_path = HashMap::new();
+        id_by_path.insert(
+            "units/pricing/apply_discount.unit.spec".to_string(),
+            "pricing/apply_discount".to_string(),
+        );
+
+        let duplicate = spec_error_to_json_entry(
+            &spec_core::SpecError::DuplicateId {
+                id: "pricing/apply_discount".to_string(),
+                file1: "units/pricing/apply_discount.unit.spec".to_string(),
+                file2: "units/pricing/apply_tax.unit.spec".to_string(),
+            },
+            &id_by_path,
+        );
+        assert_eq!(duplicate.unit.as_deref(), Some("pricing/apply_discount"));
+        assert_eq!(
+            duplicate.path.as_deref(),
+            Some("units/pricing/apply_discount.unit.spec")
+        );
+        assert_eq!(duplicate.id.as_deref(), Some("pricing/apply_discount"));
+        assert_eq!(
+            duplicate.path2.as_deref(),
+            Some("units/pricing/apply_tax.unit.spec")
+        );
+
+        let dep_collision = spec_error_to_json_entry(
+            &spec_core::SpecError::DepCollision {
+                dep1: "money/round".to_string(),
+                dep2: "money/format".to_string(),
+                fn_name: "money".to_string(),
+                path: "units/pricing/apply_discount.unit.spec".to_string(),
+            },
+            &id_by_path,
+        );
+        assert_eq!(dep_collision.dep.as_deref(), Some("money/round"));
+        assert_eq!(dep_collision.value.as_deref(), Some("money"));
+        assert_eq!(dep_collision.path2.as_deref(), Some("money/format"));
+    }
+
+    #[test]
+    fn concurrent_passport_write_guard_detects_other_active_writer() {
+        let temp_dir = TempDir::new().unwrap();
+        let passport_root = temp_dir.path().join("units");
+        fs::create_dir_all(&passport_root).unwrap();
+
+        let registry_dir = concurrent_passport_writer_registry_dir(&passport_root, temp_dir.path());
+        fs::create_dir_all(&registry_dir).unwrap();
+        fs::write(
+            registry_dir.join(concurrent_passport_writer_marker_name(7, SystemTime::now())),
+            "",
+        )
+        .unwrap();
+
+        let (_guard, other_writers) = ConcurrentPassportWriteGuard::begin_in(
+            &passport_root,
+            temp_dir.path(),
+            42,
+            SystemTime::now(),
+        )
+        .unwrap();
+
+        assert_eq!(other_writers, 1);
+        let warning =
+            concurrent_passport_write_warning_message(&passport_root, other_writers).unwrap();
+        assert!(warning.contains("1 other spec process"), "{warning}");
+        assert!(
+            warning.contains(passport_root.to_str().unwrap()),
+            "{warning}"
+        );
+    }
+
+    #[test]
+    fn concurrent_passport_write_guard_ignores_stale_markers() {
+        let temp_dir = TempDir::new().unwrap();
+        let passport_root = temp_dir.path().join("units");
+        fs::create_dir_all(&passport_root).unwrap();
+
+        let stale_now = UNIX_EPOCH + Duration::from_secs(10);
+        let registry_dir = concurrent_passport_writer_registry_dir(&passport_root, temp_dir.path());
+        fs::create_dir_all(&registry_dir).unwrap();
+        fs::write(
+            registry_dir.join(concurrent_passport_writer_marker_name(7, stale_now)),
+            "",
+        )
+        .unwrap();
+
+        let (_guard, other_writers) = ConcurrentPassportWriteGuard::begin_in(
+            &passport_root,
+            temp_dir.path(),
+            42,
+            UNIX_EPOCH + Duration::from_secs(10 + CONCURRENT_PASSPORT_WRITER_TTL_SECS + 1),
+        )
+        .unwrap();
+
+        assert_eq!(other_writers, 0);
     }
 }
