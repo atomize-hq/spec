@@ -3790,7 +3790,10 @@ fn spec_test_respects_pipeline_timeout_secs() {
     assert!(!output.status.success(), "test should fail on timeout");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("timed out after 1s"), "{stderr}");
-    assert!(stderr.contains("cargo") && stderr.contains("timed out"), "{stderr}");
+    assert!(
+        stderr.contains("cargo") && stderr.contains("timed out"),
+        "{stderr}"
+    );
 
     // build_timeout_evidence must write a passport with build_status="timeout"
     let passport_path = project_dir.join("units/pricing/apply_discount.spec.passport.json");
