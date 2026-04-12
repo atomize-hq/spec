@@ -224,20 +224,29 @@ fn run_command(
         None => (child.wait()?, false),
     };
 
-    let stdout = String::from_utf8_lossy(&join_pipe_reader(stdout_handle, "stdout")?).into_owned();
-    let mut stderr =
-        String::from_utf8_lossy(&join_pipe_reader(stderr_handle, "stderr")?).into_owned();
-    if timed_out {
-        if !stderr.is_empty() && !stderr.ends_with('\n') {
-            stderr.push('\n');
-        }
-        let timeout_secs = timeout.map_or(0, |value| value.as_secs());
-        stderr.push_str(&format!(
+    // On timeout, do NOT join the pipe reader threads. cargo may have spawned
+    // grandchildren (rustc, test binaries) that inherited the pipe write-ends.
+    // Those grandchildren remain alive after we kill cargo, keeping the pipes
+    // open and causing read_to_end to block indefinitely — defeating the timeout.
+    // We abandon the threads here; they will be cleaned up when the process
+    // exits (shortly after the caller bails on the timeout error).
+    let (stdout, stderr) = if timed_out {
+        drop(stdout_handle);
+        drop(stderr_handle);
+        let timeout_secs = timeout.expect("timed_out implies Some timeout").as_secs();
+        let stderr_msg = format!(
             "spec: cargo {} timed out after {}s\n",
             args.join(" "),
             timeout_secs
-        ));
-    }
+        );
+        (String::new(), stderr_msg)
+    } else {
+        let stdout =
+            String::from_utf8_lossy(&join_pipe_reader(stdout_handle, "stdout")?).into_owned();
+        let stderr =
+            String::from_utf8_lossy(&join_pipe_reader(stderr_handle, "stderr")?).into_owned();
+        (stdout, stderr)
+    };
 
     Ok(CargoResult {
         exit_code: if timed_out {
@@ -252,7 +261,7 @@ fn run_command(
 }
 
 fn read_pipe<R: Read>(mut reader: R) -> std::io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
+    let mut bytes = Vec::with_capacity(65536);
     reader.read_to_end(&mut bytes)?;
     Ok(bytes)
 }
@@ -552,21 +561,22 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
     #[test]
     fn run_command_marks_timeout_and_reports_it() {
         let tmp = TempDir::new().unwrap();
-        let fake_cargo = write_fake_command(&tmp, "fake-cargo.sh", "#!/bin/sh\nsleep 1\n");
+        // Command sleeps 10s so the 2s timeout fires first; as_secs() returns "2s" in message.
+        let fake_cargo = write_fake_command(&tmp, "fake-cargo.sh", "#!/bin/sh\nsleep 10\n");
 
         let result = run_command(
             &fake_cargo,
             tmp.path(),
             &["build"],
             &tmp.path().join("target"),
-            Some(Duration::from_millis(50)),
+            Some(Duration::from_secs(2)),
         )
         .unwrap();
 
         assert!(result.timed_out);
-        assert_eq!(result.exit_code, 124);
+        assert_eq!(result.exit_code, TIMEOUT_EXIT_CODE);
         assert!(
-            result.stderr.contains("timed out after 0s"),
+            result.stderr.contains("timed out after 2s"),
             "{}",
             result.stderr
         );

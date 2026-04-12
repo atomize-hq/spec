@@ -3791,4 +3791,17 @@ fn spec_test_respects_pipeline_timeout_secs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("timed out after 1s"), "{stderr}");
     assert!(stderr.contains("cargo") && stderr.contains("timed out"), "{stderr}");
+
+    // build_timeout_evidence must write a passport with build_status="timeout"
+    let passport_path = project_dir.join("units/pricing/apply_discount.spec.passport.json");
+    assert!(
+        passport_path.exists(),
+        "passport should be written on timeout: {}",
+        passport_path.display()
+    );
+    let passport = fs::read_to_string(&passport_path).unwrap();
+    assert!(
+        passport.contains("\"build_status\": \"timeout\""),
+        "passport should record timeout evidence: {passport}"
+    );
 }
