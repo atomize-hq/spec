@@ -2,6 +2,8 @@ use serde_json::Value;
 use spec_core::AUTHORED_SPEC_VERSION;
 use std::fs;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -38,6 +40,19 @@ fn run_in(cwd: &Path, args: &[&str]) -> std::process::Output {
         .expect("failed to run spec")
 }
 
+fn run_in_with_env(
+    cwd: &Path,
+    args: &[&str],
+    envs: &[(&str, &std::ffi::OsStr)],
+) -> std::process::Output {
+    let mut command = Command::new(bin());
+    command.current_dir(cwd).args(args);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.output().expect("failed to run spec")
+}
+
 fn assert_output_success(context: &str, output: &std::process::Output) {
     if output.status.success() {
         return;
@@ -50,6 +65,10 @@ fn assert_output_success(context: &str, output: &std::process::Output) {
 
 fn temp_repo_dir() -> tempfile::TempDir {
     tempfile::TempDir::new_in(std::env::current_dir().unwrap()).unwrap()
+}
+
+fn git_available() -> bool {
+    Command::new("git").arg("--version").output().is_ok()
 }
 
 fn write_spec(dir: &Path, relative_path: &str, body: &str) {
@@ -66,6 +85,50 @@ fn write_file(dir: &Path, relative_path: &str, body: &str) {
         fs::create_dir_all(parent).unwrap();
     }
     fs::write(path, body).unwrap();
+}
+
+fn run_git(cwd: &Path, args: &[&str]) -> std::process::Output {
+    Command::new("git")
+        .current_dir(cwd)
+        .args(args)
+        .output()
+        .expect("failed to run git")
+}
+
+fn init_git_repo(cwd: &Path) -> String {
+    assert_output_success("git init failed", &run_git(cwd, &["init", "-b", "main"]));
+    assert_output_success(
+        "git config user.email failed",
+        &run_git(cwd, &["config", "user.email", "spec-tests@example.com"]),
+    );
+    assert_output_success(
+        "git config user.name failed",
+        &run_git(cwd, &["config", "user.name", "Spec Tests"]),
+    );
+    assert_output_success("git add failed", &run_git(cwd, &["add", "."]));
+    assert_output_success(
+        "git commit failed",
+        &run_git(cwd, &["commit", "-m", "test fixture"]),
+    );
+
+    let rev_parse = run_git(cwd, &["rev-parse", "HEAD"]);
+    assert_output_success("git rev-parse failed", &rev_parse);
+    String::from_utf8(rev_parse.stdout)
+        .unwrap()
+        .trim()
+        .to_string()
+}
+
+#[cfg(unix)]
+fn write_executable_file(dir: &Path, relative_path: &str, body: &str) {
+    let path = dir.join(relative_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&path, body).unwrap();
+    let mut perms = fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).unwrap();
 }
 
 fn parse_stdout_json(output: &std::process::Output) -> Value {
@@ -703,7 +766,7 @@ body:
     let json = parse_stdout_json(&output);
     assert_eq!(json["status"], "invalid");
     assert_eq!(json["errors"].as_array().unwrap().len(), 1);
-    assert_eq!(json["errors"][0]["code"], "ContractTypeInvalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_CONTRACT_TYPE_INVALID");
     assert_eq!(json["errors"][0]["field"], "contract.inputs.weight");
     assert_eq!(json["errors"][0]["value"], "Vec<");
 }
@@ -845,11 +908,76 @@ local_tests:
     assert!(output.status.success());
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], "1.0");
+    assert_eq!(bundle["schema_version"], 1);
     assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
     assert!(bundle.get("graph").is_some());
     assert!(bundle.get("warnings").is_some());
     assert!(String::from_utf8_lossy(&output.stderr).contains("spec_version not set"));
+}
+
+#[test]
+fn spec_export_omits_top_level_provenance_outside_git() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round monetary values.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    { value }
+"#,
+    );
+
+    let output = run_in(temp_dir.path(), &["export", "units"]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(bundle.get("provenance").is_none());
+}
+
+#[test]
+fn spec_export_includes_top_level_provenance_when_git_available() {
+    if !git_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round monetary values.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    { value }
+"#,
+    );
+
+    let sha = init_git_repo(temp_dir.path());
+    let output = run_in(temp_dir.path(), &["export", "units"]);
+    assert!(output.status.success());
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["provenance"]["git_commit_sha"], sha);
 }
 
 #[test]
@@ -1886,6 +2014,49 @@ fn spec_build_unavailable_cargo_exits_cleanly() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn spec_build_respects_pipeline_timeout_secs() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    write_minimal_units_dir(&units_dir);
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        "[package]\nname = \"timeout-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write_file(project_dir, "spec.toml", "[pipeline]\ntimeout_secs = 1\n");
+
+    let fake_bin_dir = project_dir.join("fake-bin");
+    write_executable_file(
+        &fake_bin_dir,
+        "cargo",
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'cargo 1.89.0'\n  exit 0\nfi\n/bin/sleep 2\n",
+    );
+    let mut path_override = std::ffi::OsString::from(fake_bin_dir.as_os_str());
+    path_override.push(":");
+    path_override.push(std::env::var_os("PATH").unwrap_or_default());
+
+    let output = run_in_with_env(
+        project_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "generated/spec",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+
+    assert!(!output.status.success(), "build should fail on timeout");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("timed out after 1s"), "{stderr}");
+    assert!(stderr.contains("cargo build timed out"), "{stderr}");
+}
+
 #[test]
 fn spec_test_runs_cargo_test() {
     if !cargo_available() {
@@ -2192,6 +2363,10 @@ fn read_passport(passport_path: &Path) -> String {
     fs::read_to_string(passport_path).unwrap()
 }
 
+fn read_passport_json(passport_path: &Path) -> Value {
+    serde_json::from_str(&read_passport(passport_path)).unwrap()
+}
+
 fn write_pricing_project(project_dir: &Path, target_has_tests: bool) -> PathBuf {
     let units_dir = project_dir.join("units");
     let pricing_dir = units_dir.join("pricing");
@@ -2309,6 +2484,63 @@ fn spec_test_writes_evidence_to_passport() {
     assert!(passport.contains("\"id\": \"basic_tax\""), "{passport}");
     assert!(passport.contains("\"status\": \"pass\""), "{passport}");
     assert!(passport.contains("\"observed_at\": \""), "{passport}");
+}
+
+#[test]
+fn spec_test_writes_provenance_to_passport_when_git_available() {
+    if !cargo_available() || !git_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let sha = init_git_repo(&ecommerce_dir);
+
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success("spec test should succeed for ecommerce example", &output);
+
+    let passport =
+        read_passport_json(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert_eq!(passport["evidence"]["provenance"]["git_commit_sha"], sha);
+}
+
+#[test]
+fn spec_test_omits_provenance_outside_git() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let project_dir = temp_dir.path();
+    write_pricing_project(project_dir, true);
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert_output_success("spec test should succeed outside git", &output);
+
+    let passport =
+        read_passport_json(&project_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(passport["evidence"].get("provenance").is_none());
 }
 
 #[test]
@@ -2540,6 +2772,50 @@ fn spec_generate_preserves_passport_evidence_from_prior_test() {
 }
 
 #[test]
+fn spec_generate_preserves_passport_provenance_from_prior_test() {
+    if !cargo_available() || !git_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    write_pricing_project(temp_dir.path(), true);
+    let sha = init_git_repo(temp_dir.path());
+
+    let seed = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to seed spec passports");
+    assert_output_success("spec test should seed passports", &seed);
+
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let after_test = read_passport_json(&passport_path);
+    assert_eq!(after_test["evidence"]["provenance"]["git_commit_sha"], sha);
+
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args(["generate", "units/pricing", "--output", "src/generated"])
+        .output()
+        .expect("failed to run spec generate");
+    assert_output_success("spec generate should succeed after spec test", &output);
+
+    let after_generate = read_passport_json(&passport_path);
+    assert_eq!(
+        after_generate["evidence"]["provenance"]["git_commit_sha"],
+        sha
+    );
+}
+
+#[test]
 fn spec_build_preserves_passport_evidence_from_prior_test() {
     if !cargo_available() {
         return;
@@ -2603,6 +2879,54 @@ fn spec_build_preserves_passport_evidence_from_prior_test() {
 }
 
 #[test]
+fn spec_build_preserves_passport_provenance_from_prior_test() {
+    if !cargo_available() || !git_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    write_pricing_project(temp_dir.path(), true);
+    let sha = init_git_repo(temp_dir.path());
+
+    let seed = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to seed spec passports");
+    assert_output_success("spec test should seed passports", &seed);
+
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let after_test = read_passport_json(&passport_path);
+    assert_eq!(after_test["evidence"]["provenance"]["git_commit_sha"], sha);
+
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "build",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec build");
+    assert_output_success("spec build should succeed after spec test", &output);
+
+    let after_build = read_passport_json(&passport_path);
+    assert_eq!(after_build["evidence"]["provenance"]["git_commit_sha"], sha);
+}
+
+#[test]
 fn spec_test_build_failure_writes_fail_build_status_to_passport() {
     if !cargo_available() {
         return;
@@ -2652,6 +2976,54 @@ body:
         "{passport}"
     );
     assert!(passport.contains("\"test_results\": []"), "{passport}");
+}
+
+#[test]
+fn spec_test_build_failure_writes_provenance_when_git_available() {
+    if !cargo_available() || !git_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    write_spec(
+        &ecommerce_dir.join("units"),
+        "pricing/broken.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/broken
+kind: function
+intent:
+  why: Force a compile error.
+contract:
+  returns: NotARealType
+body:
+  rust: |
+    {
+        todo!()
+    }
+"#,
+    );
+    let sha = init_git_repo(&ecommerce_dir);
+
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ecommerce_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+    assert!(
+        !output.status.success(),
+        "spec test should exit non-zero for compile failure"
+    );
+
+    let passport =
+        read_passport_json(&ecommerce_dir.join("units/pricing/apply_discount.spec.passport.json"));
+    assert_eq!(passport["evidence"]["provenance"]["git_commit_sha"], sha);
 }
 
 #[test]
@@ -2913,6 +3285,7 @@ body:
         !units[0]["errors"].as_array().unwrap().is_empty(),
         "errors array should be non-empty for invalid unit"
     );
+    assert_eq!(units[0]["errors"][0]["code"], "SPEC_USE_STATEMENT_IN_BODY");
     assert_eq!(units[0]["stale"], false);
 }
 
@@ -2946,6 +3319,7 @@ fn spec_status_json_loader_error_surfaces_in_response() {
         !loader_errors.is_empty(),
         "loader_errors must be present in JSON response when loader fails"
     );
+    assert_eq!(loader_errors[0]["code"], "SPEC_YAML_PARSE");
 }
 
 #[test]
@@ -3373,5 +3747,64 @@ fn spec_test_directory_path_unchanged() {
     assert!(
         target_passport.contains("\"status\": \"pass\""),
         "{target_passport}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn spec_test_respects_pipeline_timeout_secs() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    write_minimal_units_dir(&units_dir);
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        "[package]\nname = \"timeout-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write_file(project_dir, "spec.toml", "[pipeline]\ntimeout_secs = 1\n");
+
+    let fake_bin_dir = project_dir.join("fake-bin");
+    write_executable_file(
+        &fake_bin_dir,
+        "cargo",
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'cargo 1.89.0'\n  exit 0\nfi\n/bin/sleep 2\n",
+    );
+    let mut path_override = std::ffi::OsString::from(fake_bin_dir.as_os_str());
+    path_override.push(":");
+    path_override.push(std::env::var_os("PATH").unwrap_or_default());
+
+    let output = run_in_with_env(
+        project_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "generated/spec",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+
+    assert!(!output.status.success(), "test should fail on timeout");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("timed out after 1s"), "{stderr}");
+    assert!(
+        stderr.contains("cargo") && stderr.contains("timed out"),
+        "{stderr}"
+    );
+
+    // build_timeout_evidence must write a passport with build_status="timeout"
+    let passport_path = project_dir.join("units/pricing/apply_discount.spec.passport.json");
+    assert!(
+        passport_path.exists(),
+        "passport should be written on timeout: {}",
+        passport_path.display()
+    );
+    let passport = fs::read_to_string(&passport_path).unwrap();
+    assert!(
+        passport.contains("\"build_status\": \"timeout\""),
+        "passport should record timeout evidence: {passport}"
     );
 }

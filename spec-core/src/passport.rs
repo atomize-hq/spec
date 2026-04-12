@@ -49,12 +49,20 @@ pub struct PassportTestResult {
     pub reason: Option<String>,
 }
 
+/// Minimal artifact provenance for machine-readable outputs.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ArtifactProvenance {
+    pub git_commit_sha: String,
+}
+
 /// Observed runtime evidence captured from the last `spec test` run.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PassportEvidence {
     pub build_status: String,
     pub test_results: Vec<PassportTestResult>,
     pub observed_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<ArtifactProvenance>,
 }
 
 /// The full passport document for one unit.
@@ -599,6 +607,7 @@ mod tests {
                 build_status: "pass".to_string(),
                 test_results: vec![],
                 observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: None,
             }),
             compute_contract_hash(&spec),
         );
@@ -694,6 +703,9 @@ mod tests {
                     reason: None,
                 }],
                 observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: Some(ArtifactProvenance {
+                    git_commit_sha: "abc123".to_string(),
+                }),
             }),
             Some("sha256:abc123".to_string()),
         );
@@ -708,9 +720,43 @@ mod tests {
                     reason: None,
                 }],
                 observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: Some(ArtifactProvenance {
+                    git_commit_sha: "abc123".to_string(),
+                }),
             })
         );
         assert_eq!(passport.contract_hash, Some("sha256:abc123".to_string()));
+    }
+
+    #[test]
+    fn legacy_passport_evidence_without_provenance_still_deserializes() {
+        let passport: Passport = serde_json::from_str(
+            r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_tax",
+  "intent": "Why pricing/apply_tax",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2026-04-04T00:00:00Z",
+  "source_file": "units/pricing/apply_tax.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [],
+    "observed_at": "2026-04-04T00:01:00Z"
+  }
+}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            passport.evidence,
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: None,
+            })
+        );
     }
 
     #[test]

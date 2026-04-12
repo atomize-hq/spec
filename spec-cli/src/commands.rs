@@ -10,8 +10,8 @@ use spec_core::generator::{
 use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
 use spec_core::normalizer::normalize_spec;
 use spec_core::passport::{
-    PassportEvidence, PassportTestResult, build_passport_with_evidence, compute_contract_hash,
-    ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
+    ArtifactProvenance, PassportEvidence, PassportTestResult, build_passport_with_evidence,
+    compute_contract_hash, ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, cargo_available, parse_cargo_test_output, run_cargo_build,
@@ -26,6 +26,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 type CollectedSpecs = (
     Vec<LoadedSpec>,
@@ -36,6 +37,7 @@ type CollectedSpecs = (
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
 
 const JSON_SCHEMA_VERSION: u8 = 1;
+const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -90,6 +92,85 @@ struct JsonErrorEntry {
     path2: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cycle: Option<Vec<String>>,
+}
+
+#[derive(Default)]
+struct ErrorFields {
+    unit: Option<String>,
+    path: Option<String>,
+    dep: Option<String>,
+    field: Option<String>,
+    value: Option<String>,
+    message: Option<String>,
+    id: Option<String>,
+    path2: Option<String>,
+    cycle: Option<Vec<String>>,
+}
+
+struct PassportWritePlan<'a> {
+    passport_root: &'a Path,
+    specs: &'a [LoadedSpec],
+}
+
+struct ConcurrentPassportWriteGuard {
+    marker_path: Option<PathBuf>,
+}
+
+impl ConcurrentPassportWriteGuard {
+    fn begin(passport_root: &Path) -> Self {
+        match Self::begin_in(
+            passport_root,
+            &std::env::temp_dir(),
+            std::process::id(),
+            SystemTime::now(),
+        ) {
+            Ok((guard, other_writers)) => {
+                if let Some(warning) =
+                    concurrent_passport_write_warning_message(passport_root, other_writers)
+                {
+                    eprintln!("{warning}");
+                }
+                guard
+            }
+            Err(_) => Self { marker_path: None },
+        }
+    }
+
+    fn begin_in(
+        passport_root: &Path,
+        registry_base: &Path,
+        pid: u32,
+        now: SystemTime,
+    ) -> Result<(Self, usize)> {
+        let registry_dir = concurrent_passport_writer_registry_dir(passport_root, registry_base);
+        fs::create_dir_all(&registry_dir)
+            .with_context(|| format!("Failed to create {}", registry_dir.display()))?;
+
+        let marker_path = registry_dir.join(concurrent_passport_writer_marker_name(pid, now));
+        fs::write(&marker_path, "")
+            .with_context(|| format!("Failed to write {}", marker_path.display()))?;
+
+        let other_writers = count_other_active_passport_writers(&registry_dir, pid, now)?;
+        Ok((
+            Self {
+                marker_path: Some(marker_path),
+            },
+            other_writers,
+        ))
+    }
+}
+
+impl Drop for ConcurrentPassportWriteGuard {
+    fn drop(&mut self) {
+        let Some(marker_path) = self.marker_path.take() else {
+            return;
+        };
+
+        let _ = fs::remove_file(&marker_path);
+        if let Some(parent) = marker_path.parent() {
+            let _ = fs::remove_dir(parent);
+        }
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -510,7 +591,12 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
         );
     }
 
-    let bundle = build_export_bundle(&specs, &rfc3339_now());
+    let provenance = resolve_git_provenance(if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    });
+    let bundle = build_export_bundle(&specs, &rfc3339_now(), provenance.as_ref());
     let json = serde_json::to_string_pretty(&bundle)?;
 
     match output {
@@ -680,6 +766,7 @@ fn finalize_passports(
         return Ok(());
     }
 
+    let _writer_guard = ConcurrentPassportWriteGuard::begin(passport_root);
     write_passports(specs, generated_at, evidence_by_spec, contract_hash_by_spec)?;
     ensure_gitignore_entry(passport_root)
         .with_context(|| "Failed to update .gitignore for passport files")?;
@@ -745,6 +832,7 @@ fn write_passports(
 struct PipelineContext {
     crate_root: PathBuf,
     cargo_target_dir: PathBuf,
+    timeout: Option<Duration>,
     // Holds the tempdir alive for the duration of the command when we own one.
     _temp_dir: Option<tempfile::TempDir>,
 }
@@ -780,6 +868,7 @@ fn resolve_pipeline_context(
     Ok(PipelineContext {
         crate_root,
         cargo_target_dir,
+        timeout: config.pipeline.timeout_secs.map(Duration::from_secs),
         _temp_dir: temp_dir,
     })
 }
@@ -807,9 +896,12 @@ fn build_command(
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
-    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout)?;
     print!("{}", result.stdout);
     eprint!("{}", result.stderr);
+    if result.timed_out {
+        bail!("❌ cargo build timed out{}", timeout_suffix(ctx.timeout));
+    }
     if result.exit_code != 0 {
         bail!("❌ cargo build failed");
     }
@@ -849,6 +941,9 @@ fn test_command(
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
+    let passport_write_plan =
+        passport_write_plan(path, spec_root, &generated.specs, target_spec.as_ref());
+
     let output_prefix = if target_spec.is_some() {
         Some(output_module_prefix(output)?)
     } else {
@@ -862,39 +957,58 @@ fn test_command(
         _ => None,
     };
 
-    let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir)?;
+    let provenance = resolve_git_provenance(&ctx.crate_root);
+    let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout)?;
     print!("{}", build_result.stdout);
     eprint!("{}", build_result.stderr);
+    if build_result.timed_out {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+        bail!("❌ cargo build timed out{}", timeout_suffix(ctx.timeout));
+    }
     if build_result.exit_code != 0 {
         let observed_at = rfc3339_now();
-        if let Some(target_spec) = target_spec.as_ref() {
-            let evidence_by_spec =
-                build_failure_evidence(std::slice::from_ref(target_spec), &observed_at);
-            let contract_hash_by_spec = contract_hashes_for(std::slice::from_ref(target_spec));
-            finalize_passports(
-                spec_root,
-                std::slice::from_ref(target_spec),
-                &generated.generated_at,
-                Some(&evidence_by_spec),
-                contract_hash_by_spec.as_ref(),
-            )?;
-        } else {
-            let evidence_by_spec = build_failure_evidence(&generated.specs, &observed_at);
-            let contract_hash_by_spec = contract_hashes_for(&generated.specs);
-            finalize_passports(
-                path,
-                &generated.specs,
-                &generated.generated_at,
-                Some(&evidence_by_spec),
-                contract_hash_by_spec.as_ref(),
-            )?;
-        }
+        let evidence_by_spec =
+            build_failure_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
         bail!("❌ cargo build failed");
     }
 
-    let test_result = run_cargo_test(&ctx.crate_root, &ctx.cargo_target_dir, filter.as_deref())?;
+    let test_result = run_cargo_test(
+        &ctx.crate_root,
+        &ctx.cargo_target_dir,
+        filter.as_deref(),
+        ctx.timeout,
+    )?;
     print!("{}", test_result.stdout);
     eprint!("{}", test_result.stderr);
+    if test_result.timed_out {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+        bail!("❌ cargo test timed out{}", timeout_suffix(ctx.timeout));
+    }
 
     if target_spec.is_some() && zero_tests_ran(&test_result.stdout) {
         bail!("❌ cargo test matched 0 tests");
@@ -902,42 +1016,54 @@ fn test_command(
 
     let parsed_test_results = parse_cargo_test_output(&test_result.stdout);
     let observed_at = rfc3339_now();
-    if let Some(target_spec) = target_spec.as_ref() {
-        let evidence_by_spec = build_test_evidence(
-            std::slice::from_ref(target_spec),
-            output,
-            &parsed_test_results,
-            &observed_at,
-        )?;
-        let contract_hash_by_spec = contract_hashes_for(std::slice::from_ref(target_spec));
-        finalize_passports(
-            spec_root,
-            std::slice::from_ref(target_spec),
-            &generated.generated_at,
-            Some(&evidence_by_spec),
-            contract_hash_by_spec.as_ref(),
-        )?;
-    } else {
-        let evidence_by_spec =
-            build_test_evidence(&generated.specs, output, &parsed_test_results, &observed_at)?;
-        let contract_hash_by_spec = contract_hashes_for(&generated.specs);
-        finalize_passports(
-            path,
-            &generated.specs,
-            &generated.generated_at,
-            Some(&evidence_by_spec),
-            contract_hash_by_spec.as_ref(),
-        )?;
-    }
+    let evidence_by_spec = build_test_evidence(
+        passport_write_plan.specs,
+        output,
+        &parsed_test_results,
+        &observed_at,
+        provenance.as_ref(),
+    )?;
+    let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+    finalize_test_passports(
+        &passport_write_plan,
+        &generated.generated_at,
+        &evidence_by_spec,
+        contract_hash_by_spec.as_ref(),
+    )?;
     if test_result.exit_code != 0 {
         bail!("❌ cargo test failed");
     }
     Ok(())
 }
 
+fn timeout_suffix(timeout: Option<Duration>) -> String {
+    match timeout {
+        Some(timeout) => format!(" after {}s", timeout.as_secs()),
+        None => String::new(),
+    }
+}
+
 fn build_failure_evidence(
     specs: &[LoadedSpec],
     observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> BTreeMap<String, PassportEvidence> {
+    build_incomplete_evidence(specs, "fail", observed_at, provenance)
+}
+
+fn build_timeout_evidence(
+    specs: &[LoadedSpec],
+    observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> BTreeMap<String, PassportEvidence> {
+    build_incomplete_evidence(specs, "timeout", observed_at, provenance)
+}
+
+fn build_incomplete_evidence(
+    specs: &[LoadedSpec],
+    build_status: &str,
+    observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
 ) -> BTreeMap<String, PassportEvidence> {
     specs
         .iter()
@@ -945,20 +1071,134 @@ fn build_failure_evidence(
             (
                 spec.spec.id.clone(),
                 PassportEvidence {
-                    build_status: "fail".to_string(),
+                    build_status: build_status.to_string(),
                     test_results: vec![],
                     observed_at: observed_at.to_string(),
+                    provenance: provenance.cloned(),
                 },
             )
         })
         .collect()
 }
 
+fn passport_write_plan<'a>(
+    requested_path: &'a Path,
+    spec_root: &'a Path,
+    generated_specs: &'a [LoadedSpec],
+    target_spec: Option<&'a LoadedSpec>,
+) -> PassportWritePlan<'a> {
+    if let Some(target_spec) = target_spec {
+        PassportWritePlan {
+            passport_root: spec_root,
+            specs: std::slice::from_ref(target_spec),
+        }
+    } else {
+        PassportWritePlan {
+            passport_root: requested_path,
+            specs: generated_specs,
+        }
+    }
+}
+
+fn finalize_test_passports(
+    plan: &PassportWritePlan<'_>,
+    generated_at: &str,
+    evidence_by_spec: &BTreeMap<String, PassportEvidence>,
+    contract_hash_by_spec: Option<&BTreeMap<String, String>>,
+) -> Result<()> {
+    finalize_passports(
+        plan.passport_root,
+        plan.specs,
+        generated_at,
+        Some(evidence_by_spec),
+        contract_hash_by_spec,
+    )
+}
+
+fn concurrent_passport_writer_registry_dir(passport_root: &Path, registry_base: &Path) -> PathBuf {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    // DefaultHasher::new() uses a fixed zero seed (not per-process randomized), so two
+    // concurrent processes produce the same hash for the same path within a single Rust
+    // version. The algorithm is documented as unstable across Rust versions — if two spec
+    // binaries compiled with different Rust versions run concurrently, they may hash to
+    // different registry dirs and miss each other. For a best-effort warn-only feature
+    // this is acceptable; use a stable hasher here if the guarantee ever matters.
+    let canonical_root = passport_root
+        .canonicalize()
+        .unwrap_or_else(|_| passport_root.to_path_buf());
+    let mut hasher = DefaultHasher::new();
+    canonical_root.hash(&mut hasher);
+    let hash = hasher.finish();
+    registry_base.join(format!("spec-passport-writers-{hash:016x}"))
+}
+
+fn concurrent_passport_writer_marker_name(pid: u32, now: SystemTime) -> String {
+    let now_secs = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    format!("{pid}-{now_secs}.active")
+}
+
+fn parse_concurrent_passport_writer_marker(file_name: &str) -> Option<(u32, u64)> {
+    let file_name = file_name.strip_suffix(".active")?;
+    let (pid, started_at) = file_name.split_once('-')?;
+    Some((pid.parse().ok()?, started_at.parse().ok()?))
+}
+
+fn count_other_active_passport_writers(
+    registry_dir: &Path,
+    current_pid: u32,
+    now: SystemTime,
+) -> Result<usize> {
+    let now_secs = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let mut other_writers = HashSet::new();
+
+    for entry in fs::read_dir(registry_dir)
+        .with_context(|| format!("Failed to read {}", registry_dir.display()))?
+    {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some((pid, started_at)) = parse_concurrent_passport_writer_marker(file_name) else {
+            continue;
+        };
+
+        if now_secs.saturating_sub(started_at) > CONCURRENT_PASSPORT_WRITER_TTL_SECS {
+            let _ = fs::remove_file(entry.path());
+            continue;
+        }
+
+        if pid != current_pid {
+            other_writers.insert(pid);
+        }
+    }
+
+    Ok(other_writers.len())
+}
+
+fn concurrent_passport_write_warning_message(
+    passport_root: &Path,
+    other_writers: usize,
+) -> Option<String> {
+    if other_writers == 0 {
+        return None;
+    }
+
+    Some(format!(
+        "⚠ detected {other_writers} other spec process{} writing passports under {}; concurrent passport writes are best-effort only (no locking)",
+        pluralize(other_writers),
+        passport_root.display()
+    ))
+}
+
 fn build_test_evidence(
     specs: &[LoadedSpec],
     output: &Path,
-    parsed_test_results: &BTreeMap<String, ParsedCargoTestResult>,
+    parsed_test_results: &HashMap<String, ParsedCargoTestResult>,
     observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
 ) -> Result<BTreeMap<String, PassportEvidence>> {
     let output_prefix = output_module_prefix(output)?;
     let mut evidence_by_spec = BTreeMap::new();
@@ -969,6 +1209,9 @@ fn build_test_evidence(
 
         for local_test in &spec.spec.local_tests {
             let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+            // This lookup runs once per local test after parsing cargo stdout, so
+            // keep it on a hash-based map for large repos where thousands of test
+            // names may be correlated back into passport evidence in one command.
             let observed = parsed_test_results.get(&full_name);
             let (status, reason) = match observed {
                 Some(result) => (result.status.clone(), result.reason.clone()),
@@ -991,11 +1234,38 @@ fn build_test_evidence(
                 build_status: "pass".to_string(),
                 test_results,
                 observed_at: observed_at.to_string(),
+                provenance: provenance.cloned(),
             },
         );
     }
 
     Ok(evidence_by_spec)
+}
+
+fn resolve_git_provenance(path: &Path) -> Option<ArtifactProvenance> {
+    let sha = resolve_git_commit_sha(path)?;
+    Some(ArtifactProvenance {
+        git_commit_sha: sha,
+    })
+}
+
+fn resolve_git_commit_sha(path: &Path) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .current_dir(path)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let sha = String::from_utf8(output.stdout).ok()?;
+    let sha = sha.trim();
+    if sha.is_empty() {
+        None
+    } else {
+        Some(sha.to_string())
+    }
 }
 
 fn output_module_prefix(output: &Path) -> Result<String> {
@@ -1219,304 +1489,191 @@ fn push_warning(diagnostics: &mut DiagnosticMap, warning: spec_core::SpecWarning
         .push(warning.to_string());
 }
 
+fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
+    match err {
+        spec_core::SpecError::Io(_) => "SPEC_IO",
+        spec_core::SpecError::InvalidUtf8 { .. } => "SPEC_INVALID_UTF8",
+        spec_core::SpecError::YamlParse { .. } => "SPEC_YAML_PARSE",
+        spec_core::SpecError::Json(_) => "SPEC_JSON",
+        spec_core::SpecError::SchemaValidation { .. } => "SPEC_SCHEMA_VALIDATION",
+        spec_core::SpecError::SemanticValidation { .. } => "SPEC_SEMANTIC_VALIDATION",
+        spec_core::SpecError::RustKeyword { .. } => "SPEC_RUST_KEYWORD",
+        spec_core::SpecError::DuplicateId { .. } => "SPEC_DUPLICATE_ID",
+        spec_core::SpecError::DepCollision { .. } => "SPEC_DEP_COLLISION",
+        spec_core::SpecError::MissingDep { .. } => "SPEC_MISSING_DEP",
+        spec_core::SpecError::CyclicDep { .. } => "SPEC_CYCLIC_DEP",
+        spec_core::SpecError::UseStatementInBody { .. } => "SPEC_USE_STATEMENT_IN_BODY",
+        spec_core::SpecError::BodyRustMustBeBlock { .. } => "SPEC_BODY_RUST_MUST_BE_BLOCK",
+        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { .. } => {
+            "SPEC_BODY_RUST_LOOKS_LIKE_FN_DECLARATION"
+        }
+        spec_core::SpecError::LocalTestExpectNotExpr { .. } => "SPEC_LOCAL_TEST_EXPECT_NOT_EXPR",
+        spec_core::SpecError::DuplicateLocalTestId { .. } => "SPEC_DUPLICATE_LOCAL_TEST_ID",
+        spec_core::SpecError::ContractTypeInvalid { .. } => "SPEC_CONTRACT_TYPE_INVALID",
+        spec_core::SpecError::ContractInputNameInvalid { .. } => "SPEC_CONTRACT_INPUT_NAME_INVALID",
+        spec_core::SpecError::Traversal { .. } => "SPEC_TRAVERSAL",
+        spec_core::SpecError::Generator { .. } => "SPEC_GENERATOR",
+        spec_core::SpecError::OutputDir { .. } => "SPEC_OUTPUT_DIR",
+        spec_core::SpecError::MissingMarker { .. } => "SPEC_MISSING_MARKER",
+    }
+}
+
 fn spec_error_to_json_entry(
     err: &spec_core::SpecError,
     id_by_path: &HashMap<String, String>,
 ) -> JsonErrorEntry {
-    let code = match err {
-        spec_core::SpecError::Io(_) => "Io",
-        spec_core::SpecError::InvalidUtf8 { .. } => "InvalidUtf8",
-        spec_core::SpecError::YamlParse { .. } => "YamlParse",
-        spec_core::SpecError::Json(_) => "Json",
-        spec_core::SpecError::SchemaValidation { .. } => "SchemaValidation",
-        spec_core::SpecError::SemanticValidation { .. } => "SemanticValidation",
-        spec_core::SpecError::RustKeyword { .. } => "RustKeyword",
-        spec_core::SpecError::DuplicateId { .. } => "DuplicateId",
-        spec_core::SpecError::DepCollision { .. } => "DepCollision",
-        spec_core::SpecError::MissingDep { .. } => "MissingDep",
-        spec_core::SpecError::CyclicDep { .. } => "CyclicDep",
-        spec_core::SpecError::UseStatementInBody { .. } => "UseStatementInBody",
-        spec_core::SpecError::BodyRustMustBeBlock { .. } => "BodyRustMustBeBlock",
-        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { .. } => {
-            "BodyRustLooksLikeFnDeclaration"
-        }
-        spec_core::SpecError::LocalTestExpectNotExpr { .. } => "LocalTestExpectNotExpr",
-        spec_core::SpecError::DuplicateLocalTestId { .. } => "DuplicateLocalTestId",
-        spec_core::SpecError::ContractTypeInvalid { .. } => "ContractTypeInvalid",
-        spec_core::SpecError::ContractInputNameInvalid { .. } => "ContractInputNameInvalid",
-        spec_core::SpecError::Traversal { .. } => "Traversal",
-        spec_core::SpecError::Generator { .. } => "Generator",
-        spec_core::SpecError::OutputDir { .. } => "OutputDir",
-        spec_core::SpecError::MissingMarker { .. } => "MissingMarker",
-    }
-    .to_string();
+    let code = spec_error_code(err).to_string();
 
-    let (unit, path, dep, field, value, message, id, path2, cycle) = match err {
-        spec_core::SpecError::Io(_) => (
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(err.to_string()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::InvalidUtf8 { path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::YamlParse { message, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::Json(_) => (
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(err.to_string()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::SchemaValidation { message, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::SemanticValidation { message, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::RustKeyword { path, segment, id } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            Some(segment.clone()),
-            None,
-            Some(id.clone()),
-            None,
-            None,
-        ),
-        spec_core::SpecError::DuplicateId { id, file1, file2 } => (
-            id_by_path.get(file1).cloned(),
-            Some(file1.clone()),
-            None,
-            None,
-            None,
-            None,
-            Some(id.clone()),
-            Some(file2.clone()),
-            None,
-        ),
+    let fields = match err {
+        spec_core::SpecError::Io(_) => ErrorFields {
+            message: Some(err.to_string()),
+            ..Default::default()
+        },
+        spec_core::SpecError::InvalidUtf8 { path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::YamlParse { message, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::Json(_) => ErrorFields {
+            message: Some(err.to_string()),
+            ..Default::default()
+        },
+        spec_core::SpecError::SchemaValidation { message, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::SemanticValidation { message, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::RustKeyword { path, segment, id } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            value: Some(segment.clone()),
+            id: Some(id.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::DuplicateId { id, file1, file2 } => ErrorFields {
+            unit: id_by_path.get(file1).cloned(),
+            path: Some(file1.clone()),
+            id: Some(id.clone()),
+            path2: Some(file2.clone()),
+            ..Default::default()
+        },
         spec_core::SpecError::DepCollision {
             dep1,
             dep2,
             fn_name,
             path,
-        } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            Some(dep1.clone()),
-            None,
-            Some(fn_name.clone()),
-            None,
-            None,
-            Some(dep2.clone()),
-            None,
-        ),
-        spec_core::SpecError::MissingDep { dep, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            Some(dep.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::CyclicDep { cycle_path, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(cycle_path.clone()),
-        ),
-        spec_core::SpecError::UseStatementInBody { path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::BodyRustMustBeBlock { path, message } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::LocalTestExpectNotExpr { id, path, message } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            Some(id.clone()),
-            None,
-            None,
-        ),
-        spec_core::SpecError::DuplicateLocalTestId { id, path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            Some(id.clone()),
-            None,
-            None,
-        ),
+        } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            dep: Some(dep1.clone()),
+            value: Some(fn_name.clone()),
+            path2: Some(dep2.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::MissingDep { dep, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            dep: Some(dep.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::CyclicDep { cycle_path, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            cycle: Some(cycle_path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::UseStatementInBody { path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::BodyRustMustBeBlock { path, message } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::LocalTestExpectNotExpr { id, path, message } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            id: Some(id.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::DuplicateLocalTestId { id, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            id: Some(id.clone()),
+            ..Default::default()
+        },
         spec_core::SpecError::ContractTypeInvalid {
             field,
             type_str,
             path,
             ..
-        } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            Some(format!("contract.{field}")),
-            Some(type_str.clone()),
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::ContractInputNameInvalid { name, path, .. } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            Some(format!("contract.inputs.{name}")),
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::Traversal { path, .. } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::Generator { message } => (
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::OutputDir { message } => (
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(message.clone()),
-            None,
-            None,
-            None,
-        ),
-        spec_core::SpecError::MissingMarker { path } => (
-            id_by_path.get(path).cloned(),
-            Some(path.clone()),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
+        } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            field: Some(format!("contract.{field}")),
+            value: Some(type_str.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::ContractInputNameInvalid { name, path, .. } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            field: Some(format!("contract.inputs.{name}")),
+            ..Default::default()
+        },
+        spec_core::SpecError::Traversal { message, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::Generator { message } => ErrorFields {
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::OutputDir { message } => ErrorFields {
+            message: Some(message.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::MissingMarker { path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            ..Default::default()
+        },
     };
 
     JsonErrorEntry {
-        unit,
+        unit: fields.unit,
         code,
-        path,
-        dep,
-        field,
-        value,
-        message,
-        id,
-        path2,
-        cycle,
+        path: fields.path,
+        dep: fields.dep,
+        field: fields.field,
+        value: fields.value,
+        message: fields.message,
+        id: fields.id,
+        path2: fields.path2,
+        cycle: fields.cycle,
     }
 }
 
@@ -1671,6 +1828,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::process::Command as ProcessCommand;
+    use std::time::Instant;
     use tempfile::TempDir;
 
     fn write_spec(dir: &Path, relative_path: &str, body: &str) {
@@ -1695,6 +1853,151 @@ mod tests {
                 fs::copy(&entry_path, &dst_path).unwrap();
             }
         }
+    }
+
+    fn benchmark_loaded_spec(index: usize, tests_per_spec: usize) -> LoadedSpec {
+        let id = format!("pricing/bench_{index:04}");
+        LoadedSpec {
+            source: spec_core::types::SpecSource {
+                file_path: format!("units/pricing/bench_{index:04}.unit.spec"),
+                id: id.clone(),
+            },
+            spec: spec_core::types::SpecStruct {
+                id,
+                kind: "function".to_string(),
+                intent: spec_core::types::Intent {
+                    why: format!("Benchmark unit {index}"),
+                },
+                contract: None,
+                deps: Vec::new(),
+                imports: Vec::new(),
+                body: spec_core::types::Body {
+                    rust: "{ true }".to_string(),
+                },
+                local_tests: (0..tests_per_spec)
+                    .map(|test_index| spec_core::types::LocalTest {
+                        id: format!("case_{test_index:02}"),
+                        expect: "true".to_string(),
+                    })
+                    .collect(),
+                links: None,
+                spec_version: None,
+            },
+        }
+    }
+
+    fn benchmark_specs(spec_count: usize, tests_per_spec: usize) -> Vec<LoadedSpec> {
+        (0..spec_count)
+            .map(|index| benchmark_loaded_spec(index, tests_per_spec))
+            .collect()
+    }
+
+    fn benchmark_stdout(specs: &[LoadedSpec], output: &Path) -> String {
+        let output_prefix = output_module_prefix(output).unwrap();
+        let mut stdout = String::from("running synthetic benchmark tests\n");
+
+        for spec in specs {
+            let resolved = ResolvedSpec::from_spec(spec.spec.clone());
+            for (test_index, local_test) in spec.spec.local_tests.iter().enumerate() {
+                let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+                let status = if test_index % 11 == 0 { "FAILED" } else { "ok" };
+                stdout.push_str("test ");
+                stdout.push_str(&full_name);
+                stdout.push_str(" ... ");
+                stdout.push_str(status);
+                stdout.push('\n');
+            }
+        }
+
+        stdout
+    }
+
+    fn parse_cargo_test_output_btree_baseline(
+        stdout: &str,
+    ) -> BTreeMap<String, ParsedCargoTestResult> {
+        let mut results: BTreeMap<String, ParsedCargoTestResult> = BTreeMap::new();
+
+        for line in stdout.lines() {
+            let Some(rest) = line.strip_prefix("test ") else {
+                continue;
+            };
+            let Some((full_name, terminal_status)) = rest.split_once(" ... ") else {
+                continue;
+            };
+
+            let parsed = match terminal_status.trim() {
+                "ok" => ParsedCargoTestResult {
+                    status: "pass".to_string(),
+                    reason: None,
+                },
+                "FAILED" => ParsedCargoTestResult {
+                    status: "fail".to_string(),
+                    reason: None,
+                },
+                other => ParsedCargoTestResult {
+                    status: "error".to_string(),
+                    reason: Some(other.to_string()),
+                },
+            };
+
+            match results.get_mut(full_name) {
+                Some(existing) => {
+                    existing.status = "error".to_string();
+                    existing.reason = Some("multiple matching cargo results".to_string());
+                }
+                None => {
+                    results.insert(full_name.to_string(), parsed);
+                }
+            }
+        }
+
+        results
+    }
+
+    fn build_test_evidence_btree_baseline(
+        specs: &[LoadedSpec],
+        output: &Path,
+        parsed_test_results: &BTreeMap<String, ParsedCargoTestResult>,
+        observed_at: &str,
+        provenance: Option<&ArtifactProvenance>,
+    ) -> Result<BTreeMap<String, PassportEvidence>> {
+        let output_prefix = output_module_prefix(output)?;
+        let mut evidence_by_spec = BTreeMap::new();
+
+        for spec in specs {
+            let resolved = ResolvedSpec::from_spec(spec.spec.clone());
+            let mut test_results = Vec::new();
+
+            for local_test in &spec.spec.local_tests {
+                let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+                let observed = parsed_test_results.get(&full_name);
+                let (status, reason) = match observed {
+                    Some(result) => (result.status.clone(), result.reason.clone()),
+                    None => (
+                        "unknown".to_string(),
+                        Some("test not found in cargo output".to_string()),
+                    ),
+                };
+
+                test_results.push(PassportTestResult {
+                    id: local_test.id.clone(),
+                    status,
+                    reason,
+                });
+            }
+
+            evidence_by_spec.insert(
+                spec.spec.id.clone(),
+                PassportEvidence {
+                    build_status: "pass".to_string(),
+                    test_results,
+                    observed_at: observed_at.to_string(),
+                    provenance: provenance.cloned(),
+                },
+            );
+        }
+
+        Ok(evidence_by_spec)
     }
 
     #[test]
@@ -1820,5 +2123,311 @@ extra_field: nope
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    #[test]
+    fn spec_error_code_namespace_is_stable_and_exhaustive_for_current_variants() {
+        let io_error = std::io::Error::other("boom");
+        let json_error = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let errors = vec![
+            spec_core::SpecError::Io(io_error),
+            spec_core::SpecError::InvalidUtf8 {
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::YamlParse {
+                message: "bad yaml".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::Json(json_error),
+            spec_core::SpecError::SchemaValidation {
+                message: "bad schema".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::SemanticValidation {
+                message: "bad semantics".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::RustKeyword {
+                segment: "type".to_string(),
+                id: "pricing/type".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::DuplicateId {
+                id: "pricing/apply_discount".to_string(),
+                file1: "units/a.unit.spec".to_string(),
+                file2: "units/b.unit.spec".to_string(),
+            },
+            spec_core::SpecError::DepCollision {
+                dep1: "money/round".to_string(),
+                dep2: "money/format".to_string(),
+                fn_name: "money".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::MissingDep {
+                dep: "money/round".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::CyclicDep {
+                cycle_path: vec!["a".to_string(), "b".to_string()],
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::UseStatementInBody {
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::BodyRustMustBeBlock {
+                message: "expected block".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::BodyRustLooksLikeFnDeclaration {
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::LocalTestExpectNotExpr {
+                id: "happy_path".to_string(),
+                message: "not expr".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::DuplicateLocalTestId {
+                id: "happy_path".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::ContractTypeInvalid {
+                field: "contract.returns".to_string(),
+                type_str: "Vec<".to_string(),
+                message: "bad type".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::ContractInputNameInvalid {
+                name: "bad-name".to_string(),
+                message: "bad identifier".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::Traversal {
+                message: "walk failed".to_string(),
+                path: "units".to_string(),
+            },
+            spec_core::SpecError::Generator {
+                message: "gen failed".to_string(),
+            },
+            spec_core::SpecError::OutputDir {
+                message: "outside root".to_string(),
+            },
+            spec_core::SpecError::MissingMarker {
+                path: "generated/spec".to_string(),
+            },
+        ];
+
+        let codes = errors
+            .iter()
+            .map(spec_error_code)
+            .collect::<std::collections::HashSet<_>>();
+
+        assert_eq!(codes.len(), errors.len());
+        assert!(codes.iter().all(|code| code.starts_with("SPEC_")));
+        assert!(codes.iter().all(|code| !code.is_empty()));
+    }
+
+    #[test]
+    fn spec_error_to_json_entry_preserves_multi_field_variants() {
+        let mut id_by_path = HashMap::new();
+        id_by_path.insert(
+            "units/pricing/apply_discount.unit.spec".to_string(),
+            "pricing/apply_discount".to_string(),
+        );
+
+        let duplicate = spec_error_to_json_entry(
+            &spec_core::SpecError::DuplicateId {
+                id: "pricing/apply_discount".to_string(),
+                file1: "units/pricing/apply_discount.unit.spec".to_string(),
+                file2: "units/pricing/apply_tax.unit.spec".to_string(),
+            },
+            &id_by_path,
+        );
+        assert_eq!(duplicate.unit.as_deref(), Some("pricing/apply_discount"));
+        assert_eq!(
+            duplicate.path.as_deref(),
+            Some("units/pricing/apply_discount.unit.spec")
+        );
+        assert_eq!(duplicate.id.as_deref(), Some("pricing/apply_discount"));
+        assert_eq!(
+            duplicate.path2.as_deref(),
+            Some("units/pricing/apply_tax.unit.spec")
+        );
+
+        let dep_collision = spec_error_to_json_entry(
+            &spec_core::SpecError::DepCollision {
+                dep1: "money/round".to_string(),
+                dep2: "money/format".to_string(),
+                fn_name: "money".to_string(),
+                path: "units/pricing/apply_discount.unit.spec".to_string(),
+            },
+            &id_by_path,
+        );
+        assert_eq!(dep_collision.dep.as_deref(), Some("money/round"));
+        assert_eq!(dep_collision.value.as_deref(), Some("money"));
+        assert_eq!(dep_collision.path2.as_deref(), Some("money/format"));
+    }
+
+    #[test]
+    fn build_test_evidence_preserves_found_missing_and_duplicate_statuses() {
+        let output = Path::new("src/generated");
+        let spec = benchmark_loaded_spec(0, 3);
+        let resolved = ResolvedSpec::from_spec(spec.spec.clone());
+        let output_prefix = output_module_prefix(output).unwrap();
+
+        let mut parsed_test_results = HashMap::new();
+        parsed_test_results.insert(
+            expected_cargo_test_name(&resolved, &output_prefix, "case_00"),
+            ParsedCargoTestResult {
+                status: "pass".to_string(),
+                reason: None,
+            },
+        );
+        parsed_test_results.insert(
+            expected_cargo_test_name(&resolved, &output_prefix, "case_01"),
+            ParsedCargoTestResult {
+                status: "error".to_string(),
+                reason: Some("multiple matching cargo results".to_string()),
+            },
+        );
+
+        let evidence = build_test_evidence(
+            std::slice::from_ref(&spec),
+            output,
+            &parsed_test_results,
+            "2026-04-11T12:00:00Z",
+            None,
+        )
+        .unwrap();
+
+        let test_results = &evidence["pricing/bench_0000"].test_results;
+        assert_eq!(test_results[0].status, "pass");
+        assert_eq!(test_results[0].reason, None);
+        assert_eq!(test_results[1].status, "error");
+        assert_eq!(
+            test_results[1].reason.as_deref(),
+            Some("multiple matching cargo results")
+        );
+        assert_eq!(test_results[2].status, "unknown");
+        assert_eq!(
+            test_results[2].reason.as_deref(),
+            Some("test not found in cargo output")
+        );
+    }
+
+    #[test]
+    #[ignore = "manual benchmark for Priority 4 parse/evidence ship gate"]
+    fn benchmark_parse_and_evidence_hash_lookup_against_btree_baseline() {
+        let output = Path::new("src/generated");
+        let specs = benchmark_specs(600, 8);
+        let stdout = benchmark_stdout(&specs, output);
+        let observed_at = "2026-04-11T12:00:00Z";
+
+        let baseline_evidence = build_test_evidence_btree_baseline(
+            &specs,
+            output,
+            &parse_cargo_test_output_btree_baseline(&stdout),
+            observed_at,
+            None,
+        )
+        .unwrap();
+        let hash_evidence = build_test_evidence(
+            &specs,
+            output,
+            &parse_cargo_test_output(&stdout),
+            observed_at,
+            None,
+        )
+        .unwrap();
+        assert_eq!(hash_evidence, baseline_evidence);
+
+        const ITERS: usize = 75;
+
+        for _ in 0..5 {
+            let _ = std::hint::black_box(parse_cargo_test_output_btree_baseline(&stdout));
+            let _ = std::hint::black_box(parse_cargo_test_output(&stdout));
+        }
+
+        let btree_started = Instant::now();
+        for _ in 0..ITERS {
+            let parsed = parse_cargo_test_output_btree_baseline(std::hint::black_box(&stdout));
+            let evidence =
+                build_test_evidence_btree_baseline(&specs, output, &parsed, observed_at, None)
+                    .unwrap();
+            std::hint::black_box(evidence);
+        }
+        let btree_elapsed = btree_started.elapsed();
+
+        let hash_started = Instant::now();
+        for _ in 0..ITERS {
+            let parsed = parse_cargo_test_output(std::hint::black_box(&stdout));
+            let evidence = build_test_evidence(&specs, output, &parsed, observed_at, None).unwrap();
+            std::hint::black_box(evidence);
+        }
+        let hash_elapsed = hash_started.elapsed();
+
+        let speedup = btree_elapsed.as_secs_f64() / hash_elapsed.as_secs_f64();
+        eprintln!(
+            "Priority 4 benchmark: btree={btree_elapsed:?}, hash={hash_elapsed:?}, speedup={speedup:.2}x, specs={}, tests_per_spec={}",
+            specs.len(),
+            specs[0].spec.local_tests.len()
+        );
+    }
+
+    #[test]
+    fn concurrent_passport_write_guard_detects_other_active_writer() {
+        let temp_dir = TempDir::new().unwrap();
+        let passport_root = temp_dir.path().join("units");
+        fs::create_dir_all(&passport_root).unwrap();
+
+        let registry_dir = concurrent_passport_writer_registry_dir(&passport_root, temp_dir.path());
+        fs::create_dir_all(&registry_dir).unwrap();
+        fs::write(
+            registry_dir.join(concurrent_passport_writer_marker_name(7, SystemTime::now())),
+            "",
+        )
+        .unwrap();
+
+        let (_guard, other_writers) = ConcurrentPassportWriteGuard::begin_in(
+            &passport_root,
+            temp_dir.path(),
+            42,
+            SystemTime::now(),
+        )
+        .unwrap();
+
+        assert_eq!(other_writers, 1);
+        let warning =
+            concurrent_passport_write_warning_message(&passport_root, other_writers).unwrap();
+        assert!(warning.contains("1 other spec process"), "{warning}");
+        assert!(
+            warning.contains(passport_root.to_str().unwrap()),
+            "{warning}"
+        );
+    }
+
+    #[test]
+    fn concurrent_passport_write_guard_ignores_stale_markers() {
+        let temp_dir = TempDir::new().unwrap();
+        let passport_root = temp_dir.path().join("units");
+        fs::create_dir_all(&passport_root).unwrap();
+
+        let stale_now = UNIX_EPOCH + Duration::from_secs(10);
+        let registry_dir = concurrent_passport_writer_registry_dir(&passport_root, temp_dir.path());
+        fs::create_dir_all(&registry_dir).unwrap();
+        fs::write(
+            registry_dir.join(concurrent_passport_writer_marker_name(7, stale_now)),
+            "",
+        )
+        .unwrap();
+
+        let (_guard, other_writers) = ConcurrentPassportWriteGuard::begin_in(
+            &passport_root,
+            temp_dir.path(),
+            42,
+            UNIX_EPOCH + Duration::from_secs(10 + CONCURRENT_PASSPORT_WRITER_TTL_SECS + 1),
+        )
+        .unwrap();
+
+        assert_eq!(other_writers, 0);
     }
 }

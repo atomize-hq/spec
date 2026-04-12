@@ -117,3 +117,41 @@ validation, use-path generation, and cycle detection against this contract.
 - A registry or organization-wide namespace becomes a real product requirement.
 - Cross-library config needs stronger ownership or trust semantics than a local `[libraries]`
   mapping can provide.
+
+---
+
+## 2026-04-11 — schema_version: Integer, Not String (0.5.1 decision record)
+
+**Decision:** `schema_version` in export bundles and JSON status/validate responses is emitted as the JSON integer `1`, not the string `"1.0"`.
+
+**Rationale**
+
+- Integers are unambiguous for version comparisons and require no string parsing. A consumer checking `schema_version === 1` is correct; a consumer checking `schema_version === "1.0"` already silently broke when the patch digit changed.
+- Using a bare integer removes the misleading minor-version component: schema shape changes are never patch-level, so `"1.0"` vs `"1.1"` would have implied a meaningful distinction that does not exist.
+- The integer form matches common practice in protocol versioning (e.g., HTTP/2 version fields in JSON APIs).
+
+**Breaking impact**
+
+- Consumers that string-match `"schema_version": "1.0"` must update to match against the integer `1`. Consumers that parse the field as a number are unaffected.
+
+**Revisit when**
+
+- We need to distinguish major vs minor schema variants within a single major version (not anticipated before 1.0).
+
+---
+
+## 2026-04-11 — Concurrent Passport Writes: Warn, Not Lock (0.5.1 decision record)
+
+**Decision:** When multiple `spec` processes attempt to write passports for the same unit at the same time, `spec` emits a warning to stderr and continues. No blocking lock is taken.
+
+**Rationale**
+
+- The passport write itself is atomic (write to a temp file, then rename). The warn-only guard detects the collision window but does not prevent it; the last writer wins.
+- A blocking lock introduces the risk of deadlock or indefinite stall in CI environments where agents are killed without cleanup, leaving stale lock files.
+- Passport evidence is append-friendly: the worst outcome of a concurrent write is that one run's evidence overwrites another's. Both runs were valid observations; neither is silently lost from the overall system because the next `spec test` will regenerate fresh evidence.
+- This matches the M5 "trust, not lock" design philosophy: prefer observable warnings and human/agent follow-up over hard serialization at the tool level.
+
+**Revisit when**
+
+- We see real data loss or correctness failures from last-writer-wins behavior in production multi-agent pipelines.
+- A CI orchestrator provides a better coordination primitive (e.g., a shared artifact store with CAS semantics) that makes advisory locks unnecessary.

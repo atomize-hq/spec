@@ -1,12 +1,21 @@
 use anyhow::{Context, Result, bail};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
+use wait_timeout::ChildExt;
+
+/// Exit code used when a cargo subprocess is killed due to timeout.
+/// Matches the convention used by the POSIX `timeout(1)` command.
+const TIMEOUT_EXIT_CODE: i32 = 124;
 
 pub struct CargoResult {
     pub exit_code: i32,
     pub stdout: String,
     pub stderr: String,
+    pub timed_out: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,20 +75,25 @@ pub fn workspace_root_for(path: &Path) -> Result<PathBuf> {
     )
 }
 
-pub fn run_cargo_build(crate_root: &Path, cargo_target_dir: &Path) -> Result<CargoResult> {
+pub fn run_cargo_build(
+    crate_root: &Path,
+    cargo_target_dir: &Path,
+    timeout: Option<Duration>,
+) -> Result<CargoResult> {
     eprintln!("spec: running cargo build in {}", crate_root.display());
-    run_cargo(crate_root, &["build"], cargo_target_dir)
+    run_cargo(crate_root, &["build"], cargo_target_dir, timeout)
 }
 
 pub fn run_cargo_test(
     crate_root: &Path,
     cargo_target_dir: &Path,
     filter: Option<&str>,
+    timeout: Option<Duration>,
 ) -> Result<CargoResult> {
     eprintln!("spec: running cargo test in {}", crate_root.display());
     let args = cargo_test_args(filter);
     let arg_refs = args.iter().map(|arg| arg.as_str()).collect::<Vec<_>>();
-    run_cargo(crate_root, &arg_refs, cargo_target_dir)
+    run_cargo(crate_root, &arg_refs, cargo_target_dir, timeout)
 }
 
 fn cargo_test_args(filter: Option<&str>) -> Vec<String> {
@@ -122,8 +136,8 @@ pub fn zero_tests_ran(output: &str) -> bool {
     has_any_result
 }
 
-pub fn parse_cargo_test_output(stdout: &str) -> BTreeMap<String, ParsedCargoTestResult> {
-    let mut results: BTreeMap<String, ParsedCargoTestResult> = BTreeMap::new();
+pub fn parse_cargo_test_output(stdout: &str) -> HashMap<String, ParsedCargoTestResult> {
+    let mut results: HashMap<String, ParsedCargoTestResult> = HashMap::new();
 
     for line in stdout.lines() {
         let Some(rest) = line.strip_prefix("test ") else {
@@ -162,26 +176,112 @@ pub fn parse_cargo_test_output(stdout: &str) -> BTreeMap<String, ParsedCargoTest
     results
 }
 
-fn run_cargo(cwd: &Path, args: &[&str], cargo_target_dir: &Path) -> Result<CargoResult> {
-    let output = Command::new("cargo")
+fn run_cargo(
+    cwd: &Path,
+    args: &[&str],
+    cargo_target_dir: &Path,
+    timeout: Option<Duration>,
+) -> Result<CargoResult> {
+    run_command(Path::new("cargo"), cwd, args, cargo_target_dir, timeout)
+}
+
+fn run_command(
+    program: &Path,
+    cwd: &Path,
+    args: &[&str],
+    cargo_target_dir: &Path,
+    timeout: Option<Duration>,
+) -> Result<CargoResult> {
+    let mut child = Command::new(program)
         .current_dir(cwd)
         .env("CARGO_TARGET_DIR", cargo_target_dir)
         .env("CARGO_TERM_COLOR", "never")
         .args(args)
-        .output()
-        .with_context(|| "failed to spawn cargo")?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to spawn {}", program.display()))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .context("failed to capture child stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .context("failed to capture child stderr")?;
+    let stdout_handle = thread::spawn(move || read_pipe(stdout));
+    let stderr_handle = thread::spawn(move || read_pipe(stderr));
+
+    let (status, timed_out) = match timeout {
+        Some(timeout) => match child.wait_timeout(timeout)? {
+            Some(status) => (status, false),
+            None => {
+                let _ = child.kill();
+                (child.wait()?, true)
+            }
+        },
+        None => (child.wait()?, false),
+    };
+
+    // On timeout, do NOT join the pipe reader threads. cargo may have spawned
+    // grandchildren (rustc, test binaries) that inherited the pipe write-ends.
+    // Those grandchildren remain alive after we kill cargo, keeping the pipes
+    // open and causing read_to_end to block indefinitely — defeating the timeout.
+    // We abandon the threads here; they will be cleaned up when the process
+    // exits (shortly after the caller bails on the timeout error).
+    let (stdout, stderr) = if timed_out {
+        drop(stdout_handle);
+        drop(stderr_handle);
+        let timeout_secs = timeout.expect("timed_out implies Some timeout").as_secs();
+        let stderr_msg = format!(
+            "spec: cargo {} timed out after {}s\n",
+            args.join(" "),
+            timeout_secs
+        );
+        (String::new(), stderr_msg)
+    } else {
+        let stdout =
+            String::from_utf8_lossy(&join_pipe_reader(stdout_handle, "stdout")?).into_owned();
+        let stderr =
+            String::from_utf8_lossy(&join_pipe_reader(stderr_handle, "stderr")?).into_owned();
+        (stdout, stderr)
+    };
 
     Ok(CargoResult {
-        exit_code: output.status.code().unwrap_or(1),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        exit_code: if timed_out {
+            TIMEOUT_EXIT_CODE
+        } else {
+            status.code().unwrap_or(1)
+        },
+        stdout,
+        stderr,
+        timed_out,
     })
+}
+
+fn read_pipe<R: Read>(mut reader: R) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(65536);
+    reader.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn join_pipe_reader(
+    handle: thread::JoinHandle<std::io::Result<Vec<u8>>>,
+    name: &str,
+) -> Result<Vec<u8>> {
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("failed to join {name} reader thread"))?
+        .with_context(|| format!("failed to read child {name}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
     #[test]
@@ -445,5 +545,65 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
         );
 
         assert_eq!(cargo_test_args(None), vec!["test".to_string()]);
+    }
+
+    #[cfg(unix)]
+    fn write_fake_command(dir: &TempDir, name: &str, body: &str) -> PathBuf {
+        let path = dir.path().join(name);
+        fs::write(&path, body).unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_marks_timeout_and_reports_it() {
+        let tmp = TempDir::new().unwrap();
+        // Command sleeps 10s so the 2s timeout fires first; as_secs() returns "2s" in message.
+        let fake_cargo = write_fake_command(&tmp, "fake-cargo.sh", "#!/bin/sh\nsleep 10\n");
+
+        let result = run_command(
+            &fake_cargo,
+            tmp.path(),
+            &["build"],
+            &tmp.path().join("target"),
+            Some(Duration::from_secs(2)),
+        )
+        .unwrap();
+
+        assert!(result.timed_out);
+        assert_eq!(result.exit_code, TIMEOUT_EXIT_CODE);
+        assert!(
+            result.stderr.contains("timed out after 2s"),
+            "{}",
+            result.stderr
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_preserves_output_without_timeout() {
+        let tmp = TempDir::new().unwrap();
+        let fake_cargo = write_fake_command(
+            &tmp,
+            "fake-cargo.sh",
+            "#!/bin/sh\necho ok-stdout\necho ok-stderr >&2\n",
+        );
+
+        let result = run_command(
+            &fake_cargo,
+            tmp.path(),
+            &["build"],
+            &tmp.path().join("target"),
+            Some(Duration::from_secs(1)),
+        )
+        .unwrap();
+
+        assert!(!result.timed_out);
+        assert_eq!(result.exit_code, 0);
+        assert!(result.stdout.contains("ok-stdout"));
+        assert!(result.stderr.contains("ok-stderr"));
     }
 }

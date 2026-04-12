@@ -164,7 +164,7 @@ spec validate examples/ecommerce/units --format json
   "errors": [
     {
       "unit": "shipping/calculate",
-      "code": "MissingDep",
+      "code": "SPEC_MISSING_DEP",
       "dep": "currency/convert",
       "path": "units/shipping/calculate.unit.spec"
     }
@@ -190,28 +190,28 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 
 | Code | Description |
 |------|-------------|
-| `Io` | Filesystem I/O error |
-| `InvalidUtf8` | File is not valid UTF-8 |
-| `YamlParse` | YAML syntax error in the unit file |
-| `Json` | JSON serialization/deserialization error |
-| `SchemaValidation` | Unit file failed JSON Schema validation |
-| `SemanticValidation` | Unit passed schema but failed a semantic rule |
-| `RustKeyword` | An `id` segment is a Rust reserved keyword |
-| `DuplicateId` | Two unit files share the same `id` |
-| `DepCollision` | Two deps resolve to the same generated function name |
-| `MissingDep` | A declared dep has no matching unit in the spec set |
-| `CyclicDep` | Units form a dependency cycle |
-| `UseStatementInBody` | `body.rust` contains a `use` statement — move it to `imports` or `deps` |
-| `BodyRustMustBeBlock` | `body.rust` failed to parse as a Rust block expression |
-| `BodyRustLooksLikeFnDeclaration` | `body.rust` contains the full `pub fn` signature — keep only the body block (see migration guide) |
-| `LocalTestExpectNotExpr` | A `local_tests[].expect` value is not a valid Rust expression |
-| `DuplicateLocalTestId` | Two local tests in the same unit share the same `id` |
-| `ContractTypeInvalid` | A `contract.inputs` or `contract.returns` type is not valid Rust |
-| `ContractInputNameInvalid` | A `contract.inputs` key is not a valid Rust identifier |
-| `Traversal` | Error walking the units directory tree |
-| `Generator` | Code generation failure |
-| `OutputDir` | Output directory creation or safety check failed |
-| `MissingMarker` | Output dir lacks the `.spec-generated` marker — refusing to clean |
+| `SPEC_IO` | Filesystem I/O error |
+| `SPEC_INVALID_UTF8` | File is not valid UTF-8 |
+| `SPEC_YAML_PARSE` | YAML syntax error in the unit file |
+| `SPEC_JSON` | JSON serialization/deserialization error |
+| `SPEC_SCHEMA_VALIDATION` | Unit file failed JSON Schema validation |
+| `SPEC_SEMANTIC_VALIDATION` | Unit passed schema but failed a semantic rule |
+| `SPEC_RUST_KEYWORD` | An `id` segment is a Rust reserved keyword |
+| `SPEC_DUPLICATE_ID` | Two unit files share the same `id` |
+| `SPEC_DEP_COLLISION` | Two deps resolve to the same generated function name |
+| `SPEC_MISSING_DEP` | A declared dep has no matching unit in the spec set |
+| `SPEC_CYCLIC_DEP` | Units form a dependency cycle |
+| `SPEC_USE_STATEMENT_IN_BODY` | `body.rust` contains a `use` statement — move it to `imports` or `deps` |
+| `SPEC_BODY_RUST_MUST_BE_BLOCK` | `body.rust` failed to parse as a Rust block expression |
+| `SPEC_BODY_RUST_LOOKS_LIKE_FN_DECLARATION` | `body.rust` contains the full `pub fn` signature — keep only the body block (see migration guide) |
+| `SPEC_LOCAL_TEST_EXPECT_NOT_EXPR` | A `local_tests[].expect` value is not a valid Rust expression |
+| `SPEC_DUPLICATE_LOCAL_TEST_ID` | Two local tests in the same unit share the same `id` |
+| `SPEC_CONTRACT_TYPE_INVALID` | A `contract.inputs` or `contract.returns` type is not valid Rust |
+| `SPEC_CONTRACT_INPUT_NAME_INVALID` | A `contract.inputs` key is not a valid Rust identifier |
+| `SPEC_TRAVERSAL` | Error walking the units directory tree |
+| `SPEC_GENERATOR` | Code generation failure |
+| `SPEC_OUTPUT_DIR` | Output directory creation or safety check failed |
+| `SPEC_MISSING_MARKER` | Output dir lacks the `.spec-generated` marker — refusing to clean |
 
 ## Consuming Generated Code
 
@@ -237,6 +237,7 @@ allow_unsafe_local_test_expect = false
 [pipeline]
 crate_root = "."          # path to Cargo.toml containing your crate (default: auto-detected)
 cargo_target_dir = "target"  # cargo target dir (default: temp dir per run)
+timeout_secs = 60         # abort cargo build/test if it exceeds this many seconds
 ```
 
 When `allow_unsafe_local_test_expect = true`, `local_tests[].expect` still must parse as a Rust expression, but block, unsafe, closure, and other otherwise-rejected expression forms are allowed.

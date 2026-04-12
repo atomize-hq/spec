@@ -5,19 +5,21 @@
 //! the dependency edge list, and structured warnings for skipped passports.
 
 use crate::AUTHORED_SPEC_VERSION;
-use crate::passport::{Passport, passport_path_for};
+use crate::passport::{ArtifactProvenance, Passport, passport_path_for};
 use crate::types::{Contract, LoadedSpec, LocalTest};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-const EXPORT_SCHEMA_VERSION: &str = "1.0";
+const EXPORT_SCHEMA_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExportBundle {
-    pub schema_version: String,
+    pub schema_version: u8,
     pub spec_version: String,
     pub exported_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<ArtifactProvenance>,
     pub units: Vec<ExportUnit>,
     pub passports: Vec<Passport>,
     pub graph: ExportGraph,
@@ -54,7 +56,11 @@ pub struct ExportWarning {
     pub message: String,
 }
 
-pub fn build_export_bundle(specs: &[LoadedSpec], exported_at: &str) -> ExportBundle {
+pub fn build_export_bundle(
+    specs: &[LoadedSpec],
+    exported_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> ExportBundle {
     let (passports, warnings) = load_passports_for_specs(specs);
     let mut edges = specs
         .iter()
@@ -68,9 +74,10 @@ pub fn build_export_bundle(specs: &[LoadedSpec], exported_at: &str) -> ExportBun
     edges.sort();
 
     ExportBundle {
-        schema_version: EXPORT_SCHEMA_VERSION.to_string(),
+        schema_version: EXPORT_SCHEMA_VERSION,
         spec_version: AUTHORED_SPEC_VERSION.to_string(),
         exported_at: exported_at.to_string(),
+        provenance: provenance.cloned(),
         units: specs.iter().map(ExportUnit::from).collect(),
         passports,
         graph: ExportGraph { edges },
@@ -199,7 +206,7 @@ mod tests {
         );
         let spec_b = loaded_spec(&dir, "units/money/round.unit.spec", "money/round", vec![]);
 
-        let bundle = build_export_bundle(&[spec_a, spec_b], "2026-04-05T00:00:00Z");
+        let bundle = build_export_bundle(&[spec_a, spec_b], "2026-04-05T00:00:00Z", None);
 
         assert_eq!(
             bundle.graph.edges,
@@ -226,11 +233,11 @@ mod tests {
             vec![],
         );
 
-        let bundle = build_export_bundle(&[spec], "2026-04-05T00:00:00Z");
+        let bundle = build_export_bundle(&[spec], "2026-04-05T00:00:00Z", None);
 
-        assert_eq!(bundle.schema_version, "1.0");
+        assert_eq!(bundle.schema_version, 1);
         assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
-        assert_ne!(bundle.schema_version, bundle.spec_version);
+        assert_ne!(bundle.schema_version.to_string(), bundle.spec_version);
     }
 
     #[test]
@@ -284,12 +291,17 @@ mod tests {
                     reason: None,
                 }],
                 observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
             }),
             None,
         );
         write_passport(&passport_b, Path::new(&spec_b.source.file_path)).unwrap();
 
-        let bundle = build_export_bundle(&[spec_a.clone(), spec_b.clone()], "2026-04-05T01:00:00Z");
+        let bundle = build_export_bundle(
+            &[spec_a.clone(), spec_b.clone()],
+            "2026-04-05T01:00:00Z",
+            None,
+        );
 
         assert_eq!(bundle.graph.edges[0].from, "pricing/apply_discount");
         assert_eq!(bundle.graph.edges[0].to, "money/round");
@@ -302,5 +314,23 @@ mod tests {
         assert_eq!(bundle.warnings[0].code, "passport_missing");
         assert_eq!(bundle.passports.len(), 1);
         assert_eq!(bundle.passports[0].id, spec_b.spec.id);
+    }
+
+    #[test]
+    fn build_export_bundle_includes_top_level_provenance_when_present() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_spec(
+            &dir,
+            "units/pricing/apply_tax.unit.spec",
+            "pricing/apply_tax",
+            vec![],
+        );
+        let provenance = ArtifactProvenance {
+            git_commit_sha: "abc123".to_string(),
+        };
+
+        let bundle = build_export_bundle(&[spec], "2026-04-05T00:00:00Z", Some(&provenance));
+
+        assert_eq!(bundle.provenance, Some(provenance));
     }
 }
