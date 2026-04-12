@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.1 - 2026-04-11
+
+### Added
+
+- **Pipeline timeout** — Configure `[pipeline] timeout_secs` in `spec.toml` to bound `spec build` and `spec test` execution time. Hung cargo processes are killed after the deadline; passports record `build_status: "timeout"` so downstream agents see a clean signal instead of a stale run.
+- **Git provenance in passports and exports** — `spec test` now records the current `git_commit_sha` in passport evidence when run inside a git repository. `spec export` includes top-level provenance in the bundle. Passports from pre-provenance runs deserialize cleanly (field is optional, absent passports remain valid).
+- **Concurrent write warning** — When multiple `spec` processes write passports at the same time (a risk in multi-agent CI), a warning is emitted to stderr. The guard is advisory (warn-only, no blocking lock), matching the M5 trust-not-lock design.
+
+### Changed
+
+- **Stable `SPEC_*` JSON error codes** — `spec validate --format json` and `spec status --format json` now emit stable, namespaced error codes (`SPEC_MISSING_DEP`, `SPEC_INVALID_CONTRACT_TYPE`, etc.) instead of bare CamelCase names. Machine consumers can write stable matchers against these codes. `AGENTS.md` updated to reflect the new contract.
+- **`schema_version` is now a JSON integer** — Export bundles and JSON status/validate responses emit `"schema_version": 1` (integer) instead of `"schema_version": "1.0"` (string). Consumers that compare against the string `"1.0"` need to update to compare against the integer `1`.
+- **Faster cargo test result lookups** — `parse_cargo_test_output` now returns a `HashMap` instead of `BTreeMap`, reducing evidence-building overhead for large test suites.
+
+### Fixed
+
+- **Timeout process tree** — After killing cargo on timeout, pipe reader threads are no longer joined. Grandchildren (rustc, test binaries) that inherit pipe write-ends no longer cause `spec` to hang past the configured timeout.
+
 ## 0.5.0 - 2026-04-06
 
 ### Added
