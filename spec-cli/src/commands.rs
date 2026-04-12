@@ -957,15 +957,25 @@ fn test_command(
         _ => None,
     };
 
+    let provenance = resolve_git_provenance(&ctx.crate_root);
     let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout)?;
     print!("{}", build_result.stdout);
     eprint!("{}", build_result.stderr);
     if build_result.timed_out {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
         bail!("❌ cargo build timed out{}", timeout_suffix(ctx.timeout));
     }
     if build_result.exit_code != 0 {
         let observed_at = rfc3339_now();
-        let provenance = resolve_git_provenance(&ctx.crate_root);
         let evidence_by_spec =
             build_failure_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
         let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
@@ -987,6 +997,16 @@ fn test_command(
     print!("{}", test_result.stdout);
     eprint!("{}", test_result.stderr);
     if test_result.timed_out {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
         bail!("❌ cargo test timed out{}", timeout_suffix(ctx.timeout));
     }
 
@@ -996,7 +1016,6 @@ fn test_command(
 
     let parsed_test_results = parse_cargo_test_output(&test_result.stdout);
     let observed_at = rfc3339_now();
-    let provenance = resolve_git_provenance(&ctx.crate_root);
     let evidence_by_spec = build_test_evidence(
         passport_write_plan.specs,
         output,
@@ -1029,13 +1048,30 @@ fn build_failure_evidence(
     observed_at: &str,
     provenance: Option<&ArtifactProvenance>,
 ) -> BTreeMap<String, PassportEvidence> {
+    build_incomplete_evidence(specs, "fail", observed_at, provenance)
+}
+
+fn build_timeout_evidence(
+    specs: &[LoadedSpec],
+    observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> BTreeMap<String, PassportEvidence> {
+    build_incomplete_evidence(specs, "timeout", observed_at, provenance)
+}
+
+fn build_incomplete_evidence(
+    specs: &[LoadedSpec],
+    build_status: &str,
+    observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> BTreeMap<String, PassportEvidence> {
     specs
         .iter()
         .map(|spec| {
             (
                 spec.spec.id.clone(),
                 PassportEvidence {
-                    build_status: "fail".to_string(),
+                    build_status: build_status.to_string(),
                     test_results: vec![],
                     observed_at: observed_at.to_string(),
                     provenance: provenance.cloned(),
@@ -1083,6 +1119,12 @@ fn concurrent_passport_writer_registry_dir(passport_root: &Path, registry_base: 
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
+    // DefaultHasher::new() uses a fixed zero seed (not per-process randomized), so two
+    // concurrent processes produce the same hash for the same path within a single Rust
+    // version. The algorithm is documented as unstable across Rust versions — if two spec
+    // binaries compiled with different Rust versions run concurrently, they may hash to
+    // different registry dirs and miss each other. For a best-effort warn-only feature
+    // this is acceptable; use a stable hasher here if the guarantee ever matters.
     let canonical_root = passport_root
         .canonicalize()
         .unwrap_or_else(|_| passport_root.to_path_buf());
@@ -1600,9 +1642,10 @@ fn spec_error_to_json_entry(
             field: Some(format!("contract.inputs.{name}")),
             ..Default::default()
         },
-        spec_core::SpecError::Traversal { path, .. } => ErrorFields {
+        spec_core::SpecError::Traversal { message, path } => ErrorFields {
             unit: id_by_path.get(path).cloned(),
             path: Some(path.clone()),
+            message: Some(message.clone()),
             ..Default::default()
         },
         spec_core::SpecError::Generator { message } => ErrorFields {

@@ -95,34 +95,24 @@ fn run_git(cwd: &Path, args: &[&str]) -> std::process::Output {
         .expect("failed to run git")
 }
 
-fn assert_command_success(context: &str, output: &std::process::Output) {
-    if output.status.success() {
-        return;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    panic!("{context}\n\nstdout:\n{stdout}\n\nstderr:\n{stderr}");
-}
-
 fn init_git_repo(cwd: &Path) -> String {
-    assert_command_success("git init failed", &run_git(cwd, &["init", "-b", "main"]));
-    assert_command_success(
+    assert_output_success("git init failed", &run_git(cwd, &["init", "-b", "main"]));
+    assert_output_success(
         "git config user.email failed",
         &run_git(cwd, &["config", "user.email", "spec-tests@example.com"]),
     );
-    assert_command_success(
+    assert_output_success(
         "git config user.name failed",
         &run_git(cwd, &["config", "user.name", "Spec Tests"]),
     );
-    assert_command_success("git add failed", &run_git(cwd, &["add", "."]));
-    assert_command_success(
+    assert_output_success("git add failed", &run_git(cwd, &["add", "."]));
+    assert_output_success(
         "git commit failed",
         &run_git(cwd, &["commit", "-m", "test fixture"]),
     );
 
     let rev_parse = run_git(cwd, &["rev-parse", "HEAD"]);
-    assert_command_success("git rev-parse failed", &rev_parse);
+    assert_output_success("git rev-parse failed", &rev_parse);
     String::from_utf8(rev_parse.stdout)
         .unwrap()
         .trim()
@@ -3758,4 +3748,47 @@ fn spec_test_directory_path_unchanged() {
         target_passport.contains("\"status\": \"pass\""),
         "{target_passport}"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn spec_test_respects_pipeline_timeout_secs() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    write_minimal_units_dir(&units_dir);
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        "[package]\nname = \"timeout-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write_file(project_dir, "spec.toml", "[pipeline]\ntimeout_secs = 1\n");
+
+    let fake_bin_dir = project_dir.join("fake-bin");
+    write_executable_file(
+        &fake_bin_dir,
+        "cargo",
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'cargo 1.89.0'\n  exit 0\nfi\n/bin/sleep 2\n",
+    );
+    let mut path_override = std::ffi::OsString::from(fake_bin_dir.as_os_str());
+    path_override.push(":");
+    path_override.push(std::env::var_os("PATH").unwrap_or_default());
+
+    let output = run_in_with_env(
+        project_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "generated/spec",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+
+    assert!(!output.status.success(), "test should fail on timeout");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("timed out after 1s"), "{stderr}");
+    assert!(stderr.contains("cargo") && stderr.contains("timed out"), "{stderr}");
 }

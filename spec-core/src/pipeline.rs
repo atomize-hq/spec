@@ -7,6 +7,10 @@ use std::thread;
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
+/// Exit code used when a cargo subprocess is killed due to timeout.
+/// Matches the convention used by the POSIX `timeout(1)` command.
+const TIMEOUT_EXIT_CODE: i32 = 124;
+
 pub struct CargoResult {
     pub exit_code: i32,
     pub stdout: String,
@@ -237,7 +241,7 @@ fn run_command(
 
     Ok(CargoResult {
         exit_code: if timed_out {
-            124
+            TIMEOUT_EXIT_CODE
         } else {
             status.code().unwrap_or(1)
         },
