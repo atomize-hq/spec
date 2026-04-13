@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.2 - 2026-04-12
+## 0.5.3 - 2026-04-13
 
 ### Breaking
 
@@ -9,6 +9,8 @@
 - **`spec status --format json` now emits `schema_version: 2`** — Parsers should gate on version `2` for the new health-state contract.
 
 Migration: for `spec status`, treat any unit whose `status` is not `"valid"` as a failing health result, and replace any `stale: bool` logic with `status`/`reason` handling.
+
+## 0.5.2 - 2026-04-12
 
 ### Changed
 
