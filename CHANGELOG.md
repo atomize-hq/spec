@@ -2,6 +2,14 @@
 
 ## 0.5.2 - 2026-04-12
 
+### Breaking
+
+- **`spec status` non-valid units now exit `1`** — `untested`, `incomplete`, and `failing` units now produce a non-zero exit code alongside `invalid` and `stale`. Consumers that previously treated those states as soft-success need to update.
+- **`stale: bool` removed from `spec status --format json` units** — Machine consumers should switch to the `status` and `reason` fields instead of reading a separate stale flag.
+- **`spec status --format json` now emits `schema_version: 2`** — Parsers should gate on version `2` for the new health-state contract.
+
+Migration: for `spec status`, treat any unit whose `status` is not `"valid"` as a failing health result, and replace any `stale: bool` logic with `status`/`reason` handling.
+
 ### Changed
 
 - **Default output path is now `{crate_root}/src/generated`** — `spec generate`, `spec build`, and `spec test` no longer require `--output`. When omitted, the output directory is derived from the crate root (via `spec.toml` or ancestor `Cargo.toml` walk) and defaults to `src/generated` inside that crate. Projects using the old default `generated/spec` can pass `--output generated/spec` explicitly to preserve prior behavior.

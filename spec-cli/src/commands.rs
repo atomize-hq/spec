@@ -1,7 +1,7 @@
 use crate::config::{WorkspaceConfig, load_workspace_config};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use spec_core::export::build_export_bundle;
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_code_with_options, generate_mod_rs,
@@ -64,7 +64,7 @@ struct JsonStatusResponse {
 #[derive(Serialize)]
 struct JsonStatusUnit {
     id: String,
-    status: &'static str,
+    status: HealthState,
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
     errors: Vec<JsonErrorEntry>,
@@ -106,6 +106,52 @@ struct ErrorFields {
     id: Option<String>,
     path2: Option<String>,
     cycle: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HealthState {
+    Invalid,
+    Failing,
+    Stale,
+    Incomplete,
+    Untested,
+    Valid,
+}
+
+impl HealthState {
+    fn as_str(self) -> &'static str {
+        match self {
+            HealthState::Invalid => "invalid",
+            HealthState::Failing => "failing",
+            HealthState::Stale => "stale",
+            HealthState::Incomplete => "incomplete",
+            HealthState::Untested => "untested",
+            HealthState::Valid => "valid",
+        }
+    }
+
+    fn is_valid(self) -> bool {
+        matches!(self, HealthState::Valid)
+    }
+
+    fn symbol(self) -> &'static str {
+        match self {
+            HealthState::Valid => "✓",
+            HealthState::Untested => "—",
+            HealthState::Incomplete => "?",
+            HealthState::Stale => "~",
+            HealthState::Failing | HealthState::Invalid => "✗",
+        }
+    }
+}
+
+impl Serialize for HealthState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
 }
 
 struct PassportWritePlan<'a> {
@@ -423,7 +469,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
 }
 
 struct HealthStatus {
-    status: &'static str,
+    status: HealthState,
     reason: Option<String>,
     evidence_at: Option<String>,
 }
@@ -435,7 +481,7 @@ fn compute_health_status(
 ) -> HealthStatus {
     // 1. invalid
     if !errors.is_empty() {
-        return HealthStatus { status: "invalid", reason: None, evidence_at: None };
+        return HealthStatus { status: HealthState::Invalid, reason: None, evidence_at: None };
     }
 
     let evidence = passport.and_then(|p| p.evidence.as_ref());
@@ -455,7 +501,11 @@ fn compute_health_status(
                 let n = ev.test_results.iter().filter(|r| r.status == "fail").count();
                 format!("{} test{} failed", n, pluralize(n))
             };
-            return HealthStatus { status: "failing", reason: Some(reason), evidence_at };
+            return HealthStatus {
+                status: HealthState::Failing,
+                reason: Some(reason),
+                evidence_at,
+            };
         }
     }
 
@@ -471,7 +521,7 @@ fn compute_health_status(
         };
         if hash_changed {
             return HealthStatus {
-                status: "stale",
+                status: HealthState::Stale,
                 reason: Some("contract changed since last test".to_string()),
                 evidence_at,
             };
@@ -483,7 +533,7 @@ fn compute_health_status(
         let unknown_count = ev.test_results.iter().filter(|r| r.status == "unknown").count();
         if unknown_count > 0 {
             return HealthStatus {
-                status: "incomplete",
+                status: HealthState::Incomplete,
                 reason: Some(format!(
                     "{} test{} not observed in cargo output",
                     unknown_count,
@@ -497,14 +547,14 @@ fn compute_health_status(
     // 5. untested — no passport or no evidence
     if evidence.is_none() {
         return HealthStatus {
-            status: "untested",
+            status: HealthState::Untested,
             reason: Some("no evidence".to_string()),
             evidence_at: None,
         };
     }
 
     // 6. valid
-    HealthStatus { status: "valid", reason: None, evidence_at }
+    HealthStatus { status: HealthState::Valid, reason: None, evidence_at }
 }
 
 fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
@@ -590,7 +640,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             .unwrap_or_default();
         let health = compute_health_status(&errors, passport.as_ref(), live_hash.as_deref());
 
-        if health.status != "valid" {
+        if !health.status.is_valid() {
             needs_nonzero_exit = true;
         }
 
@@ -1821,18 +1871,8 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
 }
 
 fn print_status_unit(unit: &JsonStatusUnit) {
-    let symbol = match unit.status {
-        "valid"      => "✓",
-        "untested"   => "—",
-        "incomplete" => "?",
-        "stale"      => "~",
-        "failing"    => "✗",
-        "invalid"    => "✗",
-        _            => "?",
-    };
-
     let detail = match unit.status {
-        "invalid" => format!(
+        HealthState::Invalid => format!(
             "({} error{})",
             unit.errors.len(),
             pluralize(unit.errors.len())
@@ -1847,8 +1887,13 @@ fn print_status_unit(unit: &JsonStatusUnit) {
     };
 
     // Width 10 accommodates "incomplete" (longest state = 10 chars)
-    println!("{symbol} {:<32} {:<10} {detail}", unit.id, unit.status);
-    if unit.status == "invalid" {
+    println!(
+        "{} {:<32} {:<10} {detail}",
+        unit.status.symbol(),
+        unit.id,
+        unit.status.as_str()
+    );
+    if unit.status == HealthState::Invalid {
         for entry in &unit.errors {
             println!("  · {}", json_error_entry_to_human(entry));
         }
