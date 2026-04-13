@@ -2804,7 +2804,10 @@ local_tests:
     .unwrap();
 
     let output = run_in(project_dir, &["status", "units", "--format", "json"]);
-    assert!(!output.status.success(), "contract addition should mark unit stale");
+    assert!(
+        !output.status.success(),
+        "contract addition should mark unit stale"
+    );
     let json = parse_stdout_json(&output);
     let units = json["units"].as_array().unwrap();
     assert_eq!(units[0]["status"], "stale");
@@ -3501,7 +3504,10 @@ fn spec_status_stale_when_contract_removed_after_test() {
         ])
         .output()
         .expect("failed to run spec test");
-    assert_output_success("spec test should succeed before removing contract", &test_output);
+    assert_output_success(
+        "spec test should succeed before removing contract",
+        &test_output,
+    );
 
     rewrite_passport_generated_at(
         &project_dir.join("units/pricing/apply_discount.spec.passport.json"),
@@ -3527,7 +3533,10 @@ local_tests:
     .unwrap();
 
     let output = run_in(project_dir, &["status", "units", "--format", "json"]);
-    assert!(!output.status.success(), "contract removal should mark unit stale");
+    assert!(
+        !output.status.success(),
+        "contract removal should mark unit stale"
+    );
     let json = parse_stdout_json(&output);
     let units = json["units"].as_array().unwrap();
     assert_eq!(units[0]["status"], "stale");
@@ -3740,7 +3749,10 @@ fn spec_status_failing_tests_plural() {
     );
 
     let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
-    assert!(!output.status.success(), "plural failing tests should exit 1");
+    assert!(
+        !output.status.success(),
+        "plural failing tests should exit 1"
+    );
 
     let json = parse_stdout_json(&output);
     let units = json["units"].as_array().unwrap();
@@ -3814,7 +3826,10 @@ fn spec_status_failing_beats_stale() {
     let json = parse_stdout_json(&output);
     let units = json["units"].as_array().unwrap();
     assert_eq!(units[0]["status"], "failing", "failing should beat stale");
-    assert_ne!(units[0]["status"], "stale", "stale should not win over failing");
+    assert_ne!(
+        units[0]["status"], "stale",
+        "stale should not win over failing"
+    );
 }
 
 #[test]

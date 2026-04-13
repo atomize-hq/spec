@@ -481,7 +481,11 @@ fn compute_health_status(
 ) -> HealthStatus {
     // 1. invalid
     if !errors.is_empty() {
-        return HealthStatus { status: HealthState::Invalid, reason: None, evidence_at: None };
+        return HealthStatus {
+            status: HealthState::Invalid,
+            reason: None,
+            evidence_at: None,
+        };
     }
 
     let evidence = passport.and_then(|p| p.evidence.as_ref());
@@ -498,7 +502,11 @@ fn compute_health_status(
                     _ => "build failed".to_string(),
                 }
             } else {
-                let n = ev.test_results.iter().filter(|r| r.status == "fail").count();
+                let n = ev
+                    .test_results
+                    .iter()
+                    .filter(|r| r.status == "fail")
+                    .count();
                 format!("{} test{} failed", n, pluralize(n))
             };
             return HealthStatus {
@@ -530,7 +538,11 @@ fn compute_health_status(
 
     // 4. incomplete — unobserved tests (requires evidence)
     if let Some(ev) = evidence {
-        let unknown_count = ev.test_results.iter().filter(|r| r.status == "unknown").count();
+        let unknown_count = ev
+            .test_results
+            .iter()
+            .filter(|r| r.status == "unknown")
+            .count();
         if unknown_count > 0 {
             return HealthStatus {
                 status: HealthState::Incomplete,
@@ -554,7 +566,11 @@ fn compute_health_status(
     }
 
     // 6. valid
-    HealthStatus { status: HealthState::Valid, reason: None, evidence_at }
+    HealthStatus {
+        status: HealthState::Valid,
+        reason: None,
+        evidence_at,
+    }
 }
 
 fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
