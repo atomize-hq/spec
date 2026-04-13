@@ -255,7 +255,10 @@ pub struct GenerateArgs {
         help = "Directory containing .unit.spec files, or a single .unit.spec file"
     )]
     pub path: PathBuf,
-    #[arg(long, help = "Output directory for generated Rust files (default: {crate_root}/src/generated)")]
+    #[arg(
+        long,
+        help = "Output directory for generated Rust files (default: {crate_root}/src/generated)"
+    )]
     pub output: Option<PathBuf>,
 }
 
@@ -266,7 +269,10 @@ pub struct BuildArgs {
         help = "Directory containing .unit.spec files, or a single .unit.spec file"
     )]
     pub path: PathBuf,
-    #[arg(long, help = "Output directory for generated Rust files (default: {crate_root}/src/generated)")]
+    #[arg(
+        long,
+        help = "Output directory for generated Rust files (default: {crate_root}/src/generated)"
+    )]
     pub output: Option<PathBuf>,
     #[arg(
         long,
@@ -282,7 +288,10 @@ pub struct TestArgs {
         help = "Directory containing .unit.spec files, or a single .unit.spec file"
     )]
     pub path: PathBuf,
-    #[arg(long, help = "Output directory for generated Rust files (default: {crate_root}/src/generated)")]
+    #[arg(
+        long,
+        help = "Output directory for generated Rust files (default: {crate_root}/src/generated)"
+    )]
     pub output: Option<PathBuf>,
     #[arg(
         long,
@@ -912,7 +921,12 @@ fn build_command(
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
-    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout, Verbosity::Normal)?;
+    let result = run_cargo_build(
+        &ctx.crate_root,
+        &ctx.cargo_target_dir,
+        ctx.timeout,
+        Verbosity::Normal,
+    )?;
     print!("{}", result.stdout);
     eprint!("{}", result.stderr);
     if result.timed_out {
@@ -975,8 +989,12 @@ fn test_command(
     });
 
     let provenance = resolve_git_provenance(&ctx.crate_root);
-    let build_result =
-        run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout, Verbosity::Normal)?;
+    let build_result = run_cargo_build(
+        &ctx.crate_root,
+        &ctx.cargo_target_dir,
+        ctx.timeout,
+        Verbosity::Normal,
+    )?;
     print!("{}", build_result.stdout);
     eprint!("{}", build_result.stderr);
     if build_result.timed_out {
@@ -1226,7 +1244,7 @@ fn build_test_evidence(
         let mut test_results = Vec::new();
 
         for local_test in &spec.spec.local_tests {
-            let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+            let full_name = expected_cargo_test_name(&resolved, output_prefix, &local_test.id);
             // This lookup runs once per local test after parsing cargo stdout, so
             // keep it on a hash-based map for large repos where thousands of test
             // names may be correlated back into passport evidence in one command.
@@ -1292,21 +1310,19 @@ fn output_module_prefix(output: &Path, crate_root: &Path) -> Result<String> {
     // Falls back to stripping a leading `"src"` component for relative paths
     // (test helpers, explicit `--output src/generated`).
     let src_root = crate_root.join("src");
-    let relative = output
-        .strip_prefix(&src_root)
-        .unwrap_or_else(|_| {
-            // Relative path fallback: strip a leading "src" component if present.
-            let mut comps = output.components();
-            if comps
-                .next()
-                .map(|c| c.as_os_str() == "src")
-                .unwrap_or(false)
-            {
-                output.strip_prefix("src").unwrap_or(output)
-            } else {
-                output
-            }
-        });
+    let relative = output.strip_prefix(&src_root).unwrap_or_else(|_| {
+        // Relative path fallback: strip a leading "src" component if present.
+        let mut comps = output.components();
+        if comps
+            .next()
+            .map(|c| c.as_os_str() == "src")
+            .unwrap_or(false)
+        {
+            output.strip_prefix("src").unwrap_or(output)
+        } else {
+            output
+        }
+    });
 
     let parts: Vec<&str> = relative
         .components()
@@ -1931,7 +1947,7 @@ mod tests {
         for spec in specs {
             let resolved = ResolvedSpec::from_spec(spec.spec.clone());
             for (test_index, local_test) in spec.spec.local_tests.iter().enumerate() {
-                let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+                let full_name = expected_cargo_test_name(&resolved, output_prefix, &local_test.id);
                 let status = if test_index % 11 == 0 { "FAILED" } else { "ok" };
                 stdout.push_str("test ");
                 stdout.push_str(&full_name);
@@ -2438,9 +2454,14 @@ extra_field: nope
         let btree_started = Instant::now();
         for _ in 0..ITERS {
             let parsed = parse_cargo_test_output_btree_baseline(std::hint::black_box(&stdout));
-            let evidence =
-                build_test_evidence_btree_baseline(&specs, &output_prefix, &parsed, observed_at, None)
-                    .unwrap();
+            let evidence = build_test_evidence_btree_baseline(
+                &specs,
+                &output_prefix,
+                &parsed,
+                observed_at,
+                None,
+            )
+            .unwrap();
             std::hint::black_box(evidence);
         }
         let btree_elapsed = btree_started.elapsed();
@@ -2448,7 +2469,8 @@ extra_field: nope
         let hash_started = Instant::now();
         for _ in 0..ITERS {
             let parsed = parse_cargo_test_output(std::hint::black_box(&stdout));
-            let evidence = build_test_evidence(&specs, &output_prefix, &parsed, observed_at, None).unwrap();
+            let evidence =
+                build_test_evidence(&specs, &output_prefix, &parsed, observed_at, None).unwrap();
             std::hint::black_box(evidence);
         }
         let hash_elapsed = hash_started.elapsed();
