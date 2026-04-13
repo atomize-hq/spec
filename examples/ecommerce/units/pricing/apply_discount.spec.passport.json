@@ -39,7 +39,7 @@
         "reason": "test not found in cargo output"
       }
     ],
-    "observed_at": "2026-04-13T02:42:48Z",
+    "observed_at": "2026-04-13T02:44:13Z",
     "provenance": {
       "git_commit_sha": "ea74c8359791bbb2d5d0a9eef9528ad03b7c4ca7"
     }
