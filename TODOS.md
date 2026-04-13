@@ -95,7 +95,7 @@
 - [x] **D5c: DECISIONS.md — "Generated Output: Ephemeral by Default"** — Completed v0.4.0 (2026-04-05). DECISIONS.md documents that `spec build`/`spec test` treat generated Rust as ephemeral output. **Completed:** v0.4.0 (2026-04-05)
 - [x] **Create spec-core/src/syntax.rs shared module** — Completed v0.4.0 (2026-04-05). `syntax.rs` created; `validator.rs` and `generator.rs` import from it. Exposed from `lib.rs`. **Completed:** v0.4.0 (2026-04-05)
 - [x] **D4: Add `intent: Option<String>` to ResolvedSpec** — Completed v0.4.0 (2026-04-05). `ResolvedSpec.intent` added; `from_loaded()` copies `spec.intent.why`. **Completed:** v0.4.0 (2026-04-05)
-- [ ] **Document nextest limitation (D5b addition)** — `spec test` parses standard `cargo test` output format only. nextest uses a completely different format and is not currently supported. Document in README under `## Pipeline` section. Effort: XS. (Added by /plan-eng-review 2026-04-05)
+- [x] **Document nextest limitation (D5b addition)** — Completed v0.5.2 (2026-04-12). README Pipeline section now explicitly calls out that `cargo nextest` format is unsupported and produces `status: "unknown"`. (feat/m6a) **Completed:** v0.5.2 (2026-04-12)
 
 ## M5 Backlog (from M4 review)
 

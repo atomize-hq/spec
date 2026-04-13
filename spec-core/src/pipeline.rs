@@ -11,6 +11,18 @@ use wait_timeout::ChildExt;
 /// Matches the convention used by the POSIX `timeout(1)` command.
 const TIMEOUT_EXIT_CODE: i32 = 124;
 
+/// Controls whether `run_cargo_build` and `run_cargo_test` emit status lines
+/// to stderr. Use `Normal` for interactive CLI invocations; use `Silent` when
+/// the caller manages its own output format (e.g., `--format json` on build/test,
+/// once those flags are added).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verbosity {
+    /// Emit "spec: running cargo …" lines to stderr.
+    Normal,
+    /// Suppress all status output from the pipeline helpers.
+    Silent,
+}
+
 pub struct CargoResult {
     pub exit_code: i32,
     pub stdout: String,
@@ -79,8 +91,11 @@ pub fn run_cargo_build(
     crate_root: &Path,
     cargo_target_dir: &Path,
     timeout: Option<Duration>,
+    verbosity: Verbosity,
 ) -> Result<CargoResult> {
-    eprintln!("spec: running cargo build in {}", crate_root.display());
+    if matches!(verbosity, Verbosity::Normal) {
+        eprintln!("spec: running cargo build in {}", crate_root.display());
+    }
     run_cargo(crate_root, &["build"], cargo_target_dir, timeout)
 }
 
@@ -89,8 +104,11 @@ pub fn run_cargo_test(
     cargo_target_dir: &Path,
     filter: Option<&str>,
     timeout: Option<Duration>,
+    verbosity: Verbosity,
 ) -> Result<CargoResult> {
-    eprintln!("spec: running cargo test in {}", crate_root.display());
+    if matches!(verbosity, Verbosity::Normal) {
+        eprintln!("spec: running cargo test in {}", crate_root.display());
+    }
     let args = cargo_test_args(filter);
     let arg_refs = args.iter().map(|arg| arg.as_str()).collect::<Vec<_>>();
     run_cargo(crate_root, &arg_refs, cargo_target_dir, timeout)
@@ -280,8 +298,6 @@ fn join_pipe_reader(
 mod tests {
     use super::*;
     use std::fs;
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
     #[test]
@@ -548,26 +564,14 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
     }
 
     #[cfg(unix)]
-    fn write_fake_command(dir: &TempDir, name: &str, body: &str) -> PathBuf {
-        let path = dir.path().join(name);
-        fs::write(&path, body).unwrap();
-        let mut perms = fs::metadata(&path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&path, perms).unwrap();
-        path
-    }
-
-    #[cfg(unix)]
     #[test]
     fn run_command_marks_timeout_and_reports_it() {
         let tmp = TempDir::new().unwrap();
         // Command sleeps 10s so the 2s timeout fires first; as_secs() returns "2s" in message.
-        let fake_cargo = write_fake_command(&tmp, "fake-cargo.sh", "#!/bin/sh\nsleep 10\n");
-
         let result = run_command(
-            &fake_cargo,
+            Path::new("/bin/sh"),
             tmp.path(),
-            &["build"],
+            &["-c", "sleep 10"],
             &tmp.path().join("target"),
             Some(Duration::from_secs(2)),
         )
@@ -586,16 +590,10 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
     #[test]
     fn run_command_preserves_output_without_timeout() {
         let tmp = TempDir::new().unwrap();
-        let fake_cargo = write_fake_command(
-            &tmp,
-            "fake-cargo.sh",
-            "#!/bin/sh\necho ok-stdout\necho ok-stderr >&2\n",
-        );
-
         let result = run_command(
-            &fake_cargo,
+            Path::new("/bin/sh"),
             tmp.path(),
-            &["build"],
+            &["-c", "echo ok-stdout; echo ok-stderr >&2"],
             &tmp.path().join("target"),
             Some(Duration::from_secs(1)),
         )

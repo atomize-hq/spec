@@ -21,7 +21,7 @@
 ```bash
 cargo test
 cargo run -p spec-cli -- validate examples/ecommerce/units
-cargo run -p spec-cli -- generate examples/ecommerce/units --output generated/spec
+cargo run -p spec-cli -- generate examples/ecommerce/units
 ```
 
 After installation, the binary is `spec`:
@@ -29,7 +29,7 @@ After installation, the binary is `spec`:
 ```bash
 cargo install spec-cli
 spec validate examples/ecommerce/units
-spec generate examples/ecommerce/units --output generated/spec
+spec generate examples/ecommerce/units
 ```
 
 ## Spec format
@@ -124,10 +124,13 @@ The example crate is intentionally minimal. It provides a realistic place to kee
 spec validate <path>                      # schema + semantic validation
 spec validate <path> --no-strict          # downgrade missing deps to warnings
 spec validate <path> --format json        # machine-readable JSON output for agents
-spec generate <path> --output <dir>       # emit .rs files
+spec generate <path>                      # emit .rs files (default: {crate_root}/src/generated)
+spec generate <path> --output <dir>       # emit .rs files to explicit directory
 
-spec build <path> --output <dir>          # validate → generate → cargo build
-spec test  <path> --output <dir>          # spec build → cargo test, writes evidence to passports
+spec build <path>                         # validate → generate → cargo build
+spec build <path> --output <dir>          # explicit output directory
+spec test  <path>                         # spec build → cargo test, writes evidence to passports
+spec test  <path> --output <dir>          # explicit output directory
 spec test  <path/to/unit.unit.spec>       # scope to a single unit (filter by module path)
 
 spec status <path>                        # per-unit status: valid/invalid/stale/no-evidence
@@ -145,7 +148,7 @@ spec export <path> --output <file>        # write JSON bundle to file
 
 The `--output` path for `generate`/`build`/`test` must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
 
-Note: `spec test` parses standard `cargo test` output. If your project uses `cargo-nextest`, use `spec generate` + `cargo test` directly for now.
+**Nextest:** `spec test` parses standard `cargo test` output format only. `cargo nextest` uses a different output format and is not supported. Running `spec test` in a project configured for nextest will produce `status: "unknown"` for all local tests. Use standard `cargo test`.
 
 ## AI-Native Usage
 

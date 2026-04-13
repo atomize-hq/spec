@@ -24,6 +24,9 @@ pub struct PipelineConfig {
     pub crate_root: Option<PathBuf>,
     pub cargo_target_dir: Option<PathBuf>,
     pub timeout_secs: Option<u64>,
+    /// Explicit module prefix override for non-standard layouts. When absent,
+    /// the prefix is auto-derived from the output path relative to `{crate_root}/src/`.
+    pub generated_module_prefix: Option<String>,
 }
 
 pub fn load_workspace_config(target: &Path) -> Result<WorkspaceConfig> {

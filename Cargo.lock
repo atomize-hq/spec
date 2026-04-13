@@ -1238,7 +1238,7 @@ dependencies = [
 
 [[package]]
 name = "spec-cli"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "spec-core"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "hex",

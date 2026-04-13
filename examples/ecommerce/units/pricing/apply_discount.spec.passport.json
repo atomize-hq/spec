@@ -1,0 +1,48 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount to a subtotal while keeping the result nonnegative.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "subtotal",
+        "type": "Decimal"
+      },
+      {
+        "name": "rate",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal",
+    "invariants": [
+      "output <= subtotal",
+      "output >= 0"
+    ]
+  },
+  "deps": [
+    "money/round"
+  ],
+  "local_tests": [
+    {
+      "id": "happy_path",
+      "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
+    }
+  ],
+  "generated_at": "2026-04-13T02:44:08Z",
+  "source_file": "examples/ecommerce/units/pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "happy_path",
+        "status": "unknown",
+        "reason": "test not found in cargo output"
+      }
+    ],
+    "observed_at": "2026-04-13T02:42:48Z",
+    "provenance": {
+      "git_commit_sha": "ea74c8359791bbb2d5d0a9eef9528ad03b7c4ca7"
+    }
+  },
+  "contract_hash": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb"
+}

@@ -1,0 +1,27 @@
+{
+  "spec_version": "0.3.0",
+  "id": "money/round",
+  "intent": "Round monetary values (placeholder for compilation proof).",
+  "contract": {
+    "inputs": [
+      {
+        "name": "value",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal"
+  },
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2026-04-13T02:44:08Z",
+  "source_file": "examples/ecommerce/units/money/round.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [],
+    "observed_at": "2026-04-13T02:42:48Z",
+    "provenance": {
+      "git_commit_sha": "ea74c8359791bbb2d5d0a9eef9528ad03b7c4ca7"
+    }
+  },
+  "contract_hash": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8"
+}
