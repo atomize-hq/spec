@@ -2,16 +2,23 @@
 //!
 //! The export bundle is a read-only artifact intended for downstream tooling.
 //! It includes authored unit metadata, any readable co-located passports,
-//! the dependency edge list, and structured warnings for skipped passports.
+//! the dependency edge list, molecule tests, and structured warnings for skipped passports.
+//!
+//! # Breaking change in M7
+//! `ExportEdge` changed from a plain struct `{from, to}` to a tagged enum.
+//! Consumers must handle the `kind` field: `"dep"` edges have `from`/`to` fields;
+//! `"covers"` edges have `test`/`unit` fields.
 
 use crate::AUTHORED_SPEC_VERSION;
+use crate::graph::{SpecEdge, SpecGraph};
 use crate::passport::{ArtifactProvenance, Passport, passport_path_for};
-use crate::types::{Contract, LoadedSpec, LocalTest};
+use crate::types::{Contract, LoadedMoleculeTest, LoadedSpec, LocalTest};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-const EXPORT_SCHEMA_VERSION: u8 = 1;
+/// Export schema version. Bumped in M7 for the ExportEdge breaking change.
+const EXPORT_SCHEMA_VERSION: u8 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExportBundle {
@@ -21,6 +28,7 @@ pub struct ExportBundle {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provenance: Option<ArtifactProvenance>,
     pub units: Vec<ExportUnit>,
+    pub molecule_tests: Vec<ExportMoleculeTest>,
     pub passports: Vec<Passport>,
     pub graph: ExportGraph,
     pub warnings: Vec<ExportWarning>,
@@ -38,14 +46,30 @@ pub struct ExportUnit {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExportMoleculeTest {
+    pub id: String,
+    pub intent: String,
+    pub covers: Vec<String>,
+    pub source_file: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExportGraph {
     pub edges: Vec<ExportEdge>,
 }
 
+/// An edge in the export graph.
+///
+/// Tagged with `kind` to distinguish dep edges from covers edges.
+/// - `"dep"` edges have `from` and `to` fields (unit → dependency).
+/// - `"covers"` edges have `test` and `unit` fields (molecule test → covered unit).
+///
+/// Breaking change in M7: previously a plain struct `{from, to}`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ExportEdge {
-    pub from: String,
-    pub to: String,
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum ExportEdge {
+    Dep { from: String, to: String },
+    Covers { test: String, unit: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -58,20 +82,26 @@ pub struct ExportWarning {
 
 pub fn build_export_bundle(
     specs: &[LoadedSpec],
+    molecule_tests: &[LoadedMoleculeTest],
     exported_at: &str,
     provenance: Option<&ArtifactProvenance>,
 ) -> ExportBundle {
     let (passports, warnings) = load_passports_for_specs(specs);
-    let mut edges = specs
-        .iter()
-        .flat_map(|spec| {
-            spec.spec.deps.iter().map(|dep| ExportEdge {
-                from: spec.spec.id.clone(),
-                to: dep.clone(),
-            })
+
+    // Build graph edges from SpecGraph
+    let graph = SpecGraph::build(specs, molecule_tests);
+    let mut edges: Vec<ExportEdge> = graph
+        .edges
+        .into_iter()
+        .map(|e| match e {
+            SpecEdge::Dep { from, to } => ExportEdge::Dep { from, to },
+            SpecEdge::Covers { test, unit } => ExportEdge::Covers { test, unit },
         })
-        .collect::<Vec<_>>();
+        .collect();
     edges.sort();
+
+    let export_molecule_tests: Vec<ExportMoleculeTest> =
+        molecule_tests.iter().map(ExportMoleculeTest::from).collect();
 
     ExportBundle {
         schema_version: EXPORT_SCHEMA_VERSION,
@@ -79,6 +109,7 @@ pub fn build_export_bundle(
         exported_at: exported_at.to_string(),
         provenance: provenance.cloned(),
         units: specs.iter().map(ExportUnit::from).collect(),
+        molecule_tests: export_molecule_tests,
         passports,
         graph: ExportGraph { edges },
         warnings,
@@ -147,6 +178,17 @@ impl From<&LoadedSpec> for ExportUnit {
     }
 }
 
+impl From<&LoadedMoleculeTest> for ExportMoleculeTest {
+    fn from(test: &LoadedMoleculeTest) -> Self {
+        Self {
+            id: test.test.id.clone(),
+            intent: test.test.intent.why.clone(),
+            covers: test.test.covers.clone(),
+            source_file: test.source.file_path.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,16 +248,16 @@ mod tests {
         );
         let spec_b = loaded_spec(&dir, "units/money/round.unit.spec", "money/round", vec![]);
 
-        let bundle = build_export_bundle(&[spec_a, spec_b], "2026-04-05T00:00:00Z", None);
+        let bundle = build_export_bundle(&[spec_a, spec_b], &[], "2026-04-05T00:00:00Z", None);
 
         assert_eq!(
             bundle.graph.edges,
             vec![
-                ExportEdge {
+                ExportEdge::Dep {
                     from: "pricing/apply_tax".to_string(),
                     to: "money/format".to_string(),
                 },
-                ExportEdge {
+                ExportEdge::Dep {
                     from: "pricing/apply_tax".to_string(),
                     to: "money/round".to_string(),
                 },
@@ -233,9 +275,9 @@ mod tests {
             vec![],
         );
 
-        let bundle = build_export_bundle(&[spec], "2026-04-05T00:00:00Z", None);
+        let bundle = build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", None);
 
-        assert_eq!(bundle.schema_version, 1);
+        assert_eq!(bundle.schema_version, 2);
         assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
         assert_ne!(bundle.schema_version.to_string(), bundle.spec_version);
     }
@@ -299,16 +341,20 @@ mod tests {
 
         let bundle = build_export_bundle(
             &[spec_a.clone(), spec_b.clone()],
+            &[],
             "2026-04-05T01:00:00Z",
             None,
         );
 
-        assert_eq!(bundle.graph.edges[0].from, "pricing/apply_discount");
-        assert_eq!(bundle.graph.edges[0].to, "money/round");
-        assert_eq!(bundle.graph.edges[1].from, "pricing/apply_tax");
-        assert_eq!(bundle.graph.edges[1].to, "money/format");
-        assert_eq!(bundle.graph.edges[2].from, "pricing/apply_tax");
-        assert_eq!(bundle.graph.edges[2].to, "money/round");
+        assert!(
+            matches!(&bundle.graph.edges[0], ExportEdge::Dep { from, to } if from == "pricing/apply_discount" && to == "money/round")
+        );
+        assert!(
+            matches!(&bundle.graph.edges[1], ExportEdge::Dep { from, to } if from == "pricing/apply_tax" && to == "money/format")
+        );
+        assert!(
+            matches!(&bundle.graph.edges[2], ExportEdge::Dep { from, to } if from == "pricing/apply_tax" && to == "money/round")
+        );
         assert_eq!(bundle.warnings.len(), 1);
         assert_eq!(bundle.warnings[0].spec_id, spec_a.spec.id);
         assert_eq!(bundle.warnings[0].code, "passport_missing");
@@ -329,7 +375,8 @@ mod tests {
             git_commit_sha: "abc123".to_string(),
         };
 
-        let bundle = build_export_bundle(&[spec], "2026-04-05T00:00:00Z", Some(&provenance));
+        let bundle =
+            build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", Some(&provenance));
 
         assert_eq!(bundle.provenance, Some(provenance));
     }

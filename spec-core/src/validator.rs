@@ -5,7 +5,7 @@
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
 use crate::syntax::validate_expect_expr;
-use crate::types::LoadedSpec;
+use crate::types::{LoadedMoleculeTest, LoadedSpec};
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
@@ -15,7 +15,11 @@ use std::sync::OnceLock;
 /// JSON Schema for unit.spec validation (embedded at compile time)
 const SCHEMA_JSON: &str = include_str!("schema/unit.spec.json");
 
+/// JSON Schema for test.spec validation (embedded at compile time)
+const TEST_SCHEMA_JSON: &str = include_str!("schema/test.spec.json");
+
 static COMPILED_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
+static COMPILED_TEST_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ValidationOptions {
@@ -440,6 +444,114 @@ pub fn validate_full_with_options(spec: &LoadedSpec, options: &ValidationOptions
     validate_schema(spec)?;
     validate_semantic_with_options(spec, options)?;
     Ok(())
+}
+
+fn compiled_test_schema() -> Result<&'static jsonschema::Validator> {
+    if let Some(schema) = COMPILED_TEST_SCHEMA.get() {
+        return Ok(schema);
+    }
+
+    let schema_json: Value = serde_json::from_str(TEST_SCHEMA_JSON).map_err(SpecError::Json)?;
+    let schema =
+        jsonschema::draft7::new(&schema_json).map_err(|e| SpecError::SchemaValidation {
+            message: format!("Test schema compilation failed: {e}"),
+            path: "<test.spec.json schema>".to_string(),
+        })?;
+
+    let _ = COMPILED_TEST_SCHEMA.set(schema);
+
+    Ok(COMPILED_TEST_SCHEMA
+        .get()
+        .expect("COMPILED_TEST_SCHEMA must be set after successful compilation"))
+}
+
+/// Validate a raw YAML-authored molecule test value against the test.spec JSON Schema.
+///
+/// Used by the loader before deserialization so unknown fields and authoring mistakes
+/// are rejected before serde can apply defaults or drop data.
+pub fn validate_raw_molecule_test_yaml(yaml_value: &YamlValue, file_path: &str) -> Result<()> {
+    let spec_json = serde_json::to_value(yaml_value).map_err(SpecError::Json)?;
+    let schema = compiled_test_schema()?;
+
+    let validation_result = schema.validate(&spec_json);
+    match validation_result {
+        Ok(()) => Ok(()),
+        Err(error) => Err(SpecError::SchemaValidation {
+            message: humanize_validation_error(&error),
+            path: file_path.to_string(),
+        }),
+    }
+}
+
+/// Perform per-test semantic validation on a loaded molecule test.
+///
+/// Checks:
+/// 1. body.rust must parse as syn::Block
+/// 2. id segments must not be Rust reserved keywords
+pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> {
+    syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
+        SpecError::MoleculeBodyRustMustBeBlock {
+            message: e.to_string(),
+            test_path: test.source.file_path.clone(),
+        }
+    })?;
+
+    validate_rust_keywords(&test.test.id, &test.source.file_path)?;
+
+    Ok(())
+}
+
+/// Validate that all cover_ids reference real unit IDs in the loaded spec set.
+///
+/// Returns errors for each missing cover and a warning if covers is empty.
+pub fn validate_molecule_test_covers(
+    test: &LoadedMoleculeTest,
+    unit_ids: &HashSet<&str>,
+) -> (Vec<SpecError>, Vec<SpecWarning>) {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    if test.test.covers.is_empty() {
+        warnings.push(SpecWarning::MoleculeTestNoCoveredUnits {
+            test_id: test.test.id.clone(),
+            test_path: test.source.file_path.clone(),
+        });
+    }
+
+    for cover_id in &test.test.covers {
+        if !unit_ids.contains(cover_id.as_str()) {
+            errors.push(SpecError::MoleculeCoversNotFound {
+                cover_id: cover_id.clone(),
+                test_id: test.test.id.clone(),
+                test_path: test.source.file_path.clone(),
+            });
+        }
+    }
+
+    (errors, warnings)
+}
+
+/// Check for duplicate IDs across all loaded molecule tests.
+///
+/// Returns all duplicate pairs. Each additional file that shares an ID produces
+/// a separate error citing the first file as file1.
+pub fn validate_no_duplicate_molecule_test_ids(tests: &[LoadedMoleculeTest]) -> Vec<SpecError> {
+    let mut seen: HashMap<String, String> = HashMap::new();
+    let mut errors = Vec::new();
+
+    for test in tests {
+        if let Some(existing_file) = seen.get(&test.test.id) {
+            errors.push(SpecError::DuplicateMoleculeTestId {
+                id: test.test.id.clone(),
+                file1: existing_file.clone(),
+                file2: test.source.file_path.clone(),
+            });
+        } else {
+            seen.insert(test.test.id.clone(), test.source.file_path.clone());
+        }
+    }
+
+    errors
 }
 
 #[cfg(test)]

@@ -4,10 +4,13 @@ use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
 use spec_core::export::build_export_bundle;
 use spec_core::generator::{
-    GenerateOptions, clean_output_dir, generate_code_with_options, generate_mod_rs,
-    safe_output_path, write_generated_file,
+    GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_code_with_options,
+    generate_mod_rs, safe_output_path, write_generated_file,
 };
-use spec_core::loader::{is_unit_spec, load_directory_report, load_file};
+use spec_core::loader::{
+    is_unit_spec, load_directory_report, load_file, load_molecule_test_directory,
+    load_molecule_test_directory_report,
+};
 use spec_core::normalizer::normalize_spec;
 use spec_core::passport::{
     ArtifactProvenance, PassportEvidence, PassportTestResult, build_passport_with_evidence,
@@ -17,10 +20,11 @@ use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, cargo_available, parse_cargo_test_output, run_cargo_build,
     run_cargo_test, workspace_root_for, zero_tests_ran,
 };
-use spec_core::types::{LoadedSpec, ResolvedSpec};
+use spec_core::types::{LoadedMoleculeTest, LoadedSpec, ResolvedMoleculeTest, ResolvedSpec};
 use spec_core::validator::{
     ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
-    validate_full_with_options, validate_no_duplicate_ids,
+    validate_full_with_options, validate_molecule_test_covers, validate_molecule_test_semantic,
+    validate_no_duplicate_ids, validate_no_duplicate_molecule_test_ids,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
@@ -374,6 +378,17 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
     };
     let (validation_errors, validation_warnings) = finish_validation(&specs, &validation_options);
 
+    // Validate molecule tests
+    let validate_dir = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    let molecule_report = load_molecule_test_directory_report(validate_dir);
+    let (molecule_errors, molecule_warnings) =
+        validate_molecule_tests(&molecule_report.tests, &specs);
+    let molecule_loader_errors = molecule_report.errors;
+
     match format {
         OutputFormat::Text => {
             let mut errors = DiagnosticMap::new();
@@ -385,10 +400,19 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
             for err in validation_errors {
                 push_error(&mut errors, err);
             }
+            for err in molecule_loader_errors {
+                push_error(&mut errors, err);
+            }
+            for err in molecule_errors {
+                push_error(&mut errors, err);
+            }
             for warning in loader_warnings {
                 push_warning(&mut warnings, warning);
             }
             for warning in validation_warnings {
+                push_warning(&mut warnings, warning);
+            }
+            for warning in molecule_warnings {
                 push_warning(&mut warnings, warning);
             }
 
@@ -430,7 +454,12 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
                 .iter()
                 .map(|s| (s.source.file_path.clone(), s.spec.id.clone()))
                 .collect();
-            let mut errors = Vec::with_capacity(loader_errors.len() + validation_errors.len());
+            let mut errors = Vec::with_capacity(
+                loader_errors.len()
+                    + validation_errors.len()
+                    + molecule_loader_errors.len()
+                    + molecule_errors.len(),
+            );
             errors.extend(
                 loader_errors
                     .iter()
@@ -441,10 +470,21 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
                     .iter()
                     .map(|err| spec_error_to_json_entry(err, &id_by_path)),
             );
+            errors.extend(
+                molecule_loader_errors
+                    .iter()
+                    .map(|err| spec_error_to_json_entry(err, &id_by_path)),
+            );
+            errors.extend(
+                molecule_errors
+                    .iter()
+                    .map(|err| spec_error_to_json_entry(err, &id_by_path)),
+            );
 
             let warnings = loader_warnings
                 .into_iter()
                 .chain(validation_warnings)
+                .chain(molecule_warnings)
                 .map(|warning| warning.to_string())
                 .collect();
             let has_errors = !errors.is_empty();
@@ -732,12 +772,16 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
         );
     }
 
-    let provenance = resolve_git_provenance(if path.is_file() {
+    let export_dir = if path.is_file() {
         path.parent().unwrap_or(path)
     } else {
         path
-    });
-    let bundle = build_export_bundle(&specs, &rfc3339_now(), provenance.as_ref());
+    };
+    let provenance = resolve_git_provenance(export_dir);
+    let molecule_tests = load_molecule_test_directory(export_dir)
+        .with_context(|| format!("Failed to load molecule tests from {}", export_dir.display()))?;
+    let bundle =
+        build_export_bundle(&specs, &molecule_tests, &rfc3339_now(), provenance.as_ref());
     let json = serde_json::to_string_pretty(&bundle)?;
 
     match output {
@@ -879,6 +923,7 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         let content = generate_mod_rs(
             &namespace.unit_files.iter().cloned().collect::<Vec<_>>(),
             &namespace.subdirs.iter().cloned().collect::<Vec<_>>(),
+            false, // molecule_tests are added later by generate_and_write_molecule_tests
         )
         .with_context(|| format!("Failed to generate mod.rs for module '{module_path}'"))?;
 
@@ -893,15 +938,37 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
             .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
     }
 
+    // Load and generate molecule tests
+    let spec_dir = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    let molecule_tests = load_molecule_test_directory(spec_dir)
+        .with_context(|| format!("Failed to load molecule tests from {}", spec_dir.display()))?;
+    let resolved_molecule_tests: Vec<ResolvedMoleculeTest> =
+        molecule_tests.iter().map(ResolvedMoleculeTest::from_loaded).collect();
+    let specs_by_id: HashMap<&str, &ResolvedSpec> =
+        resolved_specs.iter().map(|s| (s.id.as_str(), s)).collect();
+    let molecule_test_paths =
+        generate_and_write_molecule_tests(&resolved_molecule_tests, &specs_by_id, &output_base)
+            .with_context(|| "Failed to generate molecule test files")?;
+    generated_rs_rel_paths.extend(molecule_test_paths);
+
     clean_output_dir(&output_base, &generated_rs_rel_paths)
         .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
 
     let generated_at = rfc3339_now();
+    let molecule_test_file_count = resolved_molecule_tests
+        .iter()
+        .map(|t| t.module_path.clone())
+        .collect::<std::collections::HashSet<_>>()
+        .len();
 
     println!(
         "Generated {} file{}",
-        resolved_specs.len() + namespaces.len(),
-        pluralize(resolved_specs.len() + namespaces.len())
+        resolved_specs.len() + namespaces.len() + molecule_test_file_count,
+        pluralize(resolved_specs.len() + namespaces.len() + molecule_test_file_count)
     );
     Ok(GeneratedSpecs {
         specs,
@@ -1624,6 +1691,35 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
     ))
 }
 
+fn validate_molecule_tests(
+    tests: &[LoadedMoleculeTest],
+    specs: &[LoadedSpec],
+) -> (Vec<spec_core::SpecError>, Vec<spec_core::SpecWarning>) {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    // Per-test semantic validation
+    for test in tests {
+        if let Err(e) = validate_molecule_test_semantic(test) {
+            errors.push(e);
+        }
+    }
+
+    // Cross-set: covers must reference real unit IDs
+    let unit_ids: std::collections::HashSet<&str> =
+        specs.iter().map(|s| s.spec.id.as_str()).collect();
+    for test in tests {
+        let (errs, warns) = validate_molecule_test_covers(test, &unit_ids);
+        errors.extend(errs);
+        warnings.extend(warns);
+    }
+
+    // Duplicate IDs
+    errors.extend(validate_no_duplicate_molecule_test_ids(tests));
+
+    (errors, warnings)
+}
+
 fn finish_validation(
     specs: &[LoadedSpec],
     options: &ValidationOptions,
@@ -1695,6 +1791,11 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::Generator { .. } => "SPEC_GENERATOR",
         spec_core::SpecError::OutputDir { .. } => "SPEC_OUTPUT_DIR",
         spec_core::SpecError::MissingMarker { .. } => "SPEC_MISSING_MARKER",
+        spec_core::SpecError::MoleculeCoversNotFound { .. } => "SPEC_MOLECULE_COVERS_NOT_FOUND",
+        spec_core::SpecError::DuplicateMoleculeTestId { .. } => "SPEC_DUPLICATE_MOLECULE_TEST_ID",
+        spec_core::SpecError::MoleculeBodyRustMustBeBlock { .. } => {
+            "SPEC_MOLECULE_BODY_RUST_MUST_BE_BLOCK"
+        }
     }
 }
 
@@ -1841,6 +1942,27 @@ fn spec_error_to_json_entry(
             path: Some(path.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::MoleculeCoversNotFound {
+            cover_id,
+            test_id,
+            test_path,
+        } => ErrorFields {
+            path: Some(test_path.clone()),
+            id: Some(test_id.clone()),
+            dep: Some(cover_id.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::DuplicateMoleculeTestId { id, file1, file2 } => ErrorFields {
+            path: Some(file1.clone()),
+            id: Some(id.clone()),
+            path2: Some(file2.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::MoleculeBodyRustMustBeBlock { message, test_path } => ErrorFields {
+            path: Some(test_path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
     };
 
     JsonErrorEntry {
@@ -1883,6 +2005,13 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::OutputDir { .. }
         | spec_core::SpecError::Io(_)
         | spec_core::SpecError::Json(_) => Vec::new(),
+        spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
+        | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. } => {
+            vec![test_path.clone()]
+        }
+        spec_core::SpecError::DuplicateMoleculeTestId { file1, file2, .. } => {
+            vec![file1.clone(), file2.clone()]
+        }
     }
 }
 
@@ -1966,6 +2095,13 @@ fn error_key(err: &spec_core::SpecError) -> String {
             "generation".to_string()
         }
         spec_core::SpecError::Io(_) | spec_core::SpecError::Json(_) => "validation".to_string(),
+        spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
+        | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. } => {
+            test_path.clone()
+        }
+        spec_core::SpecError::DuplicateMoleculeTestId { file1, file2, .. } => {
+            format!("{file1} | {file2}")
+        }
     }
 }
 
@@ -1974,6 +2110,7 @@ fn warning_key(warning: &spec_core::SpecWarning) -> String {
         spec_core::SpecWarning::MissingDep { path, .. }
         | spec_core::SpecWarning::SymlinkCycleSkipped { path }
         | spec_core::SpecWarning::MissingSpecVersion { path, .. } => path.clone(),
+        spec_core::SpecWarning::MoleculeTestNoCoveredUnits { test_path, .. } => test_path.clone(),
     }
 }
 

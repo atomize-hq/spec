@@ -6,8 +6,10 @@
 //! - UTF-8 validation before YAML parsing
 //! - Error tracking with file paths
 
-use crate::types::{LoadedSpec, SpecSource, SpecStruct};
-use crate::validator::validate_raw_yaml;
+use crate::types::{
+    LoadedMoleculeTest, LoadedSpec, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct,
+};
+use crate::validator::{validate_raw_molecule_test_yaml, validate_raw_yaml};
 use crate::{Result, SpecError};
 use std::fs;
 use std::path::Path;
@@ -173,6 +175,106 @@ fn walkdir_error(err: walkdir::Error) -> SpecError {
             .map(|path| path.display().to_string())
             .unwrap_or_else(|| "<unknown>".to_string()),
     }
+}
+
+/// Result of a collect-all molecule test directory load.
+#[derive(Debug, Default)]
+pub struct MoleculeTestLoadReport {
+    pub tests: Vec<LoadedMoleculeTest>,
+    pub errors: Vec<SpecError>,
+    pub warnings: Vec<crate::SpecWarning>,
+    pub total_files: usize,
+}
+
+/// Load a single .test.spec file
+///
+/// Returns the parsed molecule test with its source file information.
+/// Performs UTF-8 validation and schema validation before YAML parsing.
+pub fn load_molecule_test_file<P: AsRef<Path>>(path: P) -> Result<LoadedMoleculeTest> {
+    let (path_str, yaml_value) = read_yaml_value(path)?;
+
+    // Validate against test.spec.json schema before serde can normalize or drop fields.
+    validate_raw_molecule_test_yaml(&yaml_value, &path_str)?;
+
+    // Deserialize to MoleculeTestStruct
+    let test: MoleculeTestStruct =
+        serde_yaml_bw::from_value(yaml_value).map_err(|e| SpecError::YamlParse {
+            message: e.to_string(),
+            path: path_str.clone(),
+        })?;
+
+    Ok(LoadedMoleculeTest {
+        source: MoleculeTestSource {
+            file_path: path_str,
+            id: test.id.clone(),
+        },
+        test,
+    })
+}
+
+/// Load all .test.spec files from a directory recursively (fail-fast).
+///
+/// Returns a vector of LoadedMoleculeTest, sorted by file path.
+/// Non-.test.spec files are skipped.
+/// Returns error on first failure.
+pub fn load_molecule_test_directory<P: AsRef<Path>>(dir: P) -> Result<Vec<LoadedMoleculeTest>> {
+    let report = load_molecule_test_directory_report(dir);
+    if let Some(err) = report.errors.into_iter().next() {
+        return Err(err);
+    }
+    Ok(report.tests)
+}
+
+/// Load all .test.spec files from a directory recursively, collecting all errors.
+///
+/// Unlike `load_molecule_test_directory`, continues past failures so callers can
+/// present grouped diagnostics for the full directory (used by validate command).
+pub fn load_molecule_test_directory_report<P: AsRef<Path>>(dir: P) -> MoleculeTestLoadReport {
+    let dir = dir.as_ref();
+    let mut report = MoleculeTestLoadReport::default();
+
+    // If path is a file, skip molecule test loading (only directories are scanned)
+    if dir.is_file() {
+        return report;
+    }
+
+    for entry in WalkDir::new(dir).follow_links(true) {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+
+                if !path.is_file() {
+                    continue;
+                }
+
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+
+                if !name.ends_with(".test.spec") {
+                    continue;
+                }
+
+                report.total_files += 1;
+                match load_molecule_test_file(path) {
+                    Ok(test) => report.tests.push(test),
+                    Err(err) => report.errors.push(err),
+                }
+            }
+            Err(err) => {
+                if let Some(warning) = walkdir_cycle_warning(&err) {
+                    report.warnings.push(warning);
+                } else {
+                    report.errors.push(walkdir_error(err));
+                }
+            }
+        }
+    }
+
+    report
+        .tests
+        .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
+    report
 }
 
 /// Check if a path is a .unit.spec file

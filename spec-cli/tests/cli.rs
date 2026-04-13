@@ -927,9 +927,10 @@ local_tests:
     assert!(output.status.success());
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 1);
+    assert_eq!(bundle["schema_version"], 2);
     assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
     assert!(bundle.get("graph").is_some());
+    assert!(bundle.get("molecule_tests").is_some());
     assert!(bundle.get("warnings").is_some());
     assert!(String::from_utf8_lossy(&output.stderr).contains("spec_version not set"));
 }
@@ -1044,7 +1045,7 @@ body:
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         bundle["graph"]["edges"],
-        serde_json::json!([{ "from": "pricing/apply_discount", "to": "money/round" }])
+        serde_json::json!([{ "kind": "dep", "from": "pricing/apply_discount", "to": "money/round" }])
     );
 }
 
@@ -4192,5 +4193,298 @@ fn spec_test_respects_pipeline_timeout_secs() {
     assert!(
         passport.contains("\"build_status\": \"timeout\""),
         "passport should record timeout evidence: {passport}"
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// M7: molecule test (.test.spec) integration tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Helper: write a minimal .test.spec file
+fn write_molecule_test_spec(units_dir: &Path, relative_path: &str, id: &str, covers: &[&str]) {
+    let covers_yaml = if covers.is_empty() {
+        "covers: []".to_string()
+    } else {
+        let items: Vec<String> = covers.iter().map(|c| format!("  - {c}")).collect();
+        format!("covers:\n{}", items.join("\n"))
+    };
+    let content = format!(
+        r#"id: {id}
+spec_version: "0.3.0"
+intent:
+  why: Test molecule for {id}.
+{covers_yaml}
+body:
+  rust: |
+    {{
+        assert!(true);
+    }}
+"#
+    );
+    write_spec(units_dir, relative_path, &content);
+}
+
+#[test]
+fn valid_molecule_test_validates() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    // Write a unit spec that the molecule test covers
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Write a valid molecule test
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/discount_test.test.spec",
+        "pricing/discount_test",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert_output_success("valid_molecule_test_validates", &output);
+}
+
+#[test]
+fn molecule_test_unknown_covers_id_fails() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Molecule test covers a unit that doesn't exist
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/bad_test.test.spec",
+        "pricing/bad_test",
+        &["pricing/nonexistent_unit"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail when covers references unknown unit"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stderr.contains("nonexistent_unit") || stdout.contains("nonexistent_unit"),
+        "error should mention the missing unit id\nstdout: {stdout}\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn molecule_test_generates_molecule_tests_rs() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/discount_test.test.spec",
+        "pricing/discount_test",
+        &["pricing/apply_discount"],
+    );
+
+    // Create marker so generate doesn't complain about non-empty dir
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("molecule_test_generates_molecule_tests_rs", &output);
+
+    let molecule_tests_rs = output_dir.join("pricing/molecule_tests.rs");
+    assert!(
+        molecule_tests_rs.exists(),
+        "pricing/molecule_tests.rs should be generated: {}",
+        molecule_tests_rs.display()
+    );
+
+    let mod_rs = output_dir.join("pricing/mod.rs");
+    assert!(mod_rs.exists(), "pricing/mod.rs should exist");
+    let mod_content = fs::read_to_string(&mod_rs).unwrap();
+    assert!(
+        mod_content.contains("pub mod molecule_tests;"),
+        "pricing/mod.rs should declare molecule_tests module\ncontent: {mod_content}"
+    );
+}
+
+#[test]
+fn export_includes_molecule_tests_and_covers_edges() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/discount_test.test.spec",
+        "pricing/discount_test",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert_output_success("export_includes_molecule_tests_and_covers_edges", &output);
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let molecule_tests = bundle["molecule_tests"].as_array().unwrap();
+    assert!(
+        !molecule_tests.is_empty(),
+        "molecule_tests array should be non-empty"
+    );
+
+    let covers_edges: Vec<&Value> = bundle["graph"]["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] == "covers")
+        .collect();
+    assert!(
+        !covers_edges.is_empty(),
+        "graph.edges should have at least one covers edge"
+    );
+}
+
+#[test]
+fn duplicate_molecule_test_id_rejected() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Two test.spec files with the same id
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/dupe_test_a.test.spec",
+        "pricing/dupe_test",
+        &["pricing/apply_discount"],
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/dupe_test_b.test.spec",
+        "pricing/dupe_test",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail on duplicate molecule test IDs"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stderr.contains("dupe_test") || stdout.contains("dupe_test"),
+        "error should mention the duplicate id\nstdout: {stdout}\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn empty_covers_is_warning_not_error() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Molecule test with no covers (should warn, not error)
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/empty_covers_test.test.spec",
+        "pricing/empty_covers_test",
+        &[], // empty covers
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert_output_success("empty_covers_is_warning_not_error", &output);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no covered units") || stderr.contains("empty_covers_test"),
+        "should emit a warning about no covered units\nstderr: {stderr}"
     );
 }

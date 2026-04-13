@@ -27,7 +27,7 @@
       "expect": "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
     }
   ],
-  "generated_at": "2026-04-13T15:41:15Z",
+  "generated_at": "2026-04-13T18:39:44Z",
   "source_file": "examples/ecommerce/units/pricing/apply_tax.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -38,9 +38,9 @@
         "reason": "test not found in cargo output"
       }
     ],
-    "observed_at": "2026-04-13T15:41:21Z",
+    "observed_at": "2026-04-13T18:39:50Z",
     "provenance": {
-      "git_commit_sha": "f58f0498187b658945ed5df2decb2c4f581b3e4c"
+      "git_commit_sha": "bb17ff9be2ec09a3aaa665af8238948d4ba9a235"
     }
   },
   "contract_hash": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df"

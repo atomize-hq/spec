@@ -173,6 +173,68 @@ impl ResolvedSpec {
     }
 }
 
+/// Raw parsed form from YAML for .test.spec files (molecule tests)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MoleculeTestStruct {
+    pub id: String,
+    pub intent: Intent,
+    #[serde(default)]
+    pub covers: Vec<String>,
+    pub body: Body,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_version: Option<String>,
+}
+
+/// Source information for a loaded molecule test (file path tracking)
+#[derive(Debug, Clone, PartialEq)]
+pub struct MoleculeTestSource {
+    pub file_path: String,
+    pub id: String,
+}
+
+/// A loaded molecule test with its source file info
+#[derive(Debug, Clone, PartialEq)]
+pub struct LoadedMoleculeTest {
+    pub source: MoleculeTestSource,
+    pub test: MoleculeTestStruct,
+}
+
+/// Normalized internal representation for molecule tests, consumed by the generator
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedMoleculeTest {
+    /// Canonical ID: "pricing/discount_plus_tax"
+    pub id: String,
+    /// Last segment after final '/': "discount_plus_tax"
+    pub fn_name: String,
+    /// Everything before final '/': "pricing"
+    pub module_path: String,
+    pub intent_why: String,
+    pub covers: Vec<String>,
+    pub body_rust: String,
+    pub spec_version: Option<String>,
+}
+
+impl ResolvedMoleculeTest {
+    /// Derive fn_name and module_path from hierarchical ID.
+    /// The schema enforces at least one '/', so the rsplit_once fallback is defensive only.
+    pub fn from_loaded(loaded: &LoadedMoleculeTest) -> Self {
+        let id = loaded.test.id.as_str();
+        let (module_path, fn_name) = id
+            .rsplit_once('/')
+            .map(|(m, f)| (m.to_string(), f.to_string()))
+            .unwrap_or_else(|| (String::new(), id.to_string()));
+        Self {
+            id: id.to_string(),
+            fn_name,
+            module_path,
+            intent_why: loaded.test.intent.why.clone(),
+            covers: loaded.test.covers.clone(),
+            body_rust: loaded.test.body.rust.clone(),
+            spec_version: loaded.test.spec_version.clone(),
+        }
+    }
+}
+
 /// Rust reserved keywords that cannot be used as identifiers.
 /// Covers both active keywords (Rust 2018+) and reserved-for-future-use keywords that
 /// are also invalid as identifiers in current editions.

@@ -7,9 +7,9 @@
 //! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
 
 use crate::syntax::validate_expect_expr;
-use crate::types::ResolvedSpec;
+use crate::types::{ResolvedMoleculeTest, ResolvedSpec};
 use crate::{Result, SpecError};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -290,7 +290,11 @@ pub fn clean_output_dir(
     Ok(())
 }
 
-pub fn generate_mod_rs(unit_files: &[String], subdirs: &[String]) -> Result<String> {
+pub fn generate_mod_rs(
+    unit_files: &[String],
+    subdirs: &[String],
+    has_molecule_tests: bool,
+) -> Result<String> {
     let mut seen = HashSet::new();
     let mut unit_mods = Vec::new();
     let mut subdir_mods = Vec::new();
@@ -331,7 +335,160 @@ pub fn generate_mod_rs(unit_files: &[String], subdirs: &[String]) -> Result<Stri
         output.push('\n');
     }
 
+    if has_molecule_tests {
+        if !unit_mods.is_empty() || !subdir_mods.is_empty() {
+            output.push('\n');
+        }
+        output.push_str("pub mod molecule_tests;\n");
+    }
+
     Ok(output)
+}
+
+/// Returns the path for a molecule_tests.rs file relative to the output base.
+pub fn molecule_tests_file_path(output_base: &Path, module_path: &str) -> PathBuf {
+    if module_path.is_empty() {
+        output_base.join("molecule_tests.rs")
+    } else {
+        output_base
+            .join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
+            .join("molecule_tests.rs")
+    }
+}
+
+/// Generate the Rust source code for a group of molecule tests in one namespace.
+///
+/// `tests` must all belong to the same `module_path`.
+/// `specs_by_id` is used to look up imports for covered units.
+pub fn generate_molecule_tests_code(
+    tests: &[&ResolvedMoleculeTest],
+    specs_by_id: &HashMap<&str, &ResolvedSpec>,
+) -> Result<String> {
+    // Collect all unique cover_ids in stable order (first appearance across tests)
+    let mut cover_id_seen: HashSet<&str> = HashSet::new();
+    let mut all_cover_ids: Vec<&str> = Vec::new();
+    for test in tests {
+        for cover_id in &test.covers {
+            if cover_id_seen.insert(cover_id.as_str()) {
+                all_cover_ids.push(cover_id.as_str());
+            }
+        }
+    }
+    all_cover_ids.sort_unstable();
+
+    // Collect imports from covered specs, deduplicated in stable insertion order
+    let mut import_seen: HashSet<String> = HashSet::new();
+    let mut all_imports: Vec<String> = Vec::new();
+    for cover_id in &all_cover_ids {
+        let spec = specs_by_id.get(cover_id).ok_or_else(|| SpecError::Generator {
+            message: format!(
+                "covered unit '{}' not found in spec set (should have been caught by validation)",
+                cover_id
+            ),
+        })?;
+        for import in &spec.imports {
+            if import_seen.insert(import.clone()) {
+                all_imports.push(import.clone());
+            }
+        }
+    }
+
+    let mut output = String::new();
+
+    // Emit external import use statements
+    for import in &all_imports {
+        output.push_str(&format!("use {};\n", import));
+    }
+
+    if !all_imports.is_empty() && !all_cover_ids.is_empty() {
+        output.push('\n');
+    }
+
+    // Emit `use crate::...` for each covered unit.
+    // dep_to_use_path already includes the trailing semicolon.
+    for cover_id in &all_cover_ids {
+        output.push_str(&format!(
+            "use {}\n",
+            ResolvedSpec::dep_to_use_path(cover_id)
+        ));
+    }
+
+    if !all_cover_ids.is_empty() {
+        output.push('\n');
+    }
+
+    // Emit test functions
+    for (index, test) in tests.iter().enumerate() {
+        let block = test.body_rust.trim();
+        output.push_str("#[test]\n");
+        output.push_str(&format!("fn test_{}() {}\n", test.fn_name, block));
+
+        if index + 1 != tests.len() {
+            output.push('\n');
+        }
+    }
+
+    Ok(output)
+}
+
+/// Generate and write molecule_tests.rs files for all resolved molecule tests.
+///
+/// Groups tests by module_path, generates one molecule_tests.rs per group, and
+/// updates the corresponding mod.rs to declare `pub mod molecule_tests;`.
+///
+/// Returns the set of relative paths for generated molecule_tests.rs files
+/// (for inclusion in `generated_rs_rel_paths` passed to `clean_output_dir`).
+pub fn generate_and_write_molecule_tests(
+    resolved_tests: &[ResolvedMoleculeTest],
+    specs_by_id: &HashMap<&str, &ResolvedSpec>,
+    output_base: &Path,
+) -> Result<HashSet<PathBuf>> {
+    // Group tests by module_path
+    let mut by_module: HashMap<String, Vec<&ResolvedMoleculeTest>> = HashMap::new();
+    for test in resolved_tests {
+        by_module.entry(test.module_path.clone()).or_default().push(test);
+    }
+
+    let mut generated_paths = HashSet::new();
+
+    for (module_path, tests) in &by_module {
+        // Generate molecule_tests.rs content
+        let content = generate_molecule_tests_code(tests, specs_by_id)?;
+        let file_path = molecule_tests_file_path(output_base, module_path);
+        write_generated_file(&file_path.to_string_lossy(), &content)?;
+
+        // Track the relative path for clean_output_dir
+        let rel: PathBuf = if module_path.is_empty() {
+            PathBuf::from("molecule_tests.rs")
+        } else {
+            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
+                .join("molecule_tests.rs")
+        };
+        generated_paths.insert(rel);
+
+        // Update the corresponding mod.rs: append `pub mod molecule_tests;` if not present
+        let mod_rs_path: PathBuf = if module_path.is_empty() {
+            output_base.join("mod.rs")
+        } else {
+            output_base
+                .join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
+                .join("mod.rs")
+        };
+
+        if mod_rs_path.exists() {
+            let existing = fs::read_to_string(&mod_rs_path).map_err(SpecError::Io)?;
+            if !existing.contains("pub mod molecule_tests;") {
+                let new_content = if existing.trim_end().is_empty() {
+                    "pub mod molecule_tests;\n".to_string()
+                } else {
+                    format!("{}\npub mod molecule_tests;\n", existing.trim_end())
+                };
+                write_generated_file(&mod_rs_path.to_string_lossy(), &new_content)?;
+            }
+        }
+    }
+
+    Ok(generated_paths)
 }
 
 fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
@@ -633,6 +790,7 @@ mod tests {
         let content = generate_mod_rs(
             &["apply_discount.rs".to_string(), "refund.rs".to_string()],
             &["taxes".to_string(), "discounts".to_string()],
+            false,
         )
         .unwrap();
 
