@@ -145,7 +145,7 @@ spec export <path> --output <file>        # write JSON bundle to file
 
 The `--output` path for `generate`/`build`/`test` must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
 
-Note: `spec test` parses standard `cargo test` output. If your project uses `cargo-nextest`, use `spec generate` + `cargo test` directly for now.
+**Nextest:** `spec test` parses standard `cargo test` output format only. `cargo nextest` uses a different output format and is not supported. Running `spec test` in a project configured for nextest will produce `status: "unknown"` for all local tests. Use standard `cargo test`.
 
 ## AI-Native Usage
 

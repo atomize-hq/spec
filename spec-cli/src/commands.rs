@@ -196,12 +196,12 @@ impl Command {
         match self {
             Self::Validate(args) => validate_command(&args.path, args.no_strict, args.format),
             Self::Status(args) => status_command(&args.path, args.format),
-            Self::Generate(args) => generate_command(&args.path, &args.output),
+            Self::Generate(args) => generate_command(&args.path, args.output.as_deref()),
             Self::Build(args) => {
                 let config = load_workspace_config(&args.path)?;
                 build_command(
                     &args.path,
-                    &args.output,
+                    args.output.as_deref(),
                     args.crate_root.as_deref(),
                     &config,
                 )
@@ -210,7 +210,7 @@ impl Command {
                 let config = load_workspace_config(&args.path)?;
                 test_command(
                     &args.path,
-                    &args.output,
+                    args.output.as_deref(),
                     args.crate_root.as_deref(),
                     &config,
                 )
@@ -255,8 +255,8 @@ pub struct GenerateArgs {
         help = "Directory containing .unit.spec files, or a single .unit.spec file"
     )]
     pub path: PathBuf,
-    #[arg(long, default_value = "generated/spec")]
-    pub output: PathBuf,
+    #[arg(long, help = "Output directory for generated Rust files (default: {crate_root}/src/generated)")]
+    pub output: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -266,8 +266,8 @@ pub struct BuildArgs {
         help = "Directory containing .unit.spec files, or a single .unit.spec file"
     )]
     pub path: PathBuf,
-    #[arg(long, default_value = "generated/spec")]
-    pub output: PathBuf,
+    #[arg(long, help = "Output directory for generated Rust files (default: {crate_root}/src/generated)")]
+    pub output: Option<PathBuf>,
     #[arg(
         long,
         help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)"
@@ -282,8 +282,8 @@ pub struct TestArgs {
         help = "Directory containing .unit.spec files, or a single .unit.spec file"
     )]
     pub path: PathBuf,
-    #[arg(long, default_value = "generated/spec")]
-    pub output: PathBuf,
+    #[arg(long, help = "Output directory for generated Rust files (default: {crate_root}/src/generated)")]
+    pub output: Option<PathBuf>,
     #[arg(
         long,
         help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)"
@@ -613,14 +613,19 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn generate_command(path: &Path, output: &Path) -> Result<()> {
-    let generated = generate_specs(path, output)?;
+fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    let spec_root = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    let resolved_output: PathBuf = match output {
+        Some(p) => p.to_path_buf(),
+        None => workspace_root_for(spec_root)?.join("src/generated"),
+    };
+    let generated = generate_specs(path, &resolved_output)?;
     if !generated.specs.is_empty() {
-        let passport_root = if path.is_file() {
-            path.parent().unwrap_or(path)
-        } else {
-            path
-        };
+        let passport_root = spec_root;
         finalize_passports(
             passport_root,
             &generated.specs,
@@ -875,7 +880,7 @@ fn resolve_pipeline_context(
 
 fn build_command(
     path: &Path,
-    output: &Path,
+    output: Option<&Path>,
     crate_root_flag: Option<&Path>,
     config: &WorkspaceConfig,
 ) -> Result<()> {
@@ -890,13 +895,16 @@ fn build_command(
     }
 
     let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
+    let resolved_output = output
+        .map(PathBuf::from)
+        .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(path, output)?;
+    let generated = generate_specs(path, &resolved_output)?;
     if !generated.specs.is_empty() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
-    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout)?;
+    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout, true)?;
     print!("{}", result.stdout);
     eprint!("{}", result.stderr);
     if result.timed_out {
@@ -910,7 +918,7 @@ fn build_command(
 
 fn test_command(
     path: &Path,
-    output: &Path,
+    output: Option<&Path>,
     crate_root_flag: Option<&Path>,
     config: &WorkspaceConfig,
 ) -> Result<()> {
@@ -931,8 +939,11 @@ fn test_command(
     };
 
     let ctx = resolve_pipeline_context(spec_root, crate_root_flag, config)?;
+    let resolved_output = output
+        .map(PathBuf::from)
+        .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(spec_root, output)?;
+    let generated = generate_specs(spec_root, &resolved_output)?;
     if generated.specs.is_empty() {
         return Ok(());
     }
@@ -945,7 +956,11 @@ fn test_command(
         passport_write_plan(path, spec_root, &generated.specs, target_spec.as_ref());
 
     let output_prefix = if target_spec.is_some() {
-        Some(output_module_prefix(output)?)
+        let prefix = match &config.pipeline.generated_module_prefix {
+            Some(explicit) => explicit.clone(),
+            None => output_module_prefix(&resolved_output, &ctx.crate_root)?,
+        };
+        Some(prefix)
     } else {
         None
     };
@@ -958,7 +973,8 @@ fn test_command(
     };
 
     let provenance = resolve_git_provenance(&ctx.crate_root);
-    let build_result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout)?;
+    let build_result =
+        run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout, true)?;
     print!("{}", build_result.stdout);
     eprint!("{}", build_result.stderr);
     if build_result.timed_out {
@@ -993,6 +1009,7 @@ fn test_command(
         &ctx.cargo_target_dir,
         filter.as_deref(),
         ctx.timeout,
+        true,
     )?;
     print!("{}", test_result.stdout);
     eprint!("{}", test_result.stderr);
@@ -1018,10 +1035,11 @@ fn test_command(
     let observed_at = rfc3339_now();
     let evidence_by_spec = build_test_evidence(
         passport_write_plan.specs,
-        output,
+        &resolved_output,
         &parsed_test_results,
         &observed_at,
         provenance.as_ref(),
+        &ctx.crate_root,
     )?;
     let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
     finalize_test_passports(
@@ -1199,8 +1217,9 @@ fn build_test_evidence(
     parsed_test_results: &HashMap<String, ParsedCargoTestResult>,
     observed_at: &str,
     provenance: Option<&ArtifactProvenance>,
+    crate_root: &Path,
 ) -> Result<BTreeMap<String, PassportEvidence>> {
-    let output_prefix = output_module_prefix(output)?;
+    let output_prefix = output_module_prefix(output, crate_root)?;
     let mut evidence_by_spec = BTreeMap::new();
 
     for spec in specs {
@@ -1268,8 +1287,29 @@ fn resolve_git_commit_sha(path: &Path) -> Option<String> {
     }
 }
 
-fn output_module_prefix(output: &Path) -> Result<String> {
-    let parts: Vec<&str> = output
+fn output_module_prefix(output: &Path, crate_root: &Path) -> Result<String> {
+    // Strip `{crate_root}/src/` prefix from the output path so that
+    // `{crate_root}/src/generated` → `"generated"` (not `"generated::spec"`).
+    // Falls back to stripping a leading `"src"` component for relative paths
+    // (test helpers, explicit `--output src/generated`).
+    let src_root = crate_root.join("src");
+    let relative = output
+        .strip_prefix(&src_root)
+        .unwrap_or_else(|_| {
+            // Relative path fallback: strip a leading "src" component if present.
+            let mut comps = output.components();
+            if comps
+                .next()
+                .map(|c| c.as_os_str() == "src")
+                .unwrap_or(false)
+            {
+                output.strip_prefix("src").unwrap_or(output)
+            } else {
+                output
+            }
+        });
+
+    let parts: Vec<&str> = relative
         .components()
         .filter_map(|c| match c {
             std::path::Component::Normal(s) => s.to_str(),
@@ -1277,21 +1317,14 @@ fn output_module_prefix(output: &Path) -> Result<String> {
         })
         .collect();
 
-    // "src" is the Rust source root, not a module segment — strip it if present
-    let module_parts = if parts.first() == Some(&"src") {
-        &parts[1..]
-    } else {
-        &parts[..]
-    };
-
-    if module_parts.is_empty() {
+    if parts.is_empty() {
         return Err(anyhow::anyhow!(
             "❌ could not determine output module prefix from {}",
             output.display()
         ));
     }
 
-    Ok(module_parts.join("::"))
+    Ok(parts.join("::"))
 }
 
 fn cargo_test_filter_for(spec: &ResolvedSpec, output_prefix: &str) -> String {
@@ -1892,8 +1925,8 @@ mod tests {
             .collect()
     }
 
-    fn benchmark_stdout(specs: &[LoadedSpec], output: &Path) -> String {
-        let output_prefix = output_module_prefix(output).unwrap();
+    fn benchmark_stdout(specs: &[LoadedSpec], output: &Path, crate_root: &Path) -> String {
+        let output_prefix = output_module_prefix(output, crate_root).unwrap();
         let mut stdout = String::from("running synthetic benchmark tests\n");
 
         for spec in specs {
@@ -1960,8 +1993,9 @@ mod tests {
         parsed_test_results: &BTreeMap<String, ParsedCargoTestResult>,
         observed_at: &str,
         provenance: Option<&ArtifactProvenance>,
+        crate_root: &Path,
     ) -> Result<BTreeMap<String, PassportEvidence>> {
-        let output_prefix = output_module_prefix(output)?;
+        let output_prefix = output_module_prefix(output, crate_root)?;
         let mut evidence_by_spec = BTreeMap::new();
 
         for spec in specs {
@@ -2021,7 +2055,7 @@ body:
 "#,
         );
 
-        generate_command(&units_dir, &output_dir).unwrap();
+        generate_command(&units_dir, Some(&output_dir)).unwrap();
 
         assert!(output_dir.join(".spec-generated").exists());
         assert!(output_dir.join("pricing/apply_discount.rs").exists());
@@ -2081,7 +2115,7 @@ extra_field: nope
 
         let units_dir = fixture_dst.join("units");
         let output_dir = fixture_dst.join("src/generated");
-        generate_command(&units_dir, &output_dir).unwrap();
+        generate_command(&units_dir, Some(&output_dir)).unwrap();
 
         let apply_tax = fs::read_to_string(output_dir.join("pricing/apply_tax.rs")).unwrap();
         assert!(apply_tax.contains(
@@ -2107,7 +2141,7 @@ extra_field: nope
 
         let units_dir = fixture_dst.join("units");
         let output_dir = fixture_dst.join("src/generated");
-        generate_command(&units_dir, &output_dir).unwrap();
+        generate_command(&units_dir, Some(&output_dir)).unwrap();
 
         let output = ProcessCommand::new("cargo")
             .current_dir(&fixture_dst)
@@ -2270,9 +2304,10 @@ extra_field: nope
     #[test]
     fn build_test_evidence_preserves_found_missing_and_duplicate_statuses() {
         let output = Path::new("src/generated");
+        let crate_root = Path::new("");
         let spec = benchmark_loaded_spec(0, 3);
         let resolved = ResolvedSpec::from_spec(spec.spec.clone());
-        let output_prefix = output_module_prefix(output).unwrap();
+        let output_prefix = output_module_prefix(output, crate_root).unwrap();
 
         let mut parsed_test_results = HashMap::new();
         parsed_test_results.insert(
@@ -2296,6 +2331,7 @@ extra_field: nope
             &parsed_test_results,
             "2026-04-11T12:00:00Z",
             None,
+            crate_root,
         )
         .unwrap();
 
@@ -2318,8 +2354,9 @@ extra_field: nope
     #[ignore = "manual benchmark for Priority 4 parse/evidence ship gate"]
     fn benchmark_parse_and_evidence_hash_lookup_against_btree_baseline() {
         let output = Path::new("src/generated");
+        let crate_root = Path::new("");
         let specs = benchmark_specs(600, 8);
-        let stdout = benchmark_stdout(&specs, output);
+        let stdout = benchmark_stdout(&specs, output, crate_root);
         let observed_at = "2026-04-11T12:00:00Z";
 
         let baseline_evidence = build_test_evidence_btree_baseline(
@@ -2328,6 +2365,7 @@ extra_field: nope
             &parse_cargo_test_output_btree_baseline(&stdout),
             observed_at,
             None,
+            crate_root,
         )
         .unwrap();
         let hash_evidence = build_test_evidence(
@@ -2336,6 +2374,7 @@ extra_field: nope
             &parse_cargo_test_output(&stdout),
             observed_at,
             None,
+            crate_root,
         )
         .unwrap();
         assert_eq!(hash_evidence, baseline_evidence);
@@ -2351,7 +2390,7 @@ extra_field: nope
         for _ in 0..ITERS {
             let parsed = parse_cargo_test_output_btree_baseline(std::hint::black_box(&stdout));
             let evidence =
-                build_test_evidence_btree_baseline(&specs, output, &parsed, observed_at, None)
+                build_test_evidence_btree_baseline(&specs, output, &parsed, observed_at, None, crate_root)
                     .unwrap();
             std::hint::black_box(evidence);
         }
@@ -2360,7 +2399,7 @@ extra_field: nope
         let hash_started = Instant::now();
         for _ in 0..ITERS {
             let parsed = parse_cargo_test_output(std::hint::black_box(&stdout));
-            let evidence = build_test_evidence(&specs, output, &parsed, observed_at, None).unwrap();
+            let evidence = build_test_evidence(&specs, output, &parsed, observed_at, None, crate_root).unwrap();
             std::hint::black_box(evidence);
         }
         let hash_elapsed = hash_started.elapsed();

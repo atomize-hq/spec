@@ -79,8 +79,11 @@ pub fn run_cargo_build(
     crate_root: &Path,
     cargo_target_dir: &Path,
     timeout: Option<Duration>,
+    verbose: bool,
 ) -> Result<CargoResult> {
-    eprintln!("spec: running cargo build in {}", crate_root.display());
+    if verbose {
+        eprintln!("spec: running cargo build in {}", crate_root.display());
+    }
     run_cargo(crate_root, &["build"], cargo_target_dir, timeout)
 }
 
@@ -89,8 +92,11 @@ pub fn run_cargo_test(
     cargo_target_dir: &Path,
     filter: Option<&str>,
     timeout: Option<Duration>,
+    verbose: bool,
 ) -> Result<CargoResult> {
-    eprintln!("spec: running cargo test in {}", crate_root.display());
+    if verbose {
+        eprintln!("spec: running cargo test in {}", crate_root.display());
+    }
     let args = cargo_test_args(filter);
     let arg_refs = args.iter().map(|arg| arg.as_str()).collect::<Vec<_>>();
     run_cargo(crate_root, &arg_refs, cargo_target_dir, timeout)
