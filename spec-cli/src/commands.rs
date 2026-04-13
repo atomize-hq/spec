@@ -459,16 +459,19 @@ fn compute_health_status(
         }
     }
 
-    // 3. stale — hash mismatch (only when both hashes present; does not require evidence)
+    // 3. stale — contract hash changed since last test, including added/removed contracts
     let stored_hash = passport.and_then(|p| p.contract_hash.as_deref());
-    if let (Some(stored), Some(live)) = (stored_hash, live_hash) {
-        if stored != live {
-            return HealthStatus {
-                status: "stale",
-                reason: Some("contract changed since last test".to_string()),
-                evidence_at,
-            };
-        }
+    let hash_changed = match (stored_hash, live_hash) {
+        (Some(stored), Some(live)) => stored != live,
+        (None, Some(_)) | (Some(_), None) => true,
+        (None, None) => false,
+    };
+    if hash_changed {
+        return HealthStatus {
+            status: "stale",
+            reason: Some("contract changed since last test".to_string()),
+            evidence_at,
+        };
     }
 
     // 4. incomplete — unobserved tests (requires evidence)

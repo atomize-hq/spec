@@ -2716,6 +2716,84 @@ local_tests:
 }
 
 #[test]
+fn spec_status_stale_when_contract_added_after_test() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_status_project(project_dir);
+
+    fs::write(
+        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    )
+    .unwrap();
+
+    write_file(
+        project_dir,
+        "units/pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
+    );
+
+    let before_change = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        before_change.status.success(),
+        "no-contract unit should remain non-stale before contract is added"
+    );
+    let before_change_json = parse_stdout_json(&before_change);
+    let before_change_units = before_change_json["units"].as_array().unwrap();
+    assert_eq!(before_change_units[0]["status"], "valid");
+
+    fs::write(
+        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+contract:
+  returns: bool
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: happy_path
+    expect: apply_discount() == true
+"#,
+    )
+    .unwrap();
+
+    let output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(!output.status.success(), "contract addition should mark unit stale");
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "stale");
+    assert_eq!(units[0]["reason"], "contract changed since last test");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+}
+
+#[test]
 fn spec_generate_preserves_passport_evidence_from_prior_test() {
     if !cargo_available() {
         return;
@@ -3380,6 +3458,62 @@ local_tests:
     let json_output = run_in(project_dir, &["status", "units", "--format", "json"]);
     assert!(!json_output.status.success());
     assert_stdout_json_matches_fixture(&json_output, "status-stale.json");
+}
+
+#[test]
+fn spec_status_stale_when_contract_removed_after_test() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_status_project(project_dir);
+
+    let test_output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec test");
+    assert_output_success("spec test should succeed before removing contract", &test_output);
+
+    rewrite_passport_generated_at(
+        &project_dir.join("units/pricing/apply_discount.spec.passport.json"),
+        "2024-01-02T03:04:05Z",
+    );
+
+    fs::write(
+        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: happy_path
+    expect: apply_discount() == true
+"#,
+    )
+    .unwrap();
+
+    let output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(!output.status.success(), "contract removal should mark unit stale");
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "stale");
+    assert_eq!(units[0]["reason"], "contract changed since last test");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
 }
 
 #[test]
