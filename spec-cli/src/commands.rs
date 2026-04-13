@@ -453,7 +453,7 @@ fn compute_health_status(
                 }
             } else {
                 let n = ev.test_results.iter().filter(|r| r.status == "fail").count();
-                format!("{} test{} failed", n, if n == 1 { "" } else { "s" })
+                format!("{} test{} failed", n, pluralize(n))
             };
             return HealthStatus { status: "failing", reason: Some(reason), evidence_at };
         }
@@ -480,7 +480,7 @@ fn compute_health_status(
                 reason: Some(format!(
                     "{} test{} not observed in cargo output",
                     unknown_count,
-                    if unknown_count == 1 { "" } else { "s" }
+                    pluralize(unknown_count)
                 )),
                 evidence_at,
             };
