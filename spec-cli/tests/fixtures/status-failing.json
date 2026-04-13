@@ -3,8 +3,8 @@
   "units": [
     {
       "id": "pricing/apply_discount",
-      "status": "stale",
-      "reason": "contract changed since last test",
+      "status": "failing",
+      "reason": "build failed",
       "errors": [],
       "evidence_at": "2024-01-02T03:04:05Z"
     }

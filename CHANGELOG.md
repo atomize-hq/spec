@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.3 - 2026-04-13
+
+### Breaking
+
+- **`spec status` non-valid units now exit `1`** — `untested`, `incomplete`, and `failing` units now produce a non-zero exit code alongside `invalid` and `stale`. Consumers that previously treated those states as soft-success need to update.
+- **`stale: bool` removed from `spec status --format json` units** — Machine consumers should switch to the `status` and `reason` fields instead of reading a separate stale flag.
+- **`spec status --format json` now emits `schema_version: 2`** — Parsers should gate on version `2` for the new health-state contract.
+
+Migration: for `spec status`, treat any unit whose `status` is not `"valid"` as a failing health result, and replace any `stale: bool` logic with `status`/`reason` handling.
+
 ## 0.5.2 - 2026-04-12
 
 ### Changed

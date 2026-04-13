@@ -67,6 +67,25 @@ fn temp_repo_dir() -> tempfile::TempDir {
     tempfile::TempDir::new_in(std::env::current_dir().unwrap()).unwrap()
 }
 
+fn setup_apply_discount_unit() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#,
+    );
+    (temp_dir, units_dir)
+}
+
 fn git_available() -> bool {
     Command::new("git").arg("--version").output().is_ok()
 }
@@ -815,14 +834,14 @@ fn spec_validate_json_zero_units() {
     assert!(output.status.success());
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["schema_version"], 2);
     assert_eq!(json["status"], "valid");
     assert_eq!(json["errors"], serde_json::json!([]));
     assert_eq!(json["warnings"], serde_json::json!([]));
 }
 
 #[test]
-fn spec_validate_json_schema_version_is_1() {
+fn spec_validate_json_schema_version_is_2() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     write_spec(
@@ -844,7 +863,7 @@ body:
     assert!(output.status.success());
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["schema_version"], 2);
 }
 
 #[test]
@@ -2716,6 +2735,87 @@ local_tests:
 }
 
 #[test]
+fn spec_status_stale_when_contract_added_after_test() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_status_project(project_dir);
+
+    fs::write(
+        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    )
+    .unwrap();
+
+    write_file(
+        project_dir,
+        "units/pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
+    );
+
+    let before_change = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        before_change.status.success(),
+        "no-contract unit should remain non-stale before contract is added"
+    );
+    let before_change_json = parse_stdout_json(&before_change);
+    let before_change_units = before_change_json["units"].as_array().unwrap();
+    assert_eq!(before_change_units[0]["status"], "valid");
+
+    fs::write(
+        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+contract:
+  returns: bool
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: happy_path
+    expect: apply_discount() == true
+"#,
+    )
+    .unwrap();
+
+    let output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "contract addition should mark unit stale"
+    );
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "stale");
+    assert_eq!(units[0]["reason"], "contract changed since last test");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+}
+
+#[test]
 fn spec_generate_preserves_passport_evidence_from_prior_test() {
     if !cargo_available() {
         return;
@@ -3182,12 +3282,12 @@ fn spec_test_writes_evidence_atomically() {
 fn spec_status_all_valid_no_evidence() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let output = run_in(&ecommerce_dir, &["status", "units"]);
-    assert!(output.status.success());
+    assert!(!output.status.success(), "untested units should exit 1");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("pricing/apply_tax"), "{stdout}");
     assert!(stdout.contains("—"), "{stdout}");
-    assert!(stdout.contains("no-evidence"), "{stdout}");
+    assert!(stdout.contains("untested"), "{stdout}");
 }
 
 #[test]
@@ -3276,7 +3376,7 @@ body:
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["schema_version"], 2);
     let units = json["units"].as_array().unwrap();
     assert_eq!(units.len(), 1);
     assert_eq!(units[0]["id"], "pricing/bad");
@@ -3286,7 +3386,6 @@ body:
         "errors array should be non-empty for invalid unit"
     );
     assert_eq!(units[0]["errors"][0]["code"], "SPEC_USE_STATEMENT_IN_BODY");
-    assert_eq!(units[0]["stale"], false);
 }
 
 #[test]
@@ -3313,7 +3412,7 @@ fn spec_status_json_loader_error_surfaces_in_response() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["schema_version"], 2);
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert!(
         !loader_errors.is_empty(),
@@ -3384,6 +3483,68 @@ local_tests:
 }
 
 #[test]
+fn spec_status_stale_when_contract_removed_after_test() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_status_project(project_dir);
+
+    let test_output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec test");
+    assert_output_success(
+        "spec test should succeed before removing contract",
+        &test_output,
+    );
+
+    rewrite_passport_generated_at(
+        &project_dir.join("units/pricing/apply_discount.spec.passport.json"),
+        "2024-01-02T03:04:05Z",
+    );
+
+    fs::write(
+        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { true }
+local_tests:
+  - id: happy_path
+    expect: apply_discount() == true
+"#,
+    )
+    .unwrap();
+
+    let output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "contract removal should mark unit stale"
+    );
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "stale");
+    assert_eq!(units[0]["reason"], "contract changed since last test");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+}
+
+#[test]
 fn spec_status_valid_unit() {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path();
@@ -3438,12 +3599,237 @@ body:
     );
 
     let output = run(&["status", units_dir.to_str().unwrap()]);
-    assert!(output.status.success());
+    assert!(!output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stdout.contains("—"), "{stdout}");
     assert!(stderr.contains("⚠ failed to read passport"), "{stderr}");
+}
+
+#[test]
+fn spec_status_untested_unit() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    // No passport written — unit has no evidence.
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "untested unit should exit 1");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "untested");
+    assert_eq!(units[0]["reason"], "no evidence");
+    assert!(units[0].get("evidence_at").is_none() || units[0]["evidence_at"].is_null());
+    assert_stdout_json_matches_fixture(&output, "status-untested.json");
+}
+
+#[test]
+fn spec_status_failing_build() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    write_file(
+        &units_dir,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "fail",
+    "test_results": [],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "failing unit should exit 1");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "failing");
+    assert_eq!(units[0]["reason"], "build failed");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+    assert_stdout_json_matches_fixture(&output, "status-failing.json");
+}
+
+#[test]
+fn spec_status_failing_timeout() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    write_file(
+        &units_dir,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "timeout",
+    "test_results": [],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "timed out unit should exit 1");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "failing");
+    assert_eq!(units[0]["reason"], "build timed out");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+    assert_stdout_json_matches_fixture(&output, "status-failing-timeout.json");
+}
+
+#[test]
+fn spec_status_failing_test() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    write_file(
+        &units_dir,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {"id": "happy_path", "status": "fail"}
+    ],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "failing test should exit 1");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "failing");
+    assert_eq!(units[0]["reason"], "1 test failed");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+}
+
+#[test]
+fn spec_status_failing_tests_plural() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    write_file(
+        &units_dir,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {"id": "happy_path", "status": "fail"},
+      {"id": "sad_path", "status": "fail"}
+    ],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "plural failing tests should exit 1"
+    );
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "failing");
+    assert_eq!(units[0]["reason"], "2 tests failed");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+}
+
+#[test]
+fn spec_status_incomplete() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    write_file(
+        &units_dir,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {"id": "happy_path", "status": "unknown"}
+    ],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "incomplete unit should exit 1");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "incomplete");
+    assert_eq!(units[0]["reason"], "1 test not observed in cargo output");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+    assert_stdout_json_matches_fixture(&output, "status-incomplete.json");
+}
+
+#[test]
+fn spec_status_failing_beats_stale() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    // Passport has a stale hash AND a build failure — failing should win.
+    write_file(
+        &units_dir,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "contract_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "evidence": {
+    "build_status": "fail",
+    "test_results": [],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
+    );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "failing unit should exit 1");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "failing", "failing should beat stale");
+    assert_ne!(
+        units[0]["status"], "stale",
+        "stale should not win over failing"
+    );
 }
 
 #[test]
@@ -3465,7 +3851,7 @@ body:
     .unwrap();
 
     let output = run(&["status", spec_path.to_str().unwrap()]);
-    assert!(output.status.success());
+    assert!(!output.status.success(), "untested unit should exit 1");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("pricing/apply_discount"), "{stdout}");
