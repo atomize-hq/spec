@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.2 - 2026-04-12
+
+### Changed
+
+- **Default output path is now `{crate_root}/src/generated`** — `spec generate`, `spec build`, and `spec test` no longer require `--output`. When omitted, the output directory is derived from the crate root (via `spec.toml` or ancestor `Cargo.toml` walk) and defaults to `src/generated` inside that crate. Projects using the old default `generated/spec` can pass `--output generated/spec` explicitly to preserve prior behavior.
+- **`generated_module_prefix` config key** — Add `[pipeline] generated_module_prefix = "custom::prefix"` to `spec.toml` for non-standard output layouts where auto-derivation produces a wrong module path.
+- **`Verbosity` enum in pipeline API** — `run_cargo_build` and `run_cargo_test` now accept a `Verbosity` parameter. `Verbosity::Normal` preserves existing `spec: running cargo …` stderr output; `Verbosity::Silent` suppresses it (reserved for future `--format json` mode).
+
+### Fixed
+
+- **Module prefix evidence mismatch** — `spec test` was computing the generated module prefix twice: once for the cargo filter and once for evidence lookup, using different values. All tests showed `status: "unknown"` when the two derivations disagreed. Fixed by computing the effective prefix once and passing it to both sites.
+
 ## 0.5.1 - 2026-04-11
 
 ### Added
