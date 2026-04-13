@@ -1,680 +1,682 @@
-# Next Work
+# Next Work: M6–M10 Roadmap
 
-Status: **Implementation Ready** (pending PLAN.md corrections)
+Status: **Implementation Ready** (M6a approved)
 
-## CORRECTIONS FROM /plan-eng-review (2026-04-10)
-
-### Removed from scope (already implemented)
-- ❌ **Passport Evidence Preservation** — Already implemented in `commands.rs:704-743` and regression-tested
-- ❌ **Module Filter Fix** — Already fixed in `commands.rs:1001-1024`
-
-### File path corrections
-- `spec-core/src/errors.rs` → Implement in `spec-core/src/lib.rs` (SpecError lives there)
-- `spec-cli/src/pipeline.rs` → `spec-core/src/pipeline.rs` (cargo execution lives there)
-
-### New item added
-- **Concurrent process detection/warning** — Add warning in `finalize_passports` when multiple spec processes may be writing passports (warn, don't implement full locking)
-
-### Revised Success Criteria
-- ✅ Test: `spec build` does not overwrite `spec test` evidence (passport preservation)
-- ✅ Test: Timeout configuration respected and terminates hung cargo processes
-- ✅ Test: Stable error codes present in `spec validate --format json` output
-- ✅ Test: Provenance fields (commit SHA) written when git available
+Reviewed via `/plan-eng-review` 2026-04-12. ChatGPT 5.4 Pro + Codex outside voice both consulted.  
+M5 and M5 follow-up (v0.5.1) have shipped. This plan covers the next five milestones.
 
 ---
 
-## Current Focus: M5 Completion
-
-**Goal:** Stabilize core infrastructure and ship AI verification foundation for solo engineer/2-5 person AI-heavy teams.
-
-### Revised M5 Scope (Approved via /autoplan)
-
-#### Priority 1: Trust & Stability
-
-**Implementation Strategy:** Risk-first. Eliminate the two highest-trust failure modes first: hung cargo subprocesses and unstable machine-readable JSON contracts.
-
-**Feature Brief**
-- **Goal:** Make `spec` safe to run inside CI and AI loops by bounding build/test execution time and stabilizing the JSON error/export surface.
-- **Why now:** A hung `spec build` or `spec test` blocks all follow-on validation, and unstable JSON codes/schema versions make automation brittle.
-- **Primary user:** Solo engineer or 2-5 person AI-heavy team relying on `spec validate --format json`, `spec status --format json`, and exported bundles as machine-readable inputs.
-- **In scope:** `[pipeline] timeout_secs` configuration, timeout enforcement in cargo execution, stable `SPEC_*` JSON error codes, numeric `schema_version` alignment, fixture/test refresh, and `AGENTS.md` contract updates.
-- **Out of scope:** Evidence provenance, concurrent-process warnings, refactors that do not change trust/stability behavior, and performance-only optimizations.
-- **Success criteria:** `spec build`/`spec test` cannot hang indefinitely, JSON error codes are exhaustively mapped to `SPEC_*`, `validate`/`status`/`export` all emit numeric `schema_version`, and regression tests lock the contract.
-
-**Vertical Slices**
-
-**S1. Timeout Guardrail For Cargo Execution** (Effort: S, ~2-3 hours)
-- **User value:** `spec build` and `spec test` terminate predictably instead of hanging forever.
-- **Scope in:** Config parsing for `pipeline.timeout_secs`, timeout enforcement in cargo execution, explicit timeout error/reporting, and tests covering a hung subprocess path.
-- **Scope out:** Retry policies, per-command timeout overrides, and process locking.
-- **Acceptance criteria:** A configured timeout stops a hung cargo subprocess, returns a deterministic failure, and preserves partial results/error reporting well enough for the caller to understand what timed out.
-- **Verification:** Targeted pipeline/config tests plus `cargo test --all`.
-- **Rollout/flags:** No feature flag; use `pipeline.timeout_secs` as the single contract key.
-
-**Atomic Tasks**
-- **S1.T1 Config contract for timeout support**
-  - **Outcome:** `spec.toml` supports `[pipeline] timeout_secs` with one exact key and one parsed value flowing into the pipeline layer.
-  - **Inputs/outputs:** Input: current config loading in `spec-cli/src/config.rs`. Output: concrete config field `pipeline.timeout_secs` with defaulting/validation rules documented in code/tests.
-  - **Implementation notes:** Touch `spec-cli/src/config.rs` only for config shape/parsing; do not add CLI flags in this slice.
-  - **Acceptance criteria:** Missing key falls back to the existing no-timeout or chosen default behavior; invalid values fail with a clear config error.
-  - **Test notes:** Extend config tests for present/missing/invalid timeout cases.
-  - **Risk/rollback notes:** Keep the key additive so removing the field restores prior behavior.
-- **S1.T2 Timeout enforcement in cargo execution**
-  - **Outcome:** The pipeline stops waiting forever on cargo subprocesses.
-  - **Inputs/outputs:** Input: parsed timeout value from `S1.T1`. Output: timeout-aware execution path in `spec-core/src/pipeline.rs` and a deterministic surfaced error when timeout is exceeded.
-  - **Implementation notes:** Use `wait_timeout` in `spec-core/src/pipeline.rs`; keep stdout/stderr capture and partial-result handling intact.
-  - **Acceptance criteria:** A hung build/test path exits on timeout, the subprocess is terminated, and the caller can distinguish timeout from ordinary command failure.
-  - **Test notes:** Add/extend pipeline tests for success-under-timeout and timeout-triggered failure.
-  - **Risk/rollback notes:** Highest-risk change in Priority 1; isolate to the pipeline layer so rollback is one-file plus dependency removal.
-- **S1.T3 End-to-end timeout regression coverage**
-  - **Outcome:** The timeout contract is locked with CLI-visible regression tests.
-  - **Inputs/outputs:** Input: timeout-aware pipeline behavior from `S1.T2`. Output: tests that prove `spec build`/`spec test` no longer hang indefinitely.
-  - **Implementation notes:** Prefer existing test harnesses over bespoke scripts; keep assertions about timeout behavior stable and fast.
-  - **Acceptance criteria:** CI has at least one regression test that would fail if cargo waits forever again.
-  - **Test notes:** Run targeted timeout tests, then `cargo test --all`.
-  - **Risk/rollback notes:** If timing-based assertions prove flaky, replace them with deterministic harness control before shipping.
-
-**S2. Stable JSON Error Contract** (Effort: S, ~3-4 hours)
-- **User value:** Automation can key off `SPEC_*` error codes without parsing prose or chasing enum renames.
-- **Scope in:** `SpecError` to JSON mapping, exhaustive code coverage, fixture updates for `validate` and `status`, and `AGENTS.md` contract language.
-- **Scope out:** Refactoring `spec_error_to_json_entry` structure unless needed to make the mapping exhaustive.
-- **Acceptance criteria:** All JSON-visible error variants emit non-empty `SPEC_*` codes, fixtures match the new namespace, and docs instruct consumers to use the stable code field.
-- **Verification:** Unit tests for exhaustive mappings, fixture-based CLI tests, and manual inspection that JSON mode stdout stays machine-readable.
-- **Rollout/flags:** Breaking contract change; update all fixtures/docs in the same change.
-
-**Atomic Tasks**
-- **S2.T1 Define the stable `SPEC_*` namespace**
-  - **Outcome:** Every JSON-visible error variant has one explicit SCREAMING_SNAKE_CASE code with `SPEC_` prefix.
-  - **Inputs/outputs:** Input: current `SpecError` variants and `spec_error_to_json_entry` implementation. Output: complete mapping table enforced by tests.
-  - **Implementation notes:** Touch `spec-core/src/lib.rs` only as needed to understand the variant surface; keep the authoritative mapping in `spec-cli/src/commands.rs`.
-  - **Acceptance criteria:** No fallback or empty codes exist; new tests fail if an unmapped variant is added later.
-  - **Test notes:** Add/extend a unit test that checks every mapped code begins with `SPEC_` and is non-empty.
-  - **Risk/rollback notes:** Contract-breaking rename; ship fixtures/docs/tests together.
-- **S2.T2 Lock `validate` and `status` JSON outputs**
-  - **Outcome:** CLI JSON fixtures and integration tests match the new stable codes on both happy and error paths.
-  - **Inputs/outputs:** Input: stable mapping from `S2.T1`. Output: refreshed fixture files in `spec-cli/tests/fixtures/*.json` and refreshed CLI assertions.
-  - **Implementation notes:** Cover `validate --format json` happy + error paths and `status --format json` at least on the happy/stale paths already represented by fixtures.
-  - **Acceptance criteria:** Fixture comparisons and JSON parsing tests pass with the new codes and no human-only stdout noise.
-  - **Test notes:** Run the existing CLI JSON tests plus any new fixture assertions.
-  - **Risk/rollback notes:** Low code risk, high contract visibility; avoid partial fixture updates.
-- **S2.T3 Update consumer-facing contract documentation**
-  - **Outcome:** `AGENTS.md` and nearby plan text describe the stable `SPEC_*` machine-code contract accurately.
-  - **Inputs/outputs:** Input: finalized namespace from `S2.T1`. Output: doc text that tells downstream tooling to read `code` values, not prose.
-  - **Implementation notes:** Keep the guidance tight; document the stable prefix and leave examples aligned with the final mapping.
-  - **Acceptance criteria:** Documentation matches the emitted JSON contract and does not reference legacy names.
-  - **Test notes:** Doc review only.
-  - **Risk/rollback notes:** None beyond contract drift if skipped.
-
-**S3. Schema Version Alignment Across Export And JSON Surfaces** (Effort: XS-S, ~1 hour)
-- **User value:** Consumers see one numeric schema-version shape instead of a mixed integer/string contract.
-- **Scope in:** `spec-core/src/export.rs` type normalization, export tests, and any CLI assertions that currently expect `"1.0"`.
-- **Scope out:** Semantic schema-version changes or version bumps beyond normalizing the existing version representation.
-- **Acceptance criteria:** Export bundle `schema_version` is serialized as `1` (numeric) and all tests/fixtures agree on that type.
-- **Verification:** Export unit tests, CLI export tests, and `cargo test --all`.
-- **Rollout/flags:** Fold into Priority 1 so the machine-readable contract changes land together.
-
-**Atomic Tasks**
-- **S3.T1 Normalize export schema version to `u8`**
-  - **Outcome:** Export bundles no longer serialize `schema_version` as the string `"1.0"`.
-  - **Inputs/outputs:** Input: `spec-core/src/export.rs` current `String` field. Output: numeric `schema_version: u8` and updated constructor/tests.
-  - **Implementation notes:** Keep `spec_version` untouched; only normalize the export schema field.
-  - **Acceptance criteria:** Exported JSON uses `1` and existing tests are updated to distinguish schema version from spec version.
-  - **Test notes:** Update `spec-core/src/export.rs` tests and `spec-cli/tests/cli.rs` export assertions.
-  - **Risk/rollback notes:** Contract-breaking only for consumers expecting a string; land alongside JSON contract updates.
-- **S3.T2 Final contract sweep for numeric schema version**
-  - **Outcome:** No Priority 1 JSON surface still emits or expects a string schema version.
-  - **Inputs/outputs:** Input: `S2` and `S3.T1` completed. Output: final assertions/fixtures covering `validate`, `status`, and `export`.
-  - **Implementation notes:** This is the integration closeout task for the Priority 1 contract surface.
-  - **Acceptance criteria:** Repo-wide search and test suite show no remaining `"schema_version": "1.0"` expectation on active JSON outputs.
-  - **Test notes:** Run targeted schema-version tests, then `cargo test --all`.
-  - **Risk/rollback notes:** Keep this task last within Priority 1 so it validates the complete surface.
-
-**Sub-task Checklists**
-
-**S1.T1 Checklist**
-- Add `pipeline.timeout_secs` to the config model in `spec-cli/src/config.rs`.
-- Define exact parse/default behavior in tests before wiring the field through.
-- Verify existing config loads still succeed when the key is absent.
-
-**S1.T2 Checklist**
-- Add `wait_timeout` to `spec-core/Cargo.toml`.
-- Update cargo execution in `spec-core/src/pipeline.rs` to wait with the configured timeout.
-- Terminate timed-out subprocesses and preserve enough stderr/stdout context for diagnosis.
-- Add/adjust pipeline tests for timeout and non-timeout paths.
-
-**S1.T3 Checklist**
-- Extend the CLI or pipeline harness with one deterministic hung-process regression case.
-- Assert the command exits with timeout-specific failure behavior.
-- Run targeted tests and then `cargo test --all`.
-
-**S2.T1 Checklist**
-- Enumerate all JSON-visible error variants from the current `SpecError` surface.
-- Rename each emitted code to `SPEC_*` in `spec_error_to_json_entry`.
-- Add an exhaustive test that fails on missing mappings or non-`SPEC_` codes.
-
-**S2.T2 Checklist**
-- Refresh `validate-invalid.json`, `validate-valid.json`, `status-stale.json`, and `status-valid.json`.
-- Update CLI JSON tests for happy and error paths to assert the new codes.
-- Re-run fixture-backed tests and confirm JSON mode stdout remains parseable.
-
-**S2.T3 Checklist**
-- Update `AGENTS.md` to call out stable `SPEC_*` machine codes.
-- Remove or rewrite any plan text that still references legacy error-code names.
-- Verify docs/examples match the final emitted codes.
-
-**S3.T1 Checklist**
-- Change export `schema_version` from `String` to `u8` in `spec-core/src/export.rs`.
-- Update constructor logic and export unit tests.
-- Update CLI export assertions that currently expect `"1.0"`.
-
-**S3.T2 Checklist**
-- Search for lingering string-based schema-version expectations.
-- Update final fixtures/assertions across `validate`, `status`, and `export`.
-- Run `cargo test --all` as the Priority 1 closeout gate.
-
-**Dependency Graph (text)**
-- `S1.T1` blocks `S1.T2`.
-- `S1.T2` blocks `S1.T3`.
-- `S2.T1` blocks `S2.T2` and `S2.T3`.
-- `S3.T1` blocks `S3.T2`.
-- `S2` blocks `S3.T2` because the final schema-version sweep must validate the same machine-readable contract surface.
-- `S1` blocks the Priority 1 closeout checkpoint because hung commands would undermine all later validation.
-
-**Risks / Unknowns**
-- Timeout tests can become flaky if they depend on wall-clock timing alone. De-risk by using the existing harness plus deterministic subprocess control.
-- Some error variants may not currently be exercised by fixture-backed CLI tests. De-risk by adding the exhaustive unit test before refreshing fixtures.
-- Export consumers may implicitly expect a string schema version. De-risk by landing the numeric change with tests and doc updates in the same Priority 1 batch.
-
-**Milestones**
-- **M1:** `S1` complete, so `spec build`/`spec test` cannot hang indefinitely.
-- **M2:** `S2` complete, so `validate`/`status` JSON codes are stable for automation.
-- **M3:** `S3` complete, so all Priority 1 JSON surfaces share one numeric schema-version contract.
-
-**Workstreams**
-- **WS1: Pipeline Guardrail** — Touch surface: `spec-cli/src/config.rs`, `spec-core/src/pipeline.rs`, related config/pipeline tests. Owns `S1.T1`, `S1.T2`, `S1.T3`.
-- **WS2: JSON Error Contract** — Touch surface: `spec-cli/src/commands.rs`, `spec-core/src/lib.rs`, `spec-cli/tests/fixtures/*.json`, `AGENTS.md`. Owns `S2.T1`, `S2.T2`, `S2.T3`.
-- **WS3: Export Contract Alignment** — Touch surface: `spec-core/src/export.rs`, `spec-cli/tests/cli.rs`. Owns `S3.T1`, `S3.T2`.
-- **WS-INT: Priority 1 Integration** — Touch surface: shared contract tests and final `cargo test --all` run. Depends on `WS1`, `WS2`, and `WS3`; owns the final closeout sweep if concurrent work creates test or fixture overlap.
-
-#### Priority 2: Minimal Infrastructure
-
-**Implementation Strategy:** Dependency-first (minimal). Add the smallest provenance contract that improves traceability for `spec test` and `spec export` without widening the trust surface into runner identity, environment fingerprinting, or other CI-only metadata.
-
-**Feature Brief**
-- **Goal:** Let downstream tooling identify which git revision produced passport evidence and export bundles.
-- **Why now:** Priority 1 makes the machine-readable surface stable; the next trust gain is being able to correlate a passing or failing passport/export artifact with a concrete repo state.
-- **Primary user:** Solo engineer or 2-5 person AI-heavy team using passports and `spec export` as machine-readable context inside local loops or CI.
-- **In scope:** One shared provenance contract carrying `git_commit_sha`, reuse of existing timestamp fields (`observed_at`, `generated_at`, `exported_at`) instead of adding duplicate timestamp keys, passport evidence wiring for `spec test`, top-level export provenance, and regression coverage for git-present and git-absent paths.
-- **Out of scope:** Runner identity, environment fingerprint, branch name, dirty-worktree status, signed attestations, process locking, and any provenance collection that can fail the primary command.
-- **Success criteria:** `spec test` writes provenance when git is available, omits it cleanly when unavailable, `spec build`/`spec generate` preserve prior evidence provenance, `spec export` emits top-level provenance, and regression tests lock both success and no-git behavior.
-- **Contract decision:** Add one shared optional object named `provenance` with the exact field `git_commit_sha`. Keep timestamps where they already live: `PassportEvidence.observed_at`, `Passport.generated_at`, and `ExportBundle.exported_at`.
-
-**Vertical Slices**
-
-**S1. Passport Evidence Provenance Contract** (Effort: XS-S, ~1-2 hours)
-- **User value:** A passport produced by `spec test` can be traced back to the commit that generated its observed evidence.
-- **Scope in:** Provenance schema in passport types, git SHA capture during `spec test`, and preservation of provenance when later `spec generate`/`spec build` rewrites the same passport.
-- **Scope out:** New timestamps, runner metadata, export bundle wiring, and any change that makes git availability mandatory.
-- **Acceptance criteria:** A successful or failing `spec test` writes `evidence.provenance.git_commit_sha` when the workspace is in git, leaves `provenance` absent when git is unavailable, and later non-test passport rewrites preserve the full `evidence` object.
-- **Verification:** Passport serde/unit tests plus CLI integration tests for success, failure, and preservation flows.
-- **Rollout/flags:** Additive schema only; no feature flag.
-
-**Atomic Tasks**
-- **S1.T1 Define the minimal provenance schema**
-  - **Outcome:** Passport evidence has one exact additive contract for provenance.
-  - **Inputs/outputs:** Input: `spec-core/src/passport.rs` current `PassportEvidence` struct. Output: a shared `provenance` object with the single field `git_commit_sha`.
-  - **Implementation notes:** Use an optional nested object, not a loose top-level string; keep `observed_at` as the only evidence timestamp and do not introduce `captured_at` or similar duplicates.
-  - **Acceptance criteria:** Existing passports without provenance continue to deserialize, new passports serialize deterministically, and no empty provenance object is emitted.
-  - **Test notes:** Extend passport round-trip and omit-empty-field tests.
-  - **Risk/rollback notes:** Low risk; additive serde-only change.
-- **S1.T2 Capture git SHA during `spec test`**
-  - **Outcome:** Test-generated evidence includes the commit SHA when the command is run inside a git repo.
-  - **Inputs/outputs:** Input: `spec-cli/src/commands.rs` test/build failure evidence flow. Output: one resolved SHA per command, threaded into success and failure evidence creation.
-  - **Implementation notes:** Resolve the SHA once per command via git, treat lookup failure as non-fatal, and use the same field name on both success and failure paths.
-  - **Acceptance criteria:** `spec test` never fails just because git lookup failed; when git is available, the emitted SHA is a full commit hash and appears on every written passport in that run.
-  - **Test notes:** Add CLI integration coverage for a git-backed temp repo and a non-git temp dir.
-  - **Risk/rollback notes:** Git-backed tests must not depend on global user config; set repo-local config in test setup.
-- **S1.T3 Preserve provenance on later non-test rewrites**
-  - **Outcome:** `spec generate` and `spec build` do not erase provenance seeded by an earlier `spec test`.
-  - **Inputs/outputs:** Input: existing evidence-preservation path in `write_passports`. Output: regression coverage proving provenance survives generate/build rewrites.
-  - **Implementation notes:** Reuse the current preserve-existing-evidence behavior rather than adding special-case provenance copying.
-  - **Acceptance criteria:** Existing preservation tests fail if provenance disappears after `spec generate` or `spec build`.
-  - **Test notes:** Extend the current passport-preservation CLI tests to assert `git_commit_sha` remains present.
-  - **Risk/rollback notes:** None if the work stays inside the existing evidence-preservation seam.
-
-**S2. Export Provenance Surface** (Effort: XS-S, ~1 hour)
-- **User value:** Consumers inspecting only the export bundle can see the revision context without first opening individual passports.
-- **Scope in:** Top-level export provenance contract, wiring from the export command, and regression tests covering export with and without git context.
-- **Scope out:** Per-unit export provenance duplication, branch metadata, and changes to warning semantics.
-- **Acceptance criteria:** `spec export` emits a top-level `provenance.git_commit_sha` when git is available, omits `provenance` when unavailable, and continues to include passport data and warnings unchanged.
-- **Verification:** Export unit tests plus CLI export integration tests.
-- **Rollout/flags:** Additive JSON field only; land with test updates.
-
-**Atomic Tasks**
-- **S2.T1 Add top-level export provenance**
-  - **Outcome:** The export bundle advertises the same minimal provenance contract as passports.
-  - **Inputs/outputs:** Input: `spec-core/src/export.rs` current `ExportBundle` and `spec-cli/src/commands.rs` export flow. Output: optional top-level `provenance` object carrying `git_commit_sha`.
-  - **Implementation notes:** Use the same field name and struct shape as the passport contract; keep `exported_at` as the export timestamp.
-  - **Acceptance criteria:** Export JSON remains stable except for the additive provenance field, and passport loading/warning behavior is unchanged.
-  - **Test notes:** Update export unit tests and CLI assertions.
-  - **Risk/rollback notes:** Low risk; most likely failure mode is passport/export field-name drift, so share the type where practical.
-- **S2.T2 Close out export regression coverage**
-  - **Outcome:** The Priority 2 contract is locked across CLI-visible success paths.
-  - **Inputs/outputs:** Input: completed passport and export provenance wiring. Output: deterministic tests proving git-present and git-absent export behavior.
-  - **Implementation notes:** Prefer existing export test helpers and temp-project fixtures over bespoke harness logic.
-  - **Acceptance criteria:** CI has one export assertion that proves provenance is present in a git repo and one that proves omission does not fail export outside git.
-  - **Test notes:** Run targeted export/passport provenance tests, then `cargo test --all`.
-  - **Risk/rollback notes:** If git setup in tests is flaky, keep the assertions focused on field presence/absence and avoid brittle commit-message assumptions.
-
-**Sub-task Checklists**
-
-**S1.T1 Checklist**
-- Add a shared provenance struct in `spec-core/src/passport.rs`.
-- Attach it to `PassportEvidence` as `provenance: Option<_>`.
-- Add serde tests proving legacy passports still parse and empty provenance is omitted.
-
-**S1.T2 Checklist**
-- Add one helper in `spec-cli/src/commands.rs` to resolve `git rev-parse HEAD`.
-- Thread the optional SHA through both success and failure evidence builders.
-- Add one git-backed CLI test and one non-git CLI test for `spec test`.
-
-**S1.T3 Checklist**
-- Extend the existing evidence-preservation tests for `spec generate`.
-- Extend the existing evidence-preservation tests for `spec build`.
-- Assert `evidence.provenance.git_commit_sha` survives both rewrites unchanged.
-
-**S2.T1 Checklist**
-- Add optional top-level `provenance` to `ExportBundle` in `spec-core/src/export.rs`.
-- Pass the optional SHA from `export_command` into `build_export_bundle`.
-- Update export unit tests so the additive field is covered without changing warning/passport expectations.
-
-**S2.T2 Checklist**
-- Extend CLI export tests for git-present provenance.
-- Add a no-git export regression test to prove omission is non-fatal.
-- Run targeted provenance tests and then `cargo test --all`.
-
-**Dependency Graph (text)**
-- `S1.T1` blocks `S1.T2` and `S2.T1`.
-- `S1.T2` blocks `S1.T3` because preservation only matters once provenance is written.
-- `S2.T1` blocks `S2.T2`.
-- `S1.T3` and `S2.T2` together close out Priority 2.
-
-**Risks / Unknowns**
-- Git-based integration tests can be flaky if they rely on global git config. De-risk by initializing the temp repo and setting local `user.name` / `user.email` in test setup.
-- Passport and export contracts could drift if they define provenance separately. De-risk by using one shared struct/field name.
-- Non-git directories are a first-class use case for local experimentation. De-risk by treating git lookup as best-effort and asserting omission, not failure.
-
-**Milestones**
-- **M4:** `S1` complete, so passport evidence carries commit provenance and preserves it across later rewrites.
-- **M5:** `S2` complete, so export bundles expose the same provenance context for downstream tooling.
-
-**Workstreams**
-- **WS1: Passport Provenance** — Touch surface: `spec-core/src/passport.rs`, `spec-cli/src/commands.rs`, passport-focused CLI tests. Owns `S1.T1`, `S1.T2`, `S1.T3`.
-- **WS2: Export Provenance** — Touch surface: `spec-core/src/export.rs`, `spec-cli/src/commands.rs`, export-focused CLI tests. Owns `S2.T1`, `S2.T2`.
-- **WS-INT: Priority 2 Integration** — Touch surface: shared CLI regression suite and final `cargo test --all` closeout. Depends on `WS1` and `WS2`.
-
-#### Priority 3: Code Quality
-
-**Implementation Strategy:** Maintainability-first. First collapse the duplicated passport-finalization branches in `test_command`, then replace positional JSON error assembly with a typed helper, and only then layer in the warn-only concurrent-process signal at the shared passport-finalization seam.
-
-**Feature Brief**
-- **Goal:** Reduce maintenance risk in `spec-cli/src/commands.rs` by removing duplicated control flow, replacing brittle tuple-based JSON assembly with named fields, and surfacing a best-effort warning when concurrent `spec` runs may rewrite passports.
-- **Why now:** Priority 1 and Priority 2 both expanded the passport/evidence and JSON-contract surfaces. Leaving the current duplication in place makes later changes error-prone, and the same finalization seam is the right place to add the concurrent-run warning without scattering process checks across commands.
-- **Primary user:** Maintainers extending `spec build`, `spec test`, `spec validate --format json`, and passport-writing behavior for solo-engineer or small-team AI-heavy workflows.
-- **In scope:** `test_command` refactor around passport finalization, `spec_error_to_json_entry` refactor from positional tuple to named `ErrorFields`, best-effort concurrent-process detection and stderr warning near `finalize_passports`, and regression coverage proving no behavioral drift.
-- **Out of scope:** `push_error` / `push_warning` helper work (already shipped), file-locking or single-writer guarantees, JSON schema or error-code renames, performance optimizations, and any platform-specific process-management behavior beyond warn-only detection.
-- **Success criteria:** `test_command` preserves current directory-mode and file-path-mode behavior while sharing one passport-finalization path, JSON error entries keep the same external contract while becoming field-name driven internally, concurrent writes produce a warning rather than an abort when detected, and normal single-process workflows remain warning-free.
-
-**Vertical Slices**
-
-**S1. `test_command` Passport Finalization Refactor** (Effort: XS-S, ~2-3 hours)
-- **User value:** Maintainers can change test/build failure evidence writing in one place instead of keeping multiple branches in sync.
-- **Scope in:** Shared helper/plan for target-spec vs directory-spec passport writes, build-failure and post-test success/failure paths, and preservation of current file-path semantics.
-- **Scope out:** Behavioral changes to cargo invocation, provenance resolution, contract-hash computation, or zero-tests handling.
-- **Acceptance criteria:** The refactor removes the duplicated `if let Some(target_spec)` / `else` passport-writing branches while preserving all current outcomes for build-fail, test-fail, test-pass, and file-path-targeted runs.
-- **Verification:** Existing CLI passport tests plus one focused regression proving directory mode and file-path mode still write the intended passport set.
-- **Rollout/flags:** No flag; pure internal refactor.
-
-**Atomic Tasks**
-- **S1.T1 Extract shared passport-write planning for `spec test`**
-  - **Outcome:** `test_command` has one internal helper or small planning struct that determines passport root, affected specs, evidence map, and contract hashes for both target-file and directory modes.
-  - **Inputs/outputs:** Input: current duplicated branches in `spec-cli/src/commands.rs`. Output: one shared seam for preparing `finalize_passports(...)` inputs.
-  - **Implementation notes:** Keep ownership/borrowing simple; prefer a small explicit helper over a generic abstraction that obscures the file-path vs directory-path behavior.
-  - **Acceptance criteria:** The helper makes the write target explicit and does not change which passports are written in single-file mode.
-  - **Test notes:** Add or tighten command-level tests around target-only passport writes.
-  - **Risk/rollback notes:** Main risk is accidentally widening single-file writes to sibling units; keep that invariant explicit in tests.
-- **S1.T2 Refactor build-failure and post-test flows onto the shared seam**
-  - **Outcome:** `test_command` uses the same passport-finalization path after cargo build failure and after test-result parsing.
-  - **Inputs/outputs:** Input: shared seam from `S1.T1`, existing `build_failure_evidence`, `build_test_evidence`, and `contract_hashes_for`. Output: one refactored `test_command` with less branch duplication and unchanged CLI-visible behavior.
-  - **Implementation notes:** Do not refactor timeout handling or cargo output printing in this slice; keep the change bounded to evidence/passport finalization.
-  - **Acceptance criteria:** Build-fail, test-pass, and test-fail flows still write the same evidence and contract hashes they do today.
-  - **Test notes:** Run the existing passport evidence/provenance/build-failure/file-path regression suite.
-  - **Risk/rollback notes:** If the helper grows beyond the passport seam, split it back down rather than turning Priority 3 into a broad command rewrite.
-- **S1.T3 Lock refactor safety with focused regression coverage**
-  - **Outcome:** The refactor is protected by tests aimed at the exact branch behavior that used to be duplicated.
-  - **Inputs/outputs:** Input: refactored `test_command`. Output: tests covering target-only writes, build failure passport writes, and zero-tests/no-passport behavior.
-  - **Implementation notes:** Prefer extending existing CLI tests over introducing a second harness.
-  - **Acceptance criteria:** CI fails if a future edit regresses file-path targeting or skips failure-passport finalization.
-  - **Test notes:** Run targeted CLI tests, then `cargo test --all`.
-  - **Risk/rollback notes:** None beyond missing a branch-specific regression; keep the coverage focused on current invariants.
-
-**S2. Typed JSON Error Entry Construction** (Effort: XS, ~1-2 hours)
-- **User value:** Maintainers can add or adjust JSON error fields without relying on tuple position discipline.
-- **Scope in:** Replace the 9-field tuple in `spec_error_to_json_entry` with a named `ErrorFields` struct or equivalent typed helper, while keeping `JsonErrorEntry` output unchanged.
-- **Scope out:** Error-code namespace changes, fixture churn unrelated to the refactor, or broader `validate`/`status` JSON redesign.
-- **Acceptance criteria:** `spec_error_to_json_entry` no longer uses the positional tuple, and existing JSON fixtures/tests remain stable unless a test is added purely to lock field mapping behavior.
-- **Verification:** Existing JSON fixture tests plus one or two focused unit tests for variants that populate multiple fields.
-- **Rollout/flags:** No flag; internal refactor only.
-
-**Atomic Tasks**
-- **S2.T1 Introduce a named field carrier for JSON error assembly**
-  - **Outcome:** `spec_error_to_json_entry` assembles data into a local `ErrorFields` struct with named fields instead of the current positional tuple.
-  - **Inputs/outputs:** Input: current 9-value tuple match in `spec-cli/src/commands.rs`. Output: a typed intermediary that maps cleanly into `JsonErrorEntry`.
-  - **Implementation notes:** Keep the carrier local to `commands.rs`; this is not a public type and should not leak into unrelated modules.
-  - **Acceptance criteria:** The code path is easier to audit because each field is assigned by name, not position.
-  - **Test notes:** Add a small unit test for representative variants such as `DuplicateId`, `DepCollision`, `ContractTypeInvalid`, or `CyclicDep`.
-  - **Risk/rollback notes:** Low risk, but tuple-order regressions can hide easily; the new tests should cover the multi-field cases.
-- **S2.T2 Prove no JSON contract drift**
-  - **Outcome:** The internal refactor ships with explicit proof that emitted JSON remains unchanged.
-  - **Inputs/outputs:** Input: typed field carrier from `S2.T1`. Output: passing fixture-backed `validate` / `status` JSON tests and any targeted unit tests.
-  - **Implementation notes:** Avoid refreshing fixtures unless a true output difference is discovered and deliberately accepted.
-  - **Acceptance criteria:** Existing machine-readable JSON remains byte-for-byte or semantically identical where current tests already pin it.
-  - **Test notes:** Run the current CLI fixture suite plus the new unit assertions.
-  - **Risk/rollback notes:** If fixtures move unexpectedly, stop and resolve whether the refactor accidentally changed behavior before accepting the diff.
-
-**S3. Warn-Only Concurrent Passport Write Detection** (Effort: XS, ~1 hour)
-- **User value:** Operators get a clear signal when overlapping `spec` runs may both rewrite passports, without falsely implying the tool now guarantees safe concurrent writes.
-- **Scope in:** Best-effort process detection, one warning emission path near `finalize_passports`, testability of the detector/warning seam, and documentation of warn-only semantics in the plan.
-- **Scope out:** Lock files, retry loops, process coordination, or any success criterion stronger than “warning emitted when concurrent activity is detected.”
-- **Acceptance criteria:** When the detector sees another likely `spec` process, the command emits a warning and continues; when detection is unavailable or reports a single process, commands behave exactly as they do today.
-- **Verification:** One deterministic test using an injectable/testable detection seam plus a manual sanity check that ordinary runs stay quiet.
-- **Rollout/flags:** No flag; best-effort warning only.
-
-**Atomic Tasks**
-- **S3.T1 Define the best-effort detection contract**
-  - **Outcome:** One helper encapsulates “are concurrent `spec` writers likely active?” and degrades safely when process enumeration is unavailable.
-  - **Inputs/outputs:** Input: `finalize_passports` write seam in `spec-cli/src/commands.rs`. Output: helper returning enough information to decide whether to warn, without aborting the command on detection failure.
-  - **Implementation notes:** Keep the detector isolated from the write logic and make it easy to substitute in tests; unsupported platforms or missing tools should resolve to “no warning,” not failure.
-  - **Acceptance criteria:** Detection failures are silent or debug-only internally; they never block passport writes.
-  - **Test notes:** Add a unit-test seam so “concurrent process present” can be simulated without racing real commands.
-  - **Risk/rollback notes:** Platform-specific process checks are inherently racy; the contract must stay explicitly best-effort.
-- **S3.T2 Emit one clear warning at the passport finalization seam**
-  - **Outcome:** Commands that call `finalize_passports` share one consistent concurrent-run warning message.
-  - **Inputs/outputs:** Input: detection helper from `S3.T1`. Output: stderr warning emitted before or around passport writes when concurrent activity is detected.
-  - **Implementation notes:** Emit the warning once per command, not once per spec file, and keep the text explicit that this is advisory rather than protective locking.
-  - **Acceptance criteria:** The warning is human-readable, non-fatal, and absent from ordinary single-process runs.
-  - **Test notes:** Cover warning emission through the injected seam and verify command success still holds.
-  - **Risk/rollback notes:** Over-warning would erode trust; keep the trigger conservative and scoped to likely concurrent writers.
-
-**Sub-task Checklists**
-
-**S1.T1 Checklist**
-- Identify the duplicated `finalize_passports(...)` branches in `test_command`.
-- Extract the minimal shared inputs needed for target-only and directory-wide writes.
-- Preserve the current `spec_root` vs `path` distinction explicitly in the helper.
-
-**S1.T2 Checklist**
-- Route build-failure passport writes through the shared seam.
-- Route post-test evidence passport writes through the same seam.
-- Confirm cargo output, timeout handling, and zero-tests checks remain untouched.
-
-**S1.T3 Checklist**
-- Extend the existing target-only passport regression tests.
-- Extend the existing build-failure or test-failure passport regression tests.
-- Run targeted CLI coverage and then `cargo test --all`.
-
-**S2.T1 Checklist**
-- Add a local `ErrorFields` carrier in `spec-cli/src/commands.rs`.
-- Replace tuple-position assignments with named field assignments in the `match`.
-- Add focused unit tests for multi-field error variants.
-
-**S2.T2 Checklist**
-- Re-run fixture-backed `validate --format json` coverage.
-- Re-run fixture-backed `status --format json` coverage.
-- Confirm no fixture refresh is needed unless behavior truly changed.
-
-**S3.T1 Checklist**
-- Add one helper dedicated to concurrent-process detection.
-- Add one test seam so process-presence can be simulated deterministically.
-- Ensure detector failure returns “no warning” instead of an error.
-
-**S3.T2 Checklist**
-- Call the detector from the shared passport-finalization seam.
-- Emit one warning per command when concurrent activity is detected.
-- Verify commands still succeed and ordinary runs do not emit the warning.
-
-**Dependency Graph (text)**
-- `S1.T1` blocks `S1.T2`.
-- `S1.T2` blocks `S1.T3`.
-- `S2.T1` blocks `S2.T2`.
-- `S3.T1` blocks `S3.T2`.
-- `S1` should land before `S3` so the concurrent warning attaches to the final shared passport seam instead of duplicated branches.
-
-**Risks / Unknowns**
-- The `test_command` refactor can easily regress single-file behavior by broadening passport writes to sibling specs. De-risk with explicit file-path-mode regression coverage before and after the refactor.
-- The `ErrorFields` refactor is low-risk externally but can silently swap field population on multi-field variants. De-risk with focused unit tests for the variants that set several optional fields.
-- Concurrent-process detection is inherently racy and platform-specific. De-risk by keeping it advisory, isolating it behind one helper, and making unsupported environments resolve to “no warning.”
-
-**Milestones**
-- **M6:** `S1` complete, so passport finalization in `spec test` has one authoritative maintenance seam.
-- **M7:** `S2` complete, so JSON error construction is field-name driven and safer to extend.
-- **M8:** `S3` complete, so overlapping `spec` runs surface a clear advisory warning without changing command success semantics.
-
-**Workstreams**
-- **WS1: Test Command Refactor** — Touch surface: `spec-cli/src/commands.rs`, passport-focused CLI tests. Owns `S1.T1`, `S1.T2`, `S1.T3`.
-- **WS2: JSON Error Entry Refactor** — Touch surface: `spec-cli/src/commands.rs`, JSON fixture/unit tests. Owns `S2.T1`, `S2.T2`.
-- **WS3: Concurrent Warning** — Touch surface: `spec-cli/src/commands.rs`, warning-focused tests. Owns `S3.T1`, `S3.T2`.
-- **WS-INT: Priority 3 Integration** — Touch surface: shared `commands.rs` integration and final `cargo test --all` closeout. Depends on `WS1`, `WS2`, and `WS3`.
-
-#### Priority 4: Optional Improvements
-
-**Implementation Strategy:** Benchmark-first. Treat this as a performance experiment, not a guaranteed ship item. Only land the optimization if representative measurements show that cargo-test result indexing is a real contributor to `spec test` latency on large repositories.
-
-**Feature Brief**
-- **Goal:** Reduce the cost of correlating cargo test stdout with expected local test IDs, without changing any passport evidence behavior.
-- **Why now:** Priorities 1-3 address trust, provenance, and maintainability. This is the first purely performance-oriented item, so it should only ship if the measured gain justifies added complexity.
-- **Primary user:** Maintainers running `spec test` on larger repos who want faster feedback loops after the correctness and contract work is complete.
-- **In scope:** A baseline measurement pass over the current `parse_cargo_test_output` plus `build_test_evidence` lookup path, an optional hash-based lookup/indexing optimization if the baseline justifies it, a short performance note near the optimized seam, and regression coverage proving no change to duplicate-name or missing-test semantics.
-- **Out of scope:** Cargo invocation changes, passport schema changes, test naming changes, JSON contract changes, or unrelated generator/validator performance work.
-- **Success criteria:** A representative benchmark makes the ship/no-ship decision explicit; if the optimization lands, existing parse/evidence behavior remains unchanged and the benchmark shows a clear win on a larger corpus. If the gain is noise-level, Priority 4 closes as measured-but-not-implemented.
-- **Ship gate:** Proceed with the code change only if the benchmark shows at least a clear double-digit improvement on the measured parse/lookup phase for a large synthetic or corpus-shaped workload; otherwise keep the simpler implementation.
-
-**Vertical Slices**
-
-**S1. Benchmark The Current Parse/Lookup Path** (Effort: XS, ~30-45 minutes)
-- **User value:** Maintainers know whether this optional optimization is worth shipping instead of guessing based on an outdated complexity assumption.
-- **Scope in:** A reproducible measurement harness for `parse_cargo_test_output` plus downstream lookup in `build_test_evidence`, representative synthetic input sizes, and an explicit ship/no-ship threshold.
-- **Scope out:** Production code changes unless the benchmark clears the ship gate.
-- **Acceptance criteria:** The repo has one repeatable way to measure the current parse/lookup seam, and the results make it clear whether lookup cost is material on a larger workload.
-- **Verification:** Run the benchmark harness in release mode and record the before numbers used for the go/no-go decision.
-- **Rollout/flags:** No runtime flag; this is a planning/measurement gate.
-
-**Atomic Tasks**
-- **S1.T1 Build a representative benchmark harness**
-  - **Outcome:** There is one repeatable measurement path for the current cargo-test result correlation seam.
-  - **Inputs/outputs:** Input: `spec-core/src/pipeline.rs` parser and `spec-cli/src/commands.rs` evidence lookup seam. Output: a benchmark helper or ignored perf test that synthesizes representative cargo output plus expected test IDs at multiple sizes.
-  - **Implementation notes:** Keep the harness local to tests/bench code; do not introduce a new runtime dependency unless the existing test tooling is insufficient.
-  - **Acceptance criteria:** The harness exercises the same parse and lookup code paths used by `spec test`, not a toy stand-in.
-  - **Test notes:** Run locally in release mode; this harness does not need to execute in normal CI.
-  - **Risk/rollback notes:** Poorly shaped synthetic data can mislead the decision, so mirror real cargo output line shapes and duplicate-name cases.
-- **S1.T2 Make the ship/no-ship decision explicit**
-  - **Outcome:** Priority 4 has a concrete gate instead of a vague “maybe optimize later.”
-  - **Inputs/outputs:** Input: benchmark numbers from `S1.T1`. Output: a recorded decision to stop after measurement or continue to `S2`.
-  - **Implementation notes:** Use a simple threshold and compare the current path against the proposed hot-path change only; do not broaden the experiment into whole-command profiling.
-  - **Acceptance criteria:** The decision is based on measured results from the actual seam, and “no meaningful gain” is an acceptable closeout.
-  - **Test notes:** Benchmark review only.
-  - **Risk/rollback notes:** This task should prevent speculative optimization from landing on intuition alone.
-
-**S2. Optional Hash-Based Result Lookup Optimization** (Effort: XS, ~30-45 minutes)
-- **User value:** Large `spec test` runs spend less time matching cargo output to expected local tests when the benchmark shows that lookup cost is real.
-- **Scope in:** Replace the current ordered lookup structure with a hash-based lookup or similarly bounded index at the hot seam, preserve duplicate-full-name detection, and keep missing-test behavior unchanged.
-- **Scope out:** Parser format changes, broader command refactors, or public API churn outside the parser/evidence seam.
-- **Acceptance criteria:** The optimized path preserves all current parse semantics and beats the baseline from `S1` on the same workload.
-- **Verification:** Existing pipeline/CLI regressions plus a rerun of the benchmark harness used in `S1`.
-- **Rollout/flags:** No flag; only land if the ship gate was met.
-
-**Atomic Tasks**
-- **S2.T1 Replace the hot lookup path with a hash-based index**
-  - **Outcome:** The parse/evidence seam uses constant-time average lookups where the benchmark showed the current structure was costly.
-  - **Inputs/outputs:** Input: current `BTreeMap<String, ParsedCargoTestResult>` seam between `spec-core/src/pipeline.rs` and `spec-cli/src/commands.rs`. Output: an internal hash-based lookup structure or equivalent index with unchanged behavior at the call site.
-  - **Implementation notes:** Preserve the current duplicate-full-name error behavior when multiple cargo lines map to the same full test name; keep any ordering requirements out of the hot path.
-  - **Acceptance criteria:** `build_test_evidence` still reports `unknown` for missing tests, duplicate full names still degrade to the same error state, and no user-visible output changes.
-  - **Test notes:** Update type-level tests only where the internal lookup type changes; keep behavior assertions unchanged.
-  - **Risk/rollback notes:** If the optimized structure leaks complexity into unrelated code, stop and keep the current implementation.
-- **S2.T2 Lock behavior and performance together**
-  - **Outcome:** The optional optimization ships with proof that it is both safe and worthwhile.
-  - **Inputs/outputs:** Input: optimized lookup path from `S2.T1`. Output: passing regression coverage plus benchmark numbers showing improvement over the `S1` baseline.
-  - **Implementation notes:** Do not accept the change on micro-benchmark noise; require the same workload and measurement method used in `S1`.
-  - **Acceptance criteria:** Existing parser/evidence tests pass unchanged, and the measured improvement clears the ship gate.
-  - **Test notes:** Run targeted `spec-core` parser tests, relevant `spec-cli` passport-evidence tests, then re-run the perf harness.
-  - **Risk/rollback notes:** If the gain disappears after realistic measurement or forces brittle type changes, drop the optimization.
-
-**Sub-task Checklists**
-
-**S1.T1 Checklist**
-- Add one local benchmark helper or ignored perf test for the parse/evidence seam.
-- Synthesize cargo stdout lines and matching expected test IDs at small, medium, and large corpus sizes.
-- Include duplicate-full-name and missing-test cases so the benchmark still exercises real semantics.
-
-**S1.T2 Checklist**
-- Run the harness in release mode on the current implementation.
-- Record the baseline numbers and compare them against the ship gate.
-- Stop Priority 4 here if the measured gain target is not credible.
-
-**S2.T1 Checklist**
-- Replace the current ordered lookup structure only at the hot seam identified by `S1`.
-- Keep duplicate-full-name handling and missing-test behavior identical.
-- Add a short code comment or performance note near the optimized seam explaining why the hash-based lookup exists.
-
-**S2.T2 Checklist**
-- Re-run the existing parser and passport-evidence regressions.
-- Re-run the benchmark harness with the optimized path.
-- Confirm the optimized path clears the ship gate before keeping the change.
-
-**Dependency Graph (text)**
-- `S1.T1` blocks `S1.T2`.
-- `S1.T2` blocks `S2.T1`.
-- `S2.T1` blocks `S2.T2`.
-- `S1` is the gate for all of Priority 4; if it fails the ship threshold, `S2` does not start.
-
-**Risks / Unknowns**
-- The original “HashMap optimization” premise may already be partially addressed by the current code, so the benchmark must confirm the real hotspot before any change lands.
-- Synthetic benchmark data can overstate gains if it does not resemble actual cargo stdout shapes or expected test-name distributions.
-- A hash-based lookup can speed the hot path but also remove incidental ordering; keep ordering-sensitive behavior out of scope unless tests prove it matters.
-
-**Milestones**
-- **M9:** `S1` complete, so Priority 4 has an explicit measured go/no-go decision.
-- **M10:** `S2` complete, so the parse/evidence seam is faster on large corpora without behavior drift.
-
-**Workstreams**
-- **WS1: Benchmark Gate** — Touch surface: `spec-core/src/pipeline.rs`, optional perf harness/tests, and the `build_test_evidence` seam in `spec-cli/src/commands.rs`. Owns `S1.T1` and `S1.T2`.
-- **WS2: Optional Lookup Optimization** — Touch surface: `spec-core/src/pipeline.rs`, `spec-cli/src/commands.rs`, parser/evidence regression tests. Owns `S2.T1` and `S2.T2`.
-- **WS-INT: Priority 4 Integration** — Touch surface: final regression run plus benchmark comparison. Depends on `WS1` and, if the gate passes, `WS2`.
-
-#### DO NOT SHIP IN M5
-
-**❌ Cross-Library Dependency Implementation** → **DEFERRED TO M7**
-- Reason: Premature scaling without package management features (versioning, lockfile, publish)
-- Filesystem coupling disguised as architecture
-- ICP doesn't need this yet
-- Decision: Use exported bundles as package boundary instead
-
-**❌ ValidatedExpr Newtype Refactor (Public API)** → **BLOCKED**
-- Reason: `spec-core` is published library; `ResolvedSpec` is public API
-- Replacing `String` with `syn::Expr` breaks semver
-- Options: Keep internal String + validation, or make ValidatedExpr internal-only
-- Revisit in M7 if needed
-
-**❌ Full Evidence Provenance** → **DEFERRED TO M6**
-- Runner identity, environment fingerprint add complexity without trust boundary
-- Gitignored local JSON files are untrusted medium regardless
-- Wait until passports become authoritative artifacts (not cache files)
-
-### Implementation Order
-
-1. **Priority 1 / S1: Timeout Guardrail** (prevents CI hangs — finish before relying on any other M5 validation)
-2. **Priority 1 / S2: Stable Error Codes** (breaking rename: update fixtures + `AGENTS.md` in the same change)
-3. **Priority 1 / S3: schema_version type fix** (fold into the JSON contract sweep: `export.rs` → `u8`, not String)
-4. **Priority 2: Minimal Provenance** (adds CI metadata, low complexity)
-5. **Priority 3: Refactors** (improve code quality; note: `push_error`/`push_warning` already done — remove from scope)
-6. **Priority 3: Concurrent Process Warning** (warn on concurrent runs; success criterion = warning emitted, not data-loss prevention)
-7. **Priority 4 / S1: Benchmark parsed cargo-test result lookup** (measure first; stop here if gains are noise)
-8. **Priority 4 / S2: Optional hash-based lookup optimization** (only if `S1` clears the ship gate)
+## Milestone Summary
+
+```
+M6a  Trust Gap Fixes          ← next to implement
+M6b  Health Model             ← after M6a
+     structural PR            ← commands.rs split (zero behavior change)
+M7   .test.spec + minimal graph
+M8   Full Graph Layer
+M9   Cross-library Deps
+M10  Planning Boundary as Data
+```
+
+**Explicitly deferred (do not front-load):**
+- TypeScript / Python / Go targets
+- Semantic eval / embeddings
+- LLM semantic contract-vs-body scoring
+- Planning UX
+- CUE
+- Reverse ingestion
+
+---
+
+## M6a — Trust Gap Fixes
+
+**Theme:** Make the pipeline truthful end-to-end. Close the confirmed bug where spec test
+generates code to the wrong location, compiles different code than what it generated, and
+produces all-"unknown" test results in passports.
+
+### The Root Cause (confirmed by tracing commands.rs)
+
+Default `--output generated/spec` is relative to CWD. Cargo runs in the resolved crate root.
+These are different directories. `spec test examples/ecommerce/units` from the repo root:
+
+```
+BEFORE (broken):
+  generates to:  {repo_root}/generated/spec/pricing/apply_tax.rs   ← gitignored, disconnected
+  cargo sees:    examples/ecommerce/src/generated/                  ← prior run's code
+  module prefix: "generated::spec"                                  ← wrong (has ::spec:: segment)
+  test names:    "generated::spec::pricing::apply_tax::tests::..."  ← never found in cargo output
+  result:        all local tests → status: "unknown"
+
+AFTER (fixed):
+  generates to:  {crate_root}/src/generated/pricing/apply_tax.rs   ← cargo sees THIS
+  cargo sees:    examples/ecommerce/src/generated/                  ← freshly generated code
+  module prefix: "generated"                                        ← derived from strip(crate_root/src/)
+  test names:    "generated::pricing::apply_tax::tests::..."        ← found, matched
+  result:        local tests → status: "pass"
+```
+
+### Changes
+
+**1. Anchor default output to crate root (breaking behavior, correct fix)**
+
+Change the default `--output` convention from CWD-relative `generated/spec` to
+`{crate_root}/src/generated`. The crate root is already resolved via `workspace_root_for`
+or `pipeline.crate_root` in spec.toml.
+
+- Drop the `spec` subdirectory from the default. It added `::spec::` noise and no convention used it.
+- New default: `{crate_root}/src/generated` (relative to resolved crate root, not CWD).
+- Update `--output` default_value in all three command arg structs (generate, build, test).
+
+**2. Auto-derive module prefix from output path relative to crate root**
+
+Replace the current `output_module_prefix(output)` derivation (which uses the raw output path)
+with derivation from `output.strip_prefix({crate_root}/src/)`:
+
+```
+output = {crate_root}/src/generated     →  prefix = "generated"
+output = {crate_root}/src/generated/spec → prefix = "generated::spec"
+output = {crate_root}/src/api/gen        → prefix = "api::gen"
+```
+
+The `src` strip is now anchored to the crate root, not guessed from the first path component.
+
+**3. Add `[pipeline] generated_module_prefix` as explicit override**
+
+For non-standard layouts (e.g., crate imports generated code via re-export rather than
+direct `mod`), allow explicit override:
+
+```toml
+[pipeline]
+generated_module_prefix = "my_custom_name"
+```
+
+When present, this overrides auto-derivation. When absent (the common case), auto-derive.
+
+**4. Preserve evidence in write_passports**
+
+Fix the TODOS item: `spec build` and `spec generate` currently overwrite `evidence` and
+`contract_hash` fields in passports, silently erasing `spec test` results.
+
+Fix: in `write_passports`, read the existing passport before writing. If the new call
+provides `evidence = None` and `contract_hash = None`, carry forward the existing values.
+
+**Important:** this does NOT manufacture false freshness. The 6-state model (M6b) ensures
+a rebuilt unit is never shown as `valid` unless:
+- `contract_hash` still matches (contract hasn't changed)
+- Evidence exists and all tests show `pass` or `ok`
+
+If the contract changed after `spec build`, status = `stale` (hash mismatch). Evidence is
+preserved but the stale flag is accurate. M6a ships evidence preservation; M6b ships the
+status model that makes it safe.
+
+**5. Thread OutputFormat through pipeline.rs eprintln!**
+
+`run_cargo_build` and `run_cargo_test` emit unconditional `eprintln!` status lines. These
+will contaminate machine-readable output if `--format json` is ever added to build/test.
+Fix now (XS, clear deadline):
+
+```rust
+// before: eprintln!("spec: running cargo build in {}", crate_root.display());
+// after:
+if matches!(format, OutputFormat::Text) {
+    eprintln!("spec: running cargo build in {}", crate_root.display());
+}
+```
+
+Thread `OutputFormat` parameter through `run_cargo_build` and `run_cargo_test`. One caller
+each in commands.rs. No behavior change in Text mode.
+
+**6. Nextest limitation documented**
+
+Add to README under `## Pipeline`:
+> `spec test` parses standard `cargo test` output format only. `cargo nextest` uses a
+> different output format and is not supported. Running `spec test` in a project configured
+> for nextest will produce `status: "unknown"` for all local tests. Use standard `cargo test`.
+
+Close the TODOS item that has been outstanding since M4.
+
+**7. Regenerate example ecommerce passports**
+
+After all fixes land, run `spec test examples/ecommerce/units` and commit the resulting
+passports. All local tests should show `status: "pass"` (not `"unknown"`). The committed
+passports become a regression artifact proving the trust gap is closed.
+
+### Dependency Order
+
+```
+1. Anchor default output + auto-derive prefix  (commands.rs + pipeline.rs/config.rs)
+2. Evidence preservation in write_passports    (commands.rs)
+3. eprintln! compat in pipeline.rs             (pipeline.rs)
+4. Nextest doc                                 (README.md)
+5. Regenerate + commit example passports       (examples/)
+```
 
 ### Success Criteria
 
-- ✅ Zero regression in existing tests (50+ unit + integration tests)
-- ✅ New tests for all added functionality
-- ✅ JSON API contracts stable and documented
-- ✅ Concurrent run warning emitted when >1 spec process detected (warn-only, not a lock)
-- ✅ No indefinite hangs during build/test
-- ✅ Type-safe error handling patterns established
-- ✅ If Priority 4 ships, the parse/evidence hot path shows a measured win without changing parser or passport semantics
+- `spec test examples/ecommerce/units` produces passports with all test results `pass`,
+  not `unknown`. This is the regression test for the entire trust gap fix.
+- A new integration test: `spec test <dir>` with `crate_root` configured correctly →
+  `build_test_evidence` maps test names using the auto-derived prefix → results match.
+- Existing tests all pass (`cargo test --all`).
+- Fixture files updated if output path changes affect JSON snapshots.
 
-### Deferred to Future Milestones
+### What NOT in M6a Scope
 
-**M6 - AI Governance Layer**
-- Semantic contract-vs-body comparison (LLM eval)
-- Full evidence provenance with CI context
-- First AI verification surface (`spec eval` or `spec review`)
-
-**M7 - Scaling & Distribution**
-- Cross-library dependencies with namespace-prefixed schema
-- Exported bundle-based package boundaries
-- ValidatedExpr internal refactor (if API surface permits)
-
-**Future - Performance**
-- BTreeMap → HashMap replacement (measure first)
-- Other optimizations based on real-world usage
+- Status state machine changes (M6b)
+- schema_version bump (M6b)
+- commands.rs split (structural PR, between M6a and M6b)
+- ValidatedExpr newtype (structural PR)
 
 ---
 
-## For Reference
+## Structural PR (between M6a and M6b)
 
-- Original TODOS.md backlog: view with `cat TODOS.md` (contains completed/completed items)
-- Completed M5 features: see `.implemented/` directory
-- Current version: v0.5.1 (post M5 AI-native loop)
-- ICP: Solo engineer or 2-5 person AI-heavy team where correctness matters
+**Zero behavior change. All tests pass before and after.**
 
-## To start implementation
+Split `spec-cli/src/commands.rs` (2433 lines) into a module directory:
 
-1. **Run any pre-implementation checks:**
-   ```bash
-   cargo test --all
-   ```
+```
+spec-cli/src/commands/
+  mod.rs          ← CLI dispatch (Cli::run match arm)
+  validate.rs     ← validate_command
+  generate.rs     ← generate_command + generate_specs + finalize_passports
+  build.rs        ← build_command
+  test.rs         ← test_command + build_test_evidence + passport_write_plan
+  status.rs       ← status_command
+  export.rs       ← export_command
+  helpers.rs      ← output_module_prefix, expected_cargo_test_name,
+                     cargo_test_filter_for, resolve_git_provenance,
+                     rfc3339_now, timeout_suffix, etc.
+```
 
-2. **Begin with Priority 1 / S1 (Timeout Guardrail):**
-   - Read `spec-core/src/pipeline.rs` and `spec-cli/src/config.rs`
-   - Define the exact `pipeline.timeout_secs` contract
-   - Implement timeout enforcement
-   - Add regression tests before moving to the JSON contract work
+Bundle `D5a ValidatedExpr` newtype into this PR:
+- Replace `expect: String` in `ResolvedSpec` with `ValidatedExpr(syn::Expr)` newtype.
+- `ValidatedExpr` wraps a parsed `syn::Expr` — eliminates double-parse in `generator.rs`.
+- `generate_code` receives `ValidatedExpr`, calls `.into_token_stream()` directly.
+- Removes the last gap where a direct `ResolvedSpec` constructor could bypass validation.
 
-3. **After each item, run:**
-   ```bash
-   cargo test --all
-   ```
-
-4. **Ready for review:**
-   ```bash
-   /ship
-   ```
+**Success criterion:** `cargo test --all` passes before and after. No new behavior.
 
 ---
 
-**Document version:** 2026-04-11  
+## M6b — Health Model
+
+**Theme:** Make `spec status` a real evidence-health surface, not just validation + staleness.
+
+### 6-State Status Machine
+
+```
+  untested     no passport / no evidence field
+      │
+  incomplete   evidence exists but ≥1 test result is "unknown"
+      │
+  failing      build_status = "fail" OR "timeout" OR any test_result.status = "fail"
+      │   ↘
+  stale        contract_hash mismatch (contract changed since last spec test)
+  valid        all: build_status pass, all tests pass/ok, hash matches, no unknowns
+  invalid      validation errors (schema/semantic), regardless of evidence
+```
+
+**Precedence (highest to lowest):** invalid > failing > stale > incomplete > untested > valid
+
+`valid` is only reached when ALL conditions are met: validation clean, build passed,
+all test results observed (none "unknown"), all tests pass, contract hash matches.
+
+### JSON Contract Change
+
+This is a breaking change. Bump `schema_version` from 1 to 2.
+
+Old (schema_version 1):
+```json
+{"status": "stale", "stale": true}
+```
+
+New (schema_version 2):
+```json
+{
+  "schema_version": 2,
+  "status": "incomplete",
+  "reason": "1 local test not observed in cargo output"
+}
+```
+
+**Migration plan:**
+- Old passports (without `schema_version` or with `schema_version: 1`) deserialize with
+  backward-compatible serde defaults. The status computation upgrades them on read.
+- Mixed-version repos: each unit computes its own status from its own passport.
+  No cross-unit version dependency.
+- CLI consumers: the JSON `status` string values change (new values: `incomplete`, `untested`,
+  `failing`). Bump `schema_version` in `spec status --format json` output so consumers can
+  detect the change. Document in AGENTS.md and CHANGELOG.
+- Old consumers reading `schema_version: 1` responses: existing `valid/invalid/stale` still
+  valid state names. New state names are additive. Old code will see `schema_version: 2` and
+  can guard on it.
+
+### Human-readable `spec status` output
+
+```
+✓ money/round             valid       evidence:2026-04-12T02:56:17Z
+✓ pricing/apply_tax       valid       evidence:2026-04-12T02:56:17Z
+~ pricing/apply_discount  stale       contract changed since last test
+? shipping/calculate      incomplete  1 test not observed
+✗ auth/verify             failing     build failed
+— new_unit/foo            untested    no evidence
+✗ inventory/check         invalid     2 validation errors
+```
+
+### Success Criteria
+
+- Each new state has at least one test that reaches it via a real code path.
+- `spec status --format json` emits `schema_version: 2`.
+- Fixture files updated for all new status values.
+- Old passports still parse correctly (serde backward-compat test).
+- AGENTS.md updated: document new state names and schema_version: 2 contract.
+
+---
+
+## M7 — .test.spec + Minimal Graph
+
+**Theme:** First-class molecule tests with declared covers edges. Add just enough graph
+structure to represent the unit/test/edge model without over-engineering it.
+
+### .test.spec File Format
+
+```yaml
+# pricing.test.spec
+id: pricing/checkout_flow
+intent: "Verify discount + tax chain produces correct totals end-to-end."
+covers:
+  - pricing/apply_discount
+  - pricing/apply_tax
+  - money/round
+body:
+  rust: |
+    let discounted = apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2));
+    let total = apply_tax(discounted, Decimal::new(725, 4));
+    assert_eq!(total, Decimal::new(10725, 2));
+```
+
+- `id`: same namespace as unit ids, conventionally `{namespace}/test_name`
+- `intent`: why this molecule test exists
+- `covers`: declared unit ids. spec validates all ids exist in the loaded spec set.
+  These are programmer claims, not observed coverage — same epistemic status as `deps`.
+- `body.rust`: test function body. spec generates a `#[test]` function. This IS code
+  injection — spec validates it compiles and the declared units are importable; it does not
+  validate semantic correctness beyond that.
+
+### Validation Rules
+
+- All ids in `covers` must exist in the loaded spec set. Error: `SPEC_MOLECULE_COVERS_NOT_FOUND`.
+- Duplicate `.test.spec` ids are rejected. Error: `SPEC_DUPLICATE_MOLECULE_ID`.
+- Body validation: same `is_safe_expr` rules as local test `expect` (block expression,
+  no unsafe).
+- A `.test.spec` file that declares no `covers` is a warning, not an error.
+
+### Generation
+
+`spec generate` and `spec build` process `.test.spec` files alongside `.unit.spec` files.
+Each molecule test generates a `#[test]` function in a dedicated `molecule_tests.rs` file
+(or per-namespace `{namespace}/molecule_tests.rs`). The generated function imports all
+covered units and runs the body.
+
+### Minimal Graph in spec-core
+
+Rather than raw JSON arrays or a full graph abstraction, introduce a minimal `SpecGraph`
+struct in `spec-core` that represents the current loaded world:
+
+```rust
+pub struct SpecGraph {
+    pub units: Vec<UnitNode>,
+    pub molecule_tests: Vec<MoleculeTestNode>,
+    pub edges: Vec<SpecEdge>,
+}
+
+pub struct UnitNode { pub id: String, pub deps: Vec<String> }
+pub struct MoleculeTestNode { pub id: String, pub covers: Vec<String> }
+
+pub enum SpecEdge {
+    Dep { from: String, to: String },
+    Covers { test: String, unit: String },
+}
+```
+
+This is not a full graph database. It's a typed representation of what the loader found.
+It answers: what units? what molecule tests? what edges? M8 extends this.
+
+### Export
+
+`spec export` includes molecule tests and covers edges:
+
+```json
+{
+  "schema_version": 2,
+  "units": [...],
+  "molecule_tests": [
+    {
+      "id": "pricing/checkout_flow",
+      "intent": "...",
+      "covers": ["pricing/apply_discount", "pricing/apply_tax", "money/round"]
+    }
+  ],
+  "graph": {
+    "edges": [
+      {"kind": "dep",    "from": "pricing/apply_tax", "to": "money/round"},
+      {"kind": "covers", "test": "pricing/checkout_flow", "unit": "pricing/apply_discount"}
+    ]
+  }
+}
+```
+
+### Status Propagation Rule
+
+Molecule test failure does NOT propagate to unit status. A failing molecule test changes
+the molecule test's own status (in a future `spec status` extension for molecule tests).
+Unit status is determined solely by:
+- unit validation
+- `spec test` evidence for that unit's local tests
+- contract_hash staleness
+
+This avoids the "five units fail because one molecule test failed" ambiguity Codex raised.
+Document this boundary explicitly in AGENTS.md.
+
+### Atom/Molecule Boundary
+
+- **Atom tests**: inline `local_tests` in `.unit.spec`. Test one unit's behavior.
+  Generated inside the unit's `#[cfg(test)]` module.
+- **Molecule tests**: `.test.spec` files. Test interactions between units.
+  Generated as standalone `#[test]` functions that call multiple units.
+- **The boundary**: if a test needs to import more than one unit, it belongs in `.test.spec`.
+  If it tests only the current unit's behavior, it belongs in `local_tests`.
+
+### Success Criteria
+
+- `spec validate`, `spec build`, `spec test`, `spec export` all handle `.test.spec` files.
+- `covers` validation rejects unknown unit ids with a stable `SPEC_*` error code.
+- Generated molecule test compiles and `cargo test` runs it.
+- Export includes `molecule_tests` array and `covers` edges in `graph.edges`.
+- At least two molecule tests added to `examples/ecommerce/`.
+- Integration tests in `cli.rs` cover: valid molecule test, unknown covers id, generation,
+  export shape.
+
+---
+
+## M8 — Full Graph Layer in spec-core
+
+**Theme:** Formalize the graph model so M9 (cross-library) and M10 (planning) have a clean
+foundation. Extend the minimal `SpecGraph` from M7 into a first-class answerable object.
+
+### Core Questions the Graph Must Answer
+
+```
+1. What are all the units?                    → graph.units()
+2. What are all the molecule tests?           → graph.molecule_tests()
+3. What edges exist (dep + covers)?           → graph.edges()
+4. Which edges are declared vs. observed?     → edge.kind (Declared | Observed)
+5. Which deps are internal vs. external?      → edge.scope (Internal | CrossLibrary)
+6. What library does each node belong to?     → node.library_id
+7. What is the reverse dependency set?        → graph.reverse_deps(unit_id)
+8. What molecule tests cover a given unit?    → graph.tests_covering(unit_id)
+```
+
+### graph.build() Contract
+
+`SpecGraph::build(loaded_units, molecule_tests, passports)` constructs the graph from:
+- Loaded `.unit.spec` files (units, deps, local_tests)
+- Loaded `.test.spec` files (molecule tests, covers edges)
+- Passports (observed test results → future observed edges in M9+)
+
+Graph source of truth: **the spec files**. Passports contribute observed status but do not
+add or remove edges. Generated code is derived and ephemeral — not a graph input.
+
+### Invalidation Rules
+
+The graph is rebuilt on each command invocation from the current spec files. No persistent
+graph state between runs. This avoids staleness. The export bundle captures a snapshot.
+
+### Impact Analysis (foundation for M10)
+
+`graph.impact(unit_id)` returns: all units that transitively depend on `unit_id`, plus all
+molecule tests that cover `unit_id`. This is the minimal impact set for a change.
+
+### Success Criteria
+
+- `SpecGraph` lives in `spec-core`, exposed from `lib.rs`.
+- `spec export` uses `SpecGraph::build()` instead of ad-hoc edge construction.
+- `spec status` uses `graph.impact()` to detect downstream stale units (optional in M8,
+  required in M9).
+- All M7 molecule test / covers edge behavior migrated to use `SpecGraph`.
+- Integration tests for `graph.impact()`, `graph.reverse_deps()`, `graph.tests_covering()`.
+
+---
+
+## M9 — Cross-library Deps
+
+**Theme:** Implement the `shared::money/round` namespace-prefixed dep syntax with
+`[libraries]` config mapping.
+
+**Prerequisite:** M8 graph layer complete. Do not implement before SpecGraph supports
+library scope on nodes.
+
+### spec.toml Contract
+
+```toml
+[libraries]
+shared = "../shared-spec"   # namespace alias → path to another spec library root
+payments = "../../payments/spec"
+```
+
+### Dep Syntax
+
+```yaml
+deps:
+  - money/round              # local dep (same library)
+  - shared::money/round      # cross-library dep
+```
+
+### Validation
+
+- Unknown library namespace → `SPEC_UNKNOWN_LIBRARY_NAMESPACE`
+- Cross-library dep id not found in target library → `SPEC_CROSS_LIBRARY_DEP_NOT_FOUND`
+- Cross-library cycles (A depends on B depends on A across library boundary) → `SPEC_CROSS_LIBRARY_CYCLE`
+- Legacy local deps (`money/round`) continue to work unchanged.
+
+### Generation
+
+Cross-library dep generates a `use` statement pointing at the other crate's module:
+`use shared::money::round;` where `shared` is the Cargo package name or a configured alias.
+The `[libraries]` mapping must also record the Cargo package name (or derive it from the
+target spec library's Cargo.toml `[package] name`).
+
+### Cargo Cycle Detection
+
+Semantic cycles (spec dep graph) are already detected. Cross-library deps may also introduce
+Cargo build dependency cycles. `spec validate` should check the `[libraries]` dep graph is
+a DAG — if library A's spec depends on library B, B must not depend back on A.
+
+### SpecGraph Extension
+
+`SpecGraph::build()` accepts an optional `LibraryContext` that maps namespace aliases to
+loaded spec sets from other libraries. Cross-library edges get `scope: CrossLibrary` and
+`library_id` pointing at the external library namespace.
+
+### Success Criteria
+
+- `spec validate` accepts `shared::money/round` syntax with `[libraries]` config.
+- Cross-library dep generates correct `use` statement in Rust output.
+- Cross-library cycle detection catches A→B→A across library boundaries.
+- Integration tests: valid cross-library dep, unknown namespace, missing dep, cycle.
+- Example project updated with a second spec library demonstrating the feature.
+
+---
+
+## M10 — Planning Boundary as Data
+
+**Theme:** Define the first minimal plan artifact without building a planning UI. Clarifies
+the architecture boundary between spec (verification) and planning (intent).
+
+**Prerequisite:** M8 graph layer complete. `graph.impact()` must be reliable.
+
+### Plan Artifact Schema (.plan.spec)
+
+```yaml
+# feature-name.plan.spec
+id: checkout-tax-refactor
+intent: "Refactor tax calculation to support tiered rates."
+changes:
+  - unit: pricing/apply_tax
+    action: modify
+    acceptance: "apply_tax correctly handles tiered rates per test suite"
+  - unit: pricing/tiered_rate
+    action: add
+    acceptance: "new unit validates and generates"
+impacted:
+  - pricing/apply_discount  # downstream dep computed by spec
+  - pricing/checkout_flow   # molecule test that covers apply_tax
+```
+
+The `impacted` list is computed by `graph.impact()` at plan-read time and included in the
+export. It is advisory — it tells the implementer what else to re-test, not what to change.
+
+### CLI
+
+`spec plan validate <path>` — validate plan artifact, compute impact set, report.
+
+`spec plan export <path>` — include plan artifact in export bundle.
+
+No plan execution, no plan tracking, no planning UI in M10. The plan is a data artifact
+that AI agents and humans read to understand scope. The value is making the intent explicit
+and machine-readable, not automating the work.
+
+### Success Criteria
+
+- `spec plan validate` accepts `.plan.spec` files, validates unit ids exist, computes
+  impact via `graph.impact()`.
+- Export includes plan artifact and computed `impacted` list.
+- Schema documented in AGENTS.md so AI agents can read and write plan artifacts.
+- Integration tests: valid plan, unknown unit id, impact computation.
+
+---
+
+## Failure Modes
+
+| Codepath | Production failure mode | Test covers? | Error handling? | Silent? |
+|---|---|---|---|---|
+| Default output anchored to crate root | crate_root not resolved (no Cargo.toml) | yes (workspace_root_for tests) | bail with clear message | no |
+| Evidence preservation in write_passports | passport file corrupted on disk | via serde deserialize | returns None, writes fresh | no |
+| 6-state status transitions | clock skew between observed_at and now | N/A | timestamp is informational | no |
+| .test.spec covers validation | covers unit deleted after test authored | yes (integration) | SPEC_MOLECULE_COVERS_NOT_FOUND | no |
+| graph.impact() | cycle in dep graph (already caught by validate) | yes (cycle tests) | bail before graph build | no |
+| Cross-library dep resolution | [libraries] path not found on disk | partial | needs explicit test | **critical gap** |
+| Plan artifact impact computation | graph built from stale spec files | no caching | always rebuilds | no |
+
+**Critical gap:** M9 needs an explicit test that `spec validate` fails with a clear error
+when a `[libraries]` path does not exist on disk.
+
+---
+
+## NOT in Scope (Deferred)
+
+- TypeScript / Python / Go generator targets (moved from M5 design doc; re-evaluate after M8)
+- `ValidatedExpr` as a public library type (bundled into structural PR as internal refactor only)
+- Observed coverage edges (molecule tests declare coverage; observation requires instrumentation)
+- Molecule test passports / evidence tracking (molecule tests run via cargo test, but status
+  tracking for them deferred until M8 graph is solid)
+- Nextest support (detect nextest format and surface clear error rather than "unknown" — nice-to-have after M6a)
+- LLM semantic contract-vs-body scoring
+- CUE
+- Reverse ingestion
+
+---
+
+## What Already Exists (reuse, don't rebuild)
+
+| Sub-problem | Existing code |
+|---|---|
+| Crate root resolution | `pipeline.rs:workspace_root_for` |
+| Output path safety | `generator.rs:safe_output_path`, `ensure_output_marker` |
+| Stale detection | `commands.rs:contract_hash_for`, `write_passports` |
+| Cycle detection | `validator.rs:detect_cycles` |
+| Export bundle | `spec-core/src/export.rs:ExportBundle` |
+| Graph-like edges | `export.rs:GraphEdge` (promote to SpecGraph in M8) |
+| Error code registry | `commands.rs:spec_error_code` |
+| JSON fixture tests | `spec-cli/tests/fixtures/` |
+
+---
+
+## Worktree Parallelization
+
+M6a is a single workstream — all changes are tightly coupled (output path → module prefix
+→ test evidence → fixture regeneration). Sequential implementation.
+
+M6b (health model) can run in parallel with the structural PR since they touch different
+surfaces (status state machine vs. commands module split).
+
+M7 is sequential: loader → schema → validator → generator → export → tests.
+
+M8, M9, M10 are each sequential within themselves. M9 blocks on M8. M10 blocks on M8.
+M9 and M10 can run in parallel worktrees once M8 is merged.
+
+---
+
+## TODOS.md Updates
+
+The following TODOS items are closed or addressed by this plan:
+
+- `spec build/generate overwrites passport evidence` → fixed in M6a
+- `pipeline.rs eprintln! forward-compat` → fixed in M6a
+- `D5a newtype refactor (ValidatedExpr)` → bundled into structural PR
+- `nextest limitation documentation` → M6a doc task
+- `Cross-library dep IMPLEMENTATION` → M9
+- `M6: Semantic contract-vs-body comparison (LLM eval)` → deferred
+
+New TODOS to add:
+
+- `[M6a investigation] Auto-derive module prefix vs explicit config key: consider whether
+  generated_module_prefix config key can be eliminated entirely once auto-derivation is
+  validated in practice.`
+- `[M9 prerequisite] Explicit test: spec validate fails with clear error when [libraries]
+  path does not exist on disk.` (critical gap per failure modes table)
+- `[post-M6a] Nextest detection: instead of README note, detect nextest output format and
+  emit SPEC_UNSUPPORTED_TEST_RUNNER error rather than producing "unknown" test results.`
+
+---
+
+## Implementation Order
+
+**M6a first. Ship it before doing anything else.**
+
+```
+1. spec test ecommerce/units (confirm the bug reproduces)
+2. Fix output anchoring + auto-derive prefix
+3. Fix evidence preservation in write_passports
+4. Fix eprintln! compat in pipeline.rs
+5. Add nextest doc to README
+6. Regenerate + commit example passports
+7. cargo test --all → green
+8. /ship
+```
+
+Then structural PR (commands.rs split + ValidatedExpr).
+
+Then M6b (status health model).
+
+---
+
+**Document version:** 2026-04-12  
 **Review status:** Approved via /plan-eng-review  
-**Next review checkpoint:** Before /ship
+**Next review checkpoint:** Before /ship on M6a
 
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 4 | issues_open (stale, e533140) | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 7 | issues_found | schema_version type mismatch, impl order wrong, concurrency criterion misleading |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 8 | **CLEAR (PLAN)** | 7 issues, 1 critical gap, all resolved |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | M6 over-bundled, evidence retention vs. truthful pipeline tension, sequencing .test.spec before graph, 6-state status mixes dimensions — all resolved |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | **CLEAR (PLAN)** | 6 issues found, 0 unresolved, 1 critical gap (M9 missing-library test) |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
-| DX Review | `/plan-devex-review` | Developer experience gaps | 1 | issues_open (stale) | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-**CODEX:** 4 cross-model tensions: (1) error code rename vs freeze → user chose rename; (2) schema_version integer/string inconsistency → normalize to integer everywhere; (3) concurrent warning criterion misleading → corrected to "warning emitted"; (4) impl order wrong → timeout moved to Priority 1.
+**CODEX:** 6 tensions raised: (1) evidence retention vs. truthful pipeline → resolved by preserve+stale detection together; (2) M6 over-bundled → split into M6a/structural PR/M6b; (3) 6-state status mixes dimensions → explicit precedence rules defined; (4) module prefix config as band-aid → resolved by auto-derivation from crate root; (5) .test.spec before graph layer → resolved by minimal graph in M7 + full graph in M8; (6) declared covers edges can lie → documented as programmer claim, same status as deps.
 **UNRESOLVED:** 0
-**VERDICT:** ENG CLEARED — ready to implement. Run `cargo test --all` before starting, then implement in priority order: Timeout → Error Codes (+ schema_version fix + JSON tests) → Provenance → Refactors → Concurrent Warning.
+**VERDICT:** ENG CLEARED — implement in order: M6a → structural PR → M6b → M7 → M8 → M9/M10 parallel.
