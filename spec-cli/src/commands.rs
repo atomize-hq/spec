@@ -1947,7 +1947,7 @@ mod tests {
         for spec in specs {
             let resolved = ResolvedSpec::from_spec(spec.spec.clone());
             for (test_index, local_test) in spec.spec.local_tests.iter().enumerate() {
-                let full_name = expected_cargo_test_name(&resolved, output_prefix, &local_test.id);
+                let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
                 let status = if test_index % 11 == 0 { "FAILED" } else { "ok" };
                 stdout.push_str("test ");
                 stdout.push_str(&full_name);
@@ -2016,7 +2016,7 @@ mod tests {
             let mut test_results = Vec::new();
 
             for local_test in &spec.spec.local_tests {
-                let full_name = expected_cargo_test_name(&resolved, &output_prefix, &local_test.id);
+                let full_name = expected_cargo_test_name(&resolved, output_prefix, &local_test.id);
                 let observed = parsed_test_results.get(&full_name);
                 let (status, reason) = match observed {
                     Some(result) => (result.status.clone(), result.reason.clone()),
