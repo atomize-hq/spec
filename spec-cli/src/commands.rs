@@ -459,19 +459,23 @@ fn compute_health_status(
         }
     }
 
-    // 3. stale — contract hash changed since last test, including added/removed contracts
+    // 3. stale — contract hash changed since last test, including added/removed contracts.
+    //    Only fires when a passport exists (i.e. the unit has been tested before).
+    //    Without a passport there is nothing to compare against — falls through to untested.
     let stored_hash = passport.and_then(|p| p.contract_hash.as_deref());
-    let hash_changed = match (stored_hash, live_hash) {
-        (Some(stored), Some(live)) => stored != live,
-        (None, Some(_)) | (Some(_), None) => true,
-        (None, None) => false,
-    };
-    if hash_changed {
-        return HealthStatus {
-            status: "stale",
-            reason: Some("contract changed since last test".to_string()),
-            evidence_at,
+    if passport.is_some() {
+        let hash_changed = match (stored_hash, live_hash) {
+            (Some(stored), Some(live)) => stored != live,
+            (None, Some(_)) | (Some(_), None) => true, // contract added or removed since last test
+            (None, None) => false,
         };
+        if hash_changed {
+            return HealthStatus {
+                status: "stale",
+                reason: Some("contract changed since last test".to_string()),
+                evidence_at,
+            };
+        }
     }
 
     // 4. incomplete — unobserved tests (requires evidence)
