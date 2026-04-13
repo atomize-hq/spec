@@ -67,6 +67,25 @@ fn temp_repo_dir() -> tempfile::TempDir {
     tempfile::TempDir::new_in(std::env::current_dir().unwrap()).unwrap()
 }
 
+fn setup_apply_discount_unit() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+body:
+  rust: |
+    { }
+"#,
+    );
+    (temp_dir, units_dir)
+}
+
 fn git_available() -> bool {
     Command::new("git").arg("--version").output().is_ok()
 }
@@ -3581,21 +3600,7 @@ body:
 
 #[test]
 fn spec_status_untested_unit() {
-    let temp_dir = temp_repo_dir();
-    let units_dir = temp_dir.path().join("units");
-    write_spec(
-        &units_dir,
-        "pricing/apply_discount.unit.spec",
-        r#"
-id: pricing/apply_discount
-kind: function
-intent:
-  why: Apply a discount.
-body:
-  rust: |
-    { }
-"#,
-    );
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
     // No passport written — unit has no evidence.
 
     let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
@@ -3611,21 +3616,7 @@ body:
 
 #[test]
 fn spec_status_failing_build() {
-    let temp_dir = temp_repo_dir();
-    let units_dir = temp_dir.path().join("units");
-    write_spec(
-        &units_dir,
-        "pricing/apply_discount.unit.spec",
-        r#"
-id: pricing/apply_discount
-kind: function
-intent:
-  why: Apply a discount.
-body:
-  rust: |
-    { }
-"#,
-    );
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
     write_file(
         &units_dir,
         "pricing/apply_discount.spec.passport.json",
@@ -3657,22 +3648,41 @@ body:
 }
 
 #[test]
-fn spec_status_failing_test() {
-    let temp_dir = temp_repo_dir();
-    let units_dir = temp_dir.path().join("units");
-    write_spec(
+fn spec_status_failing_timeout() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    write_file(
         &units_dir,
-        "pricing/apply_discount.unit.spec",
-        r#"
-id: pricing/apply_discount
-kind: function
-intent:
-  why: Apply a discount.
-body:
-  rust: |
-    { }
-"#,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "timeout",
+    "test_results": [],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
     );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "timed out unit should exit 1");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "failing");
+    assert_eq!(units[0]["reason"], "build timed out");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+    assert_stdout_json_matches_fixture(&output, "status-failing-timeout.json");
+}
+
+#[test]
+fn spec_status_failing_test() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
     write_file(
         &units_dir,
         "pricing/apply_discount.spec.passport.json",
@@ -3705,22 +3715,43 @@ body:
 }
 
 #[test]
-fn spec_status_incomplete() {
-    let temp_dir = temp_repo_dir();
-    let units_dir = temp_dir.path().join("units");
-    write_spec(
+fn spec_status_failing_tests_plural() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
+    write_file(
         &units_dir,
-        "pricing/apply_discount.unit.spec",
-        r#"
-id: pricing/apply_discount
-kind: function
-intent:
-  why: Apply a discount.
-body:
-  rust: |
-    { }
-"#,
+        "pricing/apply_discount.spec.passport.json",
+        r#"{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount.",
+  "deps": [],
+  "local_tests": [],
+  "generated_at": "2024-01-02T03:04:05Z",
+  "source_file": "pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {"id": "happy_path", "status": "fail"},
+      {"id": "sad_path", "status": "fail"}
+    ],
+    "observed_at": "2024-01-02T03:04:05Z"
+  }
+}"#,
     );
+
+    let output = run(&["status", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "plural failing tests should exit 1");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "failing");
+    assert_eq!(units[0]["reason"], "2 tests failed");
+    assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
+}
+
+#[test]
+fn spec_status_incomplete() {
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
     write_file(
         &units_dir,
         "pricing/apply_discount.spec.passport.json",
@@ -3755,23 +3786,7 @@ body:
 
 #[test]
 fn spec_status_failing_beats_stale() {
-    let temp_dir = temp_repo_dir();
-    let units_dir = temp_dir.path().join("units");
-    write_spec(
-        &units_dir,
-        "pricing/apply_discount.unit.spec",
-        r#"
-id: pricing/apply_discount
-kind: function
-intent:
-  why: Apply a discount.
-contract:
-  returns: i32
-body:
-  rust: |
-    { 42 }
-"#,
-    );
+    let (_temp_dir, units_dir) = setup_apply_discount_unit();
     // Passport has a stale hash AND a build failure — failing should win.
     write_file(
         &units_dir,
