@@ -11,6 +11,18 @@ use wait_timeout::ChildExt;
 /// Matches the convention used by the POSIX `timeout(1)` command.
 const TIMEOUT_EXIT_CODE: i32 = 124;
 
+/// Controls whether `run_cargo_build` and `run_cargo_test` emit status lines
+/// to stderr. Use `Normal` for interactive CLI invocations; use `Silent` when
+/// the caller manages its own output format (e.g., `--format json` on build/test,
+/// once those flags are added).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verbosity {
+    /// Emit "spec: running cargo …" lines to stderr.
+    Normal,
+    /// Suppress all status output from the pipeline helpers.
+    Silent,
+}
+
 pub struct CargoResult {
     pub exit_code: i32,
     pub stdout: String,
@@ -79,9 +91,9 @@ pub fn run_cargo_build(
     crate_root: &Path,
     cargo_target_dir: &Path,
     timeout: Option<Duration>,
-    verbose: bool,
+    verbosity: Verbosity,
 ) -> Result<CargoResult> {
-    if verbose {
+    if matches!(verbosity, Verbosity::Normal) {
         eprintln!("spec: running cargo build in {}", crate_root.display());
     }
     run_cargo(crate_root, &["build"], cargo_target_dir, timeout)
@@ -92,9 +104,9 @@ pub fn run_cargo_test(
     cargo_target_dir: &Path,
     filter: Option<&str>,
     timeout: Option<Duration>,
-    verbose: bool,
+    verbosity: Verbosity,
 ) -> Result<CargoResult> {
-    if verbose {
+    if matches!(verbosity, Verbosity::Normal) {
         eprintln!("spec: running cargo test in {}", crate_root.display());
     }
     let args = cargo_test_args(filter);

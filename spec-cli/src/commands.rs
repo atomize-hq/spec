@@ -14,7 +14,7 @@ use spec_core::passport::{
     compute_contract_hash, ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
-    ParsedCargoTestResult, cargo_available, parse_cargo_test_output, run_cargo_build,
+    ParsedCargoTestResult, Verbosity, cargo_available, parse_cargo_test_output, run_cargo_build,
     run_cargo_test, workspace_root_for, zero_tests_ran,
 };
 use spec_core::types::{LoadedSpec, ResolvedSpec};
@@ -621,13 +621,21 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
     };
     let resolved_output: PathBuf = match output {
         Some(p) => p.to_path_buf(),
-        None => workspace_root_for(spec_root)?.join("src/generated"),
+        None => {
+            // Use the same crate-root precedence as build/test:
+            // spec.toml [pipeline] crate_root → ancestor Cargo.toml walk.
+            let config = load_workspace_config(path)?;
+            let crate_root = match config.pipeline.crate_root.as_deref() {
+                Some(p) => p.to_path_buf(),
+                None => workspace_root_for(spec_root)?,
+            };
+            crate_root.join("src/generated")
+        }
     };
     let generated = generate_specs(path, &resolved_output)?;
     if !generated.specs.is_empty() {
-        let passport_root = spec_root;
         finalize_passports(
-            passport_root,
+            spec_root,
             &generated.specs,
             &generated.generated_at,
             None,
@@ -904,7 +912,7 @@ fn build_command(
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
-    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout, true)?;
+    let result = run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout, Verbosity::Normal)?;
     print!("{}", result.stdout);
     eprint!("{}", result.stderr);
     if result.timed_out {
@@ -955,26 +963,20 @@ fn test_command(
     let passport_write_plan =
         passport_write_plan(path, spec_root, &generated.specs, target_spec.as_ref());
 
-    let output_prefix = if target_spec.is_some() {
-        let prefix = match &config.pipeline.generated_module_prefix {
-            Some(explicit) => explicit.clone(),
-            None => output_module_prefix(&resolved_output, &ctx.crate_root)?,
-        };
-        Some(prefix)
-    } else {
-        None
+    // Resolve the module prefix once — used for both the cargo test filter and
+    // evidence lookup. A single resolved value ensures they always agree.
+    let effective_prefix = match &config.pipeline.generated_module_prefix {
+        Some(explicit) => explicit.clone(),
+        None => output_module_prefix(&resolved_output, &ctx.crate_root)?,
     };
-    let filter = match (target_spec.as_ref(), output_prefix.as_deref()) {
-        (Some(target), Some(prefix)) => {
-            let resolved = ResolvedSpec::from_spec(target.spec.clone());
-            Some(cargo_test_filter_for(&resolved, prefix))
-        }
-        _ => None,
-    };
+    let filter = target_spec.as_ref().map(|target| {
+        let resolved = ResolvedSpec::from_spec(target.spec.clone());
+        cargo_test_filter_for(&resolved, &effective_prefix)
+    });
 
     let provenance = resolve_git_provenance(&ctx.crate_root);
     let build_result =
-        run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout, true)?;
+        run_cargo_build(&ctx.crate_root, &ctx.cargo_target_dir, ctx.timeout, Verbosity::Normal)?;
     print!("{}", build_result.stdout);
     eprint!("{}", build_result.stderr);
     if build_result.timed_out {
@@ -1009,7 +1011,7 @@ fn test_command(
         &ctx.cargo_target_dir,
         filter.as_deref(),
         ctx.timeout,
-        true,
+        Verbosity::Normal,
     )?;
     print!("{}", test_result.stdout);
     eprint!("{}", test_result.stderr);
@@ -1035,11 +1037,10 @@ fn test_command(
     let observed_at = rfc3339_now();
     let evidence_by_spec = build_test_evidence(
         passport_write_plan.specs,
-        &resolved_output,
+        &effective_prefix,
         &parsed_test_results,
         &observed_at,
         provenance.as_ref(),
-        &ctx.crate_root,
     )?;
     let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
     finalize_test_passports(
@@ -1213,13 +1214,11 @@ fn concurrent_passport_write_warning_message(
 
 fn build_test_evidence(
     specs: &[LoadedSpec],
-    output: &Path,
+    output_prefix: &str,
     parsed_test_results: &HashMap<String, ParsedCargoTestResult>,
     observed_at: &str,
     provenance: Option<&ArtifactProvenance>,
-    crate_root: &Path,
 ) -> Result<BTreeMap<String, PassportEvidence>> {
-    let output_prefix = output_module_prefix(output, crate_root)?;
     let mut evidence_by_spec = BTreeMap::new();
 
     for spec in specs {
@@ -1989,13 +1988,11 @@ mod tests {
 
     fn build_test_evidence_btree_baseline(
         specs: &[LoadedSpec],
-        output: &Path,
+        output_prefix: &str,
         parsed_test_results: &BTreeMap<String, ParsedCargoTestResult>,
         observed_at: &str,
         provenance: Option<&ArtifactProvenance>,
-        crate_root: &Path,
     ) -> Result<BTreeMap<String, PassportEvidence>> {
-        let output_prefix = output_module_prefix(output, crate_root)?;
         let mut evidence_by_spec = BTreeMap::new();
 
         for spec in specs {
@@ -2302,6 +2299,60 @@ extra_field: nope
     }
 
     #[test]
+    fn output_module_prefix_absolute_crate_root_strips_src() {
+        // Primary production path: absolute crate_root + absolute output under {crate_root}/src/
+        let crate_root = Path::new("/home/user/myproject");
+        assert_eq!(
+            output_module_prefix(
+                &PathBuf::from("/home/user/myproject/src/generated"),
+                crate_root
+            )
+            .unwrap(),
+            "generated"
+        );
+        assert_eq!(
+            output_module_prefix(
+                &PathBuf::from("/home/user/myproject/src/generated/spec"),
+                crate_root
+            )
+            .unwrap(),
+            "generated::spec"
+        );
+        assert_eq!(
+            output_module_prefix(
+                &PathBuf::from("/home/user/myproject/src/api/gen"),
+                crate_root
+            )
+            .unwrap(),
+            "api::gen"
+        );
+    }
+
+    #[test]
+    fn output_module_prefix_relative_path_fallback_strips_src_component() {
+        // Fallback path: relative output (e.g., explicit --output src/generated with relative CWD)
+        let crate_root = Path::new("");
+        assert_eq!(
+            output_module_prefix(Path::new("src/generated"), crate_root).unwrap(),
+            "generated"
+        );
+        assert_eq!(
+            output_module_prefix(Path::new("src/generated/spec"), crate_root).unwrap(),
+            "generated::spec"
+        );
+    }
+
+    #[test]
+    fn output_module_prefix_no_src_prefix_preserved() {
+        // Output not under src/ — kept as-is (user likely set generated_module_prefix explicitly)
+        let crate_root = Path::new("/home/user/myproject");
+        assert_eq!(
+            output_module_prefix(Path::new("generated"), crate_root).unwrap(),
+            "generated"
+        );
+    }
+
+    #[test]
     fn build_test_evidence_preserves_found_missing_and_duplicate_statuses() {
         let output = Path::new("src/generated");
         let crate_root = Path::new("");
@@ -2327,11 +2378,10 @@ extra_field: nope
 
         let evidence = build_test_evidence(
             std::slice::from_ref(&spec),
-            output,
+            &output_prefix,
             &parsed_test_results,
             "2026-04-11T12:00:00Z",
             None,
-            crate_root,
         )
         .unwrap();
 
@@ -2355,26 +2405,25 @@ extra_field: nope
     fn benchmark_parse_and_evidence_hash_lookup_against_btree_baseline() {
         let output = Path::new("src/generated");
         let crate_root = Path::new("");
+        let output_prefix = output_module_prefix(output, crate_root).unwrap();
         let specs = benchmark_specs(600, 8);
         let stdout = benchmark_stdout(&specs, output, crate_root);
         let observed_at = "2026-04-11T12:00:00Z";
 
         let baseline_evidence = build_test_evidence_btree_baseline(
             &specs,
-            output,
+            &output_prefix,
             &parse_cargo_test_output_btree_baseline(&stdout),
             observed_at,
             None,
-            crate_root,
         )
         .unwrap();
         let hash_evidence = build_test_evidence(
             &specs,
-            output,
+            &output_prefix,
             &parse_cargo_test_output(&stdout),
             observed_at,
             None,
-            crate_root,
         )
         .unwrap();
         assert_eq!(hash_evidence, baseline_evidence);
@@ -2390,7 +2439,7 @@ extra_field: nope
         for _ in 0..ITERS {
             let parsed = parse_cargo_test_output_btree_baseline(std::hint::black_box(&stdout));
             let evidence =
-                build_test_evidence_btree_baseline(&specs, output, &parsed, observed_at, None, crate_root)
+                build_test_evidence_btree_baseline(&specs, &output_prefix, &parsed, observed_at, None)
                     .unwrap();
             std::hint::black_box(evidence);
         }
@@ -2399,7 +2448,7 @@ extra_field: nope
         let hash_started = Instant::now();
         for _ in 0..ITERS {
             let parsed = parse_cargo_test_output(std::hint::black_box(&stdout));
-            let evidence = build_test_evidence(&specs, output, &parsed, observed_at, None, crate_root).unwrap();
+            let evidence = build_test_evidence(&specs, &output_prefix, &parsed, observed_at, None).unwrap();
             std::hint::black_box(evidence);
         }
         let hash_elapsed = hash_started.elapsed();
