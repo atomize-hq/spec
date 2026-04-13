@@ -36,7 +36,7 @@ type CollectedSpecs = (
 );
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
 
-const JSON_SCHEMA_VERSION: u8 = 1;
+const JSON_SCHEMA_VERSION: u8 = 2;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,10 +65,11 @@ struct JsonStatusResponse {
 struct JsonStatusUnit {
     id: String,
     status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
     errors: Vec<JsonErrorEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
     evidence_at: Option<String>,
-    stale: bool,
 }
 
 #[derive(Serialize)]
@@ -421,6 +422,84 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
     }
 }
 
+struct HealthStatus {
+    status: &'static str,
+    reason: Option<String>,
+    evidence_at: Option<String>,
+}
+
+fn compute_health_status(
+    errors: &[JsonErrorEntry],
+    passport: Option<&spec_core::passport::Passport>,
+    live_hash: Option<&str>,
+) -> HealthStatus {
+    // 1. invalid
+    if !errors.is_empty() {
+        return HealthStatus { status: "invalid", reason: None, evidence_at: None };
+    }
+
+    let evidence = passport.and_then(|p| p.evidence.as_ref());
+    let evidence_at = evidence.map(|e| e.observed_at.clone());
+
+    // 2. failing — build failure or any test fail (requires evidence; failing beats stale)
+    if let Some(ev) = evidence {
+        let build_failed = ev.build_status != "pass";
+        let any_test_failed = ev.test_results.iter().any(|r| r.status == "fail");
+        if build_failed || any_test_failed {
+            let reason = if build_failed {
+                match ev.build_status.as_str() {
+                    "timeout" => "build timed out".to_string(),
+                    _ => "build failed".to_string(),
+                }
+            } else {
+                let n = ev.test_results.iter().filter(|r| r.status == "fail").count();
+                format!("{} test{} failed", n, if n == 1 { "" } else { "s" })
+            };
+            return HealthStatus { status: "failing", reason: Some(reason), evidence_at };
+        }
+    }
+
+    // 3. stale — hash mismatch (only when both hashes present; does not require evidence)
+    let stored_hash = passport.and_then(|p| p.contract_hash.as_deref());
+    if let (Some(stored), Some(live)) = (stored_hash, live_hash) {
+        if stored != live {
+            return HealthStatus {
+                status: "stale",
+                reason: Some("contract changed since last test".to_string()),
+                evidence_at,
+            };
+        }
+    }
+
+    // 4. incomplete — unobserved tests (requires evidence)
+    if let Some(ev) = evidence {
+        let unknown_count = ev.test_results.iter().filter(|r| r.status == "unknown").count();
+        if unknown_count > 0 {
+            return HealthStatus {
+                status: "incomplete",
+                reason: Some(format!(
+                    "{} test{} not observed in cargo output",
+                    unknown_count,
+                    if unknown_count == 1 { "" } else { "s" }
+                )),
+                evidence_at,
+            };
+        }
+    }
+
+    // 5. untested — no passport or no evidence
+    if evidence.is_none() {
+        return HealthStatus {
+            status: "untested",
+            reason: Some("no evidence".to_string()),
+            evidence_at: None,
+        };
+    }
+
+    // 6. valid
+    HealthStatus { status: "valid", reason: None, evidence_at }
+}
+
 fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
     let (specs, loader_errors, _loader_warnings, total_files) = collect_specs(path)?;
     let config = load_workspace_config(path)?;
@@ -482,7 +561,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
     }
 
     let mut units = Vec::with_capacity(specs.len());
-    let mut has_invalid_or_stale = has_loader_errors;
+    let mut needs_nonzero_exit = has_loader_errors;
 
     for spec in &specs {
         let source_path = Path::new(&spec.source.file_path);
@@ -502,38 +581,18 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         let errors = errors_by_path
             .remove(&spec.source.file_path)
             .unwrap_or_default();
-        let invalid = !errors.is_empty();
-        let stale = !invalid
-            && passport
-                .as_ref()
-                .and_then(|p| p.contract_hash.as_ref())
-                .is_some_and(|passport_hash| live_hash.as_deref() != Some(passport_hash.as_str()));
-        let evidence_at = if invalid {
-            None
-        } else {
-            passport
-                .as_ref()
-                .and_then(|p| p.evidence.as_ref())
-                .map(|e| e.observed_at.clone())
-        };
-        let status = if invalid {
-            "invalid"
-        } else if stale {
-            "stale"
-        } else {
-            "valid"
-        };
+        let health = compute_health_status(&errors, passport.as_ref(), live_hash.as_deref());
 
-        if invalid || stale {
-            has_invalid_or_stale = true;
+        if health.status != "valid" {
+            needs_nonzero_exit = true;
         }
 
         units.push(JsonStatusUnit {
             id: spec.spec.id.clone(),
-            status,
+            status: health.status,
+            reason: health.reason,
             errors,
-            evidence_at,
-            stale,
+            evidence_at: health.evidence_at,
         });
     }
 
@@ -555,7 +614,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         }
     }
 
-    if has_invalid_or_stale {
+    if needs_nonzero_exit {
         std::process::exit(1);
     }
 
@@ -1756,16 +1815,13 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
 
 fn print_status_unit(unit: &JsonStatusUnit) {
     let symbol = match unit.status {
-        "valid" => {
-            if unit.evidence_at.is_some() {
-                "✓"
-            } else {
-                "—"
-            }
-        }
-        "invalid" => "✗",
-        "stale" => "~",
-        _ => "?",
+        "valid"      => "✓",
+        "untested"   => "—",
+        "incomplete" => "?",
+        "stale"      => "~",
+        "failing"    => "✗",
+        "invalid"    => "✗",
+        _            => "?",
     };
 
     let detail = match unit.status {
@@ -1774,17 +1830,17 @@ fn print_status_unit(unit: &JsonStatusUnit) {
             unit.errors.len(),
             pluralize(unit.errors.len())
         ),
-        "stale" => match &unit.evidence_at {
-            Some(ts) => format!("evidence:{ts}  (contract changed)"),
-            None => "no-evidence  (contract changed)".to_string(),
-        },
-        _ => match &unit.evidence_at {
-            Some(ts) => format!("evidence:{ts}"),
-            None => "no-evidence".to_string(),
+        _ => match &unit.reason {
+            Some(r) => r.clone(),
+            None => match &unit.evidence_at {
+                Some(ts) => format!("evidence:{ts}"),
+                None => String::new(),
+            },
         },
     };
 
-    println!("{symbol} {:<32} {:<7} {detail}", unit.id, unit.status);
+    // Width 10 accommodates "incomplete" (longest state = 10 chars)
+    println!("{symbol} {:<32} {:<10} {detail}", unit.id, unit.status);
     if unit.status == "invalid" {
         for entry in &unit.errors {
             println!("  · {}", json_error_entry_to_human(entry));
