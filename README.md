@@ -133,7 +133,7 @@ spec test  <path>                         # spec build → cargo test, writes ev
 spec test  <path> --output <dir>          # explicit output directory
 spec test  <path/to/unit.unit.spec>       # scope to a single unit (filter by module path)
 
-spec status <path>                        # per-unit status: valid/invalid/stale/no-evidence
+spec status <path>                        # per-unit health: valid/invalid/stale/incomplete/untested/failing
 spec status <path> --format json          # machine-readable status for agents
 
 spec export <path>                        # emit JSON bundle to stdout
@@ -162,7 +162,7 @@ spec validate examples/ecommerce/units --format json
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "status": "invalid",
   "errors": [
     {
@@ -178,12 +178,14 @@ spec validate examples/ecommerce/units --format json
 
 That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose.
 
-`spec status` uses simple symbols so you can scan a whole tree quickly:
+`spec status` uses simple symbols so you can scan a whole tree quickly. Any unit whose
+status is not `valid` exits with code `1`.
 
-- `✓` valid with evidence
-- `✗` invalid
-- `~` stale passport
-- `—` valid but no evidence yet
+- `✓` valid
+- `✗` invalid or failing
+- `~` stale
+- `?` incomplete
+- `—` untested
 
 Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/SKILL.md) when you want the full workflow spelled out for an AI coding session.
 
