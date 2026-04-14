@@ -2123,8 +2123,9 @@ body:
             "pricing/checkout_flow",
             vec!["pricing/apply_discount", "pricing/apply_tax"],
         );
-        let unit_ids: HashSet<&str> =
-            ["pricing/apply_discount", "pricing/apply_tax"].into_iter().collect();
+        let unit_ids: HashSet<&str> = ["pricing/apply_discount", "pricing/apply_tax"]
+            .into_iter()
+            .collect();
 
         let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
 
@@ -2193,7 +2194,10 @@ body:
 "#;
         let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
         let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
-        assert!(result.is_ok(), "valid molecule test YAML should pass: {result:?}");
+        assert!(
+            result.is_ok(),
+            "valid molecule test YAML should pass: {result:?}"
+        );
     }
 
     #[test]

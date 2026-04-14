@@ -1163,7 +1163,8 @@ mod tests {
     #[test]
     fn generate_molecule_tests_code_zero_covers_emits_test_fn_no_use_statements() {
         // A test with no covers should emit the #[test] function but no `use crate::` lines.
-        let test = make_resolved_molecule_test("pricing/standalone_flow", vec![], "{ assert!(true); }");
+        let test =
+            make_resolved_molecule_test("pricing/standalone_flow", vec![], "{ assert!(true); }");
         let specs_by_id: HashMap<&str, &ResolvedSpec> = HashMap::new();
 
         let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
