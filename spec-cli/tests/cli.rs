@@ -870,6 +870,19 @@ body:
 fn generate_empty_directory_reports_zero_units() {
     let temp_dir = temp_repo_dir();
     let output_dir = temp_dir.path().join("generated/spec");
+    fs::create_dir_all(output_dir.join("pricing")).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+    fs::write(output_dir.join("mod.rs"), "pub mod pricing;\n").unwrap();
+    fs::write(
+        output_dir.join("pricing/mod.rs"),
+        "pub mod molecule_tests;\n",
+    )
+    .unwrap();
+    fs::write(
+        output_dir.join("pricing/molecule_tests.rs"),
+        "#[test]\nfn stale() { assert!(false, \"stale molecule\"); }\n",
+    )
+    .unwrap();
 
     let output = run(&[
         "generate",
@@ -881,6 +894,85 @@ fn generate_empty_directory_reports_zero_units() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("0 units found, nothing to generate"));
+    assert!(
+        !output_dir.join("mod.rs").exists(),
+        "stale root mod.rs should be removed"
+    );
+    assert!(
+        !output_dir.join("pricing/molecule_tests.rs").exists(),
+        "stale molecule_tests.rs should be removed"
+    );
+    assert!(
+        !output_dir.join("pricing").exists(),
+        "empty namespace directories should be removed"
+    );
+}
+
+#[test]
+fn generate_directory_with_only_molecule_tests_fails_and_cleans_stale_output() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("src/generated");
+
+    write_spec(
+        &units_dir,
+        "pricing/only.test.spec",
+        r#"id: pricing/only
+spec_version: "0.3.0"
+intent:
+  why: Exercise the molecule-only zero-unit path.
+covers:
+  - pricing/missing
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    fs::create_dir_all(output_dir.join("pricing")).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+    fs::write(output_dir.join("mod.rs"), "pub mod pricing;\n").unwrap();
+    fs::write(
+        output_dir.join("pricing/mod.rs"),
+        "pub mod molecule_tests;\n",
+    )
+    .unwrap();
+    fs::write(
+        output_dir.join("pricing/molecule_tests.rs"),
+        "#[test]\nfn stale() { assert!(false, \"stale molecule\"); }\n",
+    )
+    .unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "generate should fail for a molecule-only tree"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("pricing/missing"),
+        "expected missing cover diagnostic\nstderr: {stderr}"
+    );
+    assert!(
+        !output_dir.join("mod.rs").exists(),
+        "stale root mod.rs should be removed before failing"
+    );
+    assert!(
+        !output_dir.join("pricing/molecule_tests.rs").exists(),
+        "stale molecule_tests.rs should be removed before failing"
+    );
+    assert!(
+        !output_dir.join("pricing").exists(),
+        "empty namespace directories should be removed before failing"
+    );
 }
 
 #[test]
@@ -927,9 +1019,10 @@ local_tests:
     assert!(output.status.success());
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 1);
+    assert_eq!(bundle["schema_version"], 2);
     assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
     assert!(bundle.get("graph").is_some());
+    assert!(bundle.get("molecule_tests").is_some());
     assert!(bundle.get("warnings").is_some());
     assert!(String::from_utf8_lossy(&output.stderr).contains("spec_version not set"));
 }
@@ -1044,7 +1137,7 @@ body:
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         bundle["graph"]["edges"],
-        serde_json::json!([{ "from": "pricing/apply_discount", "to": "money/round" }])
+        serde_json::json!([{ "kind": "dep", "from": "pricing/apply_discount", "to": "money/round" }])
     );
 }
 
@@ -2470,6 +2563,65 @@ local_tests:
     .unwrap();
 
     pricing_dir.join("apply_tax.unit.spec")
+}
+
+fn write_single_file_test_scope_project(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    let pricing_dir = units_dir.join("pricing");
+    let src_dir = project_dir.join("src");
+
+    fs::create_dir_all(&pricing_dir).unwrap();
+    fs::create_dir_all(&src_dir).unwrap();
+
+    fs::write(
+        project_dir.join("Cargo.toml"),
+        "[package]\nname = \"single-file-test-scope\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(
+        src_dir.join("main.rs"),
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    )
+    .unwrap();
+
+    write_spec(
+        &units_dir,
+        "pricing/a.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/a
+kind: function
+intent:
+  why: Return true so the single-file test path has one local test to run.
+contract:
+  returns: bool
+body:
+  rust: |
+    {
+        true
+    }
+local_tests:
+  - id: happy_path
+    expect: a() == true
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/bad.test.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/bad
+intent:
+  why: Invalid molecule test used to prove single-file spec test stays scoped.
+covers:
+  - pricing/missing
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    pricing_dir.join("a.unit.spec")
 }
 
 // ── D2: Runtime evidence in passports ───────────────────────────────────────
@@ -4136,6 +4288,100 @@ fn spec_test_directory_path_unchanged() {
     );
 }
 
+#[test]
+fn single_file_test_skips_sibling_molecule_tests() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let spec_path = write_single_file_test_scope_project(project_dir);
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            spec_path.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success(
+        "single-file spec test should ignore sibling molecule specs",
+        &output,
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+    assert!(
+        !combined.contains("pricing/missing"),
+        "single-file spec test should not load sibling molecule specs\n{combined}"
+    );
+    assert!(
+        !combined.contains("pricing/bad"),
+        "single-file spec test should stay scoped to the target unit\n{combined}"
+    );
+
+    let target_passport = project_dir.join("units/pricing/a.spec.passport.json");
+    let sibling_molecule_passport = project_dir.join("units/pricing/bad.spec.passport.json");
+    assert!(
+        target_passport.exists(),
+        "expected target passport to be written"
+    );
+    assert!(
+        !sibling_molecule_passport.exists(),
+        "expected no passport for sibling molecule spec"
+    );
+
+    let target_passport = read_passport(&target_passport);
+    assert!(
+        target_passport.contains("\"status\": \"pass\""),
+        "{target_passport}"
+    );
+}
+
+#[test]
+fn directory_test_still_loads_sibling_molecule_tests() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    write_single_file_test_scope_project(project_dir);
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            units_dir.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "directory spec test should still load sibling molecule specs"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("pricing/missing") || stderr.contains("pricing/bad"),
+        "expected directory spec test to surface the invalid molecule spec\n{stderr}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn spec_test_respects_pipeline_timeout_secs() {
@@ -4192,5 +4438,1205 @@ fn spec_test_respects_pipeline_timeout_secs() {
     assert!(
         passport.contains("\"build_status\": \"timeout\""),
         "passport should record timeout evidence: {passport}"
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// M7: molecule test (.test.spec) integration tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Helper: write a minimal .test.spec file
+fn write_molecule_test_spec(units_dir: &Path, relative_path: &str, id: &str, covers: &[&str]) {
+    let covers_yaml = if covers.is_empty() {
+        "covers: []".to_string()
+    } else {
+        let items: Vec<String> = covers.iter().map(|c| format!("  - {c}")).collect();
+        format!("covers:\n{}", items.join("\n"))
+    };
+    let content = format!(
+        r#"id: {id}
+spec_version: "0.3.0"
+intent:
+  why: Test molecule for {id}.
+{covers_yaml}
+body:
+  rust: |
+    {{
+        assert!(true);
+    }}
+"#
+    );
+    write_spec(units_dir, relative_path, &content);
+}
+
+fn write_two_unit_molecule_fixture(units_dir: &Path) -> PathBuf {
+    write_spec(
+        units_dir,
+        "pricing/a.unit.spec",
+        r#"
+id: pricing/a
+kind: function
+intent:
+  why: Unit A.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+    write_spec(
+        units_dir,
+        "pricing/b.unit.spec",
+        r#"
+id: pricing/b
+kind: function
+intent:
+  why: Unit B.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+    write_molecule_test_spec(
+        units_dir,
+        "pricing/ab.test.spec",
+        "pricing/ab",
+        &["pricing/a", "pricing/b"],
+    );
+
+    units_dir.join("pricing/a.unit.spec")
+}
+
+fn write_molecule_test_target_unit(units_dir: &Path) {
+    write_spec(
+        units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+}
+
+fn write_indexed_unsafe_molecule_test(units_dir: &Path) {
+    let content = r#"id: pricing/unsafe_test
+spec_version: "0.3.0"
+intent:
+  why: Unsafe test that should be rejected.
+covers:
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        let _x = [unsafe { std::mem::zeroed::<u8>() }][0];
+    }
+"#;
+    write_spec(units_dir, "pricing/unsafe_test.test.spec", content);
+}
+
+#[test]
+fn valid_molecule_test_validates() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    // Write a unit spec that the molecule test covers
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Write a valid molecule test
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/discount_test.test.spec",
+        "pricing/discount_test",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert_output_success("valid_molecule_test_validates", &output);
+}
+
+#[test]
+fn molecule_test_unknown_covers_id_fails() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Molecule test covers a unit that doesn't exist
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/bad_test.test.spec",
+        "pricing/bad_test",
+        &["pricing/nonexistent_unit"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail when covers references unknown unit"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stderr.contains("nonexistent_unit") || stdout.contains("nonexistent_unit"),
+        "error should mention the missing unit id\nstdout: {stdout}\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn molecule_test_generates_molecule_tests_rs() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/discount_test.test.spec",
+        "pricing/discount_test",
+        &["pricing/apply_discount"],
+    );
+
+    // Create marker so generate doesn't complain about non-empty dir
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("molecule_test_generates_molecule_tests_rs", &output);
+
+    let molecule_tests_rs = output_dir.join("pricing/molecule_tests.rs");
+    assert!(
+        molecule_tests_rs.exists(),
+        "pricing/molecule_tests.rs should be generated: {}",
+        molecule_tests_rs.display()
+    );
+
+    let mod_rs = output_dir.join("pricing/mod.rs");
+    assert!(mod_rs.exists(), "pricing/mod.rs should exist");
+    let mod_content = fs::read_to_string(&mod_rs).unwrap();
+    assert!(
+        mod_content.contains("pub mod molecule_tests;"),
+        "pricing/mod.rs should declare molecule_tests module\ncontent: {mod_content}"
+    );
+
+    let root_mod = output_dir.join("mod.rs");
+    assert!(root_mod.exists(), "root mod.rs should exist");
+    let root_mod_content = fs::read_to_string(&root_mod).unwrap();
+    assert!(
+        root_mod_content.contains("pub mod pricing;"),
+        "root mod.rs should declare pricing module\ncontent: {root_mod_content}"
+    );
+}
+
+#[test]
+fn molecule_only_namespace_generates_module_tree() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_molecule_test_spec(
+        &units_dir,
+        "qa/sample.test.spec",
+        "qa/sample",
+        &["pricing/apply_discount"],
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("molecule_only_namespace_generates_module_tree", &output);
+
+    let root_mod_content = fs::read_to_string(output_dir.join("mod.rs")).unwrap();
+    assert!(
+        root_mod_content.contains("pub mod qa;"),
+        "root mod.rs should declare qa module\ncontent: {root_mod_content}"
+    );
+
+    let qa_mod_content = fs::read_to_string(output_dir.join("qa/mod.rs")).unwrap();
+    assert!(
+        qa_mod_content.contains("pub mod molecule_tests;"),
+        "qa/mod.rs should declare molecule_tests module\ncontent: {qa_mod_content}"
+    );
+
+    assert!(
+        output_dir.join("qa/molecule_tests.rs").exists(),
+        "qa/molecule_tests.rs should be generated"
+    );
+}
+
+#[test]
+fn nested_molecule_only_namespace_generates_parent_modules() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_molecule_test_spec(
+        &units_dir,
+        "qa/sub/sample.test.spec",
+        "qa/sub/sample",
+        &["pricing/apply_discount"],
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "nested_molecule_only_namespace_generates_parent_modules",
+        &output,
+    );
+
+    let root_mod_content = fs::read_to_string(output_dir.join("mod.rs")).unwrap();
+    assert!(
+        root_mod_content.contains("pub mod qa;"),
+        "root mod.rs should declare qa module\ncontent: {root_mod_content}"
+    );
+
+    let qa_mod_content = fs::read_to_string(output_dir.join("qa/mod.rs")).unwrap();
+    assert!(
+        qa_mod_content.contains("pub mod sub;"),
+        "qa/mod.rs should declare sub module\ncontent: {qa_mod_content}"
+    );
+    assert!(
+        !qa_mod_content.contains("pub mod molecule_tests;"),
+        "qa/mod.rs should not declare molecule_tests directly\ncontent: {qa_mod_content}"
+    );
+
+    let nested_mod_content = fs::read_to_string(output_dir.join("qa/sub/mod.rs")).unwrap();
+    assert!(
+        nested_mod_content.contains("pub mod molecule_tests;"),
+        "qa/sub/mod.rs should declare molecule_tests module\ncontent: {nested_mod_content}"
+    );
+
+    assert!(
+        output_dir.join("qa/sub/molecule_tests.rs").exists(),
+        "qa/sub/molecule_tests.rs should be generated"
+    );
+}
+
+#[test]
+fn generate_removes_stale_molecule_module_declarations() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_molecule_test_target_unit(&units_dir);
+    let qa_test_path = units_dir.join("qa/sample.test.spec");
+    write_molecule_test_spec(
+        &units_dir,
+        "qa/sample.test.spec",
+        "qa/sample",
+        &["pricing/apply_discount"],
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let first_output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "generate_removes_stale_molecule_module_declarations first pass",
+        &first_output,
+    );
+
+    fs::remove_file(&qa_test_path).unwrap();
+
+    let second_output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "generate_removes_stale_molecule_module_declarations second pass",
+        &second_output,
+    );
+
+    let root_mod_content = fs::read_to_string(output_dir.join("mod.rs")).unwrap();
+    assert!(
+        !root_mod_content.contains("pub mod qa;"),
+        "root mod.rs should not retain stale qa module\ncontent: {root_mod_content}"
+    );
+
+    assert!(
+        !output_dir.join("qa/molecule_tests.rs").exists(),
+        "qa/molecule_tests.rs should be removed after molecule test deletion"
+    );
+    assert!(
+        !output_dir.join("qa/mod.rs").exists(),
+        "qa/mod.rs should be removed after molecule test deletion"
+    );
+    assert!(
+        !output_dir.join("qa").exists(),
+        "empty qa directory should be removed after molecule test deletion"
+    );
+}
+
+#[test]
+fn export_includes_molecule_tests_and_covers_edges() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/discount_test.test.spec",
+        "pricing/discount_test",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert_output_success("export_includes_molecule_tests_and_covers_edges", &output);
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let molecule_tests = bundle["molecule_tests"].as_array().unwrap();
+    assert!(
+        !molecule_tests.is_empty(),
+        "molecule_tests array should be non-empty"
+    );
+
+    let covers_edges: Vec<&Value> = bundle["graph"]["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] == "covers")
+        .collect();
+    assert!(
+        !covers_edges.is_empty(),
+        "graph.edges should have at least one covers edge"
+    );
+}
+
+#[test]
+fn single_file_validate_skips_sibling_molecule_tests() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let unit_path = write_two_unit_molecule_fixture(&units_dir);
+
+    let output = run(&["validate", unit_path.to_str().unwrap()]);
+    assert_output_success("single_file_validate_skips_sibling_molecule_tests", &output);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stdout.contains("pricing/b"),
+        "stdout should stay scoped\n{stdout}"
+    );
+    assert!(
+        !stderr.contains("pricing/b"),
+        "stderr should stay scoped\n{stderr}"
+    );
+}
+
+#[test]
+fn single_file_generate_skips_sibling_molecule_tests() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+    let unit_path = write_two_unit_molecule_fixture(&units_dir);
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        unit_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("single_file_generate_skips_sibling_molecule_tests", &output);
+
+    assert!(
+        output_dir.join("pricing/a.rs").exists(),
+        "target unit should be generated"
+    );
+    assert!(
+        !output_dir.join("pricing/molecule_tests.rs").exists(),
+        "single-file generate should not emit sibling molecule tests"
+    );
+}
+
+#[test]
+fn single_file_export_skips_sibling_molecule_tests() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let unit_path = write_two_unit_molecule_fixture(&units_dir);
+
+    let output = run(&["export", unit_path.to_str().unwrap()]);
+    assert_output_success("single_file_export_skips_sibling_molecule_tests", &output);
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["units"].as_array().unwrap().len(), 1);
+    assert_eq!(bundle["molecule_tests"].as_array().unwrap().len(), 0);
+
+    let covers_edges: Vec<&Value> = bundle["graph"]["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] == "covers")
+        .collect();
+    assert!(
+        covers_edges.is_empty(),
+        "single-file export should not include sibling covers edges"
+    );
+}
+
+#[test]
+fn duplicate_molecule_test_id_rejected() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Two test.spec files with the same id
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/dupe_test_a.test.spec",
+        "pricing/dupe_test",
+        &["pricing/apply_discount"],
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/dupe_test_b.test.spec",
+        "pricing/dupe_test",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail on duplicate molecule test IDs"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stderr.contains("dupe_test") || stdout.contains("dupe_test"),
+        "error should mention the duplicate id\nstdout: {stdout}\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn duplicate_molecule_test_id_json_uses_stable_contract_code() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let file_a = units_dir.join("pricing/dupe_test_a.test.spec");
+    let file_b = units_dir.join("pricing/dupe_test_b.test.spec");
+
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/dupe_test_a.test.spec",
+        "pricing/dupe_test",
+        &["pricing/apply_discount"],
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/dupe_test_b.test.spec",
+        "pricing/dupe_test",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "validate should fail on duplicate molecule test IDs in JSON mode"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected exactly one duplicate-id error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_DUPLICATE_MOLECULE_ID");
+    assert_eq!(error["id"], "pricing/dupe_test");
+
+    let path = error["path"].as_str().unwrap();
+    let path2 = error["path2"].as_str().unwrap();
+    let expected_a = file_a.to_str().unwrap();
+    let expected_b = file_b.to_str().unwrap();
+
+    assert!(
+        (path == expected_a && path2 == expected_b) || (path == expected_b && path2 == expected_a),
+        "duplicate paths should identify both files\npath: {path}\npath2: {path2}\nexpected_a: {expected_a}\nexpected_b: {expected_b}"
+    );
+}
+
+#[test]
+fn molecule_covers_collision_json_uses_stable_contract_code() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "utils/round.unit.spec",
+        r#"
+id: utils/round
+kind: function
+intent:
+  why: Round utility values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/rounding_flow.test.spec",
+        "pricing/rounding_flow",
+        &["money/round", "utils/round"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "validate should fail on molecule covers collisions in JSON mode"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(
+        errors.len(),
+        1,
+        "expected exactly one covers-collision error"
+    );
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_MOLECULE_COVERS_COLLISION");
+    assert_eq!(error["id"], "pricing/rounding_flow");
+    assert_eq!(
+        error["path"],
+        units_dir
+            .join("pricing/rounding_flow.test.spec")
+            .to_str()
+            .unwrap()
+    );
+    assert_eq!(error["dep"], "money/round");
+    assert_eq!(error["path2"], "utils/round");
+    assert_eq!(error["value"], "round");
+}
+
+#[test]
+fn generate_rejects_molecule_covers_collision_before_rust_codegen() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "utils/round.unit.spec",
+        r#"
+id: utils/round
+kind: function
+intent:
+  why: Round utility values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/rounding_flow.test.spec",
+        "pricing/rounding_flow",
+        &["money/round", "utils/round"],
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "generate should fail before writing duplicate Rust imports"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("money/round"),
+        "error should mention first conflicting cover\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("utils/round"),
+        "error should mention second conflicting cover\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("round"),
+        "error should mention collided callable name\nstderr: {stderr}"
+    );
+    assert!(
+        !output_dir.join("pricing/molecule_tests.rs").exists(),
+        "generate should fail before molecule_tests.rs is written"
+    );
+}
+
+#[test]
+fn empty_covers_is_warning_not_error() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Molecule test with no covers (should warn, not error)
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/empty_covers_test.test.spec",
+        "pricing/empty_covers_test",
+        &[], // empty covers
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert_output_success("empty_covers_is_warning_not_error", &output);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no covered units") || stderr.contains("empty_covers_test"),
+        "should emit a warning about no covered units\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn validate_single_test_spec_file_gives_directed_error() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/checkout_flow.test.spec",
+        "pricing/checkout_flow",
+        &[],
+    );
+
+    let test_spec_path = units_dir.join("pricing/checkout_flow.test.spec");
+    let output = run(&["validate", test_spec_path.to_str().unwrap()]);
+
+    // Should fail — single .test.spec files are not valid input to validate
+    assert!(
+        !output.status.success(),
+        "validate of single .test.spec file should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("containing directory") || stderr.contains(".unit.spec"),
+        "error should guide user to use directory path\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn molecule_body_with_unsafe_is_rejected() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_indexed_unsafe_molecule_test(&units_dir);
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for molecule test with unsafe body"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsafe") || stderr.contains("SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"),
+        "error should mention unsafe\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn molecule_body_with_unsafe_is_rejected_in_json_output() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_indexed_unsafe_molecule_test(&units_dir);
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "validate --format json should fail for molecule test with unsafe body"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"),
+        "expected SPEC_MOLECULE_BODY_CONTAINS_UNSAFE in errors: {errors:?}"
+    );
+}
+
+#[test]
+fn generate_rejects_molecule_body_with_nested_unsafe_expr() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_indexed_unsafe_molecule_test(&units_dir);
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "generate should fail for molecule test with unsafe body"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsafe") || stderr.contains("SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"),
+        "error should mention unsafe\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn export_rejects_molecule_body_with_nested_unsafe_expr() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_indexed_unsafe_molecule_test(&units_dir);
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "export should fail for molecule test with unsafe body"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsafe") || stderr.contains("SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"),
+        "error should mention unsafe\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn spec_test_with_molecule_tests_succeeds_and_no_molecule_passport_written() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_pricing_project(project_dir, true);
+
+    // Add a molecule test that covers one of the pricing units
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/tax_and_discount.test.spec",
+        r#"id: pricing/tax_and_discount
+spec_version: "0.3.0"
+intent:
+  why: Verify tax and discount interact correctly.
+covers:
+  - pricing/apply_tax
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success(
+        "spec test should succeed when molecule tests are present",
+        &output,
+    );
+
+    // M7 deferral invariant: molecule test passports are not written until M8
+    let molecule_passport =
+        project_dir.join("units/pricing/tax_and_discount.test.spec.passport.json");
+    assert!(
+        !molecule_passport.exists(),
+        "spec test must not write a passport for .test.spec files (deferred to M8): {}",
+        molecule_passport.display()
+    );
+
+    // Unit passports should still be written as normal
+    assert!(
+        project_dir
+            .join("units/pricing/apply_tax.spec.passport.json")
+            .exists(),
+        "unit passport should still be written for apply_tax"
+    );
+}
+
+#[test]
+fn spec_test_empty_directory_still_runs_cargo_tests() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    fs::create_dir_all(&units_dir).unwrap();
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+
+    fs::write(
+        project_dir.join("Cargo.toml"),
+        "[package]\nname = \"empty-units-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src/main.rs"),
+        r#"fn main() {}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn unrelated_failure() {
+        panic!("unrelated failing cargo test");
+    }
+}
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "generated/spec",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec test should fail when cargo tests fail, even with zero generated unit specs"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+    assert!(
+        combined.contains("unrelated_failure"),
+        "expected cargo test output to mention the failing test\noutput: {combined}"
+    );
+    assert!(
+        stderr.contains("cargo test failed"),
+        "expected spec test to surface cargo test failure\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn reserved_unit_name_molecule_tests_is_rejected() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/molecule_tests.unit.spec",
+        r#"
+id: pricing/molecule_tests
+kind: function
+intent:
+  why: This ID is reserved.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for unit with reserved ID segment 'molecule_tests'"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("reserved") || stderr.contains("SPEC_RESERVED_UNIT_NAME"),
+        "error should mention reserved name\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn reserved_molecule_test_name_molecule_tests_is_rejected() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    write_molecule_test_spec(
+        &units_dir,
+        "qa/molecule_tests/foo.test.spec",
+        "qa/molecule_tests/foo",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for molecule test with reserved ID segment 'molecule_tests'"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("reserved") || stderr.contains("SPEC_RESERVED_UNIT_NAME"),
+        "error should mention reserved name\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("qa/molecule_tests/foo.test.spec"),
+        "error should point at the molecule test path\nstderr: {stderr}"
+    );
+
+    let json_output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !json_output.status.success(),
+        "validate --format json should fail for molecule test with reserved ID segment"
+    );
+    assert!(
+        json_output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&json_output.stderr)
+    );
+
+    let json = parse_stdout_json(&json_output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors.iter().any(|error| {
+            let path = error["path"].as_str().unwrap_or_default();
+            error["code"] == "SPEC_RESERVED_UNIT_NAME"
+                && path.ends_with("/units/qa/molecule_tests/foo.test.spec")
+                && error["value"] == "molecule_tests"
+        }),
+        "expected SPEC_RESERVED_UNIT_NAME for molecule test path, got: {errors:?}"
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let generate_output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !generate_output.status.success(),
+        "generate should fail for molecule test with reserved ID segment 'molecule_tests'"
+    );
+    assert!(
+        !output_dir.join("qa/molecule_tests.rs").exists(),
+        "generate should fail before writing qa/molecule_tests.rs"
+    );
+    assert!(
+        !output_dir.join("qa/molecule_tests/mod.rs").exists(),
+        "generate should fail before writing qa/molecule_tests/mod.rs"
     );
 }

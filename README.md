@@ -144,17 +144,21 @@ spec export <path> --output <file>        # write JSON bundle to file
 
 `spec build` and `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec test` also updates each unit's `.spec.passport.json` with observed pass/fail evidence.
 
+When you pass a single `.unit.spec` file to `spec validate`, `spec generate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. Sibling `.test.spec` files are directory-scoped and are only loaded for directory invocations.
+
 `spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read.
 
 The `--output` path for `generate`/`build`/`test` must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
 
 **Nextest:** `spec test` parses standard `cargo test` output format only. `cargo nextest` uses a different output format and is not supported. Running `spec test` in a project configured for nextest will produce `status: "unknown"` for all local tests. Use standard `cargo test`.
 
+For both `.unit.spec` and directory-scoped `.test.spec` validation, the path segment `molecule_tests` is reserved. Molecule tests generate `molecule_tests.rs` per namespace, so allowing that literal segment in an authored spec ID would create module/file collisions in generated output.
+
 ## AI-Native Usage
 
 `spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport trail that records what was actually observed to pass.
 
-The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence.
+The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate`, `generate`, and `test` stay on that unit and do not pull sibling molecule tests into the run.
 
 ```bash
 spec validate examples/ecommerce/units --format json
@@ -217,6 +221,7 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_GENERATOR` | Code generation failure |
 | `SPEC_OUTPUT_DIR` | Output directory creation or safety check failed |
 | `SPEC_MISSING_MARKER` | Output dir lacks the `.spec-generated` marker — refusing to clean |
+| `SPEC_RESERVED_UNIT_NAME` | A slash-delimited spec `id` contains a reserved segment such as `molecule_tests` |
 
 ## Consuming Generated Code
 

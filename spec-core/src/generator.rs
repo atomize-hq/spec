@@ -7,9 +7,9 @@
 //! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
 
 use crate::syntax::validate_expect_expr;
-use crate::types::ResolvedSpec;
+use crate::types::{ResolvedMoleculeTest, ResolvedSpec};
 use crate::{Result, SpecError};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -290,7 +290,11 @@ pub fn clean_output_dir(
     Ok(())
 }
 
-pub fn generate_mod_rs(unit_files: &[String], subdirs: &[String]) -> Result<String> {
+pub fn generate_mod_rs(
+    unit_files: &[String],
+    subdirs: &[String],
+    has_molecule_tests: bool,
+) -> Result<String> {
     let mut seen = HashSet::new();
     let mut unit_mods = Vec::new();
     let mut subdir_mods = Vec::new();
@@ -331,7 +335,141 @@ pub fn generate_mod_rs(unit_files: &[String], subdirs: &[String]) -> Result<Stri
         output.push('\n');
     }
 
+    if has_molecule_tests {
+        if !unit_mods.is_empty() || !subdir_mods.is_empty() {
+            output.push('\n');
+        }
+        output.push_str("#[cfg(test)]\npub mod molecule_tests;\n");
+    }
+
     Ok(output)
+}
+
+/// Returns the path for a molecule_tests.rs file relative to the output base.
+pub fn molecule_tests_file_path(output_base: &Path, module_path: &str) -> PathBuf {
+    if module_path.is_empty() {
+        output_base.join("molecule_tests.rs")
+    } else {
+        output_base
+            .join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
+            .join("molecule_tests.rs")
+    }
+}
+
+/// Generate the Rust source code for a group of molecule tests in one namespace.
+///
+/// `tests` must all belong to the same `module_path`.
+/// `specs_by_id` is used to look up imports for covered units.
+pub fn generate_molecule_tests_code(
+    tests: &[&ResolvedMoleculeTest],
+    specs_by_id: &HashMap<&str, &ResolvedSpec>,
+) -> Result<String> {
+    // Collect all unique cover_ids in alphabetical order for deterministic output
+    let mut cover_id_seen: HashSet<&str> = HashSet::new();
+    let mut all_cover_ids: Vec<&str> = Vec::new();
+    for test in tests {
+        for cover_id in &test.covers {
+            if cover_id_seen.insert(cover_id.as_str()) {
+                all_cover_ids.push(cover_id.as_str());
+            }
+        }
+    }
+    all_cover_ids.sort_unstable();
+
+    // Collect imports from covered specs, deduplicated in stable insertion order
+    let mut import_seen: HashSet<String> = HashSet::new();
+    let mut all_imports: Vec<String> = Vec::new();
+    for cover_id in &all_cover_ids {
+        let spec = specs_by_id.get(cover_id).ok_or_else(|| SpecError::Generator {
+            message: format!(
+                "covered unit '{}' not found in spec set (should have been caught by validation)",
+                cover_id
+            ),
+        })?;
+        for import in &spec.imports {
+            if import_seen.insert(import.clone()) {
+                all_imports.push(import.clone());
+            }
+        }
+    }
+
+    let mut output = String::new();
+
+    // Emit external import use statements
+    for import in &all_imports {
+        output.push_str(&format!("use {};\n", import));
+    }
+
+    if !all_imports.is_empty() && !all_cover_ids.is_empty() {
+        output.push('\n');
+    }
+
+    // Emit `use crate::...` for each covered unit.
+    // dep_to_use_path already includes the trailing semicolon.
+    for cover_id in &all_cover_ids {
+        output.push_str(&format!(
+            "use {}\n",
+            ResolvedSpec::dep_to_use_path(cover_id)
+        ));
+    }
+
+    if !all_cover_ids.is_empty() {
+        output.push('\n');
+    }
+
+    // Emit test functions
+    for (index, test) in tests.iter().enumerate() {
+        let block = test.body_rust.trim();
+        output.push_str("#[test]\n");
+        output.push_str(&format!("fn test_{}() {}\n", test.fn_name, block));
+
+        if index + 1 != tests.len() {
+            output.push('\n');
+        }
+    }
+
+    Ok(output)
+}
+
+/// Generate and write molecule_tests.rs files for all resolved molecule tests.
+///
+/// Groups tests by module_path and generates one molecule_tests.rs per group.
+///
+/// Returns the set of relative paths for generated molecule_tests.rs files
+/// (for inclusion in `generated_rs_rel_paths` passed to `clean_output_dir`).
+pub fn generate_and_write_molecule_tests(
+    resolved_tests: &[ResolvedMoleculeTest],
+    specs_by_id: &HashMap<&str, &ResolvedSpec>,
+    output_base: &Path,
+) -> Result<HashSet<PathBuf>> {
+    // Group tests by module_path (BTreeMap for deterministic iteration order)
+    let mut by_module: BTreeMap<String, Vec<&ResolvedMoleculeTest>> = BTreeMap::new();
+    for test in resolved_tests {
+        by_module
+            .entry(test.module_path.clone())
+            .or_default()
+            .push(test);
+    }
+
+    let mut generated_paths = HashSet::new();
+
+    for (module_path, tests) in &by_module {
+        // Generate molecule_tests.rs content
+        let content = generate_molecule_tests_code(tests, specs_by_id)?;
+        let file_path = molecule_tests_file_path(output_base, module_path);
+        write_generated_file(&file_path.to_string_lossy(), &content)?;
+
+        // Track the relative path for clean_output_dir
+        let rel: PathBuf = if module_path.is_empty() {
+            PathBuf::from("molecule_tests.rs")
+        } else {
+            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
+                .join("molecule_tests.rs")
+        };
+        generated_paths.insert(rel);
+    }
+
+    Ok(generated_paths)
 }
 
 fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
@@ -461,10 +599,49 @@ fn canonicalize_existing_path(path: &Path) -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::syntax::{ExpectExprErrorKind, validate_expect_expr};
-    use crate::types::{Body, Intent, LocalTest, ResolvedSpec, SpecStruct};
+    use crate::types::{Body, Intent, LocalTest, ResolvedMoleculeTest, ResolvedSpec, SpecStruct};
     #[cfg(unix)]
     use std::os::unix::fs as unix_fs;
     use tempfile::TempDir;
+
+    fn make_resolved_molecule_test(
+        id: &str,
+        covers: Vec<&str>,
+        body_rust: &str,
+    ) -> ResolvedMoleculeTest {
+        let (module_path, fn_name) = id
+            .rsplit_once('/')
+            .map(|(m, f)| (m.to_string(), f.to_string()))
+            .unwrap_or_else(|| (String::new(), id.to_string()));
+        ResolvedMoleculeTest {
+            id: id.to_string(),
+            fn_name,
+            module_path,
+            intent_why: format!("Test {id}"),
+            covers: covers.into_iter().map(str::to_string).collect(),
+            body_rust: body_rust.to_string(),
+            spec_version: None,
+        }
+    }
+
+    fn make_resolved_spec_with_imports(id: &str, imports: Vec<&str>) -> ResolvedSpec {
+        ResolvedSpec::from_spec(SpecStruct {
+            id: id.to_string(),
+            kind: "function".to_string(),
+            intent: Intent {
+                why: format!("Why {id}"),
+            },
+            contract: None,
+            deps: vec![],
+            imports: imports.into_iter().map(str::to_string).collect(),
+            body: Body {
+                rust: "{ }".to_string(),
+            },
+            local_tests: vec![],
+            links: None,
+            spec_version: None,
+        })
+    }
 
     fn test_spec_with_intent(
         deps: Vec<&str>,
@@ -633,6 +810,7 @@ mod tests {
         let content = generate_mod_rs(
             &["apply_discount.rs".to_string(), "refund.rs".to_string()],
             &["taxes".to_string(), "discounts".to_string()],
+            false,
         )
         .unwrap();
 
@@ -852,5 +1030,170 @@ mod tests {
 
         let err = safe_output_path(link.join("generated/spec")).unwrap_err();
         assert!(err.to_string().contains("outside the project root"));
+    }
+
+    #[test]
+    fn generate_molecule_tests_code_single_test_single_cover() {
+        let test = make_resolved_molecule_test(
+            "pricing/checkout",
+            vec!["pricing/apply_tax"],
+            "{ assert!(true); }",
+        );
+        let spec =
+            make_resolved_spec_with_imports("pricing/apply_tax", vec!["rust_decimal::Decimal"]);
+        let specs_by_id: HashMap<&str, &ResolvedSpec> =
+            [("pricing/apply_tax", &spec)].into_iter().collect();
+
+        let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
+
+        assert!(
+            code.contains("use rust_decimal::Decimal;"),
+            "should emit spec imports"
+        );
+        assert!(
+            code.contains("use crate::pricing::apply_tax::apply_tax;"),
+            "should emit use crate path for covered unit"
+        );
+        assert!(code.contains("#[test]"), "should emit test attribute");
+        assert!(
+            code.contains("fn test_checkout()"),
+            "should use fn_name with test_ prefix"
+        );
+        assert!(
+            code.contains("{ assert!(true); }"),
+            "should include body verbatim"
+        );
+    }
+
+    #[test]
+    fn generate_molecule_tests_code_deduplicates_shared_imports() {
+        let test = make_resolved_molecule_test(
+            "pricing/multi",
+            vec!["pricing/apply_tax", "pricing/apply_discount"],
+            "{ assert!(true); }",
+        );
+        let spec_tax =
+            make_resolved_spec_with_imports("pricing/apply_tax", vec!["rust_decimal::Decimal"]);
+        let spec_discount = make_resolved_spec_with_imports(
+            "pricing/apply_discount",
+            vec!["rust_decimal::Decimal"],
+        );
+        let specs_by_id: HashMap<&str, &ResolvedSpec> = [
+            ("pricing/apply_tax", &spec_tax),
+            ("pricing/apply_discount", &spec_discount),
+        ]
+        .into_iter()
+        .collect();
+
+        let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
+
+        let decimal_count = code.matches("use rust_decimal::Decimal;").count();
+        assert_eq!(decimal_count, 1, "shared import should appear exactly once");
+    }
+
+    #[test]
+    fn generate_molecule_tests_code_missing_cover_id_returns_error() {
+        let test = make_resolved_molecule_test(
+            "pricing/checkout",
+            vec!["pricing/nonexistent"],
+            "{ assert!(true); }",
+        );
+        let specs_by_id: HashMap<&str, &ResolvedSpec> = HashMap::new();
+
+        let err = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap_err();
+        assert!(
+            err.to_string().contains("pricing/nonexistent"),
+            "error should name the missing cover id"
+        );
+    }
+
+    #[test]
+    fn generate_molecule_tests_code_multiple_tests_in_namespace() {
+        let test_a = make_resolved_molecule_test(
+            "pricing/flow_a",
+            vec!["pricing/apply_tax"],
+            "{ assert!(1 == 1); }",
+        );
+        let test_b = make_resolved_molecule_test(
+            "pricing/flow_b",
+            vec!["pricing/apply_tax"],
+            "{ assert!(2 == 2); }",
+        );
+        let spec = make_resolved_spec_with_imports("pricing/apply_tax", vec![]);
+        let specs_by_id: HashMap<&str, &ResolvedSpec> =
+            [("pricing/apply_tax", &spec)].into_iter().collect();
+
+        let code = generate_molecule_tests_code(&[&test_a, &test_b], &specs_by_id).unwrap();
+
+        assert!(
+            code.contains("fn test_flow_a()"),
+            "first test should be present"
+        );
+        assert!(
+            code.contains("fn test_flow_b()"),
+            "second test should be present"
+        );
+        // Use statement should appear only once despite two tests covering the same unit
+        let use_count = code
+            .matches("use crate::pricing::apply_tax::apply_tax;")
+            .count();
+        assert_eq!(use_count, 1, "use path should be deduplicated across tests");
+    }
+
+    #[test]
+    fn generate_mod_rs_with_molecule_tests_appends_declaration() {
+        let content = generate_mod_rs(&["apply_discount.rs".to_string()], &[], true).unwrap();
+
+        assert!(
+            content.contains("#[cfg(test)]\npub mod molecule_tests;"),
+            "should declare molecule_tests module gated by cfg(test)"
+        );
+        assert!(
+            content.contains("pub mod apply_discount;"),
+            "should still include unit mods"
+        );
+    }
+
+    #[test]
+    fn generate_mod_rs_molecule_tests_only_namespace() {
+        let content = generate_mod_rs(&[], &[], true).unwrap();
+        assert_eq!(content, "#[cfg(test)]\npub mod molecule_tests;\n");
+    }
+
+    #[test]
+    fn generate_molecule_tests_code_zero_covers_emits_test_fn_no_use_statements() {
+        // A test with no covers should emit the #[test] function but no `use crate::` lines.
+        let test =
+            make_resolved_molecule_test("pricing/standalone_flow", vec![], "{ assert!(true); }");
+        let specs_by_id: HashMap<&str, &ResolvedSpec> = HashMap::new();
+
+        let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
+
+        assert!(code.contains("#[test]"), "should emit #[test] attribute");
+        assert!(
+            code.contains("fn test_standalone_flow()"),
+            "should emit test function"
+        );
+        assert!(
+            !code.contains("use crate::"),
+            "no covers means no use crate:: imports"
+        );
+    }
+
+    #[test]
+    fn molecule_tests_file_path_root_namespace() {
+        let base = PathBuf::from("/tmp/generated");
+        let path = molecule_tests_file_path(&base, "");
+        assert_eq!(path, PathBuf::from("/tmp/generated/molecule_tests.rs"));
+    }
+
+    #[test]
+    fn molecule_tests_file_path_nested_namespace() {
+        let base = PathBuf::from("/tmp/generated");
+        let path = molecule_tests_file_path(&base, "pricing/sub");
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/generated/pricing/sub/molecule_tests.rs")
+        );
     }
 }

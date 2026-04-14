@@ -10,6 +10,7 @@ pub const AUTHORED_SPEC_VERSION: &str = "0.3.0";
 
 pub mod export;
 pub mod generator;
+pub mod graph;
 pub mod loader;
 pub mod normalizer;
 pub mod passport;
@@ -123,6 +124,46 @@ pub enum SpecError {
 
     #[error("Missing .spec-generated marker in {path} - refusing to clean without marker")]
     MissingMarker { path: String },
+
+    #[error(
+        "Molecule test '{test_id}' covers '{cover_id}' which was not found in the spec set at {test_path}"
+    )]
+    MoleculeCoversNotFound {
+        cover_id: String,
+        test_id: String,
+        test_path: String,
+    },
+
+    #[error("Duplicate molecule test ID '{id}' in {file1} and {file2}")]
+    DuplicateMoleculeTestId {
+        id: String,
+        file1: String,
+        file2: String,
+    },
+
+    #[error(
+        "Molecule covers collision: '{cover1}' and '{cover2}' both resolve to '{fn_name}' in test '{test_id}' at {test_path}"
+    )]
+    MoleculeCoversCollision {
+        cover1: String,
+        cover2: String,
+        fn_name: String,
+        test_id: String,
+        test_path: String,
+    },
+
+    #[error("body.rust failed to parse as a block: {message} at {test_path}")]
+    MoleculeBodyRustMustBeBlock { message: String, test_path: String },
+
+    #[error(
+        "body.rust contains an `unsafe` block, which is not allowed in molecule tests at {test_path}"
+    )]
+    MoleculeBodyContainsUnsafe { test_path: String },
+
+    #[error(
+        "spec ID segment '{segment}' is reserved by spec and cannot be used anywhere in a spec ID at {path}"
+    )]
+    ReservedUnitName { segment: String, path: String },
 }
 
 impl From<walkdir::Error> for SpecError {
@@ -146,6 +187,9 @@ pub enum SpecWarning {
         "⚠ spec_version not set in {path} — add `spec_version: \"{version}\"` to suppress this warning"
     )]
     MissingSpecVersion { path: String, version: &'static str },
+
+    #[error("⚠ molecule test '{test_id}' has no covered units at {test_path}")]
+    MoleculeTestNoCoveredUnits { test_id: String, test_path: String },
 }
 
 #[cfg(test)]

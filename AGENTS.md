@@ -43,3 +43,34 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 
 Breaking changes from schema_version 1: `stale: bool` field removed; `reason: Option<String>`
 added; new state values `failing`, `incomplete`, `untested` added (old values remain valid).
+
+## Atom and Molecule Tests
+
+**Atom tests** (`local_tests` in `.unit.spec`) test one unit's behavior in isolation. They are
+generated inside the unit's `#[cfg(test)]` module. Each test has a single `expect` expression
+that must evaluate to `true`.
+
+**Molecule tests** (`.test.spec` files) test interactions between multiple units. They are
+generated as `#[test]` functions in `molecule_tests.rs` per namespace. Each test declares which
+units it `covers` and provides a full Rust block body.
+
+**Boundary rule:** if a test needs to import more than one unit, it belongs in a `.test.spec`
+file. If it tests only a single unit's behavior, it belongs in `local_tests`.
+
+**body.rust is compiled Rust code.** Treat it with the same trust as any source file in your
+project. The validator blocks `unsafe` blocks; all other Rust constructs are the author's
+responsibility. Writing `include!`, `std::process::Command`, or `std::fs` calls in a molecule
+test body is permitted but has the same implications as writing them in any other test file.
+
+## Molecule Test Status Propagation
+
+Molecule test failure does **not** propagate to unit status. A failing molecule test affects only
+the molecule test's own future status (tracked in a later milestone). Unit status is determined
+solely by:
+
+- Unit validation (schema + semantic)
+- `spec test` evidence for that unit's local tests
+- `contract_hash` staleness
+
+This boundary prevents the "five units fail because one molecule test failed" ambiguity. A unit
+can be `valid` while a molecule test that covers it is failing — these are independent signals.

@@ -4,8 +4,8 @@
 //! 1. JSON Schema validation (using embedded unit.spec.json)
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
-use crate::syntax::validate_expect_expr;
-use crate::types::LoadedSpec;
+use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
+use crate::types::{LoadedMoleculeTest, LoadedSpec, has_callable_collision};
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
@@ -15,7 +15,11 @@ use std::sync::OnceLock;
 /// JSON Schema for unit.spec validation (embedded at compile time)
 const SCHEMA_JSON: &str = include_str!("schema/unit.spec.json");
 
+/// JSON Schema for test.spec validation (embedded at compile time)
+const TEST_SCHEMA_JSON: &str = include_str!("schema/test.spec.json");
+
 static COMPILED_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
+static COMPILED_TEST_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ValidationOptions {
@@ -140,6 +144,11 @@ pub fn validate_semantic_with_options(
     // Check if ID contains Rust reserved keywords
     validate_rust_keywords(&spec.spec.id, &spec.source.file_path)?;
 
+    // Reject IDs containing reserved namespace segments. "molecule_tests" is emitted as a
+    // generated module/file name by build_namespaces + molecule test generation, so allowing it
+    // anywhere in a unit ID can create molecule_tests.rs vs molecule_tests/mod.rs collisions.
+    validate_reserved_spec_id_segments(&spec.spec.id, &spec.source.file_path)?;
+
     // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
     for dep in &spec.spec.deps {
         validate_rust_keywords(dep, &spec.source.file_path)?;
@@ -185,6 +194,19 @@ pub fn validate_semantic_with_options(
     validate_body_rust_block(spec)?;
     validate_local_test_expects(spec, options)?;
     validate_contract_input_types(spec)?;
+
+    Ok(())
+}
+
+fn validate_reserved_spec_id_segments(id: &str, file_path: &str) -> Result<()> {
+    for segment in id.split('/') {
+        if segment == "molecule_tests" {
+            return Err(SpecError::ReservedUnitName {
+                segment: segment.to_string(),
+                path: file_path.to_string(),
+            });
+        }
+    }
 
     Ok(())
 }
@@ -442,10 +464,153 @@ pub fn validate_full_with_options(spec: &LoadedSpec, options: &ValidationOptions
     Ok(())
 }
 
+fn compiled_test_schema() -> Result<&'static jsonschema::Validator> {
+    if let Some(schema) = COMPILED_TEST_SCHEMA.get() {
+        return Ok(schema);
+    }
+
+    let schema_json: Value = serde_json::from_str(TEST_SCHEMA_JSON).map_err(SpecError::Json)?;
+    let schema =
+        jsonschema::draft7::new(&schema_json).map_err(|e| SpecError::SchemaValidation {
+            message: format!("Test schema compilation failed: {e}"),
+            path: "<test.spec.json schema>".to_string(),
+        })?;
+
+    let _ = COMPILED_TEST_SCHEMA.set(schema);
+
+    Ok(COMPILED_TEST_SCHEMA
+        .get()
+        .expect("COMPILED_TEST_SCHEMA must be set after successful compilation"))
+}
+
+/// Validate a raw YAML-authored molecule test value against the test.spec JSON Schema.
+///
+/// Used by the loader before deserialization so unknown fields and authoring mistakes
+/// are rejected before serde can apply defaults or drop data.
+pub fn validate_raw_molecule_test_yaml(yaml_value: &YamlValue, file_path: &str) -> Result<()> {
+    let spec_json = serde_json::to_value(yaml_value).map_err(SpecError::Json)?;
+    let schema = compiled_test_schema()?;
+
+    let validation_result = schema.validate(&spec_json);
+    match validation_result {
+        Ok(()) => Ok(()),
+        Err(error) => Err(SpecError::SchemaValidation {
+            message: humanize_validation_error(&error),
+            path: file_path.to_string(),
+        }),
+    }
+}
+
+/// Perform per-test semantic validation on a loaded molecule test.
+///
+/// Checks:
+/// 1. body.rust must parse as syn::Block
+/// 2. body.rust must not contain `unsafe` blocks
+/// 3. id segments must not be Rust reserved keywords
+/// 4. id segments must not use reserved generated namespace names
+pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> {
+    syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
+        SpecError::MoleculeBodyRustMustBeBlock {
+            message: e.to_string(),
+            test_path: test.source.file_path.clone(),
+        }
+    })?;
+
+    let tokens = test
+        .test
+        .body
+        .rust
+        .parse::<proc_macro2::TokenStream>()
+        .map_err(|e| SpecError::MoleculeBodyRustMustBeBlock {
+            message: e.to_string(),
+            test_path: test.source.file_path.clone(),
+        })?;
+
+    if token_stream_contains_unsafe_keyword(&tokens) {
+        return Err(SpecError::MoleculeBodyContainsUnsafe {
+            test_path: test.source.file_path.clone(),
+        });
+    }
+
+    validate_rust_keywords(&test.test.id, &test.source.file_path)?;
+    validate_reserved_spec_id_segments(&test.test.id, &test.source.file_path)?;
+
+    Ok(())
+}
+
+/// Validate that all cover_ids reference real unit IDs in the loaded spec set.
+///
+/// Returns errors for each missing cover and a warning if covers is empty.
+pub fn validate_molecule_test_covers(
+    test: &LoadedMoleculeTest,
+    unit_ids: &HashSet<&str>,
+) -> (Vec<SpecError>, Vec<SpecWarning>) {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    let mut existing_covers = Vec::new();
+
+    if test.test.covers.is_empty() {
+        warnings.push(SpecWarning::MoleculeTestNoCoveredUnits {
+            test_id: test.test.id.clone(),
+            test_path: test.source.file_path.clone(),
+        });
+    }
+
+    for cover_id in &test.test.covers {
+        if !unit_ids.contains(cover_id.as_str()) {
+            errors.push(SpecError::MoleculeCoversNotFound {
+                cover_id: cover_id.clone(),
+                test_id: test.test.id.clone(),
+                test_path: test.source.file_path.clone(),
+            });
+        } else {
+            existing_covers.push(cover_id.clone());
+        }
+    }
+
+    if let Some((cover1, cover2, fn_name)) = has_callable_collision(&existing_covers) {
+        errors.push(SpecError::MoleculeCoversCollision {
+            cover1: cover1.clone(),
+            cover2: cover2.clone(),
+            fn_name: fn_name.to_string(),
+            test_id: test.test.id.clone(),
+            test_path: test.source.file_path.clone(),
+        });
+    }
+
+    (errors, warnings)
+}
+
+/// Check for duplicate IDs across all loaded molecule tests.
+///
+/// Returns all duplicate pairs. Each additional file that shares an ID produces
+/// a separate error citing the first file as file1.
+pub fn validate_no_duplicate_molecule_test_ids(tests: &[LoadedMoleculeTest]) -> Vec<SpecError> {
+    let mut seen: HashMap<String, String> = HashMap::new();
+    let mut errors = Vec::new();
+
+    for test in tests {
+        if let Some(existing_file) = seen.get(&test.test.id) {
+            errors.push(SpecError::DuplicateMoleculeTestId {
+                id: test.test.id.clone(),
+                file1: existing_file.clone(),
+                file2: test.source.file_path.clone(),
+            });
+        } else {
+            seen.insert(test.test.id.clone(), test.source.file_path.clone());
+        }
+    }
+
+    errors
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Contract, Intent, LocalTest, SpecSource, SpecStruct};
+    use crate::types::{
+        Body, Contract, Intent, LocalTest, MoleculeTestSource, MoleculeTestStruct, SpecSource,
+        SpecStruct,
+    };
 
     fn create_test_spec(id: &str, rust_body: &str) -> LoadedSpec {
         LoadedSpec {
@@ -467,6 +632,26 @@ mod tests {
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
+            },
+        }
+    }
+
+    fn create_molecule_test_spec(id: &str, covers: Vec<&str>) -> LoadedMoleculeTest {
+        LoadedMoleculeTest {
+            source: MoleculeTestSource {
+                file_path: format!("test/{}.test.spec", id),
+                id: id.to_string(),
+            },
+            test: MoleculeTestStruct {
+                id: id.to_string(),
+                intent: Intent {
+                    why: format!("Test molecule spec for {}", id),
+                },
+                covers: covers.into_iter().map(str::to_string).collect(),
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
                 spec_version: None,
             },
         }
@@ -664,6 +849,34 @@ local_tests:
         let err = result.unwrap_err();
         assert!(err.to_string().contains("collision"));
         assert!(err.to_string().contains("round"));
+    }
+
+    #[test]
+    fn test_validate_molecule_test_covers_collision() {
+        let molecule_test =
+            create_molecule_test_spec("pricing/rounding_flow", vec!["money/round", "utils/round"]);
+        let unit_ids: HashSet<&str> = ["money/round", "utils/round"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(warnings.is_empty());
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            SpecError::MoleculeCoversCollision {
+                cover1,
+                cover2,
+                fn_name,
+                test_id,
+                test_path,
+            } => {
+                assert_eq!(cover1, "money/round");
+                assert_eq!(cover2, "utils/round");
+                assert_eq!(fn_name, "round");
+                assert_eq!(test_id, "pricing/rounding_flow");
+                assert_eq!(test_path, "test/pricing/rounding_flow.test.spec");
+            }
+            other => panic!("expected MoleculeCoversCollision, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1638,5 +1851,384 @@ body:
             .to_string();
         assert!(err.contains("invalid id format"), "got: {err}");
         assert!(err.contains("module/name"), "got: {err}");
+    }
+
+    // ── reserved unit name ───────────────────────────────────────────────────
+
+    #[test]
+    fn reserved_unit_name_molecule_tests_is_rejected() {
+        let spec = create_test_spec("pricing/molecule_tests", "{ }");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+        assert!(
+            err.contains("molecule_tests"),
+            "expected segment name in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_unit_name_nested_molecule_tests_is_rejected() {
+        let spec = create_test_spec("pricing/sub/molecule_tests", "{ }");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_unit_name_namespace_molecule_tests_is_rejected() {
+        let spec = create_test_spec("qa/molecule_tests/foo", "{ }");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+        assert!(
+            err.contains("molecule_tests"),
+            "expected segment name in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_unit_name_deep_namespace_molecule_tests_is_rejected() {
+        let spec = create_test_spec("qa/sub/molecule_tests/foo", "{ }");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn non_reserved_similar_unit_name_passes() {
+        let spec = create_test_spec("qa/molecule_test_helpers/foo", "{ }");
+        assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn non_reserved_unit_name_passes() {
+        let spec = create_test_spec("pricing/apply_discount", "{ }");
+        assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn reserved_molecule_test_name_molecule_tests_is_rejected() {
+        let test = create_molecule_test_spec("pricing/molecule_tests", vec!["money/round"]);
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+        assert!(
+            err.contains("molecule_tests"),
+            "expected segment name in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_molecule_test_name_namespace_molecule_tests_is_rejected() {
+        let test = create_molecule_test_spec("qa/molecule_tests/foo", vec!["money/round"]);
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+        assert!(
+            err.contains("molecule_tests"),
+            "expected segment name in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_molecule_test_name_deep_namespace_molecule_tests_is_rejected() {
+        let test = create_molecule_test_spec("qa/sub/molecule_tests/foo", vec!["money/round"]);
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn non_reserved_similar_molecule_test_name_passes() {
+        let test = create_molecule_test_spec("qa/molecule_test_helpers/foo", vec!["money/round"]);
+        assert!(validate_molecule_test_semantic(&test).is_ok());
+    }
+
+    // ── molecule body unsafe detection ───────────────────────────────────────
+
+    fn make_molecule_test(id: &str, body: &str) -> crate::types::LoadedMoleculeTest {
+        use crate::types::{
+            Body, Intent, LoadedMoleculeTest, MoleculeTestSource, MoleculeTestStruct,
+        };
+        LoadedMoleculeTest {
+            source: MoleculeTestSource {
+                file_path: format!("test/{}.test.spec", id),
+                id: id.to_string(),
+            },
+            test: MoleculeTestStruct {
+                id: id.to_string(),
+                intent: Intent {
+                    why: "test".to_string(),
+                },
+                covers: vec![],
+                body: Body {
+                    rust: body.to_string(),
+                },
+                spec_version: None,
+            },
+        }
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_block_is_rejected() {
+        let test = make_molecule_test("pricing/checkout_flow", "{ unsafe { let x = 1; } }");
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("unsafe"),
+            "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_nested_unsafe_is_rejected() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ let x = if true { unsafe { 1 } else { 2 } }; }",
+        );
+        // The body may or may not parse depending on syn's handling of incomplete if/else;
+        // either a parse error or an unsafe error is acceptable rejection.
+        let result = validate_molecule_test_semantic(&test);
+        assert!(result.is_err(), "expected rejection of nested unsafe");
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_in_array_index_expr_is_rejected() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ let _x = [unsafe { std::mem::zeroed::<u8>() }][0]; }",
+        );
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("unsafe"),
+            "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_fn_item_is_rejected() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ unsafe fn helper() {} helper(); }",
+        );
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("unsafe"),
+            "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_inside_macro_body_is_rejected() {
+        let test = make_molecule_test("pricing/checkout_flow", "{ m!(unsafe { 1 }); }");
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("unsafe"),
+            "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_string_literal_passes() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            r#"{ let label = "unsafe"; assert_eq!(label, "unsafe"); }"#,
+        );
+        assert!(validate_molecule_test_semantic(&test).is_ok());
+    }
+
+    #[test]
+    fn molecule_body_without_unsafe_passes() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ let x = apply_discount(100, 10); assert_eq!(x, 90); }",
+        );
+        assert!(validate_molecule_test_semantic(&test).is_ok());
+    }
+
+    // ── validate_molecule_test_semantic: MoleculeBodyRustMustBeBlock ──────────
+
+    #[test]
+    fn molecule_body_bare_expression_is_rejected() {
+        // A bare expression (no braces) is not a syn::Block and must be rejected.
+        let test = make_molecule_test("pricing/checkout_flow", "true");
+        let result = validate_molecule_test_semantic(&test);
+        assert!(result.is_err(), "bare expression should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("block") || err.contains("Block"),
+            "expected block error, got: {err}"
+        );
+    }
+
+    // ── validate_molecule_test_covers: MoleculeCoversNotFound ────────────────
+
+    #[test]
+    fn covers_unknown_unit_id_returns_covers_not_found_error() {
+        let molecule_test = create_molecule_test_spec(
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount", "pricing/unknown_unit"],
+        );
+        let unit_ids: HashSet<&str> = ["pricing/apply_discount"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(warnings.is_empty());
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            SpecError::MoleculeCoversNotFound {
+                cover_id,
+                test_id,
+                test_path,
+            } => {
+                assert_eq!(cover_id, "pricing/unknown_unit");
+                assert_eq!(test_id, "pricing/checkout_flow");
+                assert!(test_path.ends_with("checkout_flow.test.spec"));
+            }
+            other => panic!("expected MoleculeCoversNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn covers_all_known_unit_ids_returns_no_errors() {
+        let molecule_test = create_molecule_test_spec(
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount", "pricing/apply_tax"],
+        );
+        let unit_ids: HashSet<&str> = ["pricing/apply_discount", "pricing/apply_tax"]
+            .into_iter()
+            .collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(errors.is_empty());
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn covers_empty_list_emits_warning_not_error() {
+        let molecule_test = create_molecule_test_spec("pricing/checkout_flow", vec![]);
+        let unit_ids: HashSet<&str> = ["pricing/apply_discount"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(errors.is_empty(), "empty covers should not be an error");
+        assert_eq!(warnings.len(), 1, "expected one warning for empty covers");
+    }
+
+    // ── validate_no_duplicate_molecule_test_ids ───────────────────────────────
+
+    #[test]
+    fn duplicate_molecule_test_ids_returns_error() {
+        let test_a = create_molecule_test_spec("pricing/checkout_flow", vec!["money/round"]);
+        let test_b = create_molecule_test_spec("pricing/checkout_flow", vec!["pricing/apply_tax"]);
+
+        let errors = validate_no_duplicate_molecule_test_ids(&[test_a, test_b]);
+
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            SpecError::DuplicateMoleculeTestId { id, .. } => {
+                assert_eq!(id, "pricing/checkout_flow");
+            }
+            other => panic!("expected DuplicateMoleculeTestId, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unique_molecule_test_ids_returns_no_errors() {
+        let test_a = create_molecule_test_spec("pricing/checkout_flow", vec!["money/round"]);
+        let test_b = create_molecule_test_spec("pricing/discount_flow", vec!["money/round"]);
+
+        let errors = validate_no_duplicate_molecule_test_ids(&[test_a, test_b]);
+
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn empty_molecule_test_slice_returns_no_errors() {
+        let errors = validate_no_duplicate_molecule_test_ids(&[]);
+        assert!(errors.is_empty());
+    }
+
+    // ── validate_raw_molecule_test_yaml ───────────────────────────────────────
+
+    #[test]
+    fn raw_molecule_test_yaml_valid_input_passes() {
+        let yaml = r#"
+id: pricing/checkout_flow
+intent:
+  why: "Verify discount + tax chain."
+covers:
+  - pricing/apply_discount
+body:
+  rust: |
+    { assert!(true); }
+"#;
+        let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
+        let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
+        assert!(
+            result.is_ok(),
+            "valid molecule test YAML should pass: {result:?}"
+        );
+    }
+
+    #[test]
+    fn raw_molecule_test_yaml_missing_body_is_rejected() {
+        let yaml = r#"
+id: pricing/checkout_flow
+intent:
+  why: "Missing body."
+"#;
+        let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
+        let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
+        assert!(result.is_err(), "missing body field should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Schema validation failed"),
+            "expected schema error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn raw_molecule_test_yaml_unknown_field_is_rejected() {
+        let yaml = r#"
+id: pricing/checkout_flow
+intent:
+  why: "Unknown field."
+body:
+  rust: "{ assert!(true); }"
+unknown_field: should_fail
+"#;
+        let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
+        let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
+        assert!(result.is_err(), "unknown field should be rejected");
     }
 }

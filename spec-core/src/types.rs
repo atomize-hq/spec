@@ -152,24 +152,95 @@ impl ResolvedSpec {
     /// Get the fn_name (last segment) from a dep ID
     /// e.g., "money/round" -> "round"
     pub fn dep_fn_name(dep_id: &str) -> &str {
-        dep_id
-            .rsplit_once('/')
-            .map(|(_, name)| name)
-            .unwrap_or(dep_id)
+        callable_name(dep_id)
     }
 
-    /// Check for dep fn_name collisions
-    /// Returns true if two deps in the list have the same fn_name
+    /// Returns `Some((dep1, dep2))` if two deps share the same callable name, `None` otherwise.
     pub fn has_dep_collision(deps: &[String]) -> Option<(&String, &String)> {
-        for (i, dep1) in deps.iter().enumerate() {
-            let fn1 = Self::dep_fn_name(dep1);
-            for dep2 in &deps[i + 1..] {
-                if Self::dep_fn_name(dep2) == fn1 {
-                    return Some((dep1, dep2));
-                }
+        has_callable_collision(deps).map(|(dep1, dep2, _)| (dep1, dep2))
+    }
+}
+
+/// Get the callable name (last segment) from a hierarchical spec ID.
+pub fn callable_name(spec_id: &str) -> &str {
+    spec_id
+        .rsplit_once('/')
+        .map(|(_, name)| name)
+        .unwrap_or(spec_id)
+}
+
+/// Check for callable-name collisions across arbitrary hierarchical IDs.
+pub fn has_callable_collision(ids: &[String]) -> Option<(&String, &String, &str)> {
+    for (i, first) in ids.iter().enumerate() {
+        let first_name = callable_name(first);
+        for second in &ids[i + 1..] {
+            if callable_name(second) == first_name {
+                return Some((first, second, first_name));
             }
         }
-        None
+    }
+    None
+}
+
+/// Raw parsed form from YAML for .test.spec files (molecule tests)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MoleculeTestStruct {
+    pub id: String,
+    pub intent: Intent,
+    #[serde(default)]
+    pub covers: Vec<String>,
+    pub body: Body,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_version: Option<String>,
+}
+
+/// Source information for a loaded molecule test (file path tracking)
+#[derive(Debug, Clone, PartialEq)]
+pub struct MoleculeTestSource {
+    pub file_path: String,
+    pub id: String,
+}
+
+/// A loaded molecule test with its source file info
+#[derive(Debug, Clone, PartialEq)]
+pub struct LoadedMoleculeTest {
+    pub source: MoleculeTestSource,
+    pub test: MoleculeTestStruct,
+}
+
+/// Normalized internal representation for molecule tests, consumed by the generator
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedMoleculeTest {
+    /// Canonical ID: "pricing/discount_plus_tax"
+    pub id: String,
+    /// Last segment after final '/': "discount_plus_tax"
+    pub fn_name: String,
+    /// Everything before final '/': "pricing"
+    pub module_path: String,
+    pub intent_why: String,
+    pub covers: Vec<String>,
+    pub body_rust: String,
+    pub spec_version: Option<String>,
+}
+
+impl ResolvedMoleculeTest {
+    /// Derive fn_name and module_path from hierarchical ID.
+    /// The schema enforces at least one '/', so the rsplit_once fallback is defensive only.
+    pub fn from_loaded(loaded: &LoadedMoleculeTest) -> Self {
+        let id = loaded.test.id.as_str();
+        let (module_path, fn_name) = id
+            .rsplit_once('/')
+            .map(|(m, f)| (m.to_string(), f.to_string()))
+            .unwrap_or_else(|| (String::new(), id.to_string()));
+        Self {
+            id: id.to_string(),
+            fn_name,
+            module_path,
+            intent_why: loaded.test.intent.why.clone(),
+            covers: loaded.test.covers.clone(),
+            body_rust: loaded.test.body.rust.clone(),
+            spec_version: loaded.test.spec_version.clone(),
+        }
     }
 }
 
@@ -266,6 +337,12 @@ mod tests {
     }
 
     #[test]
+    fn test_callable_name() {
+        assert_eq!(callable_name("money/round"), "round");
+        assert_eq!(callable_name("utils/math/round"), "round");
+    }
+
+    #[test]
     fn test_has_dep_collision() {
         let deps = vec!["money/round".to_string(), "utils/round".to_string()];
         let collision = ResolvedSpec::has_dep_collision(&deps);
@@ -274,6 +351,18 @@ mod tests {
         let deps_no_collision = vec!["money/round".to_string(), "money/add".to_string()];
         let no_collision = ResolvedSpec::has_dep_collision(&deps_no_collision);
         assert!(no_collision.is_none());
+    }
+
+    #[test]
+    fn test_has_callable_collision() {
+        let ids = vec!["money/round".to_string(), "utils/round".to_string()];
+        let collision = has_callable_collision(&ids).expect("expected collision");
+        assert_eq!(collision.0, "money/round");
+        assert_eq!(collision.1, "utils/round");
+        assert_eq!(collision.2, "round");
+
+        let ids_no_collision = vec!["money/round".to_string(), "money/add".to_string()];
+        assert!(has_callable_collision(&ids_no_collision).is_none());
     }
 
     #[test]
