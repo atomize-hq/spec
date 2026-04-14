@@ -144,7 +144,7 @@ spec export <path> --output <file>        # write JSON bundle to file
 
 `spec build` and `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec test` also updates each unit's `.spec.passport.json` with observed pass/fail evidence.
 
-When you pass a single `.unit.spec` file to `spec validate`, `spec generate`, or `spec export`, the CLI stays scoped to that exact unit. Sibling `.test.spec` files are directory-scoped and are only loaded for directory invocations.
+When you pass a single `.unit.spec` file to `spec validate`, `spec generate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. Sibling `.test.spec` files are directory-scoped and are only loaded for directory invocations.
 
 `spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read.
 
@@ -156,7 +156,7 @@ The `--output` path for `generate`/`build`/`test` must resolve to a directory in
 
 `spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport trail that records what was actually observed to pass.
 
-The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate` and `generate` stay on that unit and do not pull sibling molecule tests into the run.
+The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate`, `generate`, and `test` stay on that unit and do not pull sibling molecule tests into the run.
 
 ```bash
 spec validate examples/ecommerce/units --format json

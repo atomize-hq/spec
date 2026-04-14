@@ -2565,6 +2565,65 @@ local_tests:
     pricing_dir.join("apply_tax.unit.spec")
 }
 
+fn write_single_file_test_scope_project(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    let pricing_dir = units_dir.join("pricing");
+    let src_dir = project_dir.join("src");
+
+    fs::create_dir_all(&pricing_dir).unwrap();
+    fs::create_dir_all(&src_dir).unwrap();
+
+    fs::write(
+        project_dir.join("Cargo.toml"),
+        "[package]\nname = \"single-file-test-scope\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(
+        src_dir.join("main.rs"),
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    )
+    .unwrap();
+
+    write_spec(
+        &units_dir,
+        "pricing/a.unit.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/a
+kind: function
+intent:
+  why: Return true so the single-file test path has one local test to run.
+contract:
+  returns: bool
+body:
+  rust: |
+    {
+        true
+    }
+local_tests:
+  - id: happy_path
+    expect: a() == true
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/bad.test.spec",
+        r#"spec_version: "0.3.0"
+id: pricing/bad
+intent:
+  why: Invalid molecule test used to prove single-file spec test stays scoped.
+covers:
+  - pricing/missing
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    pricing_dir.join("a.unit.spec")
+}
+
 // ── D2: Runtime evidence in passports ───────────────────────────────────────
 
 #[test]
@@ -4226,6 +4285,97 @@ fn spec_test_directory_path_unchanged() {
     assert!(
         target_passport.contains("\"status\": \"pass\""),
         "{target_passport}"
+    );
+}
+
+#[test]
+fn single_file_test_skips_sibling_molecule_tests() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let spec_path = write_single_file_test_scope_project(project_dir);
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            spec_path.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success("single-file spec test should ignore sibling molecule specs", &output);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+    assert!(
+        !combined.contains("pricing/missing"),
+        "single-file spec test should not load sibling molecule specs\n{combined}"
+    );
+    assert!(
+        !combined.contains("pricing/bad"),
+        "single-file spec test should stay scoped to the target unit\n{combined}"
+    );
+
+    let target_passport = project_dir.join("units/pricing/a.spec.passport.json");
+    let sibling_molecule_passport = project_dir.join("units/pricing/bad.spec.passport.json");
+    assert!(
+        target_passport.exists(),
+        "expected target passport to be written"
+    );
+    assert!(
+        !sibling_molecule_passport.exists(),
+        "expected no passport for sibling molecule spec"
+    );
+
+    let target_passport = read_passport(&target_passport);
+    assert!(
+        target_passport.contains("\"status\": \"pass\""),
+        "{target_passport}"
+    );
+}
+
+#[test]
+fn directory_test_still_loads_sibling_molecule_tests() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    write_single_file_test_scope_project(project_dir);
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            units_dir.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "directory spec test should still load sibling molecule specs"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("pricing/missing") || stderr.contains("pricing/bad"),
+        "expected directory spec test to surface the invalid molecule spec\n{stderr}"
     );
 }
 

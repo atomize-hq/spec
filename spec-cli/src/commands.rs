@@ -1256,30 +1256,31 @@ fn test_command(
         bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
     }
 
-    let (spec_root, target_spec) = if path.is_file() {
+    let (generation_scope, pipeline_scope, target_spec) = if path.is_file() {
         if !is_unit_spec(path) {
             bail!("{} is not a .unit.spec file", path.display());
         }
         (
+            path,
             path.parent().unwrap_or(path),
             Some(load_file(path).with_context(|| format!("Failed to load {}", path.display()))?),
         )
     } else {
-        (path, None)
+        (path, path, None)
     };
 
-    let ctx = resolve_pipeline_context(spec_root, crate_root_flag, config)?;
+    let ctx = resolve_pipeline_context(pipeline_scope, crate_root_flag, config)?;
     let resolved_output = output
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(spec_root, &resolved_output)?;
+    let generated = generate_specs(generation_scope, &resolved_output)?;
     if target_spec.is_none() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
     let passport_write_plan =
-        passport_write_plan(path, spec_root, &generated.specs, target_spec.as_ref());
+        passport_write_plan(path, pipeline_scope, &generated.specs, target_spec.as_ref());
 
     // Resolve the module prefix once — used for both the cargo test filter and
     // evidence lookup. A single resolved value ensures they always agree.
