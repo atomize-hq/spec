@@ -144,17 +144,10 @@ pub fn validate_semantic_with_options(
     // Check if ID contains Rust reserved keywords
     validate_rust_keywords(&spec.spec.id, &spec.source.file_path)?;
 
-    // Reject IDs whose last segment is reserved by spec (would collide with generated files).
-    // "molecule_tests" is the only reserved segment: spec generates a file with that name
-    // in each namespace to hold molecule test functions.
-    if let Some(last_segment) = spec.spec.id.split('/').next_back()
-        && last_segment == "molecule_tests"
-    {
-        return Err(SpecError::ReservedUnitName {
-            segment: last_segment.to_string(),
-            path: spec.source.file_path.clone(),
-        });
-    }
+    // Reject IDs containing reserved namespace segments. "molecule_tests" is emitted as a
+    // generated module/file name by build_namespaces + molecule test generation, so allowing it
+    // anywhere in a unit ID can create molecule_tests.rs vs molecule_tests/mod.rs collisions.
+    validate_reserved_unit_segments(&spec.spec.id, &spec.source.file_path)?;
 
     // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
     for dep in &spec.spec.deps {
@@ -201,6 +194,19 @@ pub fn validate_semantic_with_options(
     validate_body_rust_block(spec)?;
     validate_local_test_expects(spec, options)?;
     validate_contract_input_types(spec)?;
+
+    Ok(())
+}
+
+fn validate_reserved_unit_segments(id: &str, file_path: &str) -> Result<()> {
+    for segment in id.split('/') {
+        if segment == "molecule_tests" {
+            return Err(SpecError::ReservedUnitName {
+                segment: segment.to_string(),
+                path: file_path.to_string(),
+            });
+        }
+    }
 
     Ok(())
 }
@@ -1869,6 +1875,36 @@ body:
             err.contains("reserved"),
             "expected 'reserved' in error, got: {err}"
         );
+    }
+
+    #[test]
+    fn reserved_unit_name_namespace_molecule_tests_is_rejected() {
+        let spec = create_test_spec("qa/molecule_tests/foo", "{ }");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+        assert!(
+            err.contains("molecule_tests"),
+            "expected segment name in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_unit_name_deep_namespace_molecule_tests_is_rejected() {
+        let spec = create_test_spec("qa/sub/molecule_tests/foo", "{ }");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn non_reserved_similar_unit_name_passes() {
+        let spec = create_test_spec("qa/molecule_test_helpers/foo", "{ }");
+        assert!(validate_semantic(&spec).is_ok());
     }
 
     #[test]

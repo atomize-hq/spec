@@ -1039,20 +1039,30 @@ mod tests {
             vec!["pricing/apply_tax"],
             "{ assert!(true); }",
         );
-        let spec = make_resolved_spec_with_imports("pricing/apply_tax", vec!["rust_decimal::Decimal"]);
+        let spec =
+            make_resolved_spec_with_imports("pricing/apply_tax", vec!["rust_decimal::Decimal"]);
         let specs_by_id: HashMap<&str, &ResolvedSpec> =
             [("pricing/apply_tax", &spec)].into_iter().collect();
 
         let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
 
-        assert!(code.contains("use rust_decimal::Decimal;"), "should emit spec imports");
+        assert!(
+            code.contains("use rust_decimal::Decimal;"),
+            "should emit spec imports"
+        );
         assert!(
             code.contains("use crate::pricing::apply_tax::apply_tax;"),
             "should emit use crate path for covered unit"
         );
         assert!(code.contains("#[test]"), "should emit test attribute");
-        assert!(code.contains("fn test_checkout()"), "should use fn_name with test_ prefix");
-        assert!(code.contains("{ assert!(true); }"), "should include body verbatim");
+        assert!(
+            code.contains("fn test_checkout()"),
+            "should use fn_name with test_ prefix"
+        );
+        assert!(
+            code.contains("{ assert!(true); }"),
+            "should include body verbatim"
+        );
     }
 
     #[test]
@@ -1099,29 +1109,40 @@ mod tests {
 
     #[test]
     fn generate_molecule_tests_code_multiple_tests_in_namespace() {
-        let test_a = make_resolved_molecule_test("pricing/flow_a", vec!["pricing/apply_tax"], "{ assert!(1 == 1); }");
-        let test_b = make_resolved_molecule_test("pricing/flow_b", vec!["pricing/apply_tax"], "{ assert!(2 == 2); }");
+        let test_a = make_resolved_molecule_test(
+            "pricing/flow_a",
+            vec!["pricing/apply_tax"],
+            "{ assert!(1 == 1); }",
+        );
+        let test_b = make_resolved_molecule_test(
+            "pricing/flow_b",
+            vec!["pricing/apply_tax"],
+            "{ assert!(2 == 2); }",
+        );
         let spec = make_resolved_spec_with_imports("pricing/apply_tax", vec![]);
         let specs_by_id: HashMap<&str, &ResolvedSpec> =
             [("pricing/apply_tax", &spec)].into_iter().collect();
 
         let code = generate_molecule_tests_code(&[&test_a, &test_b], &specs_by_id).unwrap();
 
-        assert!(code.contains("fn test_flow_a()"), "first test should be present");
-        assert!(code.contains("fn test_flow_b()"), "second test should be present");
+        assert!(
+            code.contains("fn test_flow_a()"),
+            "first test should be present"
+        );
+        assert!(
+            code.contains("fn test_flow_b()"),
+            "second test should be present"
+        );
         // Use statement should appear only once despite two tests covering the same unit
-        let use_count = code.matches("use crate::pricing::apply_tax::apply_tax;").count();
+        let use_count = code
+            .matches("use crate::pricing::apply_tax::apply_tax;")
+            .count();
         assert_eq!(use_count, 1, "use path should be deduplicated across tests");
     }
 
     #[test]
     fn generate_mod_rs_with_molecule_tests_appends_declaration() {
-        let content = generate_mod_rs(
-            &["apply_discount.rs".to_string()],
-            &[],
-            true,
-        )
-        .unwrap();
+        let content = generate_mod_rs(&["apply_discount.rs".to_string()], &[], true).unwrap();
 
         assert!(
             content.contains("pub mod molecule_tests;"),

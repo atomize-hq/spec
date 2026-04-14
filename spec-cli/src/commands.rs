@@ -2217,24 +2217,23 @@ fn print_status_unit(unit: &JsonStatusUnit) {
 }
 
 fn json_error_entry_to_human(entry: &JsonErrorEntry) -> String {
-    if entry.code == "SPEC_DEP_COLLISION" {
-        if let (Some(dep1), Some(dep2), Some(fn_name)) = (&entry.dep, &entry.path2, &entry.value) {
-            return format!(
-                "{}: '{}' and '{}' both resolve to '{}'",
-                entry.code, dep1, dep2, fn_name
-            );
-        }
+    if entry.code == "SPEC_DEP_COLLISION"
+        && let (Some(dep1), Some(dep2), Some(fn_name)) = (&entry.dep, &entry.path2, &entry.value)
+    {
+        return format!(
+            "{}: '{}' and '{}' both resolve to '{}'",
+            entry.code, dep1, dep2, fn_name
+        );
     }
 
-    if entry.code == "SPEC_MOLECULE_COVERS_COLLISION" {
-        if let (Some(cover1), Some(cover2), Some(fn_name), Some(test_id)) =
+    if entry.code == "SPEC_MOLECULE_COVERS_COLLISION"
+        && let (Some(cover1), Some(cover2), Some(fn_name), Some(test_id)) =
             (&entry.dep, &entry.path2, &entry.value, &entry.id)
-        {
-            return format!(
-                "{}: '{}' and '{}' both resolve to '{}' in {}",
-                entry.code, cover1, cover2, fn_name, test_id
-            );
-        }
+    {
+        return format!(
+            "{}: '{}' and '{}' both resolve to '{}' in {}",
+            entry.code, cover1, cover2, fn_name, test_id
+        );
     }
 
     if let Some(message) = &entry.message {
@@ -2588,6 +2587,82 @@ extra_field: nope
             "/// Add sales tax to a subtotal using a rate expressed as a decimal fraction.\n"
         ));
         assert!(apply_tax.contains("pub fn apply_tax("));
+    }
+
+    #[test]
+    fn generate_specs_rejects_reserved_molecule_tests_namespace_segment() {
+        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let units_dir = temp_dir.path().join("units");
+        let output_dir = temp_dir.path().join("generated/spec");
+
+        write_spec(
+            &units_dir,
+            "qa/molecule_tests/foo.unit.spec",
+            r#"
+id: qa/molecule_tests/foo
+kind: function
+intent:
+  why: Reproduce reserved namespace collision.
+body:
+  rust: |
+    {
+        true
+    }
+"#,
+        );
+        write_spec(
+            &units_dir,
+            "qa/flow.test.spec",
+            r#"
+id: qa/flow
+intent:
+  why: Exercise qa molecule test generation.
+covers:
+  - qa/molecule_tests/foo
+body:
+  rust: |
+    {
+        assert!(foo());
+    }
+"#,
+        );
+
+        let (specs, loader_errors, loader_warnings, total_files) =
+            collect_specs(&units_dir).unwrap();
+        assert_eq!(loader_errors.len(), 0);
+        assert_eq!(loader_warnings.len(), 0);
+        assert_eq!(total_files, 1);
+
+        let validation_options = ValidationOptions {
+            strict_deps: true,
+            allow_unsafe_local_test_expect: false,
+        };
+        let (validation_errors, _validation_warnings) =
+            finish_validation(&specs, &validation_options);
+        assert!(
+            validation_errors.iter().any(|err| {
+                matches!(err, spec_core::SpecError::ReservedUnitName { segment, .. } if segment == "molecule_tests")
+                    && spec_error_code(err) == "SPEC_RESERVED_UNIT_NAME"
+            }),
+            "expected SPEC_RESERVED_UNIT_NAME, got: {validation_errors:?}"
+        );
+
+        let err = match generate_specs(&units_dir, &output_dir) {
+            Ok(_) => panic!("expected reserved namespace validation to fail"),
+            Err(err) => err.to_string(),
+        };
+        assert!(
+            err.contains("1 error"),
+            "expected generation to fail before output, got: {err}"
+        );
+        assert!(
+            !output_dir.join("qa/molecule_tests.rs").exists(),
+            "generator should fail before writing molecule_tests.rs"
+        );
+        assert!(
+            !output_dir.join("qa/molecule_tests/mod.rs").exists(),
+            "generator should fail before writing conflicting module output"
+        );
     }
 
     #[test]
