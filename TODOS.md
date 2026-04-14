@@ -119,3 +119,24 @@
 - [x] **Concurrent process detection/warning** — Completed feat/m5-follow-up (2026-04-11). `ConcurrentPassportWriteGuard` writes a temp-dir marker on `finalize_passports` entry, warns when other active markers exist. Best-effort / warn-only; TTL 5 min. (spec-cli/src/commands.rs)
 - [ ] **pipeline.rs eprintln! forward-compat for --format json** — `run_cargo_build` (pipeline.rs:70) and `run_cargo_test` (pipeline.rs:79) emit unconditional `eprintln!` status lines. If build/test ever get `--format json` support, these will contaminate stderr and bypass the machine-readable contract (per operational learning eprintln-json-mode-bypass). Fix: thread an `OutputFormat` parameter through `run_cargo_build`/`run_cargo_test` and gate eprintln! on `OutputFormat::Text`. Effort: XS. Do this before adding --format json to build/test commands. (Added by /plan-eng-review 2026-04-11)
 - [x] **push_error/push_warning helper extracted** — Already implemented at commands.rs:1209-1220 (marked as pending in Priority 3 plan section in error — was completed before plan was written). (Confirmed by /plan-eng-review 2026-04-11)
+
+## M6 Backlog (from M5 review)
+
+- [x] **Default output path `src/generated`** — Completed v0.5.2 (2026-04-12). `spec generate`, `spec build`, and `spec test` derive the output dir from crate root via `spec.toml` or ancestor `Cargo.toml` walk; default is `src/generated`. `--output` still accepted for legacy paths. (feat/m6, commands.rs)
+- [x] **`generated_module_prefix` config key** — Completed v0.5.2 (2026-04-12). `[pipeline] generated_module_prefix` in `spec.toml` overrides auto-derived module path for non-standard layouts. (feat/m6, config.rs)
+- [x] **`Verbosity` enum in pipeline API** — Completed v0.5.2 (2026-04-12). `Verbosity::Normal` preserves existing stderr output; `Verbosity::Silent` suppresses it. Prepares `run_cargo_build`/`run_cargo_test` for future `--format json` mode. (feat/m6, pipeline.rs)
+- [x] **Module prefix evidence mismatch** — Completed v0.5.2 (2026-04-12). Effective prefix now computed once and shared between cargo filter and evidence lookup. Fixes "all tests unknown" when derivation paths disagreed. (feat/m6, commands.rs)
+- [x] **Document nextest limitation** — Completed v0.5.2 (2026-04-12). README Pipeline section explicitly calls out that `cargo nextest` format is unsupported and produces `status: "unknown"`. (feat/m6a, README.md)
+
+## M7 Backlog (from M6 review)
+
+- [x] **Molecule tests (`.test.spec`) — first-class support** — Completed v0.5.3 (2026-04-13). `spec validate`, `generate`, `build`, `test`, and `export` all handle `.test.spec` files. Each test declares `covers` units and a full Rust block body. Generated as `#[test]` functions in `molecule_tests.rs` per namespace, gated with `#[cfg(test)]`. (feat/m7, commands.rs, generator.rs, loader.rs)
+- [x] **`SpecGraph` in spec-core** — Completed v0.5.3 (2026-04-13). Minimal typed graph (`UnitNode`, `MoleculeTestNode`, `SpecEdge`) built from loaded specs and molecule tests. Foundation for M8 full graph layer. (feat/m7, graph.rs)
+- [x] **`spec export` schema_version 2** — Completed v0.5.3 (2026-04-13). `ExportEdge` changed to tagged enum with `kind` field (`"dep"` / `"covers"`). `molecule_tests` array added to bundle. (feat/m7, export.rs)
+- [x] **`spec status` schema_version 2 with new health states** — Completed v0.5.3 (2026-04-13). Added `failing`, `incomplete`, `untested` states. `stale: bool` removed; `reason: Option<String>` added. Non-valid units exit 1. (feat/m7, commands.rs)
+- [x] **Single-file CLI scope fix for sibling molecules** — Completed v0.5.3 (2026-04-13). File-path invocations of `validate`, `generate`, `export` no longer load sibling `.test.spec` files. Directory invocations load all. (feat/m7, commands.rs)
+- [x] **Reserved `molecule_tests` namespace segment** — Completed v0.5.3 (2026-04-13). Unit IDs and molecule test IDs containing `molecule_tests` as any segment are rejected at validation time. (feat/m7, validator.rs)
+
+### Open (from M7 review)
+
+- [ ] **Molecule test status tracking** — AGENTS.md documents that molecule test failures don't propagate to unit status. A failing molecule test currently has no tracked status of its own. Future milestone should track per-molecule-test pass/fail in a `molecule_tests_evidence` field (or similar) so CI can surface molecule test regressions without confusing unit health. (Added by /ship feat/m7 2026-04-14)
