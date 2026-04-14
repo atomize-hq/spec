@@ -5147,6 +5147,68 @@ fn export_rejects_molecule_body_with_nested_unsafe_expr() {
 }
 
 #[test]
+fn spec_test_with_molecule_tests_succeeds_and_no_molecule_passport_written() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_pricing_project(project_dir, true);
+
+    // Add a molecule test that covers one of the pricing units
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/tax_and_discount.test.spec",
+        r#"id: pricing/tax_and_discount
+spec_version: "0.3.0"
+intent:
+  why: Verify tax and discount interact correctly.
+covers:
+  - pricing/apply_tax
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success(
+        "spec test should succeed when molecule tests are present",
+        &output,
+    );
+
+    // M7 deferral invariant: molecule test passports are not written until M8
+    let molecule_passport = project_dir.join("units/pricing/tax_and_discount.test.spec.passport.json");
+    assert!(
+        !molecule_passport.exists(),
+        "spec test must not write a passport for .test.spec files (deferred to M8): {}",
+        molecule_passport.display()
+    );
+
+    // Unit passports should still be written as normal
+    assert!(
+        project_dir.join("units/pricing/apply_tax.spec.passport.json").exists(),
+        "unit passport should still be written for apply_tax"
+    );
+}
+
+#[test]
 fn reserved_unit_name_molecule_tests_is_rejected() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");

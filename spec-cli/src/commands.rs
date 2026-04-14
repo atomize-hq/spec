@@ -794,13 +794,17 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     for err in molecule_errors {
         push_error(&mut errors, err);
     }
-    for warning in molecule_warnings {
-        push_warning(&mut warnings, warning);
+    // Print molecule warnings immediately and separately — unit warnings were already printed
+    // above. Adding molecule warnings to the shared map would re-print unit warnings alongside
+    // molecule ones if there are molecule errors.
+    if !molecule_warnings.is_empty() {
+        let mut mol_warn_map = DiagnosticMap::new();
+        for warning in molecule_warnings {
+            push_warning(&mut mol_warn_map, warning);
+        }
+        print_diagnostics(&mol_warn_map);
     }
     if !errors.is_empty() {
-        if !warnings.is_empty() {
-            print_diagnostics(&warnings);
-        }
         print_diagnostics(&errors);
         let file_count = count_unique_files(&errors);
         bail!(
@@ -870,6 +874,19 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         }
         if !warnings.is_empty() {
             print_diagnostics(&warnings);
+        }
+        // Even with no unit specs, validate and warn about any molecule tests found.
+        // Without this, a directory with only .test.spec files silently skips validation,
+        // and stale molecule_tests.rs files from a prior run are never cleaned up.
+        if includes_directory_molecule_tests(path) {
+            let molecule_report = load_molecule_test_directory_report(path);
+            if !molecule_report.tests.is_empty() || !molecule_report.errors.is_empty() {
+                eprintln!(
+                    "⚠ {} molecule test{} found but 0 unit specs — molecule tests require unit specs to validate covers",
+                    molecule_report.tests.len() + molecule_report.errors.len(),
+                    pluralize(molecule_report.tests.len() + molecule_report.errors.len())
+                );
+            }
         }
         println!("0 units found, nothing to generate.");
         return Ok(GeneratedSpecs {
@@ -1012,17 +1029,13 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
     let molecule_test_paths =
         generate_and_write_molecule_tests(&resolved_molecule_tests, &specs_by_id, &output_base)
             .with_context(|| "Failed to generate molecule test files")?;
+    let molecule_test_file_count = molecule_test_paths.len();
     generated_rs_rel_paths.extend(molecule_test_paths);
 
     clean_output_dir(&output_base, &generated_rs_rel_paths)
         .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
 
     let generated_at = rfc3339_now();
-    let molecule_test_file_count = resolved_molecule_tests
-        .iter()
-        .map(|t| t.module_path.clone())
-        .collect::<std::collections::HashSet<_>>()
-        .len();
 
     println!(
         "Generated {} file{}",

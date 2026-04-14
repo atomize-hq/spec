@@ -2,11 +2,20 @@
 
 ## 0.5.3 - 2026-04-13
 
+### Added
+
+- **Molecule tests (`.test.spec`)** — First-class support for multi-unit integration tests. Author `.test.spec` files alongside your unit specs to declare test interactions. `spec validate`, `spec generate`, `spec build`, `spec test`, and `spec export` all handle them. Each molecule test declares which units it `covers` and provides a full Rust block body; generated `#[test]` functions are placed in `molecule_tests.rs` per namespace.
+- **`SpecGraph` in spec-core** — Minimal typed graph (`UnitNode`, `MoleculeTestNode`, `SpecEdge`) built from loaded specs and molecule tests. Foundation for M8 full graph layer.
+
+### Breaking
+
+- **`spec export` schema_version bumped to 2** — `ExportEdge` changed from a flat struct `{from, to}` to a tagged enum. Dep edges now serialize as `{"kind":"dep","from":"…","to":"…"}` and covers edges as `{"kind":"covers","test":"…","unit":"…"}`. The `molecule_tests` array is also added to the bundle. Consumers reading schema_version 1 bundles must update to handle the `kind` field.
+
 ### Fixed
 
 - **Single-file CLI scope no longer breaks on sibling molecule tests** — `spec validate <file.unit.spec>`, `spec generate <file.unit.spec>`, and `spec export <file.unit.spec>` now stay scoped to the requested unit. Sibling `.test.spec` files are only loaded for directory invocations, preserving the exact-unit authoring loop used by agents and README workflows.
 
-### Breaking
+### Breaking (continued)
 
 - **`spec status` non-valid units now exit `1`** — `untested`, `incomplete`, and `failing` units now produce a non-zero exit code alongside `invalid` and `stale`. Consumers that previously treated those states as soft-success need to update.
 - **`stale: bool` removed from `spec status --format json` units** — Machine consumers should switch to the `status` and `reason` fields instead of reading a separate stale flag.
