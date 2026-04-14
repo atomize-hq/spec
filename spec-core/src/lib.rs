@@ -125,7 +125,9 @@ pub enum SpecError {
     #[error("Missing .spec-generated marker in {path} - refusing to clean without marker")]
     MissingMarker { path: String },
 
-    #[error("Molecule test '{test_id}' covers '{cover_id}' which was not found in the spec set at {test_path}")]
+    #[error(
+        "Molecule test '{test_id}' covers '{cover_id}' which was not found in the spec set at {test_path}"
+    )]
     MoleculeCoversNotFound {
         cover_id: String,
         test_id: String,
@@ -140,12 +142,11 @@ pub enum SpecError {
     },
 
     #[error("body.rust failed to parse as a block: {message} at {test_path}")]
-    MoleculeBodyRustMustBeBlock {
-        message: String,
-        test_path: String,
-    },
+    MoleculeBodyRustMustBeBlock { message: String, test_path: String },
 
-    #[error("body.rust contains an `unsafe` block, which is not allowed in molecule tests at {test_path}")]
+    #[error(
+        "body.rust contains an `unsafe` block, which is not allowed in molecule tests at {test_path}"
+    )]
     MoleculeBodyContainsUnsafe { test_path: String },
 
     #[error(
@@ -177,10 +178,7 @@ pub enum SpecWarning {
     MissingSpecVersion { path: String, version: &'static str },
 
     #[error("⚠ molecule test '{test_id}' has no covered units at {test_path}")]
-    MoleculeTestNoCoveredUnits {
-        test_id: String,
-        test_path: String,
-    },
+    MoleculeTestNoCoveredUnits { test_id: String, test_path: String },
 }
 
 #[cfg(test)]

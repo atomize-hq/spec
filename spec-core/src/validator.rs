@@ -147,13 +147,13 @@ pub fn validate_semantic_with_options(
     // Reject IDs whose last segment is reserved by spec (would collide with generated files).
     // "molecule_tests" is the only reserved segment: spec generates a file with that name
     // in each namespace to hold molecule test functions.
-    if let Some(last_segment) = spec.spec.id.split('/').next_back() {
-        if last_segment == "molecule_tests" {
-            return Err(SpecError::ReservedUnitName {
-                segment: last_segment.to_string(),
-                path: spec.source.file_path.clone(),
-            });
-        }
+    if let Some(last_segment) = spec.spec.id.split('/').next_back()
+        && last_segment == "molecule_tests"
+    {
+        return Err(SpecError::ReservedUnitName {
+            segment: last_segment.to_string(),
+            path: spec.source.file_path.clone(),
+        });
     }
 
     // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
@@ -541,12 +541,10 @@ fn contains_unsafe_in_expr(expr: &syn::Expr) -> bool {
         syn::Expr::Unsafe(_) => true,
         syn::Expr::Block(b) => contains_unsafe_in_block(&b.block),
         syn::Expr::Call(c) => {
-            contains_unsafe_in_expr(&c.func)
-                || c.args.iter().any(contains_unsafe_in_expr)
+            contains_unsafe_in_expr(&c.func) || c.args.iter().any(contains_unsafe_in_expr)
         }
         syn::Expr::MethodCall(m) => {
-            contains_unsafe_in_expr(&m.receiver)
-                || m.args.iter().any(contains_unsafe_in_expr)
+            contains_unsafe_in_expr(&m.receiver) || m.args.iter().any(contains_unsafe_in_expr)
         }
         syn::Expr::Binary(b) => {
             contains_unsafe_in_expr(&b.left) || contains_unsafe_in_expr(&b.right)
@@ -1852,7 +1850,9 @@ body:
     // ── molecule body unsafe detection ───────────────────────────────────────
 
     fn make_molecule_test(id: &str, body: &str) -> crate::types::LoadedMoleculeTest {
-        use crate::types::{Body, Intent, LoadedMoleculeTest, MoleculeTestSource, MoleculeTestStruct};
+        use crate::types::{
+            Body, Intent, LoadedMoleculeTest, MoleculeTestSource, MoleculeTestStruct,
+        };
         LoadedMoleculeTest {
             source: MoleculeTestSource {
                 file_path: format!("test/{}.test.spec", id),
@@ -1874,11 +1874,10 @@ body:
 
     #[test]
     fn molecule_body_with_unsafe_block_is_rejected() {
-        let test = make_molecule_test(
-            "pricing/checkout_flow",
-            "{ unsafe { let x = 1; } }",
-        );
-        let err = validate_molecule_test_semantic(&test).unwrap_err().to_string();
+        let test = make_molecule_test("pricing/checkout_flow", "{ unsafe { let x = 1; } }");
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
         assert!(
             err.contains("unsafe"),
             "expected 'unsafe' in error, got: {err}"

@@ -100,8 +100,10 @@ pub fn build_export_bundle(
         .collect();
     edges.sort();
 
-    let export_molecule_tests: Vec<ExportMoleculeTest> =
-        molecule_tests.iter().map(ExportMoleculeTest::from).collect();
+    let export_molecule_tests: Vec<ExportMoleculeTest> = molecule_tests
+        .iter()
+        .map(ExportMoleculeTest::from)
+        .collect();
 
     ExportBundle {
         schema_version: EXPORT_SCHEMA_VERSION,
@@ -375,8 +377,7 @@ mod tests {
             git_commit_sha: "abc123".to_string(),
         };
 
-        let bundle =
-            build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", Some(&provenance));
+        let bundle = build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", Some(&provenance));
 
         assert_eq!(bundle.provenance, Some(provenance));
     }

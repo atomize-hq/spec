@@ -86,7 +86,9 @@ impl SpecGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Intent, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct};
+    use crate::types::{
+        Body, Intent, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct,
+    };
 
     fn make_loaded_spec(id: &str, deps: Vec<&str>) -> LoadedSpec {
         LoadedSpec {
@@ -97,11 +99,15 @@ mod tests {
             spec: SpecStruct {
                 id: id.to_string(),
                 kind: "function".to_string(),
-                intent: Intent { why: format!("Why {id}") },
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
                 contract: None,
                 deps: deps.into_iter().map(str::to_string).collect(),
                 imports: vec![],
-                body: Body { rust: "{ }".to_string() },
+                body: Body {
+                    rust: "{ }".to_string(),
+                },
                 local_tests: vec![],
                 links: None,
                 spec_version: None,
@@ -117,9 +123,13 @@ mod tests {
             },
             test: MoleculeTestStruct {
                 id: id.to_string(),
-                intent: Intent { why: format!("Why {id}") },
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
                 covers: covers.into_iter().map(str::to_string).collect(),
-                body: Body { rust: "{ assert!(true); }".to_string() },
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
                 spec_version: None,
             },
         }
@@ -131,9 +141,10 @@ mod tests {
             make_loaded_spec("pricing/apply_discount", vec!["money/round"]),
             make_loaded_spec("money/round", vec![]),
         ];
-        let molecule_tests = vec![
-            make_loaded_molecule_test("pricing/discount_test", vec!["pricing/apply_discount"]),
-        ];
+        let molecule_tests = vec![make_loaded_molecule_test(
+            "pricing/discount_test",
+            vec!["pricing/apply_discount"],
+        )];
 
         let graph = SpecGraph::build(&units, &molecule_tests);
 
@@ -141,10 +152,18 @@ mod tests {
         assert_eq!(graph.molecule_tests.len(), 1);
         assert_eq!(graph.edges.len(), 2); // 1 dep + 1 covers
 
-        let dep_edges: Vec<_> = graph.edges.iter().filter(|e| matches!(e, SpecEdge::Dep { .. })).collect();
+        let dep_edges: Vec<_> = graph
+            .edges
+            .iter()
+            .filter(|e| matches!(e, SpecEdge::Dep { .. }))
+            .collect();
         assert_eq!(dep_edges.len(), 1);
 
-        let covers_edges: Vec<_> = graph.edges.iter().filter(|e| matches!(e, SpecEdge::Covers { .. })).collect();
+        let covers_edges: Vec<_> = graph
+            .edges
+            .iter()
+            .filter(|e| matches!(e, SpecEdge::Covers { .. }))
+            .collect();
         assert_eq!(covers_edges.len(), 1);
     }
 

@@ -446,7 +446,10 @@ pub fn generate_and_write_molecule_tests(
     // Group tests by module_path
     let mut by_module: HashMap<String, Vec<&ResolvedMoleculeTest>> = HashMap::new();
     for test in resolved_tests {
-        by_module.entry(test.module_path.clone()).or_default().push(test);
+        by_module
+            .entry(test.module_path.clone())
+            .or_default()
+            .push(test);
     }
 
     let mut generated_paths = HashSet::new();
