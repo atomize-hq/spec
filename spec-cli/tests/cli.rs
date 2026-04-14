@@ -5550,3 +5550,93 @@ body:
         "error should mention reserved name\nstderr: {stderr}"
     );
 }
+
+#[test]
+fn reserved_molecule_test_name_molecule_tests_is_rejected() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    write_molecule_test_spec(
+        &units_dir,
+        "qa/molecule_tests/foo.test.spec",
+        "qa/molecule_tests/foo",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for molecule test with reserved ID segment 'molecule_tests'"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("reserved") || stderr.contains("SPEC_RESERVED_UNIT_NAME"),
+        "error should mention reserved name\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("qa/molecule_tests/foo.test.spec"),
+        "error should point at the molecule test path\nstderr: {stderr}"
+    );
+
+    let json_output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !json_output.status.success(),
+        "validate --format json should fail for molecule test with reserved ID segment"
+    );
+    assert!(
+        json_output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&json_output.stderr)
+    );
+
+    let json = parse_stdout_json(&json_output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors.iter().any(|error| {
+            let path = error["path"].as_str().unwrap_or_default();
+            error["code"] == "SPEC_RESERVED_UNIT_NAME"
+                && path.ends_with("/units/qa/molecule_tests/foo.test.spec")
+                && error["value"] == "molecule_tests"
+        }),
+        "expected SPEC_RESERVED_UNIT_NAME for molecule test path, got: {errors:?}"
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let generate_output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !generate_output.status.success(),
+        "generate should fail for molecule test with reserved ID segment 'molecule_tests'"
+    );
+    assert!(
+        !output_dir.join("qa/molecule_tests.rs").exists(),
+        "generate should fail before writing qa/molecule_tests.rs"
+    );
+    assert!(
+        !output_dir.join("qa/molecule_tests/mod.rs").exists(),
+        "generate should fail before writing qa/molecule_tests/mod.rs"
+    );
+}

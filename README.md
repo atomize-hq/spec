@@ -152,6 +152,8 @@ The `--output` path for `generate`/`build`/`test` must resolve to a directory in
 
 **Nextest:** `spec test` parses standard `cargo test` output format only. `cargo nextest` uses a different output format and is not supported. Running `spec test` in a project configured for nextest will produce `status: "unknown"` for all local tests. Use standard `cargo test`.
 
+For both `.unit.spec` and directory-scoped `.test.spec` validation, the path segment `molecule_tests` is reserved. Molecule tests generate `molecule_tests.rs` per namespace, so allowing that literal segment in an authored spec ID would create module/file collisions in generated output.
+
 ## AI-Native Usage
 
 `spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport trail that records what was actually observed to pass.
@@ -219,6 +221,7 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_GENERATOR` | Code generation failure |
 | `SPEC_OUTPUT_DIR` | Output directory creation or safety check failed |
 | `SPEC_MISSING_MARKER` | Output dir lacks the `.spec-generated` marker — refusing to clean |
+| `SPEC_RESERVED_UNIT_NAME` | A slash-delimited spec `id` contains a reserved segment such as `molecule_tests` |
 
 ## Consuming Generated Code
 

@@ -161,7 +161,7 @@ pub enum SpecError {
     MoleculeBodyContainsUnsafe { test_path: String },
 
     #[error(
-        "unit ID segment '{segment}' is reserved by spec and cannot be used anywhere in a unit ID at {path}"
+        "spec ID segment '{segment}' is reserved by spec and cannot be used anywhere in a spec ID at {path}"
     )]
     ReservedUnitName { segment: String, path: String },
 }

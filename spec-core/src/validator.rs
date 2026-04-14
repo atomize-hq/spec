@@ -147,7 +147,7 @@ pub fn validate_semantic_with_options(
     // Reject IDs containing reserved namespace segments. "molecule_tests" is emitted as a
     // generated module/file name by build_namespaces + molecule test generation, so allowing it
     // anywhere in a unit ID can create molecule_tests.rs vs molecule_tests/mod.rs collisions.
-    validate_reserved_unit_segments(&spec.spec.id, &spec.source.file_path)?;
+    validate_reserved_spec_id_segments(&spec.spec.id, &spec.source.file_path)?;
 
     // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
     for dep in &spec.spec.deps {
@@ -198,7 +198,7 @@ pub fn validate_semantic_with_options(
     Ok(())
 }
 
-fn validate_reserved_unit_segments(id: &str, file_path: &str) -> Result<()> {
+fn validate_reserved_spec_id_segments(id: &str, file_path: &str) -> Result<()> {
     for segment in id.split('/') {
         if segment == "molecule_tests" {
             return Err(SpecError::ReservedUnitName {
@@ -507,6 +507,7 @@ pub fn validate_raw_molecule_test_yaml(yaml_value: &YamlValue, file_path: &str) 
 /// 1. body.rust must parse as syn::Block
 /// 2. body.rust must not contain `unsafe` blocks
 /// 3. id segments must not be Rust reserved keywords
+/// 4. id segments must not use reserved generated namespace names
 pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> {
     syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
         SpecError::MoleculeBodyRustMustBeBlock {
@@ -532,6 +533,7 @@ pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> 
     }
 
     validate_rust_keywords(&test.test.id, &test.source.file_path)?;
+    validate_reserved_spec_id_segments(&test.test.id, &test.source.file_path)?;
 
     Ok(())
 }
@@ -1911,6 +1913,56 @@ body:
     fn non_reserved_unit_name_passes() {
         let spec = create_test_spec("pricing/apply_discount", "{ }");
         assert!(validate_semantic(&spec).is_ok());
+    }
+
+    #[test]
+    fn reserved_molecule_test_name_molecule_tests_is_rejected() {
+        let test = create_molecule_test_spec("pricing/molecule_tests", vec!["money/round"]);
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+        assert!(
+            err.contains("molecule_tests"),
+            "expected segment name in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_molecule_test_name_namespace_molecule_tests_is_rejected() {
+        let test = create_molecule_test_spec("qa/molecule_tests/foo", vec!["money/round"]);
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+        assert!(
+            err.contains("molecule_tests"),
+            "expected segment name in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_molecule_test_name_deep_namespace_molecule_tests_is_rejected() {
+        let test = create_molecule_test_spec("qa/sub/molecule_tests/foo", vec!["money/round"]);
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn non_reserved_similar_molecule_test_name_passes() {
+        let test = create_molecule_test_spec("qa/molecule_test_helpers/foo", vec!["money/round"]);
+        assert!(validate_molecule_test_semantic(&test).is_ok());
     }
 
     // ── molecule body unsafe detection ───────────────────────────────────────
