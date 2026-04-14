@@ -433,8 +433,7 @@ pub fn generate_molecule_tests_code(
 
 /// Generate and write molecule_tests.rs files for all resolved molecule tests.
 ///
-/// Groups tests by module_path, generates one molecule_tests.rs per group, and
-/// updates the corresponding mod.rs to declare `pub mod molecule_tests;`.
+/// Groups tests by module_path and generates one molecule_tests.rs per group.
 ///
 /// Returns the set of relative paths for generated molecule_tests.rs files
 /// (for inclusion in `generated_rs_rel_paths` passed to `clean_output_dir`).
@@ -468,34 +467,6 @@ pub fn generate_and_write_molecule_tests(
                 .join("molecule_tests.rs")
         };
         generated_paths.insert(rel);
-
-        // Update the corresponding mod.rs: append `pub mod molecule_tests;` if not present.
-        // TODO(M8): this two-step approach (write mod.rs without molecule tests, then append
-        // the declaration here) leaves a stale `pub mod molecule_tests;` in mod.rs when all
-        // .test.spec files in a namespace are deleted. clean_output_dir removes molecule_tests.rs
-        // but does not strip the declaration, causing `cargo build` to fail with "file not found
-        // for module `molecule_tests`". Fix by loading molecule tests before writing mod.rs so
-        // generate_mod_rs(has_molecule_tests) is correct on the first pass. Deferred to M8 where
-        // SpecGraph drives generation as a single-pass operation.
-        let mod_rs_path: PathBuf = if module_path.is_empty() {
-            output_base.join("mod.rs")
-        } else {
-            output_base
-                .join(module_path.replace('/', std::path::MAIN_SEPARATOR_STR))
-                .join("mod.rs")
-        };
-
-        if mod_rs_path.exists() {
-            let existing = fs::read_to_string(&mod_rs_path).map_err(SpecError::Io)?;
-            if !existing.contains("pub mod molecule_tests;") {
-                let new_content = if existing.trim_end().is_empty() {
-                    "pub mod molecule_tests;\n".to_string()
-                } else {
-                    format!("{}\npub mod molecule_tests;\n", existing.trim_end())
-                };
-                write_generated_file(&mod_rs_path.to_string_lossy(), &new_content)?;
-            }
-        }
     }
 
     Ok(generated_paths)

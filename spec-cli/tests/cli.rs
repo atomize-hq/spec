@@ -4424,6 +4424,175 @@ body:
         mod_content.contains("pub mod molecule_tests;"),
         "pricing/mod.rs should declare molecule_tests module\ncontent: {mod_content}"
     );
+
+    let root_mod = output_dir.join("mod.rs");
+    assert!(root_mod.exists(), "root mod.rs should exist");
+    let root_mod_content = fs::read_to_string(&root_mod).unwrap();
+    assert!(
+        root_mod_content.contains("pub mod pricing;"),
+        "root mod.rs should declare pricing module\ncontent: {root_mod_content}"
+    );
+}
+
+#[test]
+fn molecule_only_namespace_generates_module_tree() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_molecule_test_spec(
+        &units_dir,
+        "qa/sample.test.spec",
+        "qa/sample",
+        &["pricing/apply_discount"],
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("molecule_only_namespace_generates_module_tree", &output);
+
+    let root_mod_content = fs::read_to_string(output_dir.join("mod.rs")).unwrap();
+    assert!(
+        root_mod_content.contains("pub mod qa;"),
+        "root mod.rs should declare qa module\ncontent: {root_mod_content}"
+    );
+
+    let qa_mod_content = fs::read_to_string(output_dir.join("qa/mod.rs")).unwrap();
+    assert!(
+        qa_mod_content.contains("pub mod molecule_tests;"),
+        "qa/mod.rs should declare molecule_tests module\ncontent: {qa_mod_content}"
+    );
+
+    assert!(
+        output_dir.join("qa/molecule_tests.rs").exists(),
+        "qa/molecule_tests.rs should be generated"
+    );
+}
+
+#[test]
+fn nested_molecule_only_namespace_generates_parent_modules() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_molecule_test_spec(
+        &units_dir,
+        "qa/sub/sample.test.spec",
+        "qa/sub/sample",
+        &["pricing/apply_discount"],
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "nested_molecule_only_namespace_generates_parent_modules",
+        &output,
+    );
+
+    let root_mod_content = fs::read_to_string(output_dir.join("mod.rs")).unwrap();
+    assert!(
+        root_mod_content.contains("pub mod qa;"),
+        "root mod.rs should declare qa module\ncontent: {root_mod_content}"
+    );
+
+    let qa_mod_content = fs::read_to_string(output_dir.join("qa/mod.rs")).unwrap();
+    assert!(
+        qa_mod_content.contains("pub mod sub;"),
+        "qa/mod.rs should declare sub module\ncontent: {qa_mod_content}"
+    );
+    assert!(
+        !qa_mod_content.contains("pub mod molecule_tests;"),
+        "qa/mod.rs should not declare molecule_tests directly\ncontent: {qa_mod_content}"
+    );
+
+    let nested_mod_content = fs::read_to_string(output_dir.join("qa/sub/mod.rs")).unwrap();
+    assert!(
+        nested_mod_content.contains("pub mod molecule_tests;"),
+        "qa/sub/mod.rs should declare molecule_tests module\ncontent: {nested_mod_content}"
+    );
+
+    assert!(
+        output_dir.join("qa/sub/molecule_tests.rs").exists(),
+        "qa/sub/molecule_tests.rs should be generated"
+    );
+}
+
+#[test]
+fn generate_removes_stale_molecule_module_declarations() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_molecule_test_target_unit(&units_dir);
+    let qa_test_path = units_dir.join("qa/sample.test.spec");
+    write_molecule_test_spec(
+        &units_dir,
+        "qa/sample.test.spec",
+        "qa/sample",
+        &["pricing/apply_discount"],
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let first_output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "generate_removes_stale_molecule_module_declarations first pass",
+        &first_output,
+    );
+
+    fs::remove_file(&qa_test_path).unwrap();
+
+    let second_output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "generate_removes_stale_molecule_module_declarations second pass",
+        &second_output,
+    );
+
+    let root_mod_content = fs::read_to_string(output_dir.join("mod.rs")).unwrap();
+    assert!(
+        !root_mod_content.contains("pub mod qa;"),
+        "root mod.rs should not retain stale qa module\ncontent: {root_mod_content}"
+    );
+
+    assert!(
+        !output_dir.join("qa/molecule_tests.rs").exists(),
+        "qa/molecule_tests.rs should be removed after molecule test deletion"
+    );
+    assert!(
+        !output_dir.join("qa/mod.rs").exists(),
+        "qa/mod.rs should be removed after molecule test deletion"
+    );
+    assert!(
+        !output_dir.join("qa").exists(),
+        "empty qa directory should be removed after molecule test deletion"
+    );
 }
 
 #[test]

@@ -921,54 +921,6 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         );
     }
 
-    let mut generated_rs_rel_paths = HashSet::<PathBuf>::new();
-    for spec in &resolved_specs {
-        generated_rs_rel_paths.insert(path_for_spec(spec));
-    }
-
-    // Include every generated mod.rs (root + nested modules) in the owned set.
-    let namespaces = build_namespaces(&resolved_specs);
-    for module_path in namespaces.keys() {
-        let mod_rs_rel = if module_path.is_empty() {
-            PathBuf::from("mod.rs")
-        } else {
-            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
-        };
-        generated_rs_rel_paths.insert(mod_rs_rel);
-    }
-
-    let output_base = ensure_output_marker(output)?;
-    let generate_options = GenerateOptions {
-        allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
-    };
-
-    for spec in &resolved_specs {
-        let content = generate_code_with_options(spec, &generate_options)
-            .with_context(|| format!("Failed to generate Rust for {}", spec.id))?;
-        let output_path = output_base.join(path_for_spec(spec));
-        write_generated_file(&output_path.display().to_string(), &content)
-            .with_context(|| format!("Failed to write {}", output_path.display()))?;
-    }
-
-    for (module_path, namespace) in &namespaces {
-        let content = generate_mod_rs(
-            &namespace.unit_files.iter().cloned().collect::<Vec<_>>(),
-            &namespace.subdirs.iter().cloned().collect::<Vec<_>>(),
-            false, // molecule_tests are added later by generate_and_write_molecule_tests
-        )
-        .with_context(|| format!("Failed to generate mod.rs for module '{module_path}'"))?;
-
-        let mod_rs_rel = if module_path.is_empty() {
-            PathBuf::from("mod.rs")
-        } else {
-            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
-        };
-        let mod_rs_path = output_base.join(mod_rs_rel);
-
-        write_generated_file(&mod_rs_path.display().to_string(), &content)
-            .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
-    }
-
     let molecule_tests = if includes_directory_molecule_tests(path) {
         let spec_dir = path;
         load_molecule_test_directory(spec_dir)
@@ -977,9 +929,8 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         Vec::new()
     };
 
-    // Validate molecule tests before generating code from them.
-    // generate_specs validated unit specs above but previously skipped molecule test validation,
-    // allowing tests with unknown covers IDs or invalid bodies to be written to molecule_tests.rs.
+    // Validate molecule tests before generating code from them so module trees and
+    // molecule_tests.rs files are derived from the same validated input set.
     let (mol_errors, mol_warnings) = validate_molecule_tests(&molecule_tests, &specs);
     if !mol_warnings.is_empty() {
         let mut warn_map = DiagnosticMap::new();
@@ -1008,6 +959,54 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         .iter()
         .map(ResolvedMoleculeTest::from_loaded)
         .collect();
+
+    let mut generated_rs_rel_paths = HashSet::<PathBuf>::new();
+    for spec in &resolved_specs {
+        generated_rs_rel_paths.insert(path_for_spec(spec));
+    }
+
+    // Include every generated mod.rs (root + nested modules) in the owned set.
+    let namespaces = build_namespaces(&resolved_specs, &resolved_molecule_tests);
+    for module_path in namespaces.keys() {
+        let mod_rs_rel = if module_path.is_empty() {
+            PathBuf::from("mod.rs")
+        } else {
+            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
+        };
+        generated_rs_rel_paths.insert(mod_rs_rel);
+    }
+
+    let output_base = ensure_output_marker(output)?;
+    let generate_options = GenerateOptions {
+        allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
+    };
+
+    for spec in &resolved_specs {
+        let content = generate_code_with_options(spec, &generate_options)
+            .with_context(|| format!("Failed to generate Rust for {}", spec.id))?;
+        let output_path = output_base.join(path_for_spec(spec));
+        write_generated_file(&output_path.display().to_string(), &content)
+            .with_context(|| format!("Failed to write {}", output_path.display()))?;
+    }
+
+    for (module_path, namespace) in &namespaces {
+        let content = generate_mod_rs(
+            &namespace.unit_files.iter().cloned().collect::<Vec<_>>(),
+            &namespace.subdirs.iter().cloned().collect::<Vec<_>>(),
+            namespace.has_molecule_tests,
+        )
+        .with_context(|| format!("Failed to generate mod.rs for module '{module_path}'"))?;
+
+        let mod_rs_rel = if module_path.is_empty() {
+            PathBuf::from("mod.rs")
+        } else {
+            PathBuf::from(module_path.replace('/', std::path::MAIN_SEPARATOR_STR)).join("mod.rs")
+        };
+        let mod_rs_path = output_base.join(mod_rs_rel);
+
+        write_generated_file(&mod_rs_path.display().to_string(), &content)
+            .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
+    }
     let specs_by_id: HashMap<&str, &ResolvedSpec> =
         resolved_specs.iter().map(|s| (s.id.as_str(), s)).collect();
     let molecule_test_paths =
@@ -1629,34 +1628,56 @@ fn expected_cargo_test_name(spec: &ResolvedSpec, output_prefix: &str, test_id: &
 struct Namespace {
     unit_files: BTreeSet<String>,
     subdirs: BTreeSet<String>,
+    has_molecule_tests: bool,
 }
 
-fn build_namespaces(specs: &[ResolvedSpec]) -> BTreeMap<String, Namespace> {
+fn record_namespace_branch(module_path: &str, namespaces: &mut BTreeMap<String, Namespace>) {
+    namespaces.entry(String::new()).or_default();
+
+    if module_path.is_empty() {
+        return;
+    }
+
+    let segments: Vec<&str> = module_path.split('/').collect();
+    for depth in 0..segments.len() {
+        let parent = if depth == 0 {
+            String::new()
+        } else {
+            segments[..depth].join("/")
+        };
+        namespaces
+            .entry(parent)
+            .or_default()
+            .subdirs
+            .insert(segments[depth].to_string());
+
+        let current = segments[..=depth].join("/");
+        namespaces.entry(current).or_default();
+    }
+}
+
+fn build_namespaces(
+    specs: &[ResolvedSpec],
+    molecule_tests: &[ResolvedMoleculeTest],
+) -> BTreeMap<String, Namespace> {
     let mut namespaces = BTreeMap::<String, Namespace>::new();
     namespaces.entry(String::new()).or_default();
 
     for spec in specs {
+        record_namespace_branch(&spec.module_path, &mut namespaces);
         namespaces
             .entry(spec.module_path.clone())
             .or_default()
             .unit_files
             .insert(spec.fn_name.clone());
+    }
 
-        let segments: Vec<&str> = spec.id.split('/').collect();
-        let module_segments = &segments[..segments.len() - 1];
-
-        for depth in 0..module_segments.len() {
-            let parent = if depth == 0 {
-                String::new()
-            } else {
-                module_segments[..depth].join("/")
-            };
-            namespaces
-                .entry(parent)
-                .or_default()
-                .subdirs
-                .insert(module_segments[depth].to_string());
-        }
+    for test in molecule_tests {
+        record_namespace_branch(&test.module_path, &mut namespaces);
+        namespaces
+            .entry(test.module_path.clone())
+            .or_default()
+            .has_molecule_tests = true;
     }
 
     namespaces
