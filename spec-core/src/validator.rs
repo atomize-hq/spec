@@ -4,7 +4,7 @@
 //! 1. JSON Schema validation (using embedded unit.spec.json)
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
-use crate::syntax::validate_expect_expr;
+use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{LoadedMoleculeTest, LoadedSpec};
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
@@ -502,14 +502,24 @@ pub fn validate_raw_molecule_test_yaml(yaml_value: &YamlValue, file_path: &str) 
 /// 2. body.rust must not contain `unsafe` blocks
 /// 3. id segments must not be Rust reserved keywords
 pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> {
-    let block = syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
+    syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
         SpecError::MoleculeBodyRustMustBeBlock {
             message: e.to_string(),
             test_path: test.source.file_path.clone(),
         }
     })?;
 
-    if contains_unsafe_in_block(&block) {
+    let tokens = test
+        .test
+        .body
+        .rust
+        .parse::<proc_macro2::TokenStream>()
+        .map_err(|e| SpecError::MoleculeBodyRustMustBeBlock {
+            message: e.to_string(),
+            test_path: test.source.file_path.clone(),
+        })?;
+
+    if token_stream_contains_unsafe_keyword(&tokens) {
         return Err(SpecError::MoleculeBodyContainsUnsafe {
             test_path: test.source.file_path.clone(),
         });
@@ -518,50 +528,6 @@ pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> 
     validate_rust_keywords(&test.test.id, &test.source.file_path)?;
 
     Ok(())
-}
-
-fn contains_unsafe_in_block(block: &syn::Block) -> bool {
-    block.stmts.iter().any(contains_unsafe_in_stmt)
-}
-
-fn contains_unsafe_in_stmt(stmt: &syn::Stmt) -> bool {
-    match stmt {
-        syn::Stmt::Expr(expr, _) => contains_unsafe_in_expr(expr),
-        syn::Stmt::Local(local) => local
-            .init
-            .as_ref()
-            .is_some_and(|init| contains_unsafe_in_expr(&init.expr)),
-        syn::Stmt::Item(_) => false,
-        _ => false,
-    }
-}
-
-fn contains_unsafe_in_expr(expr: &syn::Expr) -> bool {
-    match expr {
-        syn::Expr::Unsafe(_) => true,
-        syn::Expr::Block(b) => contains_unsafe_in_block(&b.block),
-        syn::Expr::Call(c) => {
-            contains_unsafe_in_expr(&c.func) || c.args.iter().any(contains_unsafe_in_expr)
-        }
-        syn::Expr::MethodCall(m) => {
-            contains_unsafe_in_expr(&m.receiver) || m.args.iter().any(contains_unsafe_in_expr)
-        }
-        syn::Expr::Binary(b) => {
-            contains_unsafe_in_expr(&b.left) || contains_unsafe_in_expr(&b.right)
-        }
-        syn::Expr::If(i) => {
-            contains_unsafe_in_expr(&i.cond)
-                || contains_unsafe_in_block(&i.then_branch)
-                || i.else_branch
-                    .as_ref()
-                    .is_some_and(|(_, e)| contains_unsafe_in_expr(e))
-        }
-        syn::Expr::Paren(p) => contains_unsafe_in_expr(&p.expr),
-        syn::Expr::Reference(r) => contains_unsafe_in_expr(&r.expr),
-        syn::Expr::Unary(u) => contains_unsafe_in_expr(&u.expr),
-        syn::Expr::Cast(c) => contains_unsafe_in_expr(&c.expr),
-        _ => false,
-    }
 }
 
 /// Validate that all cover_ids reference real unit IDs in the loaded spec set.
@@ -1894,6 +1860,57 @@ body:
         // either a parse error or an unsafe error is acceptable rejection.
         let result = validate_molecule_test_semantic(&test);
         assert!(result.is_err(), "expected rejection of nested unsafe");
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_in_array_index_expr_is_rejected() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ let _x = [unsafe { std::mem::zeroed::<u8>() }][0]; }",
+        );
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("unsafe"),
+            "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_fn_item_is_rejected() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ unsafe fn helper() {} helper(); }",
+        );
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("unsafe"),
+            "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_inside_macro_body_is_rejected() {
+        let test = make_molecule_test("pricing/checkout_flow", "{ m!(unsafe { 1 }); }");
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("unsafe"),
+            "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_string_literal_passes() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            r#"{ let label = "unsafe"; assert_eq!(label, "unsafe"); }"#,
+        );
+        assert!(validate_molecule_test_semantic(&test).is_ok());
     }
 
     #[test]

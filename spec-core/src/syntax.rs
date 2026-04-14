@@ -1,4 +1,4 @@
-//! Shared syntax helpers for validating local test expectation expressions.
+//! Shared syntax helpers for validating authored Rust snippets.
 
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
 
@@ -45,6 +45,27 @@ pub(crate) fn preflight_expect_expr_depth(expr_source: &str) -> Result<(), Expec
         .map_err(|err| ExpectExprErrorKind::Parse(err.to_string()))?;
 
     ensure_group_depth_within_limit(&tokens, MAX_EXPECT_EXPR_DEPTH)
+}
+
+pub(crate) fn token_stream_contains_unsafe_keyword(tokens: &TokenStream) -> bool {
+    let mut stack = vec![tokens.clone().into_iter()];
+
+    while let Some(iter) = stack.last_mut() {
+        match iter.next() {
+            Some(TokenTree::Group(group)) => stack.push(group.stream().into_iter()),
+            Some(TokenTree::Ident(ident)) => {
+                if ident == "unsafe" {
+                    return true;
+                }
+            }
+            Some(TokenTree::Punct(_) | TokenTree::Literal(_)) => {}
+            None => {
+                stack.pop();
+            }
+        }
+    }
+
+    false
 }
 
 fn ensure_group_depth_within_limit(
@@ -145,5 +166,35 @@ mod tests {
     fn validate_expect_expr_allows_unsafe_forms_when_configured() {
         let result = validate_expect_expr("{ let ok = apply_discount(); ok }", true);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn token_stream_contains_unsafe_keyword_finds_nested_array_expr() {
+        let tokens = "{ let _x = [unsafe { std::mem::zeroed::<u8>() }][0]; }"
+            .parse::<TokenStream>()
+            .unwrap();
+        assert!(token_stream_contains_unsafe_keyword(&tokens));
+    }
+
+    #[test]
+    fn token_stream_contains_unsafe_keyword_finds_unsafe_fn_item() {
+        let tokens = "{ unsafe fn helper() {} helper(); }"
+            .parse::<TokenStream>()
+            .unwrap();
+        assert!(token_stream_contains_unsafe_keyword(&tokens));
+    }
+
+    #[test]
+    fn token_stream_contains_unsafe_keyword_finds_unsafe_inside_macro_body() {
+        let tokens = "{ m!(unsafe { 1 }); }".parse::<TokenStream>().unwrap();
+        assert!(token_stream_contains_unsafe_keyword(&tokens));
+    }
+
+    #[test]
+    fn token_stream_contains_unsafe_keyword_ignores_string_literals() {
+        let tokens = r#"{ let label = "unsafe"; assert_eq!(label, "unsafe"); }"#
+            .parse::<TokenStream>()
+            .unwrap();
+        assert!(!token_stream_contains_unsafe_keyword(&tokens));
     }
 }

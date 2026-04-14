@@ -4263,6 +4263,39 @@ body:
     units_dir.join("pricing/a.unit.spec")
 }
 
+fn write_molecule_test_target_unit(units_dir: &Path) {
+    write_spec(
+        units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+}
+
+fn write_indexed_unsafe_molecule_test(units_dir: &Path) {
+    let content = r#"id: pricing/unsafe_test
+spec_version: "0.3.0"
+intent:
+  why: Unsafe test that should be rejected.
+covers:
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        let _x = [unsafe { std::mem::zeroed::<u8>() }][0];
+    }
+"#;
+    write_spec(&units_dir, "pricing/unsafe_test.test.spec", content);
+}
+
 #[test]
 fn valid_molecule_test_validates() {
     let temp_dir = temp_repo_dir();
@@ -4701,40 +4734,92 @@ fn molecule_body_with_unsafe_is_rejected() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
 
-    write_spec(
-        &units_dir,
-        "pricing/apply_discount.unit.spec",
-        r#"
-id: pricing/apply_discount
-kind: function
-intent:
-  why: Apply a discount.
-spec_version: "0.3.0"
-body:
-  rust: |
-    { }
-"#,
-    );
-
-    // Molecule test with unsafe block in body
-    let content = r#"id: pricing/unsafe_test
-spec_version: "0.3.0"
-intent:
-  why: Unsafe test that should be rejected.
-covers:
-  - pricing/apply_discount
-body:
-  rust: |
-    {
-        unsafe { let _x = 1; }
-    }
-"#;
-    write_spec(&units_dir, "pricing/unsafe_test.test.spec", content);
+    write_molecule_test_target_unit(&units_dir);
+    write_indexed_unsafe_molecule_test(&units_dir);
 
     let output = run(&["validate", units_dir.to_str().unwrap()]);
     assert!(
         !output.status.success(),
-        "validate should fail for molecule test with unsafe block"
+        "validate should fail for molecule test with unsafe body"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsafe") || stderr.contains("SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"),
+        "error should mention unsafe\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn molecule_body_with_unsafe_is_rejected_in_json_output() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_indexed_unsafe_molecule_test(&units_dir);
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "validate --format json should fail for molecule test with unsafe body"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"),
+        "expected SPEC_MOLECULE_BODY_CONTAINS_UNSAFE in errors: {errors:?}"
+    );
+}
+
+#[test]
+fn generate_rejects_molecule_body_with_nested_unsafe_expr() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_indexed_unsafe_molecule_test(&units_dir);
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "generate should fail for molecule test with unsafe body"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsafe") || stderr.contains("SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"),
+        "error should mention unsafe\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn export_rejects_molecule_body_with_nested_unsafe_expr() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_molecule_test_target_unit(&units_dir);
+    write_indexed_unsafe_molecule_test(&units_dir);
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "export should fail for molecule test with unsafe body"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
