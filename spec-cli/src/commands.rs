@@ -4,8 +4,8 @@ use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
 use spec_core::export::build_export_bundle;
 use spec_core::generator::{
-    GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_code_with_options,
-    generate_mod_rs, safe_output_path, write_generated_file,
+    GenerateOptions, clean_output_dir, generate_and_write_molecule_tests,
+    generate_code_with_options, generate_mod_rs, safe_output_path, write_generated_file,
 };
 use spec_core::loader::{
     is_unit_spec, load_directory_report, load_file, load_molecule_test_directory,
@@ -378,16 +378,14 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
     };
     let (validation_errors, validation_warnings) = finish_validation(&specs, &validation_options);
 
-    // Validate molecule tests
-    let validate_dir = if path.is_file() {
-        path.parent().unwrap_or(path)
-    } else {
-        path
-    };
-    let molecule_report = load_molecule_test_directory_report(validate_dir);
-    let (molecule_errors, molecule_warnings) =
-        validate_molecule_tests(&molecule_report.tests, &specs);
-    let molecule_loader_errors = molecule_report.errors;
+    let (molecule_errors, molecule_warnings, molecule_loader_errors) =
+        if includes_directory_molecule_tests(path) {
+            let molecule_report = load_molecule_test_directory_report(path);
+            let (errors, warnings) = validate_molecule_tests(&molecule_report.tests, &specs);
+            (errors, warnings, molecule_report.errors)
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
 
     match format {
         OutputFormat::Text => {
@@ -778,8 +776,16 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
         path
     };
     let provenance = resolve_git_provenance(export_dir);
-    let molecule_tests = load_molecule_test_directory(export_dir)
-        .with_context(|| format!("Failed to load molecule tests from {}", export_dir.display()))?;
+    let molecule_tests = if includes_directory_molecule_tests(path) {
+        load_molecule_test_directory(export_dir).with_context(|| {
+            format!(
+                "Failed to load molecule tests from {}",
+                export_dir.display()
+            )
+        })?
+    } else {
+        Vec::new()
+    };
 
     // Validate molecule tests before including them in the export bundle.
     // export_command validates unit specs above but previously skipped molecule test validation,
@@ -806,8 +812,7 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
         );
     }
 
-    let bundle =
-        build_export_bundle(&specs, &molecule_tests, &rfc3339_now(), provenance.as_ref());
+    let bundle = build_export_bundle(&specs, &molecule_tests, &rfc3339_now(), provenance.as_ref());
     let json = serde_json::to_string_pretty(&bundle)?;
 
     match output {
@@ -964,14 +969,13 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
             .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
     }
 
-    // Load and generate molecule tests
-    let spec_dir = if path.is_file() {
-        path.parent().unwrap_or(path)
+    let molecule_tests = if includes_directory_molecule_tests(path) {
+        let spec_dir = path;
+        load_molecule_test_directory(spec_dir)
+            .with_context(|| format!("Failed to load molecule tests from {}", spec_dir.display()))?
     } else {
-        path
+        Vec::new()
     };
-    let molecule_tests = load_molecule_test_directory(spec_dir)
-        .with_context(|| format!("Failed to load molecule tests from {}", spec_dir.display()))?;
 
     // Validate molecule tests before generating code from them.
     // generate_specs validated unit specs above but previously skipped molecule test validation,
@@ -1000,8 +1004,10 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         );
     }
 
-    let resolved_molecule_tests: Vec<ResolvedMoleculeTest> =
-        molecule_tests.iter().map(ResolvedMoleculeTest::from_loaded).collect();
+    let resolved_molecule_tests: Vec<ResolvedMoleculeTest> = molecule_tests
+        .iter()
+        .map(ResolvedMoleculeTest::from_loaded)
+        .collect();
     let specs_by_id: HashMap<&str, &ResolvedSpec> =
         resolved_specs.iter().map(|s| (s.id.as_str(), s)).collect();
     let molecule_test_paths =
@@ -1752,6 +1758,10 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
         report.warnings,
         report.total_files,
     ))
+}
+
+fn includes_directory_molecule_tests(path: &Path) -> bool {
+    path.is_dir()
 }
 
 fn validate_molecule_tests(

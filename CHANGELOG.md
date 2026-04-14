@@ -2,6 +2,10 @@
 
 ## 0.5.3 - 2026-04-13
 
+### Fixed
+
+- **Single-file CLI scope no longer breaks on sibling molecule tests** — `spec validate <file.unit.spec>`, `spec generate <file.unit.spec>`, and `spec export <file.unit.spec>` now stay scoped to the requested unit. Sibling `.test.spec` files are only loaded for directory invocations, preserving the exact-unit authoring loop used by agents and README workflows.
+
 ### Breaking
 
 - **`spec status` non-valid units now exit `1`** — `untested`, `incomplete`, and `failing` units now produce a non-zero exit code alongside `invalid` and `stale`. Consumers that previously treated those states as soft-success need to update.

@@ -4224,6 +4224,45 @@ body:
     write_spec(units_dir, relative_path, &content);
 }
 
+fn write_two_unit_molecule_fixture(units_dir: &Path) -> PathBuf {
+    write_spec(
+        units_dir,
+        "pricing/a.unit.spec",
+        r#"
+id: pricing/a
+kind: function
+intent:
+  why: Unit A.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+    write_spec(
+        units_dir,
+        "pricing/b.unit.spec",
+        r#"
+id: pricing/b
+kind: function
+intent:
+  why: Unit B.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+    write_molecule_test_spec(
+        units_dir,
+        "pricing/ab.test.spec",
+        "pricing/ab",
+        &["pricing/a", "pricing/b"],
+    );
+
+    units_dir.join("pricing/a.unit.spec")
+}
+
 #[test]
 fn valid_molecule_test_validates() {
     let temp_dir = temp_repo_dir();
@@ -4401,6 +4440,80 @@ body:
     assert!(
         !covers_edges.is_empty(),
         "graph.edges should have at least one covers edge"
+    );
+}
+
+#[test]
+fn single_file_validate_skips_sibling_molecule_tests() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let unit_path = write_two_unit_molecule_fixture(&units_dir);
+
+    let output = run(&["validate", unit_path.to_str().unwrap()]);
+    assert_output_success("single_file_validate_skips_sibling_molecule_tests", &output);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stdout.contains("pricing/b"),
+        "stdout should stay scoped\n{stdout}"
+    );
+    assert!(
+        !stderr.contains("pricing/b"),
+        "stderr should stay scoped\n{stderr}"
+    );
+}
+
+#[test]
+fn single_file_generate_skips_sibling_molecule_tests() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+    let unit_path = write_two_unit_molecule_fixture(&units_dir);
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        unit_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("single_file_generate_skips_sibling_molecule_tests", &output);
+
+    assert!(
+        output_dir.join("pricing/a.rs").exists(),
+        "target unit should be generated"
+    );
+    assert!(
+        !output_dir.join("pricing/molecule_tests.rs").exists(),
+        "single-file generate should not emit sibling molecule tests"
+    );
+}
+
+#[test]
+fn single_file_export_skips_sibling_molecule_tests() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let unit_path = write_two_unit_molecule_fixture(&units_dir);
+
+    let output = run(&["export", unit_path.to_str().unwrap()]);
+    assert_output_success("single_file_export_skips_sibling_molecule_tests", &output);
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["units"].as_array().unwrap().len(), 1);
+    assert_eq!(bundle["molecule_tests"].as_array().unwrap().len(), 0);
+
+    let covers_edges: Vec<&Value> = bundle["graph"]["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] == "covers")
+        .collect();
+    assert!(
+        covers_edges.is_empty(),
+        "single-file export should not include sibling covers edges"
     );
 }
 
