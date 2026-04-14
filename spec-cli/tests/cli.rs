@@ -4488,3 +4488,109 @@ body:
         "should emit a warning about no covered units\nstderr: {stderr}"
     );
 }
+
+#[test]
+fn validate_single_test_spec_file_gives_directed_error() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/checkout_flow.test.spec",
+        "pricing/checkout_flow",
+        &[],
+    );
+
+    let test_spec_path = units_dir.join("pricing/checkout_flow.test.spec");
+    let output = run(&["validate", test_spec_path.to_str().unwrap()]);
+
+    // Should fail — single .test.spec files are not valid input to validate
+    assert!(
+        !output.status.success(),
+        "validate of single .test.spec file should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("containing directory") || stderr.contains(".unit.spec"),
+        "error should guide user to use directory path\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn molecule_body_with_unsafe_is_rejected() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    // Molecule test with unsafe block in body
+    let content = r#"id: pricing/unsafe_test
+spec_version: "0.3.0"
+intent:
+  why: Unsafe test that should be rejected.
+covers:
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        unsafe { let _x = 1; }
+    }
+"#;
+    write_spec(&units_dir, "pricing/unsafe_test.test.spec", content);
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for molecule test with unsafe block"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsafe") || stderr.contains("SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"),
+        "error should mention unsafe\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn reserved_unit_name_molecule_tests_is_rejected() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/molecule_tests.unit.spec",
+        r#"
+id: pricing/molecule_tests
+kind: function
+intent:
+  why: This ID is reserved.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap()]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for unit with reserved ID segment 'molecule_tests'"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("reserved") || stderr.contains("SPEC_RESERVED_UNIT_NAME"),
+        "error should mention reserved name\nstderr: {stderr}"
+    );
+}

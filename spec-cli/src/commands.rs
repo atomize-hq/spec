@@ -780,6 +780,32 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     let provenance = resolve_git_provenance(export_dir);
     let molecule_tests = load_molecule_test_directory(export_dir)
         .with_context(|| format!("Failed to load molecule tests from {}", export_dir.display()))?;
+
+    // Validate molecule tests before including them in the export bundle.
+    // export_command validates unit specs above but previously skipped molecule test validation,
+    // allowing tests with unknown covers IDs or invalid bodies to silently enter the export JSON.
+    let (molecule_errors, molecule_warnings) = validate_molecule_tests(&molecule_tests, &specs);
+    for err in molecule_errors {
+        push_error(&mut errors, err);
+    }
+    for warning in molecule_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    if !errors.is_empty() {
+        if !warnings.is_empty() {
+            print_diagnostics(&warnings);
+        }
+        print_diagnostics(&errors);
+        let file_count = count_unique_files(&errors);
+        bail!(
+            "❌ {} file{}, {} error{}",
+            file_count,
+            pluralize(file_count),
+            count_messages(&errors),
+            pluralize(count_messages(&errors))
+        );
+    }
+
     let bundle =
         build_export_bundle(&specs, &molecule_tests, &rfc3339_now(), provenance.as_ref());
     let json = serde_json::to_string_pretty(&bundle)?;
@@ -946,6 +972,34 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
     };
     let molecule_tests = load_molecule_test_directory(spec_dir)
         .with_context(|| format!("Failed to load molecule tests from {}", spec_dir.display()))?;
+
+    // Validate molecule tests before generating code from them.
+    // generate_specs validated unit specs above but previously skipped molecule test validation,
+    // allowing tests with unknown covers IDs or invalid bodies to be written to molecule_tests.rs.
+    let (mol_errors, mol_warnings) = validate_molecule_tests(&molecule_tests, &specs);
+    if !mol_warnings.is_empty() {
+        let mut warn_map = DiagnosticMap::new();
+        for w in mol_warnings {
+            push_warning(&mut warn_map, w);
+        }
+        print_diagnostics(&warn_map);
+    }
+    if !mol_errors.is_empty() {
+        let mut err_map = DiagnosticMap::new();
+        for e in mol_errors {
+            push_error(&mut err_map, e);
+        }
+        print_diagnostics(&err_map);
+        let file_count = count_unique_files(&err_map);
+        bail!(
+            "❌ {} file{}, {} error{}",
+            file_count,
+            pluralize(file_count),
+            count_messages(&err_map),
+            pluralize(count_messages(&err_map))
+        );
+    }
+
     let resolved_molecule_tests: Vec<ResolvedMoleculeTest> =
         molecule_tests.iter().map(ResolvedMoleculeTest::from_loaded).collect();
     let specs_by_id: HashMap<&str, &ResolvedSpec> =
@@ -1670,7 +1724,16 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
     if path.is_file() {
         let total_files = usize::from(is_unit_spec(path));
         if !is_unit_spec(path) {
-            bail!("{} is not a .unit.spec file", path.display());
+            let hint = if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.ends_with(".test.spec"))
+            {
+                " (to validate molecule tests, pass the containing directory)"
+            } else {
+                ""
+            };
+            bail!("{} is not a .unit.spec file{}", path.display(), hint);
         }
         return match load_file(path) {
             Ok(spec) => Ok((vec![spec], Vec::new(), Vec::new(), total_files)),
@@ -1796,6 +1859,10 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::MoleculeBodyRustMustBeBlock { .. } => {
             "SPEC_MOLECULE_BODY_RUST_MUST_BE_BLOCK"
         }
+        spec_core::SpecError::MoleculeBodyContainsUnsafe { .. } => {
+            "SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"
+        }
+        spec_core::SpecError::ReservedUnitName { .. } => "SPEC_RESERVED_UNIT_NAME",
     }
 }
 
@@ -1963,6 +2030,15 @@ fn spec_error_to_json_entry(
             message: Some(message.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => ErrorFields {
+            path: Some(test_path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::ReservedUnitName { segment, path } => ErrorFields {
+            path: Some(path.clone()),
+            value: Some(segment.clone()),
+            ..Default::default()
+        },
     };
 
     JsonErrorEntry {
@@ -2006,12 +2082,14 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::Io(_)
         | spec_core::SpecError::Json(_) => Vec::new(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
-        | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. } => {
+        | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
+        | spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => {
             vec![test_path.clone()]
         }
         spec_core::SpecError::DuplicateMoleculeTestId { file1, file2, .. } => {
             vec![file1.clone(), file2.clone()]
         }
+        spec_core::SpecError::ReservedUnitName { path, .. } => vec![path.clone()],
     }
 }
 
@@ -2096,12 +2174,12 @@ fn error_key(err: &spec_core::SpecError) -> String {
         }
         spec_core::SpecError::Io(_) | spec_core::SpecError::Json(_) => "validation".to_string(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
-        | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. } => {
-            test_path.clone()
-        }
+        | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
+        | spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => test_path.clone(),
         spec_core::SpecError::DuplicateMoleculeTestId { file1, file2, .. } => {
             format!("{file1} | {file2}")
         }
+        spec_core::SpecError::ReservedUnitName { path, .. } => path.clone(),
     }
 }
 

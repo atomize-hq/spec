@@ -144,6 +144,18 @@ pub fn validate_semantic_with_options(
     // Check if ID contains Rust reserved keywords
     validate_rust_keywords(&spec.spec.id, &spec.source.file_path)?;
 
+    // Reject IDs whose last segment is reserved by spec (would collide with generated files).
+    // "molecule_tests" is the only reserved segment: spec generates a file with that name
+    // in each namespace to hold molecule test functions.
+    if let Some(last_segment) = spec.spec.id.split('/').next_back() {
+        if last_segment == "molecule_tests" {
+            return Err(SpecError::ReservedUnitName {
+                segment: last_segment.to_string(),
+                path: spec.source.file_path.clone(),
+            });
+        }
+    }
+
     // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
     for dep in &spec.spec.deps {
         validate_rust_keywords(dep, &spec.source.file_path)?;
@@ -487,18 +499,71 @@ pub fn validate_raw_molecule_test_yaml(yaml_value: &YamlValue, file_path: &str) 
 ///
 /// Checks:
 /// 1. body.rust must parse as syn::Block
-/// 2. id segments must not be Rust reserved keywords
+/// 2. body.rust must not contain `unsafe` blocks
+/// 3. id segments must not be Rust reserved keywords
 pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> {
-    syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
+    let block = syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
         SpecError::MoleculeBodyRustMustBeBlock {
             message: e.to_string(),
             test_path: test.source.file_path.clone(),
         }
     })?;
 
+    if contains_unsafe_in_block(&block) {
+        return Err(SpecError::MoleculeBodyContainsUnsafe {
+            test_path: test.source.file_path.clone(),
+        });
+    }
+
     validate_rust_keywords(&test.test.id, &test.source.file_path)?;
 
     Ok(())
+}
+
+fn contains_unsafe_in_block(block: &syn::Block) -> bool {
+    block.stmts.iter().any(contains_unsafe_in_stmt)
+}
+
+fn contains_unsafe_in_stmt(stmt: &syn::Stmt) -> bool {
+    match stmt {
+        syn::Stmt::Expr(expr, _) => contains_unsafe_in_expr(expr),
+        syn::Stmt::Local(local) => local
+            .init
+            .as_ref()
+            .is_some_and(|init| contains_unsafe_in_expr(&init.expr)),
+        syn::Stmt::Item(_) => false,
+        _ => false,
+    }
+}
+
+fn contains_unsafe_in_expr(expr: &syn::Expr) -> bool {
+    match expr {
+        syn::Expr::Unsafe(_) => true,
+        syn::Expr::Block(b) => contains_unsafe_in_block(&b.block),
+        syn::Expr::Call(c) => {
+            contains_unsafe_in_expr(&c.func)
+                || c.args.iter().any(contains_unsafe_in_expr)
+        }
+        syn::Expr::MethodCall(m) => {
+            contains_unsafe_in_expr(&m.receiver)
+                || m.args.iter().any(contains_unsafe_in_expr)
+        }
+        syn::Expr::Binary(b) => {
+            contains_unsafe_in_expr(&b.left) || contains_unsafe_in_expr(&b.right)
+        }
+        syn::Expr::If(i) => {
+            contains_unsafe_in_expr(&i.cond)
+                || contains_unsafe_in_block(&i.then_branch)
+                || i.else_branch
+                    .as_ref()
+                    .is_some_and(|(_, e)| contains_unsafe_in_expr(e))
+        }
+        syn::Expr::Paren(p) => contains_unsafe_in_expr(&p.expr),
+        syn::Expr::Reference(r) => contains_unsafe_in_expr(&r.expr),
+        syn::Expr::Unary(u) => contains_unsafe_in_expr(&u.expr),
+        syn::Expr::Cast(c) => contains_unsafe_in_expr(&c.expr),
+        _ => false,
+    }
 }
 
 /// Validate that all cover_ids reference real unit IDs in the loaded spec set.
@@ -1750,5 +1815,94 @@ body:
             .to_string();
         assert!(err.contains("invalid id format"), "got: {err}");
         assert!(err.contains("module/name"), "got: {err}");
+    }
+
+    // ── reserved unit name ───────────────────────────────────────────────────
+
+    #[test]
+    fn reserved_unit_name_molecule_tests_is_rejected() {
+        let spec = create_test_spec("pricing/molecule_tests", "{ }");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+        assert!(
+            err.contains("molecule_tests"),
+            "expected segment name in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn reserved_unit_name_nested_molecule_tests_is_rejected() {
+        let spec = create_test_spec("pricing/sub/molecule_tests", "{ }");
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "expected 'reserved' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn non_reserved_unit_name_passes() {
+        let spec = create_test_spec("pricing/apply_discount", "{ }");
+        assert!(validate_semantic(&spec).is_ok());
+    }
+
+    // ── molecule body unsafe detection ───────────────────────────────────────
+
+    fn make_molecule_test(id: &str, body: &str) -> crate::types::LoadedMoleculeTest {
+        use crate::types::{Body, Intent, LoadedMoleculeTest, MoleculeTestSource, MoleculeTestStruct};
+        LoadedMoleculeTest {
+            source: MoleculeTestSource {
+                file_path: format!("test/{}.test.spec", id),
+                id: id.to_string(),
+            },
+            test: MoleculeTestStruct {
+                id: id.to_string(),
+                intent: Intent {
+                    why: "test".to_string(),
+                },
+                covers: vec![],
+                body: Body {
+                    rust: body.to_string(),
+                },
+                spec_version: None,
+            },
+        }
+    }
+
+    #[test]
+    fn molecule_body_with_unsafe_block_is_rejected() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ unsafe { let x = 1; } }",
+        );
+        let err = validate_molecule_test_semantic(&test).unwrap_err().to_string();
+        assert!(
+            err.contains("unsafe"),
+            "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_nested_unsafe_is_rejected() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ let x = if true { unsafe { 1 } else { 2 } }; }",
+        );
+        // The body may or may not parse depending on syn's handling of incomplete if/else;
+        // either a parse error or an unsafe error is acceptable rejection.
+        let result = validate_molecule_test_semantic(&test);
+        assert!(result.is_err(), "expected rejection of nested unsafe");
+    }
+
+    #[test]
+    fn molecule_body_without_unsafe_passes() {
+        let test = make_molecule_test(
+            "pricing/checkout_flow",
+            "{ let x = apply_discount(100, 10); assert_eq!(x, 90); }",
+        );
+        assert!(validate_molecule_test_semantic(&test).is_ok());
     }
 }

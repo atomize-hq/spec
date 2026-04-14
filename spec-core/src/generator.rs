@@ -466,7 +466,14 @@ pub fn generate_and_write_molecule_tests(
         };
         generated_paths.insert(rel);
 
-        // Update the corresponding mod.rs: append `pub mod molecule_tests;` if not present
+        // Update the corresponding mod.rs: append `pub mod molecule_tests;` if not present.
+        // TODO(M8): this two-step approach (write mod.rs without molecule tests, then append
+        // the declaration here) leaves a stale `pub mod molecule_tests;` in mod.rs when all
+        // .test.spec files in a namespace are deleted. clean_output_dir removes molecule_tests.rs
+        // but does not strip the declaration, causing `cargo build` to fail with "file not found
+        // for module `molecule_tests`". Fix by loading molecule tests before writing mod.rs so
+        // generate_mod_rs(has_molecule_tests) is correct on the first pass. Deferred to M8 where
+        // SpecGraph drives generation as a single-pass operation.
         let mod_rs_path: PathBuf = if module_path.is_empty() {
             output_base.join("mod.rs")
         } else {

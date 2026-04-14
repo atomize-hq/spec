@@ -144,6 +144,14 @@ pub enum SpecError {
         message: String,
         test_path: String,
     },
+
+    #[error("body.rust contains an `unsafe` block, which is not allowed in molecule tests at {test_path}")]
+    MoleculeBodyContainsUnsafe { test_path: String },
+
+    #[error(
+        "unit ID last segment '{segment}' is reserved by spec and cannot be used as a unit name at {path}"
+    )]
+    ReservedUnitName { segment: String, path: String },
 }
 
 impl From<walkdir::Error> for SpecError {
