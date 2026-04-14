@@ -4311,7 +4311,10 @@ fn single_file_test_skips_sibling_molecule_tests() {
         .output()
         .expect("failed to run spec");
 
-    assert_output_success("single-file spec test should ignore sibling molecule specs", &output);
+    assert_output_success(
+        "single-file spec test should ignore sibling molecule specs",
+        &output,
+    );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

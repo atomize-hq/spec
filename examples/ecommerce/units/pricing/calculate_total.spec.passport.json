@@ -32,7 +32,7 @@
       "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-04-14T14:26:06Z",
+  "generated_at": "2026-04-14T15:13:06Z",
   "source_file": "examples/ecommerce/units/pricing/calculate_total.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -43,9 +43,9 @@
         "reason": "test not found in cargo output"
       }
     ],
-    "observed_at": "2026-04-14T14:26:12Z",
+    "observed_at": "2026-04-14T15:05:47Z",
     "provenance": {
-      "git_commit_sha": "fdd74b5c40a42d6d0021996c9cad566b5bf65c2d"
+      "git_commit_sha": "cb4a9b8ef5e8d89a165b6e5d2b2c27b7ed685503"
     }
   },
   "contract_hash": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92"
