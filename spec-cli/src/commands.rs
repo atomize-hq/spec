@@ -868,26 +868,63 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
 fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
     let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
     if total_files == 0 {
+        let mut errors = DiagnosticMap::new();
         let mut warnings = DiagnosticMap::new();
+        for err in loader_errors {
+            push_error(&mut errors, err);
+        }
         for warning in loader_warnings {
             push_warning(&mut warnings, warning);
         }
+
+        let mut has_molecule_tests = false;
+        if includes_directory_molecule_tests(path) {
+            let molecule_report = load_molecule_test_directory_report(path);
+            has_molecule_tests =
+                !molecule_report.tests.is_empty() || !molecule_report.errors.is_empty();
+
+            let (molecule_errors, molecule_warnings) =
+                validate_molecule_tests(&molecule_report.tests, &specs);
+
+            for err in molecule_report.errors {
+                push_error(&mut errors, err);
+            }
+            for err in molecule_errors {
+                push_error(&mut errors, err);
+            }
+            for warning in molecule_report.warnings {
+                push_warning(&mut warnings, warning);
+            }
+            for warning in molecule_warnings {
+                push_warning(&mut warnings, warning);
+            }
+        }
+
+        let output_base = ensure_output_marker(output)?;
+        let generated_rs_rel_paths = HashSet::<PathBuf>::new();
+        clean_output_dir(&output_base, &generated_rs_rel_paths).with_context(|| {
+            format!("Failed to clean output directory {}", output_base.display())
+        })?;
+
         if !warnings.is_empty() {
             print_diagnostics(&warnings);
         }
-        // Even with no unit specs, validate and warn about any molecule tests found.
-        // Without this, a directory with only .test.spec files silently skips validation,
-        // and stale molecule_tests.rs files from a prior run are never cleaned up.
-        if includes_directory_molecule_tests(path) {
-            let molecule_report = load_molecule_test_directory_report(path);
-            if !molecule_report.tests.is_empty() || !molecule_report.errors.is_empty() {
-                eprintln!(
-                    "⚠ {} molecule test{} found but 0 unit specs — molecule tests require unit specs to validate covers",
-                    molecule_report.tests.len() + molecule_report.errors.len(),
-                    pluralize(molecule_report.tests.len() + molecule_report.errors.len())
-                );
-            }
+        if !errors.is_empty() {
+            print_diagnostics(&errors);
+            let file_count = count_unique_files(&errors);
+            bail!(
+                "❌ {} file{}, {} error{}",
+                file_count,
+                pluralize(file_count),
+                count_messages(&errors),
+                pluralize(count_messages(&errors))
+            );
         }
+
+        if has_molecule_tests {
+            bail!("❌ 0 unit specs found; molecule tests require unit specs to validate covers");
+        }
+
         println!("0 units found, nothing to generate.");
         return Ok(GeneratedSpecs {
             specs,
@@ -1237,10 +1274,6 @@ fn test_command(
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
     let generated = generate_specs(spec_root, &resolved_output)?;
-    if generated.specs.is_empty() {
-        return Ok(());
-    }
-
     if target_spec.is_none() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }

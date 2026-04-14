@@ -870,6 +870,19 @@ body:
 fn generate_empty_directory_reports_zero_units() {
     let temp_dir = temp_repo_dir();
     let output_dir = temp_dir.path().join("generated/spec");
+    fs::create_dir_all(output_dir.join("pricing")).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+    fs::write(output_dir.join("mod.rs"), "pub mod pricing;\n").unwrap();
+    fs::write(
+        output_dir.join("pricing/mod.rs"),
+        "pub mod molecule_tests;\n",
+    )
+    .unwrap();
+    fs::write(
+        output_dir.join("pricing/molecule_tests.rs"),
+        "#[test]\nfn stale() { assert!(false, \"stale molecule\"); }\n",
+    )
+    .unwrap();
 
     let output = run(&[
         "generate",
@@ -881,6 +894,85 @@ fn generate_empty_directory_reports_zero_units() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("0 units found, nothing to generate"));
+    assert!(
+        !output_dir.join("mod.rs").exists(),
+        "stale root mod.rs should be removed"
+    );
+    assert!(
+        !output_dir.join("pricing/molecule_tests.rs").exists(),
+        "stale molecule_tests.rs should be removed"
+    );
+    assert!(
+        !output_dir.join("pricing").exists(),
+        "empty namespace directories should be removed"
+    );
+}
+
+#[test]
+fn generate_directory_with_only_molecule_tests_fails_and_cleans_stale_output() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("src/generated");
+
+    write_spec(
+        &units_dir,
+        "pricing/only.test.spec",
+        r#"id: pricing/only
+spec_version: "0.3.0"
+intent:
+  why: Exercise the molecule-only zero-unit path.
+covers:
+  - pricing/missing
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    fs::create_dir_all(output_dir.join("pricing")).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+    fs::write(output_dir.join("mod.rs"), "pub mod pricing;\n").unwrap();
+    fs::write(
+        output_dir.join("pricing/mod.rs"),
+        "pub mod molecule_tests;\n",
+    )
+    .unwrap();
+    fs::write(
+        output_dir.join("pricing/molecule_tests.rs"),
+        "#[test]\nfn stale() { assert!(false, \"stale molecule\"); }\n",
+    )
+    .unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "generate should fail for a molecule-only tree"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("pricing/missing"),
+        "expected missing cover diagnostic\nstderr: {stderr}"
+    );
+    assert!(
+        !output_dir.join("mod.rs").exists(),
+        "stale root mod.rs should be removed before failing"
+    );
+    assert!(
+        !output_dir.join("pricing/molecule_tests.rs").exists(),
+        "stale molecule_tests.rs should be removed before failing"
+    );
+    assert!(
+        !output_dir.join("pricing").exists(),
+        "empty namespace directories should be removed before failing"
+    );
 }
 
 #[test]
@@ -5194,7 +5286,8 @@ body:
     );
 
     // M7 deferral invariant: molecule test passports are not written until M8
-    let molecule_passport = project_dir.join("units/pricing/tax_and_discount.test.spec.passport.json");
+    let molecule_passport =
+        project_dir.join("units/pricing/tax_and_discount.test.spec.passport.json");
     assert!(
         !molecule_passport.exists(),
         "spec test must not write a passport for .test.spec files (deferred to M8): {}",
@@ -5203,8 +5296,73 @@ body:
 
     // Unit passports should still be written as normal
     assert!(
-        project_dir.join("units/pricing/apply_tax.spec.passport.json").exists(),
+        project_dir
+            .join("units/pricing/apply_tax.spec.passport.json")
+            .exists(),
         "unit passport should still be written for apply_tax"
+    );
+}
+
+#[test]
+fn spec_test_empty_directory_still_runs_cargo_tests() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    fs::create_dir_all(&units_dir).unwrap();
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+
+    fs::write(
+        project_dir.join("Cargo.toml"),
+        "[package]\nname = \"empty-units-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src/main.rs"),
+        r#"fn main() {}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn unrelated_failure() {
+        panic!("unrelated failing cargo test");
+    }
+}
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "generated/spec",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "spec test should fail when cargo tests fail, even with zero generated unit specs"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+    assert!(
+        combined.contains("unrelated_failure"),
+        "expected cargo test output to mention the failing test\noutput: {combined}"
+    );
+    assert!(
+        stderr.contains("cargo test failed"),
+        "expected spec test to surface cargo test failure\nstderr: {stderr}"
     );
 }
 
