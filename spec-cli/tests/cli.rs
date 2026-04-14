@@ -4538,7 +4538,7 @@ body:
         let _x = [unsafe { std::mem::zeroed::<u8>() }][0];
     }
 "#;
-    write_spec(&units_dir, "pricing/unsafe_test.test.spec", content);
+    write_spec(units_dir, "pricing/unsafe_test.test.spec", content);
 }
 
 #[test]

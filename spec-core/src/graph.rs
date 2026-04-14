@@ -93,7 +93,7 @@ mod tests {
     fn make_loaded_spec(id: &str, deps: Vec<&str>) -> LoadedSpec {
         LoadedSpec {
             source: SpecSource {
-                file_path: format!("{}.unit.spec", id.replace('/', "/")),
+                file_path: format!("{}.unit.spec", id),
                 id: id.to_string(),
             },
             spec: SpecStruct {
@@ -118,7 +118,7 @@ mod tests {
     fn make_loaded_molecule_test(id: &str, covers: Vec<&str>) -> LoadedMoleculeTest {
         LoadedMoleculeTest {
             source: MoleculeTestSource {
-                file_path: format!("{}.test.spec", id.replace('/', "/")),
+                file_path: format!("{}.test.spec", id),
                 id: id.to_string(),
             },
             test: MoleculeTestStruct {
