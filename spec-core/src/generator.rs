@@ -339,7 +339,7 @@ pub fn generate_mod_rs(
         if !unit_mods.is_empty() || !subdir_mods.is_empty() {
             output.push('\n');
         }
-        output.push_str("pub mod molecule_tests;\n");
+        output.push_str("#[cfg(test)]\npub mod molecule_tests;\n");
     }
 
     Ok(output)
@@ -364,7 +364,7 @@ pub fn generate_molecule_tests_code(
     tests: &[&ResolvedMoleculeTest],
     specs_by_id: &HashMap<&str, &ResolvedSpec>,
 ) -> Result<String> {
-    // Collect all unique cover_ids in stable order (first appearance across tests)
+    // Collect all unique cover_ids in alphabetical order for deterministic output
     let mut cover_id_seen: HashSet<&str> = HashSet::new();
     let mut all_cover_ids: Vec<&str> = Vec::new();
     for test in tests {
@@ -1145,8 +1145,8 @@ mod tests {
         let content = generate_mod_rs(&["apply_discount.rs".to_string()], &[], true).unwrap();
 
         assert!(
-            content.contains("pub mod molecule_tests;"),
-            "should declare molecule_tests module"
+            content.contains("#[cfg(test)]\npub mod molecule_tests;"),
+            "should declare molecule_tests module gated by cfg(test)"
         );
         assert!(
             content.contains("pub mod apply_discount;"),
@@ -1157,6 +1157,42 @@ mod tests {
     #[test]
     fn generate_mod_rs_molecule_tests_only_namespace() {
         let content = generate_mod_rs(&[], &[], true).unwrap();
-        assert_eq!(content, "pub mod molecule_tests;\n");
+        assert_eq!(content, "#[cfg(test)]\npub mod molecule_tests;\n");
+    }
+
+    #[test]
+    fn generate_molecule_tests_code_zero_covers_emits_test_fn_no_use_statements() {
+        // A test with no covers should emit the #[test] function but no `use crate::` lines.
+        let test = make_resolved_molecule_test("pricing/standalone_flow", vec![], "{ assert!(true); }");
+        let specs_by_id: HashMap<&str, &ResolvedSpec> = HashMap::new();
+
+        let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
+
+        assert!(code.contains("#[test]"), "should emit #[test] attribute");
+        assert!(
+            code.contains("fn test_standalone_flow()"),
+            "should emit test function"
+        );
+        assert!(
+            !code.contains("use crate::"),
+            "no covers means no use crate:: imports"
+        );
+    }
+
+    #[test]
+    fn molecule_tests_file_path_root_namespace() {
+        let base = PathBuf::from("/tmp/generated");
+        let path = molecule_tests_file_path(&base, "");
+        assert_eq!(path, PathBuf::from("/tmp/generated/molecule_tests.rs"));
+    }
+
+    #[test]
+    fn molecule_tests_file_path_nested_namespace() {
+        let base = PathBuf::from("/tmp/generated");
+        let path = molecule_tests_file_path(&base, "pricing/sub");
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/generated/pricing/sub/molecule_tests.rs")
+        );
     }
 }

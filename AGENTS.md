@@ -57,6 +57,11 @@ units it `covers` and provides a full Rust block body.
 **Boundary rule:** if a test needs to import more than one unit, it belongs in a `.test.spec`
 file. If it tests only a single unit's behavior, it belongs in `local_tests`.
 
+**body.rust is compiled Rust code.** Treat it with the same trust as any source file in your
+project. The validator blocks `unsafe` blocks; all other Rust constructs are the author's
+responsibility. Writing `include!`, `std::process::Command`, or `std::fs` calls in a molecule
+test body is permitted but has the same implications as writing them in any other test file.
+
 ## Molecule Test Status Propagation
 
 Molecule test failure does **not** propagate to unit status. A failing molecule test affects only

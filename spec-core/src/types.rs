@@ -155,7 +155,7 @@ impl ResolvedSpec {
         callable_name(dep_id)
     }
 
-    /// Check for dep fn_name collisions
+    /// Returns `Some((dep1, dep2))` if two deps share the same callable name, `None` otherwise.
     pub fn has_dep_collision(deps: &[String]) -> Option<(&String, &String)> {
         has_callable_collision(deps).map(|(dep1, dep2, _)| (dep1, dep2))
     }

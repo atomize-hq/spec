@@ -2073,4 +2073,158 @@ body:
         );
         assert!(validate_molecule_test_semantic(&test).is_ok());
     }
+
+    // ── validate_molecule_test_semantic: MoleculeBodyRustMustBeBlock ──────────
+
+    #[test]
+    fn molecule_body_bare_expression_is_rejected() {
+        // A bare expression (no braces) is not a syn::Block and must be rejected.
+        let test = make_molecule_test("pricing/checkout_flow", "true");
+        let result = validate_molecule_test_semantic(&test);
+        assert!(result.is_err(), "bare expression should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("block") || err.contains("Block"),
+            "expected block error, got: {err}"
+        );
+    }
+
+    // ── validate_molecule_test_covers: MoleculeCoversNotFound ────────────────
+
+    #[test]
+    fn covers_unknown_unit_id_returns_covers_not_found_error() {
+        let molecule_test = create_molecule_test_spec(
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount", "pricing/unknown_unit"],
+        );
+        let unit_ids: HashSet<&str> = ["pricing/apply_discount"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(warnings.is_empty());
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            SpecError::MoleculeCoversNotFound {
+                cover_id,
+                test_id,
+                test_path,
+            } => {
+                assert_eq!(cover_id, "pricing/unknown_unit");
+                assert_eq!(test_id, "pricing/checkout_flow");
+                assert!(test_path.ends_with("checkout_flow.test.spec"));
+            }
+            other => panic!("expected MoleculeCoversNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn covers_all_known_unit_ids_returns_no_errors() {
+        let molecule_test = create_molecule_test_spec(
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount", "pricing/apply_tax"],
+        );
+        let unit_ids: HashSet<&str> =
+            ["pricing/apply_discount", "pricing/apply_tax"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(errors.is_empty());
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn covers_empty_list_emits_warning_not_error() {
+        let molecule_test = create_molecule_test_spec("pricing/checkout_flow", vec![]);
+        let unit_ids: HashSet<&str> = ["pricing/apply_discount"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(errors.is_empty(), "empty covers should not be an error");
+        assert_eq!(warnings.len(), 1, "expected one warning for empty covers");
+    }
+
+    // ── validate_no_duplicate_molecule_test_ids ───────────────────────────────
+
+    #[test]
+    fn duplicate_molecule_test_ids_returns_error() {
+        let test_a = create_molecule_test_spec("pricing/checkout_flow", vec!["money/round"]);
+        let test_b = create_molecule_test_spec("pricing/checkout_flow", vec!["pricing/apply_tax"]);
+
+        let errors = validate_no_duplicate_molecule_test_ids(&[test_a, test_b]);
+
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            SpecError::DuplicateMoleculeTestId { id, .. } => {
+                assert_eq!(id, "pricing/checkout_flow");
+            }
+            other => panic!("expected DuplicateMoleculeTestId, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unique_molecule_test_ids_returns_no_errors() {
+        let test_a = create_molecule_test_spec("pricing/checkout_flow", vec!["money/round"]);
+        let test_b = create_molecule_test_spec("pricing/discount_flow", vec!["money/round"]);
+
+        let errors = validate_no_duplicate_molecule_test_ids(&[test_a, test_b]);
+
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn empty_molecule_test_slice_returns_no_errors() {
+        let errors = validate_no_duplicate_molecule_test_ids(&[]);
+        assert!(errors.is_empty());
+    }
+
+    // ── validate_raw_molecule_test_yaml ───────────────────────────────────────
+
+    #[test]
+    fn raw_molecule_test_yaml_valid_input_passes() {
+        let yaml = r#"
+id: pricing/checkout_flow
+intent:
+  why: "Verify discount + tax chain."
+covers:
+  - pricing/apply_discount
+body:
+  rust: |
+    { assert!(true); }
+"#;
+        let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
+        let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
+        assert!(result.is_ok(), "valid molecule test YAML should pass: {result:?}");
+    }
+
+    #[test]
+    fn raw_molecule_test_yaml_missing_body_is_rejected() {
+        let yaml = r#"
+id: pricing/checkout_flow
+intent:
+  why: "Missing body."
+"#;
+        let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
+        let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
+        assert!(result.is_err(), "missing body field should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Schema validation failed"),
+            "expected schema error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn raw_molecule_test_yaml_unknown_field_is_rejected() {
+        let yaml = r#"
+id: pricing/checkout_flow
+intent:
+  why: "Unknown field."
+body:
+  rust: "{ assert!(true); }"
+unknown_field: should_fail
+"#;
+        let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
+        let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
+        assert!(result.is_err(), "unknown field should be rejected");
+    }
 }
