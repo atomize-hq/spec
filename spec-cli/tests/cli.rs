@@ -4565,6 +4565,73 @@ body:
 }
 
 #[test]
+fn duplicate_molecule_test_id_json_uses_stable_contract_code() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let file_a = units_dir.join("pricing/dupe_test_a.test.spec");
+    let file_b = units_dir.join("pricing/dupe_test_b.test.spec");
+
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/dupe_test_a.test.spec",
+        "pricing/dupe_test",
+        &["pricing/apply_discount"],
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/dupe_test_b.test.spec",
+        "pricing/dupe_test",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "validate should fail on duplicate molecule test IDs in JSON mode"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected exactly one duplicate-id error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_DUPLICATE_MOLECULE_ID");
+    assert_eq!(error["id"], "pricing/dupe_test");
+
+    let path = error["path"].as_str().unwrap();
+    let path2 = error["path2"].as_str().unwrap();
+    let expected_a = file_a.to_str().unwrap();
+    let expected_b = file_b.to_str().unwrap();
+
+    assert!(
+        (path == expected_a && path2 == expected_b) || (path == expected_b && path2 == expected_a),
+        "duplicate paths should identify both files\npath: {path}\npath2: {path2}\nexpected_a: {expected_a}\nexpected_b: {expected_b}"
+    );
+}
+
+#[test]
 fn empty_covers_is_warning_not_error() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");

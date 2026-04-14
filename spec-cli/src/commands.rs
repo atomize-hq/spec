@@ -1865,7 +1865,7 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::OutputDir { .. } => "SPEC_OUTPUT_DIR",
         spec_core::SpecError::MissingMarker { .. } => "SPEC_MISSING_MARKER",
         spec_core::SpecError::MoleculeCoversNotFound { .. } => "SPEC_MOLECULE_COVERS_NOT_FOUND",
-        spec_core::SpecError::DuplicateMoleculeTestId { .. } => "SPEC_DUPLICATE_MOLECULE_TEST_ID",
+        spec_core::SpecError::DuplicateMoleculeTestId { .. } => "SPEC_DUPLICATE_MOLECULE_ID",
         spec_core::SpecError::MoleculeBodyRustMustBeBlock { .. } => {
             "SPEC_MOLECULE_BODY_RUST_MUST_BE_BLOCK"
         }
