@@ -5,7 +5,7 @@
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
-use crate::types::{LoadedMoleculeTest, LoadedSpec};
+use crate::types::{LoadedMoleculeTest, LoadedSpec, has_callable_collision};
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
@@ -539,6 +539,7 @@ pub fn validate_molecule_test_covers(
 ) -> (Vec<SpecError>, Vec<SpecWarning>) {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
+    let mut existing_covers = Vec::new();
 
     if test.test.covers.is_empty() {
         warnings.push(SpecWarning::MoleculeTestNoCoveredUnits {
@@ -554,7 +555,19 @@ pub fn validate_molecule_test_covers(
                 test_id: test.test.id.clone(),
                 test_path: test.source.file_path.clone(),
             });
+        } else {
+            existing_covers.push(cover_id.clone());
         }
+    }
+
+    if let Some((cover1, cover2, fn_name)) = has_callable_collision(&existing_covers) {
+        errors.push(SpecError::MoleculeCoversCollision {
+            cover1: cover1.clone(),
+            cover2: cover2.clone(),
+            fn_name: fn_name.to_string(),
+            test_id: test.test.id.clone(),
+            test_path: test.source.file_path.clone(),
+        });
     }
 
     (errors, warnings)
@@ -586,7 +599,10 @@ pub fn validate_no_duplicate_molecule_test_ids(tests: &[LoadedMoleculeTest]) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Contract, Intent, LocalTest, SpecSource, SpecStruct};
+    use crate::types::{
+        Body, Contract, Intent, LocalTest, MoleculeTestSource, MoleculeTestStruct, SpecSource,
+        SpecStruct,
+    };
 
     fn create_test_spec(id: &str, rust_body: &str) -> LoadedSpec {
         LoadedSpec {
@@ -608,6 +624,26 @@ mod tests {
                 },
                 local_tests: vec![],
                 links: None,
+                spec_version: None,
+            },
+        }
+    }
+
+    fn create_molecule_test_spec(id: &str, covers: Vec<&str>) -> LoadedMoleculeTest {
+        LoadedMoleculeTest {
+            source: MoleculeTestSource {
+                file_path: format!("test/{}.test.spec", id),
+                id: id.to_string(),
+            },
+            test: MoleculeTestStruct {
+                id: id.to_string(),
+                intent: Intent {
+                    why: format!("Test molecule spec for {}", id),
+                },
+                covers: covers.into_iter().map(str::to_string).collect(),
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
                 spec_version: None,
             },
         }
@@ -805,6 +841,34 @@ local_tests:
         let err = result.unwrap_err();
         assert!(err.to_string().contains("collision"));
         assert!(err.to_string().contains("round"));
+    }
+
+    #[test]
+    fn test_validate_molecule_test_covers_collision() {
+        let molecule_test =
+            create_molecule_test_spec("pricing/rounding_flow", vec!["money/round", "utils/round"]);
+        let unit_ids: HashSet<&str> = ["money/round", "utils/round"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(warnings.is_empty());
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            SpecError::MoleculeCoversCollision {
+                cover1,
+                cover2,
+                fn_name,
+                test_id,
+                test_path,
+            } => {
+                assert_eq!(cover1, "money/round");
+                assert_eq!(cover2, "utils/round");
+                assert_eq!(fn_name, "round");
+                assert_eq!(test_id, "pricing/rounding_flow");
+                assert_eq!(test_path, "test/pricing/rounding_flow.test.spec");
+            }
+            other => panic!("expected MoleculeCoversCollision, got {other:?}"),
+        }
     }
 
     #[test]

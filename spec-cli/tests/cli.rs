@@ -4834,6 +4834,155 @@ body:
 }
 
 #[test]
+fn molecule_covers_collision_json_uses_stable_contract_code() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "utils/round.unit.spec",
+        r#"
+id: utils/round
+kind: function
+intent:
+  why: Round utility values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/rounding_flow.test.spec",
+        "pricing/rounding_flow",
+        &["money/round", "utils/round"],
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "validate should fail on molecule covers collisions in JSON mode"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(
+        errors.len(),
+        1,
+        "expected exactly one covers-collision error"
+    );
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_MOLECULE_COVERS_COLLISION");
+    assert_eq!(error["id"], "pricing/rounding_flow");
+    assert_eq!(
+        error["path"],
+        units_dir
+            .join("pricing/rounding_flow.test.spec")
+            .to_str()
+            .unwrap()
+    );
+    assert_eq!(error["dep"], "money/round");
+    assert_eq!(error["path2"], "utils/round");
+    assert_eq!(error["value"], "round");
+}
+
+#[test]
+fn generate_rejects_molecule_covers_collision_before_rust_codegen() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "utils/round.unit.spec",
+        r#"
+id: utils/round
+kind: function
+intent:
+  why: Round utility values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/rounding_flow.test.spec",
+        "pricing/rounding_flow",
+        &["money/round", "utils/round"],
+    );
+
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "generate should fail before writing duplicate Rust imports"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("money/round"),
+        "error should mention first conflicting cover\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("utils/round"),
+        "error should mention second conflicting cover\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("round"),
+        "error should mention collided callable name\nstderr: {stderr}"
+    );
+    assert!(
+        !output_dir.join("pricing/molecule_tests.rs").exists(),
+        "generate should fail before molecule_tests.rs is written"
+    );
+}
+
+#[test]
 fn empty_covers_is_warning_not_error() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");

@@ -1887,6 +1887,7 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::MissingMarker { .. } => "SPEC_MISSING_MARKER",
         spec_core::SpecError::MoleculeCoversNotFound { .. } => "SPEC_MOLECULE_COVERS_NOT_FOUND",
         spec_core::SpecError::DuplicateMoleculeTestId { .. } => "SPEC_DUPLICATE_MOLECULE_ID",
+        spec_core::SpecError::MoleculeCoversCollision { .. } => "SPEC_MOLECULE_COVERS_COLLISION",
         spec_core::SpecError::MoleculeBodyRustMustBeBlock { .. } => {
             "SPEC_MOLECULE_BODY_RUST_MUST_BE_BLOCK"
         }
@@ -2056,6 +2057,20 @@ fn spec_error_to_json_entry(
             path2: Some(file2.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::MoleculeCoversCollision {
+            cover1,
+            cover2,
+            fn_name,
+            test_id,
+            test_path,
+        } => ErrorFields {
+            path: Some(test_path.clone()),
+            id: Some(test_id.clone()),
+            dep: Some(cover1.clone()),
+            value: Some(fn_name.clone()),
+            path2: Some(cover2.clone()),
+            ..Default::default()
+        },
         spec_core::SpecError::MoleculeBodyRustMustBeBlock { message, test_path } => ErrorFields {
             path: Some(test_path.clone()),
             message: Some(message.clone()),
@@ -2113,6 +2128,7 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::Io(_)
         | spec_core::SpecError::Json(_) => Vec::new(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
+        | spec_core::SpecError::MoleculeCoversCollision { test_path, .. }
         | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
         | spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => {
             vec![test_path.clone()]
@@ -2155,6 +2171,26 @@ fn print_status_unit(unit: &JsonStatusUnit) {
 }
 
 fn json_error_entry_to_human(entry: &JsonErrorEntry) -> String {
+    if entry.code == "SPEC_DEP_COLLISION" {
+        if let (Some(dep1), Some(dep2), Some(fn_name)) = (&entry.dep, &entry.path2, &entry.value) {
+            return format!(
+                "{}: '{}' and '{}' both resolve to '{}'",
+                entry.code, dep1, dep2, fn_name
+            );
+        }
+    }
+
+    if entry.code == "SPEC_MOLECULE_COVERS_COLLISION" {
+        if let (Some(cover1), Some(cover2), Some(fn_name), Some(test_id)) =
+            (&entry.dep, &entry.path2, &entry.value, &entry.id)
+        {
+            return format!(
+                "{}: '{}' and '{}' both resolve to '{}' in {}",
+                entry.code, cover1, cover2, fn_name, test_id
+            );
+        }
+    }
+
     if let Some(message) = &entry.message {
         return format!("{}: {message}", entry.code);
     }
@@ -2205,6 +2241,7 @@ fn error_key(err: &spec_core::SpecError) -> String {
         }
         spec_core::SpecError::Io(_) | spec_core::SpecError::Json(_) => "validation".to_string(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
+        | spec_core::SpecError::MoleculeCoversCollision { test_path, .. }
         | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
         | spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => test_path.clone(),
         spec_core::SpecError::DuplicateMoleculeTestId { file1, file2, .. } => {
@@ -2631,6 +2668,34 @@ extra_field: nope
             spec_core::SpecError::MissingMarker {
                 path: "generated/spec".to_string(),
             },
+            spec_core::SpecError::MoleculeCoversNotFound {
+                cover_id: "pricing/apply_discount".to_string(),
+                test_id: "pricing/discount_flow".to_string(),
+                test_path: "units/pricing/discount_flow.test.spec".to_string(),
+            },
+            spec_core::SpecError::DuplicateMoleculeTestId {
+                id: "pricing/discount_flow".to_string(),
+                file1: "units/pricing/a.test.spec".to_string(),
+                file2: "units/pricing/b.test.spec".to_string(),
+            },
+            spec_core::SpecError::MoleculeCoversCollision {
+                cover1: "money/round".to_string(),
+                cover2: "utils/round".to_string(),
+                fn_name: "round".to_string(),
+                test_id: "pricing/discount_flow".to_string(),
+                test_path: "units/pricing/discount_flow.test.spec".to_string(),
+            },
+            spec_core::SpecError::MoleculeBodyRustMustBeBlock {
+                message: "expected block".to_string(),
+                test_path: "units/pricing/discount_flow.test.spec".to_string(),
+            },
+            spec_core::SpecError::MoleculeBodyContainsUnsafe {
+                test_path: "units/pricing/discount_flow.test.spec".to_string(),
+            },
+            spec_core::SpecError::ReservedUnitName {
+                segment: "molecule_tests".to_string(),
+                path: "units/pricing/molecule_tests.unit.spec".to_string(),
+            },
         ];
 
         let codes = errors
@@ -2682,6 +2747,28 @@ extra_field: nope
         assert_eq!(dep_collision.dep.as_deref(), Some("money/round"));
         assert_eq!(dep_collision.value.as_deref(), Some("money"));
         assert_eq!(dep_collision.path2.as_deref(), Some("money/format"));
+
+        let molecule_collision = spec_error_to_json_entry(
+            &spec_core::SpecError::MoleculeCoversCollision {
+                cover1: "money/round".to_string(),
+                cover2: "utils/round".to_string(),
+                fn_name: "round".to_string(),
+                test_id: "pricing/rounding_flow".to_string(),
+                test_path: "units/pricing/rounding_flow.test.spec".to_string(),
+            },
+            &id_by_path,
+        );
+        assert_eq!(
+            molecule_collision.path.as_deref(),
+            Some("units/pricing/rounding_flow.test.spec")
+        );
+        assert_eq!(
+            molecule_collision.id.as_deref(),
+            Some("pricing/rounding_flow")
+        );
+        assert_eq!(molecule_collision.dep.as_deref(), Some("money/round"));
+        assert_eq!(molecule_collision.value.as_deref(), Some("round"));
+        assert_eq!(molecule_collision.path2.as_deref(), Some("utils/round"));
     }
 
     #[test]

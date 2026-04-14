@@ -141,6 +141,17 @@ pub enum SpecError {
         file2: String,
     },
 
+    #[error(
+        "Molecule covers collision: '{cover1}' and '{cover2}' both resolve to '{fn_name}' in test '{test_id}' at {test_path}"
+    )]
+    MoleculeCoversCollision {
+        cover1: String,
+        cover2: String,
+        fn_name: String,
+        test_id: String,
+        test_path: String,
+    },
+
     #[error("body.rust failed to parse as a block: {message} at {test_path}")]
     MoleculeBodyRustMustBeBlock { message: String, test_path: String },
 
