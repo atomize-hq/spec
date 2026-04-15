@@ -1,11 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-04-15
 
 ### Added
 
 - **M8 declared graph API in `spec-core`** — `SpecGraph` is now a public declared-relationship query surface, re-exported from `spec-core` alongside `SpecEdge`, `UnitNode`, `MoleculeTestNode`, and `ImpactSet`. Query methods `units()`, `molecule_tests()`, `edges()`, `reverse_deps()`, `tests_covering()`, and `impact()` expose local-library declared graph relationships.
 - **`ImpactSet` return type for impact analysis** — `impact(unit_id)` returns the local declared retest closure as `{ units, molecule_tests }`. `reverse_deps()` returns direct dependents, `tests_covering()` returns directly covering molecule tests, and all three query methods return `None` for unknown unit IDs. This is advisory planning data only, not observed runtime status, cross-library graph identity, or `spec status` propagation.
+
+### Changed
+
+- **Export now consumes the graph through accessor methods** — `spec export` continues to emit sorted declared dep and covers edges, but now projects them from the public `SpecGraph` surface instead of reaching into graph internals. This locks in the M8 contract that export is a projection layer, not the owner of graph state.
 
 ## 0.5.3 - 2026-04-13
 
