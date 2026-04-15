@@ -454,10 +454,12 @@ mod tests {
             &[],
         );
 
-        assert!(graph
-            .edges()
-            .iter()
-            .all(|edge| !matches!(edge, SpecEdge::Covers { .. })));
+        assert!(
+            graph
+                .edges()
+                .iter()
+                .all(|edge| !matches!(edge, SpecEdge::Covers { .. }))
+        );
         assert_eq!(graph.tests_covering("core/base"), Some(vec![]));
         assert_eq!(
             graph.impact("core/base"),
