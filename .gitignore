@@ -7,3 +7,4 @@ examples/ecommerce/src/generated/
 .implemented/
 spec-cli/.tmp*/
 .context
+.runs

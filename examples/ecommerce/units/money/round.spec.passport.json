@@ -13,14 +13,14 @@
   },
   "deps": [],
   "local_tests": [],
-  "generated_at": "2026-04-14T23:32:45Z",
+  "generated_at": "2026-04-15T18:24:34Z",
   "source_file": "examples/ecommerce/units/money/round.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [],
-    "observed_at": "2026-04-14T23:32:51Z",
+    "observed_at": "2026-04-15T18:24:39Z",
     "provenance": {
-      "git_commit_sha": "559599938d292493611c842a29f9ecd3892c9821"
+      "git_commit_sha": "66682cfe84cd5bed0aacce52cdf02094fd646824"
     }
   },
   "contract_hash": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8"

@@ -1,6 +1,0 @@
-status=success
-task_id=M8-INT
-finished_at=2026-04-15T18:04:26Z
-log_path=.runs/M8-INT/worker.log
-last_message_path=.runs/M8-INT/last_message.md
-exit_code=0
