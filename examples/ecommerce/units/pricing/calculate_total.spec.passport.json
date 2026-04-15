@@ -32,20 +32,19 @@
       "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-04-15T18:52:11Z",
+  "generated_at": "2026-04-15T20:06:19Z",
   "source_file": "examples/ecommerce/units/pricing/calculate_total.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
       {
         "id": "combined_flow",
-        "status": "unknown",
-        "reason": "test not found in cargo output"
+        "status": "pass"
       }
     ],
-    "observed_at": "2026-04-15T18:52:19Z",
+    "observed_at": "2026-04-15T20:06:22Z",
     "provenance": {
-      "git_commit_sha": "84fc198bd0434742744e76971654ff0a26d1ec55"
+      "git_commit_sha": "40d7fbea194fbfd77cb75a6bce3a0935649dbfb2"
     }
   },
   "contract_hash": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92"
