@@ -1,7 +1,7 @@
 <!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260414-222253.md -->
 # Next Work: M6–M10 Roadmap
 
-Status: **Implementation Ready** (M6a approved)
+Status: **M8 Delivered** (2026-04-15). M9 is the next implementation milestone.
 
 Reviewed via `/plan-eng-review` 2026-04-12. ChatGPT 5.4 Pro + Codex outside voice both consulted.  
 M5 and M5 follow-up (v0.5.1) have shipped. This plan covers the next five milestones.
@@ -11,12 +11,12 @@ M5 and M5 follow-up (v0.5.1) have shipped. This plan covers the next five milest
 ## Milestone Summary
 
 ```
-M6a  Trust Gap Fixes          ← next to implement
-M6b  Health Model             ← after M6a
-     structural PR            ← commands.rs split (zero behavior change)
-M7   .test.spec + minimal graph
-M8   Full Graph Layer
-M9   Cross-library Deps
+M6a  Trust Gap Fixes          ✓ shipped
+M6b  Health Model             ✓ shipped
+     structural PR            ✓ shipped
+M7   .test.spec + minimal graph ✓ shipped
+M8   Full Graph Layer         ✓ shipped
+M9   Cross-library Deps       ← next to implement
 M10  Planning Boundary as Data
 ```
 
@@ -564,6 +564,22 @@ SpecGraph::build()
 - `ImpactSet` struct is public from `spec-core`.
 - Tests cover: build contract, `reverse_deps()`, `tests_covering()`, `impact()` (including the downstream-covering-test case and diamond dedup case), relationship source-of-truth behavior, export projection regression, and unknown-unit-id contracts.
 - `build()` doc comment explicitly states "assumes validated input" and "links.molecule_tests is explicitly not read."
+
+### Delivery Status
+
+**Delivered 2026-04-15 in v0.6.0.**
+
+What shipped:
+- `SpecGraph` now exposes the declared graph API from `spec-core`, including `reverse_deps()`, `tests_covering()`, and `impact()`.
+- `ImpactSet` shipped as the structured return type for local declared blast-radius queries.
+- Graph internals are private; export projects through the public graph surface.
+- `links.molecule_tests` is explicitly ignored in `build()` as legacy metadata, with follow-up cleanup deferred.
+- Graph and export regression coverage landed, including downstream-covering-test and diamond-dedup cases.
+
+Post-ship verification:
+- `cargo test --all` passed on the shipped branch.
+- `spec export examples/ecommerce/units` emits `schema_version: 2` with 4 units, 2 molecule tests, and 11 graph edges.
+- Example ecommerce passports were refreshed after ship so the checked-in regression artifacts now show `pass` rather than `incomplete`.
 
 ### M8 /autoplan Review (2026-04-14)
 
@@ -1134,31 +1150,28 @@ New TODOS to add:
 
 ## Implementation Order
 
-**Current milestone: M8. M6a through M7 are shipped.**
+**Current milestone: M9. M6a through M8 are shipped.**
 
 ```text
-1. spec-core/src/graph.rs
-   - add private indexes
-   - make fields private
-   - implement reverse_deps(), tests_covering(), impact()
-   - sort + dedup all public outputs in build()
+1. M9 contract lock
+   - finalize typed cross-library dep identity
+   - define `[libraries]` config contract and validation rules
+   - keep local-only M8 graph semantics intact while extending node identity
 
-2. spec-core/src/lib.rs + spec-core/src/export.rs
-   - re-export graph surface
-   - keep export as projection over graph.edges()
-   - do not widen export schema
+2. Graph + export extension
+   - thread typed dep identity through graph construction
+   - add cross-library metadata only where M9 defines truthful semantics
+   - preserve M8 export/query behavior for local-library callers
 
-3. spec-core tests
-   - direct reverse_deps
-   - unknown-unit contracts
-   - downstream-covering-test impact case
-   - diamond dedup impact case
-   - legacy links.molecule_tests ignored
-   - export projection regression
+3. Validation + failure modes
+   - explicit errors for missing `[libraries]` path config
+   - cycle and missing-dependency behavior across library boundaries
+   - regression coverage for mixed local/cross-library graphs
 
 4. Verification
    - cargo test -p spec-core
    - cargo test --all
+   - targeted M9 export/graph smoke checks
 
 5. /ship
 ```
@@ -1172,7 +1185,7 @@ New TODOS to add:
 
 **Document version:** 2026-04-15
 **Review status:** Approved via /plan-eng-review  
-**Next review checkpoint:** Before /ship on M8
+**Next review checkpoint:** Before implementation on M9
 
 ## GSTACK REVIEW REPORT
 
