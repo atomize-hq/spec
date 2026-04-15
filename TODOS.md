@@ -140,3 +140,9 @@
 ### Open (from M7 review)
 
 - [ ] **Molecule test status tracking** — AGENTS.md documents that molecule test failures don't propagate to unit status. A failing molecule test currently has no tracked status of its own. Future milestone should track per-molecule-test pass/fail in a `molecule_tests_evidence` field (or similar) so CI can surface molecule test regressions without confusing unit health. (Added by /ship feat/m7 2026-04-14)
+
+## M8 Backlog (from M8 eng review)
+
+### Open (from M8 review)
+
+- [ ] **`links.molecule_tests` deprecation** — M8 adds an explicit comment in `SpecGraph::build()` saying `links.molecule_tests` is legacy metadata and `.test.spec` `covers` edges are the authoritative source. This TODO tracks the follow-up: emit `SpecWarning::DeprecatedLinksField` when `links.molecule_tests` is non-empty in a loaded spec, then remove the field from `SpecStruct` and the `Links` struct in a cleanup milestone. **Blocked by:** M8 landing with the comment. **Context:** The `Links` struct lives at `spec-core/src/types.rs:63`. The warning path is `spec-core/src/validator.rs` (alongside other `MissingSpecVersion`-style warnings). (Added by /plan-eng-review main 2026-04-15)

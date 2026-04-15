@@ -433,9 +433,10 @@ Graph source of truth: **the authored spec files**. In M8:
 - passports are **not** graph input
 - generated Rust is derived and ephemeral, never graph input
 
-`links.molecule_tests` on unit specs is legacy metadata, not relationship truth. M8 must
-either explicitly ignore it in graph construction or deprecate it with a follow-up plan,
-but it may not silently compete with `.test.spec` `covers`.
+`links.molecule_tests` on unit specs is legacy metadata, not relationship truth. **Decision
+(locked in M8 eng review 2026-04-15):** `build()` explicitly ignores it with a code comment;
+a TODOS entry tracks the follow-up validator warning + field removal. It must not silently
+compete with `.test.spec` `covers`.
 
 ### Invalidation Rules
 
@@ -444,14 +445,50 @@ graph state between runs. This avoids staleness. The export bundle captures a sn
 
 ### Impact Analysis (foundation for M10)
 
-`graph.impact(unit_id)` returns the **local declared retest set**:
-- the seed unit
-- the full reverse-dependency closure of that seed
-- every molecule test covering any unit in that set
+`graph.impact(unit_id)` returns the **local declared retest set** as a structured type:
 
-That makes impact a real "what should I re-test?" answer rather than a shallow direct-edge
-lookup. In M8 this remains **local-library declared impact only**. It is advisory planning
-data, not runtime status.
+```rust
+pub struct ImpactSet {
+    pub units: Vec<String>,          // unit IDs in the retest closure (seed + all reverse deps)
+    pub molecule_tests: Vec<String>, // molecule tests covering any unit in that set
+}
+
+fn impact(&self, unit_id: &str) -> Option<ImpactSet>
+// None  → seed unit not in graph
+// Some  → ImpactSet (units always includes the seed; both vecs are sorted)
+```
+
+Unit IDs and molecule test IDs share the same string format, so the structured return type
+is required to let callers (M10 plan artifact, AI agents) distinguish "units to re-implement"
+from "molecule tests to run."
+
+`impact()` returns **unit IDs**, not individual local test cases. The contract is: callers
+pass unit IDs to `spec test`, which handles local tests per unit. Local test cases are
+implicitly included through the unit ID.
+
+`impact()` is implemented via BFS over `rev_dep_index` with a `HashSet<String>` for
+deduplication (handles diamond dependencies). M8: local-library declared impact only.
+Advisory planning data, not runtime status.
+
+### API Contract (locked in M8 eng review 2026-04-15)
+
+```rust
+// SpecGraph fields are private. Accessor methods are the public API.
+// build() assumes validated input (all dep IDs and covers IDs exist in the spec set).
+
+fn units(&self) -> &[UnitNode]
+fn molecule_tests(&self) -> &[MoleculeTestNode]
+fn edges(&self) -> &[SpecEdge]           // sorted
+fn reverse_deps(&self, unit_id: &str) -> Option<Vec<String>>
+// None → unit not in graph; Some([]) → exists, no dependents; Some([...]) → sorted dependents
+fn tests_covering(&self, unit_id: &str) -> Option<Vec<String>>
+// None → unit not in graph; Some([]) → exists, no covering tests; Some([...]) → sorted
+fn impact(&self, unit_id: &str) -> Option<ImpactSet>
+// None → seed not in graph
+```
+
+Internal fields (`rev_dep_index`, `test_coverage_index`) are `HashMap<String, Vec<String>>`,
+private to the struct. Export calls `graph.edges()` (not the field directly).
 
 ### Explicit Non-Goals for M8
 
@@ -465,12 +502,14 @@ data, not runtime status.
 
 - `SpecGraph` lives in `spec-core`, exposed from `lib.rs`.
 - `SpecGraph::build()` consumes only loaded unit specs and loaded molecule tests.
-- `spec export` uses `SpecGraph::build()` instead of ad-hoc edge construction.
-- All M7 molecule test / covers edge behavior migrates to `SpecGraph` as declared graph truth.
-- `graph.reverse_deps()`, `graph.tests_covering()`, and `graph.impact()` ship for local-library declared relationships.
+- `spec export` uses `SpecGraph::build()` — already satisfied by M7 (`export.rs:92`).
+- All M7 molecule test / covers edge behavior in `SpecGraph` confirmed as declared graph truth.
+- `graph.reverse_deps()`, `graph.tests_covering()`, and `graph.impact()` ship for local-library declared relationships per the API contract above.
 - `spec status` remains passport-driven in M8. No downstream stale propagation is added.
-- Integration tests cover: build contract, `reverse_deps()`, `tests_covering()`, `impact()`, and the chosen relationship source-of-truth behavior.
-- The plan or code explicitly states how `links.molecule_tests` is treated so there is one relationship contract, not two.
+- `SpecGraph` fields are private; public API is accessor methods only.
+- `ImpactSet` struct is public from `spec-core`.
+- Integration tests cover: build contract, `reverse_deps()`, `tests_covering()`, `impact()` (including the "molecule test covering downstream, not seed" case), relationship source-of-truth behavior, and unknown-unit-id contracts.
+- `build()` doc comment explicitly states "assumes validated input" and "links.molecule_tests is explicitly not read."
 
 ### M8 /autoplan Review (2026-04-14)
 
@@ -1069,12 +1108,12 @@ Then M6b (status health model).
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | M6 over-bundled, evidence retention vs. truthful pipeline tension, sequencing .test.spec before graph, 6-state status mixes dimensions — all resolved |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | **CLEAR (PLAN)** | 6 issues found, 0 unresolved, 1 critical gap (M9 missing-library test) |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 3 | clean (PLAN via /autoplan) | mode: SELECTIVE_EXPANSION, 0 critical gaps |
+| Codex Review | `/codex review` | Independent 2nd opinion | 7+ | issues_found | M8: ImpactSet struct, private fields, trust boundary — all incorporated |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 7 | **CLEAR (PLAN)** | 4 issues found, 0 unresolved, 2 critical gaps (downstream-tests test, diamond dedup test) |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
-| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 1 | issues_open | score: 5/10 → 7/10, TTHW: 5min-local/BLOCKED-external |
 
-**CODEX:** 6 tensions raised: (1) evidence retention vs. truthful pipeline → resolved by preserve+stale detection together; (2) M6 over-bundled → split into M6a/structural PR/M6b; (3) 6-state status mixes dimensions → explicit precedence rules defined; (4) module prefix config as band-aid → resolved by auto-derivation from crate root; (5) .test.spec before graph layer → resolved by minimal graph in M7 + full graph in M8; (6) declared covers edges can lie → documented as programmer claim, same status as deps.
+**CODEX (M8):** 7 findings — ImpactSet struct for `impact()` return type (incorporated), private fields + accessor methods (incorporated), trust boundary doc comment (incorporated), three-copies concern (deferred as expected graph pattern), deterministic output (in implementation notes), export two-path concern (not M8 scope), local tests implicit in unit IDs (documented in plan).
 **UNRESOLVED:** 0
-**VERDICT:** ENG CLEARED — implement in order: M6a → structural PR → M6b → M7 → M8 → M9/M10 parallel.
+**VERDICT:** ENG CLEARED — M8 ready to implement. M6a through M7 shipped. Begin M8 graph layer.
