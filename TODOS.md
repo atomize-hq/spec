@@ -35,7 +35,7 @@
 
 - [ ] CUE validation (candidate 0.3+; JSON Schema for 0.1/0.2 — see DECISIONS.md)
 - [x] **Evidence collection and passports** — Completed v0.3.0 (2026-04-04). `spec generate` emits `.spec.passport.json` per unit, gitignored automatically. Passport contains id, intent, contract, deps, local_tests, generated_at. (passport.rs)
-- [ ] Graph resolution
+- [x] **Graph resolution** — Completed v0.6.0 (2026-04-15). `SpecGraph` now ships as the M8 declared graph layer with sorted accessors, reverse dependency queries, direct covering-test queries, and `ImpactSet`-based impact analysis in `spec-core`. (spec-core/src/graph.rs, spec-core/src/export.rs, spec-core/src/lib.rs)
 
 - [x] **Contract-to-signature enforcement (full)** — Completed v0.3.0 (2026-04-04). D3 inverted: `body.rust` is now a block, `spec generate` synthesizes fn signature from `contract.inputs`/`contract.returns`. `validate_contract_input_types` validates parameter names as Rust identifiers and type strings as valid Rust types. (validator.rs, generator.rs)
 - [x] **Cycle detection in normalizer** — Completed v0.3.0 (2026-04-04). `detect_cycles` DFS detects cycles across the full loaded spec set. `validate_deps_exist_with_options` runs cycle detection after missing-dep checks. (validator.rs)

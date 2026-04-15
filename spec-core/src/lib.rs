@@ -19,6 +19,8 @@ mod syntax;
 pub mod types;
 pub mod validator;
 
+pub use graph::{ImpactSet, MoleculeTestNode, SpecEdge, SpecGraph, UnitNode};
+
 use thiserror::Error;
 
 /// Error types for spec-core operations

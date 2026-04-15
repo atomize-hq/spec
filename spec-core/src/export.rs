@@ -88,17 +88,22 @@ pub fn build_export_bundle(
 ) -> ExportBundle {
     let (passports, warnings) = load_passports_for_specs(specs);
 
-    // Build graph edges from SpecGraph
+    // Project graph edges through the public SpecGraph surface.
     let graph = SpecGraph::build(specs, molecule_tests);
-    let mut edges: Vec<ExportEdge> = graph
-        .edges
-        .into_iter()
-        .map(|e| match e {
-            SpecEdge::Dep { from, to } => ExportEdge::Dep { from, to },
-            SpecEdge::Covers { test, unit } => ExportEdge::Covers { test, unit },
+    let edges: Vec<ExportEdge> = graph
+        .edges()
+        .iter()
+        .map(|edge| match edge {
+            SpecEdge::Dep { from, to } => ExportEdge::Dep {
+                from: from.clone(),
+                to: to.clone(),
+            },
+            SpecEdge::Covers { test, unit } => ExportEdge::Covers {
+                test: test.clone(),
+                unit: unit.clone(),
+            },
         })
         .collect();
-    edges.sort();
 
     let export_molecule_tests: Vec<ExportMoleculeTest> = molecule_tests
         .iter()
@@ -249,8 +254,34 @@ mod tests {
             vec!["money/round", "money/format"],
         );
         let spec_b = loaded_spec(&dir, "units/money/round.unit.spec", "money/round", vec![]);
+        let molecule_test = LoadedMoleculeTest {
+            source: crate::types::MoleculeTestSource {
+                file_path: dir
+                    .path()
+                    .join("tests/pricing/apply_tax.test.spec")
+                    .display()
+                    .to_string(),
+                id: "pricing/apply_tax_behavior".to_string(),
+            },
+            test: crate::types::MoleculeTestStruct {
+                id: "pricing/apply_tax_behavior".to_string(),
+                intent: Intent {
+                    why: "Why pricing/apply_tax_behavior".to_string(),
+                },
+                covers: vec!["money/round".to_string(), "pricing/apply_tax".to_string()],
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
+                spec_version: None,
+            },
+        };
 
-        let bundle = build_export_bundle(&[spec_a, spec_b], &[], "2026-04-05T00:00:00Z", None);
+        let bundle = build_export_bundle(
+            &[spec_a, spec_b],
+            &[molecule_test],
+            "2026-04-05T00:00:00Z",
+            None,
+        );
 
         assert_eq!(
             bundle.graph.edges,
@@ -262,6 +293,14 @@ mod tests {
                 ExportEdge::Dep {
                     from: "pricing/apply_tax".to_string(),
                     to: "money/round".to_string(),
+                },
+                ExportEdge::Covers {
+                    test: "pricing/apply_tax_behavior".to_string(),
+                    unit: "money/round".to_string(),
+                },
+                ExportEdge::Covers {
+                    test: "pricing/apply_tax_behavior".to_string(),
+                    unit: "pricing/apply_tax".to_string(),
                 },
             ]
         );
