@@ -490,6 +490,60 @@ fn impact(&self, unit_id: &str) -> Option<ImpactSet>
 Internal fields (`rev_dep_index`, `test_coverage_index`) are `HashMap<String, Vec<String>>`,
 private to the struct. Export calls `graph.edges()` (not the field directly).
 
+### Implementation Slices (locked for M8)
+
+```text
+LoadedSpec + LoadedMoleculeTest
+        │
+        ▼
+SpecGraph::build()
+  ├── sorted UnitNode / MoleculeTestNode vectors
+  ├── sorted SpecEdge vector
+  ├── rev_dep_index: unit_id -> direct dependents
+  └── test_coverage_index: unit_id -> covering molecule tests
+        │
+        ├── accessors: units() / molecule_tests() / edges()
+        ├── queries: reverse_deps() / tests_covering() / impact()
+        └── export projection through graph.edges()
+```
+
+**Slice A. Graph core in `spec-core/src/graph.rs`**
+
+- Keep `SpecGraph::build()` as the single constructor. It accepts validated input and stays infallible in M8.
+- Make `units`, `molecule_tests`, and `edges` private. Add private `rev_dep_index` and `test_coverage_index`.
+- Build all public vectors in deterministic order during construction:
+  - `units` sorted by `id`
+  - `molecule_tests` sorted by `id`
+  - `edges` sorted lexicographically by enum payload
+  - each index vec sorted and deduplicated once during `build()`
+- `reverse_deps(unit_id)` returns **direct** dependents only. Transitive closure belongs to `impact()`, not this accessor.
+- `tests_covering(unit_id)` returns molecule tests that directly declare the unit in `covers`.
+- `impact(unit_id)` performs BFS over `rev_dep_index`, collecting the seed plus all transitive reverse deps, then unions molecule tests covering any unit in that closure.
+- `build()` carries an explicit doc comment: "assumes validated input" and "does not read `links.molecule_tests`."
+
+**Slice B. Public surface and file boundaries**
+
+- `spec-core/src/lib.rs`: re-export `SpecGraph`, `SpecEdge`, `UnitNode`, `MoleculeTestNode`, and `ImpactSet`.
+- `spec-core/src/export.rs`: remain a projection layer. It may call `graph.edges()`, but it must not read graph internals or serialize index state.
+- `spec-core/src/types.rs`: no schema change in M8. `Links.molecule_tests` stays as legacy parsed metadata only; field removal is a later cleanup milestone.
+
+**Slice C. Exact test work required before shipping M8**
+
+- `spec-core/src/graph.rs` unit tests:
+  - `reverse_deps_returns_direct_dependents_sorted`
+  - `reverse_deps_unknown_unit_returns_none`
+  - `tests_covering_returns_multiple_tests_sorted`
+  - `tests_covering_unknown_unit_returns_none`
+  - `impact_includes_seed_reverse_dep_closure_and_covering_tests`
+  - `impact_includes_downstream_covering_tests_not_just_seed_tests`
+  - `impact_deduplicates_diamond_reverse_deps`
+  - `build_ignores_links_molecule_tests_legacy_metadata`
+- `spec-core/src/export.rs` regression test:
+  - export still projects sorted `graph.edges()` correctly after graph internals become private and indexed.
+- End-of-milestone verification:
+  - `cargo test -p spec-core`
+  - `cargo test --all`
+
 ### Explicit Non-Goals for M8
 
 - No `Declared | Observed` edge taxonomy
@@ -508,7 +562,7 @@ private to the struct. Export calls `graph.edges()` (not the field directly).
 - `spec status` remains passport-driven in M8. No downstream stale propagation is added.
 - `SpecGraph` fields are private; public API is accessor methods only.
 - `ImpactSet` struct is public from `spec-core`.
-- Integration tests cover: build contract, `reverse_deps()`, `tests_covering()`, `impact()` (including the "molecule test covering downstream, not seed" case), relationship source-of-truth behavior, and unknown-unit-id contracts.
+- Tests cover: build contract, `reverse_deps()`, `tests_covering()`, `impact()` (including the downstream-covering-test case and diamond dedup case), relationship source-of-truth behavior, export projection regression, and unknown-unit-id contracts.
 - `build()` doc comment explicitly states "assumes validated input" and "links.molecule_tests is explicitly not read."
 
 ### M8 /autoplan Review (2026-04-14)
@@ -985,14 +1039,13 @@ this thread does not allow delegated sub-agents unless the user explicitly asks 
 | Evidence preservation in write_passports | passport file corrupted on disk | via serde deserialize | returns None, writes fresh | no |
 | 6-state status transitions | clock skew between observed_at and now | N/A | timestamp is informational | no |
 | .test.spec covers validation | covers unit deleted after test authored | yes (integration) | SPEC_MOLECULE_COVERS_NOT_FOUND | no |
-| graph.impact() | downstream molecule tests omitted from retest set | no | plan now defines closure behavior; tests still needed | **yes if untested** |
-| graph query API | unknown unit id returns empty and looks valid | no | contract must be explicit (`Result` / `Option`) | **yes if left implicit** |
+| graph.impact() | downstream molecule tests omitted from retest set | yes (planned `impact_includes_downstream_covering_tests_not_just_seed_tests`) | `ImpactSet` contract + BFS closure over reverse deps | no |
+| graph query API | unknown unit id returns empty and looks valid | yes (planned `*_unknown_unit_returns_none` tests) | explicit `Option` contract on all graph query methods | no |
 | Cross-library dep resolution | [libraries] path not found on disk | partial | needs explicit test + loud error | **critical gap** |
 | Cross-library dep resolution | alias resolves to self or duplicate canonical root | no | plan now requires rejection | **critical gap** |
 | Plan artifact impact computation | graph built from file path instead of library root | no | plan now requires root resolution | **critical gap** |
 
 **Critical gaps:**
-- M8 needs explicit tests for impact-closure semantics and unknown-unit-id behavior.
 - M9 needs explicit tests for missing library path, alias-to-self, duplicate canonical root,
   and symlink-looped external roots.
 - M10 needs explicit tests proving plan validation resolves graph scope from the enclosing
@@ -1081,28 +1134,45 @@ New TODOS to add:
 
 ## Implementation Order
 
-**M6a first. Ship it before doing anything else.**
+**Current milestone: M8. M6a through M7 are shipped.**
 
+```text
+1. spec-core/src/graph.rs
+   - add private indexes
+   - make fields private
+   - implement reverse_deps(), tests_covering(), impact()
+   - sort + dedup all public outputs in build()
+
+2. spec-core/src/lib.rs + spec-core/src/export.rs
+   - re-export graph surface
+   - keep export as projection over graph.edges()
+   - do not widen export schema
+
+3. spec-core tests
+   - direct reverse_deps
+   - unknown-unit contracts
+   - downstream-covering-test impact case
+   - diamond dedup impact case
+   - legacy links.molecule_tests ignored
+   - export projection regression
+
+4. Verification
+   - cargo test -p spec-core
+   - cargo test --all
+
+5. /ship
 ```
-1. spec test ecommerce/units (confirm the bug reproduces)
-2. Fix output anchoring + auto-derive prefix
-3. Fix evidence preservation in write_passports
-4. Fix eprintln! compat in pipeline.rs
-5. Add nextest doc to README
-6. Regenerate + commit example passports
-7. cargo test --all → green
-8. /ship
-```
 
-Then structural PR (commands.rs split + ValidatedExpr).
-
-Then M6b (status health model).
+**Do not front-load into this PR:**
+- `links.molecule_tests` validator warning + field removal
+- M9 typed dep identity
+- M10 plan artifact command surface
 
 ---
 
-**Document version:** 2026-04-12  
+**Document version:** 2026-04-15
 **Review status:** Approved via /plan-eng-review  
-**Next review checkpoint:** Before /ship on M6a
+**Next review checkpoint:** Before /ship on M8
 
 ## GSTACK REVIEW REPORT
 
@@ -1110,10 +1180,10 @@ Then M6b (status health model).
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 3 | clean (PLAN via /autoplan) | mode: SELECTIVE_EXPANSION, 0 critical gaps |
 | Codex Review | `/codex review` | Independent 2nd opinion | 7+ | issues_found | M8: ImpactSet struct, private fields, trust boundary — all incorporated |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 7 | **CLEAR (PLAN)** | 4 issues found, 0 unresolved, 2 critical gaps (downstream-tests test, diamond dedup test) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 8 | **CLEAR (PLAN)** | 4 issues found, 0 unresolved, 0 M8-blocking gaps after test matrix + execution order refresh |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 1 | issues_open | score: 5/10 → 7/10, TTHW: 5min-local/BLOCKED-external |
 
-**CODEX (M8):** 7 findings — ImpactSet struct for `impact()` return type (incorporated), private fields + accessor methods (incorporated), trust boundary doc comment (incorporated), three-copies concern (deferred as expected graph pattern), deterministic output (in implementation notes), export two-path concern (not M8 scope), local tests implicit in unit IDs (documented in plan).
+**CODEX (M8):** 7 findings — ImpactSet struct for `impact()` return type (incorporated), private fields + accessor methods (incorporated), trust boundary doc comment (incorporated), deterministic output locked into the build contract, downstream-covering-test and diamond-dedup cases now explicit in the test matrix, export two-path concern held out of M8, local tests implicit in unit IDs documented.
 **UNRESOLVED:** 0
-**VERDICT:** ENG CLEARED — M8 ready to implement. M6a through M7 shipped. Begin M8 graph layer.
+**VERDICT:** ENG CLEARED — M8 implementation plan locked. Start in `spec-core/src/graph.rs`, then project through `lib.rs` and `export.rs`, then run the graph/export regression suite before `/ship`.
