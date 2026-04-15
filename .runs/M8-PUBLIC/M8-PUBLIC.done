@@ -1,0 +1,6 @@
+status=success
+task_id=M8-PUBLIC
+finished_at=2026-04-15T17:57:35Z
+log_path=.runs/M8-PUBLIC/worker.log
+last_message_path=.runs/M8-PUBLIC/last_message.md
+exit_code=0

@@ -1,0 +1,6 @@
+status=success
+task_id=M8-EXPORT
+finished_at=2026-04-15T18:01:14Z
+log_path=.runs/M8-EXPORT/worker.log
+last_message_path=.runs/M8-EXPORT/last_message.md
+exit_code=0

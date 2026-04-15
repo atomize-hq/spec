@@ -1,0 +1,6 @@
+status=success
+task_id=M8-GRAPH
+finished_at=2026-04-15T17:54:44Z
+log_path=.runs/M8-GRAPH/worker.log
+last_message_path=.runs/M8-GRAPH/last_message.md
+exit_code=0
