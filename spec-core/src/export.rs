@@ -7,6 +7,7 @@
 //! # Breaking changes
 //! - In M7, `ExportEdge` changed from a plain struct `{from, to}` to a tagged enum.
 //! - In M9, dep refs changed from ambiguous strings to structured `{library, id}` objects.
+//!
 //! Consumers must handle the `kind` field: `"dep"` edges have structured `from`/`to` refs;
 //! `"covers"` edges have `test`/`unit` string fields.
 
