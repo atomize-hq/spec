@@ -180,10 +180,12 @@ spec validate examples/ecommerce/units --format json
 }
 ```
 
-That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose.
+That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose. Pre-validation workspace-config failures, including broken `[libraries]` entries, also stay in this JSON contract for `validate --format json`.
 
 `spec status` uses simple symbols so you can scan a whole tree quickly. Any unit whose
 status is not `valid` exits with code `1`.
+
+For `spec status --format json`, workspace-config failures that happen before any unit row can be computed surface as top-level `loader_errors` entries instead of raw stderr text.
 
 - `✓` valid
 - `✗` invalid or failing
@@ -195,7 +197,7 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 
 ## Validation error codes
 
-`spec validate --format json` returns error objects with a `code` field. These are the recognized codes in v0.5:
+`spec validate --format json` returns error objects with a `code` field. These are the recognized codes returned by the current CLI:
 
 | Code | Description |
 |------|-------------|
@@ -207,9 +209,17 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_SEMANTIC_VALIDATION` | Unit passed schema but failed a semantic rule |
 | `SPEC_RUST_KEYWORD` | An `id` segment is a Rust reserved keyword |
 | `SPEC_DUPLICATE_ID` | Two unit files share the same `id` |
-| `SPEC_DEP_COLLISION` | Two deps resolve to the same generated function name |
+| `SPEC_DEP_COLLISION` | A dep collides with another generated callable name, including another dep or the owning unit function |
 | `SPEC_MISSING_DEP` | A declared dep has no matching unit in the spec set |
+| `SPEC_UNKNOWN_LIBRARY_NAMESPACE` | A dep references a library alias that is not configured in `[libraries]` |
+| `SPEC_CROSS_LIBRARY_DEP_NOT_FOUND` | A cross-library dep has no matching unit in the resolved library set |
+| `SPEC_LIBRARY_CRATE_ALIAS_MISSING` | The root crate is missing the Cargo dependency alias required by a cross-library dep |
+| `SPEC_LIBRARY_PATH_NOT_FOUND` | A `[libraries]` entry points to a path that does not exist |
+| `SPEC_LIBRARY_OUT_OF_ROOT` | A `[libraries]` entry resolves outside the repo root |
+| `SPEC_LIBRARY_ALIAS_SELF` | A `[libraries]` entry points back to the invoking library root |
+| `SPEC_DUPLICATE_LIBRARY_ROOT` | Two `[libraries]` aliases resolve to the same canonical root |
 | `SPEC_CYCLIC_DEP` | Units form a dependency cycle |
+| `SPEC_CROSS_LIBRARY_CYCLE` | Units form a dependency cycle across library boundaries |
 | `SPEC_USE_STATEMENT_IN_BODY` | `body.rust` contains a `use` statement — move it to `imports` or `deps` |
 | `SPEC_BODY_RUST_MUST_BE_BLOCK` | `body.rust` failed to parse as a Rust block expression |
 | `SPEC_BODY_RUST_LOOKS_LIKE_FN_DECLARATION` | `body.rust` contains the full `pub fn` signature — keep only the body block (see migration guide) |
@@ -221,6 +231,7 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_GENERATOR` | Code generation failure |
 | `SPEC_OUTPUT_DIR` | Output directory creation or safety check failed |
 | `SPEC_MISSING_MARKER` | Output dir lacks the `.spec-generated` marker — refusing to clean |
+| `SPEC_MOLECULE_CROSS_LIBRARY_COVERS_UNSUPPORTED` | A molecule test `covers` entry references another library, which remains unsupported in M9 |
 | `SPEC_RESERVED_UNIT_NAME` | A slash-delimited spec `id` contains a reserved segment such as `molecule_tests` |
 
 ## Consuming Generated Code

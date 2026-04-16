@@ -1,0 +1,11 @@
+[package]
+name = "crosslib-app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+rust_decimal = { version = "1.36", features = ["serde"] }
+shared = { path = "../shared-crate" }
+
+[workspace]

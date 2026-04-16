@@ -1,4 +1,7 @@
-use crate::config::{WorkspaceConfig, load_workspace_config};
+use crate::config::{
+    ResolvedLibrary, WorkspaceConfig, WorkspaceConfigError, load_workspace_config,
+    load_workspace_context,
+};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
@@ -20,12 +23,17 @@ use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, cargo_available, parse_cargo_test_output, run_cargo_build,
     run_cargo_test, workspace_root_for, zero_tests_ran,
 };
-use spec_core::types::{LoadedMoleculeTest, LoadedSpec, ResolvedMoleculeTest, ResolvedSpec};
-use spec_core::validator::{
-    ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
-    validate_full_with_options, validate_molecule_test_covers, validate_molecule_test_semantic,
-    validate_no_duplicate_ids, validate_no_duplicate_molecule_test_ids,
+use spec_core::types::{
+    DepRef, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef, ResolvedMoleculeTest, ResolvedSpec,
 };
+use spec_core::validator::{
+    QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
+    validate_molecule_test_covers, validate_molecule_test_semantic,
+    validate_no_duplicate_molecule_test_ids, validate_no_duplicate_qualified_ids,
+    validate_qualified_deps_exist_with_options,
+};
+#[cfg(test)]
+use spec_core::validator::{validate_deps_exist_with_options, validate_no_duplicate_ids};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Write;
@@ -39,6 +47,37 @@ type CollectedSpecs = (
     usize,
 );
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
+
+struct ImportedLibrarySpecs {
+    alias: String,
+    specs: Vec<LoadedSpec>,
+}
+
+struct ValidationSpecCollection {
+    root_specs: Vec<LoadedSpec>,
+    imported_libraries: Vec<ImportedLibrarySpecs>,
+    loader_errors: Vec<spec_core::SpecError>,
+    loader_warnings: Vec<spec_core::SpecWarning>,
+    total_files: usize,
+}
+
+impl ValidationSpecCollection {
+    fn all_specs(&self) -> Vec<&LoadedSpec> {
+        let mut specs = Vec::with_capacity(
+            self.root_specs.len()
+                + self
+                    .imported_libraries
+                    .iter()
+                    .map(|library| library.specs.len())
+                    .sum::<usize>(),
+        );
+        specs.extend(self.root_specs.iter());
+        for library in &self.imported_libraries {
+            specs.extend(library.specs.iter());
+        }
+        specs
+    }
+}
 
 const JSON_SCHEMA_VERSION: u8 = 2;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
@@ -76,7 +115,7 @@ struct JsonStatusUnit {
     evidence_at: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct JsonErrorEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     unit: Option<String>,
@@ -97,6 +136,54 @@ struct JsonErrorEntry {
     path2: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cycle: Option<Vec<String>>,
+}
+
+fn workspace_config_error_to_json_entry(err: &WorkspaceConfigError) -> JsonErrorEntry {
+    JsonErrorEntry {
+        unit: None,
+        code: err.code().to_string(),
+        path: Some(err.config_path().display().to_string()),
+        dep: None,
+        field: None,
+        value: None,
+        message: Some(err.detail_message()),
+        id: None,
+        path2: None,
+        cycle: None,
+    }
+}
+
+fn emit_json_validate_response(response: &JsonValidateResponse) -> Result<()> {
+    let json = serde_json::to_string_pretty(response)?;
+    print!("{json}");
+    std::io::stdout().flush()?;
+    Ok(())
+}
+
+fn emit_json_status_response(response: &JsonStatusResponse) -> Result<()> {
+    let json = serde_json::to_string_pretty(response)?;
+    print!("{json}");
+    std::io::stdout().flush()?;
+    Ok(())
+}
+
+fn emit_json_validate_workspace_config_failure(err: &WorkspaceConfigError) -> Result<()> {
+    emit_json_validate_response(&JsonValidateResponse {
+        schema_version: JSON_SCHEMA_VERSION,
+        status: "invalid",
+        errors: vec![workspace_config_error_to_json_entry(err)],
+        warnings: vec![],
+    })?;
+    std::process::exit(1);
+}
+
+fn emit_json_status_workspace_config_failure(err: &WorkspaceConfigError) -> Result<()> {
+    emit_json_status_response(&JsonStatusResponse {
+        schema_version: JSON_SCHEMA_VERSION,
+        units: vec![],
+        loader_errors: vec![workspace_config_error_to_json_entry(err)],
+    })?;
+    std::process::exit(1);
 }
 
 #[derive(Default)]
@@ -370,18 +457,35 @@ pub struct CompletionsArgs {
 }
 
 fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Result<()> {
-    let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
-    let config = load_workspace_config(path)?;
+    let context = match load_workspace_context(path) {
+        Ok(context) => context,
+        Err(err) if matches!(format, OutputFormat::Json) => {
+            if let Some(config_err) = err.downcast_ref::<WorkspaceConfigError>() {
+                return emit_json_validate_workspace_config_failure(config_err);
+            }
+            return Err(err);
+        }
+        Err(err) => return Err(err),
+    };
+    let validation_specs = collect_validation_specs(path, &context.libraries)?;
+    let config = context.config;
     let validation_options = ValidationOptions {
         strict_deps: !no_strict,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (validation_errors, validation_warnings) = finish_validation(&specs, &validation_options);
+    let (mut validation_errors, validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
+    validation_errors.extend(validate_library_crate_aliases(
+        &validation_specs.root_specs,
+        path,
+        &config,
+    ));
 
     let (molecule_errors, molecule_warnings, molecule_loader_errors) =
         if includes_directory_molecule_tests(path) {
             let molecule_report = load_molecule_test_directory_report(path);
-            let (errors, warnings) = validate_molecule_tests(&molecule_report.tests, &specs);
+            let (errors, warnings) =
+                validate_molecule_tests(&molecule_report.tests, &validation_specs.root_specs);
             (errors, warnings, molecule_report.errors)
         } else {
             (Vec::new(), Vec::new(), Vec::new())
@@ -392,7 +496,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
             let mut errors = DiagnosticMap::new();
             let mut warnings = DiagnosticMap::new();
 
-            for err in loader_errors {
+            for err in validation_specs.loader_errors {
                 push_error(&mut errors, err);
             }
             for err in validation_errors {
@@ -404,7 +508,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
             for err in molecule_errors {
                 push_error(&mut errors, err);
             }
-            for warning in loader_warnings {
+            for warning in validation_specs.loader_warnings {
                 push_warning(&mut warnings, warning);
             }
             for warning in validation_warnings {
@@ -421,12 +525,13 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
             }
 
             if errors.is_empty() {
-                if total_files == 0 {
+                if validation_specs.total_files == 0 {
                     println!("0 units found, nothing to validate.");
                 } else {
                     println!(
-                        "✅ {total_files} unit{} valid{}",
-                        pluralize(total_files),
+                        "✅ {} unit{} valid{}",
+                        validation_specs.total_files,
+                        pluralize(validation_specs.total_files),
                         if warning_count == 0 {
                             String::new()
                         } else {
@@ -448,18 +553,20 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
             );
         }
         OutputFormat::Json => {
-            let id_by_path: HashMap<String, String> = specs
-                .iter()
+            let id_by_path: HashMap<String, String> = validation_specs
+                .all_specs()
+                .into_iter()
                 .map(|s| (s.source.file_path.clone(), s.spec.id.clone()))
                 .collect();
             let mut errors = Vec::with_capacity(
-                loader_errors.len()
+                validation_specs.loader_errors.len()
                     + validation_errors.len()
                     + molecule_loader_errors.len()
                     + molecule_errors.len(),
             );
             errors.extend(
-                loader_errors
+                validation_specs
+                    .loader_errors
                     .iter()
                     .map(|err| spec_error_to_json_entry(err, &id_by_path)),
             );
@@ -479,7 +586,8 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
                     .map(|err| spec_error_to_json_entry(err, &id_by_path)),
             );
 
-            let warnings = loader_warnings
+            let warnings = validation_specs
+                .loader_warnings
                 .into_iter()
                 .chain(validation_warnings)
                 .chain(molecule_warnings)
@@ -493,9 +601,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
                 errors,
                 warnings,
             };
-            let json = serde_json::to_string_pretty(&response)?;
-            print!("{json}");
-            std::io::stdout().flush()?;
+            emit_json_validate_response(&response)?;
 
             if has_errors {
                 std::process::exit(1);
@@ -612,47 +718,99 @@ fn compute_health_status(
 }
 
 fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
-    let (specs, loader_errors, _loader_warnings, total_files) = collect_specs(path)?;
-    let config = load_workspace_config(path)?;
+    let context = match load_workspace_context(path) {
+        Ok(context) => context,
+        Err(err) if matches!(format, OutputFormat::Json) => {
+            if let Some(config_err) = err.downcast_ref::<WorkspaceConfigError>() {
+                return emit_json_status_workspace_config_failure(config_err);
+            }
+            return Err(err);
+        }
+        Err(err) => return Err(err),
+    };
+    let config = context.config;
+    let (root_specs, root_loader_errors, _root_loader_warnings, root_total_files) =
+        collect_specs(path)?;
+    let (
+        selected_libraries,
+        imported_libraries,
+        imported_loader_errors,
+        _imported_loader_warnings,
+        _imported_total,
+    ) = load_referenced_validation_specs(&root_specs, &context.libraries);
+    let validation_specs = ValidationSpecCollection {
+        root_specs,
+        imported_libraries,
+        loader_errors: Vec::new(),
+        loader_warnings: Vec::new(),
+        total_files: root_total_files,
+    };
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (validation_errors, _validation_warnings) = finish_validation(&specs, &validation_options);
-    let id_by_path: HashMap<String, String> = specs
-        .iter()
+    let failed_import_aliases =
+        imported_library_aliases_with_loader_errors(&imported_loader_errors, &selected_libraries);
+    let (validation_errors, _validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
+    let mut validation_errors = suppress_cross_library_dep_not_found_for_failed_imports(
+        validation_errors,
+        &failed_import_aliases,
+    );
+    validation_errors.extend(validate_library_crate_aliases(
+        &validation_specs.root_specs,
+        path,
+        &config,
+    ));
+
+    let id_by_path: HashMap<String, String> = validation_specs
+        .all_specs()
+        .into_iter()
         .map(|s| (s.source.file_path.clone(), s.spec.id.clone()))
         .collect();
-    let has_loader_errors = !loader_errors.is_empty();
+    let root_paths: HashSet<String> = validation_specs
+        .root_specs
+        .iter()
+        .map(|spec| spec.source.file_path.clone())
+        .collect();
 
-    // Convert loader errors to JSON entries (non-consuming borrow) so they can be
-    // surfaced in JSON mode where print_diagnostics is not called.
-    let loader_error_entries: Vec<JsonErrorEntry> = loader_errors
+    let mut errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
+    let mut global_errors = root_loader_errors;
+    global_errors.extend(imported_loader_errors);
+    for err in validation_errors {
+        let entry = spec_error_to_json_entry(&err, &id_by_path);
+        let root_error_paths: Vec<String> = error_paths(&err)
+            .into_iter()
+            .filter(|path| root_paths.contains(path))
+            .collect();
+        if root_error_paths.is_empty() {
+            global_errors.push(err);
+            continue;
+        }
+        for path in root_error_paths {
+            errors_by_path.entry(path).or_default().push(entry.clone());
+        }
+    }
+    let has_global_errors = !global_errors.is_empty();
+
+    // JSON mode uses loader_errors as the existing top-level bucket for diagnostics that do not
+    // attach to a root-library status row, including imported-library failures.
+    let loader_error_entries: Vec<JsonErrorEntry> = global_errors
         .iter()
         .map(|err| spec_error_to_json_entry(err, &id_by_path))
         .collect();
 
-    let mut errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
-    for err in &validation_errors {
-        for path in error_paths(err) {
-            errors_by_path
-                .entry(path)
-                .or_default()
-                .push(spec_error_to_json_entry(err, &id_by_path));
-        }
-    }
-
-    // Text mode emits loader errors as human-readable diagnostics;
-    // JSON mode surfaces them in the response's loader_errors field.
-    if has_loader_errors && matches!(format, OutputFormat::Text) {
+    // Text mode emits global diagnostics as human-readable output; JSON mode surfaces them in
+    // the response's loader_errors field to preserve the existing status contract.
+    if has_global_errors && matches!(format, OutputFormat::Text) {
         let mut diagnostics = DiagnosticMap::new();
-        for err in loader_errors {
+        for err in global_errors {
             push_error(&mut diagnostics, err);
         }
         print_diagnostics(&diagnostics);
     }
 
-    if total_files == 0 && specs.is_empty() && !has_loader_errors {
+    if root_total_files == 0 && validation_specs.root_specs.is_empty() && !has_global_errors {
         match format {
             OutputFormat::Text => {
                 println!("0 units found, nothing to status.");
@@ -663,18 +821,16 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                     units: vec![],
                     loader_errors: vec![],
                 };
-                let json = serde_json::to_string_pretty(&response)?;
-                print!("{json}");
-                std::io::stdout().flush()?;
+                emit_json_status_response(&response)?;
             }
         }
         return Ok(());
     }
 
-    let mut units = Vec::with_capacity(specs.len());
-    let mut needs_nonzero_exit = has_loader_errors;
+    let mut units = Vec::with_capacity(validation_specs.root_specs.len());
+    let mut needs_nonzero_exit = has_global_errors;
 
-    for spec in &specs {
+    for spec in &validation_specs.root_specs {
         let source_path = Path::new(&spec.source.file_path);
         let passport = match read_passport(source_path) {
             Ok(passport) => passport,
@@ -719,9 +875,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 units,
                 loader_errors: loader_error_entries,
             };
-            let json = serde_json::to_string_pretty(&response)?;
-            print!("{json}");
-            std::io::stdout().flush()?;
+            emit_json_status_response(&response)?;
         }
     }
 
@@ -732,23 +886,83 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
     Ok(())
 }
 
+fn imported_library_aliases_with_loader_errors(
+    loader_errors: &[spec_core::SpecError],
+    libraries: &[ResolvedLibrary],
+) -> HashSet<String> {
+    libraries
+        .iter()
+        .filter(|library| {
+            loader_errors.iter().any(|err| {
+                error_paths(err)
+                    .into_iter()
+                    .any(|path| Path::new(&path).starts_with(&library.root))
+            })
+        })
+        .map(|library| library.alias.clone())
+        .collect()
+}
+
+fn suppress_cross_library_dep_not_found_for_failed_imports(
+    errors: Vec<spec_core::SpecError>,
+    failed_import_aliases: &HashSet<String>,
+) -> Vec<spec_core::SpecError> {
+    errors
+        .into_iter()
+        .filter(|err| match err {
+            spec_core::SpecError::CrossLibraryDepNotFound { dep, .. } => DepRef::parse(dep)
+                .ok()
+                .and_then(|dep_ref| dep_ref.library_alias().map(str::to_string))
+                .is_none_or(|alias| !failed_import_aliases.contains(&alias)),
+            _ => true,
+        })
+        .collect()
+}
+
 fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
-    let (specs, loader_errors, loader_warnings, _total_files) = collect_specs(path)?;
-    let config = load_workspace_config(path)?;
+    let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
+    let context = load_workspace_context(path)?;
+    let config = context.config;
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (validation_errors, validation_warnings) = finish_validation(&specs, &validation_options);
+    let (
+        _selected_libraries,
+        imported_libraries,
+        imported_loader_errors,
+        imported_loader_warnings,
+        _imported_total,
+    ) = load_referenced_validation_specs(&specs, &context.libraries);
+    let validation_specs = ValidationSpecCollection {
+        root_specs: specs.clone(),
+        imported_libraries,
+        loader_errors: Vec::new(),
+        loader_warnings: Vec::new(),
+        total_files,
+    };
+    let (mut validation_errors, validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
+    validation_errors.extend(validate_library_crate_aliases(
+        &validation_specs.root_specs,
+        path,
+        &config,
+    ));
     let mut errors = DiagnosticMap::new();
     let mut warnings = DiagnosticMap::new();
     for err in loader_errors {
+        push_error(&mut errors, err);
+    }
+    for err in imported_loader_errors {
         push_error(&mut errors, err);
     }
     for err in validation_errors {
         push_error(&mut errors, err);
     }
     for warning in loader_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    for warning in imported_loader_warnings {
         push_warning(&mut warnings, warning);
     }
     for warning in validation_warnings {
@@ -834,6 +1048,33 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
 }
 
 fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    let config = load_workspace_config(path)?;
+    let (root_specs, loader_errors, loader_warnings, _total_files) = collect_specs(path)?;
+    if !loader_errors.is_empty() {
+        let mut errors = DiagnosticMap::new();
+        for err in loader_errors {
+            push_error(&mut errors, err);
+        }
+        print_diagnostics(&errors);
+        bail!("❌ unable to load units before generation");
+    }
+    if !loader_warnings.is_empty() {
+        let mut warnings = DiagnosticMap::new();
+        for warning in loader_warnings {
+            push_warning(&mut warnings, warning);
+        }
+        print_diagnostics(&warnings);
+    }
+    let alias_errors = validate_library_crate_aliases(&root_specs, path, &config);
+    if !alias_errors.is_empty() {
+        let mut errors = DiagnosticMap::new();
+        for err in alias_errors {
+            push_error(&mut errors, err);
+        }
+        print_diagnostics(&errors);
+        bail!("❌ cross-library crate alias validation failed");
+    }
+
     let spec_root = if path.is_file() {
         path.parent().unwrap_or(path)
     } else {
@@ -844,7 +1085,6 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
         None => {
             // Use the same crate-root precedence as build/test:
             // spec.toml [pipeline] crate_root → ancestor Cargo.toml walk.
-            let config = load_workspace_config(path)?;
             let crate_root = match config.pipeline.crate_root.as_deref() {
                 Some(p) => p.to_path_buf(),
                 None => workspace_root_for(spec_root)?,
@@ -932,21 +1172,43 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         });
     }
 
-    let config = load_workspace_config(path)?;
+    let context = load_workspace_context(path)?;
+    let config = context.config;
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (validation_errors, validation_warnings) = finish_validation(&specs, &validation_options);
+    let (
+        _selected_libraries,
+        imported_libraries,
+        imported_loader_errors,
+        imported_loader_warnings,
+        _imported_total,
+    ) = load_referenced_validation_specs(&specs, &context.libraries);
+    let validation_specs = ValidationSpecCollection {
+        root_specs: specs.clone(),
+        imported_libraries,
+        loader_errors: Vec::new(),
+        loader_warnings: Vec::new(),
+        total_files,
+    };
+    let (validation_errors, validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
     let mut errors = DiagnosticMap::new();
     let mut warnings = DiagnosticMap::new();
     for err in loader_errors {
+        push_error(&mut errors, err);
+    }
+    for err in imported_loader_errors {
         push_error(&mut errors, err);
     }
     for err in validation_errors {
         push_error(&mut errors, err);
     }
     for warning in loader_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    for warning in imported_loader_warnings {
         push_warning(&mut warnings, warning);
     }
     for warning in validation_warnings {
@@ -1219,6 +1481,32 @@ fn build_command(
         bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
     }
 
+    let (root_specs, loader_errors, loader_warnings, _total_files) = collect_specs(path)?;
+    if !loader_errors.is_empty() {
+        let mut errors = DiagnosticMap::new();
+        for err in loader_errors {
+            push_error(&mut errors, err);
+        }
+        print_diagnostics(&errors);
+        bail!("❌ unable to load units before build");
+    }
+    if !loader_warnings.is_empty() {
+        let mut warnings = DiagnosticMap::new();
+        for warning in loader_warnings {
+            push_warning(&mut warnings, warning);
+        }
+        print_diagnostics(&warnings);
+    }
+    let alias_errors = validate_library_crate_aliases(&root_specs, path, config);
+    if !alias_errors.is_empty() {
+        let mut errors = DiagnosticMap::new();
+        for err in alias_errors {
+            push_error(&mut errors, err);
+        }
+        print_diagnostics(&errors);
+        bail!("❌ cross-library crate alias validation failed");
+    }
+
     let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
     let resolved_output = output
         .map(PathBuf::from)
@@ -1268,6 +1556,33 @@ fn test_command(
     } else {
         (path, path, None)
     };
+
+    let (root_specs, loader_errors, loader_warnings, _total_files) =
+        collect_specs(generation_scope)?;
+    if !loader_errors.is_empty() {
+        let mut errors = DiagnosticMap::new();
+        for err in loader_errors {
+            push_error(&mut errors, err);
+        }
+        print_diagnostics(&errors);
+        bail!("❌ unable to load units before test");
+    }
+    if !loader_warnings.is_empty() {
+        let mut warnings = DiagnosticMap::new();
+        for warning in loader_warnings {
+            push_warning(&mut warnings, warning);
+        }
+        print_diagnostics(&warnings);
+    }
+    let alias_errors = validate_library_crate_aliases(&root_specs, generation_scope, config);
+    if !alias_errors.is_empty() {
+        let mut errors = DiagnosticMap::new();
+        for err in alias_errors {
+            push_error(&mut errors, err);
+        }
+        print_diagnostics(&errors);
+        bail!("❌ cross-library crate alias validation failed");
+    }
 
     let ctx = resolve_pipeline_context(pipeline_scope, crate_root_flag, config)?;
     let resolved_output = output
@@ -1828,6 +2143,176 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
     ))
 }
 
+fn collect_validation_specs(
+    path: &Path,
+    libraries: &[ResolvedLibrary],
+) -> Result<ValidationSpecCollection> {
+    let (root_specs, mut loader_errors, mut loader_warnings, mut total_files) =
+        collect_specs(path)?;
+    let (
+        _selected_libraries,
+        imported_libraries,
+        imported_errors,
+        imported_warnings,
+        imported_total_files,
+    ) = load_referenced_validation_specs(&root_specs, libraries);
+    total_files += imported_total_files;
+    loader_errors.extend(imported_errors);
+    loader_warnings.extend(imported_warnings);
+
+    Ok(ValidationSpecCollection {
+        root_specs,
+        imported_libraries,
+        loader_errors,
+        loader_warnings,
+        total_files,
+    })
+}
+
+fn load_referenced_validation_specs(
+    root_specs: &[LoadedSpec],
+    libraries: &[ResolvedLibrary],
+) -> (
+    Vec<ResolvedLibrary>,
+    Vec<ImportedLibrarySpecs>,
+    Vec<spec_core::SpecError>,
+    Vec<spec_core::SpecWarning>,
+    usize,
+) {
+    let mut selected_libraries = Vec::new();
+    let mut imported_libraries = Vec::new();
+    let mut loader_errors = Vec::new();
+    let mut loader_warnings = Vec::new();
+    let mut total_files = 0;
+    let direct_root_aliases: BTreeSet<String> = direct_root_library_aliases(root_specs)
+        .into_keys()
+        .collect();
+
+    for library in libraries
+        .iter()
+        .filter(|library| direct_root_aliases.contains(&library.alias))
+        .cloned()
+    {
+        // Only root-spec aliases participate in library discovery. Imported libraries may refer to
+        // additional aliases, but those stay unresolved during this invocation rather than
+        // recursively loading transitive libraries.
+        let report = load_directory_report(&library.root);
+        total_files += report.total_files;
+        loader_errors.extend(report.errors);
+        loader_warnings.extend(report.warnings);
+        selected_libraries.push(library.clone());
+        imported_libraries.push(ImportedLibrarySpecs {
+            alias: library.alias,
+            specs: report.specs,
+        });
+    }
+
+    (
+        selected_libraries,
+        imported_libraries,
+        loader_errors,
+        loader_warnings,
+        total_files,
+    )
+}
+
+#[derive(serde::Deserialize)]
+struct CargoManifest {
+    #[serde(default)]
+    dependencies: BTreeMap<String, toml::Value>,
+}
+
+fn validate_library_crate_aliases(
+    root_specs: &[LoadedSpec],
+    path: &Path,
+    config: &WorkspaceConfig,
+) -> Vec<spec_core::SpecError> {
+    let referenced_aliases = direct_root_library_aliases(root_specs);
+    if referenced_aliases.is_empty() {
+        return Vec::new();
+    }
+
+    let (manifest_path, dependency_aliases) = match load_root_cargo_dependency_aliases(path, config)
+    {
+        Ok(result) => result,
+        Err(err) => return vec![err],
+    };
+
+    referenced_aliases
+        .into_iter()
+        .filter_map(|(alias, source_path)| {
+            if dependency_aliases.contains(&alias) {
+                None
+            } else {
+                Some(spec_core::SpecError::LibraryCrateAliasMissing {
+                    alias,
+                    cargo_toml: manifest_path.display().to_string(),
+                    path: source_path,
+                })
+            }
+        })
+        .collect()
+}
+
+fn direct_root_library_aliases(root_specs: &[LoadedSpec]) -> BTreeMap<String, String> {
+    let mut aliases = BTreeMap::new();
+
+    for spec in root_specs {
+        for dep in &spec.spec.deps {
+            let Ok(dep_ref) = DepRef::parse(dep) else {
+                continue;
+            };
+            if let Some(alias) = dep_ref.library_alias() {
+                aliases
+                    .entry(alias.to_string())
+                    .or_insert_with(|| spec.source.file_path.clone());
+            }
+        }
+    }
+
+    aliases
+}
+
+fn resolved_crate_manifest_path(path: &Path, config: &WorkspaceConfig) -> Result<PathBuf> {
+    let spec_root = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    let crate_root = match config.pipeline.crate_root.as_deref() {
+        Some(path) => path.to_path_buf(),
+        None => workspace_root_for(spec_root)?,
+    };
+    Ok(crate_root.join("Cargo.toml"))
+}
+
+fn load_root_cargo_dependency_aliases(
+    path: &Path,
+    config: &WorkspaceConfig,
+) -> std::result::Result<(PathBuf, HashSet<String>), spec_core::SpecError> {
+    let manifest_path = resolved_crate_manifest_path(path, config).map_err(|err| {
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: None,
+            message: format!("Failed to resolve Cargo.toml for library alias validation: {err}"),
+        }
+    })?;
+    let dependency_aliases = load_cargo_dependency_aliases(&manifest_path).map_err(|err| {
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: Some(manifest_path.display().to_string()),
+            message: err.to_string(),
+        }
+    })?;
+    Ok((manifest_path, dependency_aliases))
+}
+
+fn load_cargo_dependency_aliases(manifest_path: &Path) -> Result<HashSet<String>> {
+    let manifest = fs::read_to_string(manifest_path)
+        .with_context(|| format!("Failed to read {}", manifest_path.display()))?;
+    let parsed: CargoManifest = toml::from_str(&manifest)
+        .with_context(|| format!("Failed to parse {}", manifest_path.display()))?;
+    Ok(parsed.dependencies.into_keys().collect())
+}
+
 fn includes_directory_molecule_tests(path: &Path) -> bool {
     path.is_dir()
 }
@@ -1861,6 +2346,7 @@ fn validate_molecule_tests(
     (errors, warnings)
 }
 
+#[cfg(test)]
 fn finish_validation(
     specs: &[LoadedSpec],
     options: &ValidationOptions,
@@ -1882,6 +2368,120 @@ fn finish_validation(
     warnings.extend(check_spec_versions(specs));
 
     (errors, warnings)
+}
+
+fn finish_validation_with_imports(
+    specs: &ValidationSpecCollection,
+    options: &ValidationOptions,
+) -> (Vec<spec_core::SpecError>, Vec<spec_core::SpecWarning>) {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    for spec in &specs.root_specs {
+        if let Err(err) = validate_full_with_options(spec, options) {
+            errors.push(err);
+        }
+    }
+    for library in &specs.imported_libraries {
+        for spec in &library.specs {
+            if let Err(err) = validate_full_with_options(spec, options) {
+                errors.push(err);
+            }
+        }
+    }
+
+    let alias_set: HashSet<&str> = specs
+        .imported_libraries
+        .iter()
+        .map(|library| library.alias.as_str())
+        .collect();
+    let qualified_specs = build_qualified_validation_specs(specs, &alias_set, &mut errors);
+
+    errors.extend(validate_no_duplicate_qualified_ids(&qualified_specs));
+
+    let (mut dep_errors, dep_warnings) =
+        validate_qualified_deps_exist_with_options(&qualified_specs, options);
+    errors.append(&mut dep_errors);
+    warnings.extend(dep_warnings);
+    warnings.extend(check_spec_versions(&specs.root_specs));
+    for library in &specs.imported_libraries {
+        warnings.extend(check_spec_versions(&library.specs));
+    }
+
+    (errors, warnings)
+}
+
+fn build_qualified_validation_specs<'a>(
+    specs: &'a ValidationSpecCollection,
+    known_library_aliases: &HashSet<&str>,
+    errors: &mut Vec<spec_core::SpecError>,
+) -> Vec<QualifiedLoadedSpec<'a>> {
+    let mut qualified_specs = Vec::new();
+
+    for spec in &specs.root_specs {
+        qualified_specs.push(qualify_loaded_spec(
+            spec,
+            None,
+            known_library_aliases,
+            errors,
+        ));
+    }
+    for library in &specs.imported_libraries {
+        for spec in &library.specs {
+            qualified_specs.push(qualify_loaded_spec(
+                spec,
+                Some(library.alias.as_str()),
+                known_library_aliases,
+                errors,
+            ));
+        }
+    }
+
+    qualified_specs
+}
+
+fn qualify_loaded_spec<'a>(
+    loaded: &'a LoadedSpec,
+    current_library: Option<&str>,
+    known_library_aliases: &HashSet<&str>,
+    errors: &mut Vec<spec_core::SpecError>,
+) -> QualifiedLoadedSpec<'a> {
+    let mut qualified_deps = Vec::with_capacity(loaded.spec.deps.len());
+
+    for authored_dep in &loaded.spec.deps {
+        let dep = match DepRef::parse(authored_dep) {
+            Ok(dep) => dep,
+            Err(err) => {
+                errors.push(spec_core::SpecError::SemanticValidation {
+                    message: err.to_string(),
+                    path: loaded.source.file_path.clone(),
+                });
+                continue;
+            }
+        };
+
+        if let Some(alias) = dep.library_alias()
+            && !known_library_aliases.contains(alias)
+        {
+            errors.push(spec_core::SpecError::UnknownLibraryNamespace {
+                alias: alias.to_string(),
+                dep: dep.authored(),
+                path: loaded.source.file_path.clone(),
+            });
+            continue;
+        }
+
+        qualified_deps.push(dep.to_qualified(current_library));
+    }
+
+    QualifiedLoadedSpec {
+        loaded,
+        qualified_id: QualifiedUnitRef::new(
+            current_library.map(str::to_string),
+            loaded.spec.id.clone(),
+        ),
+        qualified_deps,
+    }
 }
 
 fn print_diagnostics(diagnostics: &DiagnosticMap) {
@@ -1918,7 +2518,14 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::DuplicateId { .. } => "SPEC_DUPLICATE_ID",
         spec_core::SpecError::DepCollision { .. } => "SPEC_DEP_COLLISION",
         spec_core::SpecError::MissingDep { .. } => "SPEC_MISSING_DEP",
+        spec_core::SpecError::UnknownLibraryNamespace { .. } => "SPEC_UNKNOWN_LIBRARY_NAMESPACE",
+        spec_core::SpecError::CrossLibraryDepNotFound { .. } => "SPEC_CROSS_LIBRARY_DEP_NOT_FOUND",
+        spec_core::SpecError::LibraryCrateAliasMissing { .. } => "SPEC_LIBRARY_CRATE_ALIAS_MISSING",
+        spec_core::SpecError::LibraryCrateManifestError { .. } => {
+            "SPEC_LIBRARY_CRATE_MANIFEST_ERROR"
+        }
         spec_core::SpecError::CyclicDep { .. } => "SPEC_CYCLIC_DEP",
+        spec_core::SpecError::CrossLibraryCycle { .. } => "SPEC_CROSS_LIBRARY_CYCLE",
         spec_core::SpecError::UseStatementInBody { .. } => "SPEC_USE_STATEMENT_IN_BODY",
         spec_core::SpecError::BodyRustMustBeBlock { .. } => "SPEC_BODY_RUST_MUST_BE_BLOCK",
         spec_core::SpecError::BodyRustLooksLikeFnDeclaration { .. } => {
@@ -1933,6 +2540,9 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::OutputDir { .. } => "SPEC_OUTPUT_DIR",
         spec_core::SpecError::MissingMarker { .. } => "SPEC_MISSING_MARKER",
         spec_core::SpecError::MoleculeCoversNotFound { .. } => "SPEC_MOLECULE_COVERS_NOT_FOUND",
+        spec_core::SpecError::CrossLibraryMoleculeCoverUnsupported { .. } => {
+            "SPEC_MOLECULE_CROSS_LIBRARY_COVERS_UNSUPPORTED"
+        }
         spec_core::SpecError::DuplicateMoleculeTestId { .. } => "SPEC_DUPLICATE_MOLECULE_ID",
         spec_core::SpecError::MoleculeCoversCollision { .. } => "SPEC_MOLECULE_COVERS_COLLISION",
         spec_core::SpecError::MoleculeBodyRustMustBeBlock { .. } => {
@@ -2016,7 +2626,45 @@ fn spec_error_to_json_entry(
             dep: Some(dep.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::UnknownLibraryNamespace { alias, dep, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            dep: Some(dep.clone()),
+            value: Some(alias.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::CrossLibraryDepNotFound { dep, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            dep: Some(dep.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::LibraryCrateAliasMissing {
+            alias,
+            cargo_toml,
+            path,
+        } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            value: Some(alias.clone()),
+            path2: Some(cargo_toml.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml,
+            message,
+        } => ErrorFields {
+            path: cargo_toml.clone(),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
         spec_core::SpecError::CyclicDep { cycle_path, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            cycle: Some(cycle_path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::CrossLibraryCycle { cycle_path, path } => ErrorFields {
             unit: id_by_path.get(path).cloned(),
             path: Some(path.clone()),
             cycle: Some(cycle_path.clone()),
@@ -2098,6 +2746,17 @@ fn spec_error_to_json_entry(
             dep: Some(cover_id.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::CrossLibraryMoleculeCoverUnsupported {
+            cover_id,
+            test_id,
+            test_path,
+        } => ErrorFields {
+            path: Some(test_path.clone()),
+            id: Some(test_id.clone()),
+            dep: Some(cover_id.clone()),
+            message: Some(err.to_string()),
+            ..Default::default()
+        },
         spec_core::SpecError::DuplicateMoleculeTestId { id, file1, file2 } => ErrorFields {
             path: Some(file1.clone()),
             id: Some(id.clone()),
@@ -2160,7 +2819,11 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::RustKeyword { path, .. }
         | spec_core::SpecError::DepCollision { path, .. }
         | spec_core::SpecError::MissingDep { path, .. }
+        | spec_core::SpecError::UnknownLibraryNamespace { path, .. }
+        | spec_core::SpecError::CrossLibraryDepNotFound { path, .. }
+        | spec_core::SpecError::LibraryCrateAliasMissing { path, .. }
         | spec_core::SpecError::CyclicDep { path, .. }
+        | spec_core::SpecError::CrossLibraryCycle { path, .. }
         | spec_core::SpecError::UseStatementInBody { path }
         | spec_core::SpecError::BodyRustMustBeBlock { path, .. }
         | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }
@@ -2170,11 +2833,19 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::ContractInputNameInvalid { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
         | spec_core::SpecError::MissingMarker { path } => vec![path.clone()],
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: Some(path),
+            ..
+        } => vec![path.clone()],
         spec_core::SpecError::Generator { .. }
         | spec_core::SpecError::OutputDir { .. }
+        | spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: None, ..
+        }
         | spec_core::SpecError::Io(_)
         | spec_core::SpecError::Json(_) => Vec::new(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
+        | spec_core::SpecError::CrossLibraryMoleculeCoverUnsupported { test_path, .. }
         | spec_core::SpecError::MoleculeCoversCollision { test_path, .. }
         | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
         | spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => {
@@ -2271,7 +2942,11 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::RustKeyword { path, .. }
         | spec_core::SpecError::DepCollision { path, .. }
         | spec_core::SpecError::MissingDep { path, .. }
+        | spec_core::SpecError::UnknownLibraryNamespace { path, .. }
+        | spec_core::SpecError::CrossLibraryDepNotFound { path, .. }
+        | spec_core::SpecError::LibraryCrateAliasMissing { path, .. }
         | spec_core::SpecError::CyclicDep { path, .. }
+        | spec_core::SpecError::CrossLibraryCycle { path, .. }
         | spec_core::SpecError::UseStatementInBody { path }
         | spec_core::SpecError::BodyRustMustBeBlock { path, .. }
         | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }
@@ -2281,12 +2956,21 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::ContractInputNameInvalid { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
         | spec_core::SpecError::MissingMarker { path } => path.clone(),
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: Some(path),
+            ..
+        } => path.clone(),
         spec_core::SpecError::DuplicateId { file1, file2, .. } => format!("{file1} | {file2}"),
         spec_core::SpecError::Generator { .. } | spec_core::SpecError::OutputDir { .. } => {
             "generation".to_string()
         }
-        spec_core::SpecError::Io(_) | spec_core::SpecError::Json(_) => "validation".to_string(),
+        spec_core::SpecError::Io(_)
+        | spec_core::SpecError::Json(_)
+        | spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: None, ..
+        } => "validation".to_string(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
+        | spec_core::SpecError::CrossLibraryMoleculeCoverUnsupported { test_path, .. }
         | spec_core::SpecError::MoleculeCoversCollision { test_path, .. }
         | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
         | spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => test_path.clone(),
@@ -2743,8 +3427,30 @@ body:
                 dep: "money/round".to_string(),
                 path: "units/a.unit.spec".to_string(),
             },
+            spec_core::SpecError::UnknownLibraryNamespace {
+                alias: "shared".to_string(),
+                dep: "shared::money/round".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::CrossLibraryDepNotFound {
+                dep: "shared::money/round".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::LibraryCrateAliasMissing {
+                alias: "shared".to_string(),
+                cargo_toml: "Cargo.toml".to_string(),
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::LibraryCrateManifestError {
+                cargo_toml: Some("Cargo.toml".to_string()),
+                message: "Failed to parse Cargo.toml".to_string(),
+            },
             spec_core::SpecError::CyclicDep {
                 cycle_path: vec!["a".to_string(), "b".to_string()],
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::CrossLibraryCycle {
+                cycle_path: vec!["a".to_string(), "shared::b".to_string()],
                 path: "units/a.unit.spec".to_string(),
             },
             spec_core::SpecError::UseStatementInBody {
@@ -2891,6 +3597,56 @@ body:
         assert_eq!(molecule_collision.dep.as_deref(), Some("money/round"));
         assert_eq!(molecule_collision.value.as_deref(), Some("round"));
         assert_eq!(molecule_collision.path2.as_deref(), Some("utils/round"));
+    }
+
+    #[test]
+    fn workspace_config_error_json_entry_uses_stable_codes_and_config_path() {
+        let config_path = PathBuf::from("/tmp/spec.toml");
+        let cases = vec![
+            (
+                WorkspaceConfigError::LibraryPathNotFound {
+                    config_path: config_path.clone(),
+                    alias: "shared".to_string(),
+                    candidate: PathBuf::from("/tmp/missing-spec"),
+                },
+                "SPEC_LIBRARY_PATH_NOT_FOUND",
+            ),
+            (
+                WorkspaceConfigError::LibraryOutOfRoot {
+                    config_path: config_path.clone(),
+                    alias: "shared".to_string(),
+                    resolved_root: PathBuf::from("/outside/shared-spec"),
+                },
+                "SPEC_LIBRARY_OUT_OF_ROOT",
+            ),
+            (
+                WorkspaceConfigError::LibraryAliasSelf {
+                    config_path: config_path.clone(),
+                    alias: "app".to_string(),
+                },
+                "SPEC_LIBRARY_ALIAS_SELF",
+            ),
+            (
+                WorkspaceConfigError::DuplicateLibraryRoot {
+                    config_path: config_path.clone(),
+                    existing_alias: "shared".to_string(),
+                    alias: "shared_copy".to_string(),
+                    resolved_root: PathBuf::from("/repo/shared-spec"),
+                },
+                "SPEC_DUPLICATE_LIBRARY_ROOT",
+            ),
+        ];
+
+        for (err, expected_code) in cases {
+            let entry = workspace_config_error_to_json_entry(&err);
+            assert_eq!(entry.unit, None);
+            assert_eq!(entry.code, expected_code);
+            assert_eq!(entry.path.as_deref(), Some("/tmp/spec.toml"));
+            assert_eq!(
+                entry.message.as_deref(),
+                Some(err.detail_message().as_str())
+            );
+        }
     }
 
     #[test]

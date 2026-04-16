@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0 - 2026-04-16
+
+### Added
+
+- **M9 direct cross-library deps** — Root specs can now declare direct sibling-library deps like `shared::money/round` via `[libraries]` in `spec.toml`. The CLI resolves only the root library's direct aliases, keeps root config authoritative, and validates the full direct dep shape before generation or export.
+- **In-repo shared-library proof example** — Added `examples/shared-spec`, `examples/shared-crate`, and `examples/crosslib-app` to show the end-to-end sibling-library flow: generate shared units into a Rust crate, generate the consuming app, then `cargo check` and `cargo test` the result.
+
+### Changed
+
+- **Cross-library dep identity is now typed end-to-end** — Validator, generator, graph, and export all consume the same parsed dep identity instead of stringly local IDs. Local deps stay backward compatible, duplicate unit IDs remain library-local, and imported libraries do not recursively widen the graph.
+- **Generated imports now honor library aliases** — External deps emit `use <alias>::...` imports, and the CLI rejects missing Cargo dependency aliases or callable-name collisions instead of generating ambiguous Rust.
+- **`spec export` now emits `schema_version: 3`** — Dep edges and unit deps use structured `{ library, id }` refs so mixed local and external deps are no longer ambiguous in exported bundles.
+- **Status/validate handling for library loader failures is now truthful** — `spec validate --format json` and `spec status --format json` keep `[libraries]` resolution failures machine-readable, and `spec status` routes imported-library loader failures to top-level `loader_errors` instead of misreporting root units.
+
+### Fixed
+
+- **Cross-library cycle and cover failures now fail with stable contract errors** — Direct A→B→A library cycles raise `SPEC_CROSS_LIBRARY_CYCLE`, cross-library `.test.spec` covers are rejected explicitly, and transitive library aliases stay unresolved instead of silently loading extra graphs.
+- **Example ecommerce passports now record observed `pass` evidence** — Re-ran `spec test examples/ecommerce/units` so the checked-in regression passports match the current M9 test-name and provenance behavior instead of leaving local tests at `unknown`.
+
 ## 0.6.0 - 2026-04-15
 
 ### Added

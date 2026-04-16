@@ -7,7 +7,7 @@
 //! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
 
 use crate::syntax::validate_expect_expr;
-use crate::types::{ResolvedMoleculeTest, ResolvedSpec};
+use crate::types::{DepRef, ResolvedMoleculeTest, ResolvedSpec};
 use crate::{Result, SpecError};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
@@ -482,6 +482,19 @@ fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
         });
     }
 
+    if let Some(dep) = spec.deps.iter().find(|dep| {
+        DepRef::parse(dep)
+            .map(|parsed| parsed.callable_name() == spec.fn_name)
+            .unwrap_or(false)
+    }) {
+        return Err(SpecError::DepCollision {
+            dep1: dep.clone(),
+            dep2: spec.id.clone(),
+            fn_name: spec.fn_name.clone(),
+            path: spec.id.clone(),
+        });
+    }
+
     let mut import_seen = HashSet::new();
     let mut import_statements = Vec::new();
 
@@ -496,11 +509,25 @@ fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
 
     for dep in &spec.deps {
         if dep_seen.insert(dep.clone()) {
-            dep_statements.push(format!("use {}", ResolvedSpec::dep_to_use_path(dep)));
+            dep_statements.push(build_dep_use_statement(dep)?);
         }
     }
 
     Ok((import_statements, dep_statements))
+}
+
+fn build_dep_use_statement(dep: &str) -> Result<String> {
+    let dep_ref = DepRef::parse(dep).map_err(|err| SpecError::Generator {
+        message: format!(
+            "invalid dep '{}' reached generator after validation: {}",
+            dep, err
+        ),
+    })?;
+
+    let unit_path = dep_ref.unit_id().replace('/', "::");
+    let callable_name = dep_ref.callable_name();
+    let prefix = dep_ref.library_alias().unwrap_or("crate");
+    Ok(format!("use {prefix}::{unit_path}::{callable_name};"))
 }
 
 fn module_item_name(fragment: &str) -> Option<String> {
@@ -783,6 +810,70 @@ mod tests {
             code,
             "use rust_decimal::Decimal;\n\nuse crate::money::round::round;\n\npub fn apply_discount() {\n    round(Decimal::ZERO)\n}\n"
         );
+    }
+
+    #[test]
+    fn external_deps_generate_alias_use_statements() {
+        let spec = test_spec_with(
+            vec!["shared::money/round"],
+            vec![],
+            "{\n    round(Decimal::ZERO)\n}",
+        );
+
+        let code = generate_code(&spec).unwrap();
+        assert_eq!(
+            code,
+            "use shared::money::round::round;\n\npub fn apply_discount() {\n    round(Decimal::ZERO)\n}\n"
+        );
+    }
+
+    #[test]
+    fn generate_code_rejects_local_external_dep_collision() {
+        let spec = test_spec(
+            vec!["money/round", "shared::math/round"],
+            "{\n    round(Decimal::ONE)\n}",
+        );
+
+        let err = generate_code(&spec).unwrap_err().to_string();
+        assert!(err.contains("Dep fn_name collision"), "{err}");
+        assert!(err.contains("money/round"), "{err}");
+        assert!(err.contains("shared::math/round"), "{err}");
+    }
+
+    #[test]
+    fn generate_code_rejects_dep_collision_with_unit_callable_name() {
+        let spec = ResolvedSpec::from_spec(SpecStruct {
+            id: "money/round".to_string(),
+            kind: "function".to_string(),
+            intent: Intent {
+                why: "Round money values.".to_string(),
+            },
+            contract: None,
+            deps: vec!["shared::money/round".to_string()],
+            imports: vec![],
+            body: Body {
+                rust: "{\n    round(value)\n}".to_string(),
+            },
+            local_tests: vec![],
+            links: None,
+            spec_version: None,
+        });
+
+        let err = generate_code(&spec).unwrap_err();
+        match err {
+            SpecError::DepCollision {
+                dep1,
+                dep2,
+                fn_name,
+                path,
+            } => {
+                assert_eq!(dep1, "shared::money/round");
+                assert_eq!(dep2, "money/round");
+                assert_eq!(fn_name, "round");
+                assert_eq!(path, "money/round");
+            }
+            other => panic!("expected DepCollision, got {other:?}"),
+        }
     }
 
     #[test]

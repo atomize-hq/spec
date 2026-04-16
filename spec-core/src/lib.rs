@@ -69,8 +69,39 @@ pub enum SpecError {
     #[error("❌ dep '{dep}' not found in this spec set")]
     MissingDep { dep: String, path: String },
 
+    #[error("unknown library namespace '{alias}' in dep '{dep}' at {path}")]
+    UnknownLibraryNamespace {
+        alias: String,
+        dep: String,
+        path: String,
+    },
+
+    #[error("❌ cross-library dep '{dep}' not found in the resolved library set at {path}")]
+    CrossLibraryDepNotFound { dep: String, path: String },
+
+    #[error(
+        "SPEC_LIBRARY_CRATE_ALIAS_MISSING: crate dependency alias '{alias}' not found in {cargo_toml} (referenced from {path})"
+    )]
+    LibraryCrateAliasMissing {
+        alias: String,
+        cargo_toml: String,
+        path: String,
+    },
+
+    #[error("SPEC_LIBRARY_CRATE_MANIFEST_ERROR: {message}")]
+    LibraryCrateManifestError {
+        cargo_toml: Option<String>,
+        message: String,
+    },
+
     #[error("❌ cycle detected: {}", cycle_path.join(" → "))]
     CyclicDep {
+        cycle_path: Vec<String>,
+        path: String,
+    },
+
+    #[error("❌ cross-library cycle detected: {}", cycle_path.join(" → "))]
+    CrossLibraryCycle {
         cycle_path: Vec<String>,
         path: String,
     },
@@ -131,6 +162,15 @@ pub enum SpecError {
         "Molecule test '{test_id}' covers '{cover_id}' which was not found in the spec set at {test_path}"
     )]
     MoleculeCoversNotFound {
+        cover_id: String,
+        test_id: String,
+        test_path: String,
+    },
+
+    #[error(
+        "cross-library molecule cover '{cover_id}' is not supported in M9 for test '{test_id}' at {test_path}"
+    )]
+    CrossLibraryMoleculeCoverUnsupported {
         cover_id: String,
         test_id: String,
         test_path: String,

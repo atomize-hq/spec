@@ -5,7 +5,10 @@
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
-use crate::types::{LoadedMoleculeTest, LoadedSpec, has_callable_collision};
+use crate::types::{
+    DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef, callable_name,
+    has_callable_collision,
+};
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
@@ -33,6 +36,36 @@ impl ValidationOptions {
             strict_deps: true,
             allow_unsafe_local_test_expect: false,
         }
+    }
+}
+
+/// A library-aware validation snapshot used by later M9 slices.
+#[derive(Debug, Clone)]
+pub struct QualifiedLoadedSpec<'a> {
+    pub loaded: &'a LoadedSpec,
+    pub qualified_id: QualifiedUnitRef,
+    pub qualified_deps: Vec<QualifiedUnitRef>,
+}
+
+impl<'a> QualifiedLoadedSpec<'a> {
+    pub fn local_identity(loaded: &'a LoadedSpec) -> Self {
+        Self {
+            loaded,
+            qualified_id: QualifiedUnitRef::local(loaded.spec.id.clone()),
+            qualified_deps: Vec::new(),
+        }
+    }
+
+    pub fn local(loaded: &'a LoadedSpec) -> std::result::Result<Self, DepRefParseError> {
+        let dep_refs = parse_dep_refs(&loaded.spec.deps)?;
+        Ok(Self {
+            loaded,
+            qualified_id: QualifiedUnitRef::local(loaded.spec.id.clone()),
+            qualified_deps: dep_refs
+                .into_iter()
+                .map(|dep| dep.to_qualified(None))
+                .collect(),
+        })
     }
 }
 
@@ -149,17 +182,36 @@ pub fn validate_semantic_with_options(
     // anywhere in a unit ID can create molecule_tests.rs vs molecule_tests/mod.rs collisions.
     validate_reserved_spec_id_segments(&spec.spec.id, &spec.source.file_path)?;
 
+    let dep_refs = parse_dep_refs(&spec.spec.deps).map_err(|err| invalid_dep_error(err, spec))?;
+
     // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
-    for dep in &spec.spec.deps {
-        validate_rust_keywords(dep, &spec.source.file_path)?;
+    for dep in &dep_refs {
+        validate_dep_ref_keywords(dep, &spec.source.file_path)?;
+    }
+
+    let owner_callable_name = callable_name(&spec.spec.id);
+    if let Some(authored_dep) = spec
+        .spec
+        .deps
+        .iter()
+        .zip(dep_refs.iter())
+        .find(|(_, dep)| dep.callable_name() == owner_callable_name)
+        .map(|(authored_dep, _)| authored_dep)
+    {
+        return Err(SpecError::DepCollision {
+            dep1: authored_dep.clone(),
+            dep2: spec.spec.id.clone(),
+            fn_name: owner_callable_name.to_string(),
+            path: spec.source.file_path.clone(),
+        });
     }
 
     // Check for dep fn_name collisions
-    if let Some((dep1, dep2)) = crate::types::ResolvedSpec::has_dep_collision(&spec.spec.deps) {
+    if let Some((dep1, dep2)) = has_dep_ref_collision(&dep_refs) {
         return Err(SpecError::DepCollision {
-            dep1: dep1.clone(),
-            dep2: dep2.clone(),
-            fn_name: crate::types::ResolvedSpec::dep_fn_name(dep1).to_string(),
+            dep1: dep1.to_string(),
+            dep2: dep2.to_string(),
+            fn_name: dep1.callable_name().to_string(),
             path: spec.source.file_path.clone(),
         });
     }
@@ -209,6 +261,53 @@ fn validate_reserved_spec_id_segments(id: &str, file_path: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn parse_dep_refs(dep_ids: &[String]) -> std::result::Result<Vec<DepRef>, DepRefParseError> {
+    dep_ids.iter().map(|dep| DepRef::parse(dep)).collect()
+}
+
+fn invalid_dep_error(err: DepRefParseError, spec: &LoadedSpec) -> SpecError {
+    SpecError::SemanticValidation {
+        message: err.to_string(),
+        path: spec.source.file_path.clone(),
+    }
+}
+
+fn validate_dep_ref_keywords(dep: &DepRef, file_path: &str) -> Result<()> {
+    if let Some(alias) = dep.library_alias() {
+        validate_keyword_segment(alias, &dep.to_string(), file_path)?;
+    }
+
+    for segment in dep.unit_id().split('/') {
+        validate_keyword_segment(segment, &dep.to_string(), file_path)?;
+    }
+
+    Ok(())
+}
+
+fn validate_keyword_segment(segment: &str, authored: &str, file_path: &str) -> Result<()> {
+    if crate::types::is_rust_keyword(segment) {
+        return Err(SpecError::RustKeyword {
+            segment: segment.to_string(),
+            id: authored.to_string(),
+            path: file_path.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn has_dep_ref_collision(deps: &[DepRef]) -> Option<(&DepRef, &DepRef)> {
+    for (i, first) in deps.iter().enumerate() {
+        for second in &deps[i + 1..] {
+            if first.callable_name() == second.callable_name() {
+                return Some((first, second));
+            }
+        }
+    }
+
+    None
 }
 
 fn validate_local_test_expects(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
@@ -301,19 +400,29 @@ pub fn validate_rust_keywords(id: &str, file_path: &str) -> Result<()> {
 /// Returns all duplicate pairs, not just the first. Each additional file that
 /// shares an ID produces a separate error citing the original file as file1.
 pub fn validate_no_duplicate_ids(specs: &[LoadedSpec]) -> Vec<SpecError> {
-    use std::collections::HashMap;
-    let mut seen: HashMap<String, String> = HashMap::new();
+    let scoped_specs: Vec<_> = specs
+        .iter()
+        .map(QualifiedLoadedSpec::local_identity)
+        .collect();
+    validate_no_duplicate_qualified_ids(&scoped_specs)
+}
+
+pub fn validate_no_duplicate_qualified_ids(specs: &[QualifiedLoadedSpec<'_>]) -> Vec<SpecError> {
+    let mut seen: HashMap<QualifiedUnitRef, String> = HashMap::new();
     let mut errors = Vec::new();
 
     for spec in specs {
-        if let Some(existing_file) = seen.get(&spec.spec.id) {
+        if let Some(existing_file) = seen.get(&spec.qualified_id) {
             errors.push(SpecError::DuplicateId {
-                id: spec.spec.id.clone(),
+                id: spec.qualified_id.to_string(),
                 file1: existing_file.clone(),
-                file2: spec.source.file_path.clone(),
+                file2: spec.loaded.source.file_path.clone(),
             });
         } else {
-            seen.insert(spec.spec.id.clone(), spec.source.file_path.clone());
+            seen.insert(
+                spec.qualified_id.clone(),
+                spec.loaded.source.file_path.clone(),
+            );
         }
     }
 
@@ -345,76 +454,113 @@ pub fn validate_deps_exist_with_options(
     specs: &[LoadedSpec],
     options: &ValidationOptions,
 ) -> (Vec<SpecError>, Vec<SpecWarning>) {
-    let mut ids = HashSet::<&str>::new();
+    let mut errors = Vec::<SpecError>::new();
+    let mut scoped_specs = Vec::new();
+
     for spec in specs {
-        ids.insert(spec.spec.id.as_str());
+        match QualifiedLoadedSpec::local(spec) {
+            Ok(scoped_spec) => scoped_specs.push(scoped_spec),
+            Err(err) => errors.push(invalid_dep_error(err, spec)),
+        }
     }
+
+    let (mut dep_errors, warnings) =
+        validate_qualified_deps_exist_with_options(&scoped_specs, options);
+    errors.append(&mut dep_errors);
+
+    (errors, warnings)
+}
+
+pub fn validate_qualified_deps_exist_with_options(
+    specs: &[QualifiedLoadedSpec<'_>],
+    options: &ValidationOptions,
+) -> (Vec<SpecError>, Vec<SpecWarning>) {
+    let ids: HashSet<_> = specs.iter().map(|spec| spec.qualified_id.clone()).collect();
 
     let mut errors = Vec::<SpecError>::new();
     let mut warnings = Vec::<SpecWarning>::new();
     for spec in specs {
-        for dep in &spec.spec.deps {
-            if !ids.contains(dep.as_str()) {
+        for dep in &spec.qualified_deps {
+            if !ids.contains(dep) {
+                let err = if dep.library().is_some() {
+                    SpecError::CrossLibraryDepNotFound {
+                        dep: dep.to_string(),
+                        path: spec.loaded.source.file_path.clone(),
+                    }
+                } else {
+                    SpecError::MissingDep {
+                        dep: dep.to_string(),
+                        path: spec.loaded.source.file_path.clone(),
+                    }
+                };
                 if options.strict_deps {
-                    errors.push(SpecError::MissingDep {
-                        dep: dep.clone(),
-                        path: spec.source.file_path.clone(),
-                    });
+                    errors.push(err);
                 } else {
                     warnings.push(SpecWarning::MissingDep {
-                        dep: dep.clone(),
-                        path: spec.source.file_path.clone(),
+                        dep: dep.to_string(),
+                        path: spec.loaded.source.file_path.clone(),
                     });
                 }
             }
         }
     }
 
-    let cycle_errors = detect_cycles(specs);
+    let cycle_errors = detect_qualified_cycles(specs);
     errors.extend(cycle_errors);
 
     (errors, warnings)
 }
 
 /// DFS helper for cycle detection. Mutates `visited`, `in_stack`, `stack`, and `errors` in place.
-fn dfs_cycle_check<'a>(
-    node_id: &'a str,
-    id_map: &HashMap<&'a str, &'a LoadedSpec>,
-    visited: &mut HashSet<String>,
-    in_stack: &mut HashSet<String>,
-    stack: &mut Vec<String>,
+fn dfs_qualified_cycle_check<'a>(
+    node_id: &QualifiedUnitRef,
+    id_map: &HashMap<QualifiedUnitRef, &'a QualifiedLoadedSpec<'a>>,
+    visited: &mut HashSet<QualifiedUnitRef>,
+    in_stack: &mut HashSet<QualifiedUnitRef>,
+    stack: &mut Vec<QualifiedUnitRef>,
     errors: &mut Vec<SpecError>,
 ) {
-    in_stack.insert(node_id.to_string());
-    stack.push(node_id.to_string());
+    in_stack.insert(node_id.clone());
+    stack.push(node_id.clone());
 
     if let Some(spec) = id_map.get(node_id) {
-        for dep in &spec.spec.deps {
-            if !id_map.contains_key(dep.as_str()) {
+        for dep in &spec.qualified_deps {
+            if !id_map.contains_key(dep) {
                 // Missing dep — already reported by validate_deps_exist; skip during DFS
                 continue;
             }
-            if in_stack.contains(dep.as_str()) {
+            if in_stack.contains(dep) {
                 // Cycle found — reconstruct path from the point where dep appears on the stack
                 let cycle_start = stack
                     .iter()
                     .position(|n| n == dep)
                     .expect("dep in in_stack must be in stack");
-                let mut cycle_path: Vec<String> = stack[cycle_start..].to_vec();
-                cycle_path.push(dep.clone());
-                errors.push(SpecError::CyclicDep {
-                    cycle_path,
-                    path: spec.source.file_path.clone(),
-                });
-            } else if !visited.contains(dep.as_str()) {
-                dfs_cycle_check(dep, id_map, visited, in_stack, stack, errors);
+                let mut qualified_cycle_path = stack[cycle_start..].to_vec();
+                qualified_cycle_path.push(dep.clone());
+                let cycle_path: Vec<String> = qualified_cycle_path
+                    .iter()
+                    .map(QualifiedUnitRef::authored)
+                    .collect();
+                let distinct_libraries: HashSet<Option<&str>> = qualified_cycle_path
+                    .iter()
+                    .map(|unit| unit.library())
+                    .collect();
+                let path = spec.loaded.source.file_path.clone();
+
+                if distinct_libraries.len() > 1 {
+                    errors.push(SpecError::CrossLibraryCycle { cycle_path, path });
+                } else {
+                    errors.push(SpecError::CyclicDep { cycle_path, path });
+                }
+            } else if !visited.contains(dep) {
+                dfs_qualified_cycle_check(dep, id_map, visited, in_stack, stack, errors);
             }
         }
     }
 
     stack.pop();
     in_stack.remove(node_id);
-    visited.insert(node_id.to_string());
+    visited.insert(node_id.clone());
 }
 
 /// Detect cycles in the dependency graph using depth-first search.
@@ -428,18 +574,35 @@ fn dfs_cycle_check<'a>(
 /// ids (for example `shared::money/round`), but cross-library cycle detection is
 /// still deferred until M5 implements cross-library loading and validation.
 pub fn detect_cycles(specs: &[LoadedSpec]) -> Vec<SpecError> {
-    let id_map: HashMap<&str, &LoadedSpec> =
-        specs.iter().map(|s| (s.spec.id.as_str(), s)).collect();
+    let mut errors = Vec::new();
+    let mut scoped_specs = Vec::new();
 
-    let mut visited = HashSet::<String>::new();
+    for spec in specs {
+        match QualifiedLoadedSpec::local(spec) {
+            Ok(scoped_spec) => scoped_specs.push(scoped_spec),
+            Err(err) => errors.push(invalid_dep_error(err, spec)),
+        }
+    }
+
+    errors.extend(detect_qualified_cycles(&scoped_specs));
+    errors
+}
+
+pub fn detect_qualified_cycles(specs: &[QualifiedLoadedSpec<'_>]) -> Vec<SpecError> {
+    let id_map: HashMap<QualifiedUnitRef, &QualifiedLoadedSpec<'_>> = specs
+        .iter()
+        .map(|spec| (spec.qualified_id.clone(), spec))
+        .collect();
+
+    let mut visited = HashSet::<QualifiedUnitRef>::new();
     let mut errors = Vec::<SpecError>::new();
 
     for spec in specs {
-        if !visited.contains(&spec.spec.id) {
-            let mut in_stack = HashSet::<String>::new();
-            let mut stack = Vec::<String>::new();
-            dfs_cycle_check(
-                &spec.spec.id,
+        if !visited.contains(&spec.qualified_id) {
+            let mut in_stack = HashSet::<QualifiedUnitRef>::new();
+            let mut stack = Vec::<QualifiedUnitRef>::new();
+            dfs_qualified_cycle_check(
+                &spec.qualified_id,
                 &id_map,
                 &mut visited,
                 &mut in_stack,
@@ -557,7 +720,24 @@ pub fn validate_molecule_test_covers(
     }
 
     for cover_id in &test.test.covers {
-        if !unit_ids.contains(cover_id.as_str()) {
+        let dep_ref = match DepRef::parse(cover_id) {
+            Ok(dep_ref) => dep_ref,
+            Err(err) => {
+                errors.push(SpecError::SchemaValidation {
+                    message: err.to_string(),
+                    path: test.source.file_path.clone(),
+                });
+                continue;
+            }
+        };
+
+        if dep_ref.library_alias().is_some() {
+            errors.push(SpecError::CrossLibraryMoleculeCoverUnsupported {
+                cover_id: cover_id.clone(),
+                test_id: test.test.id.clone(),
+                test_path: test.source.file_path.clone(),
+            });
+        } else if !unit_ids.contains(dep_ref.unit_id()) {
             errors.push(SpecError::MoleculeCoversNotFound {
                 cover_id: cover_id.clone(),
                 test_id: test.test.id.clone(),
@@ -608,8 +788,8 @@ pub fn validate_no_duplicate_molecule_test_ids(tests: &[LoadedMoleculeTest]) -> 
 mod tests {
     use super::*;
     use crate::types::{
-        Body, Contract, Intent, LocalTest, MoleculeTestSource, MoleculeTestStruct, SpecSource,
-        SpecStruct,
+        Body, Contract, Intent, LocalTest, MoleculeTestSource, MoleculeTestStruct,
+        QualifiedUnitRef, SpecSource, SpecStruct,
     };
 
     fn create_test_spec(id: &str, rust_body: &str) -> LoadedSpec {
@@ -852,6 +1032,46 @@ local_tests:
     }
 
     #[test]
+    fn test_validate_dep_collision_with_unit_callable_name() {
+        let mut spec = create_test_spec("money/round", "{ round(value) }");
+        spec.spec.deps = vec!["shared::money/round".to_string()];
+
+        let err = validate_semantic(&spec).unwrap_err();
+        match err {
+            SpecError::DepCollision {
+                dep1,
+                dep2,
+                fn_name,
+                path,
+            } => {
+                assert_eq!(dep1, "shared::money/round");
+                assert_eq!(dep2, "money/round");
+                assert_eq!(fn_name, "round");
+                assert_eq!(path, "test/money/round.unit.spec");
+            }
+            other => panic!("expected DepCollision, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_validate_semantic_accepts_external_dep_syntax() {
+        let mut spec = create_test_spec("pricing/calculate_total", "{ round(1.5) }");
+        spec.spec.deps = vec!["shared::money/round".to_string()];
+
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn test_validate_semantic_rejects_invalid_external_dep_syntax() {
+        let mut spec = create_test_spec("pricing/calculate_total", "{ round(1.5) }");
+        spec.spec.deps = vec!["shared::Money/round".to_string()];
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("invalid segment 'Money'"), "{err}");
+    }
+
+    #[test]
     fn test_validate_molecule_test_covers_collision() {
         let molecule_test =
             create_molecule_test_spec("pricing/rounding_flow", vec!["money/round", "utils/round"]);
@@ -876,6 +1096,32 @@ local_tests:
                 assert_eq!(test_path, "test/pricing/rounding_flow.test.spec");
             }
             other => panic!("expected MoleculeCoversCollision, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_validate_molecule_test_covers_rejects_cross_library_cover_without_collision() {
+        let molecule_test = create_molecule_test_spec(
+            "pricing/rounding_flow",
+            vec!["shared::money/round", "money/round"],
+        );
+        let unit_ids: HashSet<&str> = ["money/round"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(warnings.is_empty());
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            SpecError::CrossLibraryMoleculeCoverUnsupported {
+                cover_id,
+                test_id,
+                test_path,
+            } => {
+                assert_eq!(cover_id, "shared::money/round");
+                assert_eq!(test_id, "pricing/rounding_flow");
+                assert_eq!(test_path, "test/pricing/rounding_flow.test.spec");
+            }
+            other => panic!("expected CrossLibraryMoleculeCoverUnsupported, got {other:?}"),
         }
     }
 
@@ -911,6 +1157,55 @@ local_tests:
             err.to_string()
                 .contains("body.rust must not contain use statements")
         );
+    }
+
+    #[test]
+    fn test_validate_qualified_duplicate_ids_allow_same_unit_in_different_libraries() {
+        let local = create_test_spec("money/round", "{ }");
+        let shared = create_test_spec("money/round", "{ }");
+
+        let scoped_specs = vec![
+            QualifiedLoadedSpec {
+                loaded: &local,
+                qualified_id: QualifiedUnitRef::new(Some("root".to_string()), "money/round"),
+                qualified_deps: Vec::new(),
+            },
+            QualifiedLoadedSpec {
+                loaded: &shared,
+                qualified_id: QualifiedUnitRef::new(Some("shared".to_string()), "money/round"),
+                qualified_deps: Vec::new(),
+            },
+        ];
+
+        let errors = validate_no_duplicate_qualified_ids(&scoped_specs);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn test_validate_deps_exist_local_wrapper_still_passes_local_graph() {
+        let mut calculate_total = create_test_spec("pricing/calculate_total", "{ round(1.5) }");
+        calculate_total.spec.deps = vec!["money/round".to_string()];
+        let round = create_test_spec("money/round", "{ amount }");
+
+        let (errors, warnings) = validate_deps_exist(&[calculate_total, round]);
+        assert!(errors.is_empty(), "{errors:?}");
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn test_validate_deps_exist_local_wrapper_reports_external_missing_dep() {
+        let mut calculate_total = create_test_spec("pricing/calculate_total", "{ round(1.5) }");
+        calculate_total.spec.deps = vec!["shared::money/round".to_string()];
+
+        let (errors, warnings) = validate_deps_exist(&[calculate_total]);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        match &errors[0] {
+            SpecError::CrossLibraryDepNotFound { dep, .. } => {
+                assert_eq!(dep, "shared::money/round")
+            }
+            other => panic!("expected CrossLibraryDepNotFound, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1697,6 +1992,86 @@ local_tests:
             "{}",
             errors[0]
         );
+    }
+
+    #[test]
+    fn test_detect_qualified_cycles_supports_cross_library_shapes() {
+        let local = create_test_spec("pricing/calculate_total", "{ }");
+        let shared = create_test_spec("money/round", "{ }");
+        let scoped_specs = vec![
+            QualifiedLoadedSpec {
+                loaded: &local,
+                qualified_id: QualifiedUnitRef::new(
+                    Some("root".to_string()),
+                    "pricing/calculate_total",
+                ),
+                qualified_deps: vec![QualifiedUnitRef::new(
+                    Some("shared".to_string()),
+                    "money/round",
+                )],
+            },
+            QualifiedLoadedSpec {
+                loaded: &shared,
+                qualified_id: QualifiedUnitRef::new(Some("shared".to_string()), "money/round"),
+                qualified_deps: vec![QualifiedUnitRef::new(
+                    Some("root".to_string()),
+                    "pricing/calculate_total",
+                )],
+            },
+        ];
+
+        let errors = detect_qualified_cycles(&scoped_specs);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        match &errors[0] {
+            SpecError::CrossLibraryCycle { cycle_path, .. } => {
+                assert_eq!(
+                    cycle_path,
+                    &[
+                        "root::pricing/calculate_total".to_string(),
+                        "shared::money/round".to_string(),
+                        "root::pricing/calculate_total".to_string(),
+                    ]
+                );
+            }
+            other => panic!("expected CrossLibraryCycle, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_detect_qualified_cycles_classifies_root_and_imported_cycle_as_cross_library() {
+        let local = create_test_spec("pricing/apply_discount", "{ }");
+        let shared = create_test_spec("money/round", "{ }");
+        let scoped_specs = vec![
+            QualifiedLoadedSpec {
+                loaded: &local,
+                qualified_id: QualifiedUnitRef::local("pricing/apply_discount"),
+                qualified_deps: vec![QualifiedUnitRef::new(
+                    Some("shared".to_string()),
+                    "money/round",
+                )],
+            },
+            QualifiedLoadedSpec {
+                loaded: &shared,
+                qualified_id: QualifiedUnitRef::new(Some("shared".to_string()), "money/round"),
+                qualified_deps: vec![QualifiedUnitRef::local("pricing/apply_discount")],
+            },
+        ];
+
+        let errors = detect_qualified_cycles(&scoped_specs);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        match &errors[0] {
+            SpecError::CrossLibraryCycle { cycle_path, .. } => {
+                assert_eq!(
+                    cycle_path,
+                    &[
+                        "pricing/apply_discount".to_string(),
+                        "shared::money/round".to_string(),
+                        "pricing/apply_discount".to_string(),
+                    ]
+                );
+            }
+            other => panic!("expected CrossLibraryCycle, got {other:?}"),
+        }
     }
 
     // --- check_spec_versions ---

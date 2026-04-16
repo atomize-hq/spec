@@ -4,21 +4,23 @@
 //! It includes authored unit metadata, any readable co-located passports,
 //! the dependency edge list, molecule tests, and structured warnings for skipped passports.
 //!
-//! # Breaking change in M7
-//! `ExportEdge` changed from a plain struct `{from, to}` to a tagged enum.
-//! Consumers must handle the `kind` field: `"dep"` edges have `from`/`to` fields;
-//! `"covers"` edges have `test`/`unit` fields.
+//! # Breaking changes
+//! - In M7, `ExportEdge` changed from a plain struct `{from, to}` to a tagged enum.
+//! - In M9, dep refs changed from ambiguous strings to structured `{library, id}` objects.
+//!
+//! Consumers must handle the `kind` field: `"dep"` edges have structured `from`/`to` refs;
+//! `"covers"` edges have `test`/`unit` string fields.
 
 use crate::AUTHORED_SPEC_VERSION;
 use crate::graph::{SpecEdge, SpecGraph};
 use crate::passport::{ArtifactProvenance, Passport, passport_path_for};
-use crate::types::{Contract, LoadedMoleculeTest, LoadedSpec, LocalTest};
+use crate::types::{Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-/// Export schema version. Bumped in M7 for the ExportEdge breaking change.
-const EXPORT_SCHEMA_VERSION: u8 = 2;
+/// Export schema version. Bumped in M9 for structured dep refs.
+const EXPORT_SCHEMA_VERSION: u8 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExportBundle {
@@ -40,9 +42,15 @@ pub struct ExportUnit {
     pub intent: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contract: Option<Contract>,
-    pub deps: Vec<String>,
+    pub deps: Vec<ExportDepRef>,
     pub local_tests: Vec<LocalTest>,
     pub source_file: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ExportDepRef {
+    pub library: Option<String>,
+    pub id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -61,15 +69,23 @@ pub struct ExportGraph {
 /// An edge in the export graph.
 ///
 /// Tagged with `kind` to distinguish dep edges from covers edges.
-/// - `"dep"` edges have `from` and `to` fields (unit → dependency).
+/// - `"dep"` edges have structured `from` and `to` refs (unit → dependency).
 /// - `"covers"` edges have `test` and `unit` fields (molecule test → covered unit).
 ///
-/// Breaking change in M7: previously a plain struct `{from, to}`.
+/// Breaking changes:
+/// - M7: previously a plain struct `{from, to}`.
+/// - M9: `from` and `to` changed from strings to `{library, id}` refs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum ExportEdge {
-    Dep { from: String, to: String },
-    Covers { test: String, unit: String },
+    Dep {
+        from: ExportDepRef,
+        to: ExportDepRef,
+    },
+    Covers {
+        test: String,
+        unit: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -95,8 +111,8 @@ pub fn build_export_bundle(
         .iter()
         .map(|edge| match edge {
             SpecEdge::Dep { from, to } => ExportEdge::Dep {
-                from: from.clone(),
-                to: to.clone(),
+                from: ExportDepRef::local(from),
+                to: ExportDepRef::from(to),
             },
             SpecEdge::Covers { test, unit } => ExportEdge::Covers {
                 test: test.clone(),
@@ -172,13 +188,40 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
     (passports, warnings)
 }
 
+impl ExportDepRef {
+    fn local(id: impl Into<String>) -> Self {
+        Self {
+            library: None,
+            id: id.into(),
+        }
+    }
+}
+
+impl From<&DepRef> for ExportDepRef {
+    fn from(dep: &DepRef) -> Self {
+        Self {
+            library: dep.library_alias().map(str::to_string),
+            id: dep.unit_id().to_string(),
+        }
+    }
+}
+
 impl From<&LoadedSpec> for ExportUnit {
     fn from(spec: &LoadedSpec) -> Self {
         Self {
             id: spec.spec.id.clone(),
             intent: spec.spec.intent.why.clone(),
             contract: spec.spec.contract.clone(),
-            deps: spec.spec.deps.clone(),
+            deps: spec
+                .spec
+                .deps
+                .iter()
+                .map(|dep| {
+                    let dep_ref = DepRef::parse(dep)
+                        .expect("export assumes validated dep refs before projection");
+                    ExportDepRef::from(&dep_ref)
+                })
+                .collect(),
             local_tests: spec.spec.local_tests.clone(),
             source_file: spec.source.file_path.clone(),
         }
@@ -287,12 +330,12 @@ mod tests {
             bundle.graph.edges,
             vec![
                 ExportEdge::Dep {
-                    from: "pricing/apply_tax".to_string(),
-                    to: "money/format".to_string(),
+                    from: ExportDepRef::local("pricing/apply_tax"),
+                    to: ExportDepRef::local("money/format"),
                 },
                 ExportEdge::Dep {
-                    from: "pricing/apply_tax".to_string(),
-                    to: "money/round".to_string(),
+                    from: ExportDepRef::local("pricing/apply_tax"),
+                    to: ExportDepRef::local("money/round"),
                 },
                 ExportEdge::Covers {
                     test: "pricing/apply_tax_behavior".to_string(),
@@ -318,7 +361,7 @@ mod tests {
 
         let bundle = build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", None);
 
-        assert_eq!(bundle.schema_version, 2);
+        assert_eq!(bundle.schema_version, 3);
         assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
         assert_ne!(bundle.schema_version.to_string(), bundle.spec_version);
     }
@@ -388,19 +431,65 @@ mod tests {
         );
 
         assert!(
-            matches!(&bundle.graph.edges[0], ExportEdge::Dep { from, to } if from == "pricing/apply_discount" && to == "money/round")
+            matches!(&bundle.graph.edges[0], ExportEdge::Dep { from, to } if from == &ExportDepRef::local("pricing/apply_discount") && to == &ExportDepRef::local("money/round"))
         );
         assert!(
-            matches!(&bundle.graph.edges[1], ExportEdge::Dep { from, to } if from == "pricing/apply_tax" && to == "money/format")
+            matches!(&bundle.graph.edges[1], ExportEdge::Dep { from, to } if from == &ExportDepRef::local("pricing/apply_tax") && to == &ExportDepRef::local("money/format"))
         );
         assert!(
-            matches!(&bundle.graph.edges[2], ExportEdge::Dep { from, to } if from == "pricing/apply_tax" && to == "money/round")
+            matches!(&bundle.graph.edges[2], ExportEdge::Dep { from, to } if from == &ExportDepRef::local("pricing/apply_tax") && to == &ExportDepRef::local("money/round"))
         );
         assert_eq!(bundle.warnings.len(), 1);
         assert_eq!(bundle.warnings[0].spec_id, spec_a.spec.id);
         assert_eq!(bundle.warnings[0].code, "passport_missing");
         assert_eq!(bundle.passports.len(), 1);
         assert_eq!(bundle.passports[0].id, spec_b.spec.id);
+    }
+
+    #[test]
+    fn export_unit_and_graph_dep_refs_are_structured_in_schema_v3() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_spec(
+            &dir,
+            "units/pricing/apply_tax.unit.spec",
+            "pricing/apply_tax",
+            vec!["shared::money/round", "money/format"],
+        );
+
+        let bundle = build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", None);
+
+        assert_eq!(
+            bundle.units[0].deps,
+            vec![
+                ExportDepRef {
+                    library: Some("shared".to_string()),
+                    id: "money/round".to_string(),
+                },
+                ExportDepRef {
+                    library: None,
+                    id: "money/format".to_string(),
+                },
+            ]
+        );
+        assert_eq!(
+            bundle.graph.edges,
+            vec![
+                ExportEdge::Dep {
+                    from: ExportDepRef::local("pricing/apply_tax"),
+                    to: ExportDepRef {
+                        library: None,
+                        id: "money/format".to_string(),
+                    },
+                },
+                ExportEdge::Dep {
+                    from: ExportDepRef::local("pricing/apply_tax"),
+                    to: ExportDepRef {
+                        library: Some("shared".to_string()),
+                        id: "money/round".to_string(),
+                    },
+                },
+            ]
+        );
     }
 
     #[test]
