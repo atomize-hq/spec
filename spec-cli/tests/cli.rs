@@ -841,6 +841,67 @@ body:
 }
 
 #[test]
+fn spec_validate_json_local_cycle_keeps_cyclic_dep_code() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        &units_dir,
+        "a/foo.unit.spec",
+        r#"
+id: a/foo
+kind: function
+intent:
+  why: Exercise local cycle JSON reporting.
+spec_version: "0.3.0"
+deps:
+  - b/bar
+body:
+  rust: |
+    { }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "b/bar.unit.spec",
+        r#"
+id: b/bar
+kind: function
+intent:
+  why: Close the local cycle.
+spec_version: "0.3.0"
+deps:
+  - a/foo
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    let output = run_in(temp_dir.path(), &["validate", "units", "--format", "json"]);
+    assert!(!output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr output, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CYCLIC_DEP"),
+        "expected SPEC_CYCLIC_DEP, got: {errors:?}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CROSS_LIBRARY_CYCLE"),
+        "unexpected SPEC_CROSS_LIBRARY_CYCLE, got: {errors:?}"
+    );
+}
+
+#[test]
 fn spec_validate_json_contract_type_invalid() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -6010,6 +6071,61 @@ fn validate_detects_direct_cross_library_cycle() {
 }
 
 #[test]
+fn validate_json_emits_cross_library_cycle_code() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared", "payments"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &["payments::money/scale"],
+    );
+    write_m9_unit(
+        &fixture.payments_root.join("units"),
+        "money/scale.unit.spec",
+        "money/scale",
+        &["shared::money/round"],
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["validate", "units", "--format", "json"],
+    );
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CROSS_LIBRARY_CYCLE"),
+        "expected SPEC_CROSS_LIBRARY_CYCLE, got: {errors:?}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CYCLIC_DEP"),
+        "unexpected SPEC_CYCLIC_DEP, got: {errors:?}"
+    );
+}
+
+#[test]
 fn validate_rejects_cross_library_molecule_covers() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -6096,6 +6212,117 @@ fn generate_rejects_missing_library_crate_alias_before_writing_output() {
 }
 
 #[test]
+fn export_rejects_missing_library_crate_alias() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &[]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(&fixture.app_root, &["export", "units"]);
+    assert!(!output.status.success(), "export should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("shared"), "{stderr}");
+}
+
+#[test]
+fn export_rejects_missing_library_crate_alias_before_writing_output() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &[]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let bundle_path = fixture.app_root.join("bundle.json");
+    let output = run_in(
+        &fixture.app_root,
+        &["export", "units", "--output", "bundle.json"],
+    );
+    assert!(!output.status.success(), "export should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "{stderr}"
+    );
+    assert!(
+        !bundle_path.exists(),
+        "export should fail before writing output bundle"
+    );
+}
+
+#[test]
+fn export_emits_schema_v3_bundle_for_valid_cross_library_dep() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(&fixture.app_root, &["export", "units"]);
+    assert!(output.status.success(), "export should succeed");
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["schema_version"], 3);
+    let edges = bundle["graph"]["edges"].as_array().unwrap();
+    assert!(
+        edges.iter().any(|edge| {
+            edge["kind"] == "dep"
+                && edge["from"]["library"].is_null()
+                && edge["from"]["id"] == "pricing/apply_discount"
+                && edge["to"]["library"] == "shared"
+                && edge["to"]["id"] == "money/round"
+        }),
+        "expected cross-library dep edge in export bundle, got: {edges:?}"
+    );
+}
+
+#[test]
 fn status_reports_valid_cross_library_unit_as_untested_without_dep_errors() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -6176,6 +6403,57 @@ fn status_json_reports_cross_library_unit_as_untested_without_loader_errors() {
     assert!(
         json.get("loader_errors").is_none(),
         "expected no global loader_errors, got: {json:?}"
+    );
+}
+
+#[test]
+fn status_json_routes_imported_cross_library_cycles_to_loader_errors() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared", "payments"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &["payments::money/scale"],
+    );
+    write_m9_unit(
+        &fixture.payments_root.join("units"),
+        "money/scale.unit.spec",
+        "money/scale",
+        &["shared::money/round"],
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(!output.status.success(), "status should fail");
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0]["status"], "untested");
+    assert_eq!(units[0]["errors"].as_array().unwrap().len(), 0);
+
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CROSS_LIBRARY_CYCLE"),
+        "expected SPEC_CROSS_LIBRARY_CYCLE, got: {loader_errors:?}"
+    );
+    assert!(
+        !loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CYCLIC_DEP"),
+        "unexpected SPEC_CYCLIC_DEP, got: {loader_errors:?}"
     );
 }
 

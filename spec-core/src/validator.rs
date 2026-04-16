@@ -518,15 +518,23 @@ fn dfs_qualified_cycle_check<'a>(
                     .iter()
                     .position(|n| n == dep)
                     .expect("dep in in_stack must be in stack");
-                let mut cycle_path: Vec<String> = stack[cycle_start..]
+                let mut qualified_cycle_path = stack[cycle_start..].to_vec();
+                qualified_cycle_path.push(dep.clone());
+                let cycle_path: Vec<String> = qualified_cycle_path
                     .iter()
                     .map(QualifiedUnitRef::authored)
                     .collect();
-                cycle_path.push(dep.authored());
-                errors.push(SpecError::CyclicDep {
-                    cycle_path,
-                    path: spec.loaded.source.file_path.clone(),
-                });
+                let distinct_libraries: HashSet<Option<&str>> = qualified_cycle_path
+                    .iter()
+                    .map(|unit| unit.library())
+                    .collect();
+                let path = spec.loaded.source.file_path.clone();
+
+                if distinct_libraries.len() > 1 {
+                    errors.push(SpecError::CrossLibraryCycle { cycle_path, path });
+                } else {
+                    errors.push(SpecError::CyclicDep { cycle_path, path });
+                }
             } else if !visited.contains(dep) {
                 dfs_qualified_cycle_check(dep, id_map, visited, in_stack, stack, errors);
             }
@@ -1933,7 +1941,7 @@ local_tests:
         let errors = detect_qualified_cycles(&scoped_specs);
         assert_eq!(errors.len(), 1, "{errors:?}");
         match &errors[0] {
-            SpecError::CyclicDep { cycle_path, .. } => {
+            SpecError::CrossLibraryCycle { cycle_path, .. } => {
                 assert_eq!(
                     cycle_path,
                     &[
@@ -1943,7 +1951,44 @@ local_tests:
                     ]
                 );
             }
-            other => panic!("expected CyclicDep, got {other:?}"),
+            other => panic!("expected CrossLibraryCycle, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_detect_qualified_cycles_classifies_root_and_imported_cycle_as_cross_library() {
+        let local = create_test_spec("pricing/apply_discount", "{ }");
+        let shared = create_test_spec("money/round", "{ }");
+        let scoped_specs = vec![
+            QualifiedLoadedSpec {
+                loaded: &local,
+                qualified_id: QualifiedUnitRef::local("pricing/apply_discount"),
+                qualified_deps: vec![QualifiedUnitRef::new(
+                    Some("shared".to_string()),
+                    "money/round",
+                )],
+            },
+            QualifiedLoadedSpec {
+                loaded: &shared,
+                qualified_id: QualifiedUnitRef::new(Some("shared".to_string()), "money/round"),
+                qualified_deps: vec![QualifiedUnitRef::local("pricing/apply_discount")],
+            },
+        ];
+
+        let errors = detect_qualified_cycles(&scoped_specs);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        match &errors[0] {
+            SpecError::CrossLibraryCycle { cycle_path, .. } => {
+                assert_eq!(
+                    cycle_path,
+                    &[
+                        "pricing/apply_discount".to_string(),
+                        "shared::money/round".to_string(),
+                        "pricing/apply_discount".to_string(),
+                    ]
+                );
+            }
+            other => panic!("expected CrossLibraryCycle, got {other:?}"),
         }
     }
 

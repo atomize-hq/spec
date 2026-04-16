@@ -94,6 +94,12 @@ pub enum SpecError {
         path: String,
     },
 
+    #[error("❌ cross-library cycle detected: {}", cycle_path.join(" → "))]
+    CrossLibraryCycle {
+        cycle_path: Vec<String>,
+        path: String,
+    },
+
     #[error(
         "body.rust must not contain use statements; declare external imports via imports (and internal unit deps via deps) at {path}"
     )]

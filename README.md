@@ -210,6 +210,7 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_DEP_COLLISION` | Two deps resolve to the same generated function name |
 | `SPEC_MISSING_DEP` | A declared dep has no matching unit in the spec set |
 | `SPEC_CYCLIC_DEP` | Units form a dependency cycle |
+| `SPEC_CROSS_LIBRARY_CYCLE` | Units form a dependency cycle across library boundaries |
 | `SPEC_USE_STATEMENT_IN_BODY` | `body.rust` contains a `use` statement — move it to `imports` or `deps` |
 | `SPEC_BODY_RUST_MUST_BE_BLOCK` | `body.rust` failed to parse as a Rust block expression |
 | `SPEC_BODY_RUST_LOOKS_LIKE_FN_DECLARATION` | `body.rust` contains the full `pub fn` signature — keep only the body block (see migration guide) |

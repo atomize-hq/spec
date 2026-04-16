@@ -870,8 +870,13 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
         loader_warnings: Vec::new(),
         total_files,
     };
-    let (validation_errors, validation_warnings) =
+    let (mut validation_errors, validation_warnings) =
         finish_validation_with_imports(&validation_specs, &validation_options);
+    validation_errors.extend(validate_library_crate_aliases(
+        &validation_specs.root_specs,
+        path,
+        &config,
+    ));
     let mut errors = DiagnosticMap::new();
     let mut warnings = DiagnosticMap::new();
     for err in loader_errors {
@@ -2390,6 +2395,7 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::CrossLibraryDepNotFound { .. } => "SPEC_CROSS_LIBRARY_DEP_NOT_FOUND",
         spec_core::SpecError::LibraryCrateAliasMissing { .. } => "SPEC_LIBRARY_CRATE_ALIAS_MISSING",
         spec_core::SpecError::CyclicDep { .. } => "SPEC_CYCLIC_DEP",
+        spec_core::SpecError::CrossLibraryCycle { .. } => "SPEC_CROSS_LIBRARY_CYCLE",
         spec_core::SpecError::UseStatementInBody { .. } => "SPEC_USE_STATEMENT_IN_BODY",
         spec_core::SpecError::BodyRustMustBeBlock { .. } => "SPEC_BODY_RUST_MUST_BE_BLOCK",
         spec_core::SpecError::BodyRustLooksLikeFnDeclaration { .. } => {
@@ -2512,6 +2518,12 @@ fn spec_error_to_json_entry(
             ..Default::default()
         },
         spec_core::SpecError::CyclicDep { cycle_path, path } => ErrorFields {
+            unit: id_by_path.get(path).cloned(),
+            path: Some(path.clone()),
+            cycle: Some(cycle_path.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::CrossLibraryCycle { cycle_path, path } => ErrorFields {
             unit: id_by_path.get(path).cloned(),
             path: Some(path.clone()),
             cycle: Some(cycle_path.clone()),
@@ -2659,6 +2671,7 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::CrossLibraryDepNotFound { path, .. }
         | spec_core::SpecError::LibraryCrateAliasMissing { path, .. }
         | spec_core::SpecError::CyclicDep { path, .. }
+        | spec_core::SpecError::CrossLibraryCycle { path, .. }
         | spec_core::SpecError::UseStatementInBody { path }
         | spec_core::SpecError::BodyRustMustBeBlock { path, .. }
         | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }
@@ -2773,6 +2786,7 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::CrossLibraryDepNotFound { path, .. }
         | spec_core::SpecError::LibraryCrateAliasMissing { path, .. }
         | spec_core::SpecError::CyclicDep { path, .. }
+        | spec_core::SpecError::CrossLibraryCycle { path, .. }
         | spec_core::SpecError::UseStatementInBody { path }
         | spec_core::SpecError::BodyRustMustBeBlock { path, .. }
         | spec_core::SpecError::BodyRustLooksLikeFnDeclaration { path }
@@ -3260,6 +3274,10 @@ body:
             },
             spec_core::SpecError::CyclicDep {
                 cycle_path: vec!["a".to_string(), "b".to_string()],
+                path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::CrossLibraryCycle {
+                cycle_path: vec!["a".to_string(), "shared::b".to_string()],
                 path: "units/a.unit.spec".to_string(),
             },
             spec_core::SpecError::UseStatementInBody {
