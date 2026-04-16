@@ -31,7 +31,9 @@ jobs:
         run: cargo test --workspace
 
       - name: Check ecommerce example
-        run: cargo check --manifest-path examples/ecommerce/Cargo.toml
+        run: |
+          cargo run -p spec-cli -- generate examples/ecommerce/units --output examples/ecommerce/src/generated
+          cargo check --manifest-path examples/ecommerce/Cargo.toml
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
