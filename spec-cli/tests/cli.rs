@@ -5916,6 +5916,43 @@ fn validate_ignores_unreferenced_broken_library() {
 }
 
 #[test]
+fn validate_rejects_transitive_library_alias_without_loading_transitive_library() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &["payments::money/scale"],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/scale.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["validate", "units"]);
+    assert!(!output.status.success(), "validate should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown library namespace 'payments'"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("YAML parse error"), "{stderr}");
+}
+
+#[test]
 fn validate_ignores_unreferenced_library_cycles() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -6196,7 +6233,7 @@ fn validate_detects_direct_cross_library_cycle() {
         &fixture.app_root.join("units"),
         "pricing/apply_discount.unit.spec",
         "pricing/apply_discount",
-        &["shared::money/round"],
+        &["shared::money/round", "payments::money/scale"],
     );
     write_m9_unit(
         &fixture.shared_root.join("units"),
@@ -6232,7 +6269,7 @@ fn validate_json_emits_cross_library_cycle_code() {
         &fixture.app_root.join("units"),
         "pricing/apply_discount.unit.spec",
         "pricing/apply_discount",
-        &["shared::money/round"],
+        &["shared::money/round", "payments::money/scale"],
     );
     write_m9_unit(
         &fixture.shared_root.join("units"),
@@ -6645,7 +6682,7 @@ fn status_json_ignores_unreferenced_broken_library_loader_errors() {
 }
 
 #[test]
-fn status_json_routes_imported_cross_library_cycles_to_loader_errors() {
+fn status_json_routes_direct_cross_library_cycles_to_loader_errors() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
         fixture.app_root.join("spec.toml"),
@@ -6657,7 +6694,7 @@ fn status_json_routes_imported_cross_library_cycles_to_loader_errors() {
         &fixture.app_root.join("units"),
         "pricing/apply_discount.unit.spec",
         "pricing/apply_discount",
-        &["shared::money/round"],
+        &["shared::money/round", "payments::money/scale"],
     );
     write_m9_unit(
         &fixture.shared_root.join("units"),
@@ -6692,6 +6729,58 @@ fn status_json_routes_imported_cross_library_cycles_to_loader_errors() {
             .iter()
             .any(|error| error["code"] == "SPEC_CYCLIC_DEP"),
         "unexpected SPEC_CYCLIC_DEP, got: {loader_errors:?}"
+    );
+}
+
+#[test]
+fn status_json_reports_transitive_library_alias_without_loading_transitive_library() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &["payments::money/scale"],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/scale.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(!output.status.success(), "status should fail");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0]["id"], "pricing/apply_discount");
+    assert_eq!(units[0]["status"], "untested");
+    assert_eq!(units[0]["errors"].as_array().unwrap().len(), 0);
+
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_UNKNOWN_LIBRARY_NAMESPACE"),
+        "expected SPEC_UNKNOWN_LIBRARY_NAMESPACE, got: {loader_errors:?}"
+    );
+    assert!(
+        !loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_YAML_PARSE"),
+        "unexpected transitive loader error, got: {loader_errors:?}"
     );
 }
 
@@ -6923,6 +7012,43 @@ fn export_ignores_configured_library_when_root_has_no_cross_library_deps() {
 }
 
 #[test]
+fn export_rejects_transitive_library_alias_without_loading_transitive_library() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &["payments::money/scale"],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/scale.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["export", "units"]);
+    assert!(!output.status.success(), "export should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown library namespace 'payments'"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("YAML parse error"), "{stderr}");
+}
+
+#[test]
 fn generate_ignores_unreferenced_broken_library() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -7001,4 +7127,44 @@ fn generate_ignores_configured_library_when_root_has_no_cross_library_deps() {
             .exists(),
         "expected generated output for local root unit"
     );
+}
+
+#[test]
+fn generate_rejects_transitive_library_alias_without_loading_transitive_library() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &["payments::money/scale"],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/scale.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert!(!output.status.success(), "generate should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown library namespace 'payments'"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("YAML parse error"), "{stderr}");
 }

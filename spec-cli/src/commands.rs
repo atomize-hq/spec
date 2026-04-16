@@ -2184,42 +2184,23 @@ fn load_referenced_validation_specs(
     let mut loader_errors = Vec::new();
     let mut loader_warnings = Vec::new();
     let mut total_files = 0;
-    let mut pending_aliases: BTreeSet<String> =
+    let direct_aliases: BTreeSet<String> =
         referenced_library_aliases(root_specs).into_keys().collect();
-    let mut loaded_aliases = HashSet::new();
 
-    loop {
-        let next_libraries: Vec<ResolvedLibrary> = libraries
-            .iter()
-            .filter(|library| {
-                pending_aliases.contains(&library.alias) && !loaded_aliases.contains(&library.alias)
-            })
-            .cloned()
-            .collect();
-
-        if next_libraries.is_empty() {
-            break;
-        }
-
-        for library in next_libraries {
-            let report = load_directory_report(&library.root);
-            for alias in report
-                .specs
-                .iter()
-                .flat_map(|spec| referenced_library_aliases(std::slice::from_ref(spec)).into_keys())
-            {
-                pending_aliases.insert(alias);
-            }
-            total_files += report.total_files;
-            loader_errors.extend(report.errors);
-            loader_warnings.extend(report.warnings);
-            loaded_aliases.insert(library.alias.clone());
-            selected_libraries.push(library.clone());
-            imported_libraries.push(ImportedLibrarySpecs {
-                alias: library.alias,
-                specs: report.specs,
-            });
-        }
+    for library in libraries
+        .iter()
+        .filter(|library| direct_aliases.contains(&library.alias))
+        .cloned()
+    {
+        let report = load_directory_report(&library.root);
+        total_files += report.total_files;
+        loader_errors.extend(report.errors);
+        loader_warnings.extend(report.warnings);
+        selected_libraries.push(library.clone());
+        imported_libraries.push(ImportedLibrarySpecs {
+            alias: library.alias,
+            specs: report.specs,
+        });
     }
 
     (
@@ -2413,17 +2394,21 @@ fn build_qualified_validation_specs<'a>(
     let mut qualified_specs = Vec::new();
 
     for spec in &specs.root_specs {
-        match qualify_loaded_spec(spec, None, known_library_aliases) {
-            Ok(spec) => qualified_specs.push(spec),
-            Err(err) => errors.push(err),
-        }
+        qualified_specs.push(qualify_loaded_spec(
+            spec,
+            None,
+            known_library_aliases,
+            errors,
+        ));
     }
     for library in &specs.imported_libraries {
         for spec in &library.specs {
-            match qualify_loaded_spec(spec, Some(library.alias.as_str()), known_library_aliases) {
-                Ok(spec) => qualified_specs.push(spec),
-                Err(err) => errors.push(err),
-            }
+            qualified_specs.push(qualify_loaded_spec(
+                spec,
+                Some(library.alias.as_str()),
+                known_library_aliases,
+                errors,
+            ));
         }
     }
 
@@ -2434,38 +2419,44 @@ fn qualify_loaded_spec<'a>(
     loaded: &'a LoadedSpec,
     current_library: Option<&str>,
     known_library_aliases: &HashSet<&str>,
-) -> std::result::Result<QualifiedLoadedSpec<'a>, spec_core::SpecError> {
+    errors: &mut Vec<spec_core::SpecError>,
+) -> QualifiedLoadedSpec<'a> {
     let mut qualified_deps = Vec::with_capacity(loaded.spec.deps.len());
 
     for authored_dep in &loaded.spec.deps {
-        let dep = DepRef::parse(authored_dep).map_err(|err| {
-            spec_core::SpecError::SemanticValidation {
-                message: err.to_string(),
-                path: loaded.source.file_path.clone(),
+        let dep = match DepRef::parse(authored_dep) {
+            Ok(dep) => dep,
+            Err(err) => {
+                errors.push(spec_core::SpecError::SemanticValidation {
+                    message: err.to_string(),
+                    path: loaded.source.file_path.clone(),
+                });
+                continue;
             }
-        })?;
+        };
 
         if let Some(alias) = dep.library_alias()
             && !known_library_aliases.contains(alias)
         {
-            return Err(spec_core::SpecError::UnknownLibraryNamespace {
+            errors.push(spec_core::SpecError::UnknownLibraryNamespace {
                 alias: alias.to_string(),
                 dep: dep.authored(),
                 path: loaded.source.file_path.clone(),
             });
+            continue;
         }
 
         qualified_deps.push(dep.to_qualified(current_library));
     }
 
-    Ok(QualifiedLoadedSpec {
+    QualifiedLoadedSpec {
         loaded,
         qualified_id: QualifiedUnitRef::new(
             current_library.map(str::to_string),
             loaded.spec.id.clone(),
         ),
         qualified_deps,
-    })
+    }
 }
 
 fn print_diagnostics(diagnostics: &DiagnosticMap) {
