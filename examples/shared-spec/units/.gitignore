@@ -1,1 +1,2 @@
 **/*.spec.passport.json
+!money/round.spec.passport.json

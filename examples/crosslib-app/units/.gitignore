@@ -1,1 +1,2 @@
 **/*.spec.passport.json
+!pricing/apply_discount.spec.passport.json

@@ -47,6 +47,34 @@ pub struct WorkspaceContext {
     pub libraries: Vec<ResolvedLibrary>,
 }
 
+impl WorkspaceContext {
+    pub fn resolve_pipeline_path(&self, path: &Path) -> PathBuf {
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else if let Some(root) = &self.workspace_root {
+            root.join(path)
+        } else {
+            path.to_path_buf()
+        }
+    }
+
+    pub fn pipeline_crate_root(&self) -> Option<PathBuf> {
+        self.config
+            .pipeline
+            .crate_root
+            .as_deref()
+            .map(|path| self.resolve_pipeline_path(path))
+    }
+
+    pub fn pipeline_cargo_target_dir(&self) -> Option<PathBuf> {
+        self.config
+            .pipeline
+            .cargo_target_dir
+            .as_deref()
+            .map(|path| self.resolve_pipeline_path(path))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkspaceConfigError {
     LibraryPathNotFound {
@@ -130,6 +158,7 @@ impl fmt::Display for WorkspaceConfigError {
 
 impl std::error::Error for WorkspaceConfigError {}
 
+#[cfg(test)]
 pub fn load_workspace_config(target: &Path) -> Result<WorkspaceConfig> {
     Ok(load_workspace_context(target)?.config)
 }
@@ -349,6 +378,31 @@ mod tests {
         let err = load_workspace_config(temp_dir.path()).unwrap_err();
         let err = format!("{err:#}");
         assert!(err.contains("timeout_secs must be greater than 0"));
+    }
+
+    #[test]
+    fn resolves_relative_pipeline_paths_from_workspace_root() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path().join("repo");
+        let root = repo_root.join("shared-spec");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(repo_root.join("shared-crate")).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: .git/modules/repo\n").unwrap();
+        fs::write(
+            root.join("spec.toml"),
+            "[pipeline]\ncrate_root = \"../shared-crate\"\ncargo_target_dir = \"../target/spec\"\n",
+        )
+        .unwrap();
+
+        let context = load_workspace_context(&root).unwrap();
+        assert_eq!(
+            context.pipeline_crate_root(),
+            Some(root.canonicalize().unwrap().join("../shared-crate"))
+        );
+        assert_eq!(
+            context.pipeline_cargo_target_dir(),
+            Some(root.canonicalize().unwrap().join("../target/spec"))
+        );
     }
 
     #[test]

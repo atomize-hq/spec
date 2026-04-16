@@ -1,0 +1,43 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount while importing the shared round helper from a sibling spec library.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "subtotal",
+        "type": "Decimal"
+      },
+      {
+        "name": "rate",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal"
+  },
+  "deps": [
+    "shared::money/round"
+  ],
+  "local_tests": [
+    {
+      "id": "happy_path",
+      "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
+    }
+  ],
+  "generated_at": "2026-04-16T16:43:55Z",
+  "source_file": "examples/crosslib-app/units/pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "happy_path",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-04-16T16:43:58Z",
+    "provenance": {
+      "git_commit_sha": "0b00975c84d31e75d75008b38bc1d7ca1c3bcbc9"
+    }
+  },
+  "contract_hash": "sha256:a40bb5809eb8af8ebe7f3e247aff4691f1c22a13fd72baf3ed6ca67e269d6b67"
+}

@@ -1,6 +1,5 @@
 use crate::config::{
-    ResolvedLibrary, WorkspaceConfig, WorkspaceConfigError, load_workspace_config,
-    load_workspace_context,
+    ResolvedLibrary, WorkspaceConfigError, WorkspaceContext, load_workspace_context,
 };
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
@@ -20,8 +19,8 @@ use spec_core::passport::{
     compute_contract_hash, ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
-    ParsedCargoTestResult, Verbosity, cargo_available, parse_cargo_test_output, run_cargo_build,
-    run_cargo_test, workspace_root_for, zero_tests_ran,
+    ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
+    parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
 };
 use spec_core::types::{
     DepRef, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef, ResolvedMoleculeTest, ResolvedSpec,
@@ -336,21 +335,21 @@ impl Command {
             Self::Status(args) => status_command(&args.path, args.format),
             Self::Generate(args) => generate_command(&args.path, args.output.as_deref()),
             Self::Build(args) => {
-                let config = load_workspace_config(&args.path)?;
+                let context = load_workspace_context(&args.path)?;
                 build_command(
                     &args.path,
                     args.output.as_deref(),
                     args.crate_root.as_deref(),
-                    &config,
+                    &context,
                 )
             }
             Self::Test(args) => {
-                let config = load_workspace_config(&args.path)?;
+                let context = load_workspace_context(&args.path)?;
                 test_command(
                     &args.path,
                     args.output.as_deref(),
                     args.crate_root.as_deref(),
-                    &config,
+                    &context,
                 )
             }
             Self::Export(args) => export_command(&args.path, args.output.as_deref()),
@@ -468,7 +467,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
         Err(err) => return Err(err),
     };
     let validation_specs = collect_validation_specs(path, &context.libraries)?;
-    let config = context.config;
+    let config = context.config.clone();
     let validation_options = ValidationOptions {
         strict_deps: !no_strict,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
@@ -478,7 +477,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
     validation_errors.extend(validate_library_crate_aliases(
         &validation_specs.root_specs,
         path,
-        &config,
+        &context,
     ));
 
     let (molecule_errors, molecule_warnings, molecule_loader_errors) =
@@ -728,7 +727,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         }
         Err(err) => return Err(err),
     };
-    let config = context.config;
+    let config = context.config.clone();
     let (root_specs, root_loader_errors, _root_loader_warnings, root_total_files) =
         collect_specs(path)?;
     let (
@@ -760,7 +759,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
     validation_errors.extend(validate_library_crate_aliases(
         &validation_specs.root_specs,
         path,
-        &config,
+        &context,
     ));
 
     let id_by_path: HashMap<String, String> = validation_specs
@@ -922,7 +921,7 @@ fn suppress_cross_library_dep_not_found_for_failed_imports(
 fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
     let context = load_workspace_context(path)?;
-    let config = context.config;
+    let config = context.config.clone();
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
@@ -946,7 +945,7 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     validation_errors.extend(validate_library_crate_aliases(
         &validation_specs.root_specs,
         path,
-        &config,
+        &context,
     ));
     let mut errors = DiagnosticMap::new();
     let mut warnings = DiagnosticMap::new();
@@ -1048,7 +1047,7 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
 }
 
 fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
-    let config = load_workspace_config(path)?;
+    let context = load_workspace_context(path)?;
     let (root_specs, loader_errors, loader_warnings, _total_files) = collect_specs(path)?;
     if !loader_errors.is_empty() {
         let mut errors = DiagnosticMap::new();
@@ -1065,7 +1064,7 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
         }
         print_diagnostics(&warnings);
     }
-    let alias_errors = validate_library_crate_aliases(&root_specs, path, &config);
+    let alias_errors = validate_library_crate_aliases(&root_specs, path, &context);
     if !alias_errors.is_empty() {
         let mut errors = DiagnosticMap::new();
         for err in alias_errors {
@@ -1085,8 +1084,8 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
         None => {
             // Use the same crate-root precedence as build/test:
             // spec.toml [pipeline] crate_root → ancestor Cargo.toml walk.
-            let crate_root = match config.pipeline.crate_root.as_deref() {
-                Some(p) => p.to_path_buf(),
+            let crate_root = match context.pipeline_crate_root() {
+                Some(path) => path,
                 None => workspace_root_for(spec_root)?,
             };
             crate_root.join("src/generated")
@@ -1437,16 +1436,19 @@ struct GeneratedSpecs {
 fn resolve_pipeline_context(
     path: &Path,
     crate_root_flag: Option<&Path>,
-    config: &WorkspaceConfig,
+    context: &WorkspaceContext,
 ) -> Result<PipelineContext> {
-    let crate_root = match crate_root_flag.or(config.pipeline.crate_root.as_deref()) {
+    let crate_root = match crate_root_flag {
         Some(p) => p.to_path_buf(),
-        None => workspace_root_for(path)?,
+        None => match context.pipeline_crate_root() {
+            Some(path) => path,
+            None => workspace_root_for(path)?,
+        },
     };
 
     let mut temp_dir: Option<tempfile::TempDir> = None;
-    let cargo_target_dir = if let Some(p) = &config.pipeline.cargo_target_dir {
-        p.clone()
+    let cargo_target_dir = if let Some(path) = context.pipeline_cargo_target_dir() {
+        path
     } else if let Ok(env_val) = std::env::var("CARGO_TARGET_DIR") {
         PathBuf::from(env_val)
     } else {
@@ -1460,7 +1462,11 @@ fn resolve_pipeline_context(
     Ok(PipelineContext {
         crate_root,
         cargo_target_dir,
-        timeout: config.pipeline.timeout_secs.map(Duration::from_secs),
+        timeout: context
+            .config
+            .pipeline
+            .timeout_secs
+            .map(Duration::from_secs),
         _temp_dir: temp_dir,
     })
 }
@@ -1469,7 +1475,7 @@ fn build_command(
     path: &Path,
     output: Option<&Path>,
     crate_root_flag: Option<&Path>,
-    config: &WorkspaceConfig,
+    context: &WorkspaceContext,
 ) -> Result<()> {
     if path.is_file() {
         bail!(
@@ -1497,7 +1503,7 @@ fn build_command(
         }
         print_diagnostics(&warnings);
     }
-    let alias_errors = validate_library_crate_aliases(&root_specs, path, config);
+    let alias_errors = validate_library_crate_aliases(&root_specs, path, context);
     if !alias_errors.is_empty() {
         let mut errors = DiagnosticMap::new();
         for err in alias_errors {
@@ -1507,7 +1513,7 @@ fn build_command(
         bail!("❌ cross-library crate alias validation failed");
     }
 
-    let ctx = resolve_pipeline_context(path, crate_root_flag, config)?;
+    let ctx = resolve_pipeline_context(path, crate_root_flag, context)?;
     let resolved_output = output
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
@@ -1538,7 +1544,7 @@ fn test_command(
     path: &Path,
     output: Option<&Path>,
     crate_root_flag: Option<&Path>,
-    config: &WorkspaceConfig,
+    context: &WorkspaceContext,
 ) -> Result<()> {
     if !cargo_available() {
         bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
@@ -1574,7 +1580,7 @@ fn test_command(
         }
         print_diagnostics(&warnings);
     }
-    let alias_errors = validate_library_crate_aliases(&root_specs, generation_scope, config);
+    let alias_errors = validate_library_crate_aliases(&root_specs, generation_scope, context);
     if !alias_errors.is_empty() {
         let mut errors = DiagnosticMap::new();
         for err in alias_errors {
@@ -1584,7 +1590,7 @@ fn test_command(
         bail!("❌ cross-library crate alias validation failed");
     }
 
-    let ctx = resolve_pipeline_context(pipeline_scope, crate_root_flag, config)?;
+    let ctx = resolve_pipeline_context(pipeline_scope, crate_root_flag, context)?;
     let resolved_output = output
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
@@ -1599,9 +1605,13 @@ fn test_command(
 
     // Resolve the module prefix once — used for both the cargo test filter and
     // evidence lookup. A single resolved value ensures they always agree.
-    let effective_prefix = match &config.pipeline.generated_module_prefix {
+    let effective_prefix = match &context.config.pipeline.generated_module_prefix {
         Some(explicit) => explicit.clone(),
-        None => output_module_prefix(&resolved_output, &ctx.crate_root)?,
+        None => output_module_prefix(
+            &resolved_output,
+            &ctx.crate_root,
+            &std::env::current_dir().context("failed to resolve current working directory")?,
+        )?,
     };
     let filter = target_spec.as_ref().map(|target| {
         let resolved = ResolvedSpec::from_spec(target.spec.clone());
@@ -1924,44 +1934,6 @@ fn resolve_git_commit_sha(path: &Path) -> Option<String> {
     }
 }
 
-fn output_module_prefix(output: &Path, crate_root: &Path) -> Result<String> {
-    // Strip `{crate_root}/src/` prefix from the output path so that
-    // `{crate_root}/src/generated` → `"generated"` (not `"generated::spec"`).
-    // Falls back to stripping a leading `"src"` component for relative paths
-    // (test helpers, explicit `--output src/generated`).
-    let src_root = crate_root.join("src");
-    let relative = output.strip_prefix(&src_root).unwrap_or_else(|_| {
-        // Relative path fallback: strip a leading "src" component if present.
-        let mut comps = output.components();
-        if comps
-            .next()
-            .map(|c| c.as_os_str() == "src")
-            .unwrap_or(false)
-        {
-            output.strip_prefix("src").unwrap_or(output)
-        } else {
-            output
-        }
-    });
-
-    let parts: Vec<&str> = relative
-        .components()
-        .filter_map(|c| match c {
-            std::path::Component::Normal(s) => s.to_str(),
-            _ => None,
-        })
-        .collect();
-
-    if parts.is_empty() {
-        return Err(anyhow::anyhow!(
-            "❌ could not determine output module prefix from {}",
-            output.display()
-        ));
-    }
-
-    Ok(parts.join("::"))
-}
-
 fn cargo_test_filter_for(spec: &ResolvedSpec, output_prefix: &str) -> String {
     if spec.module_path.is_empty() {
         format!("{output_prefix}::{}::tests::", spec.fn_name)
@@ -2225,18 +2197,18 @@ struct CargoManifest {
 fn validate_library_crate_aliases(
     root_specs: &[LoadedSpec],
     path: &Path,
-    config: &WorkspaceConfig,
+    context: &WorkspaceContext,
 ) -> Vec<spec_core::SpecError> {
     let referenced_aliases = direct_root_library_aliases(root_specs);
     if referenced_aliases.is_empty() {
         return Vec::new();
     }
 
-    let (manifest_path, dependency_aliases) = match load_root_cargo_dependency_aliases(path, config)
-    {
-        Ok(result) => result,
-        Err(err) => return vec![err],
-    };
+    let (manifest_path, dependency_aliases) =
+        match load_root_cargo_dependency_aliases(path, context) {
+            Ok(result) => result,
+            Err(err) => return vec![err],
+        };
 
     referenced_aliases
         .into_iter()
@@ -2273,14 +2245,14 @@ fn direct_root_library_aliases(root_specs: &[LoadedSpec]) -> BTreeMap<String, St
     aliases
 }
 
-fn resolved_crate_manifest_path(path: &Path, config: &WorkspaceConfig) -> Result<PathBuf> {
+fn resolved_crate_manifest_path(path: &Path, context: &WorkspaceContext) -> Result<PathBuf> {
     let spec_root = if path.is_file() {
         path.parent().unwrap_or(path)
     } else {
         path
     };
-    let crate_root = match config.pipeline.crate_root.as_deref() {
-        Some(path) => path.to_path_buf(),
+    let crate_root = match context.pipeline_crate_root() {
+        Some(path) => path,
         None => workspace_root_for(spec_root)?,
     };
     Ok(crate_root.join("Cargo.toml"))
@@ -2288,9 +2260,9 @@ fn resolved_crate_manifest_path(path: &Path, config: &WorkspaceConfig) -> Result
 
 fn load_root_cargo_dependency_aliases(
     path: &Path,
-    config: &WorkspaceConfig,
+    context: &WorkspaceContext,
 ) -> std::result::Result<(PathBuf, HashSet<String>), spec_core::SpecError> {
-    let manifest_path = resolved_crate_manifest_path(path, config).map_err(|err| {
+    let manifest_path = resolved_crate_manifest_path(path, context).map_err(|err| {
         spec_core::SpecError::LibraryCrateManifestError {
             cargo_toml: None,
             message: format!("Failed to resolve Cargo.toml for library alias validation: {err}"),
@@ -3078,7 +3050,7 @@ mod tests {
     }
 
     fn benchmark_stdout(specs: &[LoadedSpec], output: &Path, crate_root: &Path) -> String {
-        let output_prefix = output_module_prefix(output, crate_root).unwrap();
+        let output_prefix = output_module_prefix(output, crate_root, Path::new("")).unwrap();
         let mut stdout = String::from("running synthetic benchmark tests\n");
 
         for spec in specs {
@@ -3656,7 +3628,8 @@ body:
         assert_eq!(
             output_module_prefix(
                 &PathBuf::from("/home/user/myproject/src/generated"),
-                crate_root
+                crate_root,
+                Path::new("/home/user")
             )
             .unwrap(),
             "generated"
@@ -3664,7 +3637,8 @@ body:
         assert_eq!(
             output_module_prefix(
                 &PathBuf::from("/home/user/myproject/src/generated/spec"),
-                crate_root
+                crate_root,
+                Path::new("/home/user")
             )
             .unwrap(),
             "generated::spec"
@@ -3672,7 +3646,8 @@ body:
         assert_eq!(
             output_module_prefix(
                 &PathBuf::from("/home/user/myproject/src/api/gen"),
-                crate_root
+                crate_root,
+                Path::new("/home/user")
             )
             .unwrap(),
             "api::gen"
@@ -3684,11 +3659,12 @@ body:
         // Fallback path: relative output (e.g., explicit --output src/generated with relative CWD)
         let crate_root = Path::new("");
         assert_eq!(
-            output_module_prefix(Path::new("src/generated"), crate_root).unwrap(),
+            output_module_prefix(Path::new("src/generated"), crate_root, Path::new("")).unwrap(),
             "generated"
         );
         assert_eq!(
-            output_module_prefix(Path::new("src/generated/spec"), crate_root).unwrap(),
+            output_module_prefix(Path::new("src/generated/spec"), crate_root, Path::new(""))
+                .unwrap(),
             "generated::spec"
         );
     }
@@ -3698,7 +3674,7 @@ body:
         // Output not under src/ — kept as-is (user likely set generated_module_prefix explicitly)
         let crate_root = Path::new("/home/user/myproject");
         assert_eq!(
-            output_module_prefix(Path::new("generated"), crate_root).unwrap(),
+            output_module_prefix(Path::new("generated"), crate_root, Path::new("")).unwrap(),
             "generated"
         );
     }
@@ -3709,7 +3685,7 @@ body:
         let crate_root = Path::new("");
         let spec = benchmark_loaded_spec(0, 3);
         let resolved = ResolvedSpec::from_spec(spec.spec.clone());
-        let output_prefix = output_module_prefix(output, crate_root).unwrap();
+        let output_prefix = output_module_prefix(output, crate_root, Path::new("")).unwrap();
 
         let mut parsed_test_results = HashMap::new();
         parsed_test_results.insert(
@@ -3756,7 +3732,7 @@ body:
     fn benchmark_parse_and_evidence_hash_lookup_against_btree_baseline() {
         let output = Path::new("src/generated");
         let crate_root = Path::new("");
-        let output_prefix = output_module_prefix(output, crate_root).unwrap();
+        let output_prefix = output_module_prefix(output, crate_root, Path::new("")).unwrap();
         let specs = benchmark_specs(600, 8);
         let stdout = benchmark_stdout(&specs, output, crate_root);
         let observed_at = "2026-04-11T12:00:00Z";

@@ -1,0 +1,37 @@
+{
+  "spec_version": "0.3.0",
+  "id": "money/round",
+  "intent": "Round a decimal for reuse by sibling spec libraries.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "value",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal"
+  },
+  "deps": [],
+  "local_tests": [
+    {
+      "id": "rounds_half_up",
+      "expect": "round(Decimal::new(12345, 3)) == Decimal::new(1235, 2)"
+    }
+  ],
+  "generated_at": "2026-04-16T16:43:52Z",
+  "source_file": "examples/shared-spec/units/money/round.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "rounds_half_up",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-04-16T16:43:54Z",
+    "provenance": {
+      "git_commit_sha": "0b00975c84d31e75d75008b38bc1d7ca1c3bcbc9"
+    }
+  },
+  "contract_hash": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8"
+}

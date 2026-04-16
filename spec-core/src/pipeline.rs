@@ -154,6 +154,59 @@ pub fn zero_tests_ran(output: &str) -> bool {
     has_any_result
 }
 
+/// Derive the Rust module prefix used by generated tests from an output path.
+///
+/// This needs to handle both:
+/// - absolute output paths already rooted under `{crate_root}/src`
+/// - repo-relative output paths such as `examples/ecommerce/src/generated`,
+///   where the caller's cwd is above `crate_root`
+pub fn output_module_prefix(output: &Path, crate_root: &Path, cwd: &Path) -> Result<String> {
+    let absolute_output = absolutize_path(output, cwd);
+    let absolute_crate_root = absolutize_path(crate_root, cwd);
+
+    let relative = absolute_output
+        .strip_prefix(absolute_crate_root.join("src"))
+        .or_else(|_| absolute_output.strip_prefix(&absolute_crate_root))
+        .unwrap_or(output);
+
+    output_module_prefix_from_relative(relative)
+}
+
+fn output_module_prefix_from_relative(relative: &Path) -> Result<String> {
+    let mut components = relative.components().peekable();
+    if components
+        .peek()
+        .map(|component| component.as_os_str() == "src")
+        .unwrap_or(false)
+    {
+        components.next();
+    }
+
+    let parts: Vec<&str> = components
+        .filter_map(|component| match component {
+            std::path::Component::Normal(segment) => segment.to_str(),
+            _ => None,
+        })
+        .collect();
+
+    if parts.is_empty() {
+        return Err(anyhow::anyhow!(
+            "❌ could not determine output module prefix from {}",
+            relative.display()
+        ));
+    }
+
+    Ok(parts.join("::"))
+}
+
+fn absolutize_path(path: &Path, cwd: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    }
+}
+
 pub fn parse_cargo_test_output(stdout: &str) -> HashMap<String, ParsedCargoTestResult> {
     let mut results: HashMap<String, ParsedCargoTestResult> = HashMap::new();
 
@@ -506,6 +559,91 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ";
 
         assert!(!zero_tests_ran(stdout));
+    }
+
+    #[test]
+    fn output_module_prefix_absolute_crate_root_strips_src() {
+        let cwd = Path::new("/home/user");
+        let crate_root = Path::new("/home/user/myproject");
+
+        assert_eq!(
+            output_module_prefix(
+                &PathBuf::from("/home/user/myproject/src/generated"),
+                crate_root,
+                cwd,
+            )
+            .unwrap(),
+            "generated"
+        );
+        assert_eq!(
+            output_module_prefix(
+                &PathBuf::from("/home/user/myproject/src/generated/spec"),
+                crate_root,
+                cwd,
+            )
+            .unwrap(),
+            "generated::spec"
+        );
+        assert_eq!(
+            output_module_prefix(
+                &PathBuf::from("/home/user/myproject/src/api/gen"),
+                crate_root,
+                cwd,
+            )
+            .unwrap(),
+            "api::gen"
+        );
+    }
+
+    #[test]
+    fn output_module_prefix_repo_relative_output_under_crate_root_strips_prefixes() {
+        let cwd = Path::new("/repo");
+        let crate_root = Path::new("/repo/examples/ecommerce");
+
+        assert_eq!(
+            output_module_prefix(
+                Path::new("examples/ecommerce/src/generated"),
+                crate_root,
+                cwd,
+            )
+            .unwrap(),
+            "generated"
+        );
+        assert_eq!(
+            output_module_prefix(
+                Path::new("examples/ecommerce/src/generated/spec"),
+                crate_root,
+                cwd,
+            )
+            .unwrap(),
+            "generated::spec"
+        );
+    }
+
+    #[test]
+    fn output_module_prefix_relative_path_fallback_strips_src_component() {
+        let cwd = Path::new("/repo");
+        let crate_root = Path::new("/repo/examples/ecommerce");
+
+        assert_eq!(
+            output_module_prefix(Path::new("src/generated"), crate_root, cwd).unwrap(),
+            "generated"
+        );
+        assert_eq!(
+            output_module_prefix(Path::new("src/generated/spec"), crate_root, cwd).unwrap(),
+            "generated::spec"
+        );
+    }
+
+    #[test]
+    fn output_module_prefix_no_src_prefix_preserved() {
+        let cwd = Path::new("/home/user");
+        let crate_root = Path::new("/home/user/myproject");
+
+        assert_eq!(
+            output_module_prefix(Path::new("generated"), crate_root, cwd).unwrap(),
+            "generated"
+        );
     }
 
     #[test]

@@ -1934,21 +1934,15 @@ fn generate_cargo_check_on_ecommerce() {
         return;
     }
 
-    let root = repo_root();
-    let ecommerce_dir = root.join("examples/ecommerce");
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
 
     let output = run_in(
-        &root,
-        &[
-            "generate",
-            "examples/ecommerce/units",
-            "--output",
-            "examples/ecommerce/src/generated",
-        ],
+        &ecommerce_dir,
+        &["generate", "units", "--output", "src/generated"],
     );
     assert_output_success("spec generate failed for ecommerce example", &output);
 
-    let cargo_target_dir = tempfile::TempDir::new_in(root.join("target"))
+    let cargo_target_dir = tempfile::TempDir::new_in(repo_root().join("target"))
         .expect("failed to create temp cargo target dir under repo target/");
 
     let output = run_cargo(
@@ -2037,6 +2031,28 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn setup_detached_shared_example() -> (tempfile::TempDir, PathBuf, PathBuf) {
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let shared_crate_dir = temp_dir.path().join("shared-crate");
+    let shared_spec_dir = temp_dir.path().join("shared-spec");
+
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .unwrap();
+    copy_dir_recursive(&root.join("examples/shared-crate"), &shared_crate_dir).unwrap();
+    copy_dir_recursive(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+    fs::write(
+        shared_spec_dir.join("spec.toml"),
+        "[pipeline]\ncrate_root = \"../shared-crate\"\n",
+    )
+    .unwrap();
+
+    (temp_dir, shared_spec_dir, shared_crate_dir)
 }
 
 fn snapshot_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
@@ -2264,15 +2280,14 @@ fn spec_build_validates_and_runs_cargo_build() {
         return;
     }
 
-    let root = repo_root();
-    let ecommerce_dir = root.join("examples/ecommerce");
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let output = run_in(
-        &root,
+        &ecommerce_dir,
         &[
             "build",
-            "examples/ecommerce/units",
+            "units",
             "--output",
-            "examples/ecommerce/src/generated",
+            "src/generated",
             "--crate-root",
             ecommerce_dir.to_str().unwrap(),
         ],
@@ -2397,15 +2412,14 @@ fn spec_test_runs_cargo_test() {
         return;
     }
 
-    let root = repo_root();
-    let ecommerce_dir = root.join("examples/ecommerce");
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let output = run_in(
-        &root,
+        &ecommerce_dir,
         &[
             "test",
-            "examples/ecommerce/units",
+            "units",
             "--output",
-            "examples/ecommerce/src/generated",
+            "src/generated",
             "--crate-root",
             ecommerce_dir.to_str().unwrap(),
         ],
@@ -2610,15 +2624,14 @@ fn spec_build_prints_crate_root_to_stderr() {
         return;
     }
 
-    let root = repo_root();
-    let ecommerce_dir = root.join("examples/ecommerce");
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let output = run_in(
-        &root,
+        &ecommerce_dir,
         &[
             "build",
-            "examples/ecommerce/units",
+            "units",
             "--output",
-            "examples/ecommerce/src/generated",
+            "src/generated",
             "--crate-root",
             ecommerce_dir.to_str().unwrap(),
         ],
@@ -2628,6 +2641,36 @@ fn spec_build_prints_crate_root_to_stderr() {
     assert!(
         stderr.contains("spec: running cargo build in"),
         "expected progress signal in stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_resolves_relative_pipeline_crate_root_from_spec_toml() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, shared_spec_dir, _shared_crate_dir) = setup_detached_shared_example();
+    let output = run_in(
+        shared_spec_dir
+            .parent()
+            .expect("shared-spec fixture should have a parent"),
+        &[
+            "build",
+            "shared-spec/units",
+            "--output",
+            "shared-crate/src/generated",
+        ],
+    );
+
+    assert_output_success(
+        "spec build should resolve relative [pipeline].crate_root from spec.toml",
+        &output,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("spec: running cargo build in") && stderr.contains("shared-crate"),
+        "{stderr}"
     );
 }
 
@@ -4661,6 +4704,39 @@ fn spec_test_respects_pipeline_timeout_secs() {
         passport.contains("\"build_status\": \"timeout\""),
         "passport should record timeout evidence: {passport}"
     );
+}
+
+#[test]
+fn spec_test_resolves_relative_pipeline_crate_root_from_spec_toml() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, shared_spec_dir, _shared_crate_dir) = setup_detached_shared_example();
+    let output = run_in(
+        shared_spec_dir
+            .parent()
+            .expect("shared-spec fixture should have a parent"),
+        &[
+            "test",
+            "shared-spec/units",
+            "--output",
+            "shared-crate/src/generated",
+        ],
+    );
+
+    assert_output_success(
+        "shared example should resolve relative [pipeline].crate_root and pass cargo test",
+        &output,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("spec: running cargo build in")
+            && stderr.contains("shared-crate")
+            && stderr.contains("spec: running cargo test in"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("failed to spawn cargo"), "{stderr}");
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
