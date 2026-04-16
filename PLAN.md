@@ -1,11 +1,12 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m9-autoplan-restore-20260415-202850.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260416-190525.md -->
 # Next Work: M6–M10 Roadmap
 
-Status: **M8 Delivered** (2026-04-15). M9 is the next implementation milestone, narrowed to a contract-first cross-library dep slice.
+Status: **M9 Delivered** (2026-04-16). M10 is the next implementation milestone, narrowed to a local-library plan contract that turns authored change intent into truthful derived impact.
 
-Reviewed via `/autoplan` 2026-04-15 for the M9 refresh. Codex outside voice consulted; delegated
-subagents were unavailable in this thread by session policy. M5 through M8 have shipped. This
-plan covers the next two implementation milestones plus the already-shipped historical context.
+Reviewed via `/autoplan` 2026-04-16 for the M10 solidification. Codex outside voices consulted;
+delegated subagents were unavailable in this thread by session policy. M5 through M9 have
+shipped. This plan covers the next implementation milestone plus the already-shipped historical
+context that constrains it.
 
 ---
 
@@ -17,8 +18,8 @@ M6b  Health Model             ✓ shipped
      structural PR            ✓ shipped
 M7   .test.spec + minimal graph ✓ shipped
 M8   Full Graph Layer         ✓ shipped
-M9   Cross-library Deps       ← next to implement (contract-first)
-M10  Planning Boundary as Data
+M9   Cross-library Deps       ✓ shipped
+M10  Planning Boundary as Data ← next to implement
 ```
 
 **Explicitly deferred (do not front-load):**
@@ -740,6 +741,13 @@ CEO DUAL VOICES — CONSENSUS TABLE:
 | 4 | CEO | Defer observed edges out of M8 | Mechanical | P5 | The repo has no edge-level observation artifact today. | Encoding fake "observed" precision from passports |
 | 5 | CEO | Defer downstream stale propagation out of M8 | Mechanical | P3 + P5 | `spec status` currently reports observed unit truth; mixing inferred blast radius would muddy the contract. | Folding status semantics into the graph milestone |
 | 6 | CEO | Cascade M8 scope changes into M9 and M10 prerequisites/success criteria | Mechanical | P1 | The roadmap must stay internally consistent or implementation will drift immediately. | Leaving later milestones on the old assumptions |
+| 7 | CEO | Keep M10 local-library only even after M9 shipped | Taste | P3 + P5 | The repo has truthful local graph queries today, but not truthful cross-library query semantics. The complete near-term move is to prove the planning contract on one library before widening the blast radius. | Expanding M10 straight into cross-library planning |
+| 8 | CEO | Reframe M10 around change intent + derived impact, not a passive YAML note | Mechanical | P1 | The user job is understanding what changed, why, and what else to retest. A file format alone does not solve that job. | Keeping M10 as a thin parseable note format |
+| 9 | CEO | Replace authored `impacted` with derived `computed_impact` | Mechanical | P5 | Source and derived data must not share one field or the plan will rot immediately. | Authoring and exporting the same flat `impacted` list |
+| 10 | Eng | Make acceptance criteria structured and machine-readable | Mechanical | P1 + P5 | Linking acceptance to unit ids and molecule tests gives AI and humans a real contract instead of YAML-shaped prose. | Free-text-only acceptance strings |
+| 11 | Eng | Resolve plan graph scope from the enclosing library root, never from the plan file path | Mechanical | P5 | Existing file-path loaders are intentionally narrow. Reusing them for plans would under-report impact and drop sibling molecule tests. | Reusing single-file spec loading for plan impact |
+| 12 | Eng | Define action-sensitive impact semantics: `modify/remove` = current graph, `add` = unknown | Mechanical | P5 | The graph can only answer questions about nodes that already exist. Fabricating impact for `add` would be a lie. | Pretending `graph.impact()` works for all actions |
+| 13 | Eng | Use a dedicated `spec plan export` bundle instead of mutating `spec export` in M10 | Taste | P3 + P5 | The existing export bundle is already consumer-facing. A dedicated plan export is the smaller, cleaner first cut while the plan surface is still stabilizing. | Bumping the main export bundle schema for a single-plan feature |
 
 ---
 
@@ -1054,61 +1062,344 @@ CODE PATH COVERAGE
 
 ---
 
-## M10 — Planning Boundary as Data
+## M10 — Planning Boundary as Data (Change Intent + Derived Impact)
 
-**Theme:** Define the first minimal plan artifact without building a planning UI. Clarifies
-the architecture boundary between spec (verification) and planning (intent).
+**Theme:** Ship the first truthful plan contract after M9. M10 is not a planning UI and not
+cross-library change intelligence. It is the minimal authored change-set artifact that lets a
+human or AI say "these are the units I intend to change" and receive a derived local-library
+retest set without scraping prose.
 
-**Prerequisite:** M8 declared local impact complete. M10 consumes `graph.impact()` as
-advisory planning data and stays local-library only. If a future plan needs cross-library
-impact, that is a post-M9 query-contract milestone, not part of M9's first dep slice.
+**Milestone verdict:** M10 should prove one clean boundary:
+- authored plan source = intended changes + structured acceptance targets
+- derived plan output = advisory impact, computed from the current local graph
 
-### Plan Artifact Schema (.plan.spec)
+That keeps planning explicit without pretending the repo already knows future state.
+
+**User job:**
+- A developer can author a local refactor plan and immediately see which existing units and
+  molecule tests are in the current blast radius.
+- An AI agent can parse one file, validate the intended changes, and get a machine-readable
+  impact result instead of guessing from filenames and prose.
+- The system stays honest about uncertainty: existing units get derived impact, new units do not.
+
+**Prerequisite:** M9 shipped direct cross-library dep truth, but public graph queries are still
+local-library only. M10 consumes the current local `SpecGraph` contract exactly as shipped in M8/M9.
+If a future milestone wants cross-library plan impact, it must first define truthful
+cross-library `reverse_deps()` / `impact()` semantics.
+
+### Locked Boundary
+
+- One plan file at a time. M10 validates or exports a single `.plan.spec` file by explicit path.
+- The plan file must live under a resolved spec-library root. Directory-scoped graph loading is
+  anchored to that library root, never to the plan file path.
+- `changes[].unit` is local-library only in M10. Any authored `shared::...` unit ref is rejected.
+- `computed_impact` is derived output only. It is not authored in `.plan.spec`.
+- `modify` and `remove` compute current-graph impact. `add` reports `impact_status: unknown`
+  unless a later milestone adds future-edge authoring.
+- No plan execution, no progress tracking, no status mutation, no planning UI.
+- Do not widen the existing `spec export` bundle contract in M10. Plan export gets its own bundle.
+
+### Authored Schema (`.plan.spec`)
 
 ```yaml
-# feature-name.plan.spec
+# checkout-tax-refactor.plan.spec
 id: checkout-tax-refactor
-intent: "Refactor tax calculation to support tiered rates."
+intent:
+  why: "Refactor tax calculation to support tiered rates without losing checkout coverage."
 changes:
   - unit: pricing/apply_tax
     action: modify
-    acceptance: "apply_tax correctly handles tiered rates per test suite"
+    acceptance:
+      validate:
+        - pricing/apply_tax
+      molecule_tests:
+        - pricing/checkout_flow
+      notes:
+        - "tiered-rate behavior is covered by checkout_flow"
   - unit: pricing/tiered_rate
     action: add
-    acceptance: "new unit validates and generates"
-impacted:
-  - pricing/apply_discount  # downstream dep computed by spec
-  - pricing/checkout_flow   # molecule test that covers apply_tax
+    acceptance:
+      validate:
+        - pricing/tiered_rate
+notes:
+  - "M10 plans are local-library only."
 ```
 
-The `impacted` list is computed by `graph.impact()` at plan-read time and included in the
-export. It is advisory, declared blast radius data. It tells the implementer what else to
-re-test, not what to change, and it does **not** affect `spec status`.
+**Authoring rules:**
+- `id` is unique per plan file.
+- `intent.why` is required.
+- `changes` must be non-empty.
+- `changes[].unit` must be a valid local unit id, not a cross-library ref.
+- `changes[].unit` values must be unique within one plan file.
+- `action` is one of `add | modify | remove`.
+- `modify` / `remove` require the unit to exist in the current library graph.
+- `add` requires the unit id to be absent from the current library graph while still passing
+  unit-id syntax validation.
+- `acceptance.validate` lists unit ids that must validate when the work is done.
+- `acceptance.molecule_tests` lists existing molecule-test ids that must still pass.
+- `notes` fields are optional human guidance, not machine-derived truth.
 
-For M10, `graph.impact()` is evaluated from the enclosing spec-library root, not from the
-individual `.plan.spec` file path. This avoids silently dropping sibling molecule tests or
-downstream units because the loader scope was too narrow.
+### Derived Impact Output (`validate` / `export` only)
 
-### CLI
+`computed_impact` is the machine-readable answer to "what current work should I re-check?"
 
-`spec plan validate <path>` — validate plan artifact, compute impact set, report.
+```json
+{
+  "plan_id": "checkout-tax-refactor",
+  "computed_impact": {
+    "status": "partial",
+    "units": ["pricing/apply_tax", "pricing/calculate_total"],
+    "molecule_tests": ["pricing/checkout_flow"],
+    "unresolved": [
+      {
+        "unit": "pricing/tiered_rate",
+        "action": "add",
+        "reason": "current graph has no node for action=add"
+      }
+    ]
+  }
+}
+```
 
-`spec plan export <path>` — include plan artifact in export bundle.
+**Derived-impact contract:**
+- `modify` / `remove` use `graph.impact(unit_id)` from the enclosing library root.
+- Changed seed units stay in `computed_impact.units`. They are part of the retest set.
+- `add` contributes an unresolved entry, not a fabricated impact set.
+- Union impact across multiple changes is sorted and deduplicated.
+- `computed_impact` is advisory planning data only. It does **not** mutate `spec status`.
 
-No plan execution, no plan tracking, no planning UI in M10. The plan is a data artifact
-that AI agents and humans read to understand scope. The value is making the intent explicit
-and machine-readable, not automating the work.
+### CLI Contract
+
+`spec plan validate <file>`
+- accepts one `.plan.spec` file path
+- rejects directories
+- resolves the enclosing library root before loading units or molecule tests
+- validates authored shape plus action-specific rules
+- computes per-change and union `computed_impact`
+- should support `--format json` from the first cut so agents do not scrape terminal prose
+
+`spec plan export <file>`
+- emits a dedicated `PlanExportBundle`, not the existing `ExportBundle`
+- includes the authored plan plus derived `computed_impact`
+- keeps plan export schema evolution decoupled from the unit export contract
+
+No plan discovery in M10. The caller passes one plan file explicitly.
+
+### Dedicated Export Shape
+
+```json
+{
+  "schema_version": 1,
+  "spec_version": "0.3.0",
+  "exported_at": "2026-04-16T00:00:00Z",
+  "plan": { "...authored plan..." },
+  "computed_impact": { "...derived output..." },
+  "warnings": []
+}
+```
+
+This is intentionally separate from `spec export`. The existing export bundle is already a
+consumer-facing contract for units, molecule tests, passports, and graph edges. M10 should not
+take on unrelated schema churn just to ship one plan artifact.
+
+### Architecture Review
+
+```text
+.plan.spec
+    │
+    ├── authored change intent
+    │       └── validate change ids + actions + acceptance targets
+    │
+    └── spec plan validate/export
+            │
+            ├── resolve enclosing library root (canonical, repo-bounded)
+            ├── load units + molecule tests from that root
+            ├── validate against current local graph
+            ├── run graph.impact() per supported action
+            └── emit PlanReport / PlanExportBundle
+```
+
+**Architecture constraints:**
+- Plan scope resolution must reuse the existing workspace-root and repo-root truth from
+  [spec-cli/src/config.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/config.rs:1),
+  but with a dedicated plan-root resolver instead of the current single-file spec loader.
+- The plan layer consumes the current public `SpecGraph` contract from
+  [spec-core/src/graph.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/graph.rs:56),
+  not graph internals.
+- Symlink traversal and out-of-root paths must be rejected or skipped explicitly during
+  plan-root scanning. M10 cannot widen trust boundaries by accident.
+
+### What Already Exists
+
+| Sub-problem | Existing code | Reuse / implication |
+|---|---|---|
+| Local declared impact queries | [spec-core/src/graph.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/graph.rs:56) | Reuse `ImpactSet` as the current-graph truth for `modify/remove`. |
+| Workspace + repo boundary knowledge | [spec-cli/src/config.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/config.rs:1) | Reuse resolved workspace/repo roots when anchoring plan scope. |
+| Validation + JSON diagnostics contract | [spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs:56) | Mirror the existing `--format json` posture instead of inventing prose-only output. |
+| Directory spec loading | [spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs:2137) | Reuse only after adding a dedicated plan-root resolver. File-scoped loading is intentionally too narrow. |
+| Molecule test loading | [spec-core/src/loader.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/loader.rs:232) | Reuse for local-library test discovery once the root is resolved. |
+| Existing export versioning pattern | [spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs:22) | Reuse the versioned bundle pattern, but keep M10 in a dedicated plan export surface. |
+
+### Failure Modes
+
+| Codepath | Failure mode | Test covers? | Error handling? | Silent? |
+|---|---|---|---|---|
+| plan root resolution | plan file outside any resolved library root | no | fail with explicit path/root error | no |
+| plan root scan | symlink escapes the library or repo root | no | reject or skip with explicit warning/error | **critical gap** |
+| single-file invocation | graph built from the plan file path instead of the library root | no | dedicated resolver required | **critical gap** |
+| `computed_impact` projection | authored and derived impact shapes drift | no | derived-only contract | **critical gap** |
+| `action=add` | fake impact reported for a unit that is not yet in the graph | no | `impact_status: unknown` | no |
+| plan export | existing unit export schema churns for one new artifact | yes (by contract choice) | separate bundle | no |
+| conflicting changes | same unit listed twice with incompatible actions | no | fail validation | no |
 
 ### Success Criteria
 
-- `spec plan validate` accepts `.plan.spec` files and validates changes action-sensitively:
-  - `modify` / `remove` require an existing unit id
-  - `add` requires a non-existent unit id plus valid id syntax
-- `spec plan validate` computes impact via `graph.impact()` from the enclosing spec-library root.
-- Export includes plan artifact and computed `impacted` list.
-- Schema documented in AGENTS.md so AI agents can read and write plan artifacts.
-- Integration tests: valid plan, unknown unit id for `modify`, invalid duplicate unit id for `add`,
-  and impact computation including downstream molecule tests.
+- `spec plan validate <file>` accepts one `.plan.spec` file and rejects directories.
+- Plan validation resolves the enclosing library root before loading the graph.
+- `modify` / `remove` require an existing local unit id.
+- `add` requires a missing local unit id and reports derived impact as unresolved/unknown.
+- Cross-library unit ids in `changes[].unit` are rejected in M10.
+- `computed_impact` is derived-only, structured as `{status, units, molecule_tests, unresolved}`.
+- `spec plan export <file>` emits a dedicated versioned plan export bundle.
+- Schema is documented in AGENTS.md and README-level machine-readable docs, not only agent prompts.
+- Integration tests cover:
+  - valid local-only modify plan
+  - valid mixed modify/add plan
+  - unknown unit id for `modify`
+  - duplicate/conflicting `changes[].unit`
+  - cross-library unit ref rejected in a plan
+  - single-file nested plan path still loads the full library graph
+  - symlink escape rejected or skipped explicitly
+  - impact union includes downstream molecule tests and keeps changed seed units
+  - plan export schema/version behavior
+
+---
+
+## M10 Review Record (2026-04-16)
+
+`/autoplan` was run against the refreshed M10 scope and grounded against
+[docs/north_star_v0.2.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/north_star_v0.2.md:101),
+[docs/high_level_technical_architecture_v0.2.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/high_level_technical_architecture_v0.2.md:102),
+[docs/roadmap_and_release_shape_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/roadmap_and_release_shape_v0.1.md:413),
+[spec-core/src/graph.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/graph.rs:56),
+[spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs:22),
+[spec-cli/src/config.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/config.rs:1),
+[spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs:56),
+and [spec-core/src/loader.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/loader.rs:232).
+
+Outcome:
+- CEO correction: M10 should solve change intelligence for one library, not merely introduce a
+  file extension.
+- Eng correction: root resolution, symlink boundaries, action-sensitive impact semantics, and a
+  dedicated plan export contract must be explicit in the milestone, not left to implementer taste.
+- Design review skipped, no UI scope.
+- Outside voice: Codex ran twice (CEO + Eng). Delegated subagents were unavailable in this thread
+  by session policy.
+- Test artifact: [spensermcconnell-main-m10-test-plan-20260416-191129.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-main-m10-test-plan-20260416-191129.md)
+- Unresolved plan decisions: 2 taste choices, 0 user-blocking challenges
+
+### CEO Dual Voices — Consensus Table
+
+```text
+CEO DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Premises valid?                   N/A     Partial single-model concern
+  2. Right problem to solve?           N/A     No      single-model concern
+  3. Scope calibration correct?        N/A     Partial taste disagreement
+  4. Alternatives sufficiently explored?N/A    No      single-model concern
+  5. Competitive/market risks covered? N/A     Partial single-model concern
+  6. 6-month trajectory sound?         N/A     Partial taste disagreement
+═══════════════════════════════════════════════════════════════
+```
+
+**CODEX SAYS (CEO — strategy challenge):**
+- Do not ship YAML theater. M10 must change how developers and AI understand intended change.
+- Free-text acceptance and authored `impacted` lists would rot immediately.
+- The roadmap is more credible if M10 proves a local-library planning contract first, then opens a
+  separate cross-library change-intelligence milestone.
+
+**CLAUDE SUBAGENT (CEO — independent review):** unavailable in this run. Session policy for this
+thread does not allow delegated sub-agents unless the user explicitly asks for delegation.
+
+### Design Review
+
+Skipped, no UI scope. M10 is a CLI/data-artifact milestone.
+
+### ENG Dual Voices — Consensus Table
+
+```text
+ENG DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Architecture sound?               N/A     Partial single-model concern
+  2. Test coverage sufficient?         N/A     No      single-model concern
+  3. Performance risks addressed?      N/A     Yes     single-model positive
+  4. Security threats covered?         N/A     No      single-model concern
+  5. Error paths handled?              N/A     No      single-model concern
+  6. Deployment risk manageable?       N/A     Yes     single-model positive
+═══════════════════════════════════════════════════════════════
+```
+
+**CODEX SAYS (eng — architecture challenge):**
+- Reusing single-file loaders for `spec plan validate <file>` would under-report sibling units and
+  molecule tests.
+- The plan layer widens a real trust boundary unless root-scoped path resolution and symlink
+  handling are made explicit.
+- `action=add` cannot truthfully use current-graph impact and must report uncertainty explicitly.
+- Plan export needs a stable bundle contract now, not an implied future schema bump.
+
+**CLAUDE SUBAGENT (eng — independent review):** unavailable in this run. Session policy for this
+thread does not allow delegated sub-agents unless the user explicitly asks for delegation.
+
+### Cross-Phase Themes
+
+- **Truth before convenience** — both passes converged on the same rule: do not author or export
+  derived impact as if it were source truth.
+- **Scope from roots, not files** — both passes independently pushed the same implementation
+  constraint: plan validation must resolve the library root first or it will lie.
+
+### NOT in Scope (M10 pass)
+
+- Cross-library plan changes or cross-library impact queries
+- Plan execution, task tracking, or planning UI
+- Future-edge authoring for `action=add`
+- Automatic plan discovery during `spec export`
+- Local-test-level acceptance target identity
+
+### Completion Summary
+
+```text
+  +====================================================================+
+  |                M10 /autoplan REVIEW — COMPLETION SUMMARY           |
+  +====================================================================+
+  | Mode selected        | SELECTIVE_EXPANSION                         |
+  | Premise gate         | implicit via "solidify M10 after M9 landed" |
+  | Section 1  (Arch)    | 4 contract issues fixed in-plan             |
+  | Section 2  (Errors)  | failure modes updated, 3 critical gaps      |
+  | Section 3  (Security)| 2 path/root boundary issues named           |
+  | Section 4  (Data/UX) | skipped, no UI scope                        |
+  | Section 5  (Quality) | 3 schema/contract drift issues fixed        |
+  | Section 6  (Tests)   | diagram + QA artifact produced              |
+  | Section 7  (Perf)    | no new runtime hotspot beyond root scan     |
+  | Section 8  (Observ)  | skipped, no runtime surface in M10          |
+  | Section 9  (Deploy)  | no deploy surface                           |
+  | Section 10 (Future)  | post-M10 cross-library follow-on named      |
+  | Section 11 (Design)  | SKIPPED (no UI scope)                       |
+  +--------------------------------------------------------------------+
+  | NOT in scope         | written (5 items)                           |
+  | What already exists  | written                                     |
+  | Failure modes        | 7 rows, 3 critical gaps                     |
+  | Test artifact        | written                                     |
+  | Outside voice        | ran (codex-only)                            |
+  | Unresolved decisions | 2 taste choices, 0 blockers                 |
+  +====================================================================+
+```
+
+The M10 section above is now the authoritative source of truth. This review record stays only as
+historical evidence for why the boundary and contract were locked this way.
 
 ---
 
@@ -1460,9 +1751,9 @@ New TODOS to add:
 
 ---
 
-**Document version:** 2026-04-15
-**Review status:** Approved via /autoplan (M9 refresh)  
-**Next review checkpoint:** Before implementation on M9
+**Document version:** 2026-04-16
+**Review status:** M10 refreshed via /autoplan, awaiting approval gate
+**Next review checkpoint:** Before implementation on M10
 
 ## GSTACK REVIEW REPORT
 

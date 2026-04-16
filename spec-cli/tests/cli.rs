@@ -2514,11 +2514,11 @@ fn spec_build_crate_root_config_vs_flag_precedence() {
         return;
     }
 
-    let root = repo_root();
-    let ecommerce_dir = root.join("examples/ecommerce");
+    let (_fixture, ecommerce_dir) = copy_ecommerce_example();
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     write_minimal_units_dir(&units_dir);
+    let generated_dir = ecommerce_dir.join("src/generated");
 
     // Write a spec.toml with a wrong crate_root; the --crate-root flag should override it.
     fs::write(
@@ -2531,7 +2531,7 @@ fn spec_build_crate_root_config_vs_flag_precedence() {
         "build",
         units_dir.to_str().unwrap(),
         "--output",
-        temp_dir.path().join("out").to_str().unwrap(),
+        generated_dir.to_str().unwrap(),
         "--crate-root",
         ecommerce_dir.to_str().unwrap(),
     ]);
