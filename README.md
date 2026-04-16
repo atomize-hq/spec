@@ -197,7 +197,7 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 
 ## Validation error codes
 
-`spec validate --format json` returns error objects with a `code` field. These are the recognized codes in v0.5:
+`spec validate --format json` returns error objects with a `code` field. These are the recognized codes returned by the current CLI:
 
 | Code | Description |
 |------|-------------|
@@ -211,6 +211,9 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_DUPLICATE_ID` | Two unit files share the same `id` |
 | `SPEC_DEP_COLLISION` | Two deps resolve to the same generated function name |
 | `SPEC_MISSING_DEP` | A declared dep has no matching unit in the spec set |
+| `SPEC_UNKNOWN_LIBRARY_NAMESPACE` | A dep references a library alias that is not configured in `[libraries]` |
+| `SPEC_CROSS_LIBRARY_DEP_NOT_FOUND` | A cross-library dep has no matching unit in the resolved library set |
+| `SPEC_LIBRARY_CRATE_ALIAS_MISSING` | The root crate is missing the Cargo dependency alias required by a cross-library dep |
 | `SPEC_LIBRARY_PATH_NOT_FOUND` | A `[libraries]` entry points to a path that does not exist |
 | `SPEC_LIBRARY_OUT_OF_ROOT` | A `[libraries]` entry resolves outside the repo root |
 | `SPEC_LIBRARY_ALIAS_SELF` | A `[libraries]` entry points back to the invoking library root |
