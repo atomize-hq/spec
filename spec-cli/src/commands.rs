@@ -26,11 +26,13 @@ use spec_core::types::{
     DepRef, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef, ResolvedMoleculeTest, ResolvedSpec,
 };
 use spec_core::validator::{
-    QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_deps_exist_with_options,
-    validate_full_with_options, validate_molecule_test_covers, validate_molecule_test_semantic,
-    validate_no_duplicate_ids, validate_no_duplicate_molecule_test_ids,
-    validate_no_duplicate_qualified_ids, validate_qualified_deps_exist_with_options,
+    QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
+    validate_molecule_test_covers, validate_molecule_test_semantic,
+    validate_no_duplicate_molecule_test_ids, validate_no_duplicate_qualified_ids,
+    validate_qualified_deps_exist_with_options,
 };
+#[cfg(test)]
+use spec_core::validator::{validate_deps_exist_with_options, validate_no_duplicate_ids};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Write;
@@ -112,7 +114,7 @@ struct JsonStatusUnit {
     evidence_at: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct JsonErrorEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     unit: Option<String>,
@@ -660,47 +662,85 @@ fn compute_health_status(
 }
 
 fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
-    let (specs, loader_errors, _loader_warnings, total_files) = collect_specs(path)?;
-    let config = load_workspace_config(path)?;
+    let context = load_workspace_context(path)?;
+    let config = context.config;
+    let (root_specs, root_loader_errors, _root_loader_warnings, root_total_files) =
+        collect_specs(path)?;
+    let (imported_libraries, imported_loader_errors, _imported_loader_warnings, _imported_total) =
+        load_imported_validation_specs(&context.libraries);
+    let validation_specs = ValidationSpecCollection {
+        root_specs,
+        imported_libraries,
+        loader_errors: Vec::new(),
+        loader_warnings: Vec::new(),
+        total_files: root_total_files,
+    };
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (validation_errors, _validation_warnings) = finish_validation(&specs, &validation_options);
-    let id_by_path: HashMap<String, String> = specs
-        .iter()
+    let failed_import_aliases =
+        imported_library_aliases_with_loader_errors(&imported_loader_errors, &context.libraries);
+    let (validation_errors, _validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
+    let mut validation_errors = suppress_cross_library_dep_not_found_for_failed_imports(
+        validation_errors,
+        &failed_import_aliases,
+    );
+    validation_errors.extend(validate_library_crate_aliases(
+        &validation_specs.root_specs,
+        path,
+        &config,
+    ));
+
+    let id_by_path: HashMap<String, String> = validation_specs
+        .all_specs()
+        .into_iter()
         .map(|s| (s.source.file_path.clone(), s.spec.id.clone()))
         .collect();
-    let has_loader_errors = !loader_errors.is_empty();
+    let root_paths: HashSet<String> = validation_specs
+        .root_specs
+        .iter()
+        .map(|spec| spec.source.file_path.clone())
+        .collect();
 
-    // Convert loader errors to JSON entries (non-consuming borrow) so they can be
-    // surfaced in JSON mode where print_diagnostics is not called.
-    let loader_error_entries: Vec<JsonErrorEntry> = loader_errors
+    let mut errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
+    let mut global_errors = root_loader_errors;
+    global_errors.extend(imported_loader_errors);
+    for err in validation_errors {
+        let entry = spec_error_to_json_entry(&err, &id_by_path);
+        let root_error_paths: Vec<String> = error_paths(&err)
+            .into_iter()
+            .filter(|path| root_paths.contains(path))
+            .collect();
+        if root_error_paths.is_empty() {
+            global_errors.push(err);
+            continue;
+        }
+        for path in root_error_paths {
+            errors_by_path.entry(path).or_default().push(entry.clone());
+        }
+    }
+    let has_global_errors = !global_errors.is_empty();
+
+    // JSON mode uses loader_errors as the existing top-level bucket for diagnostics that do not
+    // attach to a root-library status row, including imported-library failures.
+    let loader_error_entries: Vec<JsonErrorEntry> = global_errors
         .iter()
         .map(|err| spec_error_to_json_entry(err, &id_by_path))
         .collect();
 
-    let mut errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
-    for err in &validation_errors {
-        for path in error_paths(err) {
-            errors_by_path
-                .entry(path)
-                .or_default()
-                .push(spec_error_to_json_entry(err, &id_by_path));
-        }
-    }
-
-    // Text mode emits loader errors as human-readable diagnostics;
-    // JSON mode surfaces them in the response's loader_errors field.
-    if has_loader_errors && matches!(format, OutputFormat::Text) {
+    // Text mode emits global diagnostics as human-readable output; JSON mode surfaces them in
+    // the response's loader_errors field to preserve the existing status contract.
+    if has_global_errors && matches!(format, OutputFormat::Text) {
         let mut diagnostics = DiagnosticMap::new();
-        for err in loader_errors {
+        for err in global_errors {
             push_error(&mut diagnostics, err);
         }
         print_diagnostics(&diagnostics);
     }
 
-    if total_files == 0 && specs.is_empty() && !has_loader_errors {
+    if root_total_files == 0 && validation_specs.root_specs.is_empty() && !has_global_errors {
         match format {
             OutputFormat::Text => {
                 println!("0 units found, nothing to status.");
@@ -719,10 +759,10 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         return Ok(());
     }
 
-    let mut units = Vec::with_capacity(specs.len());
-    let mut needs_nonzero_exit = has_loader_errors;
+    let mut units = Vec::with_capacity(validation_specs.root_specs.len());
+    let mut needs_nonzero_exit = has_global_errors;
 
-    for spec in &specs {
+    for spec in &validation_specs.root_specs {
         let source_path = Path::new(&spec.source.file_path);
         let passport = match read_passport(source_path) {
             Ok(passport) => passport,
@@ -778,6 +818,39 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn imported_library_aliases_with_loader_errors(
+    loader_errors: &[spec_core::SpecError],
+    libraries: &[ResolvedLibrary],
+) -> HashSet<String> {
+    libraries
+        .iter()
+        .filter(|library| {
+            loader_errors.iter().any(|err| {
+                error_paths(err)
+                    .into_iter()
+                    .any(|path| Path::new(&path).starts_with(&library.root))
+            })
+        })
+        .map(|library| library.alias.clone())
+        .collect()
+}
+
+fn suppress_cross_library_dep_not_found_for_failed_imports(
+    errors: Vec<spec_core::SpecError>,
+    failed_import_aliases: &HashSet<String>,
+) -> Vec<spec_core::SpecError> {
+    errors
+        .into_iter()
+        .filter(|err| match err {
+            spec_core::SpecError::CrossLibraryDepNotFound { dep, .. } => DepRef::parse(dep)
+                .ok()
+                .and_then(|dep_ref| dep_ref.library_alias().map(str::to_string))
+                .is_none_or(|alias| !failed_import_aliases.contains(&alias)),
+            _ => true,
+        })
+        .collect()
 }
 
 fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
@@ -2151,6 +2224,7 @@ fn validate_molecule_tests(
     (errors, warnings)
 }
 
+#[cfg(test)]
 fn finish_validation(
     specs: &[LoadedSpec],
     options: &ValidationOptions,

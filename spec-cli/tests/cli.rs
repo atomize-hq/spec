@@ -6094,3 +6094,174 @@ fn generate_rejects_missing_library_crate_alias_before_writing_output() {
         "generation should fail before writing output"
     );
 }
+
+#[test]
+fn status_reports_valid_cross_library_unit_as_untested_without_dep_errors() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units"]);
+    assert!(
+        !output.status.success(),
+        "untested status should exit non-zero until evidence exists"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("pricing/apply_discount"), "{stdout}");
+    assert!(stdout.contains("untested"), "{stdout}");
+    assert!(
+        !stdout.contains("SPEC_CROSS_LIBRARY_DEP_NOT_FOUND"),
+        "{stdout}"
+    );
+    assert!(stderr.is_empty(), "{stderr}");
+}
+
+#[test]
+fn status_json_reports_cross_library_unit_as_untested_without_loader_errors() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "untested status should exit non-zero until evidence exists"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0]["id"], "pricing/apply_discount");
+    assert_eq!(units[0]["status"], "untested");
+    assert_eq!(units[0]["errors"].as_array().unwrap().len(), 0);
+    assert!(
+        json.get("loader_errors").is_none(),
+        "expected no global loader_errors, got: {json:?}"
+    );
+}
+
+#[test]
+fn status_marks_missing_library_crate_alias_as_invalid() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &[]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(!output.status.success(), "status should fail");
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "invalid");
+    let errors = units[0]["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "expected SPEC_LIBRARY_CRATE_ALIAS_MISSING, got: {errors:?}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CROSS_LIBRARY_DEP_NOT_FOUND"),
+        "unexpected dep-not-found error, got: {errors:?}"
+    );
+}
+
+#[test]
+fn status_surfaces_imported_library_loader_errors_globally_without_misreporting_root_unit() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    fs::create_dir_all(fixture.shared_root.join("units/money")).unwrap();
+    fs::write(
+        fixture.shared_root.join("units/money/round.unit.spec"),
+        "not: valid: yaml: [unclosed",
+    )
+    .unwrap();
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(!output.status.success(), "status should fail");
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0]["status"], "untested");
+    assert_eq!(units[0]["errors"].as_array().unwrap().len(), 0);
+
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_YAML_PARSE"),
+        "expected imported loader error, got: {loader_errors:?}"
+    );
+    assert!(
+        !loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CROSS_LIBRARY_DEP_NOT_FOUND"),
+        "unexpected dep-not-found global error, got: {loader_errors:?}"
+    );
+}
