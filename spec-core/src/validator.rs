@@ -720,7 +720,24 @@ pub fn validate_molecule_test_covers(
     }
 
     for cover_id in &test.test.covers {
-        if !unit_ids.contains(cover_id.as_str()) {
+        let dep_ref = match DepRef::parse(cover_id) {
+            Ok(dep_ref) => dep_ref,
+            Err(err) => {
+                errors.push(SpecError::SchemaValidation {
+                    message: err.to_string(),
+                    path: test.source.file_path.clone(),
+                });
+                continue;
+            }
+        };
+
+        if dep_ref.library_alias().is_some() {
+            errors.push(SpecError::CrossLibraryMoleculeCoverUnsupported {
+                cover_id: cover_id.clone(),
+                test_id: test.test.id.clone(),
+                test_path: test.source.file_path.clone(),
+            });
+        } else if !unit_ids.contains(dep_ref.unit_id()) {
             errors.push(SpecError::MoleculeCoversNotFound {
                 cover_id: cover_id.clone(),
                 test_id: test.test.id.clone(),
@@ -1079,6 +1096,32 @@ local_tests:
                 assert_eq!(test_path, "test/pricing/rounding_flow.test.spec");
             }
             other => panic!("expected MoleculeCoversCollision, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_validate_molecule_test_covers_rejects_cross_library_cover_without_collision() {
+        let molecule_test = create_molecule_test_spec(
+            "pricing/rounding_flow",
+            vec!["shared::money/round", "money/round"],
+        );
+        let unit_ids: HashSet<&str> = ["money/round"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(warnings.is_empty());
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            SpecError::CrossLibraryMoleculeCoverUnsupported {
+                cover_id,
+                test_id,
+                test_path,
+            } => {
+                assert_eq!(cover_id, "shared::money/round");
+                assert_eq!(test_id, "pricing/rounding_flow");
+                assert_eq!(test_path, "test/pricing/rounding_flow.test.spec");
+            }
+            other => panic!("expected CrossLibraryMoleculeCoverUnsupported, got {other:?}"),
         }
     }
 

@@ -167,6 +167,15 @@ pub enum SpecError {
         test_path: String,
     },
 
+    #[error(
+        "cross-library molecule cover '{cover_id}' is not supported in M9 for test '{test_id}' at {test_path}"
+    )]
+    CrossLibraryMoleculeCoverUnsupported {
+        cover_id: String,
+        test_id: String,
+        test_path: String,
+    },
+
     #[error("Duplicate molecule test ID '{id}' in {file1} and {file2}")]
     DuplicateMoleculeTestId {
         id: String,

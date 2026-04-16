@@ -231,6 +231,7 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_GENERATOR` | Code generation failure |
 | `SPEC_OUTPUT_DIR` | Output directory creation or safety check failed |
 | `SPEC_MISSING_MARKER` | Output dir lacks the `.spec-generated` marker — refusing to clean |
+| `SPEC_MOLECULE_CROSS_LIBRARY_COVERS_UNSUPPORTED` | A molecule test `covers` entry references another library, which remains unsupported in M9 |
 | `SPEC_RESERVED_UNIT_NAME` | A slash-delimited spec `id` contains a reserved segment such as `molecule_tests` |
 
 ## Consuming Generated Code

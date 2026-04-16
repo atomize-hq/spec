@@ -6464,13 +6464,38 @@ body:
         ),
     );
 
-    let output = run_in(&fixture.app_root, &["validate", "units"]);
+    let output = run_in(
+        &fixture.app_root,
+        &["validate", "units", "--format", "json"],
+    );
     assert!(!output.status.success(), "validate should fail");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("shared::money/round"), "{stderr}");
     assert!(
-        stderr.contains("invalid format") || stderr.contains("Schema validation failed"),
-        "{stderr}"
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one cross-library cover error");
+
+    let error = &errors[0];
+    assert_eq!(
+        error["code"],
+        "SPEC_MOLECULE_CROSS_LIBRARY_COVERS_UNSUPPORTED"
+    );
+    assert_ne!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert_eq!(error["path"], "units/pricing/discount_flow.test.spec");
+    assert_eq!(error["dep"], "shared::money/round");
+    assert_eq!(error["id"], "pricing/discount_flow");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("cross-library molecule cover 'shared::money/round' is not supported in M9"),
+        "unexpected message: {}",
+        error["message"]
     );
 }
 

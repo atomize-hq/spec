@@ -2540,6 +2540,9 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::OutputDir { .. } => "SPEC_OUTPUT_DIR",
         spec_core::SpecError::MissingMarker { .. } => "SPEC_MISSING_MARKER",
         spec_core::SpecError::MoleculeCoversNotFound { .. } => "SPEC_MOLECULE_COVERS_NOT_FOUND",
+        spec_core::SpecError::CrossLibraryMoleculeCoverUnsupported { .. } => {
+            "SPEC_MOLECULE_CROSS_LIBRARY_COVERS_UNSUPPORTED"
+        }
         spec_core::SpecError::DuplicateMoleculeTestId { .. } => "SPEC_DUPLICATE_MOLECULE_ID",
         spec_core::SpecError::MoleculeCoversCollision { .. } => "SPEC_MOLECULE_COVERS_COLLISION",
         spec_core::SpecError::MoleculeBodyRustMustBeBlock { .. } => {
@@ -2743,6 +2746,17 @@ fn spec_error_to_json_entry(
             dep: Some(cover_id.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::CrossLibraryMoleculeCoverUnsupported {
+            cover_id,
+            test_id,
+            test_path,
+        } => ErrorFields {
+            path: Some(test_path.clone()),
+            id: Some(test_id.clone()),
+            dep: Some(cover_id.clone()),
+            message: Some(err.to_string()),
+            ..Default::default()
+        },
         spec_core::SpecError::DuplicateMoleculeTestId { id, file1, file2 } => ErrorFields {
             path: Some(file1.clone()),
             id: Some(id.clone()),
@@ -2831,6 +2845,7 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::Io(_)
         | spec_core::SpecError::Json(_) => Vec::new(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
+        | spec_core::SpecError::CrossLibraryMoleculeCoverUnsupported { test_path, .. }
         | spec_core::SpecError::MoleculeCoversCollision { test_path, .. }
         | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
         | spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => {
@@ -2955,6 +2970,7 @@ fn error_key(err: &spec_core::SpecError) -> String {
             cargo_toml: None, ..
         } => "validation".to_string(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
+        | spec_core::SpecError::CrossLibraryMoleculeCoverUnsupported { test_path, .. }
         | spec_core::SpecError::MoleculeCoversCollision { test_path, .. }
         | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
         | spec_core::SpecError::MoleculeBodyContainsUnsafe { test_path } => test_path.clone(),
