@@ -3,7 +3,8 @@
 //! This module provides the foundation for M8's full graph layer.
 //! It models units, molecule tests, and the edges between them (dep and covers).
 
-use crate::types::{LoadedMoleculeTest, LoadedSpec};
+use crate::types::{DepRef, LoadedMoleculeTest, LoadedSpec};
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A node representing a unit in the spec graph
@@ -21,12 +22,33 @@ pub struct MoleculeTestNode {
 }
 
 /// An edge in the spec graph, either a dependency or a covers relationship
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SpecEdge {
     /// A unit depends on another unit
-    Dep { from: String, to: String },
+    Dep { from: String, to: DepRef },
     /// A molecule test covers a unit
     Covers { test: String, unit: String },
+}
+
+impl SpecEdge {
+    fn sort_key(&self) -> (u8, &str, String) {
+        match self {
+            Self::Dep { from, to } => (0, from.as_str(), to.authored()),
+            Self::Covers { test, unit } => (1, test.as_str(), unit.clone()),
+        }
+    }
+}
+
+impl PartialOrd for SpecEdge {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SpecEdge {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.sort_key().cmp(&other.sort_key())
+    }
 }
 
 /// The local declared blast radius for a seed unit.
@@ -78,14 +100,18 @@ impl SpecGraph {
 
         for u in units {
             for dep in &u.spec.deps {
+                let dep_ref =
+                    DepRef::parse(dep).expect("SpecGraph::build assumes validated dep refs");
                 edges.push(SpecEdge::Dep {
                     from: u.spec.id.clone(),
-                    to: dep.clone(),
+                    to: dep_ref.clone(),
                 });
-                rev_dep_index
-                    .entry(dep.clone())
-                    .or_default()
-                    .push(u.spec.id.clone());
+                if dep_ref.library_alias().is_none() {
+                    rev_dep_index
+                        .entry(dep_ref.unit_id().to_string())
+                        .or_default()
+                        .push(u.spec.id.clone());
+                }
             }
         }
 
@@ -290,7 +316,7 @@ mod tests {
             [
                 SpecEdge::Dep {
                     from: "pricing/apply_discount".to_string(),
-                    to: "money/round".to_string(),
+                    to: DepRef::local("money/round"),
                 },
                 SpecEdge::Covers {
                     test: "pricing/a_test".to_string(),
@@ -439,6 +465,34 @@ mod tests {
                     "service/top".to_string(),
                 ],
                 molecule_tests: vec!["tests/top".to_string()],
+            })
+        );
+    }
+
+    #[test]
+    fn build_graph_keeps_external_dep_edges_but_local_queries_ignore_them() {
+        let graph = SpecGraph::build(
+            &[
+                make_loaded_spec("pricing/apply_discount", vec!["shared::money/round"]),
+                make_loaded_spec("money/round", vec![]),
+            ],
+            &[],
+        );
+
+        assert_eq!(
+            graph.edges(),
+            [SpecEdge::Dep {
+                from: "pricing/apply_discount".to_string(),
+                to: DepRef::external("shared", "money/round"),
+            }]
+            .as_slice()
+        );
+        assert_eq!(graph.reverse_deps("money/round"), Some(vec![]));
+        assert_eq!(
+            graph.impact("money/round"),
+            Some(ImpactSet {
+                units: vec!["money/round".to_string()],
+                molecule_tests: vec![],
             })
         );
     }

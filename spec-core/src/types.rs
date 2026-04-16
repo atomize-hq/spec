@@ -6,6 +6,7 @@
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Raw parsed form from YAML (mirrors schema structure)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -110,6 +111,167 @@ pub struct LoadedSpec {
     pub spec: SpecStruct,
 }
 
+/// A library-qualified unit identity. `library == None` represents the local/root library.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct QualifiedUnitRef {
+    library: Option<String>,
+    unit_id: String,
+}
+
+impl QualifiedUnitRef {
+    pub fn local(unit_id: impl Into<String>) -> Self {
+        Self {
+            library: None,
+            unit_id: unit_id.into(),
+        }
+    }
+
+    pub fn new(library: Option<impl Into<String>>, unit_id: impl Into<String>) -> Self {
+        Self {
+            library: library.map(Into::into),
+            unit_id: unit_id.into(),
+        }
+    }
+
+    pub fn library(&self) -> Option<&str> {
+        self.library.as_deref()
+    }
+
+    pub fn unit_id(&self) -> &str {
+        &self.unit_id
+    }
+
+    pub fn callable_name(&self) -> &str {
+        callable_name(&self.unit_id)
+    }
+
+    pub fn authored(&self) -> String {
+        match &self.library {
+            Some(library) => format!("{library}::{}", self.unit_id),
+            None => self.unit_id.clone(),
+        }
+    }
+}
+
+impl fmt::Display for QualifiedUnitRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.authored())
+    }
+}
+
+/// Parsed identity for an authored dep string.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DepRef {
+    library_alias: Option<String>,
+    unit_id: String,
+}
+
+impl DepRef {
+    pub fn local(unit_id: impl Into<String>) -> Self {
+        Self {
+            library_alias: None,
+            unit_id: unit_id.into(),
+        }
+    }
+
+    pub fn external(library_alias: impl Into<String>, unit_id: impl Into<String>) -> Self {
+        Self {
+            library_alias: Some(library_alias.into()),
+            unit_id: unit_id.into(),
+        }
+    }
+
+    pub fn parse(authored: &str) -> Result<Self, DepRefParseError> {
+        let authored = authored.trim();
+        if authored.is_empty() {
+            return Err(DepRefParseError::InvalidFormat {
+                authored: authored.to_string(),
+            });
+        }
+
+        if let Some((library_alias, unit_id)) = authored.split_once("::") {
+            if library_alias.is_empty() || unit_id.is_empty() || unit_id.contains("::") {
+                return Err(DepRefParseError::InvalidFormat {
+                    authored: authored.to_string(),
+                });
+            }
+
+            validate_dep_segment(library_alias, authored)?;
+            validate_unit_id(unit_id, authored)?;
+
+            Ok(Self::external(library_alias, unit_id))
+        } else {
+            validate_unit_id(authored, authored)?;
+            Ok(Self::local(authored))
+        }
+    }
+
+    pub fn library_alias(&self) -> Option<&str> {
+        self.library_alias.as_deref()
+    }
+
+    pub fn unit_id(&self) -> &str {
+        &self.unit_id
+    }
+
+    pub fn callable_name(&self) -> &str {
+        callable_name(&self.unit_id)
+    }
+
+    pub fn authored(&self) -> String {
+        match &self.library_alias {
+            Some(library_alias) => format!("{library_alias}::{}", self.unit_id),
+            None => self.unit_id.clone(),
+        }
+    }
+
+    pub fn to_qualified(&self, current_library: Option<&str>) -> QualifiedUnitRef {
+        QualifiedUnitRef::new(
+            self.library_alias
+                .as_deref()
+                .or(current_library)
+                .map(str::to_string),
+            self.unit_id.clone(),
+        )
+    }
+}
+
+impl fmt::Display for DepRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.authored())
+    }
+}
+
+impl TryFrom<&str> for DepRef {
+    type Error = DepRefParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DepRefParseError {
+    InvalidFormat { authored: String },
+    InvalidSegment { segment: String, authored: String },
+}
+
+impl fmt::Display for DepRefParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidFormat { authored } => write!(
+                f,
+                "dep '{authored}' must use 'module/name' or 'library::module/name' syntax"
+            ),
+            Self::InvalidSegment { segment, authored } => {
+                write!(f, "dep '{authored}' contains invalid segment '{segment}'")
+            }
+        }
+    }
+}
+
+impl std::error::Error for DepRefParseError {}
+
 impl ResolvedSpec {
     /// Derive fn_name and module_path from hierarchical ID
     pub fn from_spec(spec: SpecStruct) -> Self {
@@ -139,25 +301,36 @@ impl ResolvedSpec {
     /// Convert a dep ID to its Rust use statement path
     /// e.g., "money/round" -> "crate::money::round::round"
     pub fn dep_to_use_path(dep_id: &str) -> String {
+        let unit_id = dep_unit_id(dep_id);
         format!(
             "crate::{}::{};",
-            dep_id.replace('/', "::"),
-            dep_id
-                .rsplit_once('/')
-                .map(|(_, name)| name)
-                .unwrap_or(dep_id)
+            unit_id.replace('/', "::"),
+            callable_name(unit_id)
         )
     }
 
     /// Get the fn_name (last segment) from a dep ID
     /// e.g., "money/round" -> "round"
     pub fn dep_fn_name(dep_id: &str) -> &str {
-        callable_name(dep_id)
+        callable_name(dep_unit_id(dep_id))
     }
 
     /// Returns `Some((dep1, dep2))` if two deps share the same callable name, `None` otherwise.
     pub fn has_dep_collision(deps: &[String]) -> Option<(&String, &String)> {
-        has_callable_collision(deps).map(|(dep1, dep2, _)| (dep1, dep2))
+        for (i, first) in deps.iter().enumerate() {
+            let Ok(first_dep) = DepRef::parse(first) else {
+                continue;
+            };
+            for second in &deps[i + 1..] {
+                let Ok(second_dep) = DepRef::parse(second) else {
+                    continue;
+                };
+                if first_dep.callable_name() == second_dep.callable_name() {
+                    return Some((first, second));
+                }
+            }
+        }
+        None
     }
 }
 
@@ -167,6 +340,14 @@ pub fn callable_name(spec_id: &str) -> &str {
         .rsplit_once('/')
         .map(|(_, name)| name)
         .unwrap_or(spec_id)
+}
+
+/// Strip an authored dep string down to its unit ID segment.
+pub fn dep_unit_id(dep_id: &str) -> &str {
+    dep_id
+        .split_once("::")
+        .map(|(_, unit_id)| unit_id)
+        .unwrap_or(dep_id)
 }
 
 /// Check for callable-name collisions across arbitrary hierarchical IDs.
@@ -263,6 +444,41 @@ pub fn is_rust_keyword(s: &str) -> bool {
     RUST_KEYWORDS.contains(&s)
 }
 
+fn validate_unit_id(unit_id: &str, authored: &str) -> Result<(), DepRefParseError> {
+    if !unit_id.contains('/') {
+        return Err(DepRefParseError::InvalidFormat {
+            authored: authored.to_string(),
+        });
+    }
+
+    for segment in unit_id.split('/') {
+        validate_dep_segment(segment, authored)?;
+    }
+
+    Ok(())
+}
+
+fn validate_dep_segment(segment: &str, authored: &str) -> Result<(), DepRefParseError> {
+    let mut chars = segment.chars();
+    let Some(first) = chars.next() else {
+        return Err(DepRefParseError::InvalidSegment {
+            segment: segment.to_string(),
+            authored: authored.to_string(),
+        });
+    };
+
+    if !first.is_ascii_lowercase()
+        || !chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+    {
+        return Err(DepRefParseError::InvalidSegment {
+            segment: segment.to_string(),
+            authored: authored.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,6 +550,7 @@ mod tests {
     fn test_dep_fn_name() {
         assert_eq!(ResolvedSpec::dep_fn_name("money/round"), "round");
         assert_eq!(ResolvedSpec::dep_fn_name("utils/math/round"), "round");
+        assert_eq!(ResolvedSpec::dep_fn_name("shared::money/round"), "round");
     }
 
     #[test]
@@ -348,9 +565,63 @@ mod tests {
         let collision = ResolvedSpec::has_dep_collision(&deps);
         assert!(collision.is_some());
 
+        let external_collision = vec!["money/round".to_string(), "shared::utils/round".to_string()];
+        let collision = ResolvedSpec::has_dep_collision(&external_collision);
+        assert!(collision.is_some());
+
         let deps_no_collision = vec!["money/round".to_string(), "money/add".to_string()];
         let no_collision = ResolvedSpec::has_dep_collision(&deps_no_collision);
         assert!(no_collision.is_none());
+    }
+
+    #[test]
+    fn test_parse_local_dep_ref() {
+        let dep = DepRef::parse("money/round").expect("local dep should parse");
+        assert_eq!(dep.library_alias(), None);
+        assert_eq!(dep.unit_id(), "money/round");
+        assert_eq!(dep.callable_name(), "round");
+        assert_eq!(dep.to_string(), "money/round");
+        assert_eq!(
+            dep.to_qualified(None),
+            QualifiedUnitRef::local("money/round")
+        );
+    }
+
+    #[test]
+    fn test_parse_external_dep_ref() {
+        let dep = DepRef::parse("shared::money/round").expect("external dep should parse");
+        assert_eq!(dep.library_alias(), Some("shared"));
+        assert_eq!(dep.unit_id(), "money/round");
+        assert_eq!(dep.callable_name(), "round");
+        assert_eq!(dep.to_string(), "shared::money/round");
+        assert_eq!(
+            dep.to_qualified(None),
+            QualifiedUnitRef::new(Some("shared".to_string()), "money/round")
+        );
+    }
+
+    #[test]
+    fn test_qualify_local_dep_ref_into_library() {
+        let dep = DepRef::parse("money/round").expect("local dep should parse");
+        assert_eq!(
+            dep.to_qualified(Some("shared")),
+            QualifiedUnitRef::new(Some("shared".to_string()), "money/round")
+        );
+    }
+
+    #[test]
+    fn test_parse_invalid_dep_ref() {
+        let err = DepRef::parse("shared::").expect_err("invalid dep should fail");
+        assert_eq!(
+            err.to_string(),
+            "dep 'shared::' must use 'module/name' or 'library::module/name' syntax"
+        );
+
+        let err = DepRef::parse("shared::Money/round").expect_err("invalid segment should fail");
+        assert_eq!(
+            err.to_string(),
+            "dep 'shared::Money/round' contains invalid segment 'Money'"
+        );
     }
 
     #[test]

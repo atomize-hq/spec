@@ -69,6 +69,25 @@ pub enum SpecError {
     #[error("❌ dep '{dep}' not found in this spec set")]
     MissingDep { dep: String, path: String },
 
+    #[error("unknown library namespace '{alias}' in dep '{dep}' at {path}")]
+    UnknownLibraryNamespace {
+        alias: String,
+        dep: String,
+        path: String,
+    },
+
+    #[error("❌ cross-library dep '{dep}' not found in the resolved library set at {path}")]
+    CrossLibraryDepNotFound { dep: String, path: String },
+
+    #[error(
+        "SPEC_LIBRARY_CRATE_ALIAS_MISSING: crate dependency alias '{alias}' not found in {cargo_toml} (referenced from {path})"
+    )]
+    LibraryCrateAliasMissing {
+        alias: String,
+        cargo_toml: String,
+        path: String,
+    },
+
     #[error("❌ cycle detected: {}", cycle_path.join(" → "))]
     CyclicDep {
         cycle_path: Vec<String>,
