@@ -1,10 +1,11 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260414-222253.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260415-211200.md -->
 # Next Work: M6–M10 Roadmap
 
-Status: **M8 Delivered** (2026-04-15). M9 is the next implementation milestone.
+Status: **M8 Delivered** (2026-04-15). M9 is the next implementation milestone, narrowed to a contract-first cross-library dep slice.
 
-Reviewed via `/plan-eng-review` 2026-04-12. ChatGPT 5.4 Pro + Codex outside voice both consulted.  
-M5 and M5 follow-up (v0.5.1) have shipped. This plan covers the next five milestones.
+Reviewed via `/autoplan` 2026-04-15 for the M9 refresh. Codex outside voice consulted; delegated
+subagents were unavailable in this thread by session policy. M5 through M8 have shipped. This
+plan covers the next two implementation milestones plus the already-shipped historical context.
 
 ---
 
@@ -16,7 +17,7 @@ M6b  Health Model             ✓ shipped
      structural PR            ✓ shipped
 M7   .test.spec + minimal graph ✓ shipped
 M8   Full Graph Layer         ✓ shipped
-M9   Cross-library Deps       ← next to implement
+M9   Cross-library Deps       ← next to implement (contract-first)
 M10  Planning Boundary as Data
 ```
 
@@ -742,21 +743,55 @@ CEO DUAL VOICES — CONSENSUS TABLE:
 
 ---
 
-## M9 — Cross-library Deps
+## M9 — Cross-library Deps (Contract-First, Repo-Scoped)
 
-**Theme:** Implement the `shared::money/round` namespace-prefixed dep syntax with
-`[libraries]` config mapping.
+**Theme:** Let one spec library reuse units from a sibling spec library in the same git repo
+without copy-pasting code, while keeping `spec validate`, generated Rust imports, and export
+truthful. M9 is not a package manager, not cross-library planning, and not a graph-query
+expansion milestone.
+
+**User job:**
+- A root library can author `shared::money/round` and get real validation/build behavior,
+  not stringly best-effort.
+- A team can split shared units into a sibling spec library without losing trust in
+  generated Rust or `spec validate`.
+- M10 plan artifacts remain local-library only. Cross-library planning stays deferred.
 
 **Prerequisite:** M8 declared graph contract complete. Do not implement M9 until local
 `reverse_deps()` / `tests_covering()` / `impact()` semantics are locked and the graph has a
 single source of relationship truth.
 
+### First-Cut Boundary (locked for M9)
+
+- Only direct cross-library deps authored by the root library being validated/generated.
+- `[libraries]` targets must resolve inside the same git repo as the invoking library.
+- Only the root library's `spec.toml` is authoritative. Imported libraries do **not**
+  recursively load their own `[libraries]` entries in M9.
+- Cross-library `.test.spec` `covers` are out of scope and rejected loudly.
+- `SpecGraph::reverse_deps()`, `tests_covering()`, and `impact()` stay local-library only in M9.
+- M10 remains local-library only even after M9 lands.
+
 ### spec.toml Contract
 
 ```toml
 [libraries]
-shared = "../shared-spec"   # namespace alias → path to another spec library root
+shared = "../shared-spec"
 payments = "../../payments/spec"
+```
+
+The namespace alias is authoritative for:
+- authored dep syntax (`shared::money/round`)
+- generated Rust import paths (`use shared::money::round::round;`)
+- root-scoped graph/export references in M9
+
+M9 does **not** read a target crate's Cargo `[package] name` to invent a second identity.
+If the consuming crate wants to import `shared::...`, its `Cargo.toml` must expose a dependency
+named `shared`.
+
+```toml
+[dependencies]
+shared = { path = "../shared-crate" }
+payments = { path = "../../payments/crate" }
 ```
 
 ### Dep Syntax
@@ -767,50 +802,115 @@ deps:
   - shared::money/round      # cross-library dep
 ```
 
+### Typed Identity Contract
+
+```rust
+enum DepRef {
+    Local { unit_id: String },
+    External { library: String, unit_id: String },
+}
+
+struct QualifiedUnitRef {
+    library: Option<String>, // None = root library, Some("shared") = external alias
+    id: String,
+}
+```
+
+- Local root-library units keep their existing slash-delimited unit ids.
+- External refs use the root config's namespace alias plus the unit id.
+- Canonicalized filesystem paths are used for trust checks and duplicate-root rejection,
+  not as authored ids or generated Rust module names.
+
 ### Validation
 
 - Unknown library namespace → `SPEC_UNKNOWN_LIBRARY_NAMESPACE`
+- Target library path missing on disk → `SPEC_LIBRARY_PATH_NOT_FOUND`
+- Target library path escapes the repo root → `SPEC_LIBRARY_OUT_OF_ROOT`
+- Alias points back to the root library → `SPEC_LIBRARY_ALIAS_SELF`
+- Two aliases resolve to the same canonical library root → `SPEC_DUPLICATE_LIBRARY_ROOT`
 - Cross-library dep id not found in target library → `SPEC_CROSS_LIBRARY_DEP_NOT_FOUND`
-- Cross-library cycles (A depends on B depends on A across library boundary) → `SPEC_CROSS_LIBRARY_CYCLE`
+- Cross-library cycle across the direct library graph → `SPEC_CROSS_LIBRARY_CYCLE`
+- Root crate lacks a Cargo dependency keyed by the same alias → `SPEC_LIBRARY_CRATE_ALIAS_MISSING`
 - Legacy local deps (`money/round`) continue to work unchanged.
-- `[libraries]` paths are canonicalized before use.
-- Self-targeting aliases, duplicate aliases to the same canonical root, and symlink-looped
-  external roots are rejected loudly.
+- Duplicate unit ids across different libraries are allowed. Duplicate ids within the same
+  resolved library remain errors.
 
 ### Generation
 
-Cross-library dep generates a `use` statement pointing at the other crate's module:
-`use shared::money::round;` where `shared` is the Cargo package name or a configured alias.
-The `[libraries]` mapping must also record the Cargo package name (or derive it from the
-target spec library's Cargo.toml `[package] name`).
+- Local deps keep the current `use crate::...` contract.
+- Cross-library deps emit `use <alias>::...` where `<alias>` is the namespace key from
+  the root library's `[libraries]` config.
+- Cross-library callable-name collisions are rejected with a stable error in M9. Automatic
+  import alias rewriting is deferred until the authored `body.rust` contract has a story for
+  those alias names.
 
-### Cargo Cycle Detection
+### Graph + Export Contract
 
-Semantic cycles (spec dep graph) are already detected. Cross-library deps may also introduce
-Cargo build dependency cycles. `spec validate` should check the `[libraries]` dep graph is
-a DAG — if library A's spec depends on library B, B must not depend back on A.
+M9 is where dep identity becomes typed. It is **not** where cross-library graph queries become
+public API.
 
-### SpecGraph Extension
+- Validator, generator, graph, and export all consume the same typed dep IR.
+- `SpecGraph` may store typed cross-library dep refs internally, but public query semantics remain
+  local-library only in M9.
+- `spec export` bumps `schema_version` to 3 and encodes dep endpoints as structured refs:
 
-M9 is where graph metadata becomes cross-library aware. Extend the M8 declared graph with:
-- a typed dep IR at the `spec-core` layer that distinguishes local ids from
-  `namespace::unit/id`
-- `LibraryContext` for loading external spec sets
-- cross-library edge metadata (`scope: CrossLibrary`, `library_id`) only after dep identity is real
+```json
+{
+  "kind": "dep",
+  "from": {"library": null, "id": "pricing/apply_tax"},
+  "to": {"library": "shared", "id": "money/round"}
+}
+```
 
-Do not back-port these fields into M8 as placeholders. M9 owns the first truthful version.
-The typed dep IR must be shared by validator, generator, graph, and export. It cannot live
-only inside graph code or the repo will keep reparsing raw strings in four places.
+Export remains a projection over the public contract. It must not serialize raw graph internals.
+
+### Implementation Slices
+
+**Slice A. Dep identity in `spec-core`**
+- Add typed dep IR to `spec-core/src/types.rs` and normalize authored dep strings once.
+- Keep the existing local-only path backward compatible.
+
+**Slice B. Library resolution + config boundary**
+- Extend `spec-cli/src/config.rs` with `[libraries]`.
+- Add a repo-scoped library resolver that canonicalizes paths, rejects out-of-root targets,
+  rejects alias-to-self, and rejects duplicate canonical roots.
+- Root config is authoritative. Imported libraries do not recursively widen the library graph.
+
+**Slice C. Validation + cycle truth**
+- Teach validator/CLI loading paths to resolve direct external libraries before dep existence checks.
+- Extend cycle detection to the direct root-library + imported-library graph for M9.
+- Keep cross-library molecule-test coverage out of scope and fail loudly if authored.
+
+**Slice D. Generator + compiler-truth contract**
+- Extend generation to emit `use <alias>::...` for external deps.
+- Validate that the root crate's `Cargo.toml` exposes the same alias as a dependency name.
+- Keep `use crate::...` unchanged for local deps.
+
+**Slice E. Export + fixtures**
+- Bump export schema to 3 with structured dep refs.
+- Add fixture coverage for mixed local/cross-library dep graphs.
+- Do not widen export beyond named consumers in this repo.
 
 ### Success Criteria
 
 - `spec validate` accepts `shared::money/round` syntax with `[libraries]` config.
-- Cross-library dep generates correct `use` statement in Rust output.
-- Cross-library cycle detection catches A→B→A across library boundaries.
-- Graph queries (`reverse_deps`, `impact`) work across library boundaries once `LibraryContext` is present.
-- Integration tests: valid cross-library dep, unknown namespace, missing dep, cycle,
-  missing library path, alias-to-self, duplicate canonical library root, and symlink-cycle external root.
-- Example project updated with a second spec library demonstrating the feature.
+- `[libraries]` targets outside the repo root are rejected loudly.
+- Cross-library deps generate `use <alias>::...` imports and fail validation if the root crate
+  does not expose that alias in `Cargo.toml`.
+- Cross-library cycle detection catches direct A→B→A across library boundaries.
+- Export bumps to `schema_version: 3` and represents cross-library dep endpoints without ambiguity.
+- Integration tests cover: valid direct cross-library dep, unknown namespace, missing dep,
+  missing library path, out-of-root path, alias-to-self, duplicate canonical root, missing Cargo
+  dependency alias, and direct cross-library cycle.
+- Example project updated with a second spec library in-repo demonstrating the feature.
+
+### What NOT in M9 Scope
+
+- Out-of-repo libraries
+- Recursive/transitive library discovery
+- Cross-library `.test.spec` covers
+- Cross-library `reverse_deps()` / `tests_covering()` / `impact()` semantics
+- Package-name-derived import identity
 
 ---
 
@@ -820,7 +920,8 @@ only inside graph code or the repo will keep reparsing raw strings in four place
 the architecture boundary between spec (verification) and planning (intent).
 
 **Prerequisite:** M8 declared local impact complete. M10 consumes `graph.impact()` as
-advisory planning data. If a plan needs cross-library impact, that dependency moves to M9.
+advisory planning data and stays local-library only. If a future plan needs cross-library
+impact, that is a post-M9 query-contract milestone, not part of M9's first dep slice.
 
 ### Plan Artifact Schema (.plan.spec)
 
@@ -868,6 +969,229 @@ and machine-readable, not automating the work.
 - Schema documented in AGENTS.md so AI agents can read and write plan artifacts.
 - Integration tests: valid plan, unknown unit id for `modify`, invalid duplicate unit id for `add`,
   and impact computation including downstream molecule tests.
+
+---
+
+## M9 /autoplan Review (2026-04-15)
+
+**Review scope:** refreshed M9 section, grounded against
+[DECISIONS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/DECISIONS.md:56),
+[spec-core/src/types.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/types.rs:1),
+[spec-core/src/graph.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/graph.rs:1),
+[spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs:1),
+[spec-core/src/generator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/generator.rs:475),
+[spec-core/src/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/validator.rs:303),
+[spec-cli/src/config.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/config.rs:1),
+and [spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs:1797).
+
+**UI scope:** No. This is backend and data-model planning only, so Phase 2 design review is skipped.
+
+### Step 0A. Premise Challenge
+
+1. M9 only makes sense as the next milestone if the real user job is direct reuse of sibling
+   spec libraries, not "future-proof the graph."
+2. The current repo is stringly at every boundary that matters for cross-library work: dep ids,
+   duplicate-id validation, generator imports, export edges, and config loading. M9 must fix
+   identity first or it will ship lies.
+3. Stronger cross-library trust semantics were explicitly deferred in
+   [DECISIONS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/DECISIONS.md:118), so
+   the first cut must stay repo-scoped and direct-only.
+
+### Step 0B. What Already Exists
+
+| Sub-problem | Existing code | Reuse / implication |
+|---|---|---|
+| Author-facing cross-library syntax decision | [DECISIONS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/DECISIONS.md:56) | Reuse the `shared::money/round` decision. Do not reopen syntax in M9. |
+| Local dep identity and duplicate-id validation | [spec-core/src/types.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/types.rs:13) and [spec-core/src/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/validator.rs:303) | Today everything keys on plain local strings. M9 must add typed identity before loading multiple libraries. |
+| Local graph/export contract | [spec-core/src/graph.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/graph.rs:37) and [spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs:83) | Reuse the public graph/export boundary. Keep export a projection. |
+| Generated import contract | [spec-core/src/generator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/generator.rs:475) and [README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/README.md:226) | Local deps already resolve through `use crate::...`; cross-library imports must extend this cleanly without inventing a second identity. |
+| Root config loading | [spec-cli/src/config.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/config.rs:32) | Current config lookup is single-root nearest-ancestor. M9 should keep one authoritative root config, not recursive config merging. |
+| Crate-root / cargo execution truth | [spec-core/src/pipeline.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/pipeline.rs:37) | Reuse the current "build what Cargo actually sees" principle. M9 must validate the Rust dependency alias before codegen lies. |
+
+### Step 0C-bis. Implementation Alternatives
+
+```text
+APPROACH A: Full external-library platform now
+  Summary: arbitrary path loading, transitive library discovery, graph-query expansion, and planning integration in one milestone.
+  Effort:  L
+  Risk:    High
+  Pros:    Big platform story if guessed correctly.
+  Cons:    Reopens deferred trust semantics and makes M9 three milestones wearing one trench coat.
+
+APPROACH B: Contract-first, repo-scoped direct deps (RECOMMENDED)
+  Summary: typed dep identity, root-owned [libraries] config, direct validation/generation/export truth, no cross-library queries yet.
+  Effort:  M
+  Risk:    Medium
+  Pros:    Solves the real "reuse shared units safely" job without pretending graph/planning semantics are settled.
+  Cons:    Leaves cross-library impact/planning for a later milestone.
+
+APPROACH C: M10 first, defer M9
+  Summary: ship local-only planning artifacts first and revisit cross-library deps later.
+  Effort:  M
+  Risk:    Medium
+  Pros:    Faster user-facing planning story.
+  Cons:    Does not solve shared-library reuse, which is the concrete next implementation ask in this roadmap.
+```
+
+**Recommendation:** Choose **Approach B**. Keep M9 next, but make it the first truthful slice instead of a vague platform milestone.
+
+### CEO Outside Voice
+
+**CLAUDE SUBAGENT (CEO — strategic independence):** unavailable in this run. Session policy for
+this thread does not allow delegated sub-agents unless the user explicitly asks for delegation.
+
+**CODEX SAYS (CEO — strategy challenge):**
+
+- M9 was carrying too many jobs at once: syntax, config, generator, graph semantics, and planning adjacency.
+- The plan was under-specified on library trust boundaries and identity.
+- The current roadmap made M9 look like an architecture milestone rather than a concrete user job.
+- The right correction was to keep M9 but narrow it to direct, repo-scoped shared-library reuse.
+
+### CEO Dual Voices — Consensus Table
+
+```text
+CEO DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Premises valid?                   N/A     Partial single-model concern
+  2. Right problem to solve?           N/A     Yes     single-model positive after narrowing
+  3. Scope calibration correct?        N/A     No      single-model concern
+  4. Alternatives sufficiently explored?N/A    Partial single-model concern
+  5. Competitive/market risks covered? N/A     Partial single-model concern
+  6. 6-month trajectory sound?         N/A     Yes     single-model positive after narrowing
+═══════════════════════════════════════════════════════════════
+```
+
+### Eng Review
+
+**System architecture**
+
+```text
+root spec library
+    │
+    ├── root spec.toml [libraries]
+    │       │
+    │       └── repo-scoped library resolver
+    │               │
+    │               ├── typed DepRef / QualifiedUnitRef
+    │               ├── validator + cycle checks
+    │               ├── generator import path selection
+    │               └── export schema v3 projection
+    │
+    └── local graph queries remain local-only in M9
+```
+
+**Architecture findings:**
+- The namespace alias must be the only public cross-library identity in M9. Pulling Cargo package
+  names into the API would create two competing truths immediately.
+- Export needs its own schema bump. Current graph/export structs are library-blind and cannot
+  represent mixed local/external deps truthfully.
+- Recursive library discovery is a trap. One authoritative root config keeps the blast radius sane.
+
+### Test Review
+
+```text
+CODE PATH COVERAGE
+===========================
+[+] spec-cli/src/config.rs
+    ├── [GAP] parse [libraries] table
+    ├── [GAP] alias-to-self rejection
+    ├── [GAP] duplicate canonical root rejection
+    └── [GAP] out-of-root path rejection
+
+[+] spec-core/src/types.rs / validator.rs
+    ├── [GAP] typed dep IR parsing
+    ├── [GAP] same-library duplicate ids still rejected
+    ├── [GAP] same local id across two libraries allowed
+    └── [GAP] direct cross-library cycle detection
+
+[+] spec-core/src/generator.rs
+    ├── [GAP] external deps emit use <alias>::...
+    ├── [GAP] missing Cargo dependency alias fails loudly
+    └── [GAP] callable-name collisions across local/external deps
+
+[+] spec-core/src/export.rs
+    ├── [GAP] schema_version 3 dep ref encoding
+    └── [GAP] mixed local/cross-library fixture coverage
+```
+
+### Failure Modes
+
+| Codepath | Production failure mode | Test covers? | Error handling? | Silent? |
+|---|---|---|---|---|
+| `[libraries]` resolution | path escapes repo root | planned | `SPEC_LIBRARY_OUT_OF_ROOT` | no |
+| dep identity | two libraries both define `money/round` | planned | typed `{library?, id}` contract avoids ambiguity | no |
+| generator import path | config alias does not match Cargo dependency name | planned | `SPEC_LIBRARY_CRATE_ALIAS_MISSING` | no |
+| export | cross-library dep serialized as plain string edge | planned | schema_version 3 structured refs | no |
+| molecule coverage | external `.test.spec` cover silently treated as local | planned | dedicated rejection in M9 | no |
+
+### ENG Dual Voices — Consensus Table
+
+```text
+ENG DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Architecture sound?               N/A     Yes     single-model positive after narrowing
+  2. Test coverage sufficient?         N/A     No      single-model concern
+  3. Performance risks addressed?      N/A     Partial single-model concern
+  4. Security threats covered?         N/A     Partial single-model concern
+  5. Error paths handled?              N/A     No      single-model concern
+  6. Deployment risk manageable?       N/A     Yes     single-model positive
+═══════════════════════════════════════════════════════════════
+```
+
+**CODEX SAYS (eng — architecture challenge):**
+- M9 needed a globally unambiguous dep identity, not just new string parsing.
+- Generator identity was wrong until the plan chose one alias story for authored deps and Rust imports.
+- Export needed a schema bump. Current library-blind edges were not good enough.
+- Config ownership had to be explicit or recursive loading would become nondeterministic immediately.
+
+**CLAUDE SUBAGENT (eng — independent review):** unavailable in this run. Session policy for
+this thread does not allow delegated sub-agents unless the user explicitly asks for delegation.
+
+### Cross-Phase Themes
+
+- **Identity before metadata** — both strategy and engineering review converged on the same rule:
+  M9 must define one truthful dep identity before it widens graph/export semantics.
+- **One alias, one compiler story** — the namespace alias is now the authored syntax and the
+  generated Rust import identity. No second Cargo-package-name truth in M9.
+- **Repo-scoped first cut** — stronger trust semantics stay deferred, exactly as `DECISIONS.md`
+  warned. M9 does the first safe thing, not the broadest thing.
+
+### Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|-------|----------|----------------|-----------|-----------|----------|
+| 7 | CEO | Keep M9 as the next milestone, but narrow it to repo-scoped direct deps | Taste | P1 + P3 | Preserves the user's milestone order while removing architecture-first sprawl. | Reordering M10 ahead of M9 or keeping the old broad M9 |
+| 8 | CEO | Make the namespace alias the only public cross-library identity in M9 | Mechanical | P5 | One alias keeps authored deps, generated imports, and export aligned. | Cargo-package-name-derived identity |
+| 9 | Eng | Root `spec.toml` is the only authoritative `[libraries]` config in M9 | Mechanical | P5 | Recursive config loading would make validation and cycle detection nondeterministic. | Transitive config discovery |
+| 10 | Eng | Keep cross-library graph queries out of M9 | Mechanical | P3 | Direct dep truth is the lake. Cross-library query semantics are a different lake. | Expanding `reverse_deps()` / `impact()` across libraries now |
+| 11 | Eng | Reject cross-library callable-name collisions in M9 | Mechanical | P5 | Automatic alias rewriting would require a new authored-body contract. | Silent alias generation |
+| 12 | Eng | Bump export to schema_version 3 for structured dep refs | Mechanical | P1 | Multi-library deps are ambiguous without typed export refs. | Reusing schema_version 2 stringly edge endpoints |
+
+### Test Plan Artifact
+
+- QA handoff written to [spensermcconnell-main-m9-test-plan-20260415-211200.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-main-m9-test-plan-20260415-211200.md)
+
+### Completion Summary
+
+```text
+  +====================================================================+
+  |                 M9 /autoplan REVIEW — COMPLETION SUMMARY            |
+  +====================================================================+
+  | Mode selected        | SELECTIVE_EXPANSION                         |
+  | System Audit         | M9 narrowed to repo-scoped direct deps      |
+  | Section 1  (CEO)     | scope corrected, user job made concrete     |
+  | Section 2  (Design)  | skipped, no UI scope                        |
+  | Section 3  (Eng)     | identity/config/export gaps made explicit   |
+  | Failure modes        | 5 rows, 0 silent failure paths accepted     |
+  | Test artifact        | written                                      |
+  | Outside voice        | ran (codex-only)                            |
+  | Unresolved decisions | 0 user-blocking                             |
+  +====================================================================+
+```
 
 ---
 
@@ -1138,13 +1462,13 @@ The following TODOS items are closed or addressed by this plan:
 
 New TODOS to add:
 
-- `[M6a investigation] Auto-derive module prefix vs explicit config key: consider whether
-  generated_module_prefix config key can be eliminated entirely once auto-derivation is
-  validated in practice.`
-- `[M9 prerequisite] Explicit test: spec validate fails with clear error when [libraries]
-  path does not exist on disk.` (critical gap per failure modes table)
-- `[post-M6a] Nextest detection: instead of README note, detect nextest output format and
-  emit SPEC_UNSUPPORTED_TEST_RUNNER error rather than producing "unknown" test results.`
+- `[M9] Add stable error codes for missing library path, out-of-root path, alias-to-self,
+  duplicate canonical root, and missing Cargo dependency alias.`
+- `[M9] Add export schema_version 3 fixtures covering mixed local + cross-library dep refs.`
+- `[post-M9] Decide whether cross-library callable-name collisions stay hard errors or gain
+  authored alias syntax.`
+- `[post-M9] Cross-library graph query semantics (`reverse_deps`, `impact`) need their own
+  milestone once direct dep identity is proven.`
 
 ---
 
@@ -1153,50 +1477,62 @@ New TODOS to add:
 **Current milestone: M9. M6a through M8 are shipped.**
 
 ```text
-1. M9 contract lock
-   - finalize typed cross-library dep identity
-   - define `[libraries]` config contract and validation rules
-   - keep local-only M8 graph semantics intact while extending node identity
+1. M9 identity + boundary lock
+   - add typed dep IR shared by validator, generator, graph, and export
+   - make root `[libraries]` config authoritative
+   - lock M9 to repo-scoped, direct-only library resolution
 
-2. Graph + export extension
-   - thread typed dep identity through graph construction
-   - add cross-library metadata only where M9 defines truthful semantics
-   - preserve M8 export/query behavior for local-library callers
+2. Validation + resolver implementation
+   - canonicalize and validate library roots
+   - reject out-of-root targets, alias-to-self, duplicate canonical roots
+   - resolve direct external spec sets and detect direct cross-library cycles
 
-3. Validation + failure modes
-   - explicit errors for missing `[libraries]` path config
-   - cycle and missing-dependency behavior across library boundaries
-   - regression coverage for mixed local/cross-library graphs
+3. Generator + compiler-truth contract
+   - emit `use <alias>::...` for external deps
+   - validate that the root crate exposes the same alias in `Cargo.toml`
+   - reject cross-library callable-name collisions explicitly
 
-4. Verification
+4. Export + regression suite
+   - bump export to schema_version 3 with structured dep refs
+   - add fixture and integration coverage for mixed local/cross-library graphs
+   - keep graph query APIs local-only
+
+5. Verification
    - cargo test -p spec-core
+   - cargo test -p spec-cli
    - cargo test --all
-   - targeted M9 export/graph smoke checks
 
-5. /ship
+6. Re-open M10 local-only plan artifact work
+   - only after M9 direct dep truth is locked
+   - keep M10 local-library scoped unless a later milestone expands query semantics
+
+7. /ship
 ```
 
 **Do not front-load into this PR:**
 - `links.molecule_tests` validator warning + field removal
-- M9 typed dep identity
-- M10 plan artifact command surface
+- Out-of-repo libraries
+- Recursive/transitive library discovery
+- Cross-library `.test.spec` covers
+- Cross-library graph query semantics
+- M10 cross-library planning or impact
 
 ---
 
 **Document version:** 2026-04-15
-**Review status:** Approved via /plan-eng-review  
+**Review status:** Approved via /autoplan (M9 refresh)  
 **Next review checkpoint:** Before implementation on M9
 
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 3 | clean (PLAN via /autoplan) | mode: SELECTIVE_EXPANSION, 0 critical gaps |
-| Codex Review | `/codex review` | Independent 2nd opinion | 7+ | issues_found | M8: ImpactSet struct, private fields, trust boundary — all incorporated |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 8 | **CLEAR (PLAN)** | 4 issues found, 0 unresolved, 0 M8-blocking gaps after test matrix + execution order refresh |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 4 | clean (PLAN via /autoplan) | M9 kept next, but narrowed to repo-scoped direct deps with a concrete user job |
+| Codex Review | `/codex review` | Independent 2nd opinion | 9+ | issues_found | M9: identity, trust boundary, export schema, Cargo alias contract |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 9 | **CLEAR (PLAN)** | M9 gaps made explicit, 0 unresolved after contract lock |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 1 | issues_open | score: 5/10 → 7/10, TTHW: 5min-local/BLOCKED-external |
 
-**CODEX (M8):** 7 findings — ImpactSet struct for `impact()` return type (incorporated), private fields + accessor methods (incorporated), trust boundary doc comment (incorporated), deterministic output locked into the build contract, downstream-covering-test and diamond-dedup cases now explicit in the test matrix, export two-path concern held out of M8, local tests implicit in unit IDs documented.
+**CODEX (M9):** flagged the real missing pieces: globally unambiguous dep identity, root-owned library config, explicit Cargo dependency alias validation, export schema_version 3, and rejection of cross-library callable-name collisions until there is an authored alias contract.
 **UNRESOLVED:** 0
-**VERDICT:** ENG CLEARED — M8 implementation plan locked. Start in `spec-core/src/graph.rs`, then project through `lib.rs` and `export.rs`, then run the graph/export regression suite before `/ship`.
+**VERDICT:** PLAN LOCKED — start with dep identity in `spec-core/src/types.rs`, then library resolution/config in `spec-cli/src/config.rs`, then validator/generator/export, then run the M9 regression suite before `/ship`.
