@@ -224,8 +224,9 @@ pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
 pub fn clean_output_dir(
     output_base: &Path,
     generated_rs_rel_paths: &HashSet<PathBuf>,
+    project_root: &Path,
 ) -> Result<()> {
-    let base = safe_output_path(output_base)?;
+    let base = safe_output_path_with_project_root(output_base, project_root)?;
 
     let marker = base.join(GENERATED_MARKER);
     if !marker.exists() {
@@ -539,12 +540,19 @@ fn module_item_name(fragment: &str) -> Option<String> {
 }
 
 pub fn safe_output_path<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
+    let project_root = std::env::current_dir().map_err(|err| SpecError::OutputDir {
+        message: format!("Unable to determine project root: {err}"),
+    })?;
+    safe_output_path_with_project_root(path, project_root)
+}
+
+pub fn safe_output_path_with_project_root<P: AsRef<Path>, R: AsRef<Path>>(
+    path: P,
+    project_root: R,
+) -> Result<PathBuf> {
     let path = path.as_ref();
-    let project_root = canonicalize_existing_path(&std::env::current_dir().map_err(|err| {
-        SpecError::OutputDir {
-            message: format!("Unable to determine project root: {err}"),
-        }
-    })?)?;
+    let project_root =
+        canonicalize_existing_path(&normalized_absolute_path(project_root.as_ref()))?;
     let output_base = canonicalize_output_path(path)?;
 
     if !output_base.starts_with(&project_root) {
@@ -1035,7 +1043,7 @@ mod tests {
         generated.insert(PathBuf::from("pricing/mod.rs"));
         generated.insert(PathBuf::from("mod.rs"));
 
-        clean_output_dir(&base, &generated).unwrap();
+        clean_output_dir(&base, &generated, temp_dir.path()).unwrap();
 
         assert!(pricing.join("apply_discount.rs").exists());
         assert!(pricing.join("mod.rs").exists());
@@ -1055,7 +1063,7 @@ mod tests {
         fs::create_dir_all(&base).unwrap();
 
         let generated = HashSet::new();
-        let err = clean_output_dir(&base, &generated).unwrap_err();
+        let err = clean_output_dir(&base, &generated, temp_dir.path()).unwrap_err();
         assert!(matches!(err, SpecError::MissingMarker { .. }));
     }
 
@@ -1077,7 +1085,7 @@ mod tests {
         unix_fs::symlink(&outside_dir, pricing.join("link")).unwrap();
 
         let generated = HashSet::new();
-        clean_output_dir(&base, &generated).unwrap();
+        clean_output_dir(&base, &generated, temp_dir.path()).unwrap();
 
         assert!(!pricing.join("apply_discount.rs").exists());
         assert!(

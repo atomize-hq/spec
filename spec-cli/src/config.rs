@@ -211,20 +211,42 @@ fn read_workspace_config(config_path: &Path) -> Result<WorkspaceConfig> {
 }
 
 pub fn find_workspace_config(target: &Path) -> Option<PathBuf> {
-    let start = if target.is_file() {
-        target.parent().unwrap_or(target)
+    let cwd = std::env::current_dir().ok()?;
+    let absolute_target = if target.is_absolute() {
+        target.to_path_buf()
     } else {
-        target
+        cwd.join(target)
+    };
+    let stop_at = if target.is_absolute() {
+        find_repo_root(&absolute_target)
+    } else {
+        Some(cwd.clone())
+    };
+
+    let start = if absolute_target.is_file() {
+        absolute_target.parent().unwrap_or(&absolute_target)
+    } else {
+        &absolute_target
     };
 
     for dir in start.ancestors() {
         let candidate = dir.join(CONFIG_FILE_NAME);
         if candidate.is_file() {
-            return Some(candidate);
+            return Some(relative_to_cwd_if_possible(&candidate, &cwd));
+        }
+
+        if stop_at.as_ref().is_some_and(|boundary| dir == boundary) {
+            break;
         }
     }
 
     None
+}
+
+fn relative_to_cwd_if_possible(path: &Path, cwd: &Path) -> PathBuf {
+    path.strip_prefix(cwd)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn resolve_direct_libraries(
@@ -336,6 +358,45 @@ mod tests {
 
         let config = load_workspace_config(&nested_dir).unwrap();
         assert!(config.validation.allow_unsafe_local_test_expect);
+    }
+
+    #[test]
+    fn load_workspace_context_from_relative_subdir_path_keeps_repo_root() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path().join("repo");
+        let shared_spec = repo_root.join("shared-spec");
+        let shared_crate = repo_root.join("shared-crate");
+        fs::create_dir_all(shared_spec.join("units")).unwrap();
+        fs::create_dir_all(&shared_crate).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: .git/modules/repo\n").unwrap();
+        fs::write(
+            shared_spec.join("spec.toml"),
+            "[pipeline]\ncrate_root = \"../shared-crate\"\n",
+        )
+        .unwrap();
+
+        let original_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&shared_spec).unwrap();
+        let context = load_workspace_context(Path::new("units")).unwrap();
+        std::env::set_current_dir(original_cwd).unwrap();
+
+        let shared_spec = shared_spec.canonicalize().unwrap();
+        let repo_root = repo_root.canonicalize().unwrap();
+        let shared_crate = shared_crate.canonicalize().unwrap();
+
+        assert_eq!(
+            context.workspace_root.as_deref(),
+            Some(shared_spec.as_path())
+        );
+        assert_eq!(context.repo_root.as_deref(), Some(repo_root.as_path()));
+        assert_eq!(
+            context
+                .pipeline_crate_root()
+                .as_deref()
+                .and_then(|path| path.canonicalize().ok())
+                .as_deref(),
+            Some(shared_crate.as_path())
+        );
     }
 
     #[test]

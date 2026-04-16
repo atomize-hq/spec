@@ -2674,6 +2674,47 @@ fn spec_build_resolves_relative_pipeline_crate_root_from_spec_toml() {
     );
 }
 
+#[test]
+fn spec_build_from_crate_subdir_infers_crate_root_without_empty_workdir() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = run_in(&ecommerce_dir, &["build", "units"]);
+
+    assert_output_success(
+        "spec build from crate subdir should infer the local crate root",
+        &output,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("spec: running cargo build in"), "{stderr}");
+    assert!(
+        !stderr.contains("failed to spawn cargo"),
+        "crate-root inference regressed: {stderr}"
+    );
+}
+
+#[test]
+fn spec_build_from_shared_spec_subdir_allows_repo_relative_output() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, shared_spec_dir, _shared_crate_dir) = setup_detached_shared_example();
+    let output = run_in(&shared_spec_dir, &["build", "units"]);
+
+    assert_output_success(
+        "spec build from shared-spec subdir should honor repo-relative crate_root",
+        &output,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("spec: running cargo build in") && stderr.contains("shared-crate"),
+        "{stderr}"
+    );
+}
+
 // ── End D1 ────────────────────────────────────────────────────────────────────
 
 // Regression: ISSUE-QA-004 — no CLI integration test for contract input identifier validation.

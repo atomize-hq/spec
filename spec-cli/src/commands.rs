@@ -7,7 +7,8 @@ use serde::{Serialize, Serializer};
 use spec_core::export::build_export_bundle;
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests,
-    generate_code_with_options, generate_mod_rs, safe_output_path, write_generated_file,
+    generate_code_with_options, generate_mod_rs, safe_output_path_with_project_root,
+    write_generated_file,
 };
 use spec_core::loader::{
     is_unit_spec, load_directory_report, load_file, load_molecule_test_directory,
@@ -1079,19 +1080,24 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
     } else {
         path
     };
-    let resolved_output: PathBuf = match output {
-        Some(p) => p.to_path_buf(),
-        None => {
-            // Use the same crate-root precedence as build/test:
-            // spec.toml [pipeline] crate_root → ancestor Cargo.toml walk.
-            let crate_root = match context.pipeline_crate_root() {
-                Some(path) => path,
-                None => workspace_root_for(spec_root)?,
-            };
-            crate_root.join("src/generated")
-        }
+    let explicit_output = output.map(PathBuf::from);
+    let crate_root = if explicit_output.is_none() {
+        Some(resolve_default_crate_root(spec_root, &context)?)
+    } else {
+        None
     };
-    let generated = generate_specs(path, &resolved_output)?;
+    let project_root = context
+        .repo_root
+        .clone()
+        .or_else(|| context.workspace_root.clone())
+        .or_else(|| crate_root.clone())
+        .unwrap_or(absolutize_from_current_dir(Path::new("."))?);
+    let resolved_output: PathBuf = explicit_output.unwrap_or_else(|| {
+        crate_root
+            .expect("missing default crate root")
+            .join("src/generated")
+    });
+    let generated = generate_specs(path, &resolved_output, &project_root)?;
     if !generated.specs.is_empty() {
         finalize_passports(
             spec_root,
@@ -1104,7 +1110,7 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
+fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
     let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
     if total_files == 0 {
         let mut errors = DiagnosticMap::new();
@@ -1139,11 +1145,11 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
             }
         }
 
-        let output_base = ensure_output_marker(output)?;
+        let output_base = ensure_output_marker(output, project_root)?;
         let generated_rs_rel_paths = HashSet::<PathBuf>::new();
-        clean_output_dir(&output_base, &generated_rs_rel_paths).with_context(|| {
-            format!("Failed to clean output directory {}", output_base.display())
-        })?;
+        clean_output_dir(&output_base, &generated_rs_rel_paths, project_root).with_context(
+            || format!("Failed to clean output directory {}", output_base.display()),
+        )?;
 
         if !warnings.is_empty() {
             print_diagnostics(&warnings);
@@ -1291,7 +1297,7 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
         generated_rs_rel_paths.insert(mod_rs_rel);
     }
 
-    let output_base = ensure_output_marker(output)?;
+    let output_base = ensure_output_marker(output, project_root)?;
     let generate_options = GenerateOptions {
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
@@ -1330,7 +1336,7 @@ fn generate_specs(path: &Path, output: &Path) -> Result<GeneratedSpecs> {
     let molecule_test_file_count = molecule_test_paths.len();
     generated_rs_rel_paths.extend(molecule_test_paths);
 
-    clean_output_dir(&output_base, &generated_rs_rel_paths)
+    clean_output_dir(&output_base, &generated_rs_rel_paths, project_root)
         .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
 
     let generated_at = rfc3339_now();
@@ -1422,6 +1428,7 @@ fn write_passports(
 
 struct PipelineContext {
     crate_root: PathBuf,
+    project_root: PathBuf,
     cargo_target_dir: PathBuf,
     timeout: Option<Duration>,
     // Holds the tempdir alive for the duration of the command when we own one.
@@ -1439,12 +1446,11 @@ fn resolve_pipeline_context(
     context: &WorkspaceContext,
 ) -> Result<PipelineContext> {
     let crate_root = match crate_root_flag {
-        Some(p) => p.to_path_buf(),
-        None => match context.pipeline_crate_root() {
-            Some(path) => path,
-            None => workspace_root_for(path)?,
-        },
+        Some(path) => absolutize_from_current_dir(path)?,
+        None => resolve_default_crate_root(path, context)?,
     };
+    let crate_root = canonicalize_existing_dir(&crate_root)?;
+    let project_root = resolve_project_root(context, &crate_root);
 
     let mut temp_dir: Option<tempfile::TempDir> = None;
     let cargo_target_dir = if let Some(path) = context.pipeline_cargo_target_dir() {
@@ -1461,6 +1467,7 @@ fn resolve_pipeline_context(
 
     Ok(PipelineContext {
         crate_root,
+        project_root,
         cargo_target_dir,
         timeout: context
             .config
@@ -1469,6 +1476,52 @@ fn resolve_pipeline_context(
             .map(Duration::from_secs),
         _temp_dir: temp_dir,
     })
+}
+
+fn absolutize_from_current_dir(path: &Path) -> Result<PathBuf> {
+    Ok(if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .context("failed to resolve current working directory")?
+            .join(path)
+    })
+}
+
+fn resolve_default_crate_root(path: &Path, context: &WorkspaceContext) -> Result<PathBuf> {
+    match context.pipeline_crate_root() {
+        Some(path) => canonicalize_existing_dir(&path),
+        None => workspace_root_for(path),
+    }
+}
+
+fn resolve_project_root(context: &WorkspaceContext, crate_root: &Path) -> PathBuf {
+    if let Some(repo_root) = &context.repo_root {
+        return repo_root.clone();
+    }
+
+    if let Some(workspace_root) = &context.workspace_root {
+        return common_ancestor_path(workspace_root, crate_root)
+            .unwrap_or_else(|| workspace_root.clone());
+    }
+
+    crate_root.to_path_buf()
+}
+
+fn common_ancestor_path(left: &Path, right: &Path) -> Option<PathBuf> {
+    left.ancestors()
+        .find(|candidate| right.starts_with(candidate))
+        .map(Path::to_path_buf)
+}
+
+fn canonicalize_existing_dir(path: &Path) -> Result<PathBuf> {
+    let canonical = path
+        .canonicalize()
+        .with_context(|| format!("Failed to resolve {}", path.display()))?;
+    if !canonical.is_dir() {
+        bail!("{} is not a directory", canonical.display());
+    }
+    Ok(canonical)
 }
 
 fn build_command(
@@ -1518,7 +1571,7 @@ fn build_command(
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(path, &resolved_output)?;
+    let generated = generate_specs(path, &resolved_output, &ctx.project_root)?;
     if !generated.specs.is_empty() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
@@ -1595,7 +1648,7 @@ fn test_command(
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(generation_scope, &resolved_output)?;
+    let generated = generate_specs(generation_scope, &resolved_output, &ctx.project_root)?;
     if target_spec.is_none() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
@@ -2026,8 +2079,8 @@ fn path_for_spec(spec: &ResolvedSpec) -> PathBuf {
     path
 }
 
-fn ensure_output_marker(output: &Path) -> Result<PathBuf> {
-    let output_base = safe_output_path(output)?;
+fn ensure_output_marker(output: &Path, project_root: &Path) -> Result<PathBuf> {
+    let output_base = safe_output_path_with_project_root(output, project_root)?;
 
     if output_base.exists() && !output_base.is_dir() {
         bail!(
@@ -2251,10 +2304,7 @@ fn resolved_crate_manifest_path(path: &Path, context: &WorkspaceContext) -> Resu
     } else {
         path
     };
-    let crate_root = match context.pipeline_crate_root() {
-        Some(path) => path,
-        None => workspace_root_for(spec_root)?,
-    };
+    let crate_root = resolve_default_crate_root(spec_root, context)?;
     Ok(crate_root.join("Cargo.toml"))
 }
 
@@ -3304,7 +3354,7 @@ body:
             "expected SPEC_RESERVED_UNIT_NAME, got: {validation_errors:?}"
         );
 
-        let err = match generate_specs(&units_dir, &output_dir) {
+        let err = match generate_specs(&units_dir, &output_dir, temp_dir.path()) {
             Ok(_) => panic!("expected reserved namespace validation to fail"),
             Err(err) => err.to_string(),
         };

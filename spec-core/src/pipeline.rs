@@ -52,10 +52,22 @@ pub fn cargo_available() -> bool {
 /// 2. If no such ancestor exists, fall back to the nearest `[workspace]` root.
 /// 3. Otherwise bail.
 pub fn workspace_root_for(path: &Path) -> Result<PathBuf> {
-    let start = if path.is_file() {
-        path.parent().unwrap_or(path)
+    let cwd = std::env::current_dir().context("failed to resolve current working directory")?;
+    let absolute_path = if path.is_absolute() {
+        path.to_path_buf()
     } else {
-        path
+        cwd.join(path)
+    };
+    let stop_at = if path.is_absolute() {
+        find_repo_root_boundary(&absolute_path)
+    } else {
+        Some(cwd)
+    };
+
+    let start = if absolute_path.is_file() {
+        absolute_path.parent().unwrap_or(&absolute_path)
+    } else {
+        &absolute_path
     };
 
     let mut workspace_root: Option<PathBuf> = None;
@@ -76,6 +88,10 @@ pub fn workspace_root_for(path: &Path) -> Result<PathBuf> {
                 workspace_root = Some(dir.to_path_buf());
             }
         }
+
+        if stop_at.as_ref().is_some_and(|boundary| dir == boundary) {
+            break;
+        }
     }
 
     if let Some(root) = workspace_root {
@@ -85,6 +101,16 @@ pub fn workspace_root_for(path: &Path) -> Result<PathBuf> {
     bail!(
         "❌ could not find crate root — run from inside a Cargo project, or pass --crate-root <path>"
     )
+}
+
+fn find_repo_root_boundary(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|dir| {
+            let git_marker = dir.join(".git");
+            git_marker.is_dir() || git_marker.is_file()
+        })
+        .map(Path::to_path_buf)
 }
 
 pub fn run_cargo_build(
