@@ -11,6 +11,10 @@
 
 - **Export now consumes the graph through accessor methods** — `spec export` continues to emit sorted declared dep and covers edges, but now projects them from the public `SpecGraph` surface instead of reaching into graph internals. This locks in the M8 contract that export is a projection layer, not the owner of graph state.
 
+### Fixed
+
+- **JSON-mode workspace config failures stay machine-readable** — `spec validate --format json` and `spec status --format json` now emit structured JSON when `[libraries]` resolution fails before validation starts. Stable config codes such as `SPEC_LIBRARY_PATH_NOT_FOUND` now remain on stdout instead of dropping to raw `Error: ...` stderr output.
+
 ## 0.5.3 - 2026-04-13
 
 ### Added

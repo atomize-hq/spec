@@ -180,10 +180,12 @@ spec validate examples/ecommerce/units --format json
 }
 ```
 
-That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose.
+That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose. Pre-validation workspace-config failures, including broken `[libraries]` entries, also stay in this JSON contract for `validate --format json`.
 
 `spec status` uses simple symbols so you can scan a whole tree quickly. Any unit whose
 status is not `valid` exits with code `1`.
+
+For `spec status --format json`, workspace-config failures that happen before any unit row can be computed surface as top-level `loader_errors` entries instead of raw stderr text.
 
 - `✓` valid
 - `✗` invalid or failing
@@ -209,6 +211,10 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_DUPLICATE_ID` | Two unit files share the same `id` |
 | `SPEC_DEP_COLLISION` | Two deps resolve to the same generated function name |
 | `SPEC_MISSING_DEP` | A declared dep has no matching unit in the spec set |
+| `SPEC_LIBRARY_PATH_NOT_FOUND` | A `[libraries]` entry points to a path that does not exist |
+| `SPEC_LIBRARY_OUT_OF_ROOT` | A `[libraries]` entry resolves outside the repo root |
+| `SPEC_LIBRARY_ALIAS_SELF` | A `[libraries]` entry points back to the invoking library root |
+| `SPEC_DUPLICATE_LIBRARY_ROOT` | Two `[libraries]` aliases resolve to the same canonical root |
 | `SPEC_CYCLIC_DEP` | Units form a dependency cycle |
 | `SPEC_CROSS_LIBRARY_CYCLE` | Units form a dependency cycle across library boundaries |
 | `SPEC_USE_STATEMENT_IN_BODY` | `body.rust` contains a `use` statement — move it to `imports` or `deps` |

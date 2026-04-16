@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -46,6 +47,89 @@ pub struct WorkspaceContext {
     pub libraries: Vec<ResolvedLibrary>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkspaceConfigError {
+    LibraryPathNotFound {
+        config_path: PathBuf,
+        alias: String,
+        candidate: PathBuf,
+    },
+    LibraryOutOfRoot {
+        config_path: PathBuf,
+        alias: String,
+        resolved_root: PathBuf,
+    },
+    LibraryAliasSelf {
+        config_path: PathBuf,
+        alias: String,
+    },
+    DuplicateLibraryRoot {
+        config_path: PathBuf,
+        existing_alias: String,
+        alias: String,
+        resolved_root: PathBuf,
+    },
+}
+
+impl WorkspaceConfigError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::LibraryPathNotFound { .. } => "SPEC_LIBRARY_PATH_NOT_FOUND",
+            Self::LibraryOutOfRoot { .. } => "SPEC_LIBRARY_OUT_OF_ROOT",
+            Self::LibraryAliasSelf { .. } => "SPEC_LIBRARY_ALIAS_SELF",
+            Self::DuplicateLibraryRoot { .. } => "SPEC_DUPLICATE_LIBRARY_ROOT",
+        }
+    }
+
+    pub fn config_path(&self) -> &Path {
+        match self {
+            Self::LibraryPathNotFound { config_path, .. }
+            | Self::LibraryOutOfRoot { config_path, .. }
+            | Self::LibraryAliasSelf { config_path, .. }
+            | Self::DuplicateLibraryRoot { config_path, .. } => config_path,
+        }
+    }
+
+    pub fn detail_message(&self) -> String {
+        match self {
+            Self::LibraryPathNotFound {
+                alias, candidate, ..
+            } => format!(
+                "library '{alias}' path does not exist: {}",
+                candidate.display()
+            ),
+            Self::LibraryOutOfRoot {
+                alias,
+                resolved_root,
+                ..
+            } => format!(
+                "library '{alias}' resolves outside repo root: {}",
+                resolved_root.display()
+            ),
+            Self::LibraryAliasSelf { alias, .. } => {
+                format!("library '{alias}' resolves to the invoking library root")
+            }
+            Self::DuplicateLibraryRoot {
+                existing_alias,
+                alias,
+                resolved_root,
+                ..
+            } => format!(
+                "libraries '{existing_alias}' and '{alias}' resolve to {}",
+                resolved_root.display()
+            ),
+        }
+    }
+}
+
+impl fmt::Display for WorkspaceConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.code(), self.detail_message())
+    }
+}
+
+impl std::error::Error for WorkspaceConfigError {}
+
 pub fn load_workspace_config(target: &Path) -> Result<WorkspaceConfig> {
     Ok(load_workspace_context(target)?.config)
 }
@@ -69,7 +153,7 @@ pub fn load_workspace_context(target: &Path) -> Result<WorkspaceContext> {
             .unwrap_or_else(|| Path::new(".")),
     )?;
     let repo_root = find_repo_root(&workspace_root).unwrap_or_else(|| workspace_root.clone());
-    let libraries = resolve_direct_libraries(&workspace_root, &repo_root, &config)?;
+    let libraries = resolve_direct_libraries(&config_path, &workspace_root, &repo_root, &config)?;
 
     Ok(WorkspaceContext {
         config,
@@ -115,6 +199,7 @@ pub fn find_workspace_config(target: &Path) -> Option<PathBuf> {
 }
 
 fn resolve_direct_libraries(
+    config_path: &Path,
     workspace_root: &Path,
     repo_root: &Path,
     config: &WorkspaceConfig,
@@ -127,32 +212,41 @@ fn resolve_direct_libraries(
     for (alias, relative_root) in &config.libraries {
         let candidate = workspace_root.join(relative_root);
         if !candidate.exists() {
-            bail!(
-                "SPEC_LIBRARY_PATH_NOT_FOUND: library '{alias}' path does not exist: {}",
-                candidate.display()
-            );
+            return Err(WorkspaceConfigError::LibraryPathNotFound {
+                config_path: config_path.to_path_buf(),
+                alias: alias.clone(),
+                candidate,
+            }
+            .into());
         }
 
         let canonical_root = canonicalize_existing_dir(&candidate)?;
 
         if !canonical_root.starts_with(&repo_root) {
-            bail!(
-                "SPEC_LIBRARY_OUT_OF_ROOT: library '{alias}' resolves outside repo root: {}",
-                canonical_root.display()
-            );
+            return Err(WorkspaceConfigError::LibraryOutOfRoot {
+                config_path: config_path.to_path_buf(),
+                alias: alias.clone(),
+                resolved_root: canonical_root,
+            }
+            .into());
         }
 
         if canonical_root == workspace_root {
-            bail!(
-                "SPEC_LIBRARY_ALIAS_SELF: library '{alias}' resolves to the invoking library root"
-            );
+            return Err(WorkspaceConfigError::LibraryAliasSelf {
+                config_path: config_path.to_path_buf(),
+                alias: alias.clone(),
+            }
+            .into());
         }
 
         if let Some(existing_alias) = seen_roots.get(&canonical_root) {
-            bail!(
-                "SPEC_DUPLICATE_LIBRARY_ROOT: libraries '{existing_alias}' and '{alias}' resolve to {}",
-                canonical_root.display()
-            );
+            return Err(WorkspaceConfigError::DuplicateLibraryRoot {
+                config_path: config_path.to_path_buf(),
+                existing_alias: existing_alias.clone(),
+                alias: alias.clone(),
+                resolved_root: canonical_root,
+            }
+            .into());
         }
 
         seen_roots.insert(canonical_root.clone(), alias.clone());
@@ -293,6 +387,29 @@ mod tests {
 
         let err = load_workspace_context(&root).unwrap_err().to_string();
         assert!(err.contains("SPEC_LIBRARY_PATH_NOT_FOUND"));
+    }
+
+    #[test]
+    fn missing_library_path_downcasts_to_workspace_config_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path().join("repo");
+        let root = repo_root.join("app-spec");
+        let config_path = root.join("spec.toml");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: .git/modules/repo\n").unwrap();
+        fs::write(&config_path, "[libraries]\nshared = \"../missing-spec\"\n").unwrap();
+
+        let err = load_workspace_context(&root).unwrap_err();
+        let config_err = err.downcast_ref::<WorkspaceConfigError>().unwrap();
+        assert_eq!(config_err.code(), "SPEC_LIBRARY_PATH_NOT_FOUND");
+        assert_eq!(config_err.config_path(), config_path.as_path());
+        assert!(
+            config_err
+                .detail_message()
+                .contains("library 'shared' path does not exist:"),
+            "{}",
+            config_err.detail_message()
+        );
     }
 
     #[test]

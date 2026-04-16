@@ -5880,6 +5880,111 @@ fn validate_accepts_valid_direct_cross_library_dep() {
 }
 
 #[test]
+fn validate_ignores_unreferenced_broken_library() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["validate", "units"]);
+    assert_output_success(
+        "validate should ignore unreferenced configured libraries",
+        &output,
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("2 unit"), "{stdout}");
+}
+
+#[test]
+fn validate_ignores_unreferenced_library_cycles() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+    write_m9_unit(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "money/charge",
+        &["money/refund"],
+    );
+    write_m9_unit(
+        &fixture.payments_root.join("units"),
+        "money/refund.unit.spec",
+        "money/refund",
+        &["money/charge"],
+    );
+
+    let output = run_in(&fixture.app_root, &["validate", "units"]);
+    assert_output_success(
+        "validate should ignore cycles in unreferenced configured libraries",
+        &output,
+    );
+}
+
+#[test]
+fn validate_preserves_referenced_broken_library_failures() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_file(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["validate", "units"]);
+    assert!(!output.status.success(), "validate should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("YAML parse error"), "{stderr}");
+    assert!(stderr.contains("shared-spec"), "{stderr}");
+}
+
+#[test]
 fn validate_rejects_missing_library_crate_alias() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -5961,6 +6066,50 @@ fn validate_rejects_missing_library_path() {
     assert!(!output.status.success(), "validate should fail");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("SPEC_LIBRARY_PATH_NOT_FOUND"), "{stderr}");
+}
+
+#[test]
+fn validate_json_surfaces_missing_library_path_as_machine_readable_error() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../missing-spec\"\n",
+    )
+    .unwrap();
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &[],
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["validate", "units", "--format", "json"],
+    );
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["warnings"], serde_json::json!([]));
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0]["code"], "SPEC_LIBRARY_PATH_NOT_FOUND");
+    assert_eq!(errors[0]["unit"], Value::Null);
+    assert_eq!(errors[0]["path"], Value::String("spec.toml".to_string()));
+    assert!(
+        errors[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("library 'shared' path does not exist"),
+        "{errors:?}"
+    );
 }
 
 #[test]
@@ -6323,6 +6472,50 @@ fn export_emits_schema_v3_bundle_for_valid_cross_library_dep() {
 }
 
 #[test]
+fn export_ignores_unreferenced_broken_library() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["export", "units"]);
+    assert!(output.status.success(), "export should succeed");
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let edges = bundle["graph"]["edges"].as_array().unwrap();
+    assert!(
+        edges.iter().any(|edge| {
+            edge["kind"] == "dep"
+                && edge["from"]["library"].is_null()
+                && edge["from"]["id"] == "pricing/apply_discount"
+                && edge["to"]["library"] == "shared"
+                && edge["to"]["id"] == "money/round"
+        }),
+        "expected cross-library dep edge in export bundle, got: {edges:?}"
+    );
+}
+
+#[test]
 fn status_reports_valid_cross_library_unit_as_untested_without_dep_errors() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -6403,6 +6596,51 @@ fn status_json_reports_cross_library_unit_as_untested_without_loader_errors() {
     assert!(
         json.get("loader_errors").is_none(),
         "expected no global loader_errors, got: {json:?}"
+    );
+}
+
+#[test]
+fn status_json_ignores_unreferenced_broken_library_loader_errors() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "untested status should exit non-zero until evidence exists"
+    );
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0]["id"], "pricing/apply_discount");
+    assert_eq!(units[0]["status"], "untested");
+    assert_eq!(units[0]["errors"].as_array().unwrap().len(), 0);
+    assert!(
+        json.get("loader_errors").is_none(),
+        "expected no loader errors from unreferenced libraries, got: {json:?}"
     );
 }
 
@@ -6541,5 +6779,226 @@ fn status_surfaces_imported_library_loader_errors_globally_without_misreporting_
             .iter()
             .any(|error| error["code"] == "SPEC_CROSS_LIBRARY_DEP_NOT_FOUND"),
         "unexpected dep-not-found global error, got: {loader_errors:?}"
+    );
+}
+
+#[test]
+fn status_json_surfaces_missing_library_path_as_loader_error() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../missing-spec\"\n",
+    )
+    .unwrap();
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &[],
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(!output.status.success(), "status should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["units"], serde_json::json!([]));
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert_eq!(loader_errors.len(), 1);
+    assert_eq!(loader_errors[0]["code"], "SPEC_LIBRARY_PATH_NOT_FOUND");
+    assert_eq!(loader_errors[0]["unit"], Value::Null);
+    assert_eq!(
+        loader_errors[0]["path"],
+        Value::String("spec.toml".to_string())
+    );
+    assert!(
+        loader_errors[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("library 'shared' path does not exist"),
+        "{loader_errors:?}"
+    );
+}
+
+#[test]
+fn validate_ignores_broken_configured_library_when_root_has_no_cross_library_deps() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &[],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["validate", "units"]);
+    assert_output_success(
+        "validate should ignore configured libraries when root specs have no cross-library deps",
+        &output,
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("1 unit"), "{stdout}");
+}
+
+#[test]
+fn status_json_ignores_configured_library_when_root_has_no_cross_library_deps() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &[],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "untested status should exit non-zero until evidence exists"
+    );
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0]["id"], "pricing/apply_discount");
+    assert_eq!(units[0]["status"], "untested");
+    assert!(
+        json.get("loader_errors").is_none(),
+        "expected no loader errors from unused configured libraries, got: {json:?}"
+    );
+}
+
+#[test]
+fn export_ignores_configured_library_when_root_has_no_cross_library_deps() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &[],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(&fixture.app_root, &["export", "units"]);
+    assert!(output.status.success(), "export should succeed");
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let edges = bundle["graph"]["edges"].as_array().unwrap();
+    assert!(
+        !edges.iter().any(|edge| edge["to"]["library"] == "payments"),
+        "did not expect unused configured libraries in export graph, got: {edges:?}"
+    );
+}
+
+#[test]
+fn generate_ignores_unreferenced_broken_library() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "generate should ignore unreferenced configured libraries",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("src/generated/pricing/apply_discount.rs")
+            .exists(),
+        "expected generated output for referenced root unit"
+    );
+}
+
+#[test]
+fn generate_ignores_configured_library_when_root_has_no_cross_library_deps() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\npayments = \"../payments-spec\"\n",
+    )
+    .unwrap();
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &[],
+    );
+    write_file(
+        &fixture.payments_root.join("units"),
+        "money/charge.unit.spec",
+        "not: valid: yaml: [unclosed",
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "generate should ignore configured libraries when root has no cross-library deps",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("src/generated/pricing/apply_discount.rs")
+            .exists(),
+        "expected generated output for local root unit"
     );
 }
