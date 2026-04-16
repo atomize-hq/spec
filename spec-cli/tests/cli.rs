@@ -156,6 +156,23 @@ edition = "2024"
     .unwrap();
 }
 
+fn write_invalid_m9_app_cargo_toml(app_root: &Path) {
+    fs::write(
+        app_root.join("Cargo.toml"),
+        r#"[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies
+shared = { path = "../shared-crate" }
+
+[workspace]
+"#,
+    )
+    .unwrap();
+}
+
 fn setup_apply_discount_unit() -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -6054,6 +6071,60 @@ fn validate_rejects_missing_library_crate_alias() {
 }
 
 #[test]
+fn validate_json_reports_library_manifest_errors_without_alias_misdiagnosis() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_invalid_m9_app_cargo_toml(&fixture.app_root);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["validate", "units", "--format", "json"],
+    );
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_MANIFEST_ERROR"),
+        "expected SPEC_LIBRARY_CRATE_MANIFEST_ERROR, got: {errors:?}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "unexpected alias-missing error, got: {errors:?}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("<unresolved>/Cargo.toml"),
+        "unexpected unresolved manifest path: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn validate_rejects_unknown_library_namespace() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -6312,6 +6383,53 @@ fn validate_json_emits_cross_library_cycle_code() {
 }
 
 #[test]
+fn validate_json_rejects_dep_collision_with_unit_callable_name() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["validate", "units", "--format", "json"],
+    );
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one collision error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_DEP_COLLISION");
+    assert_eq!(error["unit"], "money/round");
+    assert_eq!(error["path"], "units/money/round.unit.spec");
+    assert_eq!(error["dep"], "shared::money/round");
+    assert_eq!(error["value"], "round");
+    assert_eq!(error["path2"], "money/round");
+}
+
+#[test]
 fn validate_rejects_cross_library_molecule_covers() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -6388,6 +6506,53 @@ fn generate_rejects_missing_library_crate_alias_before_writing_output() {
         stderr.contains("SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
         "{stderr}"
     );
+    assert!(
+        !fixture
+            .app_root
+            .join("src/generated/pricing/apply_discount.rs")
+            .exists(),
+        "generation should fail before writing output"
+    );
+}
+
+#[test]
+fn generate_rejects_invalid_library_manifest_before_writing_output() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_invalid_m9_app_cargo_toml(&fixture.app_root);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert!(!output.status.success(), "generate should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("SPEC_LIBRARY_CRATE_MANIFEST_ERROR"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Failed to parse"), "{stderr}");
+    assert!(
+        !stderr.contains("SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("<unresolved>/Cargo.toml"), "{stderr}");
     assert!(
         !fixture
             .app_root
@@ -6823,6 +6988,56 @@ fn status_marks_missing_library_crate_alias_as_invalid() {
             .iter()
             .any(|error| error["code"] == "SPEC_CROSS_LIBRARY_DEP_NOT_FOUND"),
         "unexpected dep-not-found error, got: {errors:?}"
+    );
+}
+
+#[test]
+fn status_json_surfaces_library_manifest_errors_globally() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_invalid_m9_app_cargo_toml(&fixture.app_root);
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(!output.status.success(), "status should fail");
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "untested");
+    assert_eq!(units[0]["errors"].as_array().unwrap().len(), 0);
+
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_MANIFEST_ERROR"),
+        "expected SPEC_LIBRARY_CRATE_MANIFEST_ERROR, got: {loader_errors:?}"
+    );
+    assert!(
+        !loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "unexpected alias-missing error, got: {loader_errors:?}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("<unresolved>/Cargo.toml"),
+        "unexpected unresolved manifest path: {}",
+        String::from_utf8_lossy(&output.stdout)
     );
 }
 

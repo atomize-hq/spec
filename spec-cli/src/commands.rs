@@ -2184,14 +2184,18 @@ fn load_referenced_validation_specs(
     let mut loader_errors = Vec::new();
     let mut loader_warnings = Vec::new();
     let mut total_files = 0;
-    let direct_aliases: BTreeSet<String> =
-        referenced_library_aliases(root_specs).into_keys().collect();
+    let direct_root_aliases: BTreeSet<String> = direct_root_library_aliases(root_specs)
+        .into_keys()
+        .collect();
 
     for library in libraries
         .iter()
-        .filter(|library| direct_aliases.contains(&library.alias))
+        .filter(|library| direct_root_aliases.contains(&library.alias))
         .cloned()
     {
+        // Only root-spec aliases participate in library discovery. Imported libraries may refer to
+        // additional aliases, but those stay unresolved during this invocation rather than
+        // recursively loading transitive libraries.
         let report = load_directory_report(&library.root);
         total_files += report.total_files;
         loader_errors.extend(report.errors);
@@ -2223,14 +2227,16 @@ fn validate_library_crate_aliases(
     path: &Path,
     config: &WorkspaceConfig,
 ) -> Vec<spec_core::SpecError> {
-    let referenced_aliases = referenced_library_aliases(root_specs);
+    let referenced_aliases = direct_root_library_aliases(root_specs);
     if referenced_aliases.is_empty() {
         return Vec::new();
     }
 
-    let manifest_path = resolved_crate_manifest_path(path, config)
-        .unwrap_or_else(|_| PathBuf::from("<unresolved>/Cargo.toml"));
-    let dependency_aliases = load_cargo_dependency_aliases(&manifest_path).unwrap_or_default();
+    let (manifest_path, dependency_aliases) = match load_root_cargo_dependency_aliases(path, config)
+    {
+        Ok(result) => result,
+        Err(err) => return vec![err],
+    };
 
     referenced_aliases
         .into_iter()
@@ -2248,7 +2254,7 @@ fn validate_library_crate_aliases(
         .collect()
 }
 
-fn referenced_library_aliases(root_specs: &[LoadedSpec]) -> BTreeMap<String, String> {
+fn direct_root_library_aliases(root_specs: &[LoadedSpec]) -> BTreeMap<String, String> {
     let mut aliases = BTreeMap::new();
 
     for spec in root_specs {
@@ -2278,6 +2284,25 @@ fn resolved_crate_manifest_path(path: &Path, config: &WorkspaceConfig) -> Result
         None => workspace_root_for(spec_root)?,
     };
     Ok(crate_root.join("Cargo.toml"))
+}
+
+fn load_root_cargo_dependency_aliases(
+    path: &Path,
+    config: &WorkspaceConfig,
+) -> std::result::Result<(PathBuf, HashSet<String>), spec_core::SpecError> {
+    let manifest_path = resolved_crate_manifest_path(path, config).map_err(|err| {
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: None,
+            message: format!("Failed to resolve Cargo.toml for library alias validation: {err}"),
+        }
+    })?;
+    let dependency_aliases = load_cargo_dependency_aliases(&manifest_path).map_err(|err| {
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: Some(manifest_path.display().to_string()),
+            message: err.to_string(),
+        }
+    })?;
+    Ok((manifest_path, dependency_aliases))
 }
 
 fn load_cargo_dependency_aliases(manifest_path: &Path) -> Result<HashSet<String>> {
@@ -2496,6 +2521,9 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::UnknownLibraryNamespace { .. } => "SPEC_UNKNOWN_LIBRARY_NAMESPACE",
         spec_core::SpecError::CrossLibraryDepNotFound { .. } => "SPEC_CROSS_LIBRARY_DEP_NOT_FOUND",
         spec_core::SpecError::LibraryCrateAliasMissing { .. } => "SPEC_LIBRARY_CRATE_ALIAS_MISSING",
+        spec_core::SpecError::LibraryCrateManifestError { .. } => {
+            "SPEC_LIBRARY_CRATE_MANIFEST_ERROR"
+        }
         spec_core::SpecError::CyclicDep { .. } => "SPEC_CYCLIC_DEP",
         spec_core::SpecError::CrossLibraryCycle { .. } => "SPEC_CROSS_LIBRARY_CYCLE",
         spec_core::SpecError::UseStatementInBody { .. } => "SPEC_USE_STATEMENT_IN_BODY",
@@ -2617,6 +2645,14 @@ fn spec_error_to_json_entry(
             path: Some(path.clone()),
             value: Some(alias.clone()),
             path2: Some(cargo_toml.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml,
+            message,
+        } => ErrorFields {
+            path: cargo_toml.clone(),
+            message: Some(message.clone()),
             ..Default::default()
         },
         spec_core::SpecError::CyclicDep { cycle_path, path } => ErrorFields {
@@ -2783,8 +2819,15 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::ContractInputNameInvalid { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
         | spec_core::SpecError::MissingMarker { path } => vec![path.clone()],
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: Some(path),
+            ..
+        } => vec![path.clone()],
         spec_core::SpecError::Generator { .. }
         | spec_core::SpecError::OutputDir { .. }
+        | spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: None, ..
+        }
         | spec_core::SpecError::Io(_)
         | spec_core::SpecError::Json(_) => Vec::new(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
@@ -2898,11 +2941,19 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::ContractInputNameInvalid { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
         | spec_core::SpecError::MissingMarker { path } => path.clone(),
+        spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: Some(path),
+            ..
+        } => path.clone(),
         spec_core::SpecError::DuplicateId { file1, file2, .. } => format!("{file1} | {file2}"),
         spec_core::SpecError::Generator { .. } | spec_core::SpecError::OutputDir { .. } => {
             "generation".to_string()
         }
-        spec_core::SpecError::Io(_) | spec_core::SpecError::Json(_) => "validation".to_string(),
+        spec_core::SpecError::Io(_)
+        | spec_core::SpecError::Json(_)
+        | spec_core::SpecError::LibraryCrateManifestError {
+            cargo_toml: None, ..
+        } => "validation".to_string(),
         spec_core::SpecError::MoleculeCoversNotFound { test_path, .. }
         | spec_core::SpecError::MoleculeCoversCollision { test_path, .. }
         | spec_core::SpecError::MoleculeBodyRustMustBeBlock { test_path, .. }
@@ -3373,6 +3424,10 @@ body:
                 alias: "shared".to_string(),
                 cargo_toml: "Cargo.toml".to_string(),
                 path: "units/a.unit.spec".to_string(),
+            },
+            spec_core::SpecError::LibraryCrateManifestError {
+                cargo_toml: Some("Cargo.toml".to_string()),
+                message: "Failed to parse Cargo.toml".to_string(),
             },
             spec_core::SpecError::CyclicDep {
                 cycle_path: vec!["a".to_string(), "b".to_string()],

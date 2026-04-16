@@ -482,6 +482,19 @@ fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
         });
     }
 
+    if let Some(dep) = spec.deps.iter().find(|dep| {
+        DepRef::parse(dep)
+            .map(|parsed| parsed.callable_name() == spec.fn_name)
+            .unwrap_or(false)
+    }) {
+        return Err(SpecError::DepCollision {
+            dep1: dep.clone(),
+            dep2: spec.id.clone(),
+            fn_name: spec.fn_name.clone(),
+            path: spec.id.clone(),
+        });
+    }
+
     let mut import_seen = HashSet::new();
     let mut import_statements = Vec::new();
 
@@ -825,6 +838,42 @@ mod tests {
         assert!(err.contains("Dep fn_name collision"), "{err}");
         assert!(err.contains("money/round"), "{err}");
         assert!(err.contains("shared::math/round"), "{err}");
+    }
+
+    #[test]
+    fn generate_code_rejects_dep_collision_with_unit_callable_name() {
+        let spec = ResolvedSpec::from_spec(SpecStruct {
+            id: "money/round".to_string(),
+            kind: "function".to_string(),
+            intent: Intent {
+                why: "Round money values.".to_string(),
+            },
+            contract: None,
+            deps: vec!["shared::money/round".to_string()],
+            imports: vec![],
+            body: Body {
+                rust: "{\n    round(value)\n}".to_string(),
+            },
+            local_tests: vec![],
+            links: None,
+            spec_version: None,
+        });
+
+        let err = generate_code(&spec).unwrap_err();
+        match err {
+            SpecError::DepCollision {
+                dep1,
+                dep2,
+                fn_name,
+                path,
+            } => {
+                assert_eq!(dep1, "shared::money/round");
+                assert_eq!(dep2, "money/round");
+                assert_eq!(fn_name, "round");
+                assert_eq!(path, "money/round");
+            }
+            other => panic!("expected DepCollision, got {other:?}"),
+        }
     }
 
     #[test]

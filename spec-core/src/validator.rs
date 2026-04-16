@@ -6,7 +6,7 @@
 
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
-    DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef,
+    DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef, callable_name,
     has_callable_collision,
 };
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
@@ -187,6 +187,23 @@ pub fn validate_semantic_with_options(
     // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
     for dep in &dep_refs {
         validate_dep_ref_keywords(dep, &spec.source.file_path)?;
+    }
+
+    let owner_callable_name = callable_name(&spec.spec.id);
+    if let Some(authored_dep) = spec
+        .spec
+        .deps
+        .iter()
+        .zip(dep_refs.iter())
+        .find(|(_, dep)| dep.callable_name() == owner_callable_name)
+        .map(|(authored_dep, _)| authored_dep)
+    {
+        return Err(SpecError::DepCollision {
+            dep1: authored_dep.clone(),
+            dep2: spec.spec.id.clone(),
+            fn_name: owner_callable_name.to_string(),
+            path: spec.source.file_path.clone(),
+        });
     }
 
     // Check for dep fn_name collisions
@@ -995,6 +1012,28 @@ local_tests:
         let err = result.unwrap_err();
         assert!(err.to_string().contains("collision"));
         assert!(err.to_string().contains("round"));
+    }
+
+    #[test]
+    fn test_validate_dep_collision_with_unit_callable_name() {
+        let mut spec = create_test_spec("money/round", "{ round(value) }");
+        spec.spec.deps = vec!["shared::money/round".to_string()];
+
+        let err = validate_semantic(&spec).unwrap_err();
+        match err {
+            SpecError::DepCollision {
+                dep1,
+                dep2,
+                fn_name,
+                path,
+            } => {
+                assert_eq!(dep1, "shared::money/round");
+                assert_eq!(dep2, "money/round");
+                assert_eq!(fn_name, "round");
+                assert_eq!(path, "test/money/round.unit.spec");
+            }
+            other => panic!("expected DepCollision, got {other:?}"),
+        }
     }
 
     #[test]

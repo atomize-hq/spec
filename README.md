@@ -209,7 +209,7 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_SEMANTIC_VALIDATION` | Unit passed schema but failed a semantic rule |
 | `SPEC_RUST_KEYWORD` | An `id` segment is a Rust reserved keyword |
 | `SPEC_DUPLICATE_ID` | Two unit files share the same `id` |
-| `SPEC_DEP_COLLISION` | Two deps resolve to the same generated function name |
+| `SPEC_DEP_COLLISION` | A dep collides with another generated callable name, including another dep or the owning unit function |
 | `SPEC_MISSING_DEP` | A declared dep has no matching unit in the spec set |
 | `SPEC_UNKNOWN_LIBRARY_NAMESPACE` | A dep references a library alias that is not configured in `[libraries]` |
 | `SPEC_CROSS_LIBRARY_DEP_NOT_FOUND` | A cross-library dep has no matching unit in the resolved library set |

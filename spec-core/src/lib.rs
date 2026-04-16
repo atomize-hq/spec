@@ -88,6 +88,12 @@ pub enum SpecError {
         path: String,
     },
 
+    #[error("SPEC_LIBRARY_CRATE_MANIFEST_ERROR: {message}")]
+    LibraryCrateManifestError {
+        cargo_toml: Option<String>,
+        message: String,
+    },
+
     #[error("❌ cycle detected: {}", cycle_path.join(" → "))]
     CyclicDep {
         cycle_path: Vec<String>,
