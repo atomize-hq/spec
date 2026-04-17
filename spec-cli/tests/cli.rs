@@ -4653,6 +4653,25 @@ fn single_file_test_skips_sibling_molecule_tests() {
 }
 
 #[test]
+fn single_file_test_with_local_deps_succeeds() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args(["test", "units/pricing/apply_tax.unit.spec"])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success("single_file_test_with_local_deps_succeeds", &output);
+
+    let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(passport.contains("\"status\": \"pass\""), "{passport}");
+}
+
+#[test]
 fn directory_test_still_loads_sibling_molecule_tests() {
     if !cargo_available() {
         return;
@@ -5251,6 +5270,54 @@ fn single_file_validate_skips_sibling_molecule_tests() {
 }
 
 #[test]
+fn single_file_validate_with_local_deps_succeeds() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "validate",
+            "units/pricing/apply_tax.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success("single_file_validate_with_local_deps_succeeds", &output);
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "valid");
+    assert_eq!(json["errors"], serde_json::json!([]));
+}
+
+#[test]
+fn single_file_status_with_local_deps_stays_scoped() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "status",
+            "units/pricing/apply_tax.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "single_file_status_with_local_deps_stays_scoped\n\nstdout:\n{}\n\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1, "{json}");
+    assert_eq!(units[0]["id"], "pricing/apply_tax");
+    assert_eq!(units[0]["status"], "untested");
+    assert_eq!(units[0]["errors"], serde_json::json!([]));
+}
+
+#[test]
 fn single_file_generate_skips_sibling_molecule_tests() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -5279,6 +5346,26 @@ fn single_file_generate_skips_sibling_molecule_tests() {
 }
 
 #[test]
+fn single_file_generate_with_local_deps_succeeds() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output_dir = ecommerce_dir.join("generated-single");
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "generate",
+            "units/pricing/apply_tax.unit.spec",
+            "--output",
+            output_dir.to_str().unwrap(),
+        ],
+    );
+    assert_output_success("single_file_generate_with_local_deps_succeeds", &output);
+
+    assert!(output_dir.join("pricing/apply_tax.rs").exists());
+    assert!(!output_dir.join("money/round.rs").exists());
+}
+
+#[test]
 fn single_file_export_skips_sibling_molecule_tests() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -5301,6 +5388,22 @@ fn single_file_export_skips_sibling_molecule_tests() {
         covers_edges.is_empty(),
         "single-file export should not include sibling covers edges"
     );
+}
+
+#[test]
+fn single_file_export_with_local_deps_succeeds() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &["export", "units/pricing/apply_tax.unit.spec"],
+    );
+    assert_output_success("single_file_export_with_local_deps_succeeds", &output);
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(bundle["units"].as_array().unwrap().len(), 1);
+    assert_eq!(bundle["units"][0]["id"], "pricing/apply_tax");
+    assert_eq!(bundle["molecule_tests"].as_array().unwrap().len(), 0);
 }
 
 #[test]

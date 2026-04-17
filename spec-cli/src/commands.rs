@@ -36,7 +36,7 @@ use spec_core::validator::{
 };
 #[cfg(test)]
 use spec_core::validator::{validate_deps_exist_with_options, validate_no_duplicate_ids};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -63,6 +63,7 @@ struct ImportedLibrarySpecs {
 
 struct ValidationSpecCollection {
     root_specs: Vec<LoadedSpec>,
+    support_specs: Vec<LoadedSpec>,
     imported_libraries: Vec<ImportedLibrarySpecs>,
     loader_errors: Vec<spec_core::SpecError>,
     loader_warnings: Vec<spec_core::SpecWarning>,
@@ -70,9 +71,17 @@ struct ValidationSpecCollection {
 }
 
 impl ValidationSpecCollection {
+    fn local_specs(&self) -> Vec<&LoadedSpec> {
+        let mut specs = Vec::with_capacity(self.root_specs.len() + self.support_specs.len());
+        specs.extend(self.root_specs.iter());
+        specs.extend(self.support_specs.iter());
+        specs
+    }
+
     fn all_specs(&self) -> Vec<&LoadedSpec> {
         let mut specs = Vec::with_capacity(
             self.root_specs.len()
+                + self.support_specs.len()
                 + self
                     .imported_libraries
                     .iter()
@@ -80,6 +89,7 @@ impl ValidationSpecCollection {
                     .sum::<usize>(),
         );
         specs.extend(self.root_specs.iter());
+        specs.extend(self.support_specs.iter());
         for library in &self.imported_libraries {
             specs.extend(library.specs.iter());
         }
@@ -519,7 +529,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
         }
         Err(err) => return Err(err),
     };
-    let validation_specs = collect_validation_specs(path, &context.libraries)?;
+    let validation_specs = collect_validation_specs(path, &context)?;
     let config = context.config.clone();
     let validation_options = ValidationOptions {
         strict_deps: !no_strict,
@@ -528,7 +538,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
     let (mut validation_errors, validation_warnings) =
         finish_validation_with_imports(&validation_specs, &validation_options);
     validation_errors.extend(validate_library_crate_aliases(
-        &validation_specs.root_specs,
+        validation_specs.local_specs(),
         path,
         &context,
     ));
@@ -783,28 +793,25 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         Err(err) => return Err(err),
     };
     let config = context.config.clone();
-    let (root_specs, root_loader_errors, _root_loader_warnings, root_total_files) =
-        collect_specs(path)?;
-    let (
-        selected_libraries,
-        imported_libraries,
-        imported_loader_errors,
-        _imported_loader_warnings,
-        _imported_total,
-    ) = load_referenced_validation_specs(&root_specs, &context.libraries);
-    let validation_specs = ValidationSpecCollection {
-        root_specs,
-        imported_libraries,
-        loader_errors: Vec::new(),
-        loader_warnings: Vec::new(),
-        total_files: root_total_files,
-    };
+    let mut validation_specs = collect_validation_specs(path, &context)?;
+    let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
+    let selected_libraries: Vec<ResolvedLibrary> = context
+        .libraries
+        .iter()
+        .filter(|library| {
+            validation_specs
+                .imported_libraries
+                .iter()
+                .any(|imported| imported.alias == library.alias)
+        })
+        .cloned()
+        .collect();
     let failed_import_aliases =
-        imported_library_aliases_with_loader_errors(&imported_loader_errors, &selected_libraries);
+        imported_library_aliases_with_loader_errors(&loader_errors, &selected_libraries);
     let (validation_errors, _validation_warnings) =
         finish_validation_with_imports(&validation_specs, &validation_options);
     let mut validation_errors = suppress_cross_library_dep_not_found_for_failed_imports(
@@ -812,7 +819,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         &failed_import_aliases,
     );
     validation_errors.extend(validate_library_crate_aliases(
-        &validation_specs.root_specs,
+        validation_specs.local_specs(),
         path,
         &context,
     ));
@@ -829,8 +836,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         .collect();
 
     let mut errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
-    let mut global_errors = root_loader_errors;
-    global_errors.extend(imported_loader_errors);
+    let mut global_errors = loader_errors;
     for err in validation_errors {
         let entry = spec_error_to_json_entry(&err, &id_by_path);
         let root_error_paths: Vec<String> = error_paths(&err)
@@ -864,7 +870,10 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         print_diagnostics(&diagnostics);
     }
 
-    if root_total_files == 0 && validation_specs.root_specs.is_empty() && !has_global_errors {
+    if validation_specs.total_files == 0
+        && validation_specs.root_specs.is_empty()
+        && !has_global_errors
+    {
         match format {
             OutputFormat::Text => {
                 println!("0 units found, nothing to status.");
@@ -974,31 +983,19 @@ fn suppress_cross_library_dep_not_found_for_failed_imports(
 }
 
 fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
-    let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
     let context = load_workspace_context(path)?;
+    let mut validation_specs = collect_validation_specs(path, &context)?;
+    let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
+    let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
     let config = context.config.clone();
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let (
-        _selected_libraries,
-        imported_libraries,
-        imported_loader_errors,
-        imported_loader_warnings,
-        _imported_total,
-    ) = load_referenced_validation_specs(&specs, &context.libraries);
-    let validation_specs = ValidationSpecCollection {
-        root_specs: specs.clone(),
-        imported_libraries,
-        loader_errors: Vec::new(),
-        loader_warnings: Vec::new(),
-        total_files,
-    };
     let (mut validation_errors, validation_warnings) =
         finish_validation_with_imports(&validation_specs, &validation_options);
     validation_errors.extend(validate_library_crate_aliases(
-        &validation_specs.root_specs,
+        validation_specs.local_specs(),
         path,
         &context,
     ));
@@ -1007,16 +1004,10 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     for err in loader_errors {
         push_error(&mut errors, err);
     }
-    for err in imported_loader_errors {
-        push_error(&mut errors, err);
-    }
     for err in validation_errors {
         push_error(&mut errors, err);
     }
     for warning in loader_warnings {
-        push_warning(&mut warnings, warning);
-    }
-    for warning in imported_loader_warnings {
         push_warning(&mut warnings, warning);
     }
     for warning in validation_warnings {
@@ -1058,7 +1049,8 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     // Validate molecule tests before including them in the export bundle.
     // export_command validates unit specs above but previously skipped molecule test validation,
     // allowing tests with unknown covers IDs or invalid bodies to silently enter the export JSON.
-    let (molecule_errors, molecule_warnings) = validate_molecule_tests(&molecule_tests, &specs);
+    let (molecule_errors, molecule_warnings) =
+        validate_molecule_tests(&molecule_tests, &validation_specs.root_specs);
     for err in molecule_errors {
         push_error(&mut errors, err);
     }
@@ -1084,7 +1076,12 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
         );
     }
 
-    let bundle = build_export_bundle(&specs, &molecule_tests, &rfc3339_now(), provenance.as_ref());
+    let bundle = build_export_bundle(
+        &validation_specs.root_specs,
+        &molecule_tests,
+        &rfc3339_now(),
+        provenance.as_ref(),
+    );
     let json = serde_json::to_string_pretty(&bundle)?;
 
     match output {
@@ -1297,7 +1294,9 @@ fn emit_plan_validate_failure(
 
 fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
     let context = load_workspace_context(path)?;
-    let (root_specs, loader_errors, loader_warnings, _total_files) = collect_specs(path)?;
+    let mut validation_specs = collect_validation_specs(path, &context)?;
+    let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
+    let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
     if !loader_errors.is_empty() {
         let mut errors = DiagnosticMap::new();
         for err in loader_errors {
@@ -1313,7 +1312,8 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
         }
         print_diagnostics(&warnings);
     }
-    let alias_errors = validate_library_crate_aliases(&root_specs, path, &context);
+    let alias_errors =
+        validate_library_crate_aliases(validation_specs.local_specs(), path, &context);
     if !alias_errors.is_empty() {
         let mut errors = DiagnosticMap::new();
         for err in alias_errors {
@@ -1359,7 +1359,12 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
 }
 
 fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
-    let (specs, loader_errors, loader_warnings, total_files) = collect_specs(path)?;
+    let context = load_workspace_context(path)?;
+    let mut validation_specs = collect_validation_specs(path, &context)?;
+    let specs = validation_specs.root_specs.clone();
+    let total_files = validation_specs.total_files;
+    let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
+    let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
     if total_files == 0 {
         let mut errors = DiagnosticMap::new();
         let mut warnings = DiagnosticMap::new();
@@ -1425,25 +1430,10 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
         });
     }
 
-    let context = load_workspace_context(path)?;
     let config = context.config;
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
-    };
-    let (
-        _selected_libraries,
-        imported_libraries,
-        imported_loader_errors,
-        imported_loader_warnings,
-        _imported_total,
-    ) = load_referenced_validation_specs(&specs, &context.libraries);
-    let validation_specs = ValidationSpecCollection {
-        root_specs: specs.clone(),
-        imported_libraries,
-        loader_errors: Vec::new(),
-        loader_warnings: Vec::new(),
-        total_files,
     };
     let (validation_errors, validation_warnings) =
         finish_validation_with_imports(&validation_specs, &validation_options);
@@ -1452,16 +1442,10 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
     for err in loader_errors {
         push_error(&mut errors, err);
     }
-    for err in imported_loader_errors {
-        push_error(&mut errors, err);
-    }
     for err in validation_errors {
         push_error(&mut errors, err);
     }
     for warning in loader_warnings {
-        push_warning(&mut warnings, warning);
-    }
-    for warning in imported_loader_warnings {
         push_warning(&mut warnings, warning);
     }
     for warning in validation_warnings {
@@ -1914,21 +1898,33 @@ fn test_command(
         bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
     }
 
+    let mut single_file_generation_scope: Option<tempfile::TempDir> = None;
     let (generation_scope, pipeline_scope, target_spec) = if path.is_file() {
         if !is_unit_spec(path) {
             bail!("{} is not a .unit.spec file", path.display());
         }
+        let validation_specs = collect_validation_specs(path, context)?;
+        let generation_specs: Vec<LoadedSpec> = validation_specs
+            .root_specs
+            .iter()
+            .chain(validation_specs.support_specs.iter())
+            .cloned()
+            .collect();
+        let generation_tempdir =
+            materialize_single_file_generation_scope(path, context, &generation_specs)?;
+        let generation_scope = generation_tempdir.path().join("units");
+        single_file_generation_scope = Some(generation_tempdir);
         (
-            path,
+            generation_scope,
             path.parent().unwrap_or(path),
             Some(load_file(path).with_context(|| format!("Failed to load {}", path.display()))?),
         )
     } else {
-        (path, path, None)
+        (path.to_path_buf(), path, None)
     };
 
     let (root_specs, loader_errors, loader_warnings, _total_files) =
-        collect_specs(generation_scope)?;
+        collect_specs(&generation_scope)?;
     if !loader_errors.is_empty() {
         let mut errors = DiagnosticMap::new();
         for err in loader_errors {
@@ -1944,7 +1940,7 @@ fn test_command(
         }
         print_diagnostics(&warnings);
     }
-    let alias_errors = validate_library_crate_aliases(&root_specs, generation_scope, context);
+    let alias_errors = validate_library_crate_aliases(&root_specs, path, context);
     if !alias_errors.is_empty() {
         let mut errors = DiagnosticMap::new();
         for err in alias_errors {
@@ -1959,7 +1955,8 @@ fn test_command(
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(generation_scope, &resolved_output, &ctx.project_root)?;
+    let generated = generate_specs(&generation_scope, &resolved_output, &ctx.project_root)?;
+    let _single_file_generation_scope = single_file_generation_scope;
     if target_spec.is_none() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
@@ -2481,28 +2478,163 @@ fn collect_specs(path: &Path) -> Result<CollectedSpecs> {
 
 fn collect_validation_specs(
     path: &Path,
-    libraries: &[ResolvedLibrary],
+    context: &WorkspaceContext,
 ) -> Result<ValidationSpecCollection> {
     let (root_specs, mut loader_errors, mut loader_warnings, mut total_files) =
         collect_specs(path)?;
+    let support_specs = collect_local_support_specs(path, context, &root_specs)?;
     let (
         _selected_libraries,
         imported_libraries,
         imported_errors,
         imported_warnings,
         imported_total_files,
-    ) = load_referenced_validation_specs(&root_specs, libraries);
+    ) = load_referenced_validation_specs(
+        root_specs.iter().chain(support_specs.iter()),
+        &context.libraries,
+    );
     total_files += imported_total_files;
     loader_errors.extend(imported_errors);
     loader_warnings.extend(imported_warnings);
 
     Ok(ValidationSpecCollection {
         root_specs,
+        support_specs,
         imported_libraries,
         loader_errors,
         loader_warnings,
         total_files,
     })
+}
+
+fn collect_local_support_specs(
+    path: &Path,
+    context: &WorkspaceContext,
+    root_specs: &[LoadedSpec],
+) -> Result<Vec<LoadedSpec>> {
+    if !path.is_file() || !is_unit_spec(path) {
+        return Ok(Vec::new());
+    }
+
+    let Some(library_root) = resolve_unit_library_root(path, context) else {
+        return Ok(Vec::new());
+    };
+
+    let report = load_directory_report_bounded(&library_root, &library_root)?;
+    let specs_by_id: HashMap<String, LoadedSpec> = report
+        .specs
+        .into_iter()
+        .map(|spec| (spec.spec.id.clone(), spec))
+        .collect();
+    let mut visited: HashSet<String> = root_specs.iter().map(|spec| spec.spec.id.clone()).collect();
+    let mut queue = VecDeque::new();
+    let mut support_specs = Vec::new();
+
+    for spec in root_specs {
+        for dep in local_dep_ids(spec) {
+            queue.push_back(dep);
+        }
+    }
+
+    while let Some(dep_id) = queue.pop_front() {
+        if !visited.insert(dep_id.clone()) {
+            continue;
+        }
+        let Some(spec) = specs_by_id.get(&dep_id) else {
+            continue;
+        };
+        for child_dep in local_dep_ids(spec) {
+            if !visited.contains(&child_dep) {
+                queue.push_back(child_dep);
+            }
+        }
+        support_specs.push(spec.clone());
+    }
+
+    support_specs.sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
+    Ok(support_specs)
+}
+
+fn resolve_unit_library_root(path: &Path, context: &WorkspaceContext) -> Option<PathBuf> {
+    let absolute_path = absolutize_from_current_dir(path).ok()?;
+    let repo_root = context
+        .repo_root
+        .clone()
+        .or_else(|| repo_root_for(&absolute_path));
+    let mut current = absolute_path.parent();
+
+    while let Some(dir) = current {
+        if let Some(repo_root) = &repo_root
+            && !dir.starts_with(repo_root)
+        {
+            break;
+        }
+
+        let units_dir = dir.join("units");
+        if units_dir.is_dir() && absolute_path.starts_with(&units_dir) {
+            return dir.canonicalize().ok();
+        }
+
+        current = dir.parent();
+    }
+
+    None
+}
+
+fn local_dep_ids(spec: &LoadedSpec) -> Vec<String> {
+    spec.spec
+        .deps
+        .iter()
+        .filter_map(|dep| DepRef::parse(dep).ok())
+        .filter(|dep| dep.library_alias().is_none())
+        .map(|dep| dep.unit_id().to_string())
+        .collect()
+}
+
+fn materialize_single_file_generation_scope(
+    path: &Path,
+    context: &WorkspaceContext,
+    specs: &[LoadedSpec],
+) -> Result<tempfile::TempDir> {
+    let library_root = resolve_unit_library_root(path, context)
+        .ok_or_else(|| anyhow::anyhow!("failed to resolve library root for {}", path.display()))?;
+    let temp_dir = tempfile::TempDir::new_in(&library_root).with_context(|| {
+        format!(
+            "Failed to create temporary generation scope in {}",
+            library_root.display()
+        )
+    })?;
+
+    let spec_toml = library_root.join("spec.toml");
+    if spec_toml.is_file() {
+        fs::copy(&spec_toml, temp_dir.path().join("spec.toml"))
+            .with_context(|| format!("Failed to copy {}", spec_toml.display()))?;
+    }
+
+    for spec in specs {
+        let source_path = absolutize_from_current_dir(Path::new(&spec.source.file_path))?;
+        let rel_path = source_path.strip_prefix(&library_root).with_context(|| {
+            format!(
+                "Failed to place {} inside temporary generation scope rooted at {}",
+                source_path.display(),
+                library_root.display()
+            )
+        })?;
+        let dest_path = temp_dir.path().join(rel_path);
+        if let Some(parent) = dest_path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        fs::copy(&source_path, &dest_path).with_context(|| {
+            format!(
+                "Failed to copy {} into {}",
+                source_path.display(),
+                dest_path.display()
+            )
+        })?;
+    }
+
+    Ok(temp_dir)
 }
 
 fn collect_plan_validation_specs(
@@ -2525,6 +2657,7 @@ fn collect_plan_validation_specs(
 
     Ok(ValidationSpecCollection {
         root_specs: report.specs,
+        support_specs: Vec::new(),
         imported_libraries,
         loader_errors,
         loader_warnings,
@@ -2585,8 +2718,8 @@ fn plan_validation_inputs(
     ))
 }
 
-fn load_referenced_validation_specs(
-    root_specs: &[LoadedSpec],
+fn load_referenced_validation_specs<'a>(
+    root_specs: impl IntoIterator<Item = &'a LoadedSpec>,
     libraries: &[ResolvedLibrary],
 ) -> (
     Vec<ResolvedLibrary>,
@@ -2638,8 +2771,8 @@ struct CargoManifest {
     dependencies: BTreeMap<String, toml::Value>,
 }
 
-fn validate_library_crate_aliases(
-    root_specs: &[LoadedSpec],
+fn validate_library_crate_aliases<'a>(
+    root_specs: impl IntoIterator<Item = &'a LoadedSpec>,
     path: &Path,
     context: &WorkspaceContext,
 ) -> Vec<spec_core::SpecError> {
@@ -2670,7 +2803,9 @@ fn validate_library_crate_aliases(
         .collect()
 }
 
-fn direct_root_library_aliases(root_specs: &[LoadedSpec]) -> BTreeMap<String, String> {
+fn direct_root_library_aliases<'a>(
+    root_specs: impl IntoIterator<Item = &'a LoadedSpec>,
+) -> BTreeMap<String, String> {
     let mut aliases = BTreeMap::new();
 
     for spec in root_specs {
@@ -2795,6 +2930,11 @@ fn finish_validation_with_imports(
             errors.push(err);
         }
     }
+    for spec in &specs.support_specs {
+        if let Err(err) = validate_full_with_options(spec, options) {
+            errors.push(err);
+        }
+    }
     for library in &specs.imported_libraries {
         for spec in &library.specs {
             if let Err(err) = validate_full_with_options(spec, options) {
@@ -2817,6 +2957,7 @@ fn finish_validation_with_imports(
     errors.append(&mut dep_errors);
     warnings.extend(dep_warnings);
     warnings.extend(check_spec_versions(&specs.root_specs));
+    warnings.extend(check_spec_versions(&specs.support_specs));
     for library in &specs.imported_libraries {
         warnings.extend(check_spec_versions(&library.specs));
     }
@@ -2832,6 +2973,14 @@ fn build_qualified_validation_specs<'a>(
     let mut qualified_specs = Vec::new();
 
     for spec in &specs.root_specs {
+        qualified_specs.push(qualify_loaded_spec(
+            spec,
+            None,
+            known_library_aliases,
+            errors,
+        ));
+    }
+    for spec in &specs.support_specs {
         qualified_specs.push(qualify_loaded_spec(
             spec,
             None,
