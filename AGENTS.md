@@ -26,6 +26,19 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 - A passport is the co-located `.spec.passport.json` record for a unit. It is "done" only when the unit validates, builds, tests, and has fresh passport evidence from `spec test`.
 - A stale unit is marked with `~` in `spec status` when the passport's stored contract hash no longer matches the current spec contract. Treat stale as work to redo, not as success.
 
+## Plan Artifact Workflow
+
+Use this workflow when authoring or reviewing `.plan.spec` files.
+
+- `.plan.spec` is authored intent plus acceptance targets. `computed_impact` is derived output only and is never authored in the source file.
+- Run `spec plan validate <file> --format json` as the machine-readable source of truth for plan artifacts.
+- `spec plan validate/export` accepts exactly one `.plan.spec` file, not a directory.
+- Plan scope is local-library only in M10. `changes[].unit` and `acceptance.validate[]` must use local unit ids like `pricing/apply_tax`, not `shared::pricing/apply_tax`.
+- `modify` and `remove` require an existing current-graph unit and derive current local-library impact.
+- `add` requires a syntactically valid but currently missing local unit id and yields `computed_impact.unresolved[]` instead of fabricated impact.
+- `computed_impact.status` is `complete` when every change has truthful current-graph impact and `partial` when any `add` remains unresolved.
+- `spec plan export <file>` emits a dedicated plan bundle and does not change the `spec export` unit bundle contract.
+
 ## spec status health states (schema_version 2)
 
 `spec status --format json` emits `schema_version: 2`. Each unit has a `status` field:
