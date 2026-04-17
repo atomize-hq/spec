@@ -235,11 +235,7 @@ pub fn find_workspace_config(target: &Path) -> Option<PathBuf> {
     } else {
         cwd.join(target)
     };
-    let stop_at = if target.is_absolute() {
-        find_repo_root(&absolute_target)
-    } else {
-        Some(cwd.clone())
-    };
+    let stop_at = find_repo_root(&absolute_target);
 
     let start = if absolute_target.is_file() {
         absolute_target.parent().unwrap_or(&absolute_target)
@@ -353,7 +349,13 @@ fn find_repo_root(start: &Path) -> Option<PathBuf> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::{Mutex, OnceLock};
     use tempfile::TempDir;
+
+    fn cwd_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn loads_default_config_when_missing() {
@@ -380,6 +382,7 @@ mod tests {
 
     #[test]
     fn load_workspace_context_from_relative_subdir_path_keeps_repo_root() {
+        let _guard = cwd_test_lock().lock().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let repo_root = temp_dir.path().join("repo");
         let shared_spec = repo_root.join("shared-spec");
@@ -414,6 +417,46 @@ mod tests {
                 .and_then(|path| path.canonicalize().ok())
                 .as_deref(),
             Some(shared_crate.as_path())
+        );
+    }
+
+    #[test]
+    fn load_workspace_context_from_nested_relative_file_finds_ancestor_config() {
+        let _guard = cwd_test_lock().lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path().join("repo");
+        let crate_root = repo_root.join("ecommerce");
+        let nested_dir = crate_root.join("units/pricing");
+        fs::create_dir_all(&nested_dir).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: .git/modules/repo\n").unwrap();
+        fs::write(
+            crate_root.join("Cargo.toml"),
+            "[package]\nname = \"ecommerce\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        fs::write(
+            crate_root.join("spec.toml"),
+            "[pipeline]\ncrate_root = \".\"\n",
+        )
+        .unwrap();
+        fs::write(
+            nested_dir.join("apply_tax.unit.spec"),
+            "id: pricing/apply_tax\nkind: function\nintent:\n  why: test\nbody:\n  rust: |\n    { true }\n",
+        )
+        .unwrap();
+
+        let original_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&nested_dir).unwrap();
+        let context = load_workspace_context(Path::new("apply_tax.unit.spec")).unwrap();
+        std::env::set_current_dir(original_cwd).unwrap();
+
+        assert_eq!(
+            context.workspace_root.as_deref(),
+            Some(crate_root.canonicalize().unwrap().as_path())
+        );
+        assert_eq!(
+            context.repo_root.as_deref(),
+            Some(repo_root.canonicalize().unwrap().as_path())
         );
     }
 

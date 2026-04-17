@@ -58,11 +58,7 @@ pub fn workspace_root_for(path: &Path) -> Result<PathBuf> {
     } else {
         cwd.join(path)
     };
-    let stop_at = if path.is_absolute() {
-        find_repo_root_boundary(&absolute_path)
-    } else {
-        Some(cwd)
-    };
+    let stop_at = find_repo_root_boundary(&absolute_path);
 
     let start = if absolute_path.is_file() {
         absolute_path.parent().unwrap_or(&absolute_path)
@@ -163,21 +159,28 @@ pub fn zero_tests_ran(output: &str) -> bool {
         };
         has_any_result = true;
         // If any binary ran at least one test the filter matched, return false.
-        // The first `;`-delimited segment is "ok. N passed" or "FAILED. N passed";
-        // strip the status prefix before parsing.
-        let passed = summary.split(';').map(str::trim).find_map(|part| {
-            let part = part
-                .strip_prefix("ok. ")
-                .or_else(|| part.strip_prefix("FAILED. "))
-                .unwrap_or(part);
-            part.strip_suffix(" passed")
-                .and_then(|n| n.trim().parse::<u32>().ok())
+        // A failed-only run still matched and executed tests, so count both passed
+        // and failed summaries here.
+        let ran_any = summary.split(';').map(str::trim).any(|part| {
+            summary_segment_count(part, "passed").is_some_and(|n| n > 0)
+                || summary_segment_count(part, "failed").is_some_and(|n| n > 0)
+                || summary_segment_count(part, "measured").is_some_and(|n| n > 0)
         });
-        if passed.is_some_and(|n| n > 0) {
+        if ran_any {
             return false;
         }
     }
     has_any_result
+}
+
+fn summary_segment_count(segment: &str, label: &str) -> Option<u32> {
+    let segment = segment
+        .strip_prefix("ok. ")
+        .or_else(|| segment.strip_prefix("FAILED. "))
+        .unwrap_or(segment);
+    segment
+        .strip_suffix(&format!(" {label}"))
+        .and_then(|n| n.trim().parse::<u32>().ok())
 }
 
 /// Derive the Rust module prefix used by generated tests from an output path.
@@ -582,6 +585,25 @@ test generated::pricing::apply_tax::tests::test_basic_tax ... ok
 test generated::pricing::calculate_total::tests::test_combined_flow ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+        assert!(!zero_tests_ran(stdout));
+    }
+
+    #[test]
+    fn test_zero_tests_ran_false_for_failed_tests() {
+        let stdout = "\
+running 1 test
+test generated::pricing::apply_tax::tests::test_basic_tax ... FAILED
+
+failures:
+
+---- generated::pricing::apply_tax::tests::test_basic_tax stdout ----
+
+thread 'generated::pricing::apply_tax::tests::test_basic_tax' panicked at src/lib.rs:10:9:
+assertion failed: false
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ";
 
         assert!(!zero_tests_ran(stdout));

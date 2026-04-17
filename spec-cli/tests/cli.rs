@@ -2544,11 +2544,12 @@ fn spec_build_crate_root_config_vs_flag_precedence() {
 
 #[test]
 fn spec_build_no_cargo_toml_exits_with_error() {
-    let temp_dir = temp_repo_dir();
+    let temp_dir = tempfile::TempDir::new().unwrap();
     let units_dir = temp_dir.path().join("units");
     write_minimal_units_dir(&units_dir);
 
-    // No Cargo.toml anywhere under temp_dir — ancestor walk will fail.
+    // No Cargo.toml anywhere under temp_dir, and the fixture lives outside this repo,
+    // so the ancestor walk has no crate root to find.
     // We run spec from within temp_dir and don't pass --crate-root.
     let output = Command::new(bin())
         .current_dir(temp_dir.path())
@@ -4672,6 +4673,60 @@ fn single_file_test_with_local_deps_succeeds() {
 }
 
 #[test]
+fn single_file_test_failure_writes_failing_passport() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let spec_path = ecommerce_dir.join("units/pricing/apply_tax.unit.spec");
+    let contents = fs::read_to_string(&spec_path).unwrap();
+    fs::write(
+        &spec_path,
+        contents.replace(
+            "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)",
+            "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(99999, 2)",
+        ),
+    )
+    .unwrap();
+
+    let output = Command::new(bin())
+        .current_dir(&ecommerce_dir)
+        .args(["test", "units/pricing/apply_tax.unit.spec"])
+        .output()
+        .expect("failed to run spec");
+
+    assert!(
+        !output.status.success(),
+        "expected failing local test to exit non-zero"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("matched 0 tests"),
+        "failing single-file test should not be misclassified as zero matches\n{stderr}"
+    );
+
+    let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(passport.contains("\"status\": \"fail\""), "{passport}");
+
+    let status_output = run_in(
+        &ecommerce_dir,
+        &[
+            "status",
+            "units/pricing/apply_tax.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !status_output.status.success(),
+        "failing unit status should exit non-zero"
+    );
+    let json = parse_stdout_json(&status_output);
+    assert_eq!(json["units"][0]["status"], "failing");
+}
+
+#[test]
 fn directory_test_still_loads_sibling_molecule_tests() {
     if !cargo_available() {
         return;
@@ -5363,6 +5418,51 @@ fn single_file_generate_with_local_deps_succeeds() {
 
     assert!(output_dir.join("pricing/apply_tax.rs").exists());
     assert!(!output_dir.join("money/round.rs").exists());
+}
+
+#[test]
+fn single_file_generate_from_nested_units_subdir_allows_relative_output() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let pricing_dir = ecommerce_dir.join("units/pricing");
+
+    let output = run_in(
+        &pricing_dir,
+        &[
+            "generate",
+            "apply_tax.unit.spec",
+            "--output",
+            "../../src/generated",
+        ],
+    );
+    assert_output_success(
+        "single-file generate from nested units dir should honor ancestor spec.toml/project root",
+        &output,
+    );
+
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/apply_tax.rs")
+            .exists()
+    );
+}
+
+#[test]
+fn single_file_test_from_nested_units_subdir_finds_ancestor_crate_root() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let pricing_dir = ecommerce_dir.join("units/pricing");
+
+    let output = run_in(&pricing_dir, &["test", "apply_tax.unit.spec"]);
+    assert_output_success(
+        "single-file test from nested units dir should find ancestor Cargo.toml",
+        &output,
+    );
+
+    let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert!(passport.contains("\"status\": \"pass\""), "{passport}");
 }
 
 #[test]

@@ -1329,10 +1329,9 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
         path
     };
     let explicit_output = output.map(PathBuf::from);
-    let crate_root = if explicit_output.is_none() {
-        Some(resolve_default_crate_root(spec_root, &context)?)
-    } else {
-        None
+    let crate_root = match explicit_output {
+        Some(_) => resolve_default_crate_root(spec_root, &context).ok(),
+        None => Some(resolve_default_crate_root(spec_root, &context)?),
     };
     let project_root = context
         .repo_root
@@ -3803,7 +3802,7 @@ mod tests {
 
     #[test]
     fn generate_command_bootstraps_marker_and_writes_files() {
-        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let temp_dir = TempDir::new_in(Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
         let units_dir = temp_dir.path().join("units");
         let output_dir = temp_dir.path().join("generated/spec");
         write_spec(
@@ -3871,7 +3870,7 @@ extra_field: nope
 
     #[test]
     fn generate_command_writes_doc_comments_for_ecommerce_units() {
-        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let temp_dir = TempDir::new_in(Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
@@ -3893,7 +3892,7 @@ extra_field: nope
 
     #[test]
     fn generate_specs_rejects_reserved_molecule_tests_namespace_segment() {
-        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let temp_dir = TempDir::new_in(Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
         let units_dir = temp_dir.path().join("units");
         let output_dir = temp_dir.path().join("generated/spec");
 
@@ -3973,7 +3972,7 @@ body:
             return;
         }
 
-        let temp_dir = TempDir::new_in(std::env::current_dir().unwrap()).unwrap();
+        let temp_dir = TempDir::new_in(Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
