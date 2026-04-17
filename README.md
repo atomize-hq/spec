@@ -9,12 +9,27 @@
 3. Build: `spec build` validates, generates, and compiles in one step.
 4. Test: `spec test` runs the full pipeline and writes observed evidence to passports.
 5. Export: `spec export` emits a machine-readable JSON bundle for downstream tooling.
+6. Plan: `spec plan validate` and `spec plan export` turn authored change intent into truthful local-library impact data.
 
 ## Workspace
 
 - `spec-core`: parsing, validation, normalization, generation, pipeline, and export primitives
-- `spec-cli`: CLI for `validate`, `generate`, `build`, `test`, and `export`
-- `examples/ecommerce`: a small realistic example with pricing units
+- `spec-cli`: CLI for `validate`, `generate`, `build`, `test`, `export`, and `plan`
+- `examples/ecommerce`: a small single-library example with pricing units
+- `examples/shared-spec`, `examples/shared-crate`, `examples/crosslib-app`: a direct sibling-library example for `[libraries]` and `shared::...` deps
+
+## Project docs
+
+- [`CHANGELOG.md`](CHANGELOG.md): shipped release history
+- [`PLAN.md`](PLAN.md): active implementation roadmap through M10
+- [`DECISIONS.md`](DECISIONS.md): project-level decisions that stay stable across releases
+- [`TODOS.md`](TODOS.md): backlog and follow-up inventory
+- [`AGENTS.md`](AGENTS.md): agent workflow and machine-readable `spec` authoring loop
+- [`CLAUDE.md`](CLAUDE.md): lightweight routing rules for Claude/Codex sessions in this repo
+- [`examples/ecommerce/README.md`](examples/ecommerce/README.md): local example walkthrough
+- [`examples/crosslib-app/README.md`](examples/crosslib-app/README.md): cross-library example walkthrough
+- [`docs/north_star_v0.2.md`](docs/north_star_v0.2.md), [`docs/high_level_technical_architecture_v0.2.md`](docs/high_level_technical_architecture_v0.2.md), and [`docs/roadmap_and_release_shape_v0.1.md`](docs/roadmap_and_release_shape_v0.1.md): historical design context from the pre-ship planning phase
+- [`.implemented/`](.implemented/): archived milestone release plans and early design artifacts
 
 ## Quickstart
 
@@ -138,6 +153,11 @@ spec status <path> --format json          # machine-readable status for agents
 
 spec export <path>                        # emit JSON bundle to stdout
 spec export <path> --output <file>        # write JSON bundle to file
+
+spec plan validate <file>                 # validate one .plan.spec file and compute local impact
+spec plan validate <file> --format json   # machine-readable plan validation + computed impact
+spec plan export <file>                   # emit dedicated plan bundle to stdout
+spec plan export <file> --output <file>   # write dedicated plan bundle to file
 ```
 
 `validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
@@ -147,6 +167,8 @@ spec export <path> --output <file>        # write JSON bundle to file
 When you pass a single `.unit.spec` file to `spec validate`, `spec generate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. Sibling `.test.spec` files are directory-scoped and are only loaded for directory invocations.
 
 `spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read.
+
+`spec plan validate` and `spec plan export` are single-file commands. They accept exactly one `.plan.spec` file, resolve the enclosing library root by walking up to the directory that owns `units/`, validate the authored change set against the current graph, and compute advisory impact for the current local library only. `add` changes stay truthful by contributing `unresolved[]` entries instead of fabricated impact.
 
 The `--output` path for `generate`/`build`/`test` must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
 
@@ -181,6 +203,42 @@ spec validate examples/ecommerce/units --format json
 ```
 
 That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose. Pre-validation workspace-config failures, including broken `[libraries]` entries, also stay in this JSON contract for `validate --format json`.
+
+For plan artifacts, the machine-readable loop is:
+
+```bash
+spec plan validate path/to/checkout-tax-refactor.plan.spec --format json
+```
+
+The repo does not currently ship a checked-in `.plan.spec` example. Author one inside a library
+root such as `examples/ecommerce/plans/` and then run `spec plan validate` or `spec plan export`
+against that explicit file path.
+
+Valid plan responses reuse the same top-level envelope and add `plan_id` plus derived `computed_impact`:
+
+```json
+{
+  "schema_version": 2,
+  "status": "valid",
+  "errors": [],
+  "warnings": [],
+  "plan_id": "checkout-tax-refactor",
+  "computed_impact": {
+    "status": "partial",
+    "units": ["pricing/apply_tax", "pricing/calculate_total"],
+    "molecule_tests": ["pricing/checkout_flow", "pricing/discount_plus_tax"],
+    "unresolved": [
+      {
+        "unit": "pricing/tiered_rate",
+        "action": "add",
+        "reason": "current graph has no node for action=add"
+      }
+    ]
+  }
+}
+```
+
+`spec plan export` emits a dedicated bundle with `{schema_version, spec_version, exported_at, plan, computed_impact, warnings}` and does not change the existing `spec export` bundle contract.
 
 `spec status` uses simple symbols so you can scan a whole tree quickly. Any unit whose
 status is not `valid` exits with code `1`.
@@ -233,6 +291,14 @@ Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/
 | `SPEC_MISSING_MARKER` | Output dir lacks the `.spec-generated` marker — refusing to clean |
 | `SPEC_MOLECULE_CROSS_LIBRARY_COVERS_UNSUPPORTED` | A molecule test `covers` entry references another library, which remains unsupported in M9 |
 | `SPEC_RESERVED_UNIT_NAME` | A slash-delimited spec `id` contains a reserved segment such as `molecule_tests` |
+| `SPEC_PLAN_DIRECTORY_INPUT` | `spec plan validate/export` received a directory instead of a single `.plan.spec` file |
+| `SPEC_PLAN_OUTSIDE_LIBRARY_ROOT` | The `.plan.spec` file does not live under any resolved library root |
+| `SPEC_PLAN_SYMLINK_ESCAPE` | The `.plan.spec` path escapes the repo/library root through a symlink |
+| `SPEC_PLAN_CROSS_LIBRARY_UNIT` | A plan authored a cross-library `changes[].unit` or acceptance unit ref, which M10 forbids |
+| `SPEC_PLAN_DUPLICATE_CHANGE_UNIT` | The same `changes[].unit` appears more than once in one plan file |
+| `SPEC_PLAN_UNIT_MISSING_FOR_ACTION` | `modify` or `remove` references a unit that does not exist in the current graph |
+| `SPEC_PLAN_UNIT_ALREADY_EXISTS_FOR_ADD` | `add` references a unit that already exists in the current graph |
+| `SPEC_PLAN_MOLECULE_TEST_NOT_FOUND` | A plan acceptance target references a molecule test id that does not exist in the current library |
 
 ## Consuming Generated Code
 

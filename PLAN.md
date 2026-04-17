@@ -1,12 +1,13 @@
 <!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260416-194312.md -->
-# Next Work: M6–M10 Roadmap
+# M6–M10 Roadmap
 
-Status: **M9 Delivered** (2026-04-16). M10 is the next implementation milestone, narrowed to a local-library plan contract that turns authored change intent into truthful derived impact.
+Status: **M10 Delivered** (2026-04-17). `v0.8.0` ships the first local-library `.plan.spec`
+contract, `spec plan validate`, `spec plan export`, and the dedicated plan export bundle.
 
 Reviewed via `/autoplan` 2026-04-16 for the M10 solidification. Codex outside voices consulted;
 delegated subagents were unavailable in this thread by session policy. M5 through M9 have
-shipped. This plan covers the next implementation milestone plus the already-shipped historical
-context that constrains it.
+shipped before this branch. This plan now serves as the roadmap record for the shipped M6 through
+M10 sequence plus the historical context that constrained it.
 
 ---
 
@@ -19,7 +20,7 @@ M6b  Health Model             ✓ shipped
 M7   .test.spec + minimal graph ✓ shipped
 M8   Full Graph Layer         ✓ shipped
 M9   Cross-library Deps       ✓ shipped
-M10  Planning Boundary as Data ← next to implement
+M10  Planning Boundary as Data ✓ shipped
 ```
 
 **Explicitly deferred (do not front-load):**
@@ -1352,7 +1353,7 @@ M10 is partially parallelizable, but only after the contract gate is locked.
 | Codepath | Failure mode | Test covers? | Error handling? | Silent? |
 |---|---|---|---|---|
 | plan root resolution | plan file outside any resolved library root | no | fail with explicit path/root error | no |
-| plan root scan | symlink escapes the library or repo root | no | reject or skip with explicit warning/error | **critical gap** |
+| plan root scan | symlink escapes the library or repo root | no | reject with `SPEC_PLAN_SYMLINK_ESCAPE` | **critical gap** |
 | single-file invocation | graph built from the plan file path instead of the library root | no | dedicated resolver required | **critical gap** |
 | `computed_impact` projection | authored and derived impact shapes drift | no | derived-only contract | **critical gap** |
 | `action=add` | fake impact reported for a unit that is not yet in the graph | no | unresolved entry + partial status | no |
@@ -1397,7 +1398,7 @@ M10 is partially parallelizable, but only after the contract gate is locked.
   - duplicate/conflicting `changes[].unit`
   - cross-library unit ref rejected in a plan
   - single-file nested plan path still loads the full library graph
-  - symlink escape rejected or skipped explicitly
+  - symlink escape rejected with `SPEC_PLAN_SYMLINK_ESCAPE`
   - impact union includes downstream molecule tests and keeps changed seed units
   - plan export schema/version behavior
 

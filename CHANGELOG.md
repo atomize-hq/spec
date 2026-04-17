@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0 - 2026-04-17
+
+### Added
+
+- **M10 plan artifacts** — `spec plan validate <file>` and `spec plan export <file>` now let you author a single `.plan.spec` change-intent file, validate it, and export a dedicated machine-readable plan bundle without mutating the existing `spec export` contract.
+
+### Changed
+
+- **Plan impact is now derived, local-library, and truthful** — M10 plan files author intended changes plus structured acceptance targets, while `computed_impact` is derived from the current local graph. `modify` and `remove` reuse current graph impact, `add` stays honest with unresolved output, and cross-library plan refs remain out of scope.
+- **Plan commands reuse the repo trust boundary** — plan root resolution now anchors to the enclosing library root instead of the plan file directory, keeps scans repo-bounded, and emits stable JSON diagnostics for the new plan failure modes.
+- **Machine-readable docs now cover the plan contract** — README and AGENTS document the single-file plan workflow, the local-library-only rules, the dedicated export shape, and the new `SPEC_PLAN_*` error codes.
+
+### Fixed
+
+- **Plan validation now rejects duplicate and impossible authored changes cleanly** — missing `modify/remove` targets, duplicate `changes[].unit` entries, symlink escapes, and invalid local molecule-test loading all fail with explicit contract errors instead of leaking ambiguous loader behavior.
+- **M10 regression coverage is now complete at the CLI boundary** — end-to-end tests cover nested plan root resolution, mixed add/modify impact, cross-library rejection, missing modify targets, duplicate change units, symlink escapes, and dedicated plan export stability.
+
 ## 0.7.0 - 2026-04-16
 
 ### Added

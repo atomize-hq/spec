@@ -7525,3 +7525,615 @@ fn generate_rejects_transitive_library_alias_without_loading_transitive_library(
     );
     assert!(!stderr.contains("YAML parse error"), "{stderr}");
 }
+
+const M10_MODIFY_PLAN: &str = r#"
+id: checkout-tax-refactor
+intent:
+  why: "Refactor tax calculation to support tiered rates without losing checkout coverage."
+changes:
+  - unit: pricing/apply_tax
+    action: modify
+    acceptance:
+      validate:
+        - pricing/apply_tax
+      molecule_tests:
+        - pricing/checkout_flow
+      notes:
+        - "tiered-rate behavior is covered by checkout_flow"
+notes:
+  - "M10 plans are local-library only."
+"#;
+
+const M10_MIXED_PLAN: &str = r#"
+id: checkout-tax-refactor
+intent:
+  why: "Refactor tax calculation to support tiered rates without losing checkout coverage."
+changes:
+  - unit: pricing/apply_tax
+    action: modify
+    acceptance:
+      validate:
+        - pricing/apply_tax
+      molecule_tests:
+        - pricing/checkout_flow
+      notes:
+        - "tiered-rate behavior is covered by checkout_flow"
+  - unit: pricing/tiered_rate
+    action: add
+    acceptance:
+      validate:
+        - pricing/tiered_rate
+notes:
+  - "M10 plans are local-library only."
+"#;
+
+const M10_REMOVE_PLAN: &str = r#"
+id: remove-tax
+intent:
+  why: "Evaluate the current removal blast radius for apply_tax."
+changes:
+  - unit: pricing/apply_tax
+    action: remove
+    acceptance:
+      validate:
+        - pricing/apply_tax
+      molecule_tests:
+        - pricing/checkout_flow
+"#;
+
+fn setup_m10_plan_fixture(
+    plan_relative_path: &str,
+    body: &str,
+) -> (tempfile::TempDir, PathBuf, PathBuf) {
+    let (temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let plan_path = ecommerce_dir.join(plan_relative_path);
+    if let Some(parent) = plan_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&plan_path, body).unwrap();
+    (temp_dir, ecommerce_dir, plan_path)
+}
+
+fn normalize_exported_at(mut json: Value) -> Value {
+    json["exported_at"] = Value::String("<normalized>".to_string());
+    json
+}
+
+#[test]
+fn plan_validate_rejects_directory_input() {
+    let (_temp_dir, ecommerce_dir, _plan_path) = setup_m10_plan_fixture(
+        "plans/refactors/checkout-tax-refactor.plan.spec",
+        M10_MIXED_PLAN,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &["plan", "validate", "plans", "--format", "json"],
+    );
+    assert!(
+        !output.status.success(),
+        "plan validate should fail on directory input"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_DIRECTORY_INPUT");
+}
+
+#[test]
+fn plan_validate_nested_plan_path_matches_checked_in_fixture() {
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/refactors/checkout-tax-refactor.plan.spec",
+        M10_MIXED_PLAN,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success("plan validate should succeed for nested plan path", &output);
+    assert_stdout_json_matches_fixture(&output, "plan-validate-valid-mixed.json");
+}
+
+#[test]
+fn plan_validate_modify_plan_keeps_seed_unit_in_computed_impact() {
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/modify-tax.plan.spec", M10_MODIFY_PLAN);
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success("plan validate should succeed for modify plan", &output);
+
+    let json = parse_stdout_json(&output);
+    let units = json["computed_impact"]["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(units.contains(&"pricing/apply_tax"), "{json}");
+    assert!(units.contains(&"pricing/calculate_total"), "{json}");
+    assert_eq!(json["computed_impact"]["status"], "complete");
+}
+
+#[test]
+fn plan_validate_remove_plan_uses_current_graph_impact() {
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/remove-tax.plan.spec", M10_REMOVE_PLAN);
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success("plan validate should succeed for remove plan", &output);
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["computed_impact"]["status"], "complete");
+    assert_eq!(
+        json["computed_impact"]["molecule_tests"],
+        serde_json::json!(["pricing/checkout_flow", "pricing/discount_plus_tax"])
+    );
+}
+
+#[test]
+fn plan_validate_rejects_missing_modify_unit() {
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/missing-modify.plan.spec",
+        r#"
+id: missing-modify
+intent:
+  why: "Should fail because modify targets must already exist."
+changes:
+  - unit: pricing/tiered_rate
+    action: modify
+    acceptance:
+      validate:
+        - pricing/tiered_rate
+"#,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected missing modify target to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(
+        json["errors"][0]["code"],
+        "SPEC_PLAN_UNIT_MISSING_FOR_ACTION"
+    );
+    assert_eq!(json["errors"][0]["id"], "pricing/tiered_rate");
+    assert_eq!(json["errors"][0]["value"], "modify");
+}
+
+#[test]
+fn plan_validate_rejects_duplicate_change_units_in_json() {
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/duplicate-change.plan.spec",
+        r#"
+id: duplicate-change
+intent:
+  why: "Should fail because one plan cannot author the same unit twice."
+changes:
+  - unit: pricing/apply_tax
+    action: modify
+    acceptance:
+      validate:
+        - pricing/apply_tax
+  - unit: pricing/apply_tax
+    action: remove
+    acceptance:
+      validate:
+        - pricing/apply_tax
+"#,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected duplicate plan change unit to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_DUPLICATE_CHANGE_UNIT");
+    assert_eq!(json["errors"][0]["id"], "pricing/apply_tax");
+}
+
+#[test]
+fn plan_validate_rejects_plan_outside_library_root() {
+    let (temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let outside_plan = temp_dir.path().join("outside.plan.spec");
+    fs::write(&outside_plan, M10_MODIFY_PLAN).unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            outside_plan.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected outside-root plan to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_OUTSIDE_LIBRARY_ROOT");
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_validate_rejects_symlink_escape() {
+    use std::os::unix::fs::symlink;
+
+    let (_temp_dir, ecommerce_dir, _plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let outside_plan = outside_dir.path().join("escape.plan.spec");
+    fs::write(&outside_plan, M10_MODIFY_PLAN).unwrap();
+    let symlink_path = ecommerce_dir.join("plans/escape.plan.spec");
+    symlink(&outside_plan, &symlink_path).unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            "plans/escape.plan.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(!output.status.success(), "expected symlink escape to fail");
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_SYMLINK_ESCAPE");
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_validate_rejects_symlinked_external_unit_in_library_graph() {
+    use std::os::unix::fs::symlink;
+
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let rogue_spec = outside_dir.path().join("rogue.unit.spec");
+    fs::write(
+        &rogue_spec,
+        r#"
+id: pricing/rogue
+kind: function
+intent:
+  why: Escape the local library graph.
+body:
+  rust: "{ true }"
+"#,
+    )
+    .unwrap();
+    symlink(
+        &rogue_spec,
+        ecommerce_dir.join("units/pricing/rogue.unit.spec"),
+    )
+    .unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected external unit symlink to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_SYMLINK_ESCAPE");
+    assert!(json.get("computed_impact").is_none(), "{json}");
+    assert!(
+        json["errors"][0].get("unit").is_none(),
+        "unexpected unit mapping for escaped file: {json}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_export_rejects_symlinked_external_unit_in_library_graph() {
+    use std::os::unix::fs::symlink;
+
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let rogue_spec = outside_dir.path().join("rogue.unit.spec");
+    fs::write(
+        &rogue_spec,
+        r#"
+id: pricing/rogue
+kind: function
+intent:
+  why: Escape the local library graph.
+body:
+  rust: "{ true }"
+"#,
+    )
+    .unwrap();
+    symlink(
+        &rogue_spec,
+        ecommerce_dir.join("units/pricing/rogue.unit.spec"),
+    )
+    .unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "export",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected external unit symlink to fail plan export"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.trim().is_empty(), "unexpected stdout: {stdout}");
+    assert!(
+        stderr.contains("symlink"),
+        "expected symlink escape diagnostics, got: {stderr}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_validate_rejects_symlinked_external_molecule_test_in_library_graph() {
+    use std::os::unix::fs::symlink;
+
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let rogue_test = outside_dir.path().join("rogue.test.spec");
+    fs::write(
+        &rogue_test,
+        r#"
+id: pricing/rogue_flow
+covers:
+  - pricing/apply_tax
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    )
+    .unwrap();
+    symlink(
+        &rogue_test,
+        ecommerce_dir.join("units/pricing/rogue.test.spec"),
+    )
+    .unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected external molecule test symlink to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_SYMLINK_ESCAPE");
+    assert!(json.get("computed_impact").is_none(), "{json}");
+}
+
+#[test]
+fn plan_validate_json_wraps_local_molecule_loader_failures() {
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    fs::write(
+        ecommerce_dir.join("units/pricing/broken.test.spec"),
+        "not: valid: yaml: [unclosed",
+    )
+    .unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected invalid molecule test YAML to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_YAML_PARSE");
+    assert!(json.get("computed_impact").is_none(), "{json}");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Failed to load molecule tests"),
+        "expected JSON envelope instead of raw loader fallback, got: {stderr}"
+    );
+}
+
+#[test]
+fn plan_validate_rejects_cross_library_change_unit() {
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/crosslib.plan.spec",
+        r#"
+id: crosslib-plan
+intent:
+  why: "Should fail because M10 is local-library only."
+changes:
+  - unit: shared::money/round
+    action: modify
+    acceptance:
+      validate:
+        - shared::money/round
+"#,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected cross-library plan to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_CROSS_LIBRARY_UNIT");
+}
+
+#[test]
+fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/refactors/checkout-tax-refactor.plan.spec",
+        M10_MIXED_PLAN,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "export",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        ],
+    );
+    assert_output_success("plan export should succeed", &output);
+    let actual = normalize_exported_at(parse_stdout_json(&output));
+    let expected = fixture_json("plan-export-valid-mixed.json");
+    assert_eq!(actual, expected);
+
+    let spec_export = run_in(&ecommerce_dir, &["export", "units"]);
+    assert_output_success("spec export should remain unchanged", &spec_export);
+    let spec_export_json = parse_stdout_json(&spec_export);
+    assert_eq!(spec_export_json["schema_version"], 3);
+    assert!(spec_export_json.get("plan").is_none(), "{spec_export_json}");
+    assert!(
+        spec_export_json.get("units").is_some(),
+        "{spec_export_json}"
+    );
+    assert!(
+        spec_export_json.get("graph").is_some(),
+        "{spec_export_json}"
+    );
+}

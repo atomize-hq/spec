@@ -1,18 +1,19 @@
 use crate::config::{
-    ResolvedLibrary, WorkspaceConfigError, WorkspaceContext, load_workspace_context,
+    ResolvedLibrary, WorkspaceConfigError, WorkspaceContext, load_workspace_context, repo_root_for,
 };
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
-use spec_core::export::build_export_bundle;
+use spec_core::export::{build_export_bundle, build_plan_export_bundle};
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests,
     generate_code_with_options, generate_mod_rs, safe_output_path_with_project_root,
     write_generated_file,
 };
 use spec_core::loader::{
-    is_unit_spec, load_directory_report, load_file, load_molecule_test_directory,
-    load_molecule_test_directory_report,
+    is_unit_spec, load_directory_report, load_directory_report_bounded, load_file,
+    load_molecule_test_directory, load_molecule_test_directory_report,
+    load_molecule_test_directory_report_bounded, load_plan_file,
 };
 use spec_core::normalizer::normalize_spec;
 use spec_core::passport::{
@@ -23,6 +24,7 @@ use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
     parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
 };
+use spec_core::plan::{PlanComputedImpact, build_plan_report};
 use spec_core::types::{
     DepRef, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef, ResolvedMoleculeTest, ResolvedSpec,
 };
@@ -45,6 +47,12 @@ type CollectedSpecs = (
     Vec<spec_core::SpecError>,
     Vec<spec_core::SpecWarning>,
     usize,
+);
+type PlanValidationInputs = (
+    ValidationSpecCollection,
+    Vec<spec_core::SpecError>,
+    Vec<String>,
+    Vec<LoadedMoleculeTest>,
 );
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
 
@@ -94,6 +102,10 @@ struct JsonValidateResponse {
     status: &'static str,
     errors: Vec<JsonErrorEntry>,
     warnings: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plan_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    computed_impact: Option<PlanComputedImpact>,
 }
 
 #[derive(Serialize)]
@@ -173,6 +185,8 @@ fn emit_json_validate_workspace_config_failure(err: &WorkspaceConfigError) -> Re
         status: "invalid",
         errors: vec![workspace_config_error_to_json_entry(err)],
         warnings: vec![],
+        plan_id: None,
+        computed_impact: None,
     })?;
     std::process::exit(1);
 }
@@ -325,6 +339,8 @@ pub enum Command {
     Test(TestArgs),
     #[command(about = "Export spec metadata as a JSON bundle")]
     Export(ExportArgs),
+    #[command(about = "Validate and export .plan.spec files")]
+    Plan(PlanArgs),
     #[command(about = "Print shell completion script to stdout")]
     Completions(CompletionsArgs),
 }
@@ -354,9 +370,29 @@ impl Command {
                 )
             }
             Self::Export(args) => export_command(&args.path, args.output.as_deref()),
+            Self::Plan(args) => match args.command {
+                PlanCommand::Validate(args) => plan_validate_command(&args.path, args.format),
+                PlanCommand::Export(args) => {
+                    plan_export_command(&args.path, args.output.as_deref())
+                }
+            },
             Self::Completions(_) => unreachable!("handled in main"),
         }
     }
+}
+
+#[derive(Args, Debug)]
+pub struct PlanArgs {
+    #[command(subcommand)]
+    pub command: PlanCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PlanCommand {
+    #[command(about = "Validate one .plan.spec file and compute derived impact")]
+    Validate(PlanValidateArgs),
+    #[command(about = "Export one .plan.spec file as a dedicated JSON bundle")]
+    Export(PlanExportArgs),
 }
 
 #[derive(Args, Debug)]
@@ -444,6 +480,22 @@ pub struct ExportArgs {
         value_name = "PATH",
         help = "Directory containing .unit.spec files, or a single .unit.spec file"
     )]
+    pub path: PathBuf,
+    #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct PlanValidateArgs {
+    #[arg(value_name = "FILE", help = "Path to a single .plan.spec file")]
+    pub path: PathBuf,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Args, Debug)]
+pub struct PlanExportArgs {
+    #[arg(value_name = "FILE", help = "Path to a single .plan.spec file")]
     pub path: PathBuf,
     #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
     pub output: Option<PathBuf>,
@@ -600,6 +652,8 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
                 status: if has_errors { "invalid" } else { "valid" },
                 errors,
                 warnings,
+                plan_id: None,
+                computed_impact: None,
             };
             emit_json_validate_response(&response)?;
 
@@ -1045,6 +1099,200 @@ fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
+    let context = match load_workspace_context(path) {
+        Ok(context) => context,
+        Err(err) if matches!(format, OutputFormat::Json) => {
+            if let Some(config_err) = err.downcast_ref::<WorkspaceConfigError>() {
+                return emit_json_validate_workspace_config_failure(config_err);
+            }
+            return Err(err);
+        }
+        Err(err) => return Err(err),
+    };
+
+    let (plan_path, library_root) = match resolve_plan_library_root(path, &context) {
+        Ok(result) => result,
+        Err(err) if matches!(format, OutputFormat::Json) => {
+            emit_json_validate_response(&JsonValidateResponse {
+                schema_version: JSON_SCHEMA_VERSION,
+                status: "invalid",
+                errors: vec![spec_error_to_json_entry(&err, &HashMap::new())],
+                warnings: vec![],
+                plan_id: None,
+                computed_impact: None,
+            })?;
+            std::process::exit(1);
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    let plan = match load_plan_file(&plan_path) {
+        Ok(plan) => plan,
+        Err(err) if matches!(format, OutputFormat::Json) => {
+            emit_json_validate_response(&JsonValidateResponse {
+                schema_version: JSON_SCHEMA_VERSION,
+                status: "invalid",
+                errors: vec![spec_error_to_json_entry(&err, &HashMap::new())],
+                warnings: vec![],
+                plan_id: None,
+                computed_impact: None,
+            })?;
+            std::process::exit(1);
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    let (validation_specs, validation_errors, warnings, molecule_tests) =
+        match plan_validation_inputs(&library_root, &context) {
+            Ok(inputs) => inputs,
+            Err(err) if matches!(format, OutputFormat::Json) => {
+                let Some(spec_err) = err.downcast_ref::<spec_core::SpecError>() else {
+                    return Err(err);
+                };
+                emit_json_validate_response(&JsonValidateResponse {
+                    schema_version: JSON_SCHEMA_VERSION,
+                    status: "invalid",
+                    errors: vec![spec_error_to_json_entry(spec_err, &HashMap::new())],
+                    warnings: vec![],
+                    plan_id: None,
+                    computed_impact: None,
+                })?;
+                std::process::exit(1);
+            }
+            Err(err) => return Err(err),
+        };
+    let mut id_by_path: HashMap<String, String> = validation_specs
+        .all_specs()
+        .into_iter()
+        .map(|spec| (spec.source.file_path.clone(), spec.spec.id.clone()))
+        .collect();
+    id_by_path.insert(plan.source.file_path.clone(), plan.plan.id.clone());
+
+    if !validation_errors.is_empty() {
+        return emit_plan_validate_failure(validation_errors, warnings, &id_by_path, format);
+    }
+
+    let report = match build_plan_report(&plan, &validation_specs.root_specs, &molecule_tests) {
+        Ok(report) => report,
+        Err(err) if matches!(format, OutputFormat::Json) => {
+            emit_json_validate_response(&JsonValidateResponse {
+                schema_version: JSON_SCHEMA_VERSION,
+                status: "invalid",
+                errors: vec![spec_error_to_json_entry(&err, &id_by_path)],
+                warnings,
+                plan_id: None,
+                computed_impact: None,
+            })?;
+            std::process::exit(1);
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    match format {
+        OutputFormat::Text => {
+            println!("✅ plan '{}' valid", report.plan_id);
+            println!(
+                "computed impact: {} unit{}, {} molecule test{}, {} unresolved",
+                report.computed_impact.units.len(),
+                pluralize(report.computed_impact.units.len()),
+                report.computed_impact.molecule_tests.len(),
+                pluralize(report.computed_impact.molecule_tests.len()),
+                report.computed_impact.unresolved.len()
+            );
+            Ok(())
+        }
+        OutputFormat::Json => emit_json_validate_response(&JsonValidateResponse {
+            schema_version: JSON_SCHEMA_VERSION,
+            status: "valid",
+            errors: vec![],
+            warnings,
+            plan_id: Some(report.plan_id),
+            computed_impact: Some(report.computed_impact),
+        }),
+    }
+}
+
+fn plan_export_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    let context = load_workspace_context(path)?;
+    let (plan_path, library_root) = resolve_plan_library_root(path, &context)?;
+    let plan = load_plan_file(&plan_path)?;
+    let (validation_specs, validation_errors, warnings, molecule_tests) =
+        plan_validation_inputs(&library_root, &context)?;
+
+    if !validation_errors.is_empty() {
+        let mut diagnostics = DiagnosticMap::new();
+        for err in validation_errors {
+            push_error(&mut diagnostics, err);
+        }
+        print_diagnostics(&diagnostics);
+        let file_count = count_unique_files(&diagnostics);
+        bail!(
+            "❌ {} file{}, {} error{}",
+            file_count,
+            pluralize(file_count),
+            count_messages(&diagnostics),
+            pluralize(count_messages(&diagnostics))
+        );
+    }
+
+    let report = build_plan_report(&plan, &validation_specs.root_specs, &molecule_tests)?;
+    let mut bundle = build_plan_export_bundle(&plan, &report, &rfc3339_now());
+    bundle.warnings = warnings;
+    let json = serde_json::to_string_pretty(&bundle)?;
+
+    match output {
+        Some(path) => {
+            validate_export_output_path(path)?;
+            fs::write(path, json)
+                .with_context(|| format!("Failed to write export bundle to {}", path.display()))?;
+        }
+        None => print!("{json}"),
+    }
+
+    Ok(())
+}
+
+fn emit_plan_validate_failure(
+    validation_errors: Vec<spec_core::SpecError>,
+    warnings: Vec<String>,
+    id_by_path: &HashMap<String, String>,
+    format: OutputFormat,
+) -> Result<()> {
+    match format {
+        OutputFormat::Text => {
+            let mut diagnostics = DiagnosticMap::new();
+            for err in validation_errors {
+                push_error(&mut diagnostics, err);
+            }
+            print_diagnostics(&diagnostics);
+            let file_count = count_unique_files(&diagnostics);
+            bail!(
+                "❌ {} file{}, {} error{}",
+                file_count,
+                pluralize(file_count),
+                count_messages(&diagnostics),
+                pluralize(count_messages(&diagnostics))
+            );
+        }
+        OutputFormat::Json => {
+            let response = JsonValidateResponse {
+                schema_version: JSON_SCHEMA_VERSION,
+                status: "invalid",
+                errors: validation_errors
+                    .iter()
+                    .map(|err| spec_error_to_json_entry(err, id_by_path))
+                    .collect(),
+                warnings,
+                plan_id: None,
+                computed_impact: None,
+            };
+            emit_json_validate_response(&response)?;
+            std::process::exit(1);
+        }
+    }
 }
 
 fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
@@ -1493,6 +1741,69 @@ fn resolve_default_crate_root(path: &Path, context: &WorkspaceContext) -> Result
         Some(path) => canonicalize_existing_dir(&path),
         None => workspace_root_for(path),
     }
+}
+
+fn resolve_plan_library_root(
+    path: &Path,
+    context: &WorkspaceContext,
+) -> std::result::Result<(PathBuf, PathBuf), spec_core::SpecError> {
+    let absolute_path =
+        absolutize_from_current_dir(path).map_err(|err| spec_core::SpecError::Traversal {
+            message: err.to_string(),
+            path: path.display().to_string(),
+        })?;
+
+    if absolute_path.is_dir() {
+        return Err(spec_core::SpecError::PlanDirectoryInput {
+            path: absolute_path.display().to_string(),
+        });
+    }
+
+    let canonical_plan =
+        absolute_path
+            .canonicalize()
+            .map_err(|err| spec_core::SpecError::Traversal {
+                message: err.to_string(),
+                path: absolute_path.display().to_string(),
+            })?;
+
+    let repo_root = context
+        .repo_root
+        .clone()
+        .or_else(|| repo_root_for(&absolute_path));
+
+    if let Some(repo_root) = &repo_root {
+        if absolute_path.starts_with(repo_root) && !canonical_plan.starts_with(repo_root) {
+            return Err(spec_core::SpecError::PlanSymlinkEscape {
+                path: absolute_path.display().to_string(),
+            });
+        }
+
+        if !canonical_plan.starts_with(repo_root) {
+            return Err(spec_core::SpecError::PlanOutsideLibraryRoot {
+                path: canonical_plan.display().to_string(),
+            });
+        }
+    }
+
+    let mut current = canonical_plan.parent();
+    while let Some(dir) = current {
+        if let Some(repo_root) = &repo_root
+            && !dir.starts_with(repo_root)
+        {
+            break;
+        }
+
+        if dir.join("units").is_dir() {
+            return Ok((canonical_plan.clone(), dir.to_path_buf()));
+        }
+
+        current = dir.parent();
+    }
+
+    Err(spec_core::SpecError::PlanOutsideLibraryRoot {
+        path: canonical_plan.display().to_string(),
+    })
 }
 
 fn resolve_project_root(context: &WorkspaceContext, crate_root: &Path) -> PathBuf {
@@ -2194,6 +2505,86 @@ fn collect_validation_specs(
     })
 }
 
+fn collect_plan_validation_specs(
+    library_root: &Path,
+    libraries: &[ResolvedLibrary],
+) -> Result<ValidationSpecCollection> {
+    let report = load_directory_report_bounded(library_root, library_root)?;
+    let (
+        _selected_libraries,
+        imported_libraries,
+        imported_errors,
+        imported_warnings,
+        imported_total_files,
+    ) = load_referenced_validation_specs(&report.specs, libraries);
+
+    let mut loader_errors = report.errors;
+    let mut loader_warnings = report.warnings;
+    loader_errors.extend(imported_errors);
+    loader_warnings.extend(imported_warnings);
+
+    Ok(ValidationSpecCollection {
+        root_specs: report.specs,
+        imported_libraries,
+        loader_errors,
+        loader_warnings,
+        total_files: report.total_files + imported_total_files,
+    })
+}
+
+fn plan_validation_inputs(
+    library_root: &Path,
+    context: &WorkspaceContext,
+) -> Result<PlanValidationInputs> {
+    let validation_specs = collect_plan_validation_specs(library_root, &context.libraries)?;
+    let validation_options = ValidationOptions {
+        strict_deps: true,
+        allow_unsafe_local_test_expect: context.config.validation.allow_unsafe_local_test_expect,
+    };
+    let (mut validation_errors, validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
+    validation_errors.extend(validate_library_crate_aliases(
+        &validation_specs.root_specs,
+        library_root,
+        context,
+    ));
+
+    let molecule_report = if includes_directory_molecule_tests(library_root) {
+        load_molecule_test_directory_report_bounded(library_root, library_root)?
+    } else {
+        spec_core::loader::MoleculeTestLoadReport::default()
+    };
+    validation_errors.extend(molecule_report.errors);
+
+    let (molecule_errors, molecule_warnings) =
+        validate_molecule_tests(&molecule_report.tests, &validation_specs.root_specs);
+    validation_errors.extend(molecule_errors);
+
+    let warnings = validation_specs
+        .loader_warnings
+        .iter()
+        .map(ToString::to_string)
+        .chain(
+            validation_warnings
+                .into_iter()
+                .map(|warning| warning.to_string()),
+        )
+        .chain(
+            molecule_warnings
+                .into_iter()
+                .map(|warning| warning.to_string()),
+        )
+        .chain(molecule_report.warnings.iter().map(ToString::to_string))
+        .collect();
+
+    Ok((
+        validation_specs,
+        validation_errors,
+        warnings,
+        molecule_report.tests,
+    ))
+}
+
 fn load_referenced_validation_specs(
     root_specs: &[LoadedSpec],
     libraries: &[ResolvedLibrary],
@@ -2574,6 +2965,20 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
             "SPEC_MOLECULE_BODY_CONTAINS_UNSAFE"
         }
         spec_core::SpecError::ReservedUnitName { .. } => "SPEC_RESERVED_UNIT_NAME",
+        spec_core::SpecError::PlanDirectoryInput { .. } => "SPEC_PLAN_DIRECTORY_INPUT",
+        spec_core::SpecError::PlanOutsideLibraryRoot { .. } => "SPEC_PLAN_OUTSIDE_LIBRARY_ROOT",
+        spec_core::SpecError::PlanSymlinkEscape { .. } => "SPEC_PLAN_SYMLINK_ESCAPE",
+        spec_core::SpecError::PlanCrossLibraryUnit { .. } => "SPEC_PLAN_CROSS_LIBRARY_UNIT",
+        spec_core::SpecError::PlanDuplicateChangeUnit { .. } => "SPEC_PLAN_DUPLICATE_CHANGE_UNIT",
+        spec_core::SpecError::PlanUnitMissingForAction { .. } => {
+            "SPEC_PLAN_UNIT_MISSING_FOR_ACTION"
+        }
+        spec_core::SpecError::PlanUnitAlreadyExistsForAdd { .. } => {
+            "SPEC_PLAN_UNIT_ALREADY_EXISTS_FOR_ADD"
+        }
+        spec_core::SpecError::PlanMoleculeTestNotFound { .. } => {
+            "SPEC_PLAN_MOLECULE_TEST_NOT_FOUND"
+        }
     }
 }
 
@@ -2813,6 +3218,31 @@ fn spec_error_to_json_entry(
             value: Some(segment.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::PlanDirectoryInput { path }
+        | spec_core::SpecError::PlanOutsideLibraryRoot { path }
+        | spec_core::SpecError::PlanSymlinkEscape { path } => ErrorFields {
+            path: Some(path.clone()),
+            message: Some(err.to_string()),
+            ..Default::default()
+        },
+        spec_core::SpecError::PlanCrossLibraryUnit { unit, path }
+        | spec_core::SpecError::PlanDuplicateChangeUnit { unit, path }
+        | spec_core::SpecError::PlanUnitAlreadyExistsForAdd { unit, path } => ErrorFields {
+            path: Some(path.clone()),
+            id: Some(unit.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::PlanUnitMissingForAction { unit, action, path } => ErrorFields {
+            path: Some(path.clone()),
+            id: Some(unit.clone()),
+            value: Some(action.clone()),
+            ..Default::default()
+        },
+        spec_core::SpecError::PlanMoleculeTestNotFound { test_id, path } => ErrorFields {
+            path: Some(path.clone()),
+            id: Some(test_id.clone()),
+            ..Default::default()
+        },
     };
 
     JsonErrorEntry {
@@ -2854,7 +3284,15 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::ContractTypeInvalid { path, .. }
         | spec_core::SpecError::ContractInputNameInvalid { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
-        | spec_core::SpecError::MissingMarker { path } => vec![path.clone()],
+        | spec_core::SpecError::MissingMarker { path }
+        | spec_core::SpecError::PlanDirectoryInput { path }
+        | spec_core::SpecError::PlanOutsideLibraryRoot { path }
+        | spec_core::SpecError::PlanSymlinkEscape { path }
+        | spec_core::SpecError::PlanCrossLibraryUnit { path, .. }
+        | spec_core::SpecError::PlanDuplicateChangeUnit { path, .. }
+        | spec_core::SpecError::PlanUnitMissingForAction { path, .. }
+        | spec_core::SpecError::PlanUnitAlreadyExistsForAdd { path, .. }
+        | spec_core::SpecError::PlanMoleculeTestNotFound { path, .. } => vec![path.clone()],
         spec_core::SpecError::LibraryCrateManifestError {
             cargo_toml: Some(path),
             ..
@@ -2977,7 +3415,15 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::ContractTypeInvalid { path, .. }
         | spec_core::SpecError::ContractInputNameInvalid { path, .. }
         | spec_core::SpecError::Traversal { path, .. }
-        | spec_core::SpecError::MissingMarker { path } => path.clone(),
+        | spec_core::SpecError::MissingMarker { path }
+        | spec_core::SpecError::PlanDirectoryInput { path }
+        | spec_core::SpecError::PlanOutsideLibraryRoot { path }
+        | spec_core::SpecError::PlanSymlinkEscape { path }
+        | spec_core::SpecError::PlanCrossLibraryUnit { path, .. }
+        | spec_core::SpecError::PlanDuplicateChangeUnit { path, .. }
+        | spec_core::SpecError::PlanUnitMissingForAction { path, .. }
+        | spec_core::SpecError::PlanUnitAlreadyExistsForAdd { path, .. }
+        | spec_core::SpecError::PlanMoleculeTestNotFound { path, .. } => path.clone(),
         spec_core::SpecError::LibraryCrateManifestError {
             cargo_toml: Some(path),
             ..

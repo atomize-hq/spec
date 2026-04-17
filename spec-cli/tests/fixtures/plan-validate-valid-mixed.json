@@ -1,0 +1,25 @@
+{
+  "schema_version": 2,
+  "status": "valid",
+  "errors": [],
+  "warnings": [],
+  "plan_id": "checkout-tax-refactor",
+  "computed_impact": {
+    "status": "partial",
+    "units": [
+      "pricing/apply_tax",
+      "pricing/calculate_total"
+    ],
+    "molecule_tests": [
+      "pricing/checkout_flow",
+      "pricing/discount_plus_tax"
+    ],
+    "unresolved": [
+      {
+        "unit": "pricing/tiered_rate",
+        "action": "add",
+        "reason": "current graph has no node for action=add"
+      }
+    ]
+  }
+}

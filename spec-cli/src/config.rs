@@ -193,6 +193,24 @@ pub fn load_workspace_context(target: &Path) -> Result<WorkspaceContext> {
     })
 }
 
+pub fn repo_root_for(target: &Path) -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    let absolute_target = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        cwd.join(target)
+    };
+
+    let start = if absolute_target.is_file() {
+        absolute_target.parent().unwrap_or(&absolute_target)
+    } else {
+        &absolute_target
+    };
+
+    let root = find_repo_root(start)?;
+    canonicalize_existing_dir(&root).ok()
+}
+
 fn validate_workspace_config(config: WorkspaceConfig) -> Result<WorkspaceConfig> {
     if matches!(config.pipeline.timeout_secs, Some(0)) {
         bail!("[pipeline].timeout_secs must be greater than 0");

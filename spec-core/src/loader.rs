@@ -6,6 +6,7 @@
 //! - UTF-8 validation before YAML parsing
 //! - Error tracking with file paths
 
+use crate::plan::{LoadedPlan, PlanSource, PlanStruct, validate_raw_plan_yaml};
 use crate::types::{
     LoadedMoleculeTest, LoadedSpec, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct,
 };
@@ -13,7 +14,6 @@ use crate::validator::{validate_raw_molecule_test_yaml, validate_raw_yaml};
 use crate::{Result, SpecError};
 use std::fs;
 use std::path::Path;
-#[cfg(test)]
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
@@ -27,6 +27,30 @@ pub struct DirectoryLoadReport {
     pub errors: Vec<SpecError>,
     pub warnings: Vec<crate::SpecWarning>,
     pub total_files: usize,
+}
+
+fn canonicalize_scan_root(path: &Path) -> Result<PathBuf> {
+    path.canonicalize().map_err(|err| SpecError::Traversal {
+        message: err.to_string(),
+        path: path.display().to_string(),
+    })
+}
+
+fn canonicalize_scan_entry(path: &Path) -> Result<PathBuf> {
+    path.canonicalize().map_err(|err| SpecError::Traversal {
+        message: err.to_string(),
+        path: path.display().to_string(),
+    })
+}
+
+fn escaped_plan_scan_error(path: &Path) -> SpecError {
+    SpecError::PlanSymlinkEscape {
+        path: path.display().to_string(),
+    }
+}
+
+fn subtree_already_rejected(path: &Path, rejected_roots: &[PathBuf]) -> bool {
+    rejected_roots.iter().any(|root| path.starts_with(root))
 }
 
 fn read_yaml_value<P: AsRef<Path>>(path: P) -> Result<(String, serde_yaml_bw::Value)> {
@@ -74,6 +98,27 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<LoadedSpec> {
             id: spec.id.clone(),
         },
         spec,
+    })
+}
+
+/// Load a single `.plan.spec` file.
+pub fn load_plan_file<P: AsRef<Path>>(path: P) -> Result<LoadedPlan> {
+    let (path_str, yaml_value) = read_yaml_value(path)?;
+
+    validate_raw_plan_yaml(&yaml_value, &path_str)?;
+
+    let plan: PlanStruct =
+        serde_yaml_bw::from_value(yaml_value).map_err(|e| SpecError::YamlParse {
+            message: e.to_string(),
+            path: path_str.clone(),
+        })?;
+
+    Ok(LoadedPlan {
+        source: PlanSource {
+            file_path: path_str,
+            id: plan.id.clone(),
+        },
+        plan,
     })
 }
 
@@ -133,6 +178,76 @@ pub fn load_directory_report<P: AsRef<Path>>(dir: P) -> DirectoryLoadReport {
         .specs
         .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
     report
+}
+
+/// Load all `.unit.spec` files from a directory recursively while enforcing
+/// that every visited file or followed symlink stays within `allowed_root`.
+pub fn load_directory_report_bounded<P: AsRef<Path>, R: AsRef<Path>>(
+    dir: P,
+    allowed_root: R,
+) -> Result<DirectoryLoadReport> {
+    let dir = dir.as_ref();
+    let allowed_root = canonicalize_scan_root(allowed_root.as_ref())?;
+    let mut report = DirectoryLoadReport::default();
+    let mut rejected_subtrees = Vec::new();
+
+    for entry in WalkDir::new(dir).follow_links(true) {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+
+                if subtree_already_rejected(path, &rejected_subtrees) {
+                    continue;
+                }
+
+                let canonical_path = match canonicalize_scan_entry(path) {
+                    Ok(path) => path,
+                    Err(err) => {
+                        report.errors.push(err);
+                        continue;
+                    }
+                };
+
+                if !canonical_path.starts_with(&allowed_root) {
+                    report.errors.push(escaped_plan_scan_error(path));
+                    if entry.file_type().is_dir() {
+                        rejected_subtrees.push(path.to_path_buf());
+                    }
+                    continue;
+                }
+
+                if !path.is_file() {
+                    continue;
+                }
+
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+
+                if !name.ends_with(".unit.spec") {
+                    continue;
+                }
+
+                report.total_files += 1;
+                match load_file(path) {
+                    Ok(spec) => report.specs.push(spec),
+                    Err(err) => report.errors.push(err),
+                }
+            }
+            Err(err) => {
+                if let Some(warning) = walkdir_cycle_warning(&err) {
+                    report.warnings.push(warning);
+                } else {
+                    report.errors.push(walkdir_error(err));
+                }
+            }
+        }
+    }
+
+    report
+        .specs
+        .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
+    Ok(report)
 }
 
 /// Load all .unit.spec files from a directory recursively and collect all errors.
@@ -275,6 +390,80 @@ pub fn load_molecule_test_directory_report<P: AsRef<Path>>(dir: P) -> MoleculeTe
         .tests
         .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
     report
+}
+
+/// Load all `.test.spec` files from a directory recursively while enforcing
+/// that every visited file or followed symlink stays within `allowed_root`.
+pub fn load_molecule_test_directory_report_bounded<P: AsRef<Path>, R: AsRef<Path>>(
+    dir: P,
+    allowed_root: R,
+) -> Result<MoleculeTestLoadReport> {
+    let dir = dir.as_ref();
+    let allowed_root = canonicalize_scan_root(allowed_root.as_ref())?;
+    let mut report = MoleculeTestLoadReport::default();
+    let mut rejected_subtrees = Vec::new();
+
+    if dir.is_file() {
+        return Ok(report);
+    }
+
+    for entry in WalkDir::new(dir).follow_links(true) {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+
+                if subtree_already_rejected(path, &rejected_subtrees) {
+                    continue;
+                }
+
+                let canonical_path = match canonicalize_scan_entry(path) {
+                    Ok(path) => path,
+                    Err(err) => {
+                        report.errors.push(err);
+                        continue;
+                    }
+                };
+
+                if !canonical_path.starts_with(&allowed_root) {
+                    report.errors.push(escaped_plan_scan_error(path));
+                    if entry.file_type().is_dir() {
+                        rejected_subtrees.push(path.to_path_buf());
+                    }
+                    continue;
+                }
+
+                if !path.is_file() {
+                    continue;
+                }
+
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+
+                if !name.ends_with(".test.spec") {
+                    continue;
+                }
+
+                report.total_files += 1;
+                match load_molecule_test_file(path) {
+                    Ok(test) => report.tests.push(test),
+                    Err(err) => report.errors.push(err),
+                }
+            }
+            Err(err) => {
+                if let Some(warning) = walkdir_cycle_warning(&err) {
+                    report.warnings.push(warning);
+                } else {
+                    report.errors.push(walkdir_error(err));
+                }
+            }
+        }
+    }
+
+    report
+        .tests
+        .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
+    Ok(report)
 }
 
 /// Check if a path is a .unit.spec file
@@ -542,6 +731,146 @@ body:
                 .to_string()
                 .contains("skipped symlink cycle")
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_load_directory_report_bounded_allows_in_root_symlink_target() {
+        use std::os::unix::fs as unix_fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let library_root = temp_dir.path();
+        let units_dir = library_root.join("units");
+        let shared_dir = library_root.join("shared");
+        fs::create_dir_all(&units_dir).unwrap();
+        fs::create_dir_all(shared_dir.join("pricing")).unwrap();
+        fs::write(
+            shared_dir.join("pricing/apply.unit.spec"),
+            r#"
+id: pricing/apply
+kind: function
+intent:
+  why: Apply pricing.
+body:
+  rust: "{ true }"
+"#,
+        )
+        .unwrap();
+
+        unix_fs::symlink(&shared_dir, units_dir.join("linked-shared")).unwrap();
+
+        let report = load_directory_report_bounded(&units_dir, library_root).unwrap();
+        assert_eq!(report.specs.len(), 1);
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert!(report.warnings.is_empty(), "{report:?}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_load_directory_report_bounded_rejects_out_of_root_symlink_target() {
+        use std::os::unix::fs as unix_fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let units_dir = temp_dir.path().join("units");
+        fs::create_dir_all(&units_dir).unwrap();
+
+        let outside_dir = TempDir::new().unwrap();
+        let rogue_spec = outside_dir.path().join("rogue.unit.spec");
+        fs::write(
+            &rogue_spec,
+            r#"
+id: pricing/rogue
+kind: function
+intent:
+  why: Escape the root.
+body:
+  rust: "{ true }"
+"#,
+        )
+        .unwrap();
+
+        unix_fs::symlink(&rogue_spec, units_dir.join("rogue.unit.spec")).unwrap();
+
+        let report = load_directory_report_bounded(&units_dir, temp_dir.path()).unwrap();
+        assert!(report.specs.is_empty(), "{report:?}");
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(matches!(
+            report.errors[0],
+            SpecError::PlanSymlinkEscape { .. }
+        ));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_load_directory_report_bounded_skips_symlink_cycle_with_warning() {
+        use std::os::unix::fs as unix_fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let library_root = temp_dir.path();
+        let units_dir = library_root.join("units");
+        fs::create_dir_all(units_dir.join("pricing")).unwrap();
+        fs::write(
+            units_dir.join("pricing/apply.unit.spec"),
+            r#"
+id: pricing/apply
+kind: function
+intent:
+  why: Apply pricing.
+body:
+  rust: "{ true }"
+"#,
+        )
+        .unwrap();
+
+        unix_fs::symlink(&units_dir, units_dir.join("loop")).unwrap();
+
+        let report = load_directory_report_bounded(&units_dir, library_root).unwrap();
+        assert_eq!(report.specs.len(), 1);
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(report.warnings.len(), 1, "{report:?}");
+        assert!(
+            report.warnings[0]
+                .to_string()
+                .contains("skipped symlink cycle")
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_load_molecule_test_directory_report_bounded_rejects_out_of_root_symlink_target() {
+        use std::os::unix::fs as unix_fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let units_dir = temp_dir.path().join("units");
+        fs::create_dir_all(&units_dir).unwrap();
+
+        let outside_dir = TempDir::new().unwrap();
+        let rogue_test = outside_dir.path().join("rogue.test.spec");
+        fs::write(
+            &rogue_test,
+            r#"
+id: pricing/rogue_flow
+covers:
+  - pricing/apply
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+        )
+        .unwrap();
+
+        unix_fs::symlink(&rogue_test, units_dir.join("rogue.test.spec")).unwrap();
+
+        let report =
+            load_molecule_test_directory_report_bounded(&units_dir, temp_dir.path()).unwrap();
+        assert!(report.tests.is_empty(), "{report:?}");
+        assert_eq!(report.errors.len(), 1, "{report:?}");
+        assert!(matches!(
+            report.errors[0],
+            SpecError::PlanSymlinkEscape { .. }
+        ));
     }
 
     #[test]
