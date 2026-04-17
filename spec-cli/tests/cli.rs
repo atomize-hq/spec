@@ -7745,7 +7745,10 @@ changes:
 
     let json = parse_stdout_json(&output);
     assert_eq!(json["status"], "invalid");
-    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_UNIT_MISSING_FOR_ACTION");
+    assert_eq!(
+        json["errors"][0]["code"],
+        "SPEC_PLAN_UNIT_MISSING_FOR_ACTION"
+    );
     assert_eq!(json["errors"][0]["id"], "pricing/tiered_rate");
     assert_eq!(json["errors"][0]["value"], "modify");
 }
