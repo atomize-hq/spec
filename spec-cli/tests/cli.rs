@@ -7708,6 +7708,96 @@ fn plan_validate_remove_plan_uses_current_graph_impact() {
 }
 
 #[test]
+fn plan_validate_rejects_missing_modify_unit() {
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/missing-modify.plan.spec",
+        r#"
+id: missing-modify
+intent:
+  why: "Should fail because modify targets must already exist."
+changes:
+  - unit: pricing/tiered_rate
+    action: modify
+    acceptance:
+      validate:
+        - pricing/tiered_rate
+"#,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected missing modify target to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_UNIT_MISSING_FOR_ACTION");
+    assert_eq!(json["errors"][0]["id"], "pricing/tiered_rate");
+    assert_eq!(json["errors"][0]["value"], "modify");
+}
+
+#[test]
+fn plan_validate_rejects_duplicate_change_units_in_json() {
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/duplicate-change.plan.spec",
+        r#"
+id: duplicate-change
+intent:
+  why: "Should fail because one plan cannot author the same unit twice."
+changes:
+  - unit: pricing/apply_tax
+    action: modify
+    acceptance:
+      validate:
+        - pricing/apply_tax
+  - unit: pricing/apply_tax
+    action: remove
+    acceptance:
+      validate:
+        - pricing/apply_tax
+"#,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected duplicate plan change unit to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_DUPLICATE_CHANGE_UNIT");
+    assert_eq!(json["errors"][0]["id"], "pricing/apply_tax");
+}
+
+#[test]
 fn plan_validate_rejects_plan_outside_library_root() {
     let (temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let outside_plan = temp_dir.path().join("outside.plan.spec");
