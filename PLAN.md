@@ -1352,7 +1352,7 @@ M10 is partially parallelizable, but only after the contract gate is locked.
 | Codepath | Failure mode | Test covers? | Error handling? | Silent? |
 |---|---|---|---|---|
 | plan root resolution | plan file outside any resolved library root | no | fail with explicit path/root error | no |
-| plan root scan | symlink escapes the library or repo root | no | reject or skip with explicit warning/error | **critical gap** |
+| plan root scan | symlink escapes the library or repo root | no | reject with `SPEC_PLAN_SYMLINK_ESCAPE` | **critical gap** |
 | single-file invocation | graph built from the plan file path instead of the library root | no | dedicated resolver required | **critical gap** |
 | `computed_impact` projection | authored and derived impact shapes drift | no | derived-only contract | **critical gap** |
 | `action=add` | fake impact reported for a unit that is not yet in the graph | no | unresolved entry + partial status | no |
@@ -1397,7 +1397,7 @@ M10 is partially parallelizable, but only after the contract gate is locked.
   - duplicate/conflicting `changes[].unit`
   - cross-library unit ref rejected in a plan
   - single-file nested plan path still loads the full library graph
-  - symlink escape rejected or skipped explicitly
+  - symlink escape rejected with `SPEC_PLAN_SYMLINK_ESCAPE`
   - impact union includes downstream molecule tests and keeps changed seed units
   - plan export schema/version behavior
 

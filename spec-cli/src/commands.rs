@@ -11,8 +11,9 @@ use spec_core::generator::{
     write_generated_file,
 };
 use spec_core::loader::{
-    is_unit_spec, load_directory_report, load_file, load_molecule_test_directory,
-    load_molecule_test_directory_report, load_plan_file,
+    is_unit_spec, load_directory_report, load_directory_report_bounded, load_file,
+    load_molecule_test_directory, load_molecule_test_directory_report,
+    load_molecule_test_directory_report_bounded, load_plan_file,
 };
 use spec_core::normalizer::normalize_spec;
 use spec_core::passport::{
@@ -1145,7 +1146,24 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
     };
 
     let (validation_specs, validation_errors, warnings, molecule_tests) =
-        plan_validation_inputs(&library_root, &context)?;
+        match plan_validation_inputs(&library_root, &context) {
+            Ok(inputs) => inputs,
+            Err(err) if matches!(format, OutputFormat::Json) => {
+                let Some(spec_err) = err.downcast_ref::<spec_core::SpecError>() else {
+                    return Err(err);
+                };
+                emit_json_validate_response(&JsonValidateResponse {
+                    schema_version: JSON_SCHEMA_VERSION,
+                    status: "invalid",
+                    errors: vec![spec_error_to_json_entry(spec_err, &HashMap::new())],
+                    warnings: vec![],
+                    plan_id: None,
+                    computed_impact: None,
+                })?;
+                std::process::exit(1);
+            }
+            Err(err) => return Err(err),
+        };
     let mut id_by_path: HashMap<String, String> = validation_specs
         .all_specs()
         .into_iter()
@@ -2487,11 +2505,38 @@ fn collect_validation_specs(
     })
 }
 
+fn collect_plan_validation_specs(
+    library_root: &Path,
+    libraries: &[ResolvedLibrary],
+) -> Result<ValidationSpecCollection> {
+    let report = load_directory_report_bounded(library_root, library_root)?;
+    let (
+        _selected_libraries,
+        imported_libraries,
+        imported_errors,
+        imported_warnings,
+        imported_total_files,
+    ) = load_referenced_validation_specs(&report.specs, libraries);
+
+    let mut loader_errors = report.errors;
+    let mut loader_warnings = report.warnings;
+    loader_errors.extend(imported_errors);
+    loader_warnings.extend(imported_warnings);
+
+    Ok(ValidationSpecCollection {
+        root_specs: report.specs,
+        imported_libraries,
+        loader_errors,
+        loader_warnings,
+        total_files: report.total_files + imported_total_files,
+    })
+}
+
 fn plan_validation_inputs(
     library_root: &Path,
     context: &WorkspaceContext,
 ) -> Result<PlanValidationInputs> {
-    let validation_specs = collect_validation_specs(library_root, &context.libraries)?;
+    let validation_specs = collect_plan_validation_specs(library_root, &context.libraries)?;
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: context.config.validation.allow_unsafe_local_test_expect,
@@ -2504,18 +2549,15 @@ fn plan_validation_inputs(
         context,
     ));
 
-    let molecule_tests = if includes_directory_molecule_tests(library_root) {
-        load_molecule_test_directory(library_root).with_context(|| {
-            format!(
-                "Failed to load molecule tests from {}",
-                library_root.display()
-            )
-        })?
+    let molecule_report = if includes_directory_molecule_tests(library_root) {
+        load_molecule_test_directory_report_bounded(library_root, library_root)?
     } else {
-        Vec::new()
+        spec_core::loader::MoleculeTestLoadReport::default()
     };
+    validation_errors.extend(molecule_report.errors);
+
     let (molecule_errors, molecule_warnings) =
-        validate_molecule_tests(&molecule_tests, &validation_specs.root_specs);
+        validate_molecule_tests(&molecule_report.tests, &validation_specs.root_specs);
     validation_errors.extend(molecule_errors);
 
     let warnings = validation_specs
@@ -2532,13 +2574,14 @@ fn plan_validation_inputs(
                 .into_iter()
                 .map(|warning| warning.to_string()),
         )
+        .chain(molecule_report.warnings.iter().map(ToString::to_string))
         .collect();
 
     Ok((
         validation_specs,
         validation_errors,
         warnings,
-        molecule_tests,
+        molecule_report.tests,
     ))
 }
 

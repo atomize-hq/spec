@@ -7762,6 +7762,210 @@ fn plan_validate_rejects_symlink_escape() {
     assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_SYMLINK_ESCAPE");
 }
 
+#[cfg(unix)]
+#[test]
+fn plan_validate_rejects_symlinked_external_unit_in_library_graph() {
+    use std::os::unix::fs::symlink;
+
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let rogue_spec = outside_dir.path().join("rogue.unit.spec");
+    fs::write(
+        &rogue_spec,
+        r#"
+id: pricing/rogue
+kind: function
+intent:
+  why: Escape the local library graph.
+body:
+  rust: "{ true }"
+"#,
+    )
+    .unwrap();
+    symlink(
+        &rogue_spec,
+        ecommerce_dir.join("units/pricing/rogue.unit.spec"),
+    )
+    .unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected external unit symlink to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_SYMLINK_ESCAPE");
+    assert!(json.get("computed_impact").is_none(), "{json}");
+    assert!(
+        json["errors"][0].get("unit").is_none(),
+        "unexpected unit mapping for escaped file: {json}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_export_rejects_symlinked_external_unit_in_library_graph() {
+    use std::os::unix::fs::symlink;
+
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let rogue_spec = outside_dir.path().join("rogue.unit.spec");
+    fs::write(
+        &rogue_spec,
+        r#"
+id: pricing/rogue
+kind: function
+intent:
+  why: Escape the local library graph.
+body:
+  rust: "{ true }"
+"#,
+    )
+    .unwrap();
+    symlink(
+        &rogue_spec,
+        ecommerce_dir.join("units/pricing/rogue.unit.spec"),
+    )
+    .unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "export",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected external unit symlink to fail plan export"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.trim().is_empty(), "unexpected stdout: {stdout}");
+    assert!(
+        stderr.contains("symlink"),
+        "expected symlink escape diagnostics, got: {stderr}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_validate_rejects_symlinked_external_molecule_test_in_library_graph() {
+    use std::os::unix::fs::symlink;
+
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let rogue_test = outside_dir.path().join("rogue.test.spec");
+    fs::write(
+        &rogue_test,
+        r#"
+id: pricing/rogue_flow
+covers:
+  - pricing/apply_tax
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    )
+    .unwrap();
+    symlink(
+        &rogue_test,
+        ecommerce_dir.join("units/pricing/rogue.test.spec"),
+    )
+    .unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected external molecule test symlink to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_SYMLINK_ESCAPE");
+    assert!(json.get("computed_impact").is_none(), "{json}");
+}
+
+#[test]
+fn plan_validate_json_wraps_local_molecule_loader_failures() {
+    let (_temp_dir, ecommerce_dir, plan_path) =
+        setup_m10_plan_fixture("plans/local.plan.spec", M10_MODIFY_PLAN);
+    fs::write(
+        ecommerce_dir.join("units/pricing/broken.test.spec"),
+        "not: valid: yaml: [unclosed",
+    )
+    .unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected invalid molecule test YAML to fail"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    assert_eq!(json["errors"][0]["code"], "SPEC_YAML_PARSE");
+    assert!(json.get("computed_impact").is_none(), "{json}");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Failed to load molecule tests"),
+        "expected JSON envelope instead of raw loader fallback, got: {stderr}"
+    );
+}
+
 #[test]
 fn plan_validate_rejects_cross_library_change_unit() {
     let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
