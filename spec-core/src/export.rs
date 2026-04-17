@@ -14,6 +14,7 @@
 use crate::AUTHORED_SPEC_VERSION;
 use crate::graph::{SpecEdge, SpecGraph};
 use crate::passport::{ArtifactProvenance, Passport, passport_path_for};
+use crate::plan::{LoadedPlan, PlanComputedImpact, PlanReport, PlanStruct};
 use crate::types::{Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -21,6 +22,7 @@ use std::path::Path;
 
 /// Export schema version. Bumped in M9 for structured dep refs.
 const EXPORT_SCHEMA_VERSION: u8 = 3;
+const PLAN_EXPORT_SCHEMA_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExportBundle {
@@ -94,6 +96,16 @@ pub struct ExportWarning {
     pub spec_id: String,
     pub passport_path: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlanExportBundle {
+    pub schema_version: u8,
+    pub spec_version: String,
+    pub exported_at: String,
+    pub plan: PlanStruct,
+    pub computed_impact: PlanComputedImpact,
+    pub warnings: Vec<String>,
 }
 
 pub fn build_export_bundle(
@@ -188,6 +200,21 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
     (passports, warnings)
 }
 
+pub fn build_plan_export_bundle(
+    plan: &LoadedPlan,
+    report: &PlanReport,
+    exported_at: &str,
+) -> PlanExportBundle {
+    PlanExportBundle {
+        schema_version: PLAN_EXPORT_SCHEMA_VERSION,
+        spec_version: AUTHORED_SPEC_VERSION.to_string(),
+        exported_at: exported_at.to_string(),
+        plan: plan.plan.clone(),
+        computed_impact: report.computed_impact.clone(),
+        warnings: vec![],
+    }
+}
+
 impl ExportDepRef {
     fn local(id: impl Into<String>) -> Self {
         Self {
@@ -245,6 +272,10 @@ mod tests {
     use crate::passport::{
         PassportEvidence, PassportTestResult, build_passport_with_evidence, write_passport,
     };
+    use crate::plan::{
+        LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
+        PlanComputedImpactStatus, PlanReport, PlanSource, PlanStruct,
+    };
     use crate::types::{Body, Intent, SpecSource, SpecStruct};
     use indexmap::IndexMap;
     use tempfile::TempDir;
@@ -283,6 +314,31 @@ mod tests {
                 }],
                 links: None,
                 spec_version: Some("9.9.9".to_string()),
+            },
+        }
+    }
+
+    fn loaded_plan() -> LoadedPlan {
+        LoadedPlan {
+            source: PlanSource {
+                file_path: "checkout-tax-refactor.plan.spec".to_string(),
+                id: "checkout-tax-refactor".to_string(),
+            },
+            plan: PlanStruct {
+                id: "checkout-tax-refactor".to_string(),
+                intent: Intent {
+                    why: "Refactor tax calculation.".to_string(),
+                },
+                changes: vec![PlanChange {
+                    unit: "pricing/apply_tax".to_string(),
+                    action: PlanChangeAction::Modify,
+                    acceptance: PlanAcceptance {
+                        validate: vec!["pricing/apply_tax".to_string()],
+                        molecule_tests: vec!["pricing/checkout_flow".to_string()],
+                        notes: vec![],
+                    },
+                }],
+                notes: vec!["M10 plans are local-library only.".to_string()],
             },
         }
     }
@@ -508,5 +564,28 @@ mod tests {
         let bundle = build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", Some(&provenance));
 
         assert_eq!(bundle.provenance, Some(provenance));
+    }
+
+    #[test]
+    fn build_plan_export_bundle_uses_dedicated_schema_v1() {
+        let plan = loaded_plan();
+        let report = PlanReport {
+            plan_id: plan.plan.id.clone(),
+            computed_impact: PlanComputedImpact {
+                status: PlanComputedImpactStatus::Complete,
+                units: vec!["pricing/apply_tax".to_string()],
+                molecule_tests: vec!["pricing/checkout_flow".to_string()],
+                unresolved: vec![],
+            },
+            change_reports: vec![],
+        };
+
+        let bundle = build_plan_export_bundle(&plan, &report, "2026-04-17T00:00:00Z");
+
+        assert_eq!(bundle.schema_version, 1);
+        assert_eq!(bundle.spec_version, AUTHORED_SPEC_VERSION);
+        assert_eq!(bundle.plan.id, "checkout-tax-refactor");
+        assert_eq!(bundle.computed_impact.status, PlanComputedImpactStatus::Complete);
+        assert!(bundle.warnings.is_empty());
     }
 }

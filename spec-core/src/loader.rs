@@ -6,6 +6,7 @@
 //! - UTF-8 validation before YAML parsing
 //! - Error tracking with file paths
 
+use crate::plan::{LoadedPlan, PlanSource, PlanStruct, validate_raw_plan_yaml};
 use crate::types::{
     LoadedMoleculeTest, LoadedSpec, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct,
 };
@@ -74,6 +75,27 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<LoadedSpec> {
             id: spec.id.clone(),
         },
         spec,
+    })
+}
+
+/// Load a single `.plan.spec` file.
+pub fn load_plan_file<P: AsRef<Path>>(path: P) -> Result<LoadedPlan> {
+    let (path_str, yaml_value) = read_yaml_value(path)?;
+
+    validate_raw_plan_yaml(&yaml_value, &path_str)?;
+
+    let plan: PlanStruct =
+        serde_yaml_bw::from_value(yaml_value).map_err(|e| SpecError::YamlParse {
+            message: e.to_string(),
+            path: path_str.clone(),
+        })?;
+
+    Ok(LoadedPlan {
+        source: PlanSource {
+            file_path: path_str,
+            id: plan.id.clone(),
+        },
+        plan,
     })
 }
 

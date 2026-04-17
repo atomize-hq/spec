@@ -14,6 +14,7 @@ pub mod graph;
 pub mod loader;
 pub mod normalizer;
 pub mod passport;
+pub mod plan;
 pub mod pipeline;
 mod syntax;
 pub mod types;
@@ -206,6 +207,34 @@ pub enum SpecError {
         "spec ID segment '{segment}' is reserved by spec and cannot be used anywhere in a spec ID at {path}"
     )]
     ReservedUnitName { segment: String, path: String },
+
+    #[error("plan commands require a single .plan.spec file, got directory input at {path}")]
+    PlanDirectoryInput { path: String },
+
+    #[error("plan file is outside any resolved library root: {path}")]
+    PlanOutsideLibraryRoot { path: String },
+
+    #[error("plan path escapes the resolved library or repo root via symlink: {path}")]
+    PlanSymlinkEscape { path: String },
+
+    #[error("plan unit ref '{unit}' must be local-library only at {path}")]
+    PlanCrossLibraryUnit { unit: String, path: String },
+
+    #[error("duplicate changes[].unit '{unit}' in plan at {path}")]
+    PlanDuplicateChangeUnit { unit: String, path: String },
+
+    #[error("unit '{unit}' must exist in the current graph for action '{action}' at {path}")]
+    PlanUnitMissingForAction {
+        unit: String,
+        action: String,
+        path: String,
+    },
+
+    #[error("unit '{unit}' already exists in the current graph and cannot use action 'add' at {path}")]
+    PlanUnitAlreadyExistsForAdd { unit: String, path: String },
+
+    #[error("molecule test '{test_id}' was not found in the current library graph at {path}")]
+    PlanMoleculeTestNotFound { test_id: String, path: String },
 }
 
 impl From<walkdir::Error> for SpecError {
