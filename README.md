@@ -15,7 +15,21 @@
 
 - `spec-core`: parsing, validation, normalization, generation, pipeline, and export primitives
 - `spec-cli`: CLI for `validate`, `generate`, `build`, `test`, `export`, and `plan`
-- `examples/ecommerce`: a small realistic example with pricing units
+- `examples/ecommerce`: a small single-library example with pricing units
+- `examples/shared-spec`, `examples/shared-crate`, `examples/crosslib-app`: a direct sibling-library example for `[libraries]` and `shared::...` deps
+
+## Project docs
+
+- [`CHANGELOG.md`](CHANGELOG.md): shipped release history
+- [`PLAN.md`](PLAN.md): active implementation roadmap through M10
+- [`DECISIONS.md`](DECISIONS.md): project-level decisions that stay stable across releases
+- [`TODOS.md`](TODOS.md): backlog and follow-up inventory
+- [`AGENTS.md`](AGENTS.md): agent workflow and machine-readable `spec` authoring loop
+- [`CLAUDE.md`](CLAUDE.md): lightweight routing rules for Claude/Codex sessions in this repo
+- [`examples/ecommerce/README.md`](examples/ecommerce/README.md): local example walkthrough
+- [`examples/crosslib-app/README.md`](examples/crosslib-app/README.md): cross-library example walkthrough
+- [`docs/north_star_v0.2.md`](docs/north_star_v0.2.md), [`docs/high_level_technical_architecture_v0.2.md`](docs/high_level_technical_architecture_v0.2.md), [`docs/roadmap_and_release_shape_v0.1.md`](docs/roadmap_and_release_shape_v0.1.md), and [`docs/strategy_pack_v0.3.md`](docs/strategy_pack_v0.3.md): historical design context from the pre-ship planning phase
+- [`.implemented/`](.implemented/): archived milestone release plans and early design artifacts
 
 ## Quickstart
 
@@ -193,8 +207,12 @@ That JSON form is meant for agents: parse `status`, `errors`, and `warnings` ins
 For plan artifacts, the machine-readable loop is:
 
 ```bash
-spec plan validate examples/ecommerce/plans/checkout-tax-refactor.plan.spec --format json
+spec plan validate path/to/checkout-tax-refactor.plan.spec --format json
 ```
+
+The repo does not currently ship a checked-in `.plan.spec` example. Author one inside a library
+root such as `examples/ecommerce/plans/` and then run `spec plan validate` or `spec plan export`
+against that explicit file path.
 
 Valid plan responses reuse the same top-level envelope and add `plan_id` plus derived `computed_impact`:
 

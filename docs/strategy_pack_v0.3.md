@@ -3,6 +3,11 @@
 **Status:** Draft  
 **Date:** 2026-03-28
 
+> Historical note: this versioned draft captures pre-ship planning context from March 2026.
+> For current shipped behavior and active milestone status, start with
+> [`README.md`](../README.md), [`CHANGELOG.md`](../CHANGELOG.md), [`PLAN.md`](../PLAN.md), and
+> [`DECISIONS.md`](../DECISIONS.md).
+
 ## Purpose
 
 This document defines the long-term product vision for **spec**, a semantic-unit development system for authoring, validating, compiling, and evolving software as structured semantic records rather than as loosely related text files.

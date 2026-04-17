@@ -6,6 +6,13 @@ This example shows a small pricing domain authored as `.unit.spec` files.
 
 This crate expects generated Rust to exist at `src/generated/` (gitignored).
 
+If you have `spec` installed, the quickest end-to-end loop from `examples/ecommerce/` is:
+
+```bash
+spec build units
+spec test units
+```
+
 From the repo root:
 
 ```bash

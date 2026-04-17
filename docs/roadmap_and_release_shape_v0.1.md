@@ -3,6 +3,11 @@
 **Status:** Draft  
 **Date:** 2026-03-29
 
+> Historical note: this versioned draft captures pre-ship planning context from March 2026.
+> For current shipped behavior and active milestone status, start with
+> [`README.md`](../README.md), [`CHANGELOG.md`](../CHANGELOG.md), [`PLAN.md`](../PLAN.md), and
+> [`DECISIONS.md`](../DECISIONS.md).
+
 ## Purpose
 
 This document translates the current **North Star vision** and **high-level technical architecture** into an execution sequence.
