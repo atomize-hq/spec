@@ -28,7 +28,7 @@
 - [`CLAUDE.md`](CLAUDE.md): lightweight routing rules for Claude/Codex sessions in this repo
 - [`examples/ecommerce/README.md`](examples/ecommerce/README.md): local example walkthrough
 - [`examples/crosslib-app/README.md`](examples/crosslib-app/README.md): cross-library example walkthrough
-- [`docs/north_star_v0.2.md`](docs/north_star_v0.2.md), [`docs/high_level_technical_architecture_v0.2.md`](docs/high_level_technical_architecture_v0.2.md), [`docs/roadmap_and_release_shape_v0.1.md`](docs/roadmap_and_release_shape_v0.1.md), and [`docs/strategy_pack_v0.3.md`](docs/strategy_pack_v0.3.md): historical design context from the pre-ship planning phase
+- [`docs/north_star_v0.2.md`](docs/north_star_v0.2.md), [`docs/high_level_technical_architecture_v0.2.md`](docs/high_level_technical_architecture_v0.2.md), and [`docs/roadmap_and_release_shape_v0.1.md`](docs/roadmap_and_release_shape_v0.1.md): historical design context from the pre-ship planning phase
 - [`.implemented/`](.implemented/): archived milestone release plans and early design artifacts
 
 ## Quickstart
