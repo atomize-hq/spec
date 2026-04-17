@@ -585,7 +585,10 @@ mod tests {
         assert_eq!(bundle.schema_version, 1);
         assert_eq!(bundle.spec_version, AUTHORED_SPEC_VERSION);
         assert_eq!(bundle.plan.id, "checkout-tax-refactor");
-        assert_eq!(bundle.computed_impact.status, PlanComputedImpactStatus::Complete);
+        assert_eq!(
+            bundle.computed_impact.status,
+            PlanComputedImpactStatus::Complete
+        );
         assert!(bundle.warnings.is_empty());
     }
 }

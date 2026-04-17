@@ -14,8 +14,8 @@ pub mod graph;
 pub mod loader;
 pub mod normalizer;
 pub mod passport;
-pub mod plan;
 pub mod pipeline;
+pub mod plan;
 mod syntax;
 pub mod types;
 pub mod validator;
@@ -230,7 +230,9 @@ pub enum SpecError {
         path: String,
     },
 
-    #[error("unit '{unit}' already exists in the current graph and cannot use action 'add' at {path}")]
+    #[error(
+        "unit '{unit}' already exists in the current graph and cannot use action 'add' at {path}"
+    )]
     PlanUnitAlreadyExistsForAdd { unit: String, path: String },
 
     #[error("molecule test '{test_id}' was not found in the current library graph at {path}")]

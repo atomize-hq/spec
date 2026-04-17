@@ -47,6 +47,12 @@ type CollectedSpecs = (
     Vec<spec_core::SpecWarning>,
     usize,
 );
+type PlanValidationInputs = (
+    ValidationSpecCollection,
+    Vec<spec_core::SpecError>,
+    Vec<String>,
+    Vec<LoadedMoleculeTest>,
+);
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
 
 struct ImportedLibrarySpecs {
@@ -365,7 +371,9 @@ impl Command {
             Self::Export(args) => export_command(&args.path, args.output.as_deref()),
             Self::Plan(args) => match args.command {
                 PlanCommand::Validate(args) => plan_validate_command(&args.path, args.format),
-                PlanCommand::Export(args) => plan_export_command(&args.path, args.output.as_deref()),
+                PlanCommand::Export(args) => {
+                    plan_export_command(&args.path, args.output.as_deref())
+                }
             },
             Self::Completions(_) => unreachable!("handled in main"),
         }
@@ -1762,10 +1770,10 @@ fn resolve_plan_library_root(
 
     let mut current = canonical_plan.parent();
     while let Some(dir) = current {
-        if let Some(repo_root) = &repo_root {
-            if !dir.starts_with(repo_root) {
-                break;
-            }
+        if let Some(repo_root) = &repo_root
+            && !dir.starts_with(repo_root)
+        {
+            break;
         }
 
         if dir.join("units").is_dir() {
@@ -2482,12 +2490,7 @@ fn collect_validation_specs(
 fn plan_validation_inputs(
     library_root: &Path,
     context: &WorkspaceContext,
-) -> Result<(
-    ValidationSpecCollection,
-    Vec<spec_core::SpecError>,
-    Vec<String>,
-    Vec<LoadedMoleculeTest>,
-)> {
+) -> Result<PlanValidationInputs> {
     let validation_specs = collect_validation_specs(library_root, &context.libraries)?;
     let validation_options = ValidationOptions {
         strict_deps: true,
@@ -2519,11 +2522,24 @@ fn plan_validation_inputs(
         .loader_warnings
         .iter()
         .map(ToString::to_string)
-        .chain(validation_warnings.into_iter().map(|warning| warning.to_string()))
-        .chain(molecule_warnings.into_iter().map(|warning| warning.to_string()))
+        .chain(
+            validation_warnings
+                .into_iter()
+                .map(|warning| warning.to_string()),
+        )
+        .chain(
+            molecule_warnings
+                .into_iter()
+                .map(|warning| warning.to_string()),
+        )
         .collect();
 
-    Ok((validation_specs, validation_errors, warnings, molecule_tests))
+    Ok((
+        validation_specs,
+        validation_errors,
+        warnings,
+        molecule_tests,
+    ))
 }
 
 fn load_referenced_validation_specs(

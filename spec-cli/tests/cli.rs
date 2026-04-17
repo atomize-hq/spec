@@ -7581,7 +7581,10 @@ changes:
         - pricing/checkout_flow
 "#;
 
-fn setup_m10_plan_fixture(plan_relative_path: &str, body: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
+fn setup_m10_plan_fixture(
+    plan_relative_path: &str,
+    body: &str,
+) -> (tempfile::TempDir, PathBuf, PathBuf) {
     let (temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let plan_path = ecommerce_dir.join(plan_relative_path);
     if let Some(parent) = plan_path.parent() {
@@ -7598,11 +7601,19 @@ fn normalize_exported_at(mut json: Value) -> Value {
 
 #[test]
 fn plan_validate_rejects_directory_input() {
-    let (_temp_dir, ecommerce_dir, _plan_path) =
-        setup_m10_plan_fixture("plans/refactors/checkout-tax-refactor.plan.spec", M10_MIXED_PLAN);
+    let (_temp_dir, ecommerce_dir, _plan_path) = setup_m10_plan_fixture(
+        "plans/refactors/checkout-tax-refactor.plan.spec",
+        M10_MIXED_PLAN,
+    );
 
-    let output = run_in(&ecommerce_dir, &["plan", "validate", "plans", "--format", "json"]);
-    assert!(!output.status.success(), "plan validate should fail on directory input");
+    let output = run_in(
+        &ecommerce_dir,
+        &["plan", "validate", "plans", "--format", "json"],
+    );
+    assert!(
+        !output.status.success(),
+        "plan validate should fail on directory input"
+    );
 
     let json = parse_stdout_json(&output);
     assert_eq!(json["status"], "invalid");
@@ -7611,15 +7622,21 @@ fn plan_validate_rejects_directory_input() {
 
 #[test]
 fn plan_validate_nested_plan_path_matches_checked_in_fixture() {
-    let (_temp_dir, ecommerce_dir, plan_path) =
-        setup_m10_plan_fixture("plans/refactors/checkout-tax-refactor.plan.spec", M10_MIXED_PLAN);
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/refactors/checkout-tax-refactor.plan.spec",
+        M10_MIXED_PLAN,
+    );
 
     let output = run_in(
         &ecommerce_dir,
         &[
             "plan",
             "validate",
-            plan_path.strip_prefix(&ecommerce_dir).unwrap().to_str().unwrap(),
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "--format",
             "json",
         ],
@@ -7638,7 +7655,11 @@ fn plan_validate_modify_plan_keeps_seed_unit_in_computed_impact() {
         &[
             "plan",
             "validate",
-            plan_path.strip_prefix(&ecommerce_dir).unwrap().to_str().unwrap(),
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "--format",
             "json",
         ],
@@ -7667,7 +7688,11 @@ fn plan_validate_remove_plan_uses_current_graph_impact() {
         &[
             "plan",
             "validate",
-            plan_path.strip_prefix(&ecommerce_dir).unwrap().to_str().unwrap(),
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "--format",
             "json",
         ],
@@ -7698,7 +7723,10 @@ fn plan_validate_rejects_plan_outside_library_root() {
             "json",
         ],
     );
-    assert!(!output.status.success(), "expected outside-root plan to fail");
+    assert!(
+        !output.status.success(),
+        "expected outside-root plan to fail"
+    );
 
     let json = parse_stdout_json(&output);
     assert_eq!(json["status"], "invalid");
@@ -7720,7 +7748,13 @@ fn plan_validate_rejects_symlink_escape() {
 
     let output = run_in(
         &ecommerce_dir,
-        &["plan", "validate", "plans/escape.plan.spec", "--format", "json"],
+        &[
+            "plan",
+            "validate",
+            "plans/escape.plan.spec",
+            "--format",
+            "json",
+        ],
     );
     assert!(!output.status.success(), "expected symlink escape to fail");
 
@@ -7750,12 +7784,19 @@ changes:
         &[
             "plan",
             "validate",
-            plan_path.strip_prefix(&ecommerce_dir).unwrap().to_str().unwrap(),
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "--format",
             "json",
         ],
     );
-    assert!(!output.status.success(), "expected cross-library plan to fail");
+    assert!(
+        !output.status.success(),
+        "expected cross-library plan to fail"
+    );
 
     let json = parse_stdout_json(&output);
     assert_eq!(json["errors"][0]["code"], "SPEC_PLAN_CROSS_LIBRARY_UNIT");
@@ -7763,15 +7804,21 @@ changes:
 
 #[test]
 fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
-    let (_temp_dir, ecommerce_dir, plan_path) =
-        setup_m10_plan_fixture("plans/refactors/checkout-tax-refactor.plan.spec", M10_MIXED_PLAN);
+    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
+        "plans/refactors/checkout-tax-refactor.plan.spec",
+        M10_MIXED_PLAN,
+    );
 
     let output = run_in(
         &ecommerce_dir,
         &[
             "plan",
             "export",
-            plan_path.strip_prefix(&ecommerce_dir).unwrap().to_str().unwrap(),
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
         ],
     );
     assert_output_success("plan export should succeed", &output);
@@ -7784,6 +7831,12 @@ fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
     let spec_export_json = parse_stdout_json(&spec_export);
     assert_eq!(spec_export_json["schema_version"], 3);
     assert!(spec_export_json.get("plan").is_none(), "{spec_export_json}");
-    assert!(spec_export_json.get("units").is_some(), "{spec_export_json}");
-    assert!(spec_export_json.get("graph").is_some(), "{spec_export_json}");
+    assert!(
+        spec_export_json.get("units").is_some(),
+        "{spec_export_json}"
+    );
+    assert!(
+        spec_export_json.get("graph").is_some(),
+        "{spec_export_json}"
+    );
 }

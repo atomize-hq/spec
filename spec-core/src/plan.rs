@@ -418,8 +418,12 @@ bogus: nope
             },
         };
 
-        let err = build_plan_report(&loaded_plan, &[loaded_spec("pricing/apply_tax", vec![])], &[])
-            .unwrap_err();
+        let err = build_plan_report(
+            &loaded_plan,
+            &[loaded_spec("pricing/apply_tax", vec![])],
+            &[],
+        )
+        .unwrap_err();
         match err {
             SpecError::PlanDuplicateChangeUnit { unit, .. } => {
                 assert_eq!(unit, "pricing/apply_tax");
@@ -488,9 +492,12 @@ bogus: nope
             },
         };
 
-        let err =
-            build_plan_report(&loaded_plan, &[loaded_spec("pricing/tiered_rate", vec![])], &[])
-                .unwrap_err();
+        let err = build_plan_report(
+            &loaded_plan,
+            &[loaded_spec("pricing/tiered_rate", vec![])],
+            &[],
+        )
+        .unwrap_err();
         match err {
             SpecError::PlanUnitAlreadyExistsForAdd { unit, .. } => {
                 assert_eq!(unit, "pricing/tiered_rate");
@@ -538,22 +545,34 @@ bogus: nope
             loaded_spec("pricing/apply_tax", vec![]),
             loaded_spec("pricing/calculate_total", vec!["pricing/apply_tax"]),
         ];
-        let tests = vec![loaded_test("pricing/checkout_flow", vec!["pricing/calculate_total"])];
+        let tests = vec![loaded_test(
+            "pricing/checkout_flow",
+            vec!["pricing/calculate_total"],
+        )];
 
         let report = build_plan_report(&loaded_plan, &specs, &tests).unwrap();
 
         assert_eq!(report.plan_id, "mixed");
-        assert_eq!(report.computed_impact.status, PlanComputedImpactStatus::Partial);
+        assert_eq!(
+            report.computed_impact.status,
+            PlanComputedImpactStatus::Partial
+        );
         assert_eq!(
             report.computed_impact.units,
-            vec!["pricing/apply_tax".to_string(), "pricing/calculate_total".to_string()]
+            vec![
+                "pricing/apply_tax".to_string(),
+                "pricing/calculate_total".to_string()
+            ]
         );
         assert_eq!(
             report.computed_impact.molecule_tests,
             vec!["pricing/checkout_flow".to_string()]
         );
         assert_eq!(report.computed_impact.unresolved.len(), 1);
-        assert_eq!(report.computed_impact.unresolved[0].unit, "pricing/tiered_rate");
+        assert_eq!(
+            report.computed_impact.unresolved[0].unit,
+            "pricing/tiered_rate"
+        );
         assert_eq!(
             report.computed_impact.unresolved[0].reason,
             "current graph has no node for action=add"
@@ -585,9 +604,12 @@ bogus: nope
             },
         };
 
-        let err =
-            build_plan_report(&loaded_plan, &[loaded_spec("pricing/apply_tax", vec![])], &[])
-                .unwrap_err();
+        let err = build_plan_report(
+            &loaded_plan,
+            &[loaded_spec("pricing/apply_tax", vec![])],
+            &[],
+        )
+        .unwrap_err();
         match err {
             SpecError::PlanMoleculeTestNotFound { test_id, .. } => {
                 assert_eq!(test_id, "pricing/checkout_flow");
