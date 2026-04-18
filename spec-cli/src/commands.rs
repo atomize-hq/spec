@@ -11,9 +11,10 @@ use spec_core::generator::{
     write_generated_file,
 };
 use spec_core::loader::{
-    is_molecule_test_spec, is_unit_spec, load_directory_report, load_directory_report_bounded,
-    load_file, load_molecule_test_directory, load_molecule_test_directory_report,
-    load_molecule_test_directory_report_bounded, load_molecule_test_file, load_plan_file,
+    DirectoryLoadReport, discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec,
+    load_directory_report, load_directory_report_bounded, load_file, load_molecule_test_directory,
+    load_molecule_test_directory_report, load_molecule_test_directory_report_bounded,
+    load_molecule_test_file, load_plan_file,
 };
 use spec_core::molecule_evidence::{
     MoleculeEvidence, MoleculeEvidenceStatus, build_molecule_evidence,
@@ -892,71 +893,41 @@ struct StatusRootScope {
     target_molecule_path: Option<PathBuf>,
 }
 
-fn discover_library_roots(search_root: &Path) -> Result<Vec<PathBuf>> {
-    let canonical_root = canonicalize_existing_dir(search_root)?;
-    let mut roots = BTreeSet::new();
-
-    let walker = walkdir::WalkDir::new(&canonical_root)
-        .follow_links(true)
-        .into_iter()
-        .filter_entry(|entry| {
-            if entry.path() == canonical_root {
-                return true;
-            }
-            let Some(name) = entry.file_name().to_str() else {
-                return true;
-            };
-            !name.starts_with('.') && name != "target"
-        });
-
-    for entry in walker {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err)
-                if err
-                    .io_error()
-                    .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::NotFound) =>
-            {
-                continue;
-            }
-            Err(err) => return Err(anyhow::anyhow!(err.to_string())),
-        };
-        if !entry.file_type().is_dir() {
-            continue;
-        }
-        let path = entry.path();
-        if path.join("units").is_dir() {
-            roots.insert(path.canonicalize()?);
-        }
-    }
-
-    Ok(roots.into_iter().collect())
+struct ResolvedStatusScopes {
+    scopes: Vec<StatusRootScope>,
+    loader_errors: Vec<spec_core::SpecError>,
 }
 
-fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<Vec<StatusRootScope>> {
+fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<ResolvedStatusScopes> {
     let absolute_path = absolutize_from_current_dir(path)?;
 
     if absolute_path.is_file() {
         if is_unit_spec(&absolute_path) {
             let library_root = resolve_unit_library_root(&absolute_path, context);
-            return Ok(vec![StatusRootScope {
-                collection_path: absolute_path.clone(),
-                library_root,
-                display_root: ".".to_string(),
-                target_molecule_path: None,
-            }]);
+            return Ok(ResolvedStatusScopes {
+                scopes: vec![StatusRootScope {
+                    collection_path: absolute_path.clone(),
+                    library_root,
+                    display_root: ".".to_string(),
+                    target_molecule_path: None,
+                }],
+                loader_errors: Vec::new(),
+            });
         }
 
         if is_molecule_test_spec(&absolute_path) {
             let library_root = resolve_molecule_test_library_root(&absolute_path, context);
-            return Ok(vec![StatusRootScope {
-                collection_path: library_root
-                    .clone()
-                    .unwrap_or_else(|| absolute_path.clone()),
-                library_root,
-                display_root: ".".to_string(),
-                target_molecule_path: Some(absolute_path.clone()),
-            }]);
+            return Ok(ResolvedStatusScopes {
+                scopes: vec![StatusRootScope {
+                    collection_path: library_root
+                        .clone()
+                        .unwrap_or_else(|| absolute_path.clone()),
+                    library_root,
+                    display_root: ".".to_string(),
+                    target_molecule_path: Some(absolute_path.clone()),
+                }],
+                loader_errors: Vec::new(),
+            });
         }
 
         bail!(
@@ -967,12 +938,15 @@ fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<Vec<S
 
     if absolute_path.join("units").is_dir() {
         let root = canonicalize_existing_dir(&absolute_path)?;
-        return Ok(vec![StatusRootScope {
-            collection_path: root.clone(),
-            library_root: Some(root.clone()),
-            display_root: ".".to_string(),
-            target_molecule_path: None,
-        }]);
+        return Ok(ResolvedStatusScopes {
+            scopes: vec![StatusRootScope {
+                collection_path: root.clone(),
+                library_root: Some(root.clone()),
+                display_root: ".".to_string(),
+                target_molecule_path: None,
+            }],
+            loader_errors: Vec::new(),
+        });
     }
 
     if absolute_path
@@ -981,16 +955,21 @@ fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<Vec<S
         .is_some_and(|name| name == "units")
     {
         let root = canonicalize_existing_dir(absolute_path.parent().unwrap_or(&absolute_path))?;
-        return Ok(vec![StatusRootScope {
-            collection_path: root.clone(),
-            library_root: Some(root.clone()),
-            display_root: ".".to_string(),
-            target_molecule_path: None,
-        }]);
+        return Ok(ResolvedStatusScopes {
+            scopes: vec![StatusRootScope {
+                collection_path: root.clone(),
+                library_root: Some(root.clone()),
+                display_root: ".".to_string(),
+                target_molecule_path: None,
+            }],
+            loader_errors: Vec::new(),
+        });
     }
 
     let search_root = canonicalize_existing_dir(&absolute_path)?;
-    discover_library_roots(&search_root)?
+    let discovery = discover_library_roots_bounded(&search_root, &search_root)?;
+    let scopes = discovery
+        .roots
         .into_iter()
         .map(|root| {
             let relative = root
@@ -1007,7 +986,12 @@ fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<Vec<S
                 target_molecule_path: None,
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(ResolvedStatusScopes {
+        scopes,
+        loader_errors: discovery.errors,
+    })
 }
 
 fn zero_roots_status_entry(path: &Path) -> JsonErrorEntry {
@@ -1039,24 +1023,8 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         }
         Err(err) => return Err(err),
     };
-    let scopes = resolve_status_roots(path, &context)?;
-    if scopes.is_empty() {
-        let entry = zero_roots_status_entry(path);
-        match format {
-            OutputFormat::Text => {
-                eprintln!("✗ no library roots discovered under {}", path.display());
-            }
-            OutputFormat::Json => {
-                emit_json_status_response(&JsonStatusResponse {
-                    schema_version: STATUS_JSON_SCHEMA_VERSION,
-                    roots: vec![],
-                    units: vec![],
-                    loader_errors: vec![entry],
-                })?;
-            }
-        }
-        std::process::exit(1);
-    }
+    let resolved_scopes = resolve_status_roots(path, &context)?;
+    let scopes = resolved_scopes.scopes;
 
     let config = context.config.clone();
     let validation_options = ValidationOptions {
@@ -1065,8 +1033,15 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
     };
 
     let mut roots = Vec::new();
-    let mut top_level_loader_errors = Vec::<JsonErrorEntry>::new();
-    let mut needs_nonzero_exit = false;
+    let mut top_level_loader_errors: Vec<JsonErrorEntry> = resolved_scopes
+        .loader_errors
+        .iter()
+        .map(|err| spec_error_to_json_entry(err, &HashMap::new()))
+        .collect();
+    let mut needs_nonzero_exit = scopes.is_empty();
+    if scopes.is_empty() {
+        top_level_loader_errors.push(zero_roots_status_entry(path));
+    }
 
     for scope in scopes {
         let mut validation_specs = collect_validation_specs(&scope.collection_path, &context)?;
@@ -1274,6 +1249,9 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                         eprintln!("  · {message}");
                     }
                 }
+            }
+            if roots.is_empty() {
+                eprintln!("✗ no library roots discovered under {}", path.display());
             }
             for root in &roots {
                 println!("Root: {}", root.root);
@@ -3121,8 +3099,21 @@ fn collect_validation_specs(
     path: &Path,
     context: &WorkspaceContext,
 ) -> Result<ValidationSpecCollection> {
-    let (root_specs, mut loader_errors, mut loader_warnings, mut total_files) =
-        collect_specs(path)?;
+    let (root_specs, mut loader_errors, mut loader_warnings, mut total_files) = if path.is_dir() {
+        if let Some(library_root) = resolve_directory_library_root(path) {
+            let report = load_directory_report_bounded(path, &library_root)?;
+            (
+                report.specs,
+                report.errors,
+                report.warnings,
+                report.total_files,
+            )
+        } else {
+            collect_specs(path)?
+        }
+    } else {
+        collect_specs(path)?
+    };
     let support_specs = collect_local_support_specs(path, context, &root_specs)?;
     let (
         _selected_libraries,
@@ -3146,6 +3137,20 @@ fn collect_validation_specs(
         loader_warnings,
         total_files,
     })
+}
+
+fn resolve_directory_library_root(path: &Path) -> Option<PathBuf> {
+    if path.join("units").is_dir() {
+        canonicalize_existing_dir(path).ok()
+    } else if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "units")
+    {
+        canonicalize_existing_dir(path.parent().unwrap_or(path)).ok()
+    } else {
+        None
+    }
 }
 
 fn collect_local_support_specs(
@@ -3423,7 +3428,13 @@ fn load_referenced_validation_specs<'a>(
         // Only root-spec aliases participate in library discovery. Imported libraries may refer to
         // additional aliases, but those stay unresolved during this invocation rather than
         // recursively loading transitive libraries.
-        let report = load_directory_report(&library.root);
+        let report =
+            load_directory_report_bounded(&library.root, &library.root).unwrap_or_else(|err| {
+                DirectoryLoadReport {
+                    errors: vec![err],
+                    ..Default::default()
+                }
+            });
         total_files += report.total_files;
         loader_errors.extend(report.errors);
         loader_warnings.extend(report.warnings);

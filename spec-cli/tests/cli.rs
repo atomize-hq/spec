@@ -4183,6 +4183,183 @@ body:
     assert_eq!(roots[1]["root"], "beta");
 }
 
+#[cfg(unix)]
+#[test]
+fn spec_status_repo_root_rejects_symlinked_external_library_root() {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = temp_repo_dir();
+    let repo_root = temp_dir.path().join("repo");
+    fs::create_dir_all(repo_root.join("alpha/units/pricing")).unwrap();
+    fs::write(repo_root.join(".git"), "gitdir: .git/modules/repo\n").unwrap();
+    write_spec(
+        &repo_root.join("alpha/units"),
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: In-repo library root.
+body:
+  rust: |
+    { true }
+"#,
+    );
+
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let outside_root = outside_dir.path().join("linked-lib");
+    fs::create_dir_all(outside_root.join("units/money")).unwrap();
+    write_spec(
+        &outside_root.join("units"),
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Outside-root library.
+body:
+  rust: |
+    { true }
+"#,
+    );
+    symlink(&outside_root, repo_root.join("linked-lib")).unwrap();
+
+    let output = run_in(&repo_root, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "symlinked external library root should fail status"
+    );
+
+    let json = parse_stdout_json(&output);
+    let roots = status_roots(&json);
+    assert_eq!(roots.len(), 1, "{json}");
+    assert_eq!(roots[0]["root"], "alpha");
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_PLAN_SYMLINK_ESCAPE"),
+        "{json}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn spec_status_rejects_symlinked_external_unit_in_root_library_graph() {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = project_dir.join("units");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: In-root unit.
+body:
+  rust: |
+    { true }
+"#,
+    );
+
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let rogue_spec = outside_dir.path().join("rogue.unit.spec");
+    fs::write(
+        &rogue_spec,
+        r#"
+id: pricing/rogue
+kind: function
+intent:
+  why: Escape the local library graph.
+body:
+  rust: "{ true }"
+"#,
+    )
+    .unwrap();
+    symlink(&rogue_spec, units_dir.join("pricing/rogue.unit.spec")).unwrap();
+
+    let output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "status should fail when a root library graph escapes via symlink"
+    );
+
+    let json = parse_stdout_json(&output);
+    let units = status_units(&json);
+    assert_eq!(units.len(), 1, "{json}");
+    assert_eq!(units[0]["id"], "pricing/apply_discount");
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_PLAN_SYMLINK_ESCAPE"),
+        "{json}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn spec_status_rejects_symlinked_external_unit_in_imported_library_graph() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_unit(
+        &fixture.app_root.join("units"),
+        "pricing/apply_discount.unit.spec",
+        "pricing/apply_discount",
+        &["shared::money/round"],
+    );
+    write_m9_unit(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        "money/round",
+        &[],
+    );
+
+    let outside_dir = tempfile::TempDir::new().unwrap();
+    let rogue_spec = outside_dir.path().join("rogue.unit.spec");
+    fs::write(
+        &rogue_spec,
+        r#"
+id: money/rogue
+kind: function
+intent:
+  why: Escape the imported library graph.
+body:
+  rust: "{ true }"
+"#,
+    )
+    .unwrap();
+    symlink(
+        &rogue_spec,
+        fixture.shared_root.join("units/money/rogue.unit.spec"),
+    )
+    .unwrap();
+
+    let output = run_in(&fixture.app_root, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "status should fail when an imported library graph escapes via symlink"
+    );
+
+    let json = parse_stdout_json(&output);
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert!(
+        loader_errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_PLAN_SYMLINK_ESCAPE"),
+        "{json}"
+    );
+}
+
 #[test]
 fn spec_status_malformed_passport_warns_not_aborts() {
     let temp_dir = temp_repo_dir();

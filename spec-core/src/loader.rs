@@ -12,6 +12,7 @@ use crate::types::{
 };
 use crate::validator::{validate_raw_molecule_test_yaml, validate_raw_yaml};
 use crate::{Result, SpecError};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -27,6 +28,14 @@ pub struct DirectoryLoadReport {
     pub errors: Vec<SpecError>,
     pub warnings: Vec<crate::SpecWarning>,
     pub total_files: usize,
+}
+
+/// Result of bounded library-root discovery under a search path.
+#[derive(Debug, Default)]
+pub struct LibraryRootDiscoveryReport {
+    pub roots: Vec<PathBuf>,
+    pub errors: Vec<SpecError>,
+    pub warnings: Vec<crate::SpecWarning>,
 }
 
 fn canonicalize_scan_root(path: &Path) -> Result<PathBuf> {
@@ -51,6 +60,18 @@ fn escaped_plan_scan_error(path: &Path) -> SpecError {
 
 fn subtree_already_rejected(path: &Path, rejected_roots: &[PathBuf]) -> bool {
     rejected_roots.iter().any(|root| path.starts_with(root))
+}
+
+fn should_descend_scan_entry(entry: &walkdir::DirEntry, root: &Path) -> bool {
+    if entry.path() == root {
+        return true;
+    }
+
+    let Some(name) = entry.file_name().to_str() else {
+        return true;
+    };
+
+    !name.starts_with('.') && name != "target"
 }
 
 fn read_yaml_value<P: AsRef<Path>>(path: P) -> Result<(String, serde_yaml_bw::Value)> {
@@ -247,6 +268,83 @@ pub fn load_directory_report_bounded<P: AsRef<Path>, R: AsRef<Path>>(
     report
         .specs
         .sort_by(|a, b| a.source.file_path.cmp(&b.source.file_path));
+    Ok(report)
+}
+
+/// Discover library roots while enforcing that both the candidate directory and its
+/// owned `units/` directory stay within `allowed_root`, even when reached through symlinks.
+pub fn discover_library_roots_bounded<P: AsRef<Path>, R: AsRef<Path>>(
+    dir: P,
+    allowed_root: R,
+) -> Result<LibraryRootDiscoveryReport> {
+    let dir = dir.as_ref();
+    let allowed_root = canonicalize_scan_root(allowed_root.as_ref())?;
+    let mut report = LibraryRootDiscoveryReport::default();
+    let mut rejected_subtrees = Vec::new();
+    let mut roots = BTreeSet::new();
+
+    for entry in WalkDir::new(dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_entry(|entry| should_descend_scan_entry(entry, dir))
+    {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+
+                if subtree_already_rejected(path, &rejected_subtrees) {
+                    continue;
+                }
+
+                if !entry.file_type().is_dir() {
+                    continue;
+                }
+
+                let canonical_path = match canonicalize_scan_entry(path) {
+                    Ok(path) => path,
+                    Err(err) => {
+                        report.errors.push(err);
+                        continue;
+                    }
+                };
+
+                if !canonical_path.starts_with(&allowed_root) {
+                    report.errors.push(escaped_plan_scan_error(path));
+                    rejected_subtrees.push(path.to_path_buf());
+                    continue;
+                }
+
+                let units_path = path.join("units");
+                if !units_path.is_dir() {
+                    continue;
+                }
+
+                let canonical_units = match canonicalize_scan_entry(&units_path) {
+                    Ok(path) => path,
+                    Err(err) => {
+                        report.errors.push(err);
+                        continue;
+                    }
+                };
+
+                if !canonical_units.starts_with(&allowed_root) {
+                    report.errors.push(escaped_plan_scan_error(&units_path));
+                    continue;
+                }
+
+                roots.insert(canonical_path);
+            }
+            Err(err) => {
+                if let Some(warning) = walkdir_cycle_warning(&err) {
+                    report.warnings.push(warning);
+                } else {
+                    report.errors.push(walkdir_error(err));
+                }
+            }
+        }
+    }
+
+    report.roots = roots.into_iter().collect();
     Ok(report)
 }
 
