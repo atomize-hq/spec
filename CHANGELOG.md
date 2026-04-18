@@ -5,17 +5,24 @@
 ### Added
 
 - **M10 plan artifacts** — `spec plan validate <file>` and `spec plan export <file>` now let you author a single `.plan.spec` change-intent file, validate it, and export a dedicated machine-readable plan bundle without mutating the existing `spec export` contract.
+- **M11 molecule evidence artifacts** — Molecule tests now persist observed results in co-located `*.test.evidence.json` files, separate from unit passports.
+- **Single-file molecule execution** — `spec test path/to/file.test.spec` now runs exactly one molecule test and writes only that target evidence artifact.
+- **Checked-in ecommerce plan example** — `examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec` is now the canonical in-repo plan example path.
 
 ### Changed
 
 - **Plan impact is now derived, local-library, and truthful** — M10 plan files author intended changes plus structured acceptance targets, while `computed_impact` is derived from the current local graph. `modify` and `remove` reuse current graph impact, `add` stays honest with unresolved output, and cross-library plan refs remain out of scope.
 - **Plan commands reuse the repo trust boundary** — plan root resolution now anchors to the enclosing library root instead of the plan file directory, keeps scans repo-bounded, and emits stable JSON diagnostics for the new plan failure modes.
 - **Machine-readable docs now cover the plan contract** — README and AGENTS document the single-file plan workflow, the local-library-only rules, the dedicated export shape, and the new `SPEC_PLAN_*` error codes.
+- **`spec status --format json` now emits `schema_version: 3`** — Status is grouped by discovered library root, keeps units and molecule tests in separate planes, preserves a flattened top-level `units` compatibility view, and treats zero discovered roots as a non-green result.
+- **Rust toolchain is now pinned in-repo** — Added `rust-toolchain.toml` pinned to Rust `1.89.0` to match the crate metadata and CI configuration.
 
 ### Fixed
 
 - **Plan validation now rejects duplicate and impossible authored changes cleanly** — missing `modify/remove` targets, duplicate `changes[].unit` entries, symlink escapes, and invalid local molecule-test loading all fail with explicit contract errors instead of leaking ambiguous loader behavior.
 - **M10 regression coverage is now complete at the CLI boundary** — end-to-end tests cover nested plan root resolution, mixed add/modify impact, cross-library rejection, missing modify targets, duplicate change units, symlink escapes, and dedicated plan export stability.
+- **Repo-root status discovery now stays library-bounded** — `spec status` can discover multiple library roots under a parent/repo path without collapsing duplicate local ids across roots.
+- **Molecule status no longer contaminates unit health** — failing, stale, or missing molecule evidence affects only the molecule-test plane, not the covered units' passport status.
 
 ## 0.7.0 - 2026-04-16
 

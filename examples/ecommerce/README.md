@@ -1,6 +1,6 @@
 # ecommerce example
 
-This example shows a small pricing domain authored as `.unit.spec` files.
+This example shows a small pricing domain authored as `.unit.spec` files, plus molecule tests and a checked-in plan artifact.
 
 ## Build / verify
 
@@ -11,6 +11,8 @@ If you have `spec` installed, the quickest end-to-end loop from `examples/ecomme
 ```bash
 spec build units
 spec test units
+spec test units/pricing/checkout_flow.test.spec
+spec plan validate plans/refactors/checkout-tax-refactor.plan.spec --format json
 ```
 
 From the repo root:
@@ -35,5 +37,10 @@ Files:
 - `units/pricing/apply_discount.unit.spec`
 - `units/pricing/apply_tax.unit.spec`
 - `units/pricing/calculate_total.unit.spec`
+- `units/pricing/checkout_flow.test.spec`
+- `units/pricing/discount_plus_tax.test.spec`
+- `plans/refactors/checkout-tax-refactor.plan.spec`
+
+Derived artifacts such as `src/generated/`, `*.spec.passport.json`, and `*.test.evidence.json` are generated from those source specs and should not be hand-edited.
 
 The `Cargo.toml` and `src/main.rs` are intentionally minimal. They provide a project scaffold for generated output and local experimentation with the pricing units.

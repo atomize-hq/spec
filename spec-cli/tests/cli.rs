@@ -260,6 +260,18 @@ fn parse_stdout_json(output: &std::process::Output) -> Value {
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
+fn status_roots(json: &Value) -> &Vec<Value> {
+    json["roots"].as_array().unwrap()
+}
+
+fn status_units(json: &Value) -> &Vec<Value> {
+    status_roots(json)[0]["units"].as_array().unwrap()
+}
+
+fn status_molecule_tests(json: &Value) -> &Vec<Value> {
+    status_roots(json)[0]["molecule_tests"].as_array().unwrap()
+}
+
 fn fixture_json(name: &str) -> Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
@@ -285,6 +297,12 @@ fn rewrite_passport_generated_at(passport_path: &Path, generated_at: &str) {
         serde_json::to_string_pretty(&passport).unwrap(),
     )
     .unwrap();
+}
+
+fn rewrite_json_field(path: &Path, field: &str, value: Value) {
+    let mut json: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+    json[field] = value;
+    fs::write(path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
 }
 
 fn write_status_project(project_dir: &Path) -> PathBuf {
@@ -2766,13 +2784,13 @@ fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
         .expect("failed to copy ecommerce example");
     for entry in WalkDir::new(&dst_ecommerce) {
         let entry = entry.expect("failed to walk copied ecommerce example");
-        if entry.file_type().is_file()
-            && entry
-                .file_name()
-                .to_string_lossy()
-                .ends_with(".spec.passport.json")
-        {
-            fs::remove_file(entry.path()).expect("failed to remove copied passport artifact");
+        if entry.file_type().is_file() {
+            let file_name = entry.file_name().to_string_lossy();
+            if file_name.ends_with(".spec.passport.json")
+                || file_name.ends_with(".test.evidence.json")
+            {
+                fs::remove_file(entry.path()).expect("failed to remove copied derived artifact");
+            }
         }
     }
     (temp_dir, dst_ecommerce)
@@ -3835,8 +3853,8 @@ body:
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
-    let units = json["units"].as_array().unwrap();
+    assert_eq!(json["schema_version"], 3);
+    let units = status_units(&json);
     assert_eq!(units.len(), 1);
     assert_eq!(units[0]["id"], "pricing/bad");
     assert_eq!(units[0]["status"], "invalid");
@@ -3871,7 +3889,7 @@ fn spec_status_json_loader_error_surfaces_in_response() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert!(
         !loader_errors.is_empty(),
@@ -4032,6 +4050,137 @@ fn spec_status_valid_unit() {
     assert!(output.status.success());
 
     assert_stdout_json_matches_fixture(&output, "status-valid.json");
+}
+
+#[test]
+fn spec_status_reports_molecule_failure_without_poisoning_unit_health() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_pricing_project(project_dir, true);
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/tax_and_discount.test.spec",
+        r#"id: pricing/tax_and_discount
+spec_version: "0.3.0"
+intent:
+  why: Verify tax and discount interact correctly.
+covers:
+  - pricing/apply_tax
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec test");
+    assert_output_success(
+        "spec test should seed evidence before status check",
+        &output,
+    );
+
+    rewrite_json_field(
+        &project_dir.join("units/pricing/tax_and_discount.test.evidence.json"),
+        "status",
+        Value::String("fail".to_string()),
+    );
+
+    let output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "molecule failure should exit non-zero"
+    );
+
+    let json = parse_stdout_json(&output);
+    let units = status_units(&json);
+    assert!(
+        units.iter().all(|unit| unit["status"] == "valid"),
+        "unit plane should remain valid: {units:?}"
+    );
+    let molecule_tests = status_molecule_tests(&json);
+    assert_eq!(molecule_tests.len(), 1);
+    assert_eq!(molecule_tests[0]["id"], "pricing/tax_and_discount");
+    assert_eq!(molecule_tests[0]["status"], "failing");
+}
+
+#[test]
+fn spec_status_zero_roots_is_non_green() {
+    let temp_dir = temp_repo_dir();
+    let output = run_in(temp_dir.path(), &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "empty search root should exit non-zero"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["roots"], serde_json::json!([]));
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    assert_eq!(loader_errors[0]["code"], "SPEC_NO_LIBRARY_ROOTS");
+}
+
+#[test]
+fn spec_status_repo_root_discovers_multiple_library_roots() {
+    let temp_dir = temp_repo_dir();
+    let repo_root = temp_dir.path().join("repo");
+    fs::create_dir_all(repo_root.join("alpha/units/pricing")).unwrap();
+    fs::create_dir_all(repo_root.join("beta/units/money")).unwrap();
+    fs::write(repo_root.join(".git"), "gitdir: .git/modules/repo\n").unwrap();
+    write_spec(
+        &repo_root.join("alpha/units"),
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Alpha pricing function.
+body:
+  rust: |
+    { true }
+"#,
+    );
+    write_spec(
+        &repo_root.join("beta/units"),
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Beta money function.
+body:
+  rust: |
+    { true }
+"#,
+    );
+
+    let output = run_in(&repo_root, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "untested multi-root status should exit non-zero"
+    );
+
+    let json = parse_stdout_json(&output);
+    let roots = status_roots(&json);
+    assert_eq!(roots.len(), 2);
+    assert_eq!(roots[0]["root"], "alpha");
+    assert_eq!(roots[1]["root"], "beta");
 }
 
 #[test]
@@ -5934,7 +6083,7 @@ fn export_rejects_molecule_body_with_nested_unsafe_expr() {
 }
 
 #[test]
-fn spec_test_with_molecule_tests_succeeds_and_no_molecule_passport_written() {
+fn spec_test_with_molecule_tests_writes_molecule_evidence_not_passports() {
     if !cargo_available() {
         return;
     }
@@ -5980,12 +6129,24 @@ body:
         &output,
     );
 
-    // M7 deferral invariant: molecule test passports are not written until M8
+    // Molecule evidence is written to a dedicated co-located artifact.
+    let molecule_evidence = project_dir.join("units/pricing/tax_and_discount.test.evidence.json");
+    assert!(
+        molecule_evidence.exists(),
+        "spec test should write molecule evidence for .test.spec files: {}",
+        molecule_evidence.display()
+    );
+    let molecule_evidence_json: Value =
+        serde_json::from_str(&fs::read_to_string(&molecule_evidence).unwrap()).unwrap();
+    assert_eq!(molecule_evidence_json["id"], "pricing/tax_and_discount");
+    assert_eq!(molecule_evidence_json["status"], "pass");
+
+    // Molecule tests still do not use unit-passport artifacts.
     let molecule_passport =
         project_dir.join("units/pricing/tax_and_discount.test.spec.passport.json");
     assert!(
         !molecule_passport.exists(),
-        "spec test must not write a passport for .test.spec files (deferred to M8): {}",
+        "spec test must not write a passport for .test.spec files: {}",
         molecule_passport.display()
     );
 
@@ -5995,6 +6156,85 @@ body:
             .join("units/pricing/apply_tax.spec.passport.json")
             .exists(),
         "unit passport should still be written for apply_tax"
+    );
+}
+
+#[test]
+fn spec_test_accepts_molecule_file_path_and_writes_only_targeted_evidence() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    write_pricing_project(project_dir, true);
+    let units_dir = project_dir.join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/tax_and_discount.test.spec",
+        r#"id: pricing/tax_and_discount
+spec_version: "0.3.0"
+intent:
+  why: Verify tax and discount interact correctly.
+covers:
+  - pricing/apply_tax
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/discount_only.test.spec",
+        r#"id: pricing/discount_only
+spec_version: "0.3.0"
+intent:
+  why: Verify discount-only flow.
+covers:
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    let target_test_path = units_dir.join("pricing/tax_and_discount.test.spec");
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            target_test_path.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success("spec test should accept a .test.spec file path", &output);
+
+    let targeted_evidence = units_dir.join("pricing/tax_and_discount.test.evidence.json");
+    let untouched_evidence = units_dir.join("pricing/discount_only.test.evidence.json");
+    assert!(
+        targeted_evidence.exists(),
+        "expected targeted molecule evidence"
+    );
+    assert!(
+        !untouched_evidence.exists(),
+        "single-file molecule test should not write sibling evidence"
+    );
+    assert!(
+        !units_dir
+            .join("pricing/apply_tax.spec.passport.json")
+            .exists(),
+        "single-file molecule test should not write unit passports"
     );
 }
 
@@ -7455,7 +7695,7 @@ fn status_json_surfaces_missing_library_path_as_loader_error() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
     assert_eq!(json["units"], serde_json::json!([]));
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert_eq!(loader_errors.len(), 1);
@@ -7825,10 +8065,8 @@ fn plan_validate_rejects_directory_input() {
 
 #[test]
 fn plan_validate_nested_plan_path_matches_checked_in_fixture() {
-    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
-        "plans/refactors/checkout-tax-refactor.plan.spec",
-        M10_MIXED_PLAN,
-    );
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let plan_path = ecommerce_dir.join("plans/refactors/checkout-tax-refactor.plan.spec");
 
     let output = run_in(
         &ecommerce_dir,
@@ -8304,10 +8542,8 @@ changes:
 
 #[test]
 fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
-    let (_temp_dir, ecommerce_dir, plan_path) = setup_m10_plan_fixture(
-        "plans/refactors/checkout-tax-refactor.plan.spec",
-        M10_MIXED_PLAN,
-    );
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let plan_path = ecommerce_dir.join("plans/refactors/checkout-tax-refactor.plan.spec");
 
     let output = run_in(
         &ecommerce_dir,

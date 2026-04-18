@@ -474,6 +474,14 @@ pub fn is_unit_spec(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Check if a path is a `.test.spec` file.
+pub fn is_molecule_test_spec(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.ends_with(".test.spec"))
+        .unwrap_or(false)
+}
+
 /// Get the output directory for a generated file based on its module path
 ///
 /// Returns the directory path where the .rs file should be written.

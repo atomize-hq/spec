@@ -1,5 +1,20 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
+  "roots": [
+    {
+      "root": ".",
+      "units": [
+        {
+          "id": "pricing/apply_discount",
+          "status": "failing",
+          "reason": "build failed",
+          "errors": [],
+          "evidence_at": "2024-01-02T03:04:05Z"
+        }
+      ],
+      "molecule_tests": []
+    }
+  ],
   "units": [
     {
       "id": "pricing/apply_discount",

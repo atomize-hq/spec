@@ -190,8 +190,12 @@ fn summary_segment_count(segment: &str, label: &str) -> Option<u32> {
 /// - repo-relative output paths such as `examples/ecommerce/src/generated`,
 ///   where the caller's cwd is above `crate_root`
 pub fn output_module_prefix(output: &Path, crate_root: &Path, cwd: &Path) -> Result<String> {
-    let absolute_output = absolutize_path(output, cwd);
-    let absolute_crate_root = absolutize_path(crate_root, cwd);
+    let absolute_output = absolutize_path(output, cwd)
+        .canonicalize()
+        .unwrap_or_else(|_| absolutize_path(output, cwd));
+    let absolute_crate_root = absolutize_path(crate_root, cwd)
+        .canonicalize()
+        .unwrap_or_else(|_| absolutize_path(crate_root, cwd));
 
     let relative = absolute_output
         .strip_prefix(absolute_crate_root.join("src"))
