@@ -27,4 +27,4 @@ local_tests:
     expect: calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)
 links:
   molecule_tests:
-    - pricing/checkout_total
+    - pricing/checkout_flow

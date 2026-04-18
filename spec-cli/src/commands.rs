@@ -11,9 +11,15 @@ use spec_core::generator::{
     write_generated_file,
 };
 use spec_core::loader::{
-    is_unit_spec, load_directory_report, load_directory_report_bounded, load_file,
-    load_molecule_test_directory, load_molecule_test_directory_report,
-    load_molecule_test_directory_report_bounded, load_plan_file,
+    DirectoryLoadReport, discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec,
+    load_directory_report, load_directory_report_bounded, load_file, load_molecule_test_directory,
+    load_molecule_test_directory_report, load_molecule_test_directory_report_bounded,
+    load_molecule_test_file, load_plan_file,
+};
+use spec_core::molecule_evidence::{
+    MoleculeEvidence, MoleculeEvidenceStatus, build_molecule_evidence,
+    ensure_gitignore_entry as ensure_molecule_evidence_gitignore_entry, molecule_evidence_is_stale,
+    read_molecule_evidence, write_molecule_evidence,
 };
 use spec_core::normalizer::normalize_spec;
 use spec_core::passport::{
@@ -97,7 +103,8 @@ impl ValidationSpecCollection {
     }
 }
 
-const JSON_SCHEMA_VERSION: u8 = 2;
+const VALIDATE_JSON_SCHEMA_VERSION: u8 = 2;
+const STATUS_JSON_SCHEMA_VERSION: u8 = 3;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,13 +128,24 @@ struct JsonValidateResponse {
 #[derive(Serialize)]
 struct JsonStatusResponse {
     schema_version: u8,
+    roots: Vec<JsonStatusRoot>,
     units: Vec<JsonStatusUnit>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     loader_errors: Vec<JsonErrorEntry>,
 }
 
 #[derive(Serialize)]
-struct JsonStatusUnit {
+struct JsonStatusRoot {
+    root: String,
+    units: Vec<JsonStatusUnit>,
+    molecule_tests: Vec<JsonStatusMoleculeTest>,
+}
+
+type JsonStatusUnit = JsonStatusEntry;
+type JsonStatusMoleculeTest = JsonStatusEntry;
+
+#[derive(Clone, Serialize)]
+struct JsonStatusEntry {
     id: String,
     status: HealthState,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -191,7 +209,7 @@ fn emit_json_status_response(response: &JsonStatusResponse) -> Result<()> {
 
 fn emit_json_validate_workspace_config_failure(err: &WorkspaceConfigError) -> Result<()> {
     emit_json_validate_response(&JsonValidateResponse {
-        schema_version: JSON_SCHEMA_VERSION,
+        schema_version: VALIDATE_JSON_SCHEMA_VERSION,
         status: "invalid",
         errors: vec![workspace_config_error_to_json_entry(err)],
         warnings: vec![],
@@ -203,7 +221,8 @@ fn emit_json_validate_workspace_config_failure(err: &WorkspaceConfigError) -> Re
 
 fn emit_json_status_workspace_config_failure(err: &WorkspaceConfigError) -> Result<()> {
     emit_json_status_response(&JsonStatusResponse {
-        schema_version: JSON_SCHEMA_VERSION,
+        schema_version: STATUS_JSON_SCHEMA_VERSION,
+        roots: vec![],
         units: vec![],
         loader_errors: vec![workspace_config_error_to_json_entry(err)],
     })?;
@@ -658,7 +677,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
             let has_errors = !errors.is_empty();
 
             let response = JsonValidateResponse {
-                schema_version: JSON_SCHEMA_VERSION,
+                schema_version: VALIDATE_JSON_SCHEMA_VERSION,
                 status: if has_errors { "invalid" } else { "valid" },
                 errors,
                 warnings,
@@ -781,6 +800,218 @@ fn compute_health_status(
     }
 }
 
+fn compute_molecule_health_status(
+    errors: &[JsonErrorEntry],
+    evidence: Option<&MoleculeEvidence>,
+    test: &LoadedMoleculeTest,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> HealthStatus {
+    if !errors.is_empty() {
+        return HealthStatus {
+            status: HealthState::Invalid,
+            reason: Some(format!("{} error{}", errors.len(), pluralize(errors.len()))),
+            evidence_at: None,
+        };
+    }
+
+    let Some(evidence) = evidence else {
+        return HealthStatus {
+            status: HealthState::Untested,
+            reason: Some("no molecule evidence".to_string()),
+            evidence_at: None,
+        };
+    };
+
+    let evidence_at = Some(evidence.observed_at.clone());
+    if matches!(evidence.status, MoleculeEvidenceStatus::Stale)
+        || molecule_evidence_is_stale(evidence, test, specs_by_id)
+    {
+        return HealthStatus {
+            status: HealthState::Stale,
+            reason: Some(evidence.reason.clone().unwrap_or_else(|| {
+                "covered unit contract changed since last molecule test".to_string()
+            })),
+            evidence_at,
+        };
+    }
+
+    match evidence.status {
+        MoleculeEvidenceStatus::BuildFail => HealthStatus {
+            status: HealthState::Failing,
+            reason: Some(
+                evidence
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "build failed".to_string()),
+            ),
+            evidence_at,
+        },
+        MoleculeEvidenceStatus::Timeout => HealthStatus {
+            status: HealthState::Failing,
+            reason: Some(
+                evidence
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "build timed out".to_string()),
+            ),
+            evidence_at,
+        },
+        MoleculeEvidenceStatus::Fail => HealthStatus {
+            status: HealthState::Failing,
+            reason: Some(
+                evidence
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "molecule test failed".to_string()),
+            ),
+            evidence_at,
+        },
+        MoleculeEvidenceStatus::Unknown => HealthStatus {
+            status: HealthState::Incomplete,
+            reason: Some(
+                evidence
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "molecule test result unknown".to_string()),
+            ),
+            evidence_at,
+        },
+        MoleculeEvidenceStatus::Pass => HealthStatus {
+            status: HealthState::Valid,
+            reason: None,
+            evidence_at,
+        },
+        MoleculeEvidenceStatus::Stale => unreachable!("handled above"),
+    }
+}
+
+#[derive(Clone)]
+struct StatusRootScope {
+    collection_path: PathBuf,
+    library_root: Option<PathBuf>,
+    display_root: String,
+    target_molecule_path: Option<PathBuf>,
+}
+
+struct ResolvedStatusScopes {
+    scopes: Vec<StatusRootScope>,
+    loader_errors: Vec<spec_core::SpecError>,
+}
+
+fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<ResolvedStatusScopes> {
+    let absolute_path = absolutize_from_current_dir(path)?;
+
+    if absolute_path.is_file() {
+        if is_unit_spec(&absolute_path) {
+            let library_root = resolve_unit_library_root(&absolute_path, context);
+            return Ok(ResolvedStatusScopes {
+                scopes: vec![StatusRootScope {
+                    collection_path: absolute_path.clone(),
+                    library_root,
+                    display_root: ".".to_string(),
+                    target_molecule_path: None,
+                }],
+                loader_errors: Vec::new(),
+            });
+        }
+
+        if is_molecule_test_spec(&absolute_path) {
+            let library_root = resolve_molecule_test_library_root(&absolute_path, context);
+            return Ok(ResolvedStatusScopes {
+                scopes: vec![StatusRootScope {
+                    collection_path: library_root
+                        .clone()
+                        .unwrap_or_else(|| absolute_path.clone()),
+                    library_root,
+                    display_root: ".".to_string(),
+                    target_molecule_path: Some(absolute_path.clone()),
+                }],
+                loader_errors: Vec::new(),
+            });
+        }
+
+        bail!(
+            "{} is not a .unit.spec or .test.spec file",
+            absolute_path.display()
+        );
+    }
+
+    if absolute_path.join("units").is_dir() {
+        let root = canonicalize_existing_dir(&absolute_path)?;
+        return Ok(ResolvedStatusScopes {
+            scopes: vec![StatusRootScope {
+                collection_path: root.clone(),
+                library_root: Some(root.clone()),
+                display_root: ".".to_string(),
+                target_molecule_path: None,
+            }],
+            loader_errors: Vec::new(),
+        });
+    }
+
+    if absolute_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "units")
+    {
+        let root = canonicalize_existing_dir(absolute_path.parent().unwrap_or(&absolute_path))?;
+        return Ok(ResolvedStatusScopes {
+            scopes: vec![StatusRootScope {
+                collection_path: root.clone(),
+                library_root: Some(root.clone()),
+                display_root: ".".to_string(),
+                target_molecule_path: None,
+            }],
+            loader_errors: Vec::new(),
+        });
+    }
+
+    let search_root = canonicalize_existing_dir(&absolute_path)?;
+    let discovery = discover_library_roots_bounded(&search_root, &search_root)?;
+    let scopes = discovery
+        .roots
+        .into_iter()
+        .map(|root| {
+            let relative = root
+                .strip_prefix(&search_root)
+                .ok()
+                .map(Path::to_path_buf)
+                .filter(|relative| !relative.as_os_str().is_empty())
+                .map(|relative| relative.display().to_string())
+                .unwrap_or_else(|| ".".to_string());
+            Ok(StatusRootScope {
+                collection_path: root.clone(),
+                library_root: Some(root.clone()),
+                display_root: relative,
+                target_molecule_path: None,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(ResolvedStatusScopes {
+        scopes,
+        loader_errors: discovery.errors,
+    })
+}
+
+fn zero_roots_status_entry(path: &Path) -> JsonErrorEntry {
+    JsonErrorEntry {
+        unit: None,
+        code: "SPEC_NO_LIBRARY_ROOTS".to_string(),
+        path: Some(path.display().to_string()),
+        dep: None,
+        field: None,
+        value: None,
+        message: Some(format!(
+            "no library roots discovered under {}",
+            path.display()
+        )),
+        id: None,
+        path2: None,
+        cycle: None,
+    }
+}
+
 fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
     let context = match load_workspace_context(path) {
         Ok(context) => context,
@@ -792,157 +1023,265 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         }
         Err(err) => return Err(err),
     };
+    let resolved_scopes = resolve_status_roots(path, &context)?;
+    let scopes = resolved_scopes.scopes;
+
     let config = context.config.clone();
-    let mut validation_specs = collect_validation_specs(path, &context)?;
-    let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
-    let selected_libraries: Vec<ResolvedLibrary> = context
-        .libraries
-        .iter()
-        .filter(|library| {
-            validation_specs
-                .imported_libraries
-                .iter()
-                .any(|imported| imported.alias == library.alias)
-        })
-        .cloned()
-        .collect();
-    let failed_import_aliases =
-        imported_library_aliases_with_loader_errors(&loader_errors, &selected_libraries);
-    let (validation_errors, _validation_warnings) =
-        finish_validation_with_imports(&validation_specs, &validation_options);
-    let mut validation_errors = suppress_cross_library_dep_not_found_for_failed_imports(
-        validation_errors,
-        &failed_import_aliases,
-    );
-    validation_errors.extend(validate_library_crate_aliases(
-        validation_specs.local_specs(),
-        path,
-        &context,
-    ));
 
-    let id_by_path: HashMap<String, String> = validation_specs
-        .all_specs()
-        .into_iter()
-        .map(|s| (s.source.file_path.clone(), s.spec.id.clone()))
-        .collect();
-    let root_paths: HashSet<String> = validation_specs
-        .root_specs
+    let mut roots = Vec::new();
+    let mut top_level_loader_errors: Vec<JsonErrorEntry> = resolved_scopes
+        .loader_errors
         .iter()
-        .map(|spec| spec.source.file_path.clone())
+        .map(|err| spec_error_to_json_entry(err, &HashMap::new()))
         .collect();
+    let mut needs_nonzero_exit = scopes.is_empty();
+    if scopes.is_empty() {
+        top_level_loader_errors.push(zero_roots_status_entry(path));
+    }
 
-    let mut errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
-    let mut global_errors = loader_errors;
-    for err in validation_errors {
-        let entry = spec_error_to_json_entry(&err, &id_by_path);
-        let root_error_paths: Vec<String> = error_paths(&err)
-            .into_iter()
-            .filter(|path| root_paths.contains(path))
+    for scope in scopes {
+        let mut validation_specs = collect_validation_specs(&scope.collection_path, &context)?;
+        let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
+        let selected_libraries: Vec<ResolvedLibrary> = context
+            .libraries
+            .iter()
+            .filter(|library| {
+                validation_specs
+                    .imported_libraries
+                    .iter()
+                    .any(|imported| imported.alias == library.alias)
+            })
+            .cloned()
             .collect();
-        if root_error_paths.is_empty() {
-            global_errors.push(err);
-            continue;
-        }
-        for path in root_error_paths {
-            errors_by_path.entry(path).or_default().push(entry.clone());
-        }
-    }
-    let has_global_errors = !global_errors.is_empty();
+        let failed_import_aliases =
+            imported_library_aliases_with_loader_errors(&loader_errors, &selected_libraries);
+        let (validation_errors, _validation_warnings) =
+            finish_validation_with_imports(&validation_specs, &validation_options);
+        let mut validation_errors = suppress_cross_library_dep_not_found_for_failed_imports(
+            validation_errors,
+            &failed_import_aliases,
+        );
+        validation_errors.extend(validate_library_crate_aliases(
+            validation_specs.local_specs(),
+            &scope.collection_path,
+            &context,
+        ));
 
-    // JSON mode uses loader_errors as the existing top-level bucket for diagnostics that do not
-    // attach to a root-library status row, including imported-library failures.
-    let loader_error_entries: Vec<JsonErrorEntry> = global_errors
-        .iter()
-        .map(|err| spec_error_to_json_entry(err, &id_by_path))
-        .collect();
-
-    // Text mode emits global diagnostics as human-readable output; JSON mode surfaces them in
-    // the response's loader_errors field to preserve the existing status contract.
-    if has_global_errors && matches!(format, OutputFormat::Text) {
-        let mut diagnostics = DiagnosticMap::new();
-        for err in global_errors {
-            push_error(&mut diagnostics, err);
-        }
-        print_diagnostics(&diagnostics);
-    }
-
-    if validation_specs.total_files == 0
-        && validation_specs.root_specs.is_empty()
-        && !has_global_errors
-    {
-        match format {
-            OutputFormat::Text => {
-                println!("0 units found, nothing to status.");
+        let molecule_report = if let Some(target_molecule_path) = &scope.target_molecule_path {
+            let test = load_molecule_test_file(target_molecule_path)
+                .with_context(|| format!("Failed to load {}", target_molecule_path.display()))?;
+            spec_core::loader::MoleculeTestLoadReport {
+                tests: vec![test],
+                ..Default::default()
             }
-            OutputFormat::Json => {
-                let response = JsonStatusResponse {
-                    schema_version: JSON_SCHEMA_VERSION,
-                    units: vec![],
-                    loader_errors: vec![],
-                };
-                emit_json_status_response(&response)?;
-            }
-        }
-        return Ok(());
-    }
-
-    let mut units = Vec::with_capacity(validation_specs.root_specs.len());
-    let mut needs_nonzero_exit = has_global_errors;
-
-    for spec in &validation_specs.root_specs {
-        let source_path = Path::new(&spec.source.file_path);
-        let passport = match read_passport(source_path) {
-            Ok(passport) => passport,
-            Err(err) => {
-                if matches!(format, OutputFormat::Text) {
-                    eprintln!(
-                        "⚠ failed to read passport for {}: {err}",
-                        source_path.display()
-                    );
-                }
-                None
-            }
+        } else if includes_directory_molecule_tests(&scope.collection_path) {
+            let allowed_root = scope
+                .library_root
+                .as_deref()
+                .unwrap_or(scope.collection_path.as_path());
+            load_molecule_test_directory_report_bounded(&scope.collection_path, allowed_root)?
+        } else {
+            spec_core::loader::MoleculeTestLoadReport::default()
         };
-        let live_hash = compute_contract_hash(spec);
-        let errors = errors_by_path
-            .remove(&spec.source.file_path)
-            .unwrap_or_default();
-        let health = compute_health_status(&errors, passport.as_ref(), live_hash.as_deref());
+        let mut molecule_report = molecule_report;
+        validation_errors.extend(std::mem::take(&mut molecule_report.errors));
+        let (molecule_errors, _molecule_warnings) =
+            validate_molecule_tests(&molecule_report.tests, &validation_specs.root_specs);
+        validation_errors.extend(molecule_errors);
 
-        if !health.status.is_valid() {
-            needs_nonzero_exit = true;
+        let id_by_path: HashMap<String, String> = validation_specs
+            .all_specs()
+            .into_iter()
+            .map(|spec| (spec.source.file_path.clone(), spec.spec.id.clone()))
+            .chain(
+                molecule_report
+                    .tests
+                    .iter()
+                    .map(|test| (test.source.file_path.clone(), test.test.id.clone())),
+            )
+            .collect();
+        let unit_paths: HashSet<String> = validation_specs
+            .root_specs
+            .iter()
+            .map(|spec| spec.source.file_path.clone())
+            .collect();
+        let molecule_paths: HashSet<String> = molecule_report
+            .tests
+            .iter()
+            .map(|test| test.source.file_path.clone())
+            .collect();
+
+        let mut unit_errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
+        let mut molecule_errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
+        let mut global_errors = loader_errors;
+        for err in validation_errors {
+            let entry = spec_error_to_json_entry(&err, &id_by_path);
+            let error_paths_for_entry = error_paths(&err);
+            let mut attached = false;
+            for error_path in &error_paths_for_entry {
+                if unit_paths.contains(error_path) {
+                    unit_errors_by_path
+                        .entry(error_path.clone())
+                        .or_default()
+                        .push(entry.clone());
+                    attached = true;
+                }
+                if molecule_paths.contains(error_path) {
+                    molecule_errors_by_path
+                        .entry(error_path.clone())
+                        .or_default()
+                        .push(entry.clone());
+                    attached = true;
+                }
+            }
+            if !attached {
+                global_errors.push(err);
+            }
         }
 
-        units.push(JsonStatusUnit {
-            id: spec.spec.id.clone(),
-            status: health.status,
-            reason: health.reason,
-            errors,
-            evidence_at: health.evidence_at,
+        top_level_loader_errors.extend(
+            global_errors
+                .iter()
+                .map(|err| spec_error_to_json_entry(err, &id_by_path)),
+        );
+
+        let specs_by_id: HashMap<String, LoadedSpec> = validation_specs
+            .root_specs
+            .iter()
+            .map(|spec| (spec.spec.id.clone(), spec.clone()))
+            .collect();
+
+        let mut units = Vec::with_capacity(validation_specs.root_specs.len());
+        for spec in &validation_specs.root_specs {
+            let source_path = Path::new(&spec.source.file_path);
+            let passport = match read_passport(source_path) {
+                Ok(passport) => passport,
+                Err(err) => {
+                    if matches!(format, OutputFormat::Text) {
+                        eprintln!(
+                            "⚠ failed to read passport for {}: {err}",
+                            source_path.display()
+                        );
+                    }
+                    None
+                }
+            };
+            let live_hash = compute_contract_hash(spec);
+            let errors = unit_errors_by_path
+                .remove(&spec.source.file_path)
+                .unwrap_or_default();
+            let health = compute_health_status(&errors, passport.as_ref(), live_hash.as_deref());
+            if !health.status.is_valid() {
+                needs_nonzero_exit = true;
+            }
+
+            units.push(JsonStatusUnit {
+                id: spec.spec.id.clone(),
+                status: health.status,
+                reason: health.reason,
+                errors,
+                evidence_at: health.evidence_at,
+            });
+        }
+
+        let mut molecule_tests = Vec::with_capacity(molecule_report.tests.len());
+        for test in &molecule_report.tests {
+            let errors = molecule_errors_by_path
+                .remove(&test.source.file_path)
+                .unwrap_or_default();
+            let evidence = match read_molecule_evidence(Path::new(&test.source.file_path)) {
+                Ok(evidence) => evidence,
+                Err(err) => {
+                    let mut errors = errors;
+                    errors.push(spec_error_to_json_entry(&err, &id_by_path));
+                    let health = compute_molecule_health_status(&errors, None, test, &specs_by_id);
+                    needs_nonzero_exit = true;
+                    molecule_tests.push(JsonStatusMoleculeTest {
+                        id: test.test.id.clone(),
+                        status: health.status,
+                        reason: health.reason,
+                        errors,
+                        evidence_at: health.evidence_at,
+                    });
+                    continue;
+                }
+            };
+            let health =
+                compute_molecule_health_status(&errors, evidence.as_ref(), test, &specs_by_id);
+            if !health.status.is_valid() {
+                needs_nonzero_exit = true;
+            }
+            molecule_tests.push(JsonStatusMoleculeTest {
+                id: test.test.id.clone(),
+                status: health.status,
+                reason: health.reason,
+                errors,
+                evidence_at: health.evidence_at,
+            });
+        }
+
+        roots.push(JsonStatusRoot {
+            root: scope.display_root,
+            units,
+            molecule_tests,
         });
     }
 
+    let has_top_level_errors = !top_level_loader_errors.is_empty();
+
     match format {
         OutputFormat::Text => {
-            for unit in &units {
-                print_status_unit(unit);
+            if !top_level_loader_errors.is_empty() {
+                let mut diagnostics = DiagnosticMap::new();
+                for error in &top_level_loader_errors {
+                    diagnostics
+                        .entry(error.path.clone().unwrap_or_else(|| "<global>".to_string()))
+                        .or_default()
+                        .push(json_error_entry_to_human(error));
+                }
+                for (path, messages) in diagnostics {
+                    eprintln!("{path}");
+                    for message in messages {
+                        eprintln!("  · {message}");
+                    }
+                }
+            }
+            if roots.is_empty() {
+                eprintln!("✗ no library roots discovered under {}", path.display());
+            }
+            for root in &roots {
+                println!("Root: {}", root.root);
+                println!("UNITS");
+                for unit in &root.units {
+                    print_status_unit(unit);
+                }
+                if !root.molecule_tests.is_empty() {
+                    println!("MOLECULE TESTS");
+                    for molecule_test in &root.molecule_tests {
+                        print_status_unit(molecule_test);
+                    }
+                }
             }
         }
         OutputFormat::Json => {
-            let response = JsonStatusResponse {
-                schema_version: JSON_SCHEMA_VERSION,
-                units,
-                loader_errors: loader_error_entries,
-            };
-            emit_json_status_response(&response)?;
+            let flat_units = roots
+                .iter()
+                .flat_map(|root| root.units.iter().cloned())
+                .collect();
+            emit_json_status_response(&JsonStatusResponse {
+                schema_version: STATUS_JSON_SCHEMA_VERSION,
+                roots,
+                units: flat_units,
+                loader_errors: top_level_loader_errors,
+            })?;
         }
     }
 
-    if needs_nonzero_exit {
+    if needs_nonzero_exit || has_top_level_errors {
         std::process::exit(1);
     }
 
@@ -1114,7 +1453,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
         Ok(result) => result,
         Err(err) if matches!(format, OutputFormat::Json) => {
             emit_json_validate_response(&JsonValidateResponse {
-                schema_version: JSON_SCHEMA_VERSION,
+                schema_version: VALIDATE_JSON_SCHEMA_VERSION,
                 status: "invalid",
                 errors: vec![spec_error_to_json_entry(&err, &HashMap::new())],
                 warnings: vec![],
@@ -1130,7 +1469,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
         Ok(plan) => plan,
         Err(err) if matches!(format, OutputFormat::Json) => {
             emit_json_validate_response(&JsonValidateResponse {
-                schema_version: JSON_SCHEMA_VERSION,
+                schema_version: VALIDATE_JSON_SCHEMA_VERSION,
                 status: "invalid",
                 errors: vec![spec_error_to_json_entry(&err, &HashMap::new())],
                 warnings: vec![],
@@ -1150,7 +1489,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                     return Err(err);
                 };
                 emit_json_validate_response(&JsonValidateResponse {
-                    schema_version: JSON_SCHEMA_VERSION,
+                    schema_version: VALIDATE_JSON_SCHEMA_VERSION,
                     status: "invalid",
                     errors: vec![spec_error_to_json_entry(spec_err, &HashMap::new())],
                     warnings: vec![],
@@ -1176,7 +1515,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
         Ok(report) => report,
         Err(err) if matches!(format, OutputFormat::Json) => {
             emit_json_validate_response(&JsonValidateResponse {
-                schema_version: JSON_SCHEMA_VERSION,
+                schema_version: VALIDATE_JSON_SCHEMA_VERSION,
                 status: "invalid",
                 errors: vec![spec_error_to_json_entry(&err, &id_by_path)],
                 warnings,
@@ -1202,7 +1541,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
             Ok(())
         }
         OutputFormat::Json => emit_json_validate_response(&JsonValidateResponse {
-            schema_version: JSON_SCHEMA_VERSION,
+            schema_version: VALIDATE_JSON_SCHEMA_VERSION,
             status: "valid",
             errors: vec![],
             warnings,
@@ -1276,7 +1615,7 @@ fn emit_plan_validate_failure(
         }
         OutputFormat::Json => {
             let response = JsonValidateResponse {
-                schema_version: JSON_SCHEMA_VERSION,
+                schema_version: VALIDATE_JSON_SCHEMA_VERSION,
                 status: "invalid",
                 errors: validation_errors
                     .iter()
@@ -1898,28 +2237,88 @@ fn test_command(
     }
 
     let mut single_file_generation_scope: Option<tempfile::TempDir> = None;
-    let (generation_scope, pipeline_scope, target_spec) = if path.is_file() {
-        if !is_unit_spec(path) {
-            bail!("{} is not a .unit.spec file", path.display());
+    let mut target_spec: Option<LoadedSpec> = None;
+    let mut target_molecule_test: Option<LoadedMoleculeTest> = None;
+    let mut molecule_evidence_root: Option<PathBuf> = None;
+    let mut molecule_tests_for_evidence = Vec::<LoadedMoleculeTest>::new();
+    let mut molecule_specs_by_id = HashMap::<String, LoadedSpec>::new();
+
+    let (generation_scope, pipeline_scope) = if path.is_file() {
+        if is_unit_spec(path) {
+            let validation_specs = collect_validation_specs(path, context)?;
+            let generation_specs: Vec<LoadedSpec> = validation_specs
+                .root_specs
+                .iter()
+                .chain(validation_specs.support_specs.iter())
+                .cloned()
+                .collect();
+            let library_root = resolve_unit_library_root(path, context).ok_or_else(|| {
+                anyhow::anyhow!("failed to resolve library root for {}", path.display())
+            })?;
+            let generation_tempdir =
+                materialize_single_file_generation_scope(&library_root, &generation_specs, &[])?;
+            let generation_scope = generation_tempdir.path().join("units");
+            single_file_generation_scope = Some(generation_tempdir);
+            target_spec = Some(
+                load_file(path).with_context(|| format!("Failed to load {}", path.display()))?,
+            );
+            (
+                generation_scope,
+                path.parent().unwrap_or(path).to_path_buf(),
+            )
+        } else if is_molecule_test_spec(path) {
+            let target_test = load_molecule_test_file(path)
+                .with_context(|| format!("Failed to load {}", path.display()))?;
+            let library_root =
+                resolve_molecule_test_library_root(path, context).ok_or_else(|| {
+                    anyhow::anyhow!("failed to resolve library root for {}", path.display())
+                })?;
+            let report = load_directory_report_bounded(&library_root, &library_root)?;
+            if !report.errors.is_empty() {
+                let mut errors = DiagnosticMap::new();
+                for err in report.errors {
+                    push_error(&mut errors, err);
+                }
+                print_diagnostics(&errors);
+                bail!("❌ unable to load units before test");
+            }
+            if !report.warnings.is_empty() {
+                let mut warnings = DiagnosticMap::new();
+                for warning in report.warnings {
+                    push_warning(&mut warnings, warning);
+                }
+                print_diagnostics(&warnings);
+            }
+
+            let generation_tempdir =
+                materialize_single_file_generation_scope(&library_root, &report.specs, &[path])?;
+            let generation_scope = generation_tempdir.path().join("units");
+            single_file_generation_scope = Some(generation_tempdir);
+            molecule_specs_by_id = report
+                .specs
+                .iter()
+                .map(|spec| (spec.spec.id.clone(), spec.clone()))
+                .collect();
+            molecule_evidence_root = Some(library_root.join("units"));
+            molecule_tests_for_evidence.push(target_test.clone());
+            target_molecule_test = Some(target_test);
+            (generation_scope, library_root)
+        } else {
+            bail!("{} is not a .unit.spec or .test.spec file", path.display());
         }
-        let validation_specs = collect_validation_specs(path, context)?;
-        let generation_specs: Vec<LoadedSpec> = validation_specs
-            .root_specs
-            .iter()
-            .chain(validation_specs.support_specs.iter())
-            .cloned()
-            .collect();
-        let generation_tempdir =
-            materialize_single_file_generation_scope(path, context, &generation_specs)?;
-        let generation_scope = generation_tempdir.path().join("units");
-        single_file_generation_scope = Some(generation_tempdir);
-        (
-            generation_scope,
-            path.parent().unwrap_or(path),
-            Some(load_file(path).with_context(|| format!("Failed to load {}", path.display()))?),
-        )
     } else {
-        (path.to_path_buf(), path, None)
+        if includes_directory_molecule_tests(path) {
+            let molecule_tests = load_molecule_test_directory(path).with_context(|| {
+                format!("Failed to load molecule tests from {}", path.display())
+            })?;
+            molecule_tests_for_evidence = molecule_tests;
+            molecule_evidence_root = Some(if path.join("units").is_dir() {
+                path.join("units")
+            } else {
+                path.to_path_buf()
+            });
+        }
+        (path.to_path_buf(), path.to_path_buf())
     };
 
     let (root_specs, loader_errors, loader_warnings, _total_files) =
@@ -1949,19 +2348,23 @@ fn test_command(
         bail!("❌ cross-library crate alias validation failed");
     }
 
-    let ctx = resolve_pipeline_context(pipeline_scope, crate_root_flag, context)?;
+    let ctx = resolve_pipeline_context(&pipeline_scope, crate_root_flag, context)?;
     let resolved_output = output
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
     let generated = generate_specs(&generation_scope, &resolved_output, &ctx.project_root)?;
     let _single_file_generation_scope = single_file_generation_scope;
-    if target_spec.is_none() {
+    if target_spec.is_none() && target_molecule_test.is_none() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
 
-    let passport_write_plan =
-        passport_write_plan(path, pipeline_scope, &generated.specs, target_spec.as_ref());
+    let passport_write_plan = passport_write_plan(
+        path,
+        &pipeline_scope,
+        &generated.specs,
+        target_spec.as_ref(),
+    );
 
     // Resolve the module prefix once — used for both the cargo test filter and
     // evidence lookup. A single resolved value ensures they always agree.
@@ -1973,10 +2376,15 @@ fn test_command(
             &std::env::current_dir().context("failed to resolve current working directory")?,
         )?,
     };
-    let filter = target_spec.as_ref().map(|target| {
+    let filter = if let Some(target) = target_spec.as_ref() {
         let resolved = ResolvedSpec::from_spec(target.spec.clone());
-        cargo_test_filter_for(&resolved, &effective_prefix)
-    });
+        Some(cargo_test_filter_for(&resolved, &effective_prefix))
+    } else {
+        target_molecule_test.as_ref().map(|target| {
+            let resolved = ResolvedMoleculeTest::from_loaded(target);
+            cargo_test_filter_for_molecule(&resolved, &effective_prefix)
+        })
+    };
 
     let provenance = resolve_git_provenance(&ctx.crate_root);
     let build_result = run_cargo_build(
@@ -1992,12 +2400,38 @@ fn test_command(
         let evidence_by_spec =
             build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
         let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
-        finalize_test_passports(
-            &passport_write_plan,
-            &generated.generated_at,
-            &evidence_by_spec,
-            contract_hash_by_spec.as_ref(),
-        )?;
+        if target_molecule_test.is_none() {
+            finalize_test_passports(
+                &passport_write_plan,
+                &generated.generated_at,
+                &evidence_by_spec,
+                contract_hash_by_spec.as_ref(),
+            )?;
+        }
+        if !molecule_tests_for_evidence.is_empty() {
+            let specs_by_id = if molecule_specs_by_id.is_empty() {
+                generated
+                    .specs
+                    .iter()
+                    .map(|spec| (spec.spec.id.clone(), spec.clone()))
+                    .collect()
+            } else {
+                molecule_specs_by_id.clone()
+            };
+            let molecule_evidence = build_molecule_incomplete_evidence(
+                &molecule_tests_for_evidence,
+                &specs_by_id,
+                MoleculeEvidenceStatus::Timeout,
+                Some("cargo build timed out"),
+                &observed_at,
+                provenance.as_ref(),
+            );
+            finalize_molecule_evidence(
+                molecule_evidence_root.as_deref().unwrap_or(path),
+                &molecule_tests_for_evidence,
+                &molecule_evidence,
+            )?;
+        }
         bail!("❌ cargo build timed out{}", timeout_suffix(ctx.timeout));
     }
     if build_result.exit_code != 0 {
@@ -2005,12 +2439,38 @@ fn test_command(
         let evidence_by_spec =
             build_failure_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
         let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
-        finalize_test_passports(
-            &passport_write_plan,
-            &generated.generated_at,
-            &evidence_by_spec,
-            contract_hash_by_spec.as_ref(),
-        )?;
+        if target_molecule_test.is_none() {
+            finalize_test_passports(
+                &passport_write_plan,
+                &generated.generated_at,
+                &evidence_by_spec,
+                contract_hash_by_spec.as_ref(),
+            )?;
+        }
+        if !molecule_tests_for_evidence.is_empty() {
+            let specs_by_id = if molecule_specs_by_id.is_empty() {
+                generated
+                    .specs
+                    .iter()
+                    .map(|spec| (spec.spec.id.clone(), spec.clone()))
+                    .collect()
+            } else {
+                molecule_specs_by_id.clone()
+            };
+            let molecule_evidence = build_molecule_incomplete_evidence(
+                &molecule_tests_for_evidence,
+                &specs_by_id,
+                MoleculeEvidenceStatus::BuildFail,
+                Some("cargo build failed"),
+                &observed_at,
+                provenance.as_ref(),
+            );
+            finalize_molecule_evidence(
+                molecule_evidence_root.as_deref().unwrap_or(path),
+                &molecule_tests_for_evidence,
+                &molecule_evidence,
+            )?;
+        }
         bail!("❌ cargo build failed");
     }
 
@@ -2028,16 +2488,44 @@ fn test_command(
         let evidence_by_spec =
             build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
         let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
-        finalize_test_passports(
-            &passport_write_plan,
-            &generated.generated_at,
-            &evidence_by_spec,
-            contract_hash_by_spec.as_ref(),
-        )?;
+        if target_molecule_test.is_none() {
+            finalize_test_passports(
+                &passport_write_plan,
+                &generated.generated_at,
+                &evidence_by_spec,
+                contract_hash_by_spec.as_ref(),
+            )?;
+        }
+        if !molecule_tests_for_evidence.is_empty() {
+            let specs_by_id = if molecule_specs_by_id.is_empty() {
+                generated
+                    .specs
+                    .iter()
+                    .map(|spec| (spec.spec.id.clone(), spec.clone()))
+                    .collect()
+            } else {
+                molecule_specs_by_id.clone()
+            };
+            let molecule_evidence = build_molecule_incomplete_evidence(
+                &molecule_tests_for_evidence,
+                &specs_by_id,
+                MoleculeEvidenceStatus::Timeout,
+                Some("cargo test timed out"),
+                &observed_at,
+                provenance.as_ref(),
+            );
+            finalize_molecule_evidence(
+                molecule_evidence_root.as_deref().unwrap_or(path),
+                &molecule_tests_for_evidence,
+                &molecule_evidence,
+            )?;
+        }
         bail!("❌ cargo test timed out{}", timeout_suffix(ctx.timeout));
     }
 
-    if target_spec.is_some() && zero_tests_ran(&test_result.stdout) {
+    if (target_spec.is_some() || target_molecule_test.is_some())
+        && zero_tests_ran(&test_result.stdout)
+    {
         bail!("❌ cargo test matched 0 tests");
     }
 
@@ -2051,12 +2539,38 @@ fn test_command(
         provenance.as_ref(),
     )?;
     let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
-    finalize_test_passports(
-        &passport_write_plan,
-        &generated.generated_at,
-        &evidence_by_spec,
-        contract_hash_by_spec.as_ref(),
-    )?;
+    if target_molecule_test.is_none() {
+        finalize_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+    }
+    if !molecule_tests_for_evidence.is_empty() {
+        let specs_by_id = if molecule_specs_by_id.is_empty() {
+            generated
+                .specs
+                .iter()
+                .map(|spec| (spec.spec.id.clone(), spec.clone()))
+                .collect()
+        } else {
+            molecule_specs_by_id
+        };
+        let molecule_evidence = build_test_molecule_evidence(
+            &molecule_tests_for_evidence,
+            &specs_by_id,
+            &effective_prefix,
+            &parsed_test_results,
+            &observed_at,
+            provenance.as_ref(),
+        );
+        finalize_molecule_evidence(
+            molecule_evidence_root.as_deref().unwrap_or(path),
+            &molecule_tests_for_evidence,
+            &molecule_evidence,
+        )?;
+    }
     if test_result.exit_code != 0 {
         bail!("❌ cargo test failed");
     }
@@ -2084,6 +2598,54 @@ fn build_timeout_evidence(
     provenance: Option<&ArtifactProvenance>,
 ) -> BTreeMap<String, PassportEvidence> {
     build_incomplete_evidence(specs, "timeout", observed_at, provenance)
+}
+
+fn build_molecule_incomplete_evidence(
+    tests: &[LoadedMoleculeTest],
+    specs_by_id: &HashMap<String, LoadedSpec>,
+    status: MoleculeEvidenceStatus,
+    reason: Option<&str>,
+    observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> BTreeMap<String, MoleculeEvidence> {
+    tests
+        .iter()
+        .map(|test| {
+            (
+                test.test.id.clone(),
+                build_molecule_evidence(
+                    test,
+                    status.clone(),
+                    reason.map(str::to_string),
+                    observed_at,
+                    specs_by_id,
+                    provenance,
+                ),
+            )
+        })
+        .collect()
+}
+
+fn finalize_molecule_evidence(
+    evidence_root: &Path,
+    tests: &[LoadedMoleculeTest],
+    evidence_by_id: &BTreeMap<String, MoleculeEvidence>,
+) -> Result<()> {
+    if tests.is_empty() {
+        return Ok(());
+    }
+
+    for test in tests {
+        if let Some(evidence) = evidence_by_id.get(&test.test.id) {
+            write_molecule_evidence(evidence, Path::new(&test.source.file_path)).with_context(
+                || format!("Failed to write molecule evidence for {}", test.test.id),
+            )?;
+        }
+    }
+
+    ensure_molecule_evidence_gitignore_entry(evidence_root)
+        .with_context(|| "Failed to update .gitignore for molecule evidence files")?;
+    Ok(())
 }
 
 fn build_incomplete_evidence(
@@ -2268,6 +2830,40 @@ fn build_test_evidence(
     Ok(evidence_by_spec)
 }
 
+fn build_test_molecule_evidence(
+    tests: &[LoadedMoleculeTest],
+    specs_by_id: &HashMap<String, LoadedSpec>,
+    output_prefix: &str,
+    parsed_test_results: &HashMap<String, ParsedCargoTestResult>,
+    observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> BTreeMap<String, MoleculeEvidence> {
+    tests
+        .iter()
+        .map(|test| {
+            let resolved = ResolvedMoleculeTest::from_loaded(test);
+            let full_name = expected_cargo_molecule_test_name(&resolved, output_prefix);
+            let observed = parsed_test_results.get(&full_name);
+            let (status, reason) = match observed {
+                Some(result) => match result.status.as_str() {
+                    "pass" => (MoleculeEvidenceStatus::Pass, result.reason.clone()),
+                    "fail" => (MoleculeEvidenceStatus::Fail, result.reason.clone()),
+                    _ => (MoleculeEvidenceStatus::Unknown, result.reason.clone()),
+                },
+                None => (
+                    MoleculeEvidenceStatus::Unknown,
+                    Some("test not found in cargo output".to_string()),
+                ),
+            };
+
+            (
+                test.test.id.clone(),
+                build_molecule_evidence(test, status, reason, observed_at, specs_by_id, provenance),
+            )
+        })
+        .collect()
+}
+
 fn resolve_git_provenance(path: &Path) -> Option<ArtifactProvenance> {
     let sha = resolve_git_commit_sha(path)?;
     Some(ArtifactProvenance {
@@ -2306,6 +2902,18 @@ fn cargo_test_filter_for(spec: &ResolvedSpec, output_prefix: &str) -> String {
     }
 }
 
+fn cargo_test_filter_for_molecule(test: &ResolvedMoleculeTest, output_prefix: &str) -> String {
+    if test.module_path.is_empty() {
+        format!("{output_prefix}::molecule_tests::test_{}", test.fn_name)
+    } else {
+        format!(
+            "{output_prefix}::{}::molecule_tests::test_{}",
+            test.module_path.replace('/', "::"),
+            test.fn_name
+        )
+    }
+}
+
 fn expected_cargo_test_name(spec: &ResolvedSpec, output_prefix: &str, test_id: &str) -> String {
     if spec.module_path.is_empty() {
         format!("{output_prefix}::{}::tests::test_{test_id}", spec.fn_name)
@@ -2314,6 +2922,18 @@ fn expected_cargo_test_name(spec: &ResolvedSpec, output_prefix: &str, test_id: &
             "{output_prefix}::{}::{}::tests::test_{test_id}",
             spec.module_path.replace('/', "::"),
             spec.fn_name
+        )
+    }
+}
+
+fn expected_cargo_molecule_test_name(test: &ResolvedMoleculeTest, output_prefix: &str) -> String {
+    if test.module_path.is_empty() {
+        format!("{output_prefix}::molecule_tests::test_{}", test.fn_name)
+    } else {
+        format!(
+            "{output_prefix}::{}::molecule_tests::test_{}",
+            test.module_path.replace('/', "::"),
+            test.fn_name
         )
     }
 }
@@ -2479,8 +3099,21 @@ fn collect_validation_specs(
     path: &Path,
     context: &WorkspaceContext,
 ) -> Result<ValidationSpecCollection> {
-    let (root_specs, mut loader_errors, mut loader_warnings, mut total_files) =
-        collect_specs(path)?;
+    let (root_specs, mut loader_errors, mut loader_warnings, mut total_files) = if path.is_dir() {
+        if let Some(library_root) = resolve_directory_library_root(path) {
+            let report = load_directory_report_bounded(path, &library_root)?;
+            (
+                report.specs,
+                report.errors,
+                report.warnings,
+                report.total_files,
+            )
+        } else {
+            collect_specs(path)?
+        }
+    } else {
+        collect_specs(path)?
+    };
     let support_specs = collect_local_support_specs(path, context, &root_specs)?;
     let (
         _selected_libraries,
@@ -2504,6 +3137,20 @@ fn collect_validation_specs(
         loader_warnings,
         total_files,
     })
+}
+
+fn resolve_directory_library_root(path: &Path) -> Option<PathBuf> {
+    if path.join("units").is_dir() {
+        canonicalize_existing_dir(path).ok()
+    } else if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "units")
+    {
+        canonicalize_existing_dir(path.parent().unwrap_or(path)).ok()
+    } else {
+        None
+    }
 }
 
 fn collect_local_support_specs(
@@ -2554,7 +3201,7 @@ fn collect_local_support_specs(
     Ok(support_specs)
 }
 
-fn resolve_unit_library_root(path: &Path, context: &WorkspaceContext) -> Option<PathBuf> {
+fn resolve_spec_library_root(path: &Path, context: &WorkspaceContext) -> Option<PathBuf> {
     let absolute_path = absolutize_from_current_dir(path).ok()?;
     let repo_root = context
         .repo_root
@@ -2580,6 +3227,22 @@ fn resolve_unit_library_root(path: &Path, context: &WorkspaceContext) -> Option<
     None
 }
 
+fn resolve_unit_library_root(path: &Path, context: &WorkspaceContext) -> Option<PathBuf> {
+    if is_unit_spec(path) {
+        resolve_spec_library_root(path, context)
+    } else {
+        None
+    }
+}
+
+fn resolve_molecule_test_library_root(path: &Path, context: &WorkspaceContext) -> Option<PathBuf> {
+    if is_molecule_test_spec(path) {
+        resolve_spec_library_root(path, context)
+    } else {
+        None
+    }
+}
+
 fn local_dep_ids(spec: &LoadedSpec) -> Vec<String> {
     spec.spec
         .deps
@@ -2591,13 +3254,11 @@ fn local_dep_ids(spec: &LoadedSpec) -> Vec<String> {
 }
 
 fn materialize_single_file_generation_scope(
-    path: &Path,
-    context: &WorkspaceContext,
+    library_root: &Path,
     specs: &[LoadedSpec],
+    extra_files: &[&Path],
 ) -> Result<tempfile::TempDir> {
-    let library_root = resolve_unit_library_root(path, context)
-        .ok_or_else(|| anyhow::anyhow!("failed to resolve library root for {}", path.display()))?;
-    let temp_dir = tempfile::TempDir::new_in(&library_root).with_context(|| {
+    let temp_dir = tempfile::TempDir::new_in(library_root).with_context(|| {
         format!(
             "Failed to create temporary generation scope in {}",
             library_root.display()
@@ -2612,7 +3273,30 @@ fn materialize_single_file_generation_scope(
 
     for spec in specs {
         let source_path = absolutize_from_current_dir(Path::new(&spec.source.file_path))?;
-        let rel_path = source_path.strip_prefix(&library_root).with_context(|| {
+        let rel_path = source_path.strip_prefix(library_root).with_context(|| {
+            format!(
+                "Failed to place {} inside temporary generation scope rooted at {}",
+                source_path.display(),
+                library_root.display()
+            )
+        })?;
+        let dest_path = temp_dir.path().join(rel_path);
+        if let Some(parent) = dest_path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        fs::copy(&source_path, &dest_path).with_context(|| {
+            format!(
+                "Failed to copy {} into {}",
+                source_path.display(),
+                dest_path.display()
+            )
+        })?;
+    }
+
+    for source_path in extra_files {
+        let source_path = absolutize_from_current_dir(source_path)?;
+        let rel_path = source_path.strip_prefix(library_root).with_context(|| {
             format!(
                 "Failed to place {} inside temporary generation scope rooted at {}",
                 source_path.display(),
@@ -2744,7 +3428,13 @@ fn load_referenced_validation_specs<'a>(
         // Only root-spec aliases participate in library discovery. Imported libraries may refer to
         // additional aliases, but those stay unresolved during this invocation rather than
         // recursively loading transitive libraries.
-        let report = load_directory_report(&library.root);
+        let report =
+            load_directory_report_bounded(&library.root, &library.root).unwrap_or_else(|err| {
+                DirectoryLoadReport {
+                    errors: vec![err],
+                    ..Default::default()
+                }
+            });
         total_files += report.total_files;
         loader_errors.extend(report.errors);
         loader_warnings.extend(report.warnings);
@@ -3127,6 +3817,9 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::PlanMoleculeTestNotFound { .. } => {
             "SPEC_PLAN_MOLECULE_TEST_NOT_FOUND"
         }
+        spec_core::SpecError::MoleculeEvidenceMalformed { .. } => {
+            "SPEC_MOLECULE_EVIDENCE_MALFORMED"
+        }
     }
 }
 
@@ -3366,6 +4059,11 @@ fn spec_error_to_json_entry(
             value: Some(segment.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::MoleculeEvidenceMalformed { path, message } => ErrorFields {
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
         spec_core::SpecError::PlanDirectoryInput { path }
         | spec_core::SpecError::PlanOutsideLibraryRoot { path }
         | spec_core::SpecError::PlanSymlinkEscape { path } => ErrorFields {
@@ -3440,7 +4138,8 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::PlanDuplicateChangeUnit { path, .. }
         | spec_core::SpecError::PlanUnitMissingForAction { path, .. }
         | spec_core::SpecError::PlanUnitAlreadyExistsForAdd { path, .. }
-        | spec_core::SpecError::PlanMoleculeTestNotFound { path, .. } => vec![path.clone()],
+        | spec_core::SpecError::PlanMoleculeTestNotFound { path, .. }
+        | spec_core::SpecError::MoleculeEvidenceMalformed { path, .. } => vec![path.clone()],
         spec_core::SpecError::LibraryCrateManifestError {
             cargo_toml: Some(path),
             ..
@@ -3571,7 +4270,8 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::PlanDuplicateChangeUnit { path, .. }
         | spec_core::SpecError::PlanUnitMissingForAction { path, .. }
         | spec_core::SpecError::PlanUnitAlreadyExistsForAdd { path, .. }
-        | spec_core::SpecError::PlanMoleculeTestNotFound { path, .. } => path.clone(),
+        | spec_core::SpecError::PlanMoleculeTestNotFound { path, .. }
+        | spec_core::SpecError::MoleculeEvidenceMalformed { path, .. } => path.clone(),
         spec_core::SpecError::LibraryCrateManifestError {
             cargo_toml: Some(path),
             ..
@@ -4300,15 +5000,14 @@ body:
 
     #[test]
     fn output_module_prefix_relative_path_fallback_strips_src_component() {
-        // Fallback path: relative output (e.g., explicit --output src/generated with relative CWD)
-        let crate_root = Path::new("");
+        let cwd = Path::new("/repo");
+        let crate_root = Path::new("/repo/examples/ecommerce");
         assert_eq!(
-            output_module_prefix(Path::new("src/generated"), crate_root, Path::new("")).unwrap(),
+            output_module_prefix(Path::new("src/generated"), crate_root, cwd).unwrap(),
             "generated"
         );
         assert_eq!(
-            output_module_prefix(Path::new("src/generated/spec"), crate_root, Path::new(""))
-                .unwrap(),
+            output_module_prefix(Path::new("src/generated/spec"), crate_root, cwd).unwrap(),
             "generated::spec"
         );
     }

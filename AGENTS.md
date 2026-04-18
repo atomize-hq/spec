@@ -20,11 +20,12 @@ Key routing rules:
 
 Use this workflow when editing `.unit.spec` files or responding to validation and test feedback.
 
-- Touch source specs, not generated output or passports. Edit `.unit.spec` files, then let `spec` regenerate `.rs` files and `.spec.passport.json` artifacts.
+- Touch source specs, not generated output or observed artifacts. Edit `.unit.spec` or `.test.spec` files, then let `spec` regenerate `.rs` files, `.spec.passport.json`, and `.test.evidence.json` artifacts.
 - Follow the 5-step loop: `spec status .` to find invalid, stale, or missing-evidence units, `spec validate [path] --format json` to read machine-parsable failures, edit the `.unit.spec`, run `spec build [path]`, then run `spec test [path]` and repeat until everything is green.
 - Treat `spec validate --format json` as the primary feedback channel. Read `status`, `errors`, and `warnings` from stdout; this includes pre-validation workspace-config failures such as broken `[libraries]` entries. Each error object includes a stable `SPEC_*` machine code, the unit path when applicable, and any relevant structured fields such as `dep`, `field`, or `value`.
 - A passport is the co-located `.spec.passport.json` record for a unit. It is "done" only when the unit validates, builds, tests, and has fresh passport evidence from `spec test`.
 - A stale unit is marked with `~` in `spec status` when the passport's stored contract hash no longer matches the current spec contract. Treat stale as work to redo, not as success.
+- For molecule tests, run `spec test path/to/file.test.spec` to execute only that interaction test and refresh only its co-located `.test.evidence.json` artifact.
 
 ## Plan Artifact Workflow
 
@@ -39,9 +40,17 @@ Use this workflow when authoring or reviewing `.plan.spec` files.
 - `computed_impact.status` is `complete` when every change has truthful current-graph impact and `partial` when any `add` remains unresolved.
 - `spec plan export <file>` emits a dedicated plan bundle and does not change the `spec export` unit bundle contract.
 
-## spec status health states (schema_version 2)
+## spec status health states (schema_version 3)
 
-`spec status --format json` emits `schema_version: 2`. Each unit has a `status` field:
+`spec status --format json` emits `schema_version: 3` with root-grouped output:
+
+- `roots[]` is the authoritative result set.
+- Each root contains `units[]` and `molecule_tests[]` as separate health planes.
+- Top-level `units[]` remains as a flattened compatibility view.
+- `loader_errors[]` remains top-level when discovery or library loading fails before rows can be computed.
+- Zero discovered roots is non-green in both text and JSON mode.
+
+Each unit or molecule test row has a `status` field:
 
 | status     | symbol | meaning                                               |
 |------------|--------|-------------------------------------------------------|
@@ -52,7 +61,7 @@ Use this workflow when authoring or reviewing `.plan.spec` files.
 | untested   | —      | No passport or no evidence field                      |
 | valid      | ✓      | All checks pass                                       |
 
-`reason` is present for non-valid, non-invalid units. Exit code 1 for any non-valid unit.
+`reason` is present for non-valid, non-invalid rows. Exit code 1 for any non-valid unit or molecule test.
 
 Breaking changes from schema_version 1: `stale: bool` field removed; `reason: Option<String>`
 added; new state values `failing`, `incomplete`, `untested` added (old values remain valid).
@@ -65,7 +74,8 @@ that must evaluate to `true`.
 
 **Molecule tests** (`.test.spec` files) test interactions between multiple units. They are
 generated as `#[test]` functions in `molecule_tests.rs` per namespace. Each test declares which
-units it `covers` and provides a full Rust block body.
+units it `covers`, provides a full Rust block body, and records observed results in a co-located
+`*.test.evidence.json` artifact after `spec test`.
 
 **Boundary rule:** if a test needs to import more than one unit, it belongs in a `.test.spec`
 file. If it tests only a single unit's behavior, it belongs in `local_tests`.
@@ -78,8 +88,7 @@ test body is permitted but has the same implications as writing them in any othe
 ## Molecule Test Status Propagation
 
 Molecule test failure does **not** propagate to unit status. A failing molecule test affects only
-the molecule test's own future status (tracked in a later milestone). Unit status is determined
-solely by:
+the molecule test's own status row. Unit status is determined solely by:
 
 - Unit validation (schema + semantic)
 - `spec test` evidence for that unit's local tests

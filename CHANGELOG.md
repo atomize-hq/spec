@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.0 - 2026-04-17
+
+### Added
+
+- **M11 molecule evidence artifacts** — Molecule tests now persist observed results in co-located `*.test.evidence.json` files, separate from unit passports.
+- **Single-file molecule execution** — `spec test path/to/file.test.spec` now runs exactly one molecule test and writes only that target evidence artifact.
+- **Checked-in ecommerce plan example** — `examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec` is now the canonical in-repo plan example path.
+
+### Changed
+
+- **`spec status --format json` now emits `schema_version: 3`** — Status is grouped by discovered library root, keeps units and molecule tests in separate planes, preserves a flattened top-level `units` compatibility view, and treats zero discovered roots as a non-green result.
+- **Rust toolchain is now pinned in-repo** — Added `rust-toolchain.toml` pinned to Rust `1.89.0` to match the crate metadata and CI configuration.
+
+### Fixed
+
+- **Repo-root status discovery now stays library-bounded** — `spec status` can discover multiple library roots under a parent/repo path without collapsing duplicate local ids across roots.
+- **Molecule status no longer contaminates unit health** — failing, stale, or missing molecule evidence affects only the molecule-test plane, not the covered units' passport status.
+
 ## 0.8.0 - 2026-04-17
 
 ### Added

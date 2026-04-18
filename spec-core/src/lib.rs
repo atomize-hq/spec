@@ -12,6 +12,7 @@ pub mod export;
 pub mod generator;
 pub mod graph;
 pub mod loader;
+pub mod molecule_evidence;
 pub mod normalizer;
 pub mod passport;
 pub mod pipeline;
@@ -237,6 +238,9 @@ pub enum SpecError {
 
     #[error("molecule test '{test_id}' was not found in the current library graph at {path}")]
     PlanMoleculeTestNotFound { test_id: String, path: String },
+
+    #[error("failed to parse molecule evidence JSON at {path}: {message}")]
+    MoleculeEvidenceMalformed { path: String, message: String },
 }
 
 impl From<walkdir::Error> for SpecError {

@@ -1,20 +1,22 @@
 ---
 name: spec
 description: >
-  Use for the spec v0.5 AI-native workflow: inspect .unit.spec files, validate with structured JSON, regenerate and test units, and interpret passports and stale status while editing spec-authored source.
+  Use for the spec workflow: inspect .unit.spec and .test.spec files, validate with structured JSON, regenerate and test units, and interpret passports, molecule evidence, and status output while editing spec-authored source.
 ---
 
 # spec
 
-Use this skill when working inside a `spec` repository and the task is to author, validate, generate, or test `.unit.spec` files with the M5 AI-native loop.
+Use this skill when working inside a `spec` repository and the task is to author, validate, generate, or test `.unit.spec` or `.test.spec` files with the current AI-native loop.
 
 ## Core Loop
 
-1. Run `spec status .` to identify units that are invalid, stale, or missing passport evidence.
+1. Run `spec status .` to identify units or molecule tests that are invalid, stale, or missing observed evidence.
 2. Run `spec validate [path] --format json` to get machine-readable failures and warnings.
 3. Edit the `.unit.spec` file only. Keep generated Rust and passports derived.
 4. Run `spec build [path]` to catch Rust type and generation errors.
 5. Run `spec test [path]` to execute tests, write passport evidence, and repeat until the unit is valid, fresh, and evidenced.
+
+If you are working on a molecule test, edit the `.test.spec` file and run `spec test path/to/file.test.spec` to refresh only that test's `*.test.evidence.json` artifact.
 
 ## `.unit.spec` Anatomy
 
@@ -37,34 +39,11 @@ Common optional fields:
 
 ## Validation JSON
 
-`spec validate --format json` emits structured output with `schema_version`, `status`, `errors`, and `warnings`. Error objects use the `SpecError` variant names as machine codes.
-
-Recognized validation codes in v0.5:
-
-- `Io`
-- `InvalidUtf8`
-- `YamlParse`
-- `Json`
-- `SchemaValidation`
-- `SemanticValidation`
-- `RustKeyword`
-- `DuplicateId`
-- `DepCollision`
-- `MissingDep`
-- `CyclicDep`
-- `UseStatementInBody`
-- `BodyRustMustBeBlock`
-- `BodyRustLooksLikeFnDeclaration`
-- `LocalTestExpectNotExpr`
-- `DuplicateLocalTestId`
-- `ContractTypeInvalid`
-- `ContractInputNameInvalid`
-- `Traversal`
-- `Generator`
-- `OutputDir`
-- `MissingMarker`
+`spec validate --format json` emits structured output with `schema_version`, `status`, `errors`, and `warnings`. Error objects use stable `SPEC_*` machine codes, not prose.
 
 Treat `errors[]` as the exact list of fix targets. Use the structured fields (`dep`, `field`, `value`, `id`, `cycle`, `path2`) instead of scraping prose when they are present.
+
+`spec status --format json` is a separate contract. It emits `schema_version: 3` and groups results under `roots[]`, with separate `units[]` and `molecule_tests[]` planes per discovered library root.
 
 ## `local_tests.expect`
 
@@ -73,5 +52,7 @@ Treat `errors[]` as the exact list of fix targets. Use the structured fields (`d
 ## Passports and Stale Meaning
 
 `spec generate` and `spec test` write a co-located `.spec.passport.json` file for each unit. The passport records the authored unit metadata and, after `spec test`, runtime evidence such as build status, per-test results, and `observed_at`.
+
+`spec test` also writes co-located `*.test.evidence.json` files for molecule tests. Molecule failures stay on the molecule-test plane and do not poison unit health.
 
 A passport becomes stale when the stored contract hash no longer matches the current contract in the `.unit.spec` file. In `spec status`, stale units are marked with `~` and should be revalidated and retested before being treated as done.

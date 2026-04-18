@@ -139,7 +139,7 @@
 
 ### Open (from M7 review)
 
-- [ ] **Molecule test status tracking** — AGENTS.md documents that molecule test failures don't propagate to unit status. A failing molecule test currently has no tracked status of its own. Future milestone should track per-molecule-test pass/fail in a `molecule_tests_evidence` field (or similar) so CI can surface molecule test regressions without confusing unit health. (Added by /ship feat/m7 2026-04-14)
+- [x] **Molecule test status tracking** — Completed v0.9.0 (2026-04-17). Molecule tests now persist `*.test.evidence.json` artifacts, `spec test <file.test.spec>` supports explicit single-test execution, and `spec status` reports a separate molecule-test health plane without contaminating unit status. (Added by /ship feat/m7 2026-04-14)
 
 ## M8 Backlog (from M8 eng review)
 

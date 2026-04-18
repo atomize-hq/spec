@@ -1,5 +1,528 @@
 <!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260416-194312.md -->
-# M6–M10 Roadmap
+# M11 — Post-M10 Trust Hardening
+
+Status: **Implementation-ready** (2026-04-17). Source strategy is the CEO plan at
+`~/.gstack/projects/atomize-hq-spec/ceo-plans/2026-04-17-post-m10-trust-hardening.md`,
+with this document serving as the engineering-grade execution plan.
+
+This milestone is not a feature grab-bag. It closes the last trust gaps in the default
+agent loop:
+
+1. `spec status .` from repo root must discover real library roots instead of flattening
+   the whole repo into one fake namespace.
+2. Molecule tests must gain first-class observed evidence without contaminating unit
+   passport semantics.
+3. The repo must ship one real `.plan.spec` example, one current story in docs, and one
+   explicit local toolchain contract.
+
+---
+
+## Milestone Summary
+
+```
+M11a  Bounded source-root discovery      required
+M11b  Molecule evidence artifact         required
+M11c  Molecule execution + status plane  required
+M11d  Example, docs, toolchain sync      required
+```
+
+**Lake to boil in M11**
+- Repo-root `spec status .` becomes trustworthy in this repo.
+- Molecule tests stop being declaration-only and become observed verification.
+- One checked-in `.plan.spec` example becomes the regression anchor for M10 docs and tests.
+
+**Explicitly not in M11**
+- `spec-cli/src/commands.rs` split
+- Workspace-global graph identity
+- Semantic contract-vs-body evals
+- `links.molecule_tests` removal
+- New package/distribution rails beyond the existing CI/release pipeline
+
+---
+
+## Step 0 — Scope Challenge
+
+### What Already Exists
+
+| Sub-problem | Existing surface | Reuse in M11 |
+|---|---|---|
+| Unit health and stale detection | `spec-cli/src/commands.rs` `compute_health_status` + `status_command`; `spec-core/src/passport.rs` | Reuse unit plane exactly. Do not overload it with molecule evidence. |
+| Repo-bounded scanning | `load_directory_report_bounded()`, `load_molecule_test_directory_report_bounded()`, `resolve_plan_library_root()` | Reuse the bounded walker model and the “directory owning units/” root heuristic. |
+| Local graph impact | `spec-core/src/graph.rs`, `spec-core/src/plan.rs` | Reuse current graph and impact logic. No workspace-graph promotion in this milestone. |
+| Plan validation/export coverage | `spec-cli/tests/cli.rs` M10 fixture tests | Reuse the fixture harness, but anchor it to a checked-in example file instead of temp-only plans. |
+| Toolchain version truth | `Cargo.toml` workspace `rust-version = "1.89.0"` and CI toolchain pin | Reuse the chosen version; add local `rust-toolchain.toml` so local dev matches CI. |
+
+### Minimum Change Set
+
+The smallest complete M11 is:
+
+1. Add one dedicated molecule evidence artifact type and stale model.
+2. Replace unbounded repo scans with source-root discovery plus bounded per-root loading.
+3. Add explicit molecule execution semantics.
+4. Extend `spec status` text + JSON to report unit and molecule planes separately.
+5. Ship one checked-in `.plan.spec` example and wire docs/tests to that exact path.
+6. Add `rust-toolchain.toml`.
+
+### Complexity Check
+
+This is a medium milestone, but it is still one lake, not an ocean:
+
+- Primary code seams: `spec-cli/src/commands.rs`, `spec-core/src/loader.rs`,
+  `spec-core/src/passport.rs` plus one new molecule-evidence module, `spec-cli/tests/cli.rs`,
+  README/AGENTS/CHANGELOG/examples, and `rust-toolchain.toml`.
+- No new binary, service, package, or runtime dependency model.
+- No new distribution pipeline. Existing GitHub Actions + release workflow already cover the
+  shipped CLI artifact.
+
+### Opinionated Recommendation
+
+Do the complete version. Do not ship a `.gstack/` blacklist, do not stuff molecule outcomes into
+unit passports, and do not land a checked-in example without tests pointing at it.
+
+---
+
+## Locked Engineering Decisions
+
+1. **Molecule evidence gets a dedicated co-located artifact.**
+   Chosen path: `<name>.test.evidence.json` adjacent to `<name>.test.spec`.
+   Example: `examples/ecommerce/units/pricing/checkout_flow.test.spec` →
+   `examples/ecommerce/units/pricing/checkout_flow.test.evidence.json`.
+
+2. **Unit passports remain unit-only.**
+   `spec-core/src/passport.rs` continues to model only `.unit.spec` authored truth plus local-test
+   observed evidence. No molecule fields are added to `Passport`.
+
+3. **Repo-root scans become source-root discovery, not ignore-list growth.**
+   When the invocation path is the repo root or an arbitrary parent directory, the CLI first
+   discovers candidate library roots by finding directories that own `units/`, then runs the
+   existing bounded loaders inside each root. Duplicate local IDs across roots stay isolated.
+
+4. **Zero discovered roots is non-green.**
+   `spec status .` returning “nothing found” with exit 0 is no longer acceptable for a trust tool.
+   Text mode prints a non-green diagnostic. JSON mode returns a top-level discovery error and exits 1.
+
+5. **Explicit molecule runs are supported.**
+   `spec test <file.test.spec>` is added for one-molecule execution. Directory runs continue to
+   refresh all molecule evidence in that root. `spec test <file.unit.spec>` stays unit-only.
+
+6. **Status becomes a two-plane contract.**
+   `spec status` reports:
+   - per-root unit health
+   - per-root molecule-test health
+   Exit code is 1 if either plane is non-green.
+
+7. **Status JSON is a breaking contract change.**
+   Bump `schema_version` from `2` to `3` for status output so machine consumers can detect the new
+   top-level shape.
+
+8. **Molecule stale detection is hash-based and explicit.**
+   Molecule evidence is stale if either:
+   - the authored `.test.spec` body/metadata hash changes, or
+   - any covered unit contract hash changes since the last molecule run.
+
+9. **No `commands.rs` split in this milestone.**
+   The file is large, but the trust gap is higher leverage than a structural PR right now.
+
+---
+
+## Architecture
+
+### Current vs Target
+
+```
+CURRENT
+=======
+spec status <path>
+  -> collect_validation_specs()
+     -> collect_specs(path)
+        -> file: load one .unit.spec
+        -> dir:  load_directory_report(path)        [unbounded]
+     -> collect_local_support_specs()               [bounded only for single-file deps]
+     -> imported libraries                           [mixed bounded/unbounded behavior]
+  -> read unit passports
+  -> compute unit-only health
+  -> render one flat unit list
+
+
+TARGET
+======
+spec status <path>
+  -> resolve invocation scope
+     -> unit file       -> one library root + one target unit
+     -> molecule file   -> one library root + one target molecule test
+     -> library dir     -> one library root
+     -> repo root/parent-> discover library roots inside repo boundary
+  -> for each library root
+     -> load units with bounded walker
+     -> load molecule tests with bounded walker
+     -> read unit passports
+     -> read molecule evidence artifacts
+     -> compute:
+        - unit plane
+        - molecule plane
+  -> render per-root sections
+  -> exit 1 if any root has non-green unit or molecule status
+```
+
+### Artifact Boundaries
+
+```
+.unit.spec --------------------> .spec.passport.json
+  authored contract                  observed local-test evidence
+  local test contract                contract_hash
+
+.test.spec --------------------> .test.evidence.json
+  authored covers + body             observed molecule-test evidence
+                                     test_body_hash
+                                     covered_unit_contract_hashes
+```
+
+### Proposed Status JSON Shape
+
+```
+{
+  "schema_version": 3,
+  "roots": [
+    {
+      "root": "examples/ecommerce",
+      "units": [...],
+      "molecule_tests": [...]
+    }
+  ],
+  "loader_errors": [...]
+}
+```
+
+This preserves the existing top-level loader error bucket while making root boundaries explicit.
+
+### Molecule Evidence Contract
+
+`*.test.evidence.json` should contain:
+
+- `schema_version`
+- `id`
+- `source_file`
+- `covers`
+- `status` (`pass`, `fail`, `unknown`, `build_fail`, `timeout`, `stale`)
+- `reason`
+- `observed_at`
+- `test_body_hash`
+- `covered_unit_contract_hashes`
+- `provenance.git_commit_sha` when available
+
+`status` is explicit because the CEO plan already locked distinct observed states. Do not infer
+`build_fail` or `timeout` from freeform prose later.
+
+---
+
+## Implementation Slices
+
+### Slice 1 — Bounded Source-Root Discovery
+
+**Goal:** make repo-root invocations truthful without flattening unrelated roots.
+
+**Primary files**
+- `spec-cli/src/commands.rs`
+- `spec-core/src/loader.rs`
+- `spec-cli/tests/cli.rs`
+
+**Work**
+- Add a shared discovery helper that resolves one or more library roots inside the repo boundary.
+- Replace directory-path `collect_specs()` unbounded loading with discovery + bounded per-root loading.
+- Route imported-library and support-spec loading through the same bounded seam.
+- Make zero discovered roots an explicit non-green result in text and JSON.
+
+**Why first**
+- It removes the biggest source of false trust.
+- It keeps later molecule status work root-scoped instead of patching a flat model that will be deleted.
+
+### Slice 2 — Molecule Evidence Artifact
+
+**Goal:** represent molecule observed truth without touching unit passport semantics.
+
+**Primary files**
+- `spec-core/src/passport.rs` or new sibling module `spec-core/src/molecule_evidence.rs`
+- `spec-core/src/lib.rs`
+- `spec-cli/src/commands.rs`
+- `spec-core/src/export.rs`
+
+**Work**
+- Introduce the new evidence struct and read/write helpers.
+- Define `test_body_hash` and `covered_unit_contract_hashes`.
+- Add stale computation helpers.
+- Optionally include molecule evidence in export bundles if it materially helps downstream consumers.
+
+**Why second**
+- Status integration needs a real artifact to read.
+- The artifact boundary is the main guardrail against polluting unit health.
+
+### Slice 3 — Explicit Molecule Execution
+
+**Goal:** make “directory-scoped or explicit molecule-test runs” real instead of aspirational.
+
+**Primary files**
+- `spec-cli/src/commands.rs`
+- `spec-core/src/generator.rs`
+- `spec-core/src/pipeline.rs`
+- `spec-cli/tests/cli.rs`
+
+**Work**
+- Accept `.test.spec` as a valid `spec test` file input.
+- Resolve the target library root, generate the necessary units for compilation, and derive a cargo
+  filter for the generated `molecule_tests.rs` function name.
+- Write only the targeted molecule evidence artifact for single-molecule runs.
+- Keep `spec test <file.unit.spec>` unit-only. No silent molecule refresh on unit runs.
+
+**Decision**
+- Add explicit `.test.spec` file support now. Directory-only semantics would violate the CEO plan
+  and keep the “explicit molecule run” story hand-wavy.
+
+### Slice 4 — Status Plane Integration
+
+**Goal:** ship one coherent contract change instead of multiple half-migrations.
+
+**Primary files**
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/fixtures/status-*.json`
+- `spec-cli/tests/cli.rs`
+- `AGENTS.md`
+
+**Work**
+- Keep existing unit health logic unchanged.
+- Add molecule health computation and rendering.
+- Group status output by discovered library root.
+- Bump `spec status --format json` to `schema_version: 3`.
+- Exit 1 if any unit or molecule test is non-green.
+
+### Slice 5 — Example, Docs, Toolchain
+
+**Goal:** make the shipped story testable by users and by CI.
+
+**Primary files**
+- `examples/ecommerce/plans/*.plan.spec`
+- `examples/ecommerce/README.md`
+- `README.md`
+- `AGENTS.md`
+- `.claude/skills/spec/SKILL.md`
+- `CHANGELOG.md`
+- `rust-toolchain.toml`
+- `spec-cli/tests/cli.rs`
+
+**Work**
+- Commit one real `.plan.spec` example under `examples/ecommerce/plans/`.
+- Add at least one CLI test that reads that exact file instead of synthesizing everything through temp fixtures.
+- Update docs to point to the checked-in example path.
+- Add `rust-toolchain.toml` pinned to `1.89.0`.
+
+---
+
+## Test Review
+
+### Code Path Coverage
+
+```
+CODE PATH COVERAGE
+==================
+[+] Root discovery
+    ├── [GAP] repo root with 2+ library roots and duplicate local IDs
+    ├── [GAP] library dir invocation resolves one root only
+    ├── [GAP] zero discovered roots returns non-green text + JSON
+    └── [★★ TESTED] bounded plan-root symlink escape behavior already exists
+
+[+] Molecule evidence artifact
+    ├── [GAP] missing evidence file -> untested/unknown molecule status
+    ├── [GAP] stale when .test.spec body changes
+    ├── [GAP] stale when covered unit contract hash changes
+    ├── [GAP] build_fail and timeout states serialize distinctly
+    └── [GAP] malformed evidence file becomes structured diagnostic, not raw stderr
+
+[+] Explicit molecule execution
+    ├── [GAP] spec test <file.test.spec> runs one generated molecule test
+    ├── [GAP] spec test <dir> refreshes all molecule evidence in that root
+    ├── [★★ TESTED] spec test <file.unit.spec> stays unit-only today
+    └── [GAP] zero matching molecule tests fails cleanly
+
+[+] Status contract
+    ├── [GAP] text output renders separate UNIT / MOLECULE sections per root
+    ├── [GAP] JSON schema_version 3 root grouping
+    ├── [GAP] exit 1 when molecule plane is non-green and unit plane is green
+    └── [★★ TESTED] existing unit-plane status states remain intact
+
+[+] Example/docs/toolchain
+    ├── [GAP] checked-in example validates from its committed path
+    ├── [GAP] checked-in example exports from its committed path
+    ├── [GAP] README/AGENTS/skill doc all point at same example path
+    └── [GAP] rust-toolchain.toml matches workspace + CI pin
+```
+
+### User Flow Coverage
+
+```
+USER FLOW COVERAGE
+==================
+[+] Repo-root agent loop
+    ├── [GAP] user runs `spec status .` at repo root and sees per-root truth
+    ├── [GAP] user sees non-green result when no spec roots are discovered
+    └── [GAP] user is not blocked by duplicate IDs across examples
+
+[+] Molecule author loop
+    ├── [GAP] author edits one `.test.spec`, runs `spec test path/to/file.test.spec`
+    ├── [GAP] stale molecule evidence becomes visible after covered unit contract changes
+    └── [GAP] failing molecule test does not poison unit passport health
+
+[+] M10 onboarding loop
+    ├── [GAP] user copies the checked-in `.plan.spec` example path from README
+    ├── [GAP] `spec plan validate` succeeds on that exact file
+    └── [GAP] `spec plan export` succeeds on that exact file
+```
+
+### Required Test Additions
+
+- `spec-cli/tests/cli.rs`
+  - repo-root status with multiple discovered roots
+  - zero-root non-green text + JSON behavior
+  - `spec test <file.test.spec>` success/failure/zero-match paths
+  - molecule status exit code behavior
+  - checked-in example validate/export from committed path
+- `spec-core` unit tests
+  - molecule evidence read/write round-trip
+  - stale detection from body hash
+  - stale detection from covered unit contract hash delta
+  - malformed molecule evidence diagnostics
+- JSON fixtures
+  - `status-rooted-valid.json`
+  - `status-rooted-molecule-failing.json`
+  - `status-rooted-zero-roots.json`
+
+### Test Plan Artifact
+
+This review writes a dedicated QA-facing artifact under `~/.gstack/projects/atomize-hq-spec/`
+covering repo-root status, single-molecule execution, example `.plan.spec` validation/export,
+and stale/failing molecule evidence transitions.
+
+---
+
+## Failure Modes
+
+| Codepath | Real failure | Test required | Error handling | User-visible outcome | Critical gap today |
+|---|---|---|---|---|---|
+| Repo-root discovery | Duplicate local IDs across roots get flattened | Yes | Not today | False invalid/failing status | Yes |
+| Bounded scan | Symlinked external spec slips into root scan | Yes | Partially today | Trust boundary violated | Yes |
+| Molecule evidence read | Malformed `.test.evidence.json` crashes status | Yes | Not today | Silent or raw error noise | Yes |
+| Molecule stale logic | Covered unit contract changes but molecule status stays green | Yes | Not today | False green broader verification | Yes |
+| Explicit molecule run | Cargo filter matches zero tests | Yes | Not today | False evidence write or confusing success | Yes |
+| Status rendering | Molecule fail hidden behind unit-only output | Yes | Not today | User sees green when broader verification failed | Yes |
+| Example docs | README path drifts from committed example | Yes | Not today | Broken onboarding | No |
+| Concurrent writes | Two runs mutate same generated tree and evidence files | Yes | Warn-only for passports | Nondeterministic outputs | Medium |
+
+**Critical-gap rule for M11:** no path above ships without both a regression test and a structured,
+user-visible failure surface.
+
+---
+
+## Worktree Parallelization Strategy
+
+### Dependency Table
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| A. Source-root discovery | `spec-cli/src`, `spec-core/src/loader.rs`, `spec-cli/tests` | — |
+| B. Molecule evidence contract | `spec-core/src`, `spec-cli/src`, `spec-core/src/export.rs` | — |
+| C. Explicit molecule execution | `spec-cli/src`, `spec-core/src/generator.rs`, `spec-core/src/pipeline.rs`, `spec-cli/tests` | B |
+| D. Status plane integration | `spec-cli/src`, `spec-cli/tests`, `AGENTS.md` | A, B, C |
+| E. Example/docs/toolchain sync | `examples/ecommerce`, repo docs, `.claude/skills`, root config | D for final wording; example file can start earlier |
+
+### Parallel Lanes
+
+- `Lane A`: Source-root discovery
+  `A1 discovery helper -> A2 bounded status/validate wiring -> A3 zero-root diagnostics`
+- `Lane B`: Molecule artifact contract
+  `B1 evidence schema -> B2 read/write helpers -> B3 stale hash helpers`
+- `Lane C`: Explicit molecule execution
+  waits for `Lane B`, then `C1 .test.spec input support -> C2 cargo filter mapping -> C3 targeted evidence write`
+- `Lane D`: Status integration
+  waits for `Lane A + Lane C`, then `D1 text rendering -> D2 JSON schema_version 3 -> D3 fixtures/exit code`
+- `Lane E`: Docs/example/toolchain
+  can start the example file early, but final README/AGENTS/CHANGELOG/skill edits wait for `Lane D`
+
+### Execution Order
+
+1. Launch `Lane A` and `Lane B` in parallel worktrees.
+2. Merge both.
+3. Launch `Lane C`.
+4. Merge `Lane C`, then do `Lane D`.
+5. Finish with `Lane E`.
+
+### Conflict Flags
+
+- `Lane A` and `Lane B` both touch `spec-cli/src/commands.rs`. Keep ownership split by function block
+  or merge `A` first, then rebase `B` before landing.
+- `Lane C` and `Lane D` both touch `spec-cli/src/commands.rs` and `spec-cli/tests/cli.rs`. These should
+  be sequential after `Lane B`.
+- `Lane E` is low conflict if it avoids `commands.rs`.
+
+---
+
+## NOT in Scope
+
+- `spec-cli/src/commands.rs` split: real debt, but it does not increase trust on the user path this week.
+- Workspace graph promotion: duplicate IDs across roots are solved by boundary-preserving discovery, not
+  by inventing a new global identity layer.
+- `links.molecule_tests` removal: keep as follow-up once molecule evidence/status lands and the repo has
+  one fully migrated truth story.
+- Semantic evals / LLM scoring: still downstream of observed verification.
+- Lock-based concurrency overhaul: M11 should add regression coverage and document the shared-output race;
+  a real locking design can follow if multi-writer pain remains.
+
+---
+
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | CEO→Eng | Add dedicated `*.test.evidence.json` artifact | Mechanical | Explicit over clever | Unit passports are already the unit-health truth surface. Reusing them for molecule runs would blur semantics immediately. | Extending `Passport` with molecule fields |
+| 2 | Eng | Do discovery-first before status work | Mechanical | Pragmatic | Root boundaries determine the shape of every later status row. Fixing status first would mean rewriting it twice. | `.gstack/` ignore-list patch |
+| 3 | Eng | Support `spec test <file.test.spec>` in M11 | Taste, decided | Completeness | The CEO plan already promises explicit molecule runs. Keeping directory-only semantics would leave the core workflow incomplete. | Directory-only molecule execution |
+| 4 | Eng | Bump status JSON to schema_version 3 | Mechanical | Explicit over clever | The top-level contract changes materially. Silent additive drift would punish machine consumers. | Sneaking molecule data into schema_version 2 |
+| 5 | Eng | Make zero discovered roots exit non-zero | Mechanical | Completeness | “Nothing found” is a trust failure in this repo, not a success. | Exit 0 with informational text |
+| 6 | Eng | Anchor M10 example in `examples/ecommerce/plans/` | Mechanical | DRY | Existing ecommerce example already demonstrates local-library units and molecule tests. It is the right place to prove the plan workflow too. | New synthetic example crate |
+| 7 | Eng | Add `rust-toolchain.toml` now | Mechanical | Minimal diff | The version is already chosen in workspace metadata and CI. Pinning locally is a cheap consistency fix. | Leaving local toolchain implicit |
+| 8 | Eng | Defer `commands.rs` split again | Taste, decided | Pragmatic | This milestone already hits the same file heavily. Mixing structural churn with trust-boundary behavior changes increases review risk. | Structural PR in the middle of M11 |
+
+---
+
+## Completion Summary
+
+- Step 0: Scope Challenge — scope accepted with one concrete addition: explicit `.test.spec` execution
+- Architecture Review: 4 major architectural constraints locked
+- Code Quality Review: 2 structural risks called out (`commands.rs` size, mixed bounded/unbounded loading)
+- Test Review: diagram produced, 16 concrete gaps identified
+- Performance Review: no primary runtime-performance risk; main risk is correctness and concurrency, not throughput
+- NOT in scope: written
+- What already exists: written
+- TODOS.md updates: none required to start M11; existing follow-ups remain valid
+- Failure modes: 0 unplanned critical gaps remain; all current-state trust gaps are covered by named slices and regression work
+- Outside voice: ran (Codex + Claude explorer)
+- Parallelization: 5 lanes, 2 parallel / 3 sequential
+- Lake Score: 8/8 recommendations chose the complete option
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | 5 proposals accepted, 0 deferred into M11 |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | CLEAR | Discovery-first and separate molecule artifact boundary confirmed |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 8 issues folded into slice order, test plan, and status contract |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+
+**CODEX:** The outside review agreed that the real work is discovery boundaries plus a dedicated molecule evidence artifact, not superficial repo junk filtering.
+**CROSS-MODEL:** Main review, Codex, and the explorer subagent independently converged on the same slice order: discovery first, artifact second, status integration after both.
+**UNRESOLVED:** 0
+**VERDICT:** CEO + ENG CLEARED — ready to implement M11.
+
+---
+
+# Historical Roadmap (M6–M10)
 
 Status: **M10 Delivered** (2026-04-17). `v0.8.0` ships the first local-library `.plan.spec`
 contract, `spec plan validate`, `spec plan export`, and the dedicated plan export bundle.

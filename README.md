@@ -7,7 +7,7 @@
 1. Author a `.unit.spec` file.
 2. Validate it with the CLI.
 3. Build: `spec build` validates, generates, and compiles in one step.
-4. Test: `spec test` runs the full pipeline and writes observed evidence to passports.
+4. Test: `spec test` runs the full pipeline and writes observed evidence to unit passports plus molecule evidence artifacts.
 5. Export: `spec export` emits a machine-readable JSON bundle for downstream tooling.
 6. Plan: `spec plan validate` and `spec plan export` turn authored change intent into truthful local-library impact data.
 
@@ -21,7 +21,7 @@
 ## Project docs
 
 - [`CHANGELOG.md`](CHANGELOG.md): shipped release history
-- [`PLAN.md`](PLAN.md): active implementation roadmap through M10
+- [`PLAN.md`](PLAN.md): active implementation roadmap through M11
 - [`DECISIONS.md`](DECISIONS.md): project-level decisions that stay stable across releases
 - [`TODOS.md`](TODOS.md): backlog and follow-up inventory
 - [`AGENTS.md`](AGENTS.md): agent workflow and machine-readable `spec` authoring loop
@@ -124,12 +124,15 @@ Running `spec validate` on a 0.2.x unit will emit a clear migration error pointi
 
 ## Example
 
-The ecommerce example demonstrates four units across two modules:
+The ecommerce example demonstrates four units, two molecule tests, and one checked-in plan artifact:
 
 - `money/round`
 - `pricing/apply_discount`
 - `pricing/apply_tax`
 - `pricing/calculate_total`
+- `pricing/checkout_flow`
+- `pricing/discount_plus_tax`
+- `plans/refactors/checkout-tax-refactor.plan.spec`
 
 The example crate is intentionally minimal. It provides a realistic place to keep unit specs and a Rust project scaffold that can host generated output.
 
@@ -144,11 +147,12 @@ spec generate <path> --output <dir>       # emit .rs files to explicit directory
 
 spec build <path>                         # validate → generate → cargo build
 spec build <path> --output <dir>          # explicit output directory
-spec test  <path>                         # spec build → cargo test, writes evidence to passports
+spec test  <path>                         # spec build → cargo test, writes passports + molecule evidence
 spec test  <path> --output <dir>          # explicit output directory
 spec test  <path/to/unit.unit.spec>       # scope to a single unit (filter by module path)
+spec test  <path/to/test.test.spec>       # run one molecule test and write only its .test.evidence.json
 
-spec status <path>                        # per-unit health: valid/invalid/stale/incomplete/untested/failing
+spec status <path>                        # per-root unit and molecule-test health
 spec status <path> --format json          # machine-readable status for agents
 
 spec export <path>                        # emit JSON bundle to stdout
@@ -162,13 +166,13 @@ spec plan export <file> --output <file>   # write dedicated plan bundle to file
 
 `validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
 
-`spec build` and `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec test` also updates each unit's `.spec.passport.json` with observed pass/fail evidence.
+`spec build` and `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests.
 
-When you pass a single `.unit.spec` file to `spec validate`, `spec generate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. Sibling `.test.spec` files are directory-scoped and are only loaded for directory invocations.
+When you pass a single `.unit.spec` file to `spec validate`, `spec generate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
 
 `spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read.
 
-`spec plan validate` and `spec plan export` are single-file commands. They accept exactly one `.plan.spec` file, resolve the enclosing library root by walking up to the directory that owns `units/`, validate the authored change set against the current graph, and compute advisory impact for the current local library only. `add` changes stay truthful by contributing `unresolved[]` entries instead of fabricated impact.
+`spec plan validate` and `spec plan export` are single-file commands. They accept exactly one `.plan.spec` file, resolve the enclosing library root by walking up to the directory that owns `units/`, validate the authored change set against the current graph, and compute advisory impact for the current local library only. `add` changes stay truthful by contributing `unresolved[]` entries instead of fabricated impact. The repo ships a checked-in example at `examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec`.
 
 The `--output` path for `generate`/`build`/`test` must resolve to a directory inside your project root. Paths that escape the project root are rejected as a safety guardrail to prevent accidental deletion of files outside the project.
 
@@ -178,7 +182,7 @@ For both `.unit.spec` and directory-scoped `.test.spec` validation, the path seg
 
 ## AI-Native Usage
 
-`spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport trail that records what was actually observed to pass.
+`spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport plus molecule-evidence trail that records what was actually observed to pass.
 
 The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate`, `generate`, and `test` stay on that unit and do not pull sibling molecule tests into the run.
 
@@ -210,9 +214,11 @@ For plan artifacts, the machine-readable loop is:
 spec plan validate path/to/checkout-tax-refactor.plan.spec --format json
 ```
 
-The repo does not currently ship a checked-in `.plan.spec` example. Author one inside a library
-root such as `examples/ecommerce/plans/` and then run `spec plan validate` or `spec plan export`
-against that explicit file path.
+Checked-in example:
+
+```bash
+spec plan validate examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec --format json
+```
 
 Valid plan responses reuse the same top-level envelope and add `plan_id` plus derived `computed_impact`:
 
@@ -240,10 +246,25 @@ Valid plan responses reuse the same top-level envelope and add `plan_id` plus de
 
 `spec plan export` emits a dedicated bundle with `{schema_version, spec_version, exported_at, plan, computed_impact, warnings}` and does not change the existing `spec export` bundle contract.
 
-`spec status` uses simple symbols so you can scan a whole tree quickly. Any unit whose
-status is not `valid` exits with code `1`.
+`spec status` uses simple symbols so you can scan a whole tree quickly. Any unit or molecule test whose status is not `valid` exits with code `1`.
 
-For `spec status --format json`, workspace-config failures that happen before any unit row can be computed surface as top-level `loader_errors` entries instead of raw stderr text.
+`spec status --format json` emits `schema_version: 3` and groups results by discovered library root:
+
+```json
+{
+  "schema_version": 3,
+  "roots": [
+    {
+      "root": ".",
+      "units": [{ "id": "pricing/apply_tax", "status": "valid", "errors": [] }],
+      "molecule_tests": [{ "id": "pricing/checkout_flow", "status": "untested", "reason": "no molecule evidence", "errors": [] }]
+    }
+  ],
+  "units": [{ "id": "pricing/apply_tax", "status": "valid", "errors": [] }]
+}
+```
+
+`roots[].units` and `roots[].molecule_tests` are the authoritative per-root planes. The top-level `units` array remains as a flattened compatibility view for existing consumers. Workspace-config failures that happen before any row can be computed surface as top-level `loader_errors` entries instead of raw stderr text, and zero discovered roots is a non-green status result.
 
 - `✓` valid
 - `✗` invalid or failing
