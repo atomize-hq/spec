@@ -17,6 +17,7 @@
 
 - **Repo-root status discovery now stays library-bounded** — `spec status` can discover multiple library roots under a parent/repo path without collapsing duplicate local ids across roots.
 - **Molecule status no longer contaminates unit health** — failing, stale, or missing molecule evidence affects only the molecule-test plane, not the covered units' passport status.
+- **Canonical ecommerce example now ships molecule evidence** — the checked-in `pricing/*.test.evidence.json` artifacts keep `spec status .` truthful on a fresh clone instead of leaving the shipped M11 example non-green by default.
 
 ## 0.8.0 - 2026-04-17
 

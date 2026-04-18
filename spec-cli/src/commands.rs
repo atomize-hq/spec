@@ -1013,7 +1013,7 @@ fn zero_roots_status_entry(path: &Path) -> JsonErrorEntry {
 }
 
 fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
-    let context = match load_workspace_context(path) {
+    let root_context = match load_workspace_context(path) {
         Ok(context) => context,
         Err(err) if matches!(format, OutputFormat::Json) => {
             if let Some(config_err) = err.downcast_ref::<WorkspaceConfigError>() {
@@ -1023,14 +1023,8 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         }
         Err(err) => return Err(err),
     };
-    let resolved_scopes = resolve_status_roots(path, &context)?;
+    let resolved_scopes = resolve_status_roots(path, &root_context)?;
     let scopes = resolved_scopes.scopes;
-
-    let config = context.config.clone();
-    let validation_options = ValidationOptions {
-        strict_deps: true,
-        allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
-    };
 
     let mut roots = Vec::new();
     let mut top_level_loader_errors: Vec<JsonErrorEntry> = resolved_scopes
@@ -1044,9 +1038,28 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
     }
 
     for scope in scopes {
-        let mut validation_specs = collect_validation_specs(&scope.collection_path, &context)?;
+        let scope_context = match load_workspace_context(&scope.collection_path) {
+            Ok(context) => context,
+            Err(err) => {
+                if let Some(config_err) = err.downcast_ref::<WorkspaceConfigError>() {
+                    top_level_loader_errors.push(workspace_config_error_to_json_entry(config_err));
+                    needs_nonzero_exit = true;
+                    continue;
+                }
+                return Err(err);
+            }
+        };
+        let validation_options = ValidationOptions {
+            strict_deps: true,
+            allow_unsafe_local_test_expect: scope_context
+                .config
+                .validation
+                .allow_unsafe_local_test_expect,
+        };
+        let mut validation_specs =
+            collect_validation_specs(&scope.collection_path, &scope_context)?;
         let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
-        let selected_libraries: Vec<ResolvedLibrary> = context
+        let selected_libraries: Vec<ResolvedLibrary> = scope_context
             .libraries
             .iter()
             .filter(|library| {
@@ -1068,7 +1081,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         validation_errors.extend(validate_library_crate_aliases(
             validation_specs.local_specs(),
             &scope.collection_path,
-            &context,
+            &scope_context,
         ));
 
         let molecule_report = if let Some(target_molecule_path) = &scope.target_molecule_path {
@@ -3272,7 +3285,14 @@ fn materialize_single_file_generation_scope(
     }
 
     for spec in specs {
-        let source_path = absolutize_from_current_dir(Path::new(&spec.source.file_path))?;
+        let source_path = absolutize_from_current_dir(Path::new(&spec.source.file_path))?
+            .canonicalize()
+            .with_context(|| {
+                format!(
+                    "Failed to resolve source path for {}",
+                    spec.source.file_path
+                )
+            })?;
         let rel_path = source_path.strip_prefix(library_root).with_context(|| {
             format!(
                 "Failed to place {} inside temporary generation scope rooted at {}",
@@ -3295,7 +3315,14 @@ fn materialize_single_file_generation_scope(
     }
 
     for source_path in extra_files {
-        let source_path = absolutize_from_current_dir(source_path)?;
+        let source_path = absolutize_from_current_dir(source_path)?
+            .canonicalize()
+            .with_context(|| {
+                format!(
+                    "Failed to resolve source path for {}",
+                    source_path.display()
+                )
+            })?;
         let rel_path = source_path.strip_prefix(library_root).with_context(|| {
             format!(
                 "Failed to place {} inside temporary generation scope rooted at {}",

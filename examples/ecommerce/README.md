@@ -1,6 +1,7 @@
 # ecommerce example
 
 This example shows a small pricing domain authored as `.unit.spec` files, plus molecule tests and a checked-in plan artifact.
+The canonical in-repo copy also ships tracked molecule evidence for the two pricing molecule tests so `spec status .` stays truthful on a fresh clone.
 
 ## Build / verify
 
@@ -42,5 +43,6 @@ Files:
 - `plans/refactors/checkout-tax-refactor.plan.spec`
 
 Derived artifacts such as `src/generated/`, `*.spec.passport.json`, and `*.test.evidence.json` are generated from those source specs and should not be hand-edited.
+The checked-in `pricing/*.test.evidence.json` files are the canonical generated outputs for this example. Refresh them by rerunning `spec test units --output src/generated` whenever the molecule specs or their covered unit contracts change, then commit the regenerated files.
 
 The `Cargo.toml` and `src/main.rs` are intentionally minimal. They provide a project scaffold for generated output and local experimentation with the pricing units.

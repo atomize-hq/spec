@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "pricing/checkout_flow",
+  "source_file": "examples/ecommerce/units/pricing/checkout_flow.test.spec",
+  "covers": [
+    "pricing/apply_discount",
+    "pricing/apply_tax",
+    "money/round",
+    "pricing/calculate_total"
+  ],
+  "status": "pass",
+  "observed_at": "2026-04-18T14:14:11Z",
+  "test_body_hash": "sha256:c991d22732d0b659873fe3ef0b5b0e4d05882043b92df1926f6bbf1fb78be141",
+  "covered_unit_contract_hashes": {
+    "money/round": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8",
+    "pricing/apply_discount": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb",
+    "pricing/apply_tax": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df",
+    "pricing/calculate_total": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92"
+  },
+  "provenance": {
+    "git_commit_sha": "9ee5b9279f7f560357dc744fc0c311e686f124ff"
+  }
+}

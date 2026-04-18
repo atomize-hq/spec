@@ -28,7 +28,7 @@
       "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
     }
   ],
-  "generated_at": "2026-04-16T15:44:23Z",
+  "generated_at": "2026-04-18T14:14:09Z",
   "source_file": "examples/ecommerce/units/pricing/apply_discount.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -38,9 +38,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-16T15:44:26Z",
+    "observed_at": "2026-04-18T14:14:11Z",
     "provenance": {
-      "git_commit_sha": "bf600a0be13f9388792cbb6f0a03b178a1d5efc3"
+      "git_commit_sha": "9ee5b9279f7f560357dc744fc0c311e686f124ff"
     }
   },
   "contract_hash": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb"

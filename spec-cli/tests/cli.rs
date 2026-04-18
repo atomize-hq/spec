@@ -2775,15 +2775,19 @@ body:
     );
 }
 
-fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
+fn copy_ecommerce_example_preserving_artifacts() -> (tempfile::TempDir, PathBuf) {
     let root = repo_root();
     let temp_dir =
         tempfile::TempDir::new_in(root.join("target")).expect("failed to create temp dir");
     let dst_ecommerce = temp_dir.path().join("ecommerce");
     copy_dir_recursive(&root.join("examples/ecommerce"), &dst_ecommerce)
         .expect("failed to copy ecommerce example");
-    for entry in WalkDir::new(&dst_ecommerce) {
-        let entry = entry.expect("failed to walk copied ecommerce example");
+    (temp_dir, dst_ecommerce)
+}
+
+fn remove_derived_artifacts(root: &Path) {
+    for entry in WalkDir::new(root) {
+        let entry = entry.expect("failed to walk copied example");
         if entry.file_type().is_file() {
             let file_name = entry.file_name().to_string_lossy();
             if file_name.ends_with(".spec.passport.json")
@@ -2793,6 +2797,11 @@ fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
             }
         }
     }
+}
+
+fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
+    let (temp_dir, dst_ecommerce) = copy_ecommerce_example_preserving_artifacts();
+    remove_derived_artifacts(&dst_ecommerce);
     (temp_dir, dst_ecommerce)
 }
 
@@ -3797,6 +3806,57 @@ fn spec_status_after_spec_test() {
 }
 
 #[test]
+fn spec_status_checked_in_ecommerce_example_is_green() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    let output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert_output_success("checked-in ecommerce example should be green", &output);
+
+    let json = parse_stdout_json(&output);
+    assert!(
+        status_units(&json)
+            .iter()
+            .all(|unit| unit["status"] == "valid"),
+        "{json}"
+    );
+    assert_eq!(status_molecule_tests(&json).len(), 2, "{json}");
+    assert!(
+        status_molecule_tests(&json)
+            .iter()
+            .all(|test| test["status"] == "valid"),
+        "{json}"
+    );
+}
+
+#[test]
+fn spec_status_checked_in_ecommerce_example_falls_back_to_untested_without_molecule_evidence() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    fs::remove_file(ecommerce_dir.join("units/pricing/checkout_flow.test.evidence.json")).unwrap();
+    fs::remove_file(ecommerce_dir.join("units/pricing/discount_plus_tax.test.evidence.json"))
+        .unwrap();
+
+    let output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "removing checked-in molecule evidence should make the example non-green"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert!(
+        status_units(&json)
+            .iter()
+            .all(|unit| unit["status"] == "valid"),
+        "{json}"
+    );
+    assert_eq!(status_molecule_tests(&json).len(), 2, "{json}");
+    assert!(
+        status_molecule_tests(&json)
+            .iter()
+            .all(|test| test["status"] == "untested"),
+        "{json}"
+    );
+}
+
+#[test]
 fn spec_status_invalid_unit() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -4181,6 +4241,60 @@ body:
     assert_eq!(roots.len(), 2);
     assert_eq!(roots[0]["root"], "alpha");
     assert_eq!(roots[1]["root"], "beta");
+}
+
+#[test]
+fn spec_status_repo_root_honors_each_root_workspace_config() {
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let app_dir = temp_dir.path().join("crosslib-app");
+    let ecommerce_dir = temp_dir.path().join("ecommerce");
+    let shared_spec_dir = temp_dir.path().join("shared-spec");
+
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .unwrap();
+    copy_dir_recursive(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_dir_recursive(&root.join("examples/ecommerce"), &ecommerce_dir).unwrap();
+    copy_dir_recursive(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+
+    let output = run_in(temp_dir.path(), &["status", ".", "--format", "json"]);
+    assert!(
+        output.status.success(),
+        "repo status should stay green when copied example roots are healthy"
+    );
+
+    let json = parse_stdout_json(&output);
+    let roots = status_roots(&json);
+    let crosslib_root = roots
+        .iter()
+        .find(|root| root["root"] == "crosslib-app")
+        .expect("expected crosslib-app root in repo status");
+    let units = crosslib_root["units"].as_array().unwrap();
+    assert_eq!(units.len(), 1, "{json}");
+    assert_eq!(units[0]["id"], "pricing/apply_discount");
+    assert_eq!(units[0]["status"], "valid", "{json}");
+    assert!(
+        !units[0]["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error["code"] == "SPEC_UNKNOWN_LIBRARY_NAMESPACE"),
+        "{json}"
+    );
+
+    let ecommerce_root = roots
+        .iter()
+        .find(|root| root["root"] == "ecommerce")
+        .expect("expected ecommerce root in repo status");
+    let molecule_tests = ecommerce_root["molecule_tests"].as_array().unwrap();
+    assert_eq!(molecule_tests.len(), 2, "{json}");
+    assert!(
+        molecule_tests.iter().all(|test| test["status"] == "valid"),
+        "{json}"
+    );
 }
 
 #[cfg(unix)]
@@ -4742,6 +4856,34 @@ fn spec_test_file_path_only_writes_target_passport() {
     assert_eq!(
         sibling_after, sibling_before,
         "expected sibling passport to remain unchanged in file-path mode"
+    );
+}
+
+#[test]
+fn spec_test_accepts_absolute_file_path_from_tmp_symlink_root() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
+    let spec_path = write_pricing_project(temp_dir.path(), true);
+
+    let output = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            spec_path.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success(
+        "spec test should accept an absolute file path rooted under /tmp",
+        &output,
     );
 }
 
@@ -6412,6 +6554,55 @@ body:
             .join("pricing/apply_tax.spec.passport.json")
             .exists(),
         "single-file molecule test should not write unit passports"
+    );
+}
+
+#[test]
+fn spec_test_accepts_absolute_molecule_file_path_from_tmp_symlink_root() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
+    let project_dir = temp_dir.path();
+    write_pricing_project(project_dir, true);
+    let units_dir = project_dir.join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/tax_and_discount.test.spec",
+        r#"id: pricing/tax_and_discount
+spec_version: "0.3.0"
+intent:
+  why: Verify tax and discount interact correctly.
+covers:
+  - pricing/apply_tax
+  - pricing/apply_discount
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+    );
+
+    let target_test_path = units_dir.join("pricing/tax_and_discount.test.spec");
+    let output = Command::new(bin())
+        .current_dir(project_dir)
+        .args([
+            "test",
+            target_test_path.to_str().unwrap(),
+            "--output",
+            "src/generated",
+            "--crate-root",
+            project_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run spec");
+
+    assert_output_success(
+        "spec test should accept an absolute molecule file path rooted under /tmp",
+        &output,
     );
 }
 

@@ -146,3 +146,7 @@
 ### Open (from M8 review)
 
 - [ ] **`links.molecule_tests` deprecation** — M8 adds an explicit comment in `SpecGraph::build()` saying `links.molecule_tests` is legacy metadata and `.test.spec` `covers` edges are the authoritative source. This TODO tracks the follow-up: emit `SpecWarning::DeprecatedLinksField` when `links.molecule_tests` is non-empty in a loaded spec, then remove the field from `SpecStruct` and the `Links` struct in a cleanup milestone. **Blocked by:** M8 landing with the comment. **Context:** The `Links` struct lives at `spec-core/src/types.rs:63`. The warning path is `spec-core/src/validator.rs` (alongside other `MissingSpecVersion`-style warnings). (Added by /plan-eng-review main 2026-04-15)
+
+## M11 Follow-ups
+
+- [x] **Ship canonical ecommerce molecule evidence** — Completed main (2026-04-18). `examples/ecommerce` now tracks the generated `pricing/checkout_flow.test.evidence.json` and `pricing/discount_plus_tax.test.evidence.json` artifacts so `spec status .` stays truthful on a fresh clone. Refresh with `spec test examples/ecommerce/units --output examples/ecommerce/src/generated` whenever the molecule specs or covered unit contracts change.

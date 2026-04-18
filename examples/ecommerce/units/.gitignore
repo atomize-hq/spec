@@ -1,2 +1,4 @@
 **/*.spec.passport.json
 **/*.test.evidence.json
+!pricing/checkout_flow.test.evidence.json
+!pricing/discount_plus_tax.test.evidence.json
