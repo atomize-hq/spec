@@ -9,7 +9,8 @@
 use crate::syntax::validate_expect_expr;
 use crate::types::{
     DepRef, LocalTest, MethodReceiver, NormalizedDataSeam, NormalizedUnit, ResolvedMoleculeTest,
-    ResolvedSpec, RustDataSeamLowering, RustInherentMethodLowering, type_name_for_unit_id,
+    ResolvedSpec, RustDataSeamLowering, RustInherentMethodLowering, has_callable_collision,
+    type_name_for_unit_id,
 };
 use crate::{Result, SpecError};
 use indexmap::IndexMap;
@@ -224,6 +225,7 @@ pub fn generate_data_seam_code_with_options(
 ) -> Result<String> {
     let lowering = lower_data_seam(unit)?;
     let dep_statements = build_dep_statements(&lowering.deps, &unit.id)?;
+    validate_data_inherent_callables(unit, &lowering)?;
     let mut output = String::new();
 
     for statement in dep_statements {
@@ -255,6 +257,29 @@ pub fn generate_data_seam_code_with_options(
     }
 
     Ok(output)
+}
+
+fn validate_data_inherent_callables(
+    unit: &NormalizedDataSeam,
+    lowering: &RustDataSeamLowering,
+) -> Result<()> {
+    let callable_ids = lowering
+        .constructors
+        .iter()
+        .map(|constructor| constructor.id.clone())
+        .chain(lowering.methods.iter().map(|method| method.id.clone()))
+        .collect::<Vec<_>>();
+
+    if let Some((first, second, callable_name)) = has_callable_collision(&callable_ids) {
+        return Err(SpecError::Generator {
+            message: format!(
+                "data seam '{}' contains duplicate inherent callable '{}': '{}' and '{}'",
+                unit.id, callable_name, first, second
+            ),
+        });
+    }
+
+    Ok(())
 }
 
 pub fn generate_normalized_unit_code(unit: &NormalizedUnit) -> Result<String> {
@@ -1425,6 +1450,16 @@ mod tests {
         assert!(err.contains("Dep fn_name collision"), "{err}");
         assert!(err.contains("pricing/apply_tax"), "{err}");
         assert!(err.contains("shared::money/apply_tax"), "{err}");
+    }
+
+    #[test]
+    fn generate_data_seam_code_rejects_duplicate_inherent_callables() {
+        let mut seam = test_data_seam();
+        seam.methods[0].id = "new".to_string();
+
+        let err = generate_data_seam_code(&seam).unwrap_err().to_string();
+        assert!(err.contains("duplicate inherent callable 'new'"), "{err}");
+        assert!(err.contains("pricing/checkout_quote"), "{err}");
     }
 
     #[test]

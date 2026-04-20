@@ -7533,6 +7533,199 @@ fn validate_json_rejects_dep_collision_with_unit_callable_name() {
 }
 
 #[test]
+fn validate_json_rejects_data_constructor_method_id_collision() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: new
+    intent:
+      why: Duplicate the constructor callable.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one collision error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SEMANTIC_VALIDATION");
+    assert_eq!(error["unit"], "pricing/checkout_quote");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("constructors[0].id 'new' conflicts with methods[0].id 'new'"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_cross_method_dep_callable_collision_for_data_seam() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: discount_total
+    intent:
+      why: Use the demo callable.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - demo/foo
+    lowering:
+      rust:
+        body: |
+          {{
+              foo(self.subtotal)
+          }}
+  - id: tax_total
+    intent:
+      why: Use the util callable.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - util/foo
+    lowering:
+      rust:
+        body: |
+          {{
+              foo(self.subtotal)
+          }}
+"#
+        ),
+    );
+    write_spec(
+        temp_dir.path(),
+        "units/demo/foo.unit.spec",
+        &format!(
+            r#"
+id: demo/foo
+kind: function
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Demo callable.
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+    write_spec(
+        temp_dir.path(),
+        "units/util/foo.unit.spec",
+        &format!(
+            r#"
+id: util/foo
+kind: function
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Util callable.
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one dep collision error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_DEP_COLLISION");
+    assert_eq!(error["unit"], "pricing/checkout_quote");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert_eq!(error["dep"], "demo/foo");
+    assert_eq!(error["value"], "foo");
+    assert_eq!(error["path2"], "util/foo");
+}
+
+#[test]
 fn validate_rejects_cross_library_molecule_covers() {
     let fixture = setup_m9_repo_fixture();
     fs::write(

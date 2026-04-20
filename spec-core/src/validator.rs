@@ -267,8 +267,9 @@ fn validate_function_semantic(spec: &LoadedSpec, options: &ValidationOptions) ->
 fn validate_data_semantic(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
     validate_data_escape_hatches(spec)?;
     validate_data_fields(spec)?;
-    validate_data_constructors(spec)?;
-    validate_data_methods(spec)?;
+    let constructors = validate_data_constructors(spec)?;
+    let methods = validate_data_methods(spec)?;
+    validate_data_seam_collisions(spec, &constructors, &methods)?;
     validate_local_test_expects(spec, options)?;
     Ok(())
 }
@@ -338,6 +339,25 @@ fn has_dep_ref_collision(deps: &[DepRef]) -> Option<(&DepRef, &DepRef)> {
     }
 
     None
+}
+
+#[derive(Debug, Clone)]
+struct ValidatedDataConstructor {
+    index: usize,
+    id: String,
+}
+
+#[derive(Debug, Clone)]
+struct ValidatedMethodDep {
+    authored: String,
+    dep_ref: DepRef,
+}
+
+#[derive(Debug, Clone)]
+struct ValidatedDataMethod {
+    index: usize,
+    id: String,
+    deps: Vec<ValidatedMethodDep>,
 }
 
 fn validate_local_test_expects(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
@@ -463,7 +483,7 @@ fn validate_data_fields(spec: &LoadedSpec) -> Result<()> {
     Ok(())
 }
 
-fn validate_data_constructors(spec: &LoadedSpec) -> Result<()> {
+fn validate_data_constructors(spec: &LoadedSpec) -> Result<Vec<ValidatedDataConstructor>> {
     let field_names: HashSet<_> = spec
         .spec
         .extensions
@@ -472,6 +492,7 @@ fn validate_data_constructors(spec: &LoadedSpec) -> Result<()> {
         .map(|data| data.fields.keys().cloned().collect())
         .unwrap_or_default();
     let mut seen_ids = HashSet::new();
+    let mut constructors = Vec::new();
 
     for (index, constructor) in spec.spec.extensions.constructors.iter().enumerate() {
         if !seen_ids.insert(constructor.id.as_str()) {
@@ -552,14 +573,20 @@ fn validate_data_constructors(spec: &LoadedSpec) -> Result<()> {
                 ));
             }
         }
+
+        constructors.push(ValidatedDataConstructor {
+            index,
+            id: constructor.id.clone(),
+        });
     }
 
-    Ok(())
+    Ok(constructors)
 }
 
-fn validate_data_methods(spec: &LoadedSpec) -> Result<()> {
+fn validate_data_methods(spec: &LoadedSpec) -> Result<Vec<ValidatedDataMethod>> {
     let mut seen_ids = HashSet::new();
     let owner_callable_name = callable_name(&spec.spec.id);
+    let mut methods = Vec::new();
 
     for (index, method) in spec.spec.extensions.methods.iter().enumerate() {
         if !seen_ids.insert(method.id.as_str()) {
@@ -652,6 +679,55 @@ fn validate_data_methods(spec: &LoadedSpec) -> Result<()> {
                 ),
             )
         })?;
+
+        methods.push(ValidatedDataMethod {
+            index,
+            id: method.id.clone(),
+            deps: method
+                .deps
+                .iter()
+                .cloned()
+                .zip(dep_refs.iter().cloned())
+                .map(|(authored, dep_ref)| ValidatedMethodDep { authored, dep_ref })
+                .collect(),
+        });
+    }
+
+    Ok(methods)
+}
+
+fn validate_data_seam_collisions(
+    spec: &LoadedSpec,
+    constructors: &[ValidatedDataConstructor],
+    methods: &[ValidatedDataMethod],
+) -> Result<()> {
+    for constructor in constructors {
+        if let Some(method) = methods.iter().find(|method| method.id == constructor.id) {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "constructors[{}].id '{}' conflicts with methods[{}].id '{}'",
+                    constructor.index, constructor.id, method.index, method.id
+                ),
+            ));
+        }
+    }
+
+    let seam_deps = methods.iter().flat_map(|method| method.deps.iter());
+    let mut seen_deps: Vec<&ValidatedMethodDep> = Vec::new();
+    for dep in seam_deps {
+        if let Some(existing) = seen_deps
+            .iter()
+            .find(|existing| existing.dep_ref.callable_name() == dep.dep_ref.callable_name())
+        {
+            return Err(SpecError::DepCollision {
+                dep1: existing.authored.clone(),
+                dep2: dep.authored.clone(),
+                fn_name: dep.dep_ref.callable_name().to_string(),
+                path: spec.source.file_path.clone(),
+            });
+        }
+        seen_deps.push(dep);
     }
 
     Ok(())
@@ -1667,6 +1743,18 @@ local_tests:
     }
 
     #[test]
+    fn test_validate_data_semantic_rejects_constructor_method_id_collision() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.methods[0].id = "new".to_string();
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("constructors[0].id 'new' conflicts with methods[0].id 'new'"),
+            "{err}"
+        );
+    }
+
+    #[test]
     fn test_validate_data_semantic_rejects_unsupported_receiver_mode() {
         let mut spec = create_data_spec("pricing/checkout_quote");
         spec.spec.extensions.methods[0].receiver = "shared_mut".to_string();
@@ -1728,6 +1816,34 @@ local_tests:
             err.contains("methods[0].deps contains invalid dep"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_cross_method_dep_callable_collision() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.methods[0].deps = vec!["demo/foo".to_string()];
+        spec.spec
+            .extensions
+            .methods
+            .push(spec.spec.extensions.methods[0].clone());
+        spec.spec.extensions.methods[1].id = "discount_preview".to_string();
+        spec.spec.extensions.methods[1].deps = vec!["util/foo".to_string()];
+
+        let err = validate_semantic(&spec).unwrap_err();
+        match err {
+            SpecError::DepCollision {
+                dep1,
+                dep2,
+                fn_name,
+                path,
+            } => {
+                assert_eq!(dep1, "demo/foo");
+                assert_eq!(dep2, "util/foo");
+                assert_eq!(fn_name, "foo");
+                assert_eq!(path, "test/pricing/checkout_quote.unit.spec");
+            }
+            other => panic!("expected DepCollision, got {other:?}"),
+        }
     }
 
     #[test]
