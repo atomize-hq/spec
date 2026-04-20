@@ -266,7 +266,7 @@ pub struct NormalizedMethod {
     pub id: String,
     pub intent_why: String,
     pub receiver: MethodReceiver,
-    pub contract: Option<Contract>,
+    pub contract: Contract,
     pub deps: Vec<String>,
     pub rust_body: String,
 }
@@ -626,7 +626,9 @@ impl NormalizedDataSeam {
                     id: method.id.clone(),
                     intent_why: method.intent.why.clone(),
                     receiver: MethodReceiver::try_from(method.receiver.as_str())?,
-                    contract: method.contract.clone(),
+                    contract: method.contract.clone().ok_or_else(|| {
+                        format!("kind:data method '{}' is missing contract", method.id)
+                    })?,
                     deps: method.deps.clone(),
                     rust_body: method
                         .lowering

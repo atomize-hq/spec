@@ -32,8 +32,8 @@ From the repo root:
 ```bash
 cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/checkout_quote.unit.spec --format json
 cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec --output examples/ecommerce/src/generated
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec --output examples/ecommerce/src/generated
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec
 cargo run -p spec-cli -- status examples/ecommerce --format json
 ```
 
@@ -67,5 +67,6 @@ Files:
 
 Derived artifacts such as `src/generated/`, `*.spec.passport.json`, and `*.test.evidence.json` are generated from those source specs and should not be hand-edited.
 The checked-in `pricing/*.test.evidence.json` files are the canonical generated outputs for this example. Refresh them by rerunning `spec test units --output src/generated` whenever the molecule specs or their covered unit contracts change, then commit the regenerated files.
+Single-file `spec test` runs use an isolated internal generated tree, so they do not rewrite this example's checked-out `src/generated/` directory.
 
 The `Cargo.toml` and `src/main.rs` are intentionally minimal. They provide a project scaffold for generated output and the side-by-side raw-vs-migrated checkout quote example.

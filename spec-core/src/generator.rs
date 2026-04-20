@@ -182,15 +182,8 @@ pub fn lower_data_seam(unit: &NormalizedDataSeam) -> Result<RustDataSeamLowering
             id: method.id.clone(),
             is_constructor: false,
             receiver: Some(method.receiver),
-            inputs: method
-                .contract
-                .as_ref()
-                .and_then(|contract| contract.inputs.clone())
-                .unwrap_or_default(),
-            returns: method
-                .contract
-                .as_ref()
-                .and_then(|contract| contract.returns.clone()),
+            inputs: method.contract.inputs.clone().unwrap_or_default(),
+            returns: method.contract.returns.clone(),
             body_rust: method.rust_body.clone(),
         })
         .collect::<Vec<_>>();
@@ -1072,11 +1065,11 @@ mod tests {
                 id: "total".to_string(),
                 intent_why: "Compute the final total.".to_string(),
                 receiver: MethodReceiver::SharedRef,
-                contract: Some(Contract {
+                contract: Contract {
                     inputs: None,
                     returns: Some("rust_decimal::Decimal".to_string()),
                     invariants: vec![],
-                }),
+                },
                 deps: vec!["pricing/apply_tax".to_string()],
                 rust_body: "{\n        apply_tax(self.subtotal, self.tax_rate)\n    }".to_string(),
             }],

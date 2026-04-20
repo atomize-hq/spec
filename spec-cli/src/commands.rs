@@ -110,12 +110,6 @@ const VALIDATE_JSON_SCHEMA_VERSION: u8 = 2;
 const STATUS_JSON_SCHEMA_VERSION: u8 = 3;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CleanupMode {
-    FullTreeCleanup,
-    ScopedNoCleanup,
-}
-
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Text,
@@ -462,10 +456,7 @@ pub struct StatusArgs {
 
 #[derive(Args, Debug)]
 pub struct GenerateArgs {
-    #[arg(
-        value_name = "PATH",
-        help = "Directory containing .unit.spec files, or a single .unit.spec file"
-    )]
+    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files")]
     pub path: PathBuf,
     #[arg(
         long,
@@ -497,12 +488,12 @@ pub struct BuildArgs {
 pub struct TestArgs {
     #[arg(
         value_name = "PATH",
-        help = "Directory containing .unit.spec files, or a single .unit.spec file"
+        help = "Directory containing .unit.spec files, a single .unit.spec file, or a single .test.spec file"
     )]
     pub path: PathBuf,
     #[arg(
         long,
-        help = "Output directory for generated Rust files (default: {crate_root}/src/generated)"
+        help = "Output directory for generated Rust files (directory-scoped test only; default: {crate_root}/src/generated)"
     )]
     pub output: Option<PathBuf>,
     #[arg(
@@ -1654,6 +1645,12 @@ fn emit_plan_validate_failure(
 }
 
 fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec generate requires a directory path — pass the units directory, not a single file"
+        );
+    }
+
     let context = load_workspace_context(path)?;
     let mut validation_specs = collect_validation_specs(path, &context)?;
     let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
@@ -1705,12 +1702,7 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
             .expect("missing default crate root")
             .join("src/generated")
     });
-    let cleanup_mode = if path.is_file() {
-        CleanupMode::ScopedNoCleanup
-    } else {
-        CleanupMode::FullTreeCleanup
-    };
-    let generated = generate_specs(path, &resolved_output, &project_root, cleanup_mode)?;
+    let generated = generate_specs(path, &resolved_output, &project_root)?;
     if !generated.specs.is_empty() {
         finalize_passports(
             spec_root,
@@ -1723,12 +1715,7 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn generate_specs(
-    path: &Path,
-    output: &Path,
-    project_root: &Path,
-    cleanup_mode: CleanupMode,
-) -> Result<GeneratedSpecs> {
+fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
     let context = load_workspace_context(path)?;
     let mut validation_specs = collect_validation_specs(path, &context)?;
     let specs: Vec<LoadedSpec> = validation_specs
@@ -1774,11 +1761,9 @@ fn generate_specs(
 
         let output_base = ensure_output_marker(output, project_root)?;
         let generated_rs_rel_paths = HashSet::<PathBuf>::new();
-        if cleanup_mode == CleanupMode::FullTreeCleanup {
-            clean_output_dir(&output_base, &generated_rs_rel_paths, project_root).with_context(
-                || format!("Failed to clean output directory {}", output_base.display()),
-            )?;
-        }
+        clean_output_dir(&output_base, &generated_rs_rel_paths, project_root).with_context(
+            || format!("Failed to clean output directory {}", output_base.display()),
+        )?;
 
         if !warnings.is_empty() {
             print_diagnostics(&warnings);
@@ -1945,11 +1930,8 @@ fn generate_specs(
     let molecule_test_file_count = molecule_test_paths.len();
     generated_rs_rel_paths.extend(molecule_test_paths);
 
-    if cleanup_mode == CleanupMode::FullTreeCleanup {
-        clean_output_dir(&output_base, &generated_rs_rel_paths, project_root).with_context(
-            || format!("Failed to clean output directory {}", output_base.display()),
-        )?;
-    }
+    clean_output_dir(&output_base, &generated_rs_rel_paths, project_root)
+        .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
 
     let generated_at = rfc3339_now();
 
@@ -2246,12 +2228,7 @@ fn build_command(
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(
-        path,
-        &resolved_output,
-        &ctx.project_root,
-        CleanupMode::FullTreeCleanup,
-    )?;
+    let generated = generate_specs(path, &resolved_output, &ctx.project_root)?;
     if !generated.specs.is_empty() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
@@ -2284,6 +2261,7 @@ fn test_command(
     }
 
     let mut single_file_generation_scope: Option<tempfile::TempDir> = None;
+    let mut single_file_test_project_scope: Option<tempfile::TempDir> = None;
     let mut target_spec: Option<LoadedSpec> = None;
     let mut target_molecule_test: Option<LoadedMoleculeTest> = None;
     let mut molecule_evidence_root: Option<PathBuf> = None;
@@ -2291,6 +2269,12 @@ fn test_command(
     let mut molecule_specs_by_id = HashMap::<String, LoadedSpec>::new();
 
     let (generation_scope, pipeline_scope) = if path.is_file() {
+        if output.is_some() {
+            bail!(
+                "❌ spec test does not accept --output for a single file — file-scoped tests use an isolated internal output tree"
+            );
+        }
+
         if is_unit_spec(path) {
             let validation_specs = collect_validation_specs(path, context)?;
             let generation_specs: Vec<LoadedSpec> = validation_specs
@@ -2396,22 +2380,25 @@ fn test_command(
     }
 
     let ctx = resolve_pipeline_context(&pipeline_scope, crate_root_flag, context)?;
-    let resolved_output = output
+    let mut resolved_output = output
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
+    let mut effective_project_root = ctx.project_root.clone();
+    let mut effective_crate_root = ctx.crate_root.clone();
+    if path.is_file() {
+        let isolated_project =
+            materialize_single_file_test_project_scope(&ctx.project_root, &ctx.crate_root)?;
+        effective_project_root = isolated_project.path().to_path_buf();
+        effective_crate_root = isolated_project
+            .path()
+            .join(path_relative_to(&ctx.crate_root, &ctx.project_root)?);
+        resolved_output = effective_crate_root.join("src/generated");
+        single_file_test_project_scope = Some(isolated_project);
+    }
 
-    let cleanup_mode = if path.is_file() {
-        CleanupMode::ScopedNoCleanup
-    } else {
-        CleanupMode::FullTreeCleanup
-    };
-    let generated = generate_specs(
-        &generation_scope,
-        &resolved_output,
-        &ctx.project_root,
-        cleanup_mode,
-    )?;
+    let generated = generate_specs(&generation_scope, &resolved_output, &effective_project_root)?;
     let _single_file_generation_scope = single_file_generation_scope;
+    let _single_file_test_project_scope = single_file_test_project_scope;
     if target_spec.is_none() && target_molecule_test.is_none() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
@@ -2429,7 +2416,7 @@ fn test_command(
         Some(explicit) => explicit.clone(),
         None => output_module_prefix(
             &resolved_output,
-            &ctx.crate_root,
+            &effective_crate_root,
             &std::env::current_dir().context("failed to resolve current working directory")?,
         )?,
     };
@@ -2446,7 +2433,7 @@ fn test_command(
 
     let provenance = resolve_git_provenance(&ctx.crate_root);
     let build_result = run_cargo_build(
-        &ctx.crate_root,
+        &effective_crate_root,
         &ctx.cargo_target_dir,
         ctx.timeout,
         Verbosity::Normal,
@@ -2533,7 +2520,7 @@ fn test_command(
     }
 
     let test_result = run_cargo_test(
-        &ctx.crate_root,
+        &effective_crate_root,
         &ctx.cargo_target_dir,
         filter.as_deref(),
         ctx.timeout,
@@ -3433,6 +3420,95 @@ fn materialize_single_file_generation_scope(
     }
 
     Ok(temp_dir)
+}
+
+fn path_relative_to(path: &Path, root: &Path) -> Result<PathBuf> {
+    path.strip_prefix(root).map(PathBuf::from).with_context(|| {
+        format!(
+            "Failed to resolve {} relative to {}",
+            path.display(),
+            root.display()
+        )
+    })
+}
+
+fn materialize_single_file_test_project_scope(
+    project_root: &Path,
+    crate_root: &Path,
+) -> Result<tempfile::TempDir> {
+    let temp_dir = tempfile::TempDir::new().with_context(|| {
+        format!(
+            "Failed to create isolated single-file test project rooted at {}",
+            project_root.display()
+        )
+    })?;
+    copy_project_tree_for_single_file_test(project_root, temp_dir.path(), crate_root)?;
+    Ok(temp_dir)
+}
+
+fn copy_project_tree_for_single_file_test(
+    source_root: &Path,
+    dest_root: &Path,
+    crate_root: &Path,
+) -> Result<()> {
+    fs::create_dir_all(dest_root)
+        .with_context(|| format!("Failed to create {}", dest_root.display()))?;
+    let generated_dir = crate_root.join("src/generated");
+    copy_project_tree_for_single_file_test_inner(source_root, dest_root, &generated_dir)
+}
+
+fn copy_project_tree_for_single_file_test_inner(
+    source_dir: &Path,
+    dest_dir: &Path,
+    generated_dir: &Path,
+) -> Result<()> {
+    for entry in fs::read_dir(source_dir)
+        .with_context(|| format!("Failed to read {}", source_dir.display()))?
+    {
+        let entry =
+            entry.with_context(|| format!("Failed to read entry in {}", source_dir.display()))?;
+        let source_path = entry.path();
+        if should_skip_single_file_test_copy(&source_path, generated_dir)? {
+            continue;
+        }
+
+        let dest_path = dest_dir.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("Failed to read file type for {}", source_path.display()))?;
+        if file_type.is_dir() {
+            fs::create_dir_all(&dest_path)
+                .with_context(|| format!("Failed to create {}", dest_path.display()))?;
+            copy_project_tree_for_single_file_test_inner(&source_path, &dest_path, generated_dir)?;
+        } else {
+            fs::copy(&source_path, &dest_path).with_context(|| {
+                format!(
+                    "Failed to copy {} into {}",
+                    source_path.display(),
+                    dest_path.display()
+                )
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+fn should_skip_single_file_test_copy(path: &Path, generated_dir: &Path) -> Result<bool> {
+    if path.starts_with(generated_dir) {
+        return Ok(true);
+    }
+
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("Failed to inspect {}", path.display()))?;
+    if metadata.is_dir() {
+        return Ok(path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| matches!(name, "target" | ".git")));
+    }
+
+    Ok(false)
 }
 
 fn collect_plan_validation_specs(
@@ -4765,12 +4841,7 @@ body:
             "expected SPEC_RESERVED_UNIT_NAME, got: {validation_errors:?}"
         );
 
-        let err = match generate_specs(
-            &units_dir,
-            &output_dir,
-            temp_dir.path(),
-            CleanupMode::FullTreeCleanup,
-        ) {
+        let err = match generate_specs(&units_dir, &output_dir, temp_dir.path()) {
             Ok(_) => panic!("expected reserved namespace validation to fail"),
             Err(err) => err.to_string(),
         };

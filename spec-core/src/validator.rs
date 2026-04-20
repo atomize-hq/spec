@@ -607,13 +607,17 @@ fn validate_data_methods(spec: &LoadedSpec) -> Result<Vec<ValidatedDataMethod>> 
             )
         })?;
 
-        if let Some(contract) = &method.contract {
-            validate_contract_types(
-                contract,
-                &format!("methods[{index}].contract"),
-                &spec.source.file_path,
-            )?;
-        }
+        let contract = method.contract.as_ref().ok_or_else(|| {
+            semantic_error(
+                spec,
+                format!("methods[{index}].contract is required for kind:data"),
+            )
+        })?;
+        validate_contract_types(
+            contract,
+            &format!("methods[{index}].contract"),
+            &spec.source.file_path,
+        )?;
 
         let dep_refs = parse_dep_refs(&method.deps).map_err(|err| {
             semantic_error(
@@ -1802,6 +1806,18 @@ local_tests:
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
             err.contains("constructors[0].contract.returns is not allowed"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_missing_method_contract() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.methods[0].contract = None;
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("methods[0].contract is required for kind:data"),
             "{err}"
         );
     }

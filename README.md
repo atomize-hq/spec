@@ -171,8 +171,8 @@ Canonical M12 example loop from the repo root:
 ```bash
 cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/checkout_quote.unit.spec --format json
 cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec --output examples/ecommerce/src/generated
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec --output examples/ecommerce/src/generated
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec
 cargo run -p spec-cli -- status examples/ecommerce --format json
 ```
 
@@ -180,7 +180,9 @@ cargo run -p spec-cli -- status examples/ecommerce --format json
 
 `spec build` and `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests.
 
-When you pass a single `.unit.spec` file to `spec validate`, `spec generate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
+When you pass a single `.unit.spec` file to `spec validate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. `spec generate` is directory-scoped only. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
+
+Single-file `spec test` runs generate Rust into an isolated internal build surface. They do not rewrite your checked-out `src/generated/` tree, and `--output` is accepted only for directory-scoped `test` runs.
 
 `spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read.
 
@@ -196,7 +198,7 @@ For both `.unit.spec` and directory-scoped `.test.spec` validation, the path seg
 
 `spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport plus molecule-evidence trail that records what was actually observed to pass. In this repo, the canonical ecommerce example ships both unit passports and molecule evidence so `spec status .` is a trustworthy starting point on a fresh clone.
 
-The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate`, `generate`, and `test` stay on that unit and do not pull sibling molecule tests into the run.
+The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate` and `test` stay on that unit and do not pull sibling molecule tests into the run.
 
 ```bash
 spec validate examples/ecommerce/units --format json

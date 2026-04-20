@@ -170,7 +170,7 @@
     },
     "method": {
       "type": "object",
-      "required": ["id", "intent", "receiver", "lowering"],
+      "required": ["id", "intent", "receiver", "contract", "lowering"],
       "additionalProperties": false,
       "properties": {
         "id": {

@@ -682,10 +682,7 @@ body:
 }
 
 #[test]
-fn generate_single_file_path_writes_gitignore_to_parent_dir() {
-    // Regression: passing a .unit.spec file path to `spec generate` must
-    // write .gitignore to the file's parent directory, not try to open
-    // "foo.unit.spec/.gitignore" (which would be ENOTDIR).
+fn generate_single_file_path_is_rejected_and_leaves_output_untouched() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     let output_dir = temp_dir.path().join("generated/spec");
@@ -704,6 +701,8 @@ body:
 "#,
     );
 
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
     let output = run(&[
         "generate",
         spec_path.to_str().unwrap(),
@@ -711,15 +710,19 @@ body:
         output_dir.to_str().unwrap(),
     ]);
     assert!(
-        output.status.success(),
-        "expected success for single-file generate, got:\nstdout: {}\nstderr: {}",
+        !output.status.success(),
+        "expected single-file generate to fail\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
-    // .gitignore must land next to the spec file, not as a child of it
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        units_dir.join("pricing/.gitignore").exists(),
-        "expected .gitignore in units/pricing/, not an ENOTDIR"
+        stderr.contains("spec generate requires a directory path"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(
+        !output_dir.join("pricing/apply_discount.rs").exists(),
+        "single-file generate should not write output files"
     );
 }
 
@@ -5028,8 +5031,6 @@ fn spec_test_accepts_file_path() {
         .args([
             "test",
             spec_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             temp_dir.path().to_str().unwrap(),
         ])
@@ -5092,8 +5093,6 @@ fn spec_test_file_path_only_writes_target_passport() {
         .args([
             "test",
             spec_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             temp_dir.path().to_str().unwrap(),
         ])
@@ -5128,8 +5127,6 @@ fn spec_test_accepts_absolute_file_path_from_tmp_symlink_root() {
         .args([
             "test",
             spec_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             temp_dir.path().to_str().unwrap(),
         ])
@@ -5143,7 +5140,7 @@ fn spec_test_accepts_absolute_file_path_from_tmp_symlink_root() {
 }
 
 #[test]
-fn spec_test_file_path_nested_output_filter() {
+fn spec_test_file_path_rejects_explicit_nested_output() {
     if !cargo_available() {
         return;
     }
@@ -5213,8 +5210,7 @@ local_tests:
         .join("units/pricing/apply_tax.spec.passport.json");
     let before = read_passport(&passport_path);
 
-    // Single-file run with nested output — cargo_test_filter_for must produce
-    // "generated::spec::..." not just "spec::..." for the filter to match
+    // Single-file runs now build inside an isolated internal output tree.
     let output = Command::new(bin())
         .current_dir(temp_dir.path())
         .args([
@@ -5227,14 +5223,23 @@ local_tests:
         ])
         .output()
         .expect("failed to run spec test single-file");
-    assert_output_success(
-        "spec test should pass for nested output single-file mode",
-        &output,
+    assert!(
+        !output.status.success(),
+        "spec test should reject explicit output for a single file\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("spec test does not accept --output for a single file"),
+        "expected explicit-output rejection"
     );
 
     let after = read_passport(&passport_path);
-    assert_ne!(after, before, "expected passport to be rewritten");
-    assert!(after.contains("\"status\": \"pass\""), "{after}");
+    assert_eq!(
+        after, before,
+        "single-file rejection should not rewrite passports"
+    );
 }
 
 #[test]
@@ -5333,8 +5338,6 @@ fn single_file_test_skips_sibling_molecule_tests() {
         .args([
             "test",
             spec_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             project_dir.to_str().unwrap(),
         ])
@@ -5410,14 +5413,14 @@ fn single_file_test_preserves_unrelated_generated_files() {
         "initial full build should succeed for preservation test",
         &initial_build,
     );
+    let original_mod_rs =
+        fs::read_to_string(ecommerce_dir.join("src/generated/pricing/mod.rs")).unwrap();
 
     let output = run_in(
         &ecommerce_dir,
         &[
             "test",
             "units/pricing/checkout_quote.unit.spec",
-            "--output",
-            "src/generated",
             "--crate-root",
             ".",
         ],
@@ -5438,6 +5441,40 @@ fn single_file_test_preserves_unrelated_generated_files() {
             .join("src/generated/pricing/molecule_tests.rs")
             .exists(),
         "single-file test should not prune molecule_tests.rs from the shared output tree"
+    );
+    let updated_mod_rs =
+        fs::read_to_string(ecommerce_dir.join("src/generated/pricing/mod.rs")).unwrap();
+    assert_eq!(updated_mod_rs, original_mod_rs);
+}
+
+#[test]
+fn single_file_test_rejects_explicit_output() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "single_file_test_rejects_explicit_output\n\nstdout:\n{}\n\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("spec test does not accept --output for a single file"),
+        "expected explicit-output rejection"
     );
 }
 
@@ -6142,7 +6179,7 @@ fn single_file_status_with_local_deps_stays_scoped() {
 }
 
 #[test]
-fn single_file_generate_skips_sibling_molecule_tests() {
+fn single_file_generate_is_rejected() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     let output_dir = temp_dir.path().join("generated");
@@ -6157,20 +6194,23 @@ fn single_file_generate_skips_sibling_molecule_tests() {
         "--output",
         output_dir.to_str().unwrap(),
     ]);
-    assert_output_success("single_file_generate_skips_sibling_molecule_tests", &output);
+    assert!(
+        !output.status.success(),
+        "single_file_generate_is_rejected\n\nstdout:\n{}\n\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     assert!(
-        output_dir.join("pricing/a.rs").exists(),
-        "target unit should be generated"
+        String::from_utf8_lossy(&output.stderr).contains("spec generate requires a directory path"),
+        "expected directory-path error"
     );
-    assert!(
-        !output_dir.join("pricing/molecule_tests.rs").exists(),
-        "single-file generate should not emit sibling molecule tests"
-    );
+    assert!(!output_dir.join("pricing/a.rs").exists());
+    assert!(!output_dir.join("pricing/molecule_tests.rs").exists());
 }
 
 #[test]
-fn single_file_generate_with_local_deps_succeeds() {
+fn single_file_generate_with_local_deps_is_rejected() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let output_dir = ecommerce_dir.join("generated-single");
 
@@ -6183,21 +6223,24 @@ fn single_file_generate_with_local_deps_succeeds() {
             output_dir.to_str().unwrap(),
         ],
     );
-    assert_output_success("single_file_generate_with_local_deps_succeeds", &output);
+    assert!(
+        !output.status.success(),
+        "single_file_generate_with_local_deps_is_rejected\n\nstdout:\n{}\n\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 
-    assert!(output_dir.join("pricing/apply_tax.rs").exists());
     assert!(
-        output_dir.join("money/round.rs").exists(),
-        "single-file generate should include local support deps needed by the target unit"
+        String::from_utf8_lossy(&output.stderr).contains("spec generate requires a directory path"),
+        "expected directory-path error"
     );
-    assert!(
-        !output_dir.join("pricing/checkout_quote.rs").exists(),
-        "single-file generate should not pull in unrelated sibling units"
-    );
+    assert!(!output_dir.join("pricing/apply_tax.rs").exists());
+    assert!(!output_dir.join("money/round.rs").exists());
+    assert!(!output_dir.join("pricing/checkout_quote.rs").exists());
 }
 
 #[test]
-fn single_file_generate_preserves_unrelated_generated_files() {
+fn single_file_generate_does_not_rewrite_existing_generated_tree() {
     if !cargo_available() {
         return;
     }
@@ -6211,6 +6254,8 @@ fn single_file_generate_preserves_unrelated_generated_files() {
         "initial full build should succeed for generate preservation test",
         &initial_build,
     );
+    let original_mod_rs =
+        fs::read_to_string(ecommerce_dir.join("src/generated/pricing/mod.rs")).unwrap();
 
     let output = run_in(
         &ecommerce_dir,
@@ -6221,9 +6266,11 @@ fn single_file_generate_preserves_unrelated_generated_files() {
             "src/generated",
         ],
     );
-    assert_output_success(
-        "single-file generate should preserve unrelated generated files",
-        &output,
+    assert!(
+        !output.status.success(),
+        "single-file generate should be rejected\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 
     assert!(
@@ -6238,10 +6285,13 @@ fn single_file_generate_preserves_unrelated_generated_files() {
             .exists(),
         "single-file generate should not prune molecule_tests.rs from the shared output tree"
     );
+    let updated_mod_rs =
+        fs::read_to_string(ecommerce_dir.join("src/generated/pricing/mod.rs")).unwrap();
+    assert_eq!(updated_mod_rs, original_mod_rs);
 }
 
 #[test]
-fn single_file_generate_from_nested_units_subdir_allows_relative_output() {
+fn single_file_generate_from_nested_units_subdir_is_rejected() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let pricing_dir = ecommerce_dir.join("units/pricing");
 
@@ -6254,15 +6304,16 @@ fn single_file_generate_from_nested_units_subdir_allows_relative_output() {
             "../../src/generated",
         ],
     );
-    assert_output_success(
-        "single-file generate from nested units dir should honor ancestor spec.toml/project root",
-        &output,
+    assert!(
+        !output.status.success(),
+        "single-file generate from nested units dir should fail\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 
     assert!(
-        ecommerce_dir
-            .join("src/generated/pricing/apply_tax.rs")
-            .exists()
+        String::from_utf8_lossy(&output.stderr).contains("spec generate requires a directory path"),
+        "expected directory-path error"
     );
 }
 
@@ -6881,8 +6932,6 @@ body:
         .args([
             "test",
             target_test_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             project_dir.to_str().unwrap(),
         ])
@@ -6944,8 +6993,6 @@ body:
         .args([
             "test",
             target_test_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             project_dir.to_str().unwrap(),
         ])
@@ -7912,6 +7959,76 @@ methods:
 }
 
 #[test]
+fn validate_json_rejects_data_method_without_contract() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one semantic error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert!(error["unit"].is_null(), "{error:?}");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing required field: \"contract\""),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
 fn validate_json_rejects_cross_method_dep_callable_collision_for_data_seam() {
     let temp_dir = temp_repo_dir();
     let spec_path = temp_dir
@@ -8811,8 +8928,6 @@ body:
         &[
             "test",
             "units/pricing/checkout_quote.unit.spec",
-            "--output",
-            "src/generated",
             "--crate-root",
             ".",
         ],
@@ -8895,8 +9010,6 @@ body:
         &[
             "test",
             "units/pricing/checkout_flow.test.spec",
-            "--output",
-            "src/generated",
             "--crate-root",
             ".",
         ],
@@ -10004,8 +10117,6 @@ fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
         &[
             "test",
             "units/pricing/checkout_quote.unit.spec",
-            "--output",
-            "src/generated",
             "--crate-root",
             ".",
         ],
@@ -10052,8 +10163,6 @@ fn data_seam_status_stale_after_intent_change() {
         &[
             "test",
             "units/pricing/checkout_quote.unit.spec",
-            "--output",
-            "src/generated",
             "--crate-root",
             ".",
         ],
@@ -10184,6 +10293,8 @@ methods:
     intent:
       why: Return alpha.
     receiver: shared_ref
+    contract:
+      returns: i32
     deps:
       - pricing/beta
     lowering:
@@ -10212,6 +10323,8 @@ methods:
     intent:
       why: Return beta.
     receiver: shared_ref
+    contract:
+      returns: i32
     deps:
       - pricing/alpha
     lowering:
