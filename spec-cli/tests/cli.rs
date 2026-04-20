@@ -883,6 +883,21 @@ fn generate_help_does_not_show_no_strict() {
 }
 
 #[test]
+fn build_help_requires_directory_path_description() {
+    let output = run(&["build", "--help"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Directory containing .unit.spec files"),
+        "expected directory-scoped build help, got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("or a single .unit.spec file"),
+        "build help should not advertise single-file support, got: {stdout}"
+    );
+}
+
+#[test]
 fn generate_multiple_units_with_deps_emits_imports() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");

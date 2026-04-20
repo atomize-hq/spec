@@ -49,16 +49,20 @@ spec generate examples/ecommerce/units
 
 ## Spec format
 
-Each unit is a YAML document with these required fields:
+Each unit is a YAML document with these common required fields:
 
 - `id`: hierarchical unit id like `pricing/apply_discount`
-- `kind`: currently `function`
+- `kind`: authored unit shape, currently `function` or `data`
 - `intent.why`: why the unit exists
-- `body.rust`: the function body as a Rust block expression (`{ ... }`, braces included)
 
-Optional fields include `contract`, `deps`, `imports`, `local_tests`, and `links`.
+Kind-specific authored fields:
 
-`spec` generates the complete `pub fn` signature from `contract.inputs` and `contract.returns`. A minimal unit with a contract looks like:
+| `kind` | Required authored fields | Optional authored fields | Forbidden top-level fields |
+| --- | --- | --- | --- |
+| `function` | `contract`, `body.rust` | `deps`, `imports`, `local_tests`, `links` | none |
+| `data` | `data.fields`, `constructors`, `methods` | `local_tests`, `links`, `backends.rust` | `contract`, `deps`, `imports`, `body.rust` |
+
+For `kind: function`, `spec` generates the complete `pub fn` signature from `contract.inputs` and `contract.returns`. A minimal unit with a contract looks like:
 
 ```yaml
 id: pricing/apply_tax
@@ -88,6 +92,73 @@ pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
     round(taxed)
 }
 ```
+
+For `kind: data`, one `.unit.spec` file authors a top-level data seam with shared fields plus nested constructors and methods. A minimal seam based on the canonical M12 `pricing/checkout_quote` example looks like:
+
+```yaml
+id: pricing/checkout_quote
+kind: data
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+    discount_rate:
+      type: rust_decimal::Decimal
+    tax_rate:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
+          }
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+```
+
+`kind: data` keeps shared semantics in `data.fields`, `constructors`, and `methods`. Rust-specific lowering stays inside `methods[].lowering.rust.body` and `backends.rust`.
 
 ## Migrating from 0.2.x
 
@@ -141,24 +212,24 @@ The example crate is intentionally minimal. It provides a realistic place to kee
 ## Commands
 
 ```bash
-spec validate <path>                      # schema + semantic validation
-spec validate <path> --no-strict          # downgrade missing deps to warnings
-spec validate <path> --format json        # machine-readable JSON output for agents
-spec generate <path>                      # emit .rs files (default: {crate_root}/src/generated)
-spec generate <path> --output <dir>       # emit .rs files to explicit directory
+spec validate <unit-or-root>              # directory or single .unit.spec: schema + semantic validation
+spec validate <unit-or-root> --no-strict  # downgrade missing deps to warnings
+spec validate <unit-or-root> --format json # machine-readable JSON output for agents
+spec generate <units-dir>                 # directory only: emit .rs files (default: {crate_root}/src/generated)
+spec generate <units-dir> --output <dir>  # explicit output directory
 
-spec build <path>                         # validate → generate → cargo build
-spec build <path> --output <dir>          # explicit output directory
-spec test  <path>                         # spec build → cargo test, writes passports + molecule evidence
-spec test  <path> --output <dir>          # explicit output directory
+spec build <units-dir>                    # directory only: validate → generate → cargo build
+spec build <units-dir> --output <dir>     # explicit output directory
+spec test  <path>                         # directory, single .unit.spec, or single .test.spec
+spec test  <path> --output <dir>          # explicit output directory for directory-scoped test runs
 spec test  <path/to/unit.unit.spec>       # scope to a single unit (filter by module path)
 spec test  <path/to/test.test.spec>       # run one molecule test and write only its .test.evidence.json
 
-spec status <path>                        # per-root unit and molecule-test health
-spec status <path> --format json          # machine-readable status for agents
+spec status <unit-or-root>                # directory or single .unit.spec: per-root unit and molecule-test health
+spec status <unit-or-root> --format json  # machine-readable status for agents
 
-spec export <path>                        # emit JSON bundle to stdout
-spec export <path> --output <file>        # write JSON bundle to file
+spec export <unit-or-root>                # directory or single .unit.spec: emit JSON bundle to stdout
+spec export <unit-or-root> --output <file> # write JSON bundle to file
 
 spec plan validate <file>                 # validate one .plan.spec file and compute local impact
 spec plan validate <file> --format json   # machine-readable plan validation + computed impact
@@ -176,11 +247,11 @@ cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.tes
 cargo run -p spec-cli -- status examples/ecommerce --format json
 ```
 
-`validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
+`validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict, is directory-scoped only, and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
 
-`spec build` and `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests.
+`spec build` and directory-scoped `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec build` is directory-scoped only. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests.
 
-When you pass a single `.unit.spec` file to `spec validate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. `spec generate` is directory-scoped only. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
+When you pass a single `.unit.spec` file to `spec validate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
 
 Single-file `spec test` runs generate Rust into an isolated internal build surface. They do not rewrite your checked-out `src/generated/` tree, and `--output` is accepted only for directory-scoped `test` runs.
 

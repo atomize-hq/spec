@@ -467,10 +467,7 @@ pub struct GenerateArgs {
 
 #[derive(Args, Debug)]
 pub struct BuildArgs {
-    #[arg(
-        value_name = "PATH",
-        help = "Directory containing .unit.spec files, or a single .unit.spec file"
-    )]
+    #[arg(value_name = "PATH", help = "Directory containing .unit.spec files")]
     pub path: PathBuf,
     #[arg(
         long,
