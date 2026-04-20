@@ -7,8 +7,12 @@
 //! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
 
 use crate::syntax::validate_expect_expr;
-use crate::types::{DepRef, ResolvedMoleculeTest, ResolvedSpec};
+use crate::types::{
+    DepRef, LocalTest, MethodReceiver, NormalizedDataSeam, NormalizedUnit, ResolvedMoleculeTest,
+    ResolvedSpec, RustDataSeamLowering, RustInherentMethodLowering, type_name_for_unit_id,
+};
 use crate::{Result, SpecError};
+use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
@@ -22,18 +26,20 @@ pub struct GenerateOptions {
     pub allow_unsafe_local_test_expect: bool,
 }
 
+fn build_named_inputs(inputs: &IndexMap<String, String>) -> String {
+    inputs
+        .iter()
+        .map(|(name, ty)| format!("{name}: {ty}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn build_fn_signature(spec: &ResolvedSpec) -> String {
     let params = spec
         .contract
         .as_ref()
         .and_then(|c| c.inputs.as_ref())
-        .map(|inputs| {
-            inputs
-                .iter()
-                .map(|(name, ty)| format!("{name}: {ty}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
+        .map(build_named_inputs)
         .unwrap_or_default();
 
     let return_type = spec
@@ -66,6 +72,46 @@ fn build_doc_comment(intent_why: &str) -> Option<String> {
     }
 
     Some(output)
+}
+
+fn render_local_tests(
+    unit_id: &str,
+    local_tests: &[LocalTest],
+    options: &GenerateOptions,
+) -> Result<Option<String>> {
+    if local_tests.is_empty() {
+        return Ok(None);
+    }
+
+    let mut output = String::new();
+    output.push_str("#[cfg(test)]\n");
+    output.push_str("mod tests {\n");
+    output.push_str("    use super::*;\n\n");
+
+    for (index, local_test) in local_tests.iter().enumerate() {
+        let expect = local_test.expect.trim();
+        validate_expect_expr(expect, options.allow_unsafe_local_test_expect).map_err(|err| {
+            SpecError::Generator {
+                message: format!(
+                    "invalid local test expect for unit '{}' test '{}': {}",
+                    unit_id,
+                    local_test.id,
+                    err.message()
+                ),
+            }
+        })?;
+        output.push_str("    #[test]\n");
+        output.push_str(&format!("    fn test_{}() {{\n", local_test.id));
+        output.push_str(&format!("        assert!({expect});\n"));
+        output.push_str("    }\n");
+
+        if index + 1 != local_tests.len() {
+            output.push('\n');
+        }
+    }
+
+    output.push_str("}\n");
+    Ok(Some(output))
 }
 
 pub fn generate_code(spec: &ResolvedSpec) -> Result<String> {
@@ -106,38 +152,251 @@ pub fn generate_code_with_options(
     output.push_str(&format!("{signature} {block}"));
     output.push('\n');
 
-    if !spec.local_tests.is_empty() {
+    if let Some(tests) = render_local_tests(&spec.id, &spec.local_tests, options)? {
         // One blank line between the generated unit body and the tests module.
         output.push('\n');
-        output.push_str("#[cfg(test)]\n");
-        output.push_str("mod tests {\n");
-        output.push_str("    use super::*;\n\n");
-
-        for (index, local_test) in spec.local_tests.iter().enumerate() {
-            let expect = local_test.expect.trim();
-            validate_expect_expr(expect, options.allow_unsafe_local_test_expect).map_err(
-                |err| SpecError::Generator {
-                    message: format!(
-                        "invalid local test expect for unit '{}' test '{}': {}",
-                        spec.id,
-                        local_test.id,
-                        err.message()
-                    ),
-                },
-            )?;
-            output.push_str("    #[test]\n");
-            output.push_str(&format!("    fn test_{}() {{\n", local_test.id));
-            output.push_str(&format!("        assert!({expect});\n"));
-            output.push_str("    }\n");
-
-            if index + 1 != spec.local_tests.len() {
-                output.push('\n');
-            }
-        }
-
-        output.push_str("}\n");
+        output.push_str(&tests);
     }
     Ok(output)
+}
+
+pub fn lower_data_seam(unit: &NormalizedDataSeam) -> Result<RustDataSeamLowering> {
+    let constructors = unit
+        .constructors
+        .iter()
+        .map(|constructor| RustInherentMethodLowering {
+            id: constructor.id.clone(),
+            is_constructor: true,
+            receiver: None,
+            inputs: constructor.inputs.clone(),
+            returns: Some("Self".to_string()),
+            body_rust: render_constructor_body(unit, &constructor.initializes),
+        })
+        .collect::<Vec<_>>();
+
+    let methods = unit
+        .methods
+        .iter()
+        .map(|method| RustInherentMethodLowering {
+            id: method.id.clone(),
+            is_constructor: false,
+            receiver: Some(method.receiver),
+            inputs: method
+                .contract
+                .as_ref()
+                .and_then(|contract| contract.inputs.clone())
+                .unwrap_or_default(),
+            returns: method
+                .contract
+                .as_ref()
+                .and_then(|contract| contract.returns.clone()),
+            body_rust: method.rust_body.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    Ok(RustDataSeamLowering {
+        id: unit.id.clone(),
+        module_path: unit.module_path.clone(),
+        struct_name: unit.type_name.clone(),
+        fields: unit
+            .fields
+            .iter()
+            .map(|field| crate::types::RustDataFieldLowering {
+                name: field.name.clone(),
+                type_: field.type_.clone(),
+            })
+            .collect(),
+        constructors,
+        methods,
+        local_tests: unit.local_tests.clone(),
+        deps: unit.deps.clone(),
+        derives: unit.rust_backend.derives.clone(),
+    })
+}
+
+pub fn generate_data_seam_code(unit: &NormalizedDataSeam) -> Result<String> {
+    generate_data_seam_code_with_options(unit, &GenerateOptions::default())
+}
+
+pub fn generate_data_seam_code_with_options(
+    unit: &NormalizedDataSeam,
+    options: &GenerateOptions,
+) -> Result<String> {
+    let lowering = lower_data_seam(unit)?;
+    let dep_statements = build_dep_statements(&lowering.deps, &unit.id)?;
+    let mut output = String::new();
+
+    for statement in dep_statements {
+        output.push_str(&statement);
+        output.push('\n');
+    }
+
+    if !lowering.deps.is_empty() {
+        output.push('\n');
+    }
+
+    if let Some(doc_comment) = build_doc_comment(&unit.intent_why) {
+        output.push_str(&doc_comment);
+    }
+
+    if !lowering.derives.is_empty() {
+        output.push_str(&format!("#[derive({})]\n", lowering.derives.join(", ")));
+    }
+
+    output.push_str(&render_data_struct(&lowering));
+    output.push('\n');
+    output.push('\n');
+    output.push_str(&render_data_impl(unit, &lowering));
+    output.push('\n');
+
+    if let Some(tests) = render_local_tests(&unit.id, &lowering.local_tests, options)? {
+        output.push('\n');
+        output.push_str(&tests);
+    }
+
+    Ok(output)
+}
+
+pub fn generate_normalized_unit_code(unit: &NormalizedUnit) -> Result<String> {
+    generate_normalized_unit_code_with_options(unit, &GenerateOptions::default())
+}
+
+pub fn generate_unit_code(unit: &NormalizedUnit) -> Result<String> {
+    generate_normalized_unit_code(unit)
+}
+
+pub fn generate_normalized_unit_code_with_options(
+    unit: &NormalizedUnit,
+    options: &GenerateOptions,
+) -> Result<String> {
+    match unit {
+        NormalizedUnit::Function(spec) => generate_code_with_options(spec, options),
+        NormalizedUnit::Data(unit) => generate_data_seam_code_with_options(unit, options),
+    }
+}
+
+pub fn generate_unit_code_with_options(
+    unit: &NormalizedUnit,
+    options: &GenerateOptions,
+) -> Result<String> {
+    generate_normalized_unit_code_with_options(unit, options)
+}
+
+fn render_constructor_body(
+    unit: &NormalizedDataSeam,
+    initializes: &IndexMap<String, String>,
+) -> String {
+    if unit.fields.is_empty() {
+        return "{\n        Self\n    }".to_string();
+    }
+
+    let assignments = unit
+        .fields
+        .iter()
+        .map(|field| {
+            let expr = initializes
+                .get(&field.name)
+                .map(String::as_str)
+                .unwrap_or(field.name.as_str());
+            format!("            {}: {},", field.name, expr)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("{{\n        Self {{\n{assignments}\n        }}\n    }}")
+}
+
+fn render_data_struct(lowering: &RustDataSeamLowering) -> String {
+    if lowering.fields.is_empty() {
+        return format!("pub struct {};", lowering.struct_name);
+    }
+
+    let fields = lowering
+        .fields
+        .iter()
+        .map(|field| format!("    pub {}: {},", field.name, field.type_))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("pub struct {} {{\n{}\n}}", lowering.struct_name, fields)
+}
+
+fn receiver_param(receiver: MethodReceiver) -> &'static str {
+    match receiver {
+        MethodReceiver::SharedRef => "&self",
+    }
+}
+
+fn render_inherent_method_signature(method: &RustInherentMethodLowering) -> String {
+    let mut params = Vec::new();
+    if let Some(receiver) = method.receiver {
+        params.push(receiver_param(receiver).to_string());
+    }
+
+    let named_inputs = build_named_inputs(&method.inputs);
+    if !named_inputs.is_empty() {
+        params.push(named_inputs);
+    }
+
+    let return_suffix = method
+        .returns
+        .as_ref()
+        .map(|returns| format!(" -> {returns}"))
+        .unwrap_or_default();
+
+    format!(
+        "pub fn {}({}){}",
+        method.id,
+        params.join(", "),
+        return_suffix
+    )
+}
+
+fn render_data_impl(unit: &NormalizedDataSeam, lowering: &RustDataSeamLowering) -> String {
+    let mut items = Vec::new();
+
+    for (source, lowered) in unit.constructors.iter().zip(&lowering.constructors) {
+        let mut item = String::new();
+        if let Some(doc_comment) = build_doc_comment(&source.intent_why) {
+            item.push_str(&indent_block(&doc_comment, 4));
+        }
+        item.push_str("    ");
+        item.push_str(&render_inherent_method_signature(lowered));
+        item.push(' ');
+        item.push_str(lowered.body_rust.trim());
+        item.push('\n');
+        items.push(item);
+    }
+
+    for (source, lowered) in unit.methods.iter().zip(&lowering.methods) {
+        let mut item = String::new();
+        if let Some(doc_comment) = build_doc_comment(&source.intent_why) {
+            item.push_str(&indent_block(&doc_comment, 4));
+        }
+        item.push_str("    ");
+        item.push_str(&render_inherent_method_signature(lowered));
+        item.push(' ');
+        item.push_str(lowered.body_rust.trim());
+        item.push('\n');
+        items.push(item);
+    }
+
+    if items.is_empty() {
+        format!("impl {} {{\n}}", lowering.struct_name)
+    } else {
+        format!("impl {} {{\n{}\n}}", lowering.struct_name, items.join("\n"))
+    }
+}
+
+fn indent_block(block: &str, spaces: usize) -> String {
+    let padding = " ".repeat(spaces);
+    let mut output = String::new();
+    for line in block.lines() {
+        output.push_str(&padding);
+        output.push_str(line);
+        output.push('\n');
+    }
+    output
 }
 
 pub fn write_generated_file(output_path: &str, content: &str) -> Result<()> {
@@ -360,10 +619,10 @@ pub fn molecule_tests_file_path(output_base: &Path, module_path: &str) -> PathBu
 /// Generate the Rust source code for a group of molecule tests in one namespace.
 ///
 /// `tests` must all belong to the same `module_path`.
-/// `specs_by_id` is used to look up imports for covered units.
+/// `units_by_id` is used to look up imports for covered units.
 pub fn generate_molecule_tests_code(
     tests: &[&ResolvedMoleculeTest],
-    specs_by_id: &HashMap<&str, &ResolvedSpec>,
+    units_by_id: &HashMap<&str, &NormalizedUnit>,
 ) -> Result<String> {
     // Collect all unique cover_ids in alphabetical order for deterministic output
     let mut cover_id_seen: HashSet<&str> = HashSet::new();
@@ -381,15 +640,19 @@ pub fn generate_molecule_tests_code(
     let mut import_seen: HashSet<String> = HashSet::new();
     let mut all_imports: Vec<String> = Vec::new();
     for cover_id in &all_cover_ids {
-        let spec = specs_by_id.get(cover_id).ok_or_else(|| SpecError::Generator {
-            message: format!(
+        let unit = units_by_id
+            .get(cover_id)
+            .ok_or_else(|| SpecError::Generator {
+                message: format!(
                 "covered unit '{}' not found in spec set (should have been caught by validation)",
                 cover_id
             ),
-        })?;
-        for import in &spec.imports {
-            if import_seen.insert(import.clone()) {
-                all_imports.push(import.clone());
+            })?;
+        if let NormalizedUnit::Function(spec) = unit {
+            for import in &spec.imports {
+                if import_seen.insert(import.clone()) {
+                    all_imports.push(import.clone());
+                }
             }
         }
     }
@@ -406,12 +669,11 @@ pub fn generate_molecule_tests_code(
     }
 
     // Emit `use crate::...` for each covered unit.
-    // dep_to_use_path already includes the trailing semicolon.
     for cover_id in &all_cover_ids {
-        output.push_str(&format!(
-            "use {}\n",
-            ResolvedSpec::dep_to_use_path(cover_id)
-        ));
+        let unit = units_by_id
+            .get(cover_id)
+            .expect("covered unit presence already checked above");
+        output.push_str(&format!("use {}\n", covered_unit_use_path(unit)));
     }
 
     if !all_cover_ids.is_empty() {
@@ -440,7 +702,7 @@ pub fn generate_molecule_tests_code(
 /// (for inclusion in `generated_rs_rel_paths` passed to `clean_output_dir`).
 pub fn generate_and_write_molecule_tests(
     resolved_tests: &[ResolvedMoleculeTest],
-    specs_by_id: &HashMap<&str, &ResolvedSpec>,
+    units_by_id: &HashMap<&str, &NormalizedUnit>,
     output_base: &Path,
 ) -> Result<HashSet<PathBuf>> {
     // Group tests by module_path (BTreeMap for deterministic iteration order)
@@ -456,7 +718,7 @@ pub fn generate_and_write_molecule_tests(
 
     for (module_path, tests) in &by_module {
         // Generate molecule_tests.rs content
-        let content = generate_molecule_tests_code(tests, specs_by_id)?;
+        let content = generate_molecule_tests_code(tests, units_by_id)?;
         let file_path = molecule_tests_file_path(output_base, module_path);
         write_generated_file(&file_path.to_string_lossy(), &content)?;
 
@@ -471,6 +733,17 @@ pub fn generate_and_write_molecule_tests(
     }
 
     Ok(generated_paths)
+}
+
+fn covered_unit_use_path(unit: &NormalizedUnit) -> String {
+    match unit {
+        NormalizedUnit::Function(spec) => ResolvedSpec::dep_to_use_path(&spec.id),
+        NormalizedUnit::Data(unit) => format!(
+            "crate::{}::{};",
+            unit.id.replace('/', "::"),
+            type_name_for_unit_id(&unit.id)
+        ),
+    }
 }
 
 fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
@@ -515,6 +788,28 @@ fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
     }
 
     Ok((import_statements, dep_statements))
+}
+
+fn build_dep_statements(deps: &[String], path: &str) -> Result<Vec<String>> {
+    if let Some((dep1, dep2)) = ResolvedSpec::has_dep_collision(deps) {
+        return Err(SpecError::DepCollision {
+            dep1: dep1.clone(),
+            dep2: dep2.clone(),
+            fn_name: ResolvedSpec::dep_fn_name(dep1).to_string(),
+            path: path.to_string(),
+        });
+    }
+
+    let mut dep_seen = HashSet::new();
+    let mut dep_statements = Vec::new();
+
+    for dep in deps {
+        if dep_seen.insert(dep.clone()) {
+            dep_statements.push(build_dep_use_statement(dep)?);
+        }
+    }
+
+    Ok(dep_statements)
 }
 
 fn build_dep_use_statement(dep: &str) -> Result<String> {
@@ -634,7 +929,12 @@ fn canonicalize_existing_path(path: &Path) -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::syntax::{ExpectExprErrorKind, validate_expect_expr};
-    use crate::types::{Body, Intent, LocalTest, ResolvedMoleculeTest, ResolvedSpec, SpecStruct};
+    use crate::types::{
+        Body, Contract, Intent, LocalTest, MethodReceiver, NormalizedConstructor,
+        NormalizedDataField, NormalizedDataSeam, NormalizedMethod, NormalizedUnit,
+        ResolvedMoleculeTest, ResolvedSpec, RustDataSeamBackend, SpecStruct,
+    };
+    use indexmap::IndexMap;
     #[cfg(unix)]
     use std::os::unix::fs as unix_fs;
     use tempfile::TempDir;
@@ -713,6 +1013,59 @@ mod tests {
 
     fn test_spec(deps: Vec<&str>, body: &str) -> ResolvedSpec {
         test_spec_with(deps, vec![], body)
+    }
+
+    fn test_data_seam() -> NormalizedDataSeam {
+        NormalizedDataSeam {
+            id: "pricing/checkout_quote".to_string(),
+            intent_why: "Quote checkout totals.".to_string(),
+            type_name: "CheckoutQuote".to_string(),
+            module_path: "pricing".to_string(),
+            fields: vec![
+                NormalizedDataField {
+                    name: "subtotal".to_string(),
+                    type_: "rust_decimal::Decimal".to_string(),
+                },
+                NormalizedDataField {
+                    name: "tax_rate".to_string(),
+                    type_: "rust_decimal::Decimal".to_string(),
+                },
+            ],
+            constructors: vec![NormalizedConstructor {
+                id: "new".to_string(),
+                intent_why: "Create a checkout quote.".to_string(),
+                inputs: IndexMap::from([
+                    ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                    ("tax_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                ]),
+                initializes: IndexMap::from([
+                    ("subtotal".to_string(), "subtotal".to_string()),
+                    ("tax_rate".to_string(), "tax_rate".to_string()),
+                ]),
+            }],
+            methods: vec![NormalizedMethod {
+                id: "total".to_string(),
+                intent_why: "Compute the final total.".to_string(),
+                receiver: MethodReceiver::SharedRef,
+                contract: Some(Contract {
+                    inputs: None,
+                    returns: Some("rust_decimal::Decimal".to_string()),
+                    invariants: vec![],
+                }),
+                deps: vec!["pricing/apply_tax".to_string()],
+                rust_body: "{\n        apply_tax(self.subtotal, self.tax_rate)\n    }".to_string(),
+            }],
+            deps: vec!["pricing/apply_tax".to_string()],
+            local_tests: vec![LocalTest {
+                id: "happy_path".to_string(),
+                expect: "CheckoutQuote::new(rust_decimal::Decimal::ONE, rust_decimal::Decimal::ONE).total() == apply_tax(rust_decimal::Decimal::ONE, rust_decimal::Decimal::ONE)".to_string(),
+            }],
+            links: None,
+            spec_version: None,
+            rust_backend: RustDataSeamBackend {
+                derives: vec!["Clone".to_string(), "Debug".to_string()],
+            },
+        }
     }
 
     #[test]
@@ -1010,6 +1363,85 @@ mod tests {
     }
 
     #[test]
+    fn lower_data_seam_preserves_constructor_and_method_semantics() {
+        let seam = test_data_seam();
+
+        let lowering = lower_data_seam(&seam).unwrap();
+
+        assert_eq!(lowering.struct_name, "CheckoutQuote");
+        assert_eq!(lowering.fields.len(), 2);
+        assert_eq!(lowering.constructors.len(), 1);
+        assert_eq!(lowering.constructors[0].id, "new");
+        assert_eq!(lowering.constructors[0].receiver, None);
+        assert_eq!(lowering.constructors[0].returns.as_deref(), Some("Self"));
+        assert!(
+            lowering.constructors[0].body_rust.contains("Self {"),
+            "constructor should lower to a struct literal"
+        );
+        assert_eq!(lowering.methods.len(), 1);
+        assert_eq!(lowering.methods[0].id, "total");
+        assert_eq!(
+            lowering.methods[0].receiver,
+            Some(MethodReceiver::SharedRef)
+        );
+        assert_eq!(
+            lowering.methods[0].returns.as_deref(),
+            Some("rust_decimal::Decimal")
+        );
+    }
+
+    #[test]
+    fn generate_normalized_unit_code_emits_data_struct_impl_and_tests() {
+        let code = generate_normalized_unit_code(&NormalizedUnit::Data(test_data_seam())).unwrap();
+
+        assert!(code.contains("use crate::pricing::apply_tax::apply_tax;"));
+        assert!(code.contains("/// Quote checkout totals."));
+        assert!(code.contains("#[derive(Clone, Debug)]"));
+        assert!(code.contains("pub struct CheckoutQuote {"));
+        assert!(code.contains("pub subtotal: rust_decimal::Decimal,"));
+        assert!(code.contains("pub tax_rate: rust_decimal::Decimal,"));
+        assert!(code.contains("impl CheckoutQuote {"));
+        assert!(code.contains(
+            "pub fn new(subtotal: rust_decimal::Decimal, tax_rate: rust_decimal::Decimal) -> Self {"
+        ));
+        assert!(code.contains(
+            "Self {\n            subtotal: subtotal,\n            tax_rate: tax_rate,\n        }"
+        ));
+        assert!(code.contains("pub fn total(&self) -> rust_decimal::Decimal {"));
+        assert!(code.contains("apply_tax(self.subtotal, self.tax_rate)"));
+        assert!(code.contains("#[cfg(test)]\nmod tests {"));
+        assert!(code.contains("assert!(CheckoutQuote::new("));
+    }
+
+    #[test]
+    fn generate_data_seam_code_rejects_dep_collision() {
+        let mut seam = test_data_seam();
+        seam.deps = vec![
+            "pricing/apply_tax".to_string(),
+            "shared::money/apply_tax".to_string(),
+        ];
+
+        let err = generate_data_seam_code(&seam).unwrap_err().to_string();
+        assert!(err.contains("Dep fn_name collision"), "{err}");
+        assert!(err.contains("pricing/apply_tax"), "{err}");
+        assert!(err.contains("shared::money/apply_tax"), "{err}");
+    }
+
+    #[test]
+    fn generate_normalized_unit_code_dispatches_existing_function_path() {
+        let spec = test_spec_with(
+            vec!["money/round"],
+            vec![],
+            "{\n    round(Decimal::ZERO)\n}",
+        );
+
+        let direct = generate_code(&spec).unwrap();
+        let dispatched = generate_normalized_unit_code(&NormalizedUnit::Function(spec)).unwrap();
+
+        assert_eq!(dispatched, direct);
+    }
+
+    #[test]
     fn shared_expect_validation_reports_too_deep_before_syn_parse() {
         let result = validate_expect_expr(
             &format!("{}true{}", "(".repeat(200), ")".repeat(200)),
@@ -1143,10 +1575,11 @@ mod tests {
         );
         let spec =
             make_resolved_spec_with_imports("pricing/apply_tax", vec!["rust_decimal::Decimal"]);
-        let specs_by_id: HashMap<&str, &ResolvedSpec> =
-            [("pricing/apply_tax", &spec)].into_iter().collect();
+        let unit = NormalizedUnit::Function(spec);
+        let units_by_id: HashMap<&str, &NormalizedUnit> =
+            [("pricing/apply_tax", &unit)].into_iter().collect();
 
-        let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
+        let code = generate_molecule_tests_code(&[&test], &units_by_id).unwrap();
 
         assert!(
             code.contains("use rust_decimal::Decimal;"),
@@ -1180,14 +1613,16 @@ mod tests {
             "pricing/apply_discount",
             vec!["rust_decimal::Decimal"],
         );
-        let specs_by_id: HashMap<&str, &ResolvedSpec> = [
-            ("pricing/apply_tax", &spec_tax),
-            ("pricing/apply_discount", &spec_discount),
+        let unit_tax = NormalizedUnit::Function(spec_tax);
+        let unit_discount = NormalizedUnit::Function(spec_discount);
+        let units_by_id: HashMap<&str, &NormalizedUnit> = [
+            ("pricing/apply_tax", &unit_tax),
+            ("pricing/apply_discount", &unit_discount),
         ]
         .into_iter()
         .collect();
 
-        let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
+        let code = generate_molecule_tests_code(&[&test], &units_by_id).unwrap();
 
         let decimal_count = code.matches("use rust_decimal::Decimal;").count();
         assert_eq!(decimal_count, 1, "shared import should appear exactly once");
@@ -1200,9 +1635,9 @@ mod tests {
             vec!["pricing/nonexistent"],
             "{ assert!(true); }",
         );
-        let specs_by_id: HashMap<&str, &ResolvedSpec> = HashMap::new();
+        let units_by_id: HashMap<&str, &NormalizedUnit> = HashMap::new();
 
-        let err = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap_err();
+        let err = generate_molecule_tests_code(&[&test], &units_by_id).unwrap_err();
         assert!(
             err.to_string().contains("pricing/nonexistent"),
             "error should name the missing cover id"
@@ -1222,10 +1657,11 @@ mod tests {
             "{ assert!(2 == 2); }",
         );
         let spec = make_resolved_spec_with_imports("pricing/apply_tax", vec![]);
-        let specs_by_id: HashMap<&str, &ResolvedSpec> =
-            [("pricing/apply_tax", &spec)].into_iter().collect();
+        let unit = NormalizedUnit::Function(spec);
+        let units_by_id: HashMap<&str, &NormalizedUnit> =
+            [("pricing/apply_tax", &unit)].into_iter().collect();
 
-        let code = generate_molecule_tests_code(&[&test_a, &test_b], &specs_by_id).unwrap();
+        let code = generate_molecule_tests_code(&[&test_a, &test_b], &units_by_id).unwrap();
 
         assert!(
             code.contains("fn test_flow_a()"),
@@ -1267,9 +1703,9 @@ mod tests {
         // A test with no covers should emit the #[test] function but no `use crate::` lines.
         let test =
             make_resolved_molecule_test("pricing/standalone_flow", vec![], "{ assert!(true); }");
-        let specs_by_id: HashMap<&str, &ResolvedSpec> = HashMap::new();
+        let units_by_id: HashMap<&str, &NormalizedUnit> = HashMap::new();
 
-        let code = generate_molecule_tests_code(&[&test], &specs_by_id).unwrap();
+        let code = generate_molecule_tests_code(&[&test], &units_by_id).unwrap();
 
         assert!(code.contains("#[test]"), "should emit #[test] attribute");
         assert!(
@@ -1280,6 +1716,23 @@ mod tests {
             !code.contains("use crate::"),
             "no covers means no use crate:: imports"
         );
+    }
+
+    #[test]
+    fn generate_molecule_tests_code_imports_data_seam_type() {
+        let test = make_resolved_molecule_test(
+            "pricing/data_checkout",
+            vec!["pricing/checkout_quote"],
+            "{ let _quote = CheckoutQuote::new(rust_decimal::Decimal::ONE, rust_decimal::Decimal::ONE); }",
+        );
+        let seam = test_data_seam();
+        let unit = NormalizedUnit::Data(seam);
+        let units_by_id: HashMap<&str, &NormalizedUnit> =
+            [("pricing/checkout_quote", &unit)].into_iter().collect();
+
+        let code = generate_molecule_tests_code(&[&test], &units_by_id).unwrap();
+
+        assert!(code.contains("use crate::pricing::checkout_quote::CheckoutQuote;"));
     }
 
     #[test]

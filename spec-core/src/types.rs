@@ -21,6 +21,7 @@ pub struct SpecStruct {
     pub deps: Vec<String>,
     #[serde(default)]
     pub imports: Vec<String>,
+    #[serde(default)]
     pub body: Body,
     #[serde(default)]
     pub local_tests: Vec<LocalTest>,

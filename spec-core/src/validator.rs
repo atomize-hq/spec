@@ -6,8 +6,8 @@
 
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
-    DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef, callable_name,
-    has_callable_collision,
+    Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec, MethodReceiver,
+    QualifiedUnitRef, UnitKind, callable_name, has_callable_collision,
 };
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
@@ -182,6 +182,17 @@ pub fn validate_semantic_with_options(
     // anywhere in a unit ID can create molecule_tests.rs vs molecule_tests/mod.rs collisions.
     validate_reserved_spec_id_segments(&spec.spec.id, &spec.source.file_path)?;
 
+    match spec
+        .spec
+        .unit_kind()
+        .map_err(|message| semantic_error(spec, message))?
+    {
+        UnitKind::Function => validate_function_semantic(spec, options),
+        UnitKind::Data => validate_data_semantic(spec, options),
+    }
+}
+
+fn validate_function_semantic(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
     let dep_refs = parse_dep_refs(&spec.spec.deps).map_err(|err| invalid_dep_error(err, spec))?;
 
     // Check dep IDs for Rust reserved keywords (would generate invalid use paths)
@@ -245,8 +256,19 @@ pub fn validate_semantic_with_options(
 
     validate_body_rust_block(spec)?;
     validate_local_test_expects(spec, options)?;
-    validate_contract_input_types(spec)?;
+    if let Some(contract) = &spec.spec.contract {
+        validate_contract_types(contract, "contract", &spec.source.file_path)?;
+    }
 
+    Ok(())
+}
+
+fn validate_data_semantic(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
+    validate_data_escape_hatches(spec)?;
+    validate_data_fields(spec)?;
+    validate_data_constructors(spec)?;
+    validate_data_methods(spec)?;
+    validate_local_test_expects(spec, options)?;
     Ok(())
 }
 
@@ -270,6 +292,13 @@ fn parse_dep_refs(dep_ids: &[String]) -> std::result::Result<Vec<DepRef>, DepRef
 fn invalid_dep_error(err: DepRefParseError, spec: &LoadedSpec) -> SpecError {
     SpecError::SemanticValidation {
         message: err.to_string(),
+        path: spec.source.file_path.clone(),
+    }
+}
+
+fn semantic_error(spec: &LoadedSpec, message: impl Into<String>) -> SpecError {
+    SpecError::SemanticValidation {
+        message: message.into(),
         path: spec.source.file_path.clone(),
     }
 }
@@ -347,37 +376,238 @@ fn validate_body_rust_block(spec: &LoadedSpec) -> Result<()> {
     Ok(())
 }
 
-fn validate_contract_input_types(spec: &LoadedSpec) -> Result<()> {
-    let path = &spec.source.file_path;
-    if let Some(contract) = &spec.spec.contract {
-        if let Some(inputs) = &contract.inputs {
-            for (name, type_str) in inputs {
-                syn::parse_str::<syn::Ident>(name).map_err(|_| {
-                    SpecError::ContractInputNameInvalid {
-                        name: name.clone(),
-                        message: "use a snake_case identifier (e.g. my_param)".to_string(),
-                        path: path.clone(),
-                    }
-                })?;
-                syn::parse_str::<syn::Type>(type_str).map_err(|err| {
-                    SpecError::ContractTypeInvalid {
-                        field: format!("inputs.{name}"),
-                        type_str: type_str.clone(),
-                        message: err.to_string(),
-                        path: path.clone(),
-                    }
-                })?;
-            }
-        }
-        if let Some(returns) = &contract.returns {
-            syn::parse_str::<syn::Type>(returns).map_err(|err| SpecError::ContractTypeInvalid {
-                field: "returns".to_string(),
-                type_str: returns.clone(),
-                message: err.to_string(),
-                path: path.clone(),
+fn validate_contract_types(contract: &Contract, field_root: &str, path: &str) -> Result<()> {
+    if let Some(inputs) = &contract.inputs {
+        for (name, type_str) in inputs {
+            syn::parse_str::<syn::Ident>(name).map_err(|_| {
+                SpecError::ContractInputNameInvalid {
+                    name: name.clone(),
+                    message: "use a snake_case identifier (e.g. my_param)".to_string(),
+                    path: path.to_string(),
+                }
+            })?;
+            syn::parse_str::<syn::Type>(type_str).map_err(|err| {
+                SpecError::ContractTypeInvalid {
+                    field: format!("{field_root}.inputs.{name}"),
+                    type_str: type_str.clone(),
+                    message: err.to_string(),
+                    path: path.to_string(),
+                }
             })?;
         }
     }
+    if let Some(returns) = &contract.returns {
+        syn::parse_str::<syn::Type>(returns).map_err(|err| SpecError::ContractTypeInvalid {
+            field: format!("{field_root}.returns"),
+            type_str: returns.clone(),
+            message: err.to_string(),
+            path: path.to_string(),
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_data_escape_hatches(spec: &LoadedSpec) -> Result<()> {
+    if spec.spec.contract.is_some() {
+        return Err(semantic_error(
+            spec,
+            "kind:data must not use top-level contract; shared seam semantics belong in data.fields, constructors, and methods",
+        ));
+    }
+    if !spec.spec.deps.is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:data must not use top-level deps; attach deps to individual methods instead",
+        ));
+    }
+    if !spec.spec.imports.is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:data must not use top-level imports; Rust-specific escape hatches are limited to methods[].lowering.rust.body and backends.rust.derives",
+        ));
+    }
+    if !spec.spec.body.rust.trim().is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:data must leave body.rust empty; shared seam behavior belongs in methods[].lowering.rust.body",
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_data_fields(spec: &LoadedSpec) -> Result<()> {
+    let Some(data) = spec.spec.extensions.data.as_ref() else {
+        return Err(semantic_error(spec, "kind:data requires data.fields"));
+    };
+
+    for (name, field) in &data.fields {
+        validate_keyword_segment(name, name, &spec.source.file_path)?;
+        syn::parse_str::<syn::Ident>(name).map_err(|_| {
+            semantic_error(
+                spec,
+                format!("data.fields.{name} must use a snake_case identifier (e.g. subtotal)"),
+            )
+        })?;
+        syn::parse_str::<syn::Type>(&field.type_).map_err(|err| {
+            SpecError::ContractTypeInvalid {
+                field: format!("data.fields.{name}.type"),
+                type_str: field.type_.clone(),
+                message: err.to_string(),
+                path: spec.source.file_path.clone(),
+            }
+        })?;
+    }
+
+    Ok(())
+}
+
+fn validate_data_constructors(spec: &LoadedSpec) -> Result<()> {
+    let field_names: HashSet<_> = spec
+        .spec
+        .extensions
+        .data
+        .as_ref()
+        .map(|data| data.fields.keys().cloned().collect())
+        .unwrap_or_default();
+    let mut seen_ids = HashSet::new();
+
+    for (index, constructor) in spec.spec.extensions.constructors.iter().enumerate() {
+        if !seen_ids.insert(constructor.id.as_str()) {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "duplicate constructor id '{}' at constructors[{index}]",
+                    constructor.id
+                ),
+            ));
+        }
+
+        validate_keyword_segment(&constructor.id, &constructor.id, &spec.source.file_path)?;
+        if let Some(contract) = &constructor.contract {
+            validate_contract_types(
+                contract,
+                &format!("constructors[{index}].contract"),
+                &spec.source.file_path,
+            )?;
+            if contract.returns.is_some() {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "constructors[{index}].contract.returns is not allowed; constructor return shape is shared semantics"
+                    ),
+                ));
+            }
+        }
+
+        let initialized_fields: HashSet<_> = constructor.initializes.keys().cloned().collect();
+        let missing_fields: Vec<_> = field_names
+            .iter()
+            .filter(|field| !initialized_fields.contains(*field))
+            .cloned()
+            .collect();
+        if !missing_fields.is_empty() {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "constructors[{index}] omits required field initialization for: {}",
+                    missing_fields.join(", ")
+                ),
+            ));
+        }
+
+        for (field_name, input_name) in &constructor.initializes {
+            if !field_names.contains(field_name) {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "constructors[{index}].initializes.{field_name} targets an unknown data field"
+                    ),
+                ));
+            }
+
+            let Some(contract) = &constructor.contract else {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "constructors[{index}] must declare contract.inputs for initializes.{field_name}"
+                    ),
+                ));
+            };
+            let Some(inputs) = contract.inputs.as_ref() else {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "constructors[{index}] must declare contract.inputs for initializes.{field_name}"
+                    ),
+                ));
+            };
+            if !inputs.contains_key(input_name) {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "constructors[{index}].initializes.{field_name} references unknown input '{input_name}'"
+                    ),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_data_methods(spec: &LoadedSpec) -> Result<()> {
+    let mut seen_ids = HashSet::new();
+
+    for (index, method) in spec.spec.extensions.methods.iter().enumerate() {
+        if !seen_ids.insert(method.id.as_str()) {
+            return Err(semantic_error(
+                spec,
+                format!("duplicate method id '{}' at methods[{index}]", method.id),
+            ));
+        }
+
+        validate_keyword_segment(&method.id, &method.id, &spec.source.file_path)?;
+        MethodReceiver::try_from(method.receiver.as_str()).map_err(|_| {
+            semantic_error(
+                spec,
+                format!(
+                    "methods[{index}].receiver uses unsupported mode '{}'; only 'shared_ref' is supported in M12",
+                    method.receiver
+                ),
+            )
+        })?;
+
+        if let Some(contract) = &method.contract {
+            validate_contract_types(
+                contract,
+                &format!("methods[{index}].contract"),
+                &spec.source.file_path,
+            )?;
+        }
+
+        let rust_body = method
+            .lowering
+            .as_ref()
+            .and_then(|lowering| lowering.rust.as_ref())
+            .map(|rust| rust.body.trim())
+            .filter(|body| !body.is_empty())
+            .ok_or_else(|| {
+                semantic_error(
+                    spec,
+                    format!("methods[{index}].lowering.rust.body must be provided for kind:data"),
+                )
+            })?;
+        syn::parse_str::<syn::Block>(rust_body).map_err(|err| {
+            semantic_error(
+                spec,
+                format!(
+                    "methods[{index}].lowering.rust.body must be a Rust block expression starting with `{{`: {err}"
+                ),
+            )
+        })?;
+    }
+
     Ok(())
 }
 
@@ -788,9 +1018,12 @@ pub fn validate_no_duplicate_molecule_test_ids(tests: &[LoadedMoleculeTest]) -> 
 mod tests {
     use super::*;
     use crate::types::{
-        Body, Contract, Intent, LocalTest, MoleculeTestSource, MoleculeTestStruct,
-        QualifiedUnitRef, SpecSource, SpecStruct,
+        AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Body, Contract,
+        Intent, LocalTest, MoleculeTestSource, MoleculeTestStruct, QualifiedUnitRef, SpecSource,
+        SpecStruct, UnitExtensions,
     };
+    use indexmap::IndexMap;
 
     fn create_test_spec(id: &str, rust_body: &str) -> LoadedSpec {
         LoadedSpec {
@@ -838,6 +1071,90 @@ mod tests {
         }
     }
 
+    fn create_data_spec(id: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: format!("test/{}.unit.spec", id),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "data".to_string(),
+                intent: Intent {
+                    why: format!("Test data seam for {}", id),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body {
+                    rust: String::new(),
+                },
+                local_tests: vec![],
+                links: None,
+                spec_version: None,
+                extensions: UnitExtensions {
+                    data: Some(AuthoredDataShape {
+                        fields: IndexMap::from([
+                            (
+                                "subtotal".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "tax_rate".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![AuthoredConstructor {
+                        id: "new".to_string(),
+                        intent: Intent {
+                            why: "Create a data seam".to_string(),
+                        },
+                        contract: Some(Contract {
+                            inputs: Some(IndexMap::from([
+                                ("subtotal".to_string(), "Decimal".to_string()),
+                                ("tax_rate".to_string(), "Decimal".to_string()),
+                            ])),
+                            returns: None,
+                            invariants: vec![],
+                        }),
+                        initializes: IndexMap::from([
+                            ("subtotal".to_string(), "subtotal".to_string()),
+                            ("tax_rate".to_string(), "tax_rate".to_string()),
+                        ]),
+                    }],
+                    methods: vec![AuthoredMethod {
+                        id: "total".to_string(),
+                        intent: Intent {
+                            why: "Return the total".to_string(),
+                        },
+                        receiver: "shared_ref".to_string(),
+                        contract: Some(Contract {
+                            inputs: None,
+                            returns: Some("Decimal".to_string()),
+                            invariants: vec![],
+                        }),
+                        deps: vec!["pricing/apply_tax".to_string()],
+                        lowering: Some(AuthoredMethodLowering {
+                            rust: Some(AuthoredRustMethodLowering {
+                                body: "{ apply_tax(self.subtotal, self.tax_rate) }".to_string(),
+                            }),
+                        }),
+                    }],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec!["Clone".to_string(), "Debug".to_string()],
+                        }),
+                    }),
+                },
+            },
+        }
+    }
+
     #[test]
     fn test_validate_schema_valid() {
         let spec = create_test_spec("pricing/apply_discount", "{ }");
@@ -879,6 +1196,61 @@ extra_field: should_fail
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Schema validation failed"));
         assert!(err.contains("unknown field"));
+    }
+
+    #[test]
+    fn test_validate_raw_yaml_accepts_kind_data_shape_without_placeholder_body() {
+        let yaml = r#"
+id: pricing/checkout_quote
+kind: data
+intent:
+  why: Quote a checkout total.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+    tax_rate:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+        tax_rate: Decimal
+    initializes:
+      subtotal: subtotal
+      tax_rate: tax_rate
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.subtotal, self.tax_rate)
+          }
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(
+            result.is_ok(),
+            "Expected valid kind:data shape to pass schema validation: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -1215,6 +1587,89 @@ local_tests:
         let spec = create_test_spec("pricing/apply_discount", "{ subtotal - subtotal * rate }");
         let result = validate_semantic(&spec);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_data_semantic_valid_spec() {
+        let spec = create_data_spec("pricing/checkout_quote");
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_duplicate_constructor_ids() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec
+            .extensions
+            .constructors
+            .push(spec.spec.extensions.constructors[0].clone());
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("duplicate constructor id 'new'"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_duplicate_method_ids() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec
+            .extensions
+            .methods
+            .push(spec.spec.extensions.methods[0].clone());
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("duplicate method id 'total'"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_unsupported_receiver_mode() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.methods[0].receiver = "shared_mut".to_string();
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("unsupported mode 'shared_mut'"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_missing_required_constructor_fields() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.constructors[0]
+            .initializes
+            .shift_remove("tax_rate");
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("omits required field initialization for"),
+            "{err}"
+        );
+        assert!(err.contains("tax_rate"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_shared_semantic_escape_hatch() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.body.rust = "{ unreachable!(\"escape hatch\") }".to_string();
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("kind:data must leave body.rust empty"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_constructor_return_override() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.constructors[0]
+            .contract
+            .as_mut()
+            .unwrap()
+            .returns = Some("CheckoutQuote".to_string());
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("constructors[0].contract.returns is not allowed"),
+            "{err}"
+        );
     }
 
     #[test]

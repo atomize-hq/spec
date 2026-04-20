@@ -3,7 +3,7 @@
 //! This module provides the foundation for M8's full graph layer.
 //! It models units, molecule tests, and the edges between them (dep and covers).
 
-use crate::types::{DepRef, LoadedMoleculeTest, LoadedSpec};
+use crate::types::{DepRef, LoadedMoleculeTest, LoadedSpec, UnitKind};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -80,7 +80,7 @@ impl SpecGraph {
             .iter()
             .map(|u| UnitNode {
                 id: u.spec.id.clone(),
-                deps: u.spec.deps.clone(),
+                deps: top_level_deps(u),
             })
             .collect();
         unit_nodes.sort_by(|left, right| left.id.cmp(&right.id));
@@ -99,9 +99,9 @@ impl SpecGraph {
         let mut test_coverage_index: HashMap<String, Vec<String>> = HashMap::new();
 
         for u in units {
-            for dep in &u.spec.deps {
+            for dep in top_level_deps(u) {
                 let dep_ref =
-                    DepRef::parse(dep).expect("SpecGraph::build assumes validated dep refs");
+                    DepRef::parse(&dep).expect("SpecGraph::build assumes validated dep refs");
                 edges.push(SpecEdge::Dep {
                     from: u.spec.id.clone(),
                     to: dep_ref.clone(),
@@ -220,12 +220,33 @@ impl SpecGraph {
     }
 }
 
+pub(crate) fn top_level_deps(spec: &LoadedSpec) -> Vec<String> {
+    match spec.spec.unit_kind() {
+        Ok(UnitKind::Data) => {
+            let mut deps = Vec::new();
+            for method in &spec.spec.extensions.methods {
+                for dep in &method.deps {
+                    if !deps.contains(dep) {
+                        deps.push(dep.clone());
+                    }
+                }
+            }
+            deps
+        }
+        _ => spec.spec.deps.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::{
-        Body, Intent, Links, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct,
+        AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Body, Contract,
+        Intent, Links, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct,
+        UnitExtensions,
     };
+    use indexmap::IndexMap;
 
     fn make_loaded_spec(id: &str, deps: Vec<&str>) -> LoadedSpec {
         make_loaded_spec_with_links(id, deps, None)
@@ -279,6 +300,104 @@ mod tests {
                     rust: "{ assert!(true); }".to_string(),
                 },
                 spec_version: None,
+            },
+        }
+    }
+
+    fn make_loaded_data_seam(id: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: format!("{id}.unit.spec"),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "data".to_string(),
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
+                contract: None,
+                deps: vec!["legacy/ignored".to_string()],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![],
+                links: None,
+                spec_version: None,
+                extensions: UnitExtensions {
+                    data: Some(AuthoredDataShape {
+                        fields: IndexMap::from([(
+                            "subtotal".to_string(),
+                            AuthoredField {
+                                type_: "Decimal".to_string(),
+                            },
+                        )]),
+                    }),
+                    constructors: vec![AuthoredConstructor {
+                        id: "new".to_string(),
+                        intent: Intent {
+                            why: "Create a quote".to_string(),
+                        },
+                        contract: Some(Contract {
+                            inputs: Some(IndexMap::from([(
+                                "subtotal".to_string(),
+                                "Decimal".to_string(),
+                            )])),
+                            returns: None,
+                            invariants: vec![],
+                        }),
+                        initializes: IndexMap::from([(
+                            "subtotal".to_string(),
+                            "subtotal".to_string(),
+                        )]),
+                    }],
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "discounted_subtotal".to_string(),
+                            intent: Intent {
+                                why: "Compute discounted subtotal".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_discount".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ apply_discount(self.subtotal, Decimal::ZERO) }"
+                                        .to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "total".to_string(),
+                            intent: Intent {
+                                why: "Compute total".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![
+                                "pricing/apply_discount".to_string(),
+                                "pricing/apply_tax".to_string(),
+                            ],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ apply_tax(self.subtotal, Decimal::ONE) }".to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec!["Clone".to_string()],
+                        }),
+                    }),
+                },
             },
         }
     }
@@ -495,6 +614,58 @@ mod tests {
                 units: vec!["money/round".to_string()],
                 molecule_tests: vec![],
             })
+        );
+    }
+
+    #[test]
+    fn build_graph_keeps_one_top_level_node_for_data_seam() {
+        let graph = SpecGraph::build(
+            &[
+                make_loaded_spec("pricing/apply_discount", vec![]),
+                make_loaded_spec("pricing/apply_tax", vec![]),
+                make_loaded_data_seam("pricing/checkout_quote"),
+            ],
+            &[make_loaded_molecule_test(
+                "pricing/checkout_quote_behavior",
+                vec!["pricing/checkout_quote"],
+            )],
+        );
+
+        assert_eq!(
+            graph
+                .units()
+                .iter()
+                .map(|node| (node.id.as_str(), node.deps.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("pricing/apply_discount", vec![]),
+                ("pricing/apply_tax", vec![]),
+                (
+                    "pricing/checkout_quote",
+                    vec![
+                        "pricing/apply_discount".to_string(),
+                        "pricing/apply_tax".to_string(),
+                    ],
+                ),
+            ]
+        );
+        assert_eq!(
+            graph.edges(),
+            [
+                SpecEdge::Dep {
+                    from: "pricing/checkout_quote".to_string(),
+                    to: DepRef::local("pricing/apply_discount"),
+                },
+                SpecEdge::Dep {
+                    from: "pricing/checkout_quote".to_string(),
+                    to: DepRef::local("pricing/apply_tax"),
+                },
+                SpecEdge::Covers {
+                    test: "pricing/checkout_quote_behavior".to_string(),
+                    unit: "pricing/checkout_quote".to_string(),
+                },
+            ]
+            .as_slice()
         );
     }
 

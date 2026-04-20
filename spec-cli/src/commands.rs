@@ -6,9 +6,8 @@ use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
 use spec_core::export::{build_export_bundle, build_plan_export_bundle};
 use spec_core::generator::{
-    GenerateOptions, clean_output_dir, generate_and_write_molecule_tests,
-    generate_code_with_options, generate_mod_rs, safe_output_path_with_project_root,
-    write_generated_file,
+    GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
+    generate_unit_code_with_options, safe_output_path_with_project_root, write_generated_file,
 };
 use spec_core::loader::{
     DirectoryLoadReport, discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec,
@@ -21,7 +20,7 @@ use spec_core::molecule_evidence::{
     ensure_gitignore_entry as ensure_molecule_evidence_gitignore_entry, molecule_evidence_is_stale,
     read_molecule_evidence, write_molecule_evidence,
 };
-use spec_core::normalizer::normalize_spec;
+use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
     ArtifactProvenance, PassportEvidence, PassportTestResult, build_passport_with_evidence,
     compute_contract_hash, ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
@@ -32,8 +31,10 @@ use spec_core::pipeline::{
 };
 use spec_core::plan::{PlanComputedImpact, build_plan_report};
 use spec_core::types::{
-    DepRef, LoadedMoleculeTest, LoadedSpec, QualifiedUnitRef, ResolvedMoleculeTest, ResolvedSpec,
+    DepRef, LoadedMoleculeTest, LoadedSpec, NormalizedUnit, QualifiedUnitRef, ResolvedMoleculeTest,
 };
+#[cfg(test)]
+use spec_core::types::ResolvedSpec;
 use spec_core::validator::{
     QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
     validate_molecule_test_covers, validate_molecule_test_semantic,
@@ -1817,12 +1818,11 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
         );
     }
 
-    let mut resolved_specs = Vec::new();
+    let mut normalized_units = Vec::new();
     for spec in &specs {
-        resolved_specs.push(
-            normalize_spec(spec.spec.clone())
-                .with_context(|| format!("Failed to normalize {}", spec.source.file_path))?,
-        );
+        let unit = normalize_unit(spec.spec.clone())
+            .with_context(|| format!("Failed to normalize {}", spec.source.file_path))?;
+        normalized_units.push(unit);
     }
 
     let molecule_tests = if includes_directory_molecule_tests(path) {
@@ -1865,12 +1865,12 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
         .collect();
 
     let mut generated_rs_rel_paths = HashSet::<PathBuf>::new();
-    for spec in &resolved_specs {
-        generated_rs_rel_paths.insert(path_for_spec(spec));
+    for unit in &normalized_units {
+        generated_rs_rel_paths.insert(path_for_unit(unit));
     }
 
     // Include every generated mod.rs (root + nested modules) in the owned set.
-    let namespaces = build_namespaces(&resolved_specs, &resolved_molecule_tests);
+    let namespaces = build_namespaces(&normalized_units, &resolved_molecule_tests);
     for module_path in namespaces.keys() {
         let mod_rs_rel = if module_path.is_empty() {
             PathBuf::from("mod.rs")
@@ -1885,10 +1885,10 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
         allow_unsafe_local_test_expect: config.validation.allow_unsafe_local_test_expect,
     };
 
-    for spec in &resolved_specs {
-        let content = generate_code_with_options(spec, &generate_options)
-            .with_context(|| format!("Failed to generate Rust for {}", spec.id))?;
-        let output_path = output_base.join(path_for_spec(spec));
+    for unit in &normalized_units {
+        let content = generate_unit_code_with_options(unit, &generate_options)
+            .with_context(|| format!("Failed to generate Rust for {}", unit.id()))?;
+        let output_path = output_base.join(path_for_unit(unit));
         write_generated_file(&output_path.display().to_string(), &content)
             .with_context(|| format!("Failed to write {}", output_path.display()))?;
     }
@@ -1911,10 +1911,12 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
         write_generated_file(&mod_rs_path.display().to_string(), &content)
             .with_context(|| format!("Failed to write {}", mod_rs_path.display()))?;
     }
-    let specs_by_id: HashMap<&str, &ResolvedSpec> =
-        resolved_specs.iter().map(|s| (s.id.as_str(), s)).collect();
+    let units_by_id: HashMap<&str, &NormalizedUnit> = normalized_units
+        .iter()
+        .map(|unit| (unit.id(), unit))
+        .collect();
     let molecule_test_paths =
-        generate_and_write_molecule_tests(&resolved_molecule_tests, &specs_by_id, &output_base)
+        generate_and_write_molecule_tests(&resolved_molecule_tests, &units_by_id, &output_base)
             .with_context(|| "Failed to generate molecule test files")?;
     let molecule_test_file_count = molecule_test_paths.len();
     generated_rs_rel_paths.extend(molecule_test_paths);
@@ -1926,8 +1928,8 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
 
     println!(
         "Generated {} file{}",
-        resolved_specs.len() + namespaces.len() + molecule_test_file_count,
-        pluralize(resolved_specs.len() + namespaces.len() + molecule_test_file_count)
+        normalized_units.len() + namespaces.len() + molecule_test_file_count,
+        pluralize(normalized_units.len() + namespaces.len() + molecule_test_file_count)
     );
     Ok(GeneratedSpecs {
         specs,
@@ -2390,8 +2392,9 @@ fn test_command(
         )?,
     };
     let filter = if let Some(target) = target_spec.as_ref() {
-        let resolved = ResolvedSpec::from_spec(target.spec.clone());
-        Some(cargo_test_filter_for(&resolved, &effective_prefix))
+        let resolved = normalize_unit(target.spec.clone())
+            .with_context(|| format!("Failed to normalize {}", target.source.file_path))?;
+        Some(cargo_test_filter_for_unit(&resolved, &effective_prefix))
     } else {
         target_molecule_test.as_ref().map(|target| {
             let resolved = ResolvedMoleculeTest::from_loaded(target);
@@ -2805,11 +2808,12 @@ fn build_test_evidence(
     let mut evidence_by_spec = BTreeMap::new();
 
     for spec in specs {
-        let resolved = ResolvedSpec::from_spec(spec.spec.clone());
+        let resolved = normalize_unit(spec.spec.clone()).map_err(|err| anyhow::anyhow!(err))?;
         let mut test_results = Vec::new();
 
         for local_test in &spec.spec.local_tests {
-            let full_name = expected_cargo_test_name(&resolved, output_prefix, &local_test.id);
+            let full_name =
+                expected_cargo_test_name_for_unit(&resolved, output_prefix, &local_test.id);
             // This lookup runs once per local test after parsing cargo stdout, so
             // keep it on a hash-based map for large repos where thousands of test
             // names may be correlated back into passport evidence in one command.
@@ -2903,14 +2907,22 @@ fn resolve_git_commit_sha(path: &Path) -> Option<String> {
     }
 }
 
-fn cargo_test_filter_for(spec: &ResolvedSpec, output_prefix: &str) -> String {
-    if spec.module_path.is_empty() {
-        format!("{output_prefix}::{}::tests::", spec.fn_name)
+fn unit_module_path(unit: &NormalizedUnit) -> &str {
+    unit.module_path()
+}
+
+fn unit_file_stem(unit: &NormalizedUnit) -> &str {
+    spec_core::types::callable_name(unit.id())
+}
+
+fn cargo_test_filter_for_unit(unit: &NormalizedUnit, output_prefix: &str) -> String {
+    if unit_module_path(unit).is_empty() {
+        format!("{output_prefix}::{}::tests::", unit_file_stem(unit))
     } else {
         format!(
             "{output_prefix}::{}::{}::tests::",
-            spec.module_path.replace('/', "::"),
-            spec.fn_name
+            unit_module_path(unit).replace('/', "::"),
+            unit_file_stem(unit)
         )
     }
 }
@@ -2927,14 +2939,30 @@ fn cargo_test_filter_for_molecule(test: &ResolvedMoleculeTest, output_prefix: &s
     }
 }
 
+#[cfg(test)]
 fn expected_cargo_test_name(spec: &ResolvedSpec, output_prefix: &str, test_id: &str) -> String {
-    if spec.module_path.is_empty() {
-        format!("{output_prefix}::{}::tests::test_{test_id}", spec.fn_name)
+    expected_cargo_test_name_for_unit(
+        &NormalizedUnit::Function(spec.clone()),
+        output_prefix,
+        test_id,
+    )
+}
+
+fn expected_cargo_test_name_for_unit(
+    unit: &NormalizedUnit,
+    output_prefix: &str,
+    test_id: &str,
+) -> String {
+    if unit_module_path(unit).is_empty() {
+        format!(
+            "{output_prefix}::{}::tests::test_{test_id}",
+            unit_file_stem(unit)
+        )
     } else {
         format!(
             "{output_prefix}::{}::{}::tests::test_{test_id}",
-            spec.module_path.replace('/', "::"),
-            spec.fn_name
+            unit_module_path(unit).replace('/', "::"),
+            unit_file_stem(unit)
         )
     }
 }
@@ -2984,19 +3012,19 @@ fn record_namespace_branch(module_path: &str, namespaces: &mut BTreeMap<String, 
 }
 
 fn build_namespaces(
-    specs: &[ResolvedSpec],
+    units: &[NormalizedUnit],
     molecule_tests: &[ResolvedMoleculeTest],
 ) -> BTreeMap<String, Namespace> {
     let mut namespaces = BTreeMap::<String, Namespace>::new();
     namespaces.entry(String::new()).or_default();
 
-    for spec in specs {
-        record_namespace_branch(&spec.module_path, &mut namespaces);
+    for unit in units {
+        record_namespace_branch(unit_module_path(unit), &mut namespaces);
         namespaces
-            .entry(spec.module_path.clone())
+            .entry(unit_module_path(unit).to_string())
             .or_default()
             .unit_files
-            .insert(spec.fn_name.clone());
+            .insert(unit_file_stem(unit).to_string());
     }
 
     for test in molecule_tests {
@@ -3010,12 +3038,12 @@ fn build_namespaces(
     namespaces
 }
 
-fn path_for_spec(spec: &ResolvedSpec) -> PathBuf {
+fn path_for_unit(unit: &NormalizedUnit) -> PathBuf {
     let mut path = PathBuf::new();
-    if !spec.module_path.is_empty() {
-        path.push(spec.module_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+    if !unit_module_path(unit).is_empty() {
+        path.push(unit_module_path(unit).replace('/', std::path::MAIN_SEPARATOR_STR));
     }
-    path.push(format!("{}.rs", spec.fn_name));
+    path.push(format!("{}.rs", unit_file_stem(unit)));
     path
 }
 
@@ -4410,6 +4438,7 @@ mod tests {
                     .collect(),
                 links: None,
                 spec_version: None,
+                extensions: spec_core::types::UnitExtensions::default(),
             },
         }
     }
