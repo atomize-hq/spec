@@ -3515,7 +3515,8 @@ fn collect_plan_validation_specs(
     library_root: &Path,
     libraries: &[ResolvedLibrary],
 ) -> Result<ValidationSpecCollection> {
-    let report = load_directory_report_bounded(library_root, library_root)?;
+    let units_root = library_root.join("units");
+    let report = load_directory_report_bounded(&units_root, library_root)?;
     let (
         _selected_libraries,
         imported_libraries,
@@ -3543,6 +3544,7 @@ fn plan_validation_inputs(
     library_root: &Path,
     context: &WorkspaceContext,
 ) -> Result<PlanValidationInputs> {
+    let units_root = library_root.join("units");
     let validation_specs = collect_plan_validation_specs(library_root, &context.libraries)?;
     let validation_options = ValidationOptions {
         strict_deps: true,
@@ -3556,8 +3558,8 @@ fn plan_validation_inputs(
         context,
     ));
 
-    let molecule_report = if includes_directory_molecule_tests(library_root) {
-        load_molecule_test_directory_report_bounded(library_root, library_root)?
+    let molecule_report = if includes_directory_molecule_tests(&units_root) {
+        load_molecule_test_directory_report_bounded(&units_root, library_root)?
     } else {
         spec_core::loader::MoleculeTestLoadReport::default()
     };

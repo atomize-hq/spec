@@ -30,9 +30,10 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 - Canonical M12 wedge loop:
   `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/checkout_quote.unit.spec --format json`
   `cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated`
-  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec --output examples/ecommerce/src/generated`
-  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec --output examples/ecommerce/src/generated`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec`
   `cargo run -p spec-cli -- status examples/ecommerce --format json`
+  Single-file `spec test` uses an isolated internal output tree; do not pass `--output`.
 
 ## Plan Artifact Workflow
 

@@ -9549,6 +9549,12 @@ fn setup_m10_plan_fixture(
     (temp_dir, ecommerce_dir, plan_path)
 }
 
+fn add_hidden_scratch_units_copy(ecommerce_dir: &Path) {
+    let scratch_units_dir = ecommerce_dir.join(".scratch/units");
+    copy_dir_recursive(&ecommerce_dir.join("units"), &scratch_units_dir)
+        .expect("failed to copy units into hidden scratch tree");
+}
+
 fn normalize_exported_at(mut json: Value) -> Value {
     json["exported_at"] = Value::String("<normalized>".to_string());
     json
@@ -9595,6 +9601,33 @@ fn plan_validate_nested_plan_path_matches_checked_in_fixture() {
         ],
     );
     assert_output_success("plan validate should succeed for nested plan path", &output);
+    assert_stdout_json_matches_fixture(&output, "plan-validate-valid-mixed.json");
+}
+
+#[test]
+fn plan_validate_ignores_hidden_scratch_units_copy() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let plan_path = ecommerce_dir.join("plans/refactors/checkout-tax-refactor.plan.spec");
+    add_hidden_scratch_units_copy(&ecommerce_dir);
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success(
+        "plan validate should ignore hidden scratch units copies",
+        &output,
+    );
     assert_stdout_json_matches_fixture(&output, "plan-validate-valid-mixed.json");
 }
 
@@ -10087,6 +10120,33 @@ fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
         spec_export_json.get("graph").is_some(),
         "{spec_export_json}"
     );
+}
+
+#[test]
+fn plan_export_ignores_hidden_scratch_units_copy() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let plan_path = ecommerce_dir.join("plans/refactors/checkout-tax-refactor.plan.spec");
+    add_hidden_scratch_units_copy(&ecommerce_dir);
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "export",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        ],
+    );
+    assert_output_success(
+        "plan export should ignore hidden scratch units copies",
+        &output,
+    );
+    let actual = normalize_exported_at(parse_stdout_json(&output));
+    let expected = fixture_json("plan-export-valid-mixed.json");
+    assert_eq!(actual, expected);
 }
 
 #[test]

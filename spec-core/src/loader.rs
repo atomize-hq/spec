@@ -212,7 +212,11 @@ pub fn load_directory_report_bounded<P: AsRef<Path>, R: AsRef<Path>>(
     let mut report = DirectoryLoadReport::default();
     let mut rejected_subtrees = Vec::new();
 
-    for entry in WalkDir::new(dir).follow_links(true) {
+    for entry in WalkDir::new(dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_entry(|entry| should_descend_scan_entry(entry, dir))
+    {
         match entry {
             Ok(entry) => {
                 let path = entry.path();
@@ -505,7 +509,11 @@ pub fn load_molecule_test_directory_report_bounded<P: AsRef<Path>, R: AsRef<Path
         return Ok(report);
     }
 
-    for entry in WalkDir::new(dir).follow_links(true) {
+    for entry in WalkDir::new(dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_entry(|entry| should_descend_scan_entry(entry, dir))
+    {
         match entry {
             Ok(entry) => {
                 let path = entry.path();
@@ -942,6 +950,58 @@ body:
     }
 
     #[test]
+    fn test_load_directory_report_bounded_skips_hidden_scratch_subtrees() {
+        let temp_dir = TempDir::new().unwrap();
+        let library_root = temp_dir.path();
+        let units_dir = library_root.join("units");
+        fs::create_dir_all(units_dir.join("pricing")).unwrap();
+        fs::create_dir_all(units_dir.join(".scratch/pricing")).unwrap();
+        fs::create_dir_all(units_dir.join(".tmp-cache/pricing")).unwrap();
+        fs::write(
+            units_dir.join("pricing/apply.unit.spec"),
+            r#"
+id: pricing/apply
+kind: function
+intent:
+  why: Apply pricing.
+body:
+  rust: "{ true }"
+"#,
+        )
+        .unwrap();
+        fs::write(
+            units_dir.join(".scratch/pricing/duplicate.unit.spec"),
+            r#"
+id: pricing/duplicate
+kind: function
+intent:
+  why: Hidden scratch copy.
+body:
+  rust: "{ true }"
+"#,
+        )
+        .unwrap();
+        fs::write(
+            units_dir.join(".tmp-cache/pricing/ghost.unit.spec"),
+            r#"
+id: pricing/ghost
+kind: function
+intent:
+  why: Hidden temp copy.
+body:
+  rust: "{ true }"
+"#,
+        )
+        .unwrap();
+
+        let report = load_directory_report_bounded(&units_dir, library_root).unwrap();
+        assert_eq!(report.specs.len(), 1, "{report:?}");
+        assert_eq!(report.specs[0].spec.id, "pricing/apply");
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert!(report.warnings.is_empty(), "{report:?}");
+    }
+
+    #[test]
     #[cfg(unix)]
     fn test_load_molecule_test_directory_report_bounded_rejects_out_of_root_symlink_target() {
         use std::os::unix::fs as unix_fs;
@@ -977,6 +1037,70 @@ body:
             report.errors[0],
             SpecError::PlanSymlinkEscape { .. }
         ));
+    }
+
+    #[test]
+    fn test_load_molecule_test_directory_report_bounded_skips_hidden_scratch_subtrees() {
+        let temp_dir = TempDir::new().unwrap();
+        let library_root = temp_dir.path();
+        let units_dir = library_root.join("units");
+        fs::create_dir_all(units_dir.join("pricing")).unwrap();
+        fs::create_dir_all(units_dir.join(".scratch/pricing")).unwrap();
+        fs::create_dir_all(units_dir.join(".tmp-cache/pricing")).unwrap();
+        fs::write(
+            units_dir.join("pricing/checkout_flow.test.spec"),
+            r#"
+id: pricing/checkout_flow
+intent:
+  why: Visible molecule test.
+covers:
+  - pricing/apply
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+        )
+        .unwrap();
+        fs::write(
+            units_dir.join(".scratch/pricing/duplicate.test.spec"),
+            r#"
+id: pricing/duplicate_flow
+intent:
+  why: Hidden scratch molecule test.
+covers:
+  - pricing/apply
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+        )
+        .unwrap();
+        fs::write(
+            units_dir.join(".tmp-cache/pricing/ghost.test.spec"),
+            r#"
+id: pricing/ghost_flow
+intent:
+  why: Hidden temp molecule test.
+covers:
+  - pricing/apply
+body:
+  rust: |
+    {
+        assert!(true);
+    }
+"#,
+        )
+        .unwrap();
+
+        let report = load_molecule_test_directory_report_bounded(&units_dir, library_root).unwrap();
+        assert_eq!(report.tests.len(), 1, "{report:?}");
+        assert_eq!(report.tests[0].test.id, "pricing/checkout_flow");
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert!(report.warnings.is_empty(), "{report:?}");
     }
 
     #[test]
