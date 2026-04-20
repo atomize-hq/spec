@@ -236,6 +236,32 @@ shared = { path = "../shared-crate" }
     .unwrap();
 }
 
+fn write_m9_shared_round_crate_fixture(fixture: &M9RepoFixture) {
+    write_file(
+        &fixture.app_root,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    let shared_crate_root = fixture.app_root.parent().unwrap().join("shared-crate");
+    write_file(
+        &shared_crate_root,
+        "Cargo.toml",
+        r#"[package]
+name = "shared"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    );
+    write_file(
+        &shared_crate_root,
+        "src/lib.rs",
+        "pub mod money {\n    pub mod round {\n        pub fn round(value: i32) -> i32 {\n            value\n        }\n    }\n}\n",
+    );
+}
+
 fn setup_apply_discount_unit() -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -5370,6 +5396,52 @@ fn single_file_test_with_local_deps_succeeds() {
 }
 
 #[test]
+fn single_file_test_preserves_unrelated_generated_files() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let initial_build = run_in(
+        &ecommerce_dir,
+        &["build", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "initial full build should succeed for preservation test",
+        &initial_build,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file spec test should preserve unrelated generated files",
+        &output,
+    );
+
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/calculate_total.rs")
+            .exists(),
+        "single-file test should not prune unrelated generated siblings"
+    );
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/molecule_tests.rs")
+            .exists(),
+        "single-file test should not prune molecule_tests.rs from the shared output tree"
+    );
+}
+
+#[test]
 fn single_file_test_failure_writes_failing_passport() {
     if !cargo_available() {
         return;
@@ -6121,6 +6193,50 @@ fn single_file_generate_with_local_deps_succeeds() {
     assert!(
         !output_dir.join("pricing/checkout_quote.rs").exists(),
         "single-file generate should not pull in unrelated sibling units"
+    );
+}
+
+#[test]
+fn single_file_generate_preserves_unrelated_generated_files() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let initial_build = run_in(
+        &ecommerce_dir,
+        &["build", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "initial full build should succeed for generate preservation test",
+        &initial_build,
+    );
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "generate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--output",
+            "src/generated",
+        ],
+    );
+    assert_output_success(
+        "single-file generate should preserve unrelated generated files",
+        &output,
+    );
+
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/calculate_total.rs")
+            .exists(),
+        "single-file generate should not prune unrelated generated siblings"
+    );
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/molecule_tests.rs")
+            .exists(),
+        "single-file generate should not prune molecule_tests.rs from the shared output tree"
     );
 }
 
@@ -8644,6 +8760,157 @@ body:
             .join("units/pricing/checkout_quote.spec.passport.json")
             .exists(),
         "expected data seam passport after test"
+    );
+}
+
+#[test]
+fn single_file_test_accepts_data_seam_cross_library_method_dep_with_cargo_alias() {
+    if !cargo_available() {
+        return;
+    }
+
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_shared_round_crate_fixture(&fixture);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file spec test should accept cross-library method deps for data seams",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("units/pricing/checkout_quote.spec.passport.json")
+            .exists(),
+        "expected data seam passport after single-file test"
+    );
+}
+
+#[test]
+fn single_file_molecule_test_accepts_cross_library_data_seam_dep_with_cargo_alias() {
+    if !cargo_available() {
+        return;
+    }
+
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_shared_round_crate_fixture(&fixture);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_flow.test.spec",
+        r#"
+id: pricing/checkout_flow
+intent:
+  why: Verify the checkout quote seam through a molecule test.
+covers:
+  - pricing/checkout_quote
+body:
+  rust: |
+    {
+        let quote = CheckoutQuote::new(5);
+        assert_eq!(quote.total(), 5);
+    }
+"#,
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "test",
+            "units/pricing/checkout_flow.test.spec",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file molecule test should accept cross-library unit deps",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("units/pricing/checkout_flow.test.evidence.json")
+            .exists(),
+        "expected molecule evidence after single-file molecule test"
     );
 }
 

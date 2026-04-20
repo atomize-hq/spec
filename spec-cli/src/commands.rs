@@ -1,5 +1,6 @@
 use crate::config::{
-    ResolvedLibrary, WorkspaceConfigError, WorkspaceContext, load_workspace_context, repo_root_for,
+    ResolvedLibrary, WorkspaceConfigError, WorkspaceContext, load_workspace_context,
+    read_workspace_config_file, repo_root_for, rewrite_workspace_config_relative_paths,
 };
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
@@ -108,6 +109,12 @@ impl ValidationSpecCollection {
 const VALIDATE_JSON_SCHEMA_VERSION: u8 = 2;
 const STATUS_JSON_SCHEMA_VERSION: u8 = 3;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CleanupMode {
+    FullTreeCleanup,
+    ScopedNoCleanup,
+}
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -1698,7 +1705,12 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
             .expect("missing default crate root")
             .join("src/generated")
     });
-    let generated = generate_specs(path, &resolved_output, &project_root)?;
+    let cleanup_mode = if path.is_file() {
+        CleanupMode::ScopedNoCleanup
+    } else {
+        CleanupMode::FullTreeCleanup
+    };
+    let generated = generate_specs(path, &resolved_output, &project_root, cleanup_mode)?;
     if !generated.specs.is_empty() {
         finalize_passports(
             spec_root,
@@ -1711,7 +1723,12 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
+fn generate_specs(
+    path: &Path,
+    output: &Path,
+    project_root: &Path,
+    cleanup_mode: CleanupMode,
+) -> Result<GeneratedSpecs> {
     let context = load_workspace_context(path)?;
     let mut validation_specs = collect_validation_specs(path, &context)?;
     let specs: Vec<LoadedSpec> = validation_specs
@@ -1757,9 +1774,11 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
 
         let output_base = ensure_output_marker(output, project_root)?;
         let generated_rs_rel_paths = HashSet::<PathBuf>::new();
-        clean_output_dir(&output_base, &generated_rs_rel_paths, project_root).with_context(
-            || format!("Failed to clean output directory {}", output_base.display()),
-        )?;
+        if cleanup_mode == CleanupMode::FullTreeCleanup {
+            clean_output_dir(&output_base, &generated_rs_rel_paths, project_root).with_context(
+                || format!("Failed to clean output directory {}", output_base.display()),
+            )?;
+        }
 
         if !warnings.is_empty() {
             print_diagnostics(&warnings);
@@ -1926,8 +1945,11 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
     let molecule_test_file_count = molecule_test_paths.len();
     generated_rs_rel_paths.extend(molecule_test_paths);
 
-    clean_output_dir(&output_base, &generated_rs_rel_paths, project_root)
-        .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
+    if cleanup_mode == CleanupMode::FullTreeCleanup {
+        clean_output_dir(&output_base, &generated_rs_rel_paths, project_root).with_context(
+            || format!("Failed to clean output directory {}", output_base.display()),
+        )?;
+    }
 
     let generated_at = rfc3339_now();
 
@@ -2224,7 +2246,12 @@ fn build_command(
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(path, &resolved_output, &ctx.project_root)?;
+    let generated = generate_specs(
+        path,
+        &resolved_output,
+        &ctx.project_root,
+        CleanupMode::FullTreeCleanup,
+    )?;
     if !generated.specs.is_empty() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
     }
@@ -2373,7 +2400,17 @@ fn test_command(
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
 
-    let generated = generate_specs(&generation_scope, &resolved_output, &ctx.project_root)?;
+    let cleanup_mode = if path.is_file() {
+        CleanupMode::ScopedNoCleanup
+    } else {
+        CleanupMode::FullTreeCleanup
+    };
+    let generated = generate_specs(
+        &generation_scope,
+        &resolved_output,
+        &ctx.project_root,
+        cleanup_mode,
+    )?;
     let _single_file_generation_scope = single_file_generation_scope;
     if target_spec.is_none() && target_molecule_test.is_none() {
         finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
@@ -3327,8 +3364,12 @@ fn materialize_single_file_generation_scope(
 
     let spec_toml = library_root.join("spec.toml");
     if spec_toml.is_file() {
-        fs::copy(&spec_toml, temp_dir.path().join("spec.toml"))
-            .with_context(|| format!("Failed to copy {}", spec_toml.display()))?;
+        let config = read_workspace_config_file(&spec_toml)?;
+        let rewritten = rewrite_workspace_config_relative_paths(&config, library_root);
+        let serialized = toml::to_string_pretty(&rewritten)
+            .with_context(|| format!("Failed to serialize {}", spec_toml.display()))?;
+        fs::write(temp_dir.path().join("spec.toml"), serialized)
+            .with_context(|| format!("Failed to write {}", spec_toml.display()))?;
     }
 
     for spec in specs {
@@ -4724,7 +4765,12 @@ body:
             "expected SPEC_RESERVED_UNIT_NAME, got: {validation_errors:?}"
         );
 
-        let err = match generate_specs(&units_dir, &output_dir, temp_dir.path()) {
+        let err = match generate_specs(
+            &units_dir,
+            &output_dir,
+            temp_dir.path(),
+            CleanupMode::FullTreeCleanup,
+        ) {
             Ok(_) => panic!("expected reserved namespace validation to fail"),
             Err(err) => err.to_string(),
         };
@@ -4774,6 +4820,39 @@ body:
             "cargo doc failed\nstdout:\n{}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn materialize_single_file_generation_scope_rewrites_relative_library_paths_in_temp_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path().join("repo");
+        let app_root = repo_root.join("app-spec");
+        let shared_root = repo_root.join("shared-spec");
+        fs::create_dir_all(&app_root).unwrap();
+        fs::create_dir_all(&shared_root).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: .git/modules/spec-tests\n").unwrap();
+        fs::write(
+            app_root.join("spec.toml"),
+            "[pipeline]\ncrate_root = \"../app-crate\"\ncargo_target_dir = \"../target/spec\"\n[libraries]\nshared = \"../shared-spec\"\n",
+        )
+        .unwrap();
+
+        let temp_scope = materialize_single_file_generation_scope(&app_root, &[], &[]).unwrap();
+        let materialized =
+            read_workspace_config_file(&temp_scope.path().join("spec.toml")).unwrap();
+
+        assert_eq!(
+            materialized.libraries.get("shared"),
+            Some(&repo_root.join("shared-spec"))
+        );
+        assert_eq!(
+            materialized.pipeline.crate_root,
+            Some(repo_root.join("app-crate"))
+        );
+        assert_eq!(
+            materialized.pipeline.cargo_target_dir,
+            Some(repo_root.join("target/spec"))
         );
     }
 
