@@ -9165,6 +9165,13 @@ fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
         "rust_decimal::Decimal"
     );
     assert_eq!(passport["evidence"]["test_results"][0]["status"], "pass");
+    assert!(
+        passport["contract_hash"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:"),
+        "{passport}"
+    );
 
     let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
     let status_json = parse_stdout_json(&status_output);
@@ -9174,6 +9181,205 @@ fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
         .find(|entry| entry["id"] == "pricing/checkout_quote")
         .expect("expected checkout_quote status row");
     assert_eq!(checkout_quote["status"], "valid");
+}
+
+#[test]
+fn data_seam_status_stale_after_intent_change() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("single-file data seam test should succeed", &output);
+
+    let spec_path = project_dir.join("units/pricing/checkout_quote.unit.spec");
+    let updated = fs::read_to_string(&spec_path).unwrap().replace(
+        "Quote a checkout total from subtotal plus discount and tax rates.",
+        "Quote a checkout total with updated intent wording.",
+    );
+    fs::write(&spec_path, updated).unwrap();
+
+    let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status should be non-zero for stale data seam"
+    );
+
+    let status_json = parse_stdout_json(&status_output);
+    let units = status_units(&status_json);
+    let checkout_quote = units
+        .iter()
+        .find(|entry| entry["id"] == "pricing/checkout_quote")
+        .expect("expected checkout_quote status row");
+    assert_eq!(checkout_quote["status"], "stale");
+    assert_eq!(checkout_quote["reason"], "contract changed since last test");
+}
+
+#[test]
+fn validate_json_reports_missing_data_method_dep() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return the final checkout total.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/definitely_missing
+    lowering:
+      rust:
+        body: |
+          {
+              self.subtotal
+          }
+"#,
+    );
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "validate should fail for missing data method dep"
+    );
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|err| err["dep"] == "pricing/definitely_missing"),
+        "{json}"
+    );
+}
+
+#[test]
+fn validate_json_reports_data_seam_cycle() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path().join("data-cycle");
+    let units_dir = project_dir.join("units");
+
+    write_file(
+        &project_dir,
+        "Cargo.toml",
+        "[package]\nname = \"data-cycle\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    );
+    write_file(
+        &project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    write_spec(
+        &units_dir,
+        "pricing/alpha.unit.spec",
+        r#"
+id: pricing/alpha
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Alpha seam.
+data:
+  fields:
+    subtotal:
+      type: i32
+methods:
+  - id: total
+    intent:
+      why: Return alpha.
+    receiver: shared_ref
+    deps:
+      - pricing/beta
+    lowering:
+      rust:
+        body: |
+          {
+              self.subtotal
+          }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/beta.unit.spec",
+        r#"
+id: pricing/beta
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Beta seam.
+data:
+  fields:
+    subtotal:
+      type: i32
+methods:
+  - id: total
+    intent:
+      why: Return beta.
+    receiver: shared_ref
+    deps:
+      - pricing/alpha
+    lowering:
+      rust:
+        body: |
+          {
+              self.subtotal
+          }
+"#,
+    );
+
+    let output = run_in(&project_dir, &["validate", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for data seam cycle"
+    );
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors.iter().any(|err| err["cycle"]
+            == serde_json::json!(["pricing/alpha", "pricing/beta", "pricing/alpha"])),
+        "{json}"
+    );
 }
 
 #[test]

@@ -4,6 +4,7 @@
 //! 1. JSON Schema validation (using embedded unit.spec.json)
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
+use crate::graph::top_level_deps;
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
     Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec, MethodReceiver,
@@ -57,7 +58,7 @@ impl<'a> QualifiedLoadedSpec<'a> {
     }
 
     pub fn local(loaded: &'a LoadedSpec) -> std::result::Result<Self, DepRefParseError> {
-        let dep_refs = parse_dep_refs(&loaded.spec.deps)?;
+        let dep_refs = parse_dep_refs(&top_level_deps(loaded))?;
         Ok(Self {
             loaded,
             qualified_id: QualifiedUnitRef::local(loaded.spec.id.clone()),
@@ -558,6 +559,7 @@ fn validate_data_constructors(spec: &LoadedSpec) -> Result<()> {
 
 fn validate_data_methods(spec: &LoadedSpec) -> Result<()> {
     let mut seen_ids = HashSet::new();
+    let owner_callable_name = callable_name(&spec.spec.id);
 
     for (index, method) in spec.spec.extensions.methods.iter().enumerate() {
         if !seen_ids.insert(method.id.as_str()) {
@@ -584,6 +586,50 @@ fn validate_data_methods(spec: &LoadedSpec) -> Result<()> {
                 &format!("methods[{index}].contract"),
                 &spec.source.file_path,
             )?;
+        }
+
+        let dep_refs = parse_dep_refs(&method.deps).map_err(|err| {
+            semantic_error(
+                spec,
+                format!("methods[{index}].deps contains invalid dep: {err}"),
+            )
+        })?;
+        for dep in &dep_refs {
+            validate_dep_ref_keywords(dep, &spec.source.file_path).map_err(|err| {
+                semantic_error(
+                    spec,
+                    format!(
+                        "methods[{index}].deps contains invalid dep '{}': {err}",
+                        dep
+                    ),
+                )
+            })?;
+        }
+        if let Some(authored_dep) = method
+            .deps
+            .iter()
+            .zip(dep_refs.iter())
+            .find(|(_, dep)| dep.callable_name() == owner_callable_name)
+            .map(|(authored_dep, _)| authored_dep)
+        {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "methods[{index}].deps contains self-dep collision between '{}' and '{}'",
+                    authored_dep, spec.spec.id
+                ),
+            ));
+        }
+        if let Some((dep1, dep2)) = has_dep_ref_collision(&dep_refs) {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "methods[{index}].deps has callable collision: '{}' and '{}' both resolve to '{}'",
+                    dep1,
+                    dep2,
+                    dep1.callable_name()
+                ),
+            ));
         }
 
         let rust_body = method
@@ -1670,6 +1716,52 @@ local_tests:
             err.contains("constructors[0].contract.returns is not allowed"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_invalid_method_dep() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.methods[0].deps = vec!["not a dep".to_string()];
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("methods[0].deps contains invalid dep"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_deps_exist_reports_missing_data_method_dep() {
+        let spec = create_data_spec("pricing/checkout_quote");
+
+        let (errors, warnings) = validate_deps_exist(&[spec]);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        match &errors[0] {
+            SpecError::MissingDep { dep, .. } => assert_eq!(dep, "pricing/apply_tax"),
+            other => panic!("expected MissingDep, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_detect_cycles_reports_data_method_cycle() {
+        let mut alpha = create_data_spec("pricing/alpha");
+        alpha.spec.extensions.methods[0].deps = vec!["pricing/beta".to_string()];
+
+        let mut beta = create_data_spec("pricing/beta");
+        beta.spec.extensions.methods[0].deps = vec!["pricing/alpha".to_string()];
+
+        let errors = detect_cycles(&[alpha, beta]);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        match &errors[0] {
+            SpecError::CyclicDep { cycle_path, .. } => {
+                assert_eq!(
+                    cycle_path,
+                    &["pricing/alpha", "pricing/beta", "pricing/alpha"]
+                );
+            }
+            other => panic!("expected CyclicDep, got {other:?}"),
+        }
     }
 
     #[test]

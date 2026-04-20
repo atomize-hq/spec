@@ -220,7 +220,7 @@ impl SpecGraph {
     }
 }
 
-pub(crate) fn top_level_deps(spec: &LoadedSpec) -> Vec<String> {
+pub fn top_level_deps(spec: &LoadedSpec) -> Vec<String> {
     match spec.spec.unit_kind() {
         Ok(UnitKind::Data) => {
             let mut deps = Vec::new();

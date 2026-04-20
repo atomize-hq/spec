@@ -164,13 +164,35 @@ pub fn build_passport_with_evidence(
     }
 }
 
-/// Compute SHA-256 of the serialized contract field.
+#[derive(Serialize)]
+struct DataSeamHashSurface<'a> {
+    intent: &'a str,
+    data: Option<&'a AuthoredDataShape>,
+    constructors: &'a [AuthoredConstructor],
+    methods: &'a [AuthoredMethod],
+    backends: Option<&'a AuthoredBackends>,
+}
+
+/// Compute SHA-256 of the unit's top-level truth surface.
 ///
-/// Returns `None` when the spec has no contract block.
+/// Function units hash only the legacy top-level `contract` surface.
+/// Data seams hash the seam's authored top-level truth.
 pub fn compute_contract_hash(spec: &LoadedSpec) -> Option<String> {
-    let contract = spec.spec.contract.as_ref()?;
-    let json = serde_json::to_string(contract)
-        .expect("contract serialization cannot fail for well-formed spec");
+    let json = match spec.spec.unit_kind() {
+        Ok(UnitKind::Data) => serde_json::to_string(&DataSeamHashSurface {
+            intent: &spec.spec.intent.why,
+            data: spec.spec.extensions.data.as_ref(),
+            constructors: &spec.spec.extensions.constructors,
+            methods: &spec.spec.extensions.methods,
+            backends: spec.spec.extensions.backends.as_ref(),
+        })
+        .expect("data seam hash serialization cannot fail for well-formed spec"),
+        _ => {
+            let contract = spec.spec.contract.as_ref()?;
+            serde_json::to_string(contract)
+                .expect("contract serialization cannot fail for well-formed spec")
+        }
+    };
     let hash = Sha256::digest(json.as_bytes());
     Some(format!("sha256:{}", hex::encode(hash)))
 }
@@ -694,6 +716,51 @@ mod tests {
         assert_ne!(
             compute_contract_hash(&spec_ab),
             compute_contract_hash(&spec_ba)
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_present_for_data_seam() {
+        let spec = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+
+        assert!(
+            compute_contract_hash(&spec).is_some(),
+            "data seams must write a top-level truth hash"
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_changes_on_data_seam_intent_change() {
+        let spec_original = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.intent.why = "Changed seam intent".to_string();
+
+        assert_ne!(
+            compute_contract_hash(&spec_original),
+            compute_contract_hash(&spec_changed)
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_changes_on_data_seam_method_truth_change() {
+        let spec_original = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.extensions.methods[1]
+            .deps
+            .push("money/round".to_string());
+
+        assert_ne!(
+            compute_contract_hash(&spec_original),
+            compute_contract_hash(&spec_changed)
         );
     }
 

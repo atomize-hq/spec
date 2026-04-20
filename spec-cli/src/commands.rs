@@ -9,6 +9,7 @@ use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
     generate_unit_code_with_options, safe_output_path_with_project_root, write_generated_file,
 };
+use spec_core::graph::top_level_deps;
 use spec_core::loader::{
     DirectoryLoadReport, discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec,
     load_directory_report, load_directory_report_bounded, load_file, load_molecule_test_directory,
@@ -3770,9 +3771,10 @@ fn qualify_loaded_spec<'a>(
     known_library_aliases: &HashSet<&str>,
     errors: &mut Vec<spec_core::SpecError>,
 ) -> QualifiedLoadedSpec<'a> {
-    let mut qualified_deps = Vec::with_capacity(loaded.spec.deps.len());
+    let authored_deps = top_level_deps(loaded);
+    let mut qualified_deps = Vec::with_capacity(authored_deps.len());
 
-    for authored_dep in &loaded.spec.deps {
+    for authored_dep in &authored_deps {
         let dep = match DepRef::parse(authored_dep) {
             Ok(dep) => dep,
             Err(err) => {
