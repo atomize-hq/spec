@@ -31,12 +31,13 @@ methods:
     receiver: shared_ref
     contract:
       returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
     lowering:
       rust:
         body: |
           {
-              let discounted = self.subtotal - self.subtotal * self.discount_rate;
-              discounted.max(rust_decimal::Decimal::ZERO)
+              apply_discount(self.subtotal, self.discount_rate)
           }
   - id: total
     intent:
@@ -44,12 +45,13 @@ methods:
     receiver: shared_ref
     contract:
       returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_tax
     lowering:
       rust:
         body: |
           {
-              let discounted = self.discounted_subtotal();
-              discounted + discounted * self.tax_rate
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
           }
 local_tests:
   - id: discounted_subtotal_basic

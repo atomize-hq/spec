@@ -127,6 +127,69 @@ spec_version: "{AUTHORED_SPEC_VERSION}"
     );
 }
 
+fn write_m9_data_seam(dir: &Path, relative_path: &str, id: &str, deps: &[&str]) {
+    let deps_yaml = if deps.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "    deps:\n{}\n",
+            deps.iter()
+                .map(|dep| format!("      - {dep}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
+
+    write_spec(
+        dir,
+        relative_path,
+        &format!(
+            r#"
+id: {id}
+kind: data
+intent:
+  why: Exercise M9 cross-library alias discovery for data seams.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+data:
+  fields:
+    subtotal:
+      type: i32
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: i32
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: i32
+{deps_yaml}    lowering:
+      rust:
+        body: |
+          {{
+              round(self.subtotal)
+          }}
+local_tests:
+  - id: happy_path
+    expect: CheckoutQuote::new(5).total() == 5
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#
+        ),
+    );
+}
+
 fn write_m9_app_cargo_toml(app_root: &Path, dependency_aliases: &[&str]) {
     let dependency_lines = dependency_aliases
         .iter()
@@ -469,14 +532,12 @@ methods:
     contract:
       returns: rust_decimal::Decimal
     deps:
-      - pricing/apply_discount
       - pricing/apply_tax
     lowering:
       rust:
         body: |
           {
-              let discounted = apply_discount(self.subtotal, self.discount_rate);
-              apply_tax(discounted, self.tax_rate)
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
           }
 local_tests:
   - id: total_basic
@@ -7174,6 +7235,136 @@ fn validate_rejects_missing_library_crate_alias() {
 }
 
 #[test]
+fn validate_json_accepts_data_seam_cross_library_method_dep_with_cargo_alias() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success(
+        "validate should accept cross-library method deps for data seams",
+        &output,
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "valid");
+}
+
+#[test]
+fn validate_json_reports_missing_library_crate_alias_for_data_seam_method_dep() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &[]);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "validate should fail when the Cargo alias is missing"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "expected SPEC_LIBRARY_CRATE_ALIAS_MISSING, got: {errors:?}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_UNKNOWN_LIBRARY_NAMESPACE"),
+        "unexpected SPEC_UNKNOWN_LIBRARY_NAMESPACE, got: {errors:?}"
+    );
+}
+
+#[test]
 fn validate_json_reports_library_manifest_errors_without_alias_misdiagnosis() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -7837,6 +8028,61 @@ fn generate_rejects_missing_library_crate_alias_before_writing_output() {
 }
 
 #[test]
+fn generate_accepts_data_seam_cross_library_method_dep_with_cargo_alias() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "generate should accept cross-library method deps for data seams",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("src/generated/pricing/checkout_quote.rs")
+            .exists(),
+        "expected generated data seam output"
+    );
+}
+
+#[test]
 fn generate_rejects_invalid_library_manifest_before_writing_output() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -8309,6 +8555,156 @@ fn status_marks_missing_library_crate_alias_as_invalid() {
             .iter()
             .any(|error| error["code"] == "SPEC_CROSS_LIBRARY_DEP_NOT_FOUND"),
         "unexpected dep-not-found error, got: {errors:?}"
+    );
+}
+
+#[test]
+fn test_accepts_data_seam_cross_library_method_dep_with_cargo_alias() {
+    if !cargo_available() {
+        return;
+    }
+
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_file(
+        &fixture.app_root,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    let shared_crate_root = fixture.app_root.parent().unwrap().join("shared-crate");
+    write_file(
+        &shared_crate_root,
+        "Cargo.toml",
+        r#"[package]
+name = "shared"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    );
+    write_file(
+        &shared_crate_root,
+        "src/lib.rs",
+        "pub mod money {\n    pub mod round {\n        pub fn round(value: i32) -> i32 {\n            value\n        }\n    }\n}\n",
+    );
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "test should accept cross-library method deps for data seams",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("units/pricing/checkout_quote.spec.passport.json")
+            .exists(),
+        "expected data seam passport after test"
+    );
+}
+
+#[test]
+fn status_marks_missing_library_crate_alias_as_invalid_for_data_seam_method_dep() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &[]);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "status should fail when the Cargo alias is missing"
+    );
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "invalid");
+    let errors = units[0]["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "expected SPEC_LIBRARY_CRATE_ALIAS_MISSING, got: {errors:?}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_UNKNOWN_LIBRARY_NAMESPACE"),
+        "unexpected SPEC_UNKNOWN_LIBRARY_NAMESPACE, got: {errors:?}"
     );
 }
 

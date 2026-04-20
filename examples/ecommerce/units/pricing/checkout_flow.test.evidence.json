@@ -8,14 +8,14 @@
     "pricing/checkout_quote"
   ],
   "status": "pass",
-  "observed_at": "2026-04-20T01:51:12Z",
-  "test_body_hash": "sha256:eb4c1b0e2df0942adf4187f987398ef0a0571ad2235c68a60d2ea5e4f9af0365",
+  "observed_at": "2026-04-20T11:11:03Z",
+  "test_body_hash": "sha256:7a41cd4d0d15d90019c71c4d09de8a10982084eb98edfcd7152ebd42b35b1408",
   "covered_unit_contract_hashes": {
     "pricing/apply_discount": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb",
     "pricing/calculate_total": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92",
-    "pricing/checkout_quote": "sha256:90f974e8f8c13db0270a2befd0e5d1a5fc12d5659f3a66dda3d784f0a25cba36"
+    "pricing/checkout_quote": "sha256:695d9bfd431059f5d8c63d717f2953bd1a03db50a9b8c70309791d4b6d3bbefb"
   },
   "provenance": {
-    "git_commit_sha": "3dab39a6488d96c616b58226d106f625fe3cabec"
+    "git_commit_sha": "51166f3d3d64d4293e91281eb28d62f0e77f8f77"
   }
 }

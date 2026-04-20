@@ -33,7 +33,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn total_matches_expected_amount() {
+    fn computes_happy_path_totals_without_generated_helpers() {
         let quote = CheckoutQuote::new(
             Decimal::new(10000, 2),
             Decimal::new(10, 2),
@@ -42,5 +42,17 @@ mod tests {
 
         assert_eq!(quote.discounted_subtotal(), Decimal::new(9000, 2));
         assert_eq!(quote.total(), Decimal::new(96525, 3));
+    }
+
+    #[test]
+    fn computes_rounding_sensitive_totals_without_generated_helpers() {
+        let quote = CheckoutQuote::new(
+            Decimal::new(1001, 2),
+            Decimal::new(3333, 4),
+            Decimal::new(725, 4),
+        );
+
+        assert_eq!(quote.discounted_subtotal(), Decimal::new(6673667, 6));
+        assert_eq!(quote.total(), Decimal::new(71575078575, 10));
     }
 }

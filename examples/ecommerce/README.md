@@ -10,9 +10,9 @@ The canonical in-repo copy also ships tracked molecule evidence for the two pric
 - Raw Rust baseline: `src/raw_baseline/pricing/checkout_quote.rs`
 - Migrated seam: `units/pricing/checkout_quote.unit.spec`
 
-Both implement the same pricing job: accept a subtotal plus discount and tax rates, expose `discounted_subtotal()`, and expose `total()`. The hand-written module shows the pre-`spec` baseline. The `kind: data` seam shows the M12 authored version that `spec build` lowers into generated Rust.
+Both implement the same pricing job: accept a subtotal plus discount and tax rates, compute `discounted_subtotal()`, and expose `total()`. The hand-written module shows the pre-`spec` baseline implementation of that behavior. The `kind: data` seam shows the M12 authored version that `spec build` lowers into generated Rust.
 
-The existing `units/pricing/checkout_flow.test.spec` molecule test now covers the migrated seam and compares its result against the pre-existing function-based checkout flow.
+The existing `units/pricing/checkout_flow.test.spec` molecule test now covers the migrated seam and compares both a happy path and a rounding-sensitive input against the pre-existing function-based checkout flow.
 
 ## Build / verify
 

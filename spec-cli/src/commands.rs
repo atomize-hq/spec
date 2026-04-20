@@ -3572,8 +3572,8 @@ fn direct_root_library_aliases<'a>(
     let mut aliases = BTreeMap::new();
 
     for spec in root_specs {
-        for dep in &spec.spec.deps {
-            let Ok(dep_ref) = DepRef::parse(dep) else {
+        for dep in top_level_deps(spec) {
+            let Ok(dep_ref) = DepRef::parse(&dep) else {
                 continue;
             };
             if let Some(alias) = dep_ref.library_alias() {
