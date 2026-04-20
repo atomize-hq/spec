@@ -219,6 +219,7 @@ pub fn generate_data_seam_code_with_options(
     let lowering = lower_data_seam(unit)?;
     let dep_statements = build_dep_statements(&lowering.deps, &unit.id)?;
     validate_data_inherent_callables(unit, &lowering)?;
+    validate_data_derives(unit, &lowering)?;
     let mut output = String::new();
 
     for statement in dep_statements {
@@ -270,6 +271,19 @@ fn validate_data_inherent_callables(
                 unit.id, callable_name, first, second
             ),
         });
+    }
+
+    Ok(())
+}
+
+fn validate_data_derives(unit: &NormalizedDataSeam, lowering: &RustDataSeamLowering) -> Result<()> {
+    for (index, derive) in lowering.derives.iter().enumerate() {
+        syn::parse_str::<syn::Path>(derive).map_err(|err| SpecError::Generator {
+            message: format!(
+                "data seam '{}' has invalid backends.rust.derives[{}] '{}': {}",
+                unit.id, index, derive, err
+            ),
+        })?;
     }
 
     Ok(())
@@ -1543,6 +1557,19 @@ mod tests {
 
         let err = generate_data_seam_code(&seam).unwrap_err().to_string();
         assert!(err.contains("duplicate inherent callable 'new'"), "{err}");
+        assert!(err.contains("pricing/checkout_quote"), "{err}");
+    }
+
+    #[test]
+    fn generate_data_seam_code_rejects_invalid_derive_path() {
+        let mut seam = test_data_seam();
+        seam.rust_backend.derives = vec!["not valid rust".to_string()];
+
+        let err = generate_data_seam_code(&seam).unwrap_err().to_string();
+        assert!(
+            err.contains("invalid backends.rust.derives[0] 'not valid rust'"),
+            "{err}"
+        );
         assert!(err.contains("pricing/checkout_quote"), "{err}");
     }
 

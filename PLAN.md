@@ -590,7 +590,7 @@ M12 is partially parallelizable after the kind contract is locked.
 
 - A user can author one `kind: data` seam with:
   - ordered fields
-  - one declarative constructor
+  - one or more declarative constructors
   - one or more shared-ref methods
   - seam-owned local tests
 - The authored model cleanly separates:

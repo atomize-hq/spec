@@ -7974,6 +7974,193 @@ methods:
 }
 
 #[test]
+fn validate_json_rejects_kind_data_without_constructors() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one schema error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert!(error["unit"].is_null(), "{error:?}");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing required field: \"constructors\""),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_kind_data_with_empty_constructors() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors: []
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one schema error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert!(error["unit"].is_null(), "{error:?}");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("[] has less than 1 item (at /constructors)"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_kind_data_with_empty_methods() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods: []
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one schema error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert!(error["unit"].is_null(), "{error:?}");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("[] has less than 1 item (at /methods)"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
 fn validate_json_rejects_data_method_without_contract() {
     let temp_dir = temp_repo_dir();
     let spec_path = temp_dir
@@ -8039,6 +8226,82 @@ methods:
             .as_str()
             .unwrap()
             .contains("missing required field: \"contract\""),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_invalid_data_rust_backend_derive() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+backends:
+  rust:
+    derives:
+      - not valid rust
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one semantic error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SEMANTIC_VALIDATION");
+    assert_eq!(error["unit"], "pricing/checkout_quote");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("backends.rust.derives[0] must be a valid Rust path"),
         "unexpected error payload: {error:?}"
     );
 }

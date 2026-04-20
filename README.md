@@ -60,7 +60,7 @@ Kind-specific authored fields:
 | `kind` | Required authored fields | Optional authored fields | Forbidden top-level fields |
 | --- | --- | --- | --- |
 | `function` | `contract`, `body.rust` | `deps`, `imports`, `local_tests`, `links` | none |
-| `data` | `data.fields`, `constructors`, `methods` | `local_tests`, `links`, `backends.rust` | `contract`, `deps`, `imports`, `body.rust` |
+| `data` | `data.fields`, one or more `constructors`, one or more `methods` | `local_tests`, `links`, `backends.rust` | `contract`, `deps`, `imports`, `body.rust` |
 
 For `kind: function`, `spec` generates the complete `pub fn` signature from `contract.inputs` and `contract.returns`. A minimal unit with a contract looks like:
 
@@ -93,7 +93,7 @@ pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
 }
 ```
 
-For `kind: data`, one `.unit.spec` file authors a top-level data seam with shared fields plus nested constructors and methods. A minimal seam based on the canonical M12 `pricing/checkout_quote` example looks like:
+For `kind: data`, one `.unit.spec` file authors a top-level data seam with shared fields plus one or more nested constructors and one or more nested methods. A minimal seam based on the canonical M12 `pricing/checkout_quote` example looks like:
 
 ```yaml
 id: pricing/checkout_quote

@@ -272,6 +272,8 @@ fn validate_function_semantic(spec: &LoadedSpec, options: &ValidationOptions) ->
 fn validate_data_semantic(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
     validate_data_escape_hatches(spec)?;
     validate_data_fields(spec)?;
+    validate_data_behavior_presence(spec)?;
+    validate_data_rust_backend(spec)?;
     let constructors = validate_data_constructors(spec)?;
     let methods = validate_data_methods(spec)?;
     validate_data_seam_collisions(spec, &constructors, &methods)?;
@@ -481,6 +483,47 @@ fn validate_data_fields(spec: &LoadedSpec) -> Result<()> {
                 message: err.to_string(),
                 path: spec.source.file_path.clone(),
             }
+        })?;
+    }
+
+    Ok(())
+}
+
+fn validate_data_behavior_presence(spec: &LoadedSpec) -> Result<()> {
+    if spec.spec.extensions.constructors.is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:data requires at least one constructor",
+        ));
+    }
+    if spec.spec.extensions.methods.is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:data requires at least one method",
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_data_rust_backend(spec: &LoadedSpec) -> Result<()> {
+    let derives = spec
+        .spec
+        .extensions
+        .backends
+        .as_ref()
+        .and_then(|backends| backends.rust.as_ref())
+        .map(|rust| rust.derives.as_slice())
+        .unwrap_or(&[]);
+
+    for (index, derive) in derives.iter().enumerate() {
+        syn::parse_str::<syn::Path>(derive).map_err(|err| {
+            semantic_error(
+                spec,
+                format!(
+                    "backends.rust.derives[{index}] must be a valid Rust path; got '{derive}': {err}"
+                ),
+            )
         })?;
     }
 
@@ -1381,6 +1424,77 @@ backends:
     }
 
     #[test]
+    fn test_validate_raw_yaml_rejects_kind_data_without_constructors() {
+        let yaml = r#"
+id: pricing/checkout_quote
+kind: data
+intent:
+  why: Quote a checkout total.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {
+              self.subtotal
+          }
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+
+        let err = validate_raw_yaml(&value, "test.unit.spec")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Schema validation failed"), "{err}");
+        assert!(
+            err.contains("missing required field: \"constructors\""),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_raw_yaml_rejects_kind_data_with_empty_methods() {
+        let yaml = r#"
+id: pricing/checkout_quote
+kind: data
+intent:
+  why: Quote a checkout total.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods: []
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+
+        let err = validate_raw_yaml(&value, "test.unit.spec")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Schema validation failed"), "{err}");
+        assert!(
+            err.contains("[] has less than 1 item (at /methods)"),
+            "{err}"
+        );
+    }
+
+    #[test]
     fn imports_field_validates_rust_path() {
         let valid = r#"
 id: pricing/apply_discount
@@ -1724,6 +1838,30 @@ local_tests:
     }
 
     #[test]
+    fn test_validate_data_semantic_rejects_missing_constructor_behavior() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.constructors.clear();
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("kind:data requires at least one constructor"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_missing_method_behavior() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.extensions.methods.clear();
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("kind:data requires at least one method"),
+            "{err}"
+        );
+    }
+
+    #[test]
     fn test_validate_data_semantic_allows_identical_cross_method_dep_reuse() {
         let mut spec = create_data_spec("pricing/checkout_quote");
         spec.spec
@@ -1731,6 +1869,45 @@ local_tests:
             .methods
             .push(spec.spec.extensions.methods[0].clone());
         spec.spec.extensions.methods[1].id = "tax_preview".to_string();
+
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_invalid_rust_backend_derive() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec
+            .extensions
+            .backends
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .derives = vec!["not valid rust".to_string()];
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("backends.rust.derives[0] must be a valid Rust path"),
+            "{err}"
+        );
+        assert!(err.contains("not valid rust"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_accepts_multi_segment_rust_backend_derive() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec
+            .extensions
+            .backends
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .derives
+            .push("serde::Serialize".to_string());
 
         let result = validate_semantic(&spec);
         assert!(result.is_ok(), "{result:?}");
