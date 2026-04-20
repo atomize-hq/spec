@@ -227,6 +227,7 @@ mod tests {
                 local_tests: vec![],
                 links: None,
                 spec_version: Some("0.3.0".to_string()),
+                extensions: crate::types::UnitExtensions::default(),
             },
         }
     }

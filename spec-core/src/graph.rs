@@ -258,6 +258,7 @@ mod tests {
                     molecule_tests: molecule_tests.into_iter().map(str::to_string).collect(),
                 }),
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         }
     }

@@ -813,6 +813,7 @@ mod tests {
                 local_tests: vec![],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         }
     }
@@ -1147,6 +1148,7 @@ local_tests:
                 local_tests: vec![],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1244,6 +1246,7 @@ local_tests:
                 local_tests: vec![],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
         let result = validate_semantic(&spec);
@@ -1349,6 +1352,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
         let err = validate_semantic(&spec).unwrap_err().to_string();
@@ -1384,6 +1388,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
         assert!(validate_semantic(&spec).is_ok());
@@ -1415,6 +1420,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1457,6 +1463,7 @@ local_tests:
                 ],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1493,6 +1500,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
         let err = validate_semantic(&spec).unwrap_err().to_string();
@@ -1528,6 +1536,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1564,6 +1573,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1600,6 +1610,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1636,6 +1647,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1672,6 +1684,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1708,6 +1721,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1744,6 +1758,7 @@ local_tests:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         };
 
@@ -1784,6 +1799,7 @@ local_tests:
                 local_tests: vec![],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         }
     }
@@ -2174,6 +2190,7 @@ body:
                 }],
                 links: None,
                 spec_version: None,
+                extensions: crate::types::UnitExtensions::default(),
             },
         })
         .unwrap_err();

@@ -314,6 +314,7 @@ mod tests {
                 }],
                 links: None,
                 spec_version: Some("9.9.9".to_string()),
+                extensions: crate::types::UnitExtensions::default(),
             },
         }
     }

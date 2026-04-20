@@ -338,6 +338,7 @@ mod tests {
                     .collect(),
                 links: None,
                 spec_version: spec_version.map(String::from),
+                extensions: crate::types::UnitExtensions::default(),
             },
         }
     }
