@@ -610,18 +610,11 @@ impl NormalizedDataSeam {
             })
             .collect::<Vec<_>>();
 
-        let mut deps = Vec::new();
         let methods = spec
             .extensions
             .methods
             .iter()
             .map(|method| {
-                for dep in &method.deps {
-                    if !deps.contains(dep) {
-                        deps.push(dep.clone());
-                    }
-                }
-
                 Ok(NormalizedMethod {
                     id: method.id.clone(),
                     intent_why: method.intent.why.clone(),
@@ -639,6 +632,11 @@ impl NormalizedDataSeam {
                 })
             })
             .collect::<std::result::Result<Vec<_>, String>>()?;
+        let deps = ordered_unique_deps(
+            methods
+                .iter()
+                .flat_map(|method| method.deps.iter().map(String::as_str)),
+        );
 
         Ok(Self {
             type_name: type_name_for_unit_id(&spec.id),
@@ -703,6 +701,16 @@ pub fn dep_unit_id(dep_id: &str) -> &str {
         .split_once("::")
         .map(|(_, unit_id)| unit_id)
         .unwrap_or(dep_id)
+}
+
+pub fn ordered_unique_deps<'a>(deps: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut unique = Vec::new();
+    for dep in deps {
+        if !unique.iter().any(|existing| existing == dep) {
+            unique.push(dep.to_string());
+        }
+    }
+    unique
 }
 
 /// Check for callable-name collisions across arbitrary hierarchical IDs.

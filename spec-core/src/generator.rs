@@ -948,9 +948,11 @@ mod tests {
     use super::*;
     use crate::syntax::{ExpectExprErrorKind, validate_expect_expr};
     use crate::types::{
-        Body, Contract, Intent, LocalTest, MethodReceiver, NormalizedConstructor,
-        NormalizedDataField, NormalizedDataSeam, NormalizedMethod, NormalizedUnit,
-        ResolvedMoleculeTest, ResolvedSpec, RustDataSeamBackend, SpecStruct,
+        AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
+        AuthoredMethodLowering, AuthoredRustMethodLowering, Body, Contract, Intent, LocalTest,
+        MethodReceiver, NormalizedConstructor, NormalizedDataField, NormalizedDataSeam,
+        NormalizedMethod, NormalizedUnit, ResolvedMoleculeTest, ResolvedSpec, RustDataSeamBackend,
+        SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
     #[cfg(unix)]
@@ -1443,6 +1445,95 @@ mod tests {
         assert!(err.contains("Dep fn_name collision"), "{err}");
         assert!(err.contains("pricing/apply_tax"), "{err}");
         assert!(err.contains("shared::money/apply_tax"), "{err}");
+    }
+
+    #[test]
+    fn generate_data_seam_code_dedupes_identical_cross_method_deps_after_normalization() {
+        let seam = NormalizedDataSeam::from_spec(SpecStruct {
+            id: "pricing/checkout_quote".to_string(),
+            kind: "data".to_string(),
+            intent: Intent {
+                why: "Quote checkout totals.".to_string(),
+            },
+            contract: None,
+            deps: vec![],
+            imports: vec![],
+            body: Body::default(),
+            local_tests: vec![],
+            links: None,
+            spec_version: None,
+            extensions: UnitExtensions {
+                data: Some(AuthoredDataShape {
+                    fields: IndexMap::from([(
+                        "subtotal".to_string(),
+                        AuthoredField {
+                            type_: "rust_decimal::Decimal".to_string(),
+                        },
+                    )]),
+                }),
+                constructors: vec![AuthoredConstructor {
+                    id: "new".to_string(),
+                    intent: Intent {
+                        why: "Create a quote.".to_string(),
+                    },
+                    contract: Some(Contract {
+                        inputs: Some(IndexMap::from([(
+                            "subtotal".to_string(),
+                            "rust_decimal::Decimal".to_string(),
+                        )])),
+                        returns: None,
+                        invariants: vec![],
+                    }),
+                    initializes: IndexMap::from([("subtotal".to_string(), "subtotal".to_string())]),
+                }],
+                methods: vec![
+                    AuthoredMethod {
+                        id: "subtotal_with_tax".to_string(),
+                        intent: Intent {
+                            why: "Apply tax once.".to_string(),
+                        },
+                        receiver: "shared_ref".to_string(),
+                        contract: Some(Contract {
+                            inputs: None,
+                            returns: Some("rust_decimal::Decimal".to_string()),
+                            invariants: vec![],
+                        }),
+                        deps: vec!["pricing/apply_tax".to_string()],
+                        lowering: Some(AuthoredMethodLowering {
+                            rust: Some(AuthoredRustMethodLowering {
+                                body: "{ apply_tax(self.subtotal, self.subtotal) }".to_string(),
+                            }),
+                        }),
+                    },
+                    AuthoredMethod {
+                        id: "subtotal_with_tax_again".to_string(),
+                        intent: Intent {
+                            why: "Apply the same helper again.".to_string(),
+                        },
+                        receiver: "shared_ref".to_string(),
+                        contract: Some(Contract {
+                            inputs: None,
+                            returns: Some("rust_decimal::Decimal".to_string()),
+                            invariants: vec![],
+                        }),
+                        deps: vec!["pricing/apply_tax".to_string()],
+                        lowering: Some(AuthoredMethodLowering {
+                            rust: Some(AuthoredRustMethodLowering {
+                                body: "{ apply_tax(self.subtotal, self.subtotal) }".to_string(),
+                            }),
+                        }),
+                    },
+                ],
+                backends: None,
+            },
+        })
+        .unwrap();
+        let code = generate_data_seam_code(&seam).unwrap();
+        assert_eq!(
+            code.matches("use crate::pricing::apply_tax::apply_tax;")
+                .count(),
+            1
+        );
     }
 
     #[test]

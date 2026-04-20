@@ -8,7 +8,7 @@ use crate::graph::top_level_deps;
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
     Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec, MethodReceiver,
-    QualifiedUnitRef, UnitKind, callable_name, has_callable_collision,
+    QualifiedUnitRef, UnitKind, callable_name, has_callable_collision, ordered_unique_deps,
 };
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use serde_json::Value;
@@ -131,9 +131,14 @@ fn humanize_validation_error(error: &jsonschema::ValidationError<'_>) -> String 
             )
         }
         ValidationErrorKind::Pattern { .. } => {
-            if field_path == "/id" || field_path.ends_with("/id") {
+            if field_path == "/id" {
                 format!(
                     "invalid id format{}: use \"module/name\" (e.g., \"pricing/apply_tax\")",
+                    field_label
+                )
+            } else if field_path.ends_with("/id") {
+                format!(
+                    "invalid id format{}: use a snake_case identifier (e.g., \"total\")",
                     field_label
                 )
             } else {
@@ -350,7 +355,6 @@ struct ValidatedDataConstructor {
 #[derive(Debug, Clone)]
 struct ValidatedMethodDep {
     authored: String,
-    dep_ref: DepRef,
 }
 
 #[derive(Debug, Clone)]
@@ -691,8 +695,7 @@ fn validate_data_methods(spec: &LoadedSpec) -> Result<Vec<ValidatedDataMethod>> 
                 .deps
                 .iter()
                 .cloned()
-                .zip(dep_refs.iter().cloned())
-                .map(|(authored, dep_ref)| ValidatedMethodDep { authored, dep_ref })
+                .map(|authored| ValidatedMethodDep { authored })
                 .collect(),
         });
     }
@@ -717,21 +720,19 @@ fn validate_data_seam_collisions(
         }
     }
 
-    let seam_deps = methods.iter().flat_map(|method| method.deps.iter());
-    let mut seen_deps: Vec<&ValidatedMethodDep> = Vec::new();
-    for dep in seam_deps {
-        if let Some(existing) = seen_deps
+    let seam_deps = ordered_unique_deps(
+        methods
             .iter()
-            .find(|existing| existing.dep_ref.callable_name() == dep.dep_ref.callable_name())
-        {
-            return Err(SpecError::DepCollision {
-                dep1: existing.authored.clone(),
-                dep2: dep.authored.clone(),
-                fn_name: dep.dep_ref.callable_name().to_string(),
-                path: spec.source.file_path.clone(),
-            });
-        }
-        seen_deps.push(dep);
+            .flat_map(|method| method.deps.iter().map(|dep| dep.authored.as_str())),
+    );
+    let seam_dep_refs = parse_dep_refs(&seam_deps).map_err(|err| invalid_dep_error(err, spec))?;
+    if let Some((dep1, dep2)) = has_dep_ref_collision(&seam_dep_refs) {
+        return Err(SpecError::DepCollision {
+            dep1: dep1.authored().to_string(),
+            dep2: dep2.authored().to_string(),
+            fn_name: dep1.callable_name().to_string(),
+            path: spec.source.file_path.clone(),
+        });
     }
 
     Ok(())
@@ -1718,6 +1719,19 @@ local_tests:
     #[test]
     fn test_validate_data_semantic_valid_spec() {
         let spec = create_data_spec("pricing/checkout_quote");
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_allows_identical_cross_method_dep_reuse() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec
+            .extensions
+            .methods
+            .push(spec.spec.extensions.methods[0].clone());
+        spec.spec.extensions.methods[1].id = "tax_preview".to_string();
+
         let result = validate_semantic(&spec);
         assert!(result.is_ok(), "{result:?}");
     }
@@ -2922,6 +2936,47 @@ body:
             .to_string();
         assert!(err.contains("invalid id format"), "got: {err}");
         assert!(err.contains("module/name"), "got: {err}");
+    }
+
+    #[test]
+    fn humanize_validation_error_nested_id_pattern() {
+        let yaml = r#"id: pricing/checkout_quote
+kind: data
+intent:
+  why: test
+data:
+  fields:
+    subtotal:
+      type: i32
+constructors:
+  - id: invalid-id
+    intent:
+      why: build
+    contract:
+      inputs:
+        subtotal: i32
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: total
+    receiver: shared_ref
+    contract:
+      returns: i32
+    lowering:
+      rust:
+        body: |
+          {
+              self.subtotal
+          }"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+        let err = validate_raw_yaml(&value, "test.unit.spec")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("invalid id format"), "got: {err}");
+        assert!(err.contains("snake_case identifier"), "got: {err}");
+        assert!(!err.contains("module/name"), "got: {err}");
     }
 
     // ── reserved unit name ───────────────────────────────────────────────────

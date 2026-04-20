@@ -3,7 +3,7 @@
 //! This module provides the foundation for M8's full graph layer.
 //! It models units, molecule tests, and the edges between them (dep and covers).
 
-use crate::types::{DepRef, LoadedMoleculeTest, LoadedSpec, UnitKind};
+use crate::types::{DepRef, LoadedMoleculeTest, LoadedSpec, UnitKind, ordered_unique_deps};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -222,17 +222,13 @@ impl SpecGraph {
 
 pub fn top_level_deps(spec: &LoadedSpec) -> Vec<String> {
     match spec.spec.unit_kind() {
-        Ok(UnitKind::Data) => {
-            let mut deps = Vec::new();
-            for method in &spec.spec.extensions.methods {
-                for dep in &method.deps {
-                    if !deps.contains(dep) {
-                        deps.push(dep.clone());
-                    }
-                }
-            }
-            deps
-        }
+        Ok(UnitKind::Data) => ordered_unique_deps(
+            spec.spec
+                .extensions
+                .methods
+                .iter()
+                .flat_map(|method| method.deps.iter().map(String::as_str)),
+        ),
         _ => spec.spec.deps.clone(),
     }
 }
@@ -448,6 +444,19 @@ mod tests {
                 },
             ]
             .as_slice()
+        );
+    }
+
+    #[test]
+    fn top_level_deps_dedupes_reused_data_method_deps() {
+        let seam = make_loaded_data_seam("pricing/checkout_quote");
+
+        assert_eq!(
+            top_level_deps(&seam),
+            vec![
+                "pricing/apply_discount".to_string(),
+                "pricing/apply_tax".to_string(),
+            ]
         );
     }
 
