@@ -26,6 +26,13 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 - A passport is the co-located `.spec.passport.json` record for a unit. It is "done" only when the unit validates, builds, tests, and has fresh passport evidence from `spec test`.
 - A stale unit is marked with `~` in `spec status` when the passport's stored contract hash no longer matches the current spec contract. Treat stale as work to redo, not as success.
 - For molecule tests, run `spec test path/to/file.test.spec` to execute only that interaction test and refresh only its co-located `.test.evidence.json` artifact.
+- For `kind: data`, keep shared seam semantics in `data.fields`, `constructors`, and `methods`. Do not author top-level `contract`, `deps`, `imports`, or `body.rust`.
+- Canonical M12 wedge loop:
+  `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/checkout_quote.unit.spec --format json`
+  `cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec --output examples/ecommerce/src/generated`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec --output examples/ecommerce/src/generated`
+  `cargo run -p spec-cli -- status examples/ecommerce --format json`
 
 ## Plan Artifact Workflow
 

@@ -30,11 +30,11 @@ use spec_core::pipeline::{
     parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
 };
 use spec_core::plan::{PlanComputedImpact, build_plan_report};
+#[cfg(test)]
+use spec_core::types::ResolvedSpec;
 use spec_core::types::{
     DepRef, LoadedMoleculeTest, LoadedSpec, NormalizedUnit, QualifiedUnitRef, ResolvedMoleculeTest,
 };
-#[cfg(test)]
-use spec_core::types::ResolvedSpec;
 use spec_core::validator::{
     QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
     validate_molecule_test_covers, validate_molecule_test_semantic,
@@ -1713,7 +1713,11 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
 fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
     let context = load_workspace_context(path)?;
     let mut validation_specs = collect_validation_specs(path, &context)?;
-    let specs = validation_specs.root_specs.clone();
+    let specs: Vec<LoadedSpec> = validation_specs
+        .local_specs()
+        .into_iter()
+        .cloned()
+        .collect();
     let total_files = validation_specs.total_files;
     let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
     let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
@@ -3285,8 +3289,22 @@ fn resolve_molecule_test_library_root(path: &Path, context: &WorkspaceContext) -
 }
 
 fn local_dep_ids(spec: &LoadedSpec) -> Vec<String> {
-    spec.spec
-        .deps
+    let authored_deps: Vec<String> = match spec.spec.unit_kind() {
+        Ok(spec_core::types::UnitKind::Data) => {
+            let mut deps = Vec::new();
+            for method in &spec.spec.extensions.methods {
+                for dep in &method.deps {
+                    if !deps.contains(dep) {
+                        deps.push(dep.clone());
+                    }
+                }
+            }
+            deps
+        }
+        _ => spec.spec.deps.clone(),
+    };
+
+    authored_deps
         .iter()
         .filter_map(|dep| DepRef::parse(dep).ok())
         .filter(|dep| dep.library_alias().is_none())
@@ -4030,7 +4048,7 @@ fn spec_error_to_json_entry(
         } => ErrorFields {
             unit: id_by_path.get(path).cloned(),
             path: Some(path.clone()),
-            field: Some(format!("contract.{field}")),
+            field: Some(field.clone()),
             value: Some(type_str.clone()),
             ..Default::default()
         },

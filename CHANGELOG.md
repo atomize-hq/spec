@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Canonical M12 ecommerce migration wedge** — `examples/ecommerce` now includes a real `kind: data` seam at `units/pricing/checkout_quote.unit.spec` plus a hand-written Rust baseline at `src/raw_baseline/pricing/checkout_quote.rs` for side-by-side comparison.
+
+### Changed
+
+- **Checkout molecule coverage now includes the migrated seam** — `pricing/checkout_flow.test.spec` covers `pricing/checkout_quote` and asserts the data seam agrees with the existing function-based checkout flow.
+- **Docs now show the exact M12 command loop** — `README.md`, `AGENTS.md`, and `examples/ecommerce/README.md` document the repo-root `validate`, `build`, `test`, and `status` commands for the checkout quote migration wedge.
+
 ## 0.9.0 - 2026-04-17
 
 ### Added

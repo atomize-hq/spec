@@ -346,6 +346,174 @@ local_tests:
     pricing_dir.join("apply_discount.unit.spec")
 }
 
+fn setup_m12_data_seam_project() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path().join("m12-data-seam");
+    let units_dir = project_dir.join("units");
+
+    write_file(
+        &project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "m12-data-seam"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[workspace]
+"#,
+    );
+    write_file(
+        &project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal - subtotal * discount_rate
+    }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply tax to a subtotal.
+contract:
+  inputs:
+    subtotal: Decimal
+    tax_rate: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal + subtotal * tax_rate
+    }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+    discount_rate:
+      type: rust_decimal::Decimal
+    tax_rate:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              let discounted = apply_discount(self.subtotal, self.discount_rate);
+              apply_tax(discounted, self.tax_rate)
+          }
+local_tests:
+  - id: total_basic
+    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/checkout_quote_flow.test.spec",
+        r#"
+id: pricing/checkout_quote_flow
+intent:
+  why: Verify the generated checkout quote seam composes with pricing helpers.
+covers:
+  - pricing/checkout_quote
+body:
+  rust: |
+    {
+        let quote = CheckoutQuote::new(
+            rust_decimal::Decimal::new(10000, 2),
+            rust_decimal::Decimal::new(10, 2),
+            rust_decimal::Decimal::new(725, 4),
+        );
+        assert_eq!(quote.total(), rust_decimal::Decimal::new(96525, 3));
+    }
+"#,
+    );
+
+    (temp_dir, project_dir)
+}
+
 #[test]
 fn help_lists_validate_and_generate_commands() {
     let output = run(&["--help"]);
@@ -5885,7 +6053,14 @@ fn single_file_generate_with_local_deps_succeeds() {
     assert_output_success("single_file_generate_with_local_deps_succeeds", &output);
 
     assert!(output_dir.join("pricing/apply_tax.rs").exists());
-    assert!(!output_dir.join("money/round.rs").exists());
+    assert!(
+        output_dir.join("money/round.rs").exists(),
+        "single-file generate should include local support deps needed by the target unit"
+    );
+    assert!(
+        !output_dir.join("pricing/checkout_quote.rs").exists(),
+        "single-file generate should not pull in unrelated sibling units"
+    );
 }
 
 #[test]
@@ -8943,4 +9118,96 @@ fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
         spec_export_json.get("graph").is_some(),
         "{spec_export_json}"
     );
+}
+
+#[test]
+fn validate_json_accepts_kind_data_without_placeholder_body() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success("validate should accept kind:data without body", &output);
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "valid");
+}
+
+#[test]
+fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("single-file data seam test should succeed", &output);
+
+    let passport_path = project_dir.join("units/pricing/checkout_quote.spec.passport.json");
+    assert!(passport_path.exists(), "expected data seam passport");
+    let passport = read_passport_json(&passport_path);
+    assert_eq!(passport["kind"], "data");
+    assert_eq!(
+        passport["data"]["fields"]["subtotal"]["type"],
+        "rust_decimal::Decimal"
+    );
+    assert_eq!(passport["evidence"]["test_results"][0]["status"], "pass");
+
+    let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
+    let status_json = parse_stdout_json(&status_output);
+    let units = status_units(&status_json);
+    let checkout_quote = units
+        .iter()
+        .find(|entry| entry["id"] == "pricing/checkout_quote")
+        .expect("expected checkout_quote status row");
+    assert_eq!(checkout_quote["status"], "valid");
+}
+
+#[test]
+fn export_additively_includes_data_seam_truth() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+
+    let build_output = run_in(
+        &project_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("build should succeed before export", &build_output);
+
+    let output = run_in(&project_dir, &["export", "units"]);
+    assert_output_success("export should succeed for data seam project", &output);
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    let checkout_quote = units
+        .iter()
+        .find(|entry| entry["id"] == "pricing/checkout_quote")
+        .expect("expected checkout_quote export unit");
+    assert_eq!(checkout_quote["kind"], "data");
+    assert_eq!(
+        checkout_quote["data"]["fields"]["subtotal"]["type"],
+        "rust_decimal::Decimal"
+    );
+    assert_eq!(checkout_quote["constructors"][0]["id"], "new");
+    assert_eq!(checkout_quote["methods"][0]["id"], "discounted_subtotal");
+    assert_eq!(checkout_quote["backends"]["rust"]["derives"][0], "Clone");
 }
