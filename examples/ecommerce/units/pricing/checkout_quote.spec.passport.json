@@ -1,0 +1,123 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/checkout_quote",
+  "kind": "data",
+  "intent": "Quote a checkout total from subtotal plus discount and tax rates.",
+  "data": {
+    "fields": {
+      "subtotal": {
+        "type": "rust_decimal::Decimal"
+      },
+      "discount_rate": {
+        "type": "rust_decimal::Decimal"
+      },
+      "tax_rate": {
+        "type": "rust_decimal::Decimal"
+      }
+    }
+  },
+  "constructors": [
+    {
+      "id": "new",
+      "intent": {
+        "why": "Create a quote from explicit subtotal and rates."
+      },
+      "contract": {
+        "inputs": {
+          "subtotal": "rust_decimal::Decimal",
+          "discount_rate": "rust_decimal::Decimal",
+          "tax_rate": "rust_decimal::Decimal"
+        },
+        "invariants": []
+      },
+      "initializes": {
+        "subtotal": "subtotal",
+        "discount_rate": "discount_rate",
+        "tax_rate": "tax_rate"
+      }
+    }
+  ],
+  "methods": [
+    {
+      "id": "discounted_subtotal",
+      "intent": {
+        "why": "Return the discounted subtotal before tax."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [
+        "pricing/apply_discount"
+      ],
+      "lowering": {
+        "rust": {
+          "body": "{\n    apply_discount(self.subtotal, self.discount_rate)\n}\n"
+        }
+      }
+    },
+    {
+      "id": "total",
+      "intent": {
+        "why": "Return the final checkout total after discount and tax."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [
+        "pricing/apply_tax"
+      ],
+      "lowering": {
+        "rust": {
+          "body": "{\n    apply_tax(self.discounted_subtotal(), self.tax_rate)\n}\n"
+        }
+      }
+    }
+  ],
+  "backends": {
+    "rust": {
+      "derives": [
+        "Clone",
+        "Debug",
+        "PartialEq"
+      ]
+    }
+  },
+  "deps": [
+    "pricing/apply_discount",
+    "pricing/apply_tax"
+  ],
+  "local_tests": [
+    {
+      "id": "discounted_subtotal_basic",
+      "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)"
+    },
+    {
+      "id": "total_basic",
+      "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
+    }
+  ],
+  "generated_at": "2026-04-20T22:56:32Z",
+  "source_file": "examples/ecommerce/units/pricing/checkout_quote.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "discounted_subtotal_basic",
+        "status": "pass"
+      },
+      {
+        "id": "total_basic",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-04-20T22:54:09Z",
+    "provenance": {
+      "git_commit_sha": "d20fbc60089fb2ec83a250e159c732a9c196845d"
+    }
+  },
+  "contract_hash": "sha256:695d9bfd431059f5d8c63d717f2953bd1a03db50a9b8c70309791d4b6d3bbefb"
+}

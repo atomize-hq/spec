@@ -2324,6 +2324,48 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
+fn copy_git_tracked_dir(src: &Path, dst: &Path) -> io::Result<()> {
+    let root = repo_root();
+    let relative_src = src
+        .strip_prefix(&root)
+        .expect("tracked fixture source should live under the repo root");
+    let output = Command::new("git")
+        .current_dir(&root)
+        .args(["ls-files", "--", relative_src.to_str().unwrap()])
+        .output()
+        .expect("failed to run git ls-files for tracked fixture copy");
+
+    assert!(
+        output.status.success(),
+        "git ls-files failed for {}.\nstdout:\n{}\nstderr:\n{}",
+        relative_src.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let tracked_files = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !tracked_files.trim().is_empty(),
+        "git ls-files returned no tracked files under {}",
+        relative_src.display()
+    );
+
+    fs::create_dir_all(dst)?;
+    for tracked_path in tracked_files.lines().filter(|line| !line.is_empty()) {
+        let tracked_path = Path::new(tracked_path);
+        let suffix = tracked_path
+            .strip_prefix(relative_src)
+            .unwrap_or_else(|_| panic!("{tracked_path:?} was not nested under {relative_src:?}"));
+        let destination = dst.join(suffix);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(root.join(tracked_path), destination)?;
+    }
+
+    Ok(())
+}
+
 fn setup_detached_shared_example() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let root = repo_root();
     let temp_dir = temp_repo_dir();
@@ -3053,7 +3095,7 @@ fn copy_ecommerce_example_preserving_artifacts() -> (tempfile::TempDir, PathBuf)
     let temp_dir =
         tempfile::TempDir::new_in(root.join("target")).expect("failed to create temp dir");
     let dst_ecommerce = temp_dir.path().join("ecommerce");
-    copy_dir_recursive(&root.join("examples/ecommerce"), &dst_ecommerce)
+    copy_git_tracked_dir(&root.join("examples/ecommerce"), &dst_ecommerce)
         .expect("failed to copy ecommerce example");
     (temp_dir, dst_ecommerce)
 }
@@ -4529,9 +4571,9 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         "gitdir: .git/modules/spec-tests\n",
     )
     .unwrap();
-    copy_dir_recursive(&root.join("examples/crosslib-app"), &app_dir).unwrap();
-    copy_dir_recursive(&root.join("examples/ecommerce"), &ecommerce_dir).unwrap();
-    copy_dir_recursive(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/ecommerce"), &ecommerce_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
 
     let output = run_in(temp_dir.path(), &["status", ".", "--format", "json"]);
     assert!(
