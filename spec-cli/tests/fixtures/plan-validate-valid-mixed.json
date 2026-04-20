@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "status": "valid",
   "errors": [],
   "warnings": [],
@@ -8,7 +8,8 @@
     "status": "partial",
     "units": [
       "pricing/apply_tax",
-      "pricing/calculate_total"
+      "pricing/calculate_total",
+      "pricing/checkout_quote"
     ],
     "molecule_tests": [
       "pricing/checkout_flow",

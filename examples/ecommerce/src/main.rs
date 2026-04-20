@@ -4,8 +4,11 @@ use anyhow::Result;
 // `cargo run -p spec-cli -- generate examples/ecommerce/units --output examples/ecommerce/src/generated`).
 mod generated;
 pub use generated::*;
+pub mod raw_baseline;
 
 fn main() -> Result<()> {
-    println!("ecommerce example: place generated pricing units under this project");
+    println!(
+        "ecommerce example: compare src/raw_baseline/pricing/checkout_quote.rs with units/pricing/checkout_quote.unit.spec"
+    );
     Ok(())
 }

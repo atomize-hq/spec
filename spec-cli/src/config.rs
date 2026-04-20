@@ -1,13 +1,13 @@
 use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 const CONFIG_FILE_NAME: &str = "spec.toml";
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkspaceConfig {
     pub validation: ValidationConfig,
@@ -15,13 +15,13 @@ pub struct WorkspaceConfig {
     pub libraries: BTreeMap<String, PathBuf>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct ValidationConfig {
     pub allow_unsafe_local_test_expect: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct PipelineConfig {
     pub crate_root: Option<PathBuf>,
@@ -161,6 +161,61 @@ impl std::error::Error for WorkspaceConfigError {}
 #[cfg(test)]
 pub fn load_workspace_config(target: &Path) -> Result<WorkspaceConfig> {
     Ok(load_workspace_context(target)?.config)
+}
+
+pub(crate) fn read_workspace_config_file(config_path: &Path) -> Result<WorkspaceConfig> {
+    read_workspace_config(config_path)
+}
+
+pub(crate) fn rewrite_workspace_config_relative_paths(
+    config: &WorkspaceConfig,
+    source_workspace_root: &Path,
+) -> WorkspaceConfig {
+    let rebase_path = |path: &Path| {
+        if path.is_absolute() {
+            normalized_absolute_path(path)
+        } else {
+            normalized_absolute_path(source_workspace_root.join(path))
+        }
+    };
+
+    WorkspaceConfig {
+        validation: config.validation.clone(),
+        pipeline: PipelineConfig {
+            crate_root: config.pipeline.crate_root.as_deref().map(rebase_path),
+            cargo_target_dir: config.pipeline.cargo_target_dir.as_deref().map(rebase_path),
+            timeout_secs: config.pipeline.timeout_secs,
+            generated_module_prefix: config.pipeline.generated_module_prefix.clone(),
+        },
+        libraries: config
+            .libraries
+            .iter()
+            .map(|(alias, root)| (alias.clone(), rebase_path(root)))
+            .collect(),
+    }
+}
+
+fn normalized_absolute_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let path = path.as_ref();
+    let mut normalized = if path.is_absolute() {
+        PathBuf::new()
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    };
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Normal(segment) => normalized.push(segment),
+        }
+    }
+
+    normalized
 }
 
 pub fn load_workspace_context(target: &Path) -> Result<WorkspaceContext> {
@@ -637,5 +692,49 @@ mod tests {
 
         let err = load_workspace_context(&root).unwrap_err().to_string();
         assert!(err.contains("SPEC_LIBRARY_OUT_OF_ROOT"));
+    }
+
+    #[test]
+    fn rewrite_workspace_config_relative_paths_absolutizes_path_fields() {
+        let source_root = Path::new("/tmp/spec-root");
+        let config = WorkspaceConfig {
+            validation: ValidationConfig {
+                allow_unsafe_local_test_expect: true,
+            },
+            pipeline: PipelineConfig {
+                crate_root: Some(PathBuf::from("../app-crate")),
+                cargo_target_dir: Some(PathBuf::from("../target/spec")),
+                timeout_secs: Some(30),
+                generated_module_prefix: Some("generated".to_string()),
+            },
+            libraries: BTreeMap::from([
+                ("shared".to_string(), PathBuf::from("../shared-spec")),
+                ("absolute".to_string(), PathBuf::from("/opt/specs/absolute")),
+            ]),
+        };
+
+        let rewritten = rewrite_workspace_config_relative_paths(&config, source_root);
+
+        assert_eq!(
+            rewritten.pipeline.crate_root,
+            Some(PathBuf::from("/tmp/app-crate"))
+        );
+        assert_eq!(
+            rewritten.pipeline.cargo_target_dir,
+            Some(PathBuf::from("/tmp/target/spec"))
+        );
+        assert_eq!(
+            rewritten.libraries.get("shared"),
+            Some(&PathBuf::from("/tmp/shared-spec"))
+        );
+        assert_eq!(
+            rewritten.libraries.get("absolute"),
+            Some(&PathBuf::from("/opt/specs/absolute"))
+        );
+        assert_eq!(rewritten.validation, config.validation);
+        assert_eq!(
+            rewritten.pipeline.generated_module_prefix,
+            config.pipeline.generated_module_prefix
+        );
     }
 }

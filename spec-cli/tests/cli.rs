@@ -127,6 +127,69 @@ spec_version: "{AUTHORED_SPEC_VERSION}"
     );
 }
 
+fn write_m9_data_seam(dir: &Path, relative_path: &str, id: &str, deps: &[&str]) {
+    let deps_yaml = if deps.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "    deps:\n{}\n",
+            deps.iter()
+                .map(|dep| format!("      - {dep}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
+
+    write_spec(
+        dir,
+        relative_path,
+        &format!(
+            r#"
+id: {id}
+kind: data
+intent:
+  why: Exercise M9 cross-library alias discovery for data seams.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+data:
+  fields:
+    subtotal:
+      type: i32
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: i32
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: i32
+{deps_yaml}    lowering:
+      rust:
+        body: |
+          {{
+              round(self.subtotal)
+          }}
+local_tests:
+  - id: happy_path
+    expect: CheckoutQuote::new(5).total() == 5
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#
+        ),
+    );
+}
+
 fn write_m9_app_cargo_toml(app_root: &Path, dependency_aliases: &[&str]) {
     let dependency_lines = dependency_aliases
         .iter()
@@ -171,6 +234,32 @@ shared = { path = "../shared-crate" }
 "#,
     )
     .unwrap();
+}
+
+fn write_m9_shared_round_crate_fixture(fixture: &M9RepoFixture) {
+    write_file(
+        &fixture.app_root,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    let shared_crate_root = fixture.app_root.parent().unwrap().join("shared-crate");
+    write_file(
+        &shared_crate_root,
+        "Cargo.toml",
+        r#"[package]
+name = "shared"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    );
+    write_file(
+        &shared_crate_root,
+        "src/lib.rs",
+        "pub mod money {\n    pub mod round {\n        pub fn round(value: i32) -> i32 {\n            value\n        }\n    }\n}\n",
+    );
 }
 
 fn setup_apply_discount_unit() -> (tempfile::TempDir, PathBuf) {
@@ -346,6 +435,172 @@ local_tests:
     pricing_dir.join("apply_discount.unit.spec")
 }
 
+fn setup_m12_data_seam_project() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path().join("m12-data-seam");
+    let units_dir = project_dir.join("units");
+
+    write_file(
+        &project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "m12-data-seam"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[workspace]
+"#,
+    );
+    write_file(
+        &project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal - subtotal * discount_rate
+    }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply tax to a subtotal.
+contract:
+  inputs:
+    subtotal: Decimal
+    tax_rate: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal + subtotal * tax_rate
+    }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+    discount_rate:
+      type: rust_decimal::Decimal
+    tax_rate:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
+          }
+local_tests:
+  - id: total_basic
+    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/checkout_quote_flow.test.spec",
+        r#"
+id: pricing/checkout_quote_flow
+intent:
+  why: Verify the generated checkout quote seam composes with pricing helpers.
+covers:
+  - pricing/checkout_quote
+body:
+  rust: |
+    {
+        let quote = CheckoutQuote::new(
+            rust_decimal::Decimal::new(10000, 2),
+            rust_decimal::Decimal::new(10, 2),
+            rust_decimal::Decimal::new(725, 4),
+        );
+        assert_eq!(quote.total(), rust_decimal::Decimal::new(96525, 3));
+    }
+"#,
+    );
+
+    (temp_dir, project_dir)
+}
+
 #[test]
 fn help_lists_validate_and_generate_commands() {
     let output = run(&["--help"]);
@@ -427,10 +682,7 @@ body:
 }
 
 #[test]
-fn generate_single_file_path_writes_gitignore_to_parent_dir() {
-    // Regression: passing a .unit.spec file path to `spec generate` must
-    // write .gitignore to the file's parent directory, not try to open
-    // "foo.unit.spec/.gitignore" (which would be ENOTDIR).
+fn generate_single_file_path_is_rejected_and_leaves_output_untouched() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     let output_dir = temp_dir.path().join("generated/spec");
@@ -449,6 +701,8 @@ body:
 "#,
     );
 
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
     let output = run(&[
         "generate",
         spec_path.to_str().unwrap(),
@@ -456,15 +710,19 @@ body:
         output_dir.to_str().unwrap(),
     ]);
     assert!(
-        output.status.success(),
-        "expected success for single-file generate, got:\nstdout: {}\nstderr: {}",
+        !output.status.success(),
+        "expected single-file generate to fail\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
-    // .gitignore must land next to the spec file, not as a child of it
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        units_dir.join("pricing/.gitignore").exists(),
-        "expected .gitignore in units/pricing/, not an ENOTDIR"
+        stderr.contains("spec generate requires a directory path"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(
+        !output_dir.join("pricing/apply_discount.rs").exists(),
+        "single-file generate should not write output files"
     );
 }
 
@@ -621,6 +879,21 @@ fn generate_help_does_not_show_no_strict() {
     assert!(
         !stdout.contains("no-strict"),
         "expected --no-strict to be absent from generate help, got: {stdout}"
+    );
+}
+
+#[test]
+fn build_help_requires_directory_path_description() {
+    let output = run(&["build", "--help"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Directory containing .unit.spec files"),
+        "expected directory-scoped build help, got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("or a single .unit.spec file"),
+        "build help should not advertise single-file support, got: {stdout}"
     );
 }
 
@@ -1019,14 +1292,14 @@ fn spec_validate_json_zero_units() {
     assert!(output.status.success());
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
     assert_eq!(json["status"], "valid");
     assert_eq!(json["errors"], serde_json::json!([]));
     assert_eq!(json["warnings"], serde_json::json!([]));
 }
 
 #[test]
-fn spec_validate_json_schema_version_is_2() {
+fn spec_validate_json_schema_version_is_3() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     write_spec(
@@ -1048,7 +1321,7 @@ body:
     assert!(output.status.success());
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
 }
 
 #[test]
@@ -2051,6 +2324,48 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
+fn copy_git_tracked_dir(src: &Path, dst: &Path) -> io::Result<()> {
+    let root = repo_root();
+    let relative_src = src
+        .strip_prefix(&root)
+        .expect("tracked fixture source should live under the repo root");
+    let output = Command::new("git")
+        .current_dir(&root)
+        .args(["ls-files", "--", relative_src.to_str().unwrap()])
+        .output()
+        .expect("failed to run git ls-files for tracked fixture copy");
+
+    assert!(
+        output.status.success(),
+        "git ls-files failed for {}.\nstdout:\n{}\nstderr:\n{}",
+        relative_src.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let tracked_files = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !tracked_files.trim().is_empty(),
+        "git ls-files returned no tracked files under {}",
+        relative_src.display()
+    );
+
+    fs::create_dir_all(dst)?;
+    for tracked_path in tracked_files.lines().filter(|line| !line.is_empty()) {
+        let tracked_path = Path::new(tracked_path);
+        let suffix = tracked_path
+            .strip_prefix(relative_src)
+            .unwrap_or_else(|_| panic!("{tracked_path:?} was not nested under {relative_src:?}"));
+        let destination = dst.join(suffix);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(root.join(tracked_path), destination)?;
+    }
+
+    Ok(())
+}
+
 fn setup_detached_shared_example() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let root = repo_root();
     let temp_dir = temp_repo_dir();
@@ -2780,7 +3095,7 @@ fn copy_ecommerce_example_preserving_artifacts() -> (tempfile::TempDir, PathBuf)
     let temp_dir =
         tempfile::TempDir::new_in(root.join("target")).expect("failed to create temp dir");
     let dst_ecommerce = temp_dir.path().join("ecommerce");
-    copy_dir_recursive(&root.join("examples/ecommerce"), &dst_ecommerce)
+    copy_git_tracked_dir(&root.join("examples/ecommerce"), &dst_ecommerce)
         .expect("failed to copy ecommerce example");
     (temp_dir, dst_ecommerce)
 }
@@ -4256,9 +4571,9 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         "gitdir: .git/modules/spec-tests\n",
     )
     .unwrap();
-    copy_dir_recursive(&root.join("examples/crosslib-app"), &app_dir).unwrap();
-    copy_dir_recursive(&root.join("examples/ecommerce"), &ecommerce_dir).unwrap();
-    copy_dir_recursive(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/ecommerce"), &ecommerce_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
 
     let output = run_in(temp_dir.path(), &["status", ".", "--format", "json"]);
     assert!(
@@ -4773,8 +5088,6 @@ fn spec_test_accepts_file_path() {
         .args([
             "test",
             spec_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             temp_dir.path().to_str().unwrap(),
         ])
@@ -4837,8 +5150,6 @@ fn spec_test_file_path_only_writes_target_passport() {
         .args([
             "test",
             spec_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             temp_dir.path().to_str().unwrap(),
         ])
@@ -4873,8 +5184,6 @@ fn spec_test_accepts_absolute_file_path_from_tmp_symlink_root() {
         .args([
             "test",
             spec_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             temp_dir.path().to_str().unwrap(),
         ])
@@ -4888,7 +5197,7 @@ fn spec_test_accepts_absolute_file_path_from_tmp_symlink_root() {
 }
 
 #[test]
-fn spec_test_file_path_nested_output_filter() {
+fn spec_test_file_path_rejects_explicit_nested_output() {
     if !cargo_available() {
         return;
     }
@@ -4958,8 +5267,7 @@ local_tests:
         .join("units/pricing/apply_tax.spec.passport.json");
     let before = read_passport(&passport_path);
 
-    // Single-file run with nested output — cargo_test_filter_for must produce
-    // "generated::spec::..." not just "spec::..." for the filter to match
+    // Single-file runs now build inside an isolated internal output tree.
     let output = Command::new(bin())
         .current_dir(temp_dir.path())
         .args([
@@ -4972,14 +5280,23 @@ local_tests:
         ])
         .output()
         .expect("failed to run spec test single-file");
-    assert_output_success(
-        "spec test should pass for nested output single-file mode",
-        &output,
+    assert!(
+        !output.status.success(),
+        "spec test should reject explicit output for a single file\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("spec test does not accept --output for a single file"),
+        "expected explicit-output rejection"
     );
 
     let after = read_passport(&passport_path);
-    assert_ne!(after, before, "expected passport to be rewritten");
-    assert!(after.contains("\"status\": \"pass\""), "{after}");
+    assert_eq!(
+        after, before,
+        "single-file rejection should not rewrite passports"
+    );
 }
 
 #[test]
@@ -5078,8 +5395,6 @@ fn single_file_test_skips_sibling_molecule_tests() {
         .args([
             "test",
             spec_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             project_dir.to_str().unwrap(),
         ])
@@ -5138,6 +5453,86 @@ fn single_file_test_with_local_deps_succeeds() {
 
     let passport = read_passport(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
     assert!(passport.contains("\"status\": \"pass\""), "{passport}");
+}
+
+#[test]
+fn single_file_test_preserves_unrelated_generated_files() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let initial_build = run_in(
+        &ecommerce_dir,
+        &["build", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "initial full build should succeed for preservation test",
+        &initial_build,
+    );
+    let original_mod_rs =
+        fs::read_to_string(ecommerce_dir.join("src/generated/pricing/mod.rs")).unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file spec test should preserve unrelated generated files",
+        &output,
+    );
+
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/calculate_total.rs")
+            .exists(),
+        "single-file test should not prune unrelated generated siblings"
+    );
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/molecule_tests.rs")
+            .exists(),
+        "single-file test should not prune molecule_tests.rs from the shared output tree"
+    );
+    let updated_mod_rs =
+        fs::read_to_string(ecommerce_dir.join("src/generated/pricing/mod.rs")).unwrap();
+    assert_eq!(updated_mod_rs, original_mod_rs);
+}
+
+#[test]
+fn single_file_test_rejects_explicit_output() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "single_file_test_rejects_explicit_output\n\nstdout:\n{}\n\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("spec test does not accept --output for a single file"),
+        "expected explicit-output rejection"
+    );
 }
 
 #[test]
@@ -5340,6 +5735,45 @@ spec_version: "0.3.0"
 intent:
   why: Test molecule for {id}.
 {covers_yaml}
+body:
+  rust: |
+    {{
+        assert!(true);
+    }}
+"#
+    );
+    write_spec(units_dir, relative_path, &content);
+}
+
+fn write_molecule_test_spec_with_imports(
+    units_dir: &Path,
+    relative_path: &str,
+    id: &str,
+    covers: &[&str],
+    imports: &[&str],
+) {
+    let covers_yaml = if covers.is_empty() {
+        "covers: []".to_string()
+    } else {
+        let items: Vec<String> = covers.iter().map(|c| format!("  - {c}")).collect();
+        format!("covers:\n{}", items.join("\n"))
+    };
+    let imports_yaml = if imports.is_empty() {
+        "imports: []".to_string()
+    } else {
+        let items: Vec<String> = imports
+            .iter()
+            .map(|import| format!("  - {import}"))
+            .collect();
+        format!("imports:\n{}", items.join("\n"))
+    };
+    let content = format!(
+        r#"id: {id}
+spec_version: "0.3.0"
+intent:
+  why: Test molecule for {id}.
+{covers_yaml}
+{imports_yaml}
 body:
   rust: |
     {{
@@ -5561,6 +5995,98 @@ body:
 }
 
 #[test]
+fn molecule_test_with_explicit_imports_keeps_transitive_cover_semantic_only() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    { subtotal }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    { subtotal }
+"#,
+    );
+    write_molecule_test_spec_with_imports(
+        &units_dir,
+        "pricing/discount_plus_tax.test.spec",
+        "pricing/discount_plus_tax",
+        &["pricing/apply_discount", "pricing/apply_tax", "money/round"],
+        &[
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount",
+            "crate::pricing::apply_tax::apply_tax",
+        ],
+    );
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "molecule test with explicit imports should generate successfully",
+        &output,
+    );
+
+    let generated = fs::read_to_string(output_dir.join("pricing/molecule_tests.rs")).unwrap();
+    assert!(
+        generated.contains("use crate::pricing::apply_discount::apply_discount;"),
+        "expected explicit callable import\n{generated}"
+    );
+    assert!(
+        generated.contains("use crate::pricing::apply_tax::apply_tax;"),
+        "expected explicit callable import\n{generated}"
+    );
+    assert!(
+        !generated.contains("use crate::money::round::round;"),
+        "semantic-only transitive cover should not become an import\n{generated}"
+    );
+}
+
+#[test]
 fn molecule_only_namespace_generates_module_tree() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -5772,6 +6298,125 @@ body:
 }
 
 #[test]
+fn export_preserves_molecule_test_imports_surface() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    write_molecule_test_spec_with_imports(
+        &units_dir,
+        "pricing/discount_test.test.spec",
+        "pricing/discount_test",
+        &["pricing/apply_discount"],
+        &[
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount",
+        ],
+    );
+    write_molecule_test_spec_with_imports(
+        &units_dir,
+        "pricing/empty_imports.test.spec",
+        "pricing/empty_imports",
+        &["pricing/apply_discount"],
+        &[],
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/implicit_imports.test.spec",
+        "pricing/implicit_imports",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert_output_success("export_preserves_molecule_test_imports_surface", &output);
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let molecule_tests = bundle["molecule_tests"].as_array().unwrap();
+
+    let explicit = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/discount_test")
+        .unwrap();
+    assert_eq!(
+        explicit["imports"],
+        serde_json::json!([
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount"
+        ])
+    );
+
+    let empty = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/empty_imports")
+        .unwrap();
+    assert_eq!(empty["imports"], serde_json::json!([]));
+
+    let implicit = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/implicit_imports")
+        .unwrap();
+    assert!(
+        implicit.get("imports").is_none(),
+        "omitted imports should stay omitted: {implicit}"
+    );
+}
+
+#[test]
+fn export_ecommerce_example_includes_authored_molecule_test_imports() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+
+    let output = run_in(&ecommerce_dir, &["export", "units"]);
+    assert_output_success(
+        "export_ecommerce_example_includes_authored_molecule_test_imports",
+        &output,
+    );
+
+    let bundle = parse_stdout_json(&output);
+    let molecule_tests = bundle["molecule_tests"].as_array().unwrap();
+
+    let checkout_flow = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/checkout_flow")
+        .unwrap();
+    assert_eq!(
+        checkout_flow["imports"],
+        serde_json::json!([
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount",
+            "crate::pricing::calculate_total::calculate_total",
+            "crate::pricing::checkout_quote::CheckoutQuote"
+        ])
+    );
+
+    let discount_plus_tax = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/discount_plus_tax")
+        .unwrap();
+    assert_eq!(
+        discount_plus_tax["imports"],
+        serde_json::json!([
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount",
+            "crate::pricing::apply_tax::apply_tax"
+        ])
+    );
+}
+
+#[test]
 fn single_file_validate_skips_sibling_molecule_tests() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -5841,7 +6486,7 @@ fn single_file_status_with_local_deps_stays_scoped() {
 }
 
 #[test]
-fn single_file_generate_skips_sibling_molecule_tests() {
+fn single_file_generate_is_rejected() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     let output_dir = temp_dir.path().join("generated");
@@ -5856,20 +6501,23 @@ fn single_file_generate_skips_sibling_molecule_tests() {
         "--output",
         output_dir.to_str().unwrap(),
     ]);
-    assert_output_success("single_file_generate_skips_sibling_molecule_tests", &output);
+    assert!(
+        !output.status.success(),
+        "single_file_generate_is_rejected\n\nstdout:\n{}\n\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     assert!(
-        output_dir.join("pricing/a.rs").exists(),
-        "target unit should be generated"
+        String::from_utf8_lossy(&output.stderr).contains("spec generate requires a directory path"),
+        "expected directory-path error"
     );
-    assert!(
-        !output_dir.join("pricing/molecule_tests.rs").exists(),
-        "single-file generate should not emit sibling molecule tests"
-    );
+    assert!(!output_dir.join("pricing/a.rs").exists());
+    assert!(!output_dir.join("pricing/molecule_tests.rs").exists());
 }
 
 #[test]
-fn single_file_generate_with_local_deps_succeeds() {
+fn single_file_generate_with_local_deps_is_rejected() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let output_dir = ecommerce_dir.join("generated-single");
 
@@ -5882,14 +6530,75 @@ fn single_file_generate_with_local_deps_succeeds() {
             output_dir.to_str().unwrap(),
         ],
     );
-    assert_output_success("single_file_generate_with_local_deps_succeeds", &output);
+    assert!(
+        !output.status.success(),
+        "single_file_generate_with_local_deps_is_rejected\n\nstdout:\n{}\n\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 
-    assert!(output_dir.join("pricing/apply_tax.rs").exists());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("spec generate requires a directory path"),
+        "expected directory-path error"
+    );
+    assert!(!output_dir.join("pricing/apply_tax.rs").exists());
     assert!(!output_dir.join("money/round.rs").exists());
+    assert!(!output_dir.join("pricing/checkout_quote.rs").exists());
 }
 
 #[test]
-fn single_file_generate_from_nested_units_subdir_allows_relative_output() {
+fn single_file_generate_does_not_rewrite_existing_generated_tree() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let initial_build = run_in(
+        &ecommerce_dir,
+        &["build", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "initial full build should succeed for generate preservation test",
+        &initial_build,
+    );
+    let original_mod_rs =
+        fs::read_to_string(ecommerce_dir.join("src/generated/pricing/mod.rs")).unwrap();
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "generate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--output",
+            "src/generated",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "single-file generate should be rejected\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/calculate_total.rs")
+            .exists(),
+        "single-file generate should not prune unrelated generated siblings"
+    );
+    assert!(
+        ecommerce_dir
+            .join("src/generated/pricing/molecule_tests.rs")
+            .exists(),
+        "single-file generate should not prune molecule_tests.rs from the shared output tree"
+    );
+    let updated_mod_rs =
+        fs::read_to_string(ecommerce_dir.join("src/generated/pricing/mod.rs")).unwrap();
+    assert_eq!(updated_mod_rs, original_mod_rs);
+}
+
+#[test]
+fn single_file_generate_from_nested_units_subdir_is_rejected() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
     let pricing_dir = ecommerce_dir.join("units/pricing");
 
@@ -5902,15 +6611,16 @@ fn single_file_generate_from_nested_units_subdir_allows_relative_output() {
             "../../src/generated",
         ],
     );
-    assert_output_success(
-        "single-file generate from nested units dir should honor ancestor spec.toml/project root",
-        &output,
+    assert!(
+        !output.status.success(),
+        "single-file generate from nested units dir should fail\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 
     assert!(
-        ecommerce_dir
-            .join("src/generated/pricing/apply_tax.rs")
-            .exists()
+        String::from_utf8_lossy(&output.stderr).contains("spec generate requires a directory path"),
+        "expected directory-path error"
     );
 }
 
@@ -6141,6 +6851,13 @@ body:
 
     let json = parse_stdout_json(&output);
     assert_eq!(json["status"], "invalid");
+    let warnings = json["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1, "expected one deprecation warning");
+    assert_eq!(
+        warnings[0]["code"],
+        "SPEC_MOLECULE_IMPLICIT_IMPORTS_DEPRECATED"
+    );
+    assert_eq!(warnings[0]["id"], "pricing/rounding_flow");
     let errors = json["errors"].as_array().unwrap();
     assert_eq!(
         errors.len(),
@@ -6529,8 +7246,6 @@ body:
         .args([
             "test",
             target_test_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             project_dir.to_str().unwrap(),
         ])
@@ -6592,8 +7307,6 @@ body:
         .args([
             "test",
             target_test_path.to_str().unwrap(),
-            "--output",
-            "src/generated",
             "--crate-root",
             project_dir.to_str().unwrap(),
         ])
@@ -6999,6 +7712,136 @@ fn validate_rejects_missing_library_crate_alias() {
 }
 
 #[test]
+fn validate_json_accepts_data_seam_cross_library_method_dep_with_cargo_alias() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success(
+        "validate should accept cross-library method deps for data seams",
+        &output,
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "valid");
+}
+
+#[test]
+fn validate_json_reports_missing_library_crate_alias_for_data_seam_method_dep() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &[]);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "validate should fail when the Cargo alias is missing"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "expected SPEC_LIBRARY_CRATE_ALIAS_MISSING, got: {errors:?}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_UNKNOWN_LIBRARY_NAMESPACE"),
+        "unexpected SPEC_UNKNOWN_LIBRARY_NAMESPACE, got: {errors:?}"
+    );
+}
+
+#[test]
 fn validate_json_reports_library_manifest_errors_without_alias_misdiagnosis() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -7131,7 +7974,7 @@ fn validate_json_surfaces_missing_library_path_as_machine_readable_error() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
     assert_eq!(json["status"], "invalid");
     assert_eq!(json["warnings"], serde_json::json!([]));
     let errors = json["errors"].as_array().unwrap();
@@ -7358,6 +8201,532 @@ fn validate_json_rejects_dep_collision_with_unit_callable_name() {
 }
 
 #[test]
+fn validate_json_rejects_data_constructor_method_id_collision() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: new
+    intent:
+      why: Duplicate the constructor callable.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one collision error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SEMANTIC_VALIDATION");
+    assert_eq!(error["unit"], "pricing/checkout_quote");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("constructors[0].id 'new' conflicts with methods[0].id 'new'"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_kind_data_without_constructors() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one schema error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert!(error["unit"].is_null(), "{error:?}");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing required field: \"constructors\""),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_kind_data_with_empty_constructors() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors: []
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one schema error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert!(error["unit"].is_null(), "{error:?}");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("[] has less than 1 item (at /constructors)"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_kind_data_with_empty_methods() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods: []
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one schema error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert!(error["unit"].is_null(), "{error:?}");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("[] has less than 1 item (at /methods)"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_data_method_without_contract() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one semantic error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SCHEMA_VALIDATION");
+    assert!(error["unit"].is_null(), "{error:?}");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing required field: \"contract\""),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_invalid_data_rust_backend_derive() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    lowering:
+      rust:
+        body: |
+          {{
+              self.subtotal
+          }}
+backends:
+  rust:
+    derives:
+      - not valid rust
+"#
+        ),
+    );
+
+    let output = run(&["validate", spec_path.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one semantic error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SEMANTIC_VALIDATION");
+    assert_eq!(error["unit"], "pricing/checkout_quote");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("backends.rust.derives[0] must be a valid Rust path"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn validate_json_rejects_cross_method_dep_callable_collision_for_data_seam() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = temp_dir
+        .path()
+        .join("units/pricing/checkout_quote.unit.spec");
+    let units_dir = temp_dir.path().join("units");
+    write_spec(
+        temp_dir.path(),
+        "units/pricing/checkout_quote.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Quote totals.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: discount_total
+    intent:
+      why: Use the demo callable.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - demo/foo
+    lowering:
+      rust:
+        body: |
+          {{
+              foo(self.subtotal)
+          }}
+  - id: tax_total
+    intent:
+      why: Use the util callable.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - util/foo
+    lowering:
+      rust:
+        body: |
+          {{
+              foo(self.subtotal)
+          }}
+"#
+        ),
+    );
+    write_spec(
+        temp_dir.path(),
+        "units/demo/foo.unit.spec",
+        &format!(
+            r#"
+id: demo/foo
+kind: function
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Demo callable.
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+    write_spec(
+        temp_dir.path(),
+        "units/util/foo.unit.spec",
+        &format!(
+            r#"
+id: util/foo
+kind: function
+spec_version: "{AUTHORED_SPEC_VERSION}"
+intent:
+  why: Util callable.
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run(&["validate", units_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one dep collision error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_DEP_COLLISION");
+    assert_eq!(error["unit"], "pricing/checkout_quote");
+    assert_eq!(error["path"], spec_path.to_string_lossy().as_ref());
+    assert_eq!(error["dep"], "demo/foo");
+    assert_eq!(error["value"], "foo");
+    assert_eq!(error["path2"], "util/foo");
+}
+
+#[test]
 fn validate_rejects_cross_library_molecule_covers() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -7465,6 +8834,61 @@ fn generate_rejects_missing_library_crate_alias_before_writing_output() {
             .join("src/generated/pricing/apply_discount.rs")
             .exists(),
         "generation should fail before writing output"
+    );
+}
+
+#[test]
+fn generate_accepts_data_seam_cross_library_method_dep_with_cargo_alias() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "generate should accept cross-library method deps for data seams",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("src/generated/pricing/checkout_quote.rs")
+            .exists(),
+        "expected generated data seam output"
     );
 }
 
@@ -7945,6 +9369,303 @@ fn status_marks_missing_library_crate_alias_as_invalid() {
 }
 
 #[test]
+fn test_accepts_data_seam_cross_library_method_dep_with_cargo_alias() {
+    if !cargo_available() {
+        return;
+    }
+
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_file(
+        &fixture.app_root,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    let shared_crate_root = fixture.app_root.parent().unwrap().join("shared-crate");
+    write_file(
+        &shared_crate_root,
+        "Cargo.toml",
+        r#"[package]
+name = "shared"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    );
+    write_file(
+        &shared_crate_root,
+        "src/lib.rs",
+        "pub mod money {\n    pub mod round {\n        pub fn round(value: i32) -> i32 {\n            value\n        }\n    }\n}\n",
+    );
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "test should accept cross-library method deps for data seams",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("units/pricing/checkout_quote.spec.passport.json")
+            .exists(),
+        "expected data seam passport after test"
+    );
+}
+
+#[test]
+fn single_file_test_accepts_data_seam_cross_library_method_dep_with_cargo_alias() {
+    if !cargo_available() {
+        return;
+    }
+
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_shared_round_crate_fixture(&fixture);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file spec test should accept cross-library method deps for data seams",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("units/pricing/checkout_quote.spec.passport.json")
+            .exists(),
+        "expected data seam passport after single-file test"
+    );
+}
+
+#[test]
+fn single_file_molecule_test_accepts_cross_library_data_seam_dep_with_cargo_alias() {
+    if !cargo_available() {
+        return;
+    }
+
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_shared_round_crate_fixture(&fixture);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_flow.test.spec",
+        r#"
+id: pricing/checkout_flow
+intent:
+  why: Verify the checkout quote seam through a molecule test.
+covers:
+  - pricing/checkout_quote
+body:
+  rust: |
+    {
+        let quote = CheckoutQuote::new(5);
+        assert_eq!(quote.total(), 5);
+    }
+"#,
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "test",
+            "units/pricing/checkout_flow.test.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file molecule test should accept cross-library unit deps",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("units/pricing/checkout_flow.test.evidence.json")
+            .exists(),
+        "expected molecule evidence after single-file molecule test"
+    );
+}
+
+#[test]
+fn status_marks_missing_library_crate_alias_as_invalid_for_data_seam_method_dep() {
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &[]);
+    write_m9_data_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        "pricing/checkout_quote",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "status should fail when the Cargo alias is missing"
+    );
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    assert_eq!(units[0]["status"], "invalid");
+    let errors = units[0]["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_LIBRARY_CRATE_ALIAS_MISSING"),
+        "expected SPEC_LIBRARY_CRATE_ALIAS_MISSING, got: {errors:?}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_UNKNOWN_LIBRARY_NAMESPACE"),
+        "unexpected SPEC_UNKNOWN_LIBRARY_NAMESPACE, got: {errors:?}"
+    );
+}
+
+#[test]
 fn status_json_surfaces_library_manifest_errors_globally() {
     let fixture = setup_m9_repo_fixture();
     fs::write(
@@ -8405,6 +10126,12 @@ fn setup_m10_plan_fixture(
     (temp_dir, ecommerce_dir, plan_path)
 }
 
+fn add_hidden_scratch_units_copy(ecommerce_dir: &Path) {
+    let scratch_units_dir = ecommerce_dir.join(".scratch/units");
+    copy_dir_recursive(&ecommerce_dir.join("units"), &scratch_units_dir)
+        .expect("failed to copy units into hidden scratch tree");
+}
+
 fn normalize_exported_at(mut json: Value) -> Value {
     json["exported_at"] = Value::String("<normalized>".to_string());
     json
@@ -8451,6 +10178,33 @@ fn plan_validate_nested_plan_path_matches_checked_in_fixture() {
         ],
     );
     assert_output_success("plan validate should succeed for nested plan path", &output);
+    assert_stdout_json_matches_fixture(&output, "plan-validate-valid-mixed.json");
+}
+
+#[test]
+fn plan_validate_ignores_hidden_scratch_units_copy() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let plan_path = ecommerce_dir.join("plans/refactors/checkout-tax-refactor.plan.spec");
+    add_hidden_scratch_units_copy(&ecommerce_dir);
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "validate",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success(
+        "plan validate should ignore hidden scratch units copies",
+        &output,
+    );
     assert_stdout_json_matches_fixture(&output, "plan-validate-valid-mixed.json");
 }
 
@@ -8943,4 +10697,555 @@ fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
         spec_export_json.get("graph").is_some(),
         "{spec_export_json}"
     );
+}
+
+#[test]
+fn plan_export_ignores_hidden_scratch_units_copy() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let plan_path = ecommerce_dir.join("plans/refactors/checkout-tax-refactor.plan.spec");
+    add_hidden_scratch_units_copy(&ecommerce_dir);
+
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "plan",
+            "export",
+            plan_path
+                .strip_prefix(&ecommerce_dir)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        ],
+    );
+    assert_output_success(
+        "plan export should ignore hidden scratch units copies",
+        &output,
+    );
+    let actual = normalize_exported_at(parse_stdout_json(&output));
+    let expected = fixture_json("plan-export-valid-mixed.json");
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn validate_json_accepts_kind_data_without_placeholder_body() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success("validate should accept kind:data without body", &output);
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "valid");
+}
+
+#[test]
+fn validate_json_accepts_kind_data_with_empty_placeholder_body() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+body: {}
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+    discount_rate:
+      type: rust_decimal::Decimal
+    tax_rate:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
+          }
+local_tests:
+  - id: discounted_subtotal_basic
+    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)
+  - id: total_basic
+    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
+links:
+  molecule_tests:
+    - pricing/checkout_flow
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#,
+    );
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success(
+        "validate should accept kind:data with empty placeholder body",
+        &output,
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "valid");
+}
+
+#[test]
+fn validate_json_rejects_kind_data_with_shared_body_as_semantic_error() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+body:
+  rust: |
+    {
+        unreachable!("escape hatch")
+    }
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+    discount_rate:
+      type: rust_decimal::Decimal
+    tax_rate:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
+          }
+"#,
+    );
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(!output.status.success(), "validate should fail");
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_SEMANTIC_VALIDATION"),
+        "{json}"
+    );
+    assert!(
+        errors
+            .iter()
+            .all(|error| error["code"] != "SPEC_YAML_PARSE"),
+        "{json}"
+    );
+}
+
+#[test]
+fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("single-file data seam test should succeed", &output);
+
+    let passport_path = project_dir.join("units/pricing/checkout_quote.spec.passport.json");
+    assert!(passport_path.exists(), "expected data seam passport");
+    let passport = read_passport_json(&passport_path);
+    assert_eq!(passport["kind"], "data");
+    assert_eq!(
+        passport["data"]["fields"]["subtotal"]["type"],
+        "rust_decimal::Decimal"
+    );
+    assert_eq!(passport["evidence"]["test_results"][0]["status"], "pass");
+    assert!(
+        passport["contract_hash"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:"),
+        "{passport}"
+    );
+
+    let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
+    let status_json = parse_stdout_json(&status_output);
+    let units = status_units(&status_json);
+    let checkout_quote = units
+        .iter()
+        .find(|entry| entry["id"] == "pricing/checkout_quote")
+        .expect("expected checkout_quote status row");
+    assert_eq!(checkout_quote["status"], "valid");
+}
+
+#[test]
+fn data_seam_status_stale_after_intent_change() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "test",
+            "units/pricing/checkout_quote.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("single-file data seam test should succeed", &output);
+
+    let spec_path = project_dir.join("units/pricing/checkout_quote.unit.spec");
+    let updated = fs::read_to_string(&spec_path).unwrap().replace(
+        "Quote a checkout total from subtotal plus discount and tax rates.",
+        "Quote a checkout total with updated intent wording.",
+    );
+    fs::write(&spec_path, updated).unwrap();
+
+    let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status should be non-zero for stale data seam"
+    );
+
+    let status_json = parse_stdout_json(&status_output);
+    let units = status_units(&status_json);
+    let checkout_quote = units
+        .iter()
+        .find(|entry| entry["id"] == "pricing/checkout_quote")
+        .expect("expected checkout_quote status row");
+    assert_eq!(checkout_quote["status"], "stale");
+    assert_eq!(checkout_quote["reason"], "contract changed since last test");
+}
+
+#[test]
+fn validate_json_reports_missing_data_method_dep() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return the final checkout total.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/definitely_missing
+    lowering:
+      rust:
+        body: |
+          {
+              self.subtotal
+          }
+"#,
+    );
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "validate should fail for missing data method dep"
+    );
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|err| err["dep"] == "pricing/definitely_missing"),
+        "{json}"
+    );
+}
+
+#[test]
+fn validate_json_reports_data_seam_cycle() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path().join("data-cycle");
+    let units_dir = project_dir.join("units");
+
+    write_file(
+        &project_dir,
+        "Cargo.toml",
+        "[package]\nname = \"data-cycle\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+    );
+    write_file(
+        &project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    write_spec(
+        &units_dir,
+        "pricing/alpha.unit.spec",
+        r#"
+id: pricing/alpha
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Alpha seam.
+data:
+  fields:
+    subtotal:
+      type: i32
+constructors:
+  - id: new
+    intent:
+      why: Create alpha.
+    contract:
+      inputs:
+        subtotal: i32
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return alpha.
+    receiver: shared_ref
+    contract:
+      returns: i32
+    deps:
+      - pricing/beta
+    lowering:
+      rust:
+        body: |
+          {
+              self.subtotal
+          }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/beta.unit.spec",
+        r#"
+id: pricing/beta
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Beta seam.
+data:
+  fields:
+    subtotal:
+      type: i32
+constructors:
+  - id: new
+    intent:
+      why: Create beta.
+    contract:
+      inputs:
+        subtotal: i32
+    initializes:
+      subtotal: subtotal
+methods:
+  - id: total
+    intent:
+      why: Return beta.
+    receiver: shared_ref
+    contract:
+      returns: i32
+    deps:
+      - pricing/alpha
+    lowering:
+      rust:
+        body: |
+          {
+              self.subtotal
+          }
+"#,
+    );
+
+    let output = run_in(&project_dir, &["validate", "units", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "validate should fail for data seam cycle"
+    );
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CYCLIC_DEP"),
+        "expected SPEC_CYCLIC_DEP, got: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|err| err["cycle"]
+            == serde_json::json!(["pricing/alpha", "pricing/beta", "pricing/alpha"])),
+        "{json}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_SCHEMA_VALIDATION"),
+        "unexpected SPEC_SCHEMA_VALIDATION, got: {errors:?}"
+    );
+}
+
+#[test]
+fn export_additively_includes_data_seam_truth() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+
+    let build_output = run_in(
+        &project_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("build should succeed before export", &build_output);
+
+    let output = run_in(&project_dir, &["export", "units"]);
+    assert_output_success("export should succeed for data seam project", &output);
+
+    let json = parse_stdout_json(&output);
+    let units = json["units"].as_array().unwrap();
+    let checkout_quote = units
+        .iter()
+        .find(|entry| entry["id"] == "pricing/checkout_quote")
+        .expect("expected checkout_quote export unit");
+    assert_eq!(checkout_quote["kind"], "data");
+    assert_eq!(
+        checkout_quote["data"]["fields"]["subtotal"]["type"],
+        "rust_decimal::Decimal"
+    );
+    assert_eq!(checkout_quote["constructors"][0]["id"], "new");
+    assert_eq!(checkout_quote["methods"][0]["id"], "discounted_subtotal");
+    assert_eq!(checkout_quote["backends"]["rust"]["derives"][0], "Clone");
 }

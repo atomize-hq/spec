@@ -2,7 +2,8 @@
 //!
 //! This module defines the core data structures used throughout the spec pipeline:
 //! - SpecStruct: Raw parsed form from YAML (mirrors schema)
-//! - ResolvedSpec: Normalized internal representation (IR) used by the generator
+//! - ResolvedSpec: Normalized function-unit IR used by the generator
+//! - NormalizedUnit / NormalizedDataSeam: kind-aware M12 unit normalization
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,7 @@ pub struct SpecStruct {
     pub deps: Vec<String>,
     #[serde(default)]
     pub imports: Vec<String>,
+    #[serde(default)]
     pub body: Body,
     #[serde(default)]
     pub local_tests: Vec<LocalTest>,
@@ -27,6 +29,8 @@ pub struct SpecStruct {
     pub links: Option<Links>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spec_version: Option<String>,
+    #[serde(flatten)]
+    pub extensions: UnitExtensions,
 }
 
 /// Required intent block explaining why this unit exists
@@ -36,8 +40,9 @@ pub struct Intent {
 }
 
 /// Body containing the native Rust implementation
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Body {
+    #[serde(default)]
     pub rust: String,
 }
 
@@ -66,6 +71,110 @@ pub struct Links {
     pub molecule_tests: Vec<String>,
 }
 
+/// Authoring-time extension surface for non-function units.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct UnitExtensions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<AuthoredDataShape>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constructors: Vec<AuthoredConstructor>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub methods: Vec<AuthoredMethod>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backends: Option<AuthoredBackends>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredDataShape {
+    #[serde(default)]
+    pub fields: IndexMap<String, AuthoredField>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredField {
+    #[serde(rename = "type")]
+    pub type_: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredConstructor {
+    pub id: String,
+    pub intent: Intent,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract: Option<Contract>,
+    #[serde(default)]
+    pub initializes: IndexMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredMethod {
+    pub id: String,
+    pub intent: Intent,
+    pub receiver: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract: Option<Contract>,
+    #[serde(default)]
+    pub deps: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lowering: Option<AuthoredMethodLowering>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredMethodLowering {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rust: Option<AuthoredRustMethodLowering>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredRustMethodLowering {
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredBackends {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rust: Option<AuthoredRustBackend>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredRustBackend {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derives: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnitKind {
+    Function,
+    Data,
+}
+
+impl UnitKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Function => "function",
+            Self::Data => "data",
+        }
+    }
+}
+
+impl TryFrom<&str> for UnitKind {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "function" => Ok(Self::Function),
+            "data" => Ok(Self::Data),
+            other => Err(format!("unsupported unit kind '{other}'")),
+        }
+    }
+}
+
+impl SpecStruct {
+    pub fn unit_kind(&self) -> std::result::Result<UnitKind, String> {
+        UnitKind::try_from(self.kind.as_str())
+    }
+}
+
 /// Normalized internal representation (IR) consumed by the generator
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedSpec {
@@ -91,6 +200,134 @@ pub struct ResolvedSpec {
     pub links: Option<Links>,
     /// spec_version from the source unit (e.g., "0.3.0")
     pub spec_version: Option<String>,
+}
+
+/// Kind-aware normalized unit surface introduced in M12.
+#[derive(Debug, Clone, PartialEq)]
+pub enum NormalizedUnit {
+    Function(ResolvedSpec),
+    Data(NormalizedDataSeam),
+}
+
+impl NormalizedUnit {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Function(unit) => &unit.id,
+            Self::Data(unit) => &unit.id,
+        }
+    }
+
+    pub fn module_path(&self) -> &str {
+        match self {
+            Self::Function(unit) => &unit.module_path,
+            Self::Data(unit) => &unit.module_path,
+        }
+    }
+
+    pub fn kind(&self) -> UnitKind {
+        match self {
+            Self::Function(_) => UnitKind::Function,
+            Self::Data(_) => UnitKind::Data,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalizedDataSeam {
+    pub id: String,
+    pub intent_why: String,
+    pub type_name: String,
+    pub module_path: String,
+    pub fields: Vec<NormalizedDataField>,
+    pub constructors: Vec<NormalizedConstructor>,
+    pub methods: Vec<NormalizedMethod>,
+    pub deps: Vec<String>,
+    pub local_tests: Vec<LocalTest>,
+    pub links: Option<Links>,
+    pub spec_version: Option<String>,
+    pub rust_backend: RustDataSeamBackend,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalizedDataField {
+    pub name: String,
+    pub type_: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalizedConstructor {
+    pub id: String,
+    pub intent_why: String,
+    pub inputs: IndexMap<String, String>,
+    pub initializes: IndexMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalizedMethod {
+    pub id: String,
+    pub intent_why: String,
+    pub receiver: MethodReceiver,
+    pub contract: Contract,
+    pub deps: Vec<String>,
+    pub rust_body: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MethodReceiver {
+    SharedRef,
+}
+
+impl MethodReceiver {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SharedRef => "shared_ref",
+        }
+    }
+}
+
+impl TryFrom<&str> for MethodReceiver {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "shared_ref" => Ok(Self::SharedRef),
+            other => Err(format!("unsupported receiver '{other}'")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RustDataSeamBackend {
+    pub derives: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustDataSeamLowering {
+    pub id: String,
+    pub module_path: String,
+    pub struct_name: String,
+    pub fields: Vec<RustDataFieldLowering>,
+    pub constructors: Vec<RustInherentMethodLowering>,
+    pub methods: Vec<RustInherentMethodLowering>,
+    pub local_tests: Vec<LocalTest>,
+    pub deps: Vec<String>,
+    pub derives: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustDataFieldLowering {
+    pub name: String,
+    pub type_: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustInherentMethodLowering {
+    pub id: String,
+    pub is_constructor: bool,
+    pub receiver: Option<MethodReceiver>,
+    pub inputs: IndexMap<String, String>,
+    pub returns: Option<String>,
+    pub body_rust: String,
 }
 
 /// Source information for loaded specs (file path tracking)
@@ -334,6 +571,99 @@ impl ResolvedSpec {
     }
 }
 
+impl NormalizedDataSeam {
+    pub fn from_spec(spec: SpecStruct) -> std::result::Result<Self, String> {
+        let parts: Vec<&str> = spec.id.split('/').collect();
+        let module_path = if parts.len() > 1 {
+            parts[..parts.len() - 1].join("/")
+        } else {
+            String::new()
+        };
+
+        let fields = spec
+            .extensions
+            .data
+            .as_ref()
+            .map(|data| {
+                data.fields
+                    .iter()
+                    .map(|(name, field)| NormalizedDataField {
+                        name: name.clone(),
+                        type_: field.type_.clone(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let constructors = spec
+            .extensions
+            .constructors
+            .iter()
+            .map(|constructor| NormalizedConstructor {
+                id: constructor.id.clone(),
+                intent_why: constructor.intent.why.clone(),
+                inputs: constructor
+                    .contract
+                    .as_ref()
+                    .and_then(|contract| contract.inputs.clone())
+                    .unwrap_or_default(),
+                initializes: constructor.initializes.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        let methods = spec
+            .extensions
+            .methods
+            .iter()
+            .map(|method| {
+                Ok(NormalizedMethod {
+                    id: method.id.clone(),
+                    intent_why: method.intent.why.clone(),
+                    receiver: MethodReceiver::try_from(method.receiver.as_str())?,
+                    contract: method.contract.clone().ok_or_else(|| {
+                        format!("kind:data method '{}' is missing contract", method.id)
+                    })?,
+                    deps: method.deps.clone(),
+                    rust_body: method
+                        .lowering
+                        .as_ref()
+                        .and_then(|lowering| lowering.rust.as_ref())
+                        .map(|rust| rust.body.clone())
+                        .unwrap_or_default(),
+                })
+            })
+            .collect::<std::result::Result<Vec<_>, String>>()?;
+        let deps = ordered_unique_deps(
+            methods
+                .iter()
+                .flat_map(|method| method.deps.iter().map(String::as_str)),
+        );
+
+        Ok(Self {
+            type_name: type_name_for_unit_id(&spec.id),
+            id: spec.id,
+            intent_why: spec.intent.why,
+            module_path,
+            fields,
+            constructors,
+            methods,
+            deps,
+            local_tests: spec.local_tests,
+            links: spec.links,
+            spec_version: spec.spec_version,
+            rust_backend: RustDataSeamBackend {
+                derives: spec
+                    .extensions
+                    .backends
+                    .as_ref()
+                    .and_then(|backends| backends.rust.as_ref())
+                    .map(|rust| rust.derives.clone())
+                    .unwrap_or_default(),
+            },
+        })
+    }
+}
+
 /// Get the callable name (last segment) from a hierarchical spec ID.
 pub fn callable_name(spec_id: &str) -> &str {
     spec_id
@@ -342,12 +672,46 @@ pub fn callable_name(spec_id: &str) -> &str {
         .unwrap_or(spec_id)
 }
 
+pub fn module_path_for_unit_id(unit_id: &str) -> String {
+    unit_id
+        .rsplit_once('/')
+        .map(|(module_path, _)| module_path.to_string())
+        .unwrap_or_default()
+}
+
+pub fn type_name_for_unit_id(unit_id: &str) -> String {
+    callable_name(unit_id)
+        .split('_')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| {
+            let mut chars = segment.chars();
+            let Some(first) = chars.next() else {
+                return String::new();
+            };
+            let mut out = String::new();
+            out.extend(first.to_uppercase());
+            out.push_str(chars.as_str());
+            out
+        })
+        .collect::<String>()
+}
+
 /// Strip an authored dep string down to its unit ID segment.
 pub fn dep_unit_id(dep_id: &str) -> &str {
     dep_id
         .split_once("::")
         .map(|(_, unit_id)| unit_id)
         .unwrap_or(dep_id)
+}
+
+pub fn ordered_unique_deps<'a>(deps: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut unique = Vec::new();
+    for dep in deps {
+        if !unique.iter().any(|existing| existing == dep) {
+            unique.push(dep.to_string());
+        }
+    }
+    unique
 }
 
 /// Check for callable-name collisions across arbitrary hierarchical IDs.
@@ -370,6 +734,8 @@ pub struct MoleculeTestStruct {
     pub intent: Intent,
     #[serde(default)]
     pub covers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imports: Option<Vec<String>>,
     pub body: Body,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spec_version: Option<String>,
@@ -400,6 +766,7 @@ pub struct ResolvedMoleculeTest {
     pub module_path: String,
     pub intent_why: String,
     pub covers: Vec<String>,
+    pub imports: Option<Vec<String>>,
     pub body_rust: String,
     pub spec_version: Option<String>,
 }
@@ -419,6 +786,7 @@ impl ResolvedMoleculeTest {
             module_path,
             intent_why: loaded.test.intent.why.clone(),
             covers: loaded.test.covers.clone(),
+            imports: loaded.test.imports.clone(),
             body_rust: loaded.test.body.rust.clone(),
             spec_version: loaded.test.spec_version.clone(),
         }
@@ -500,6 +868,7 @@ mod tests {
             local_tests: vec![],
             links: None,
             spec_version: None,
+            extensions: UnitExtensions::default(),
         };
 
         let resolved = ResolvedSpec::from_spec(spec);
@@ -526,6 +895,7 @@ mod tests {
             local_tests: vec![],
             links: None,
             spec_version: None,
+            extensions: UnitExtensions::default(),
         };
 
         let resolved = ResolvedSpec::from_spec(spec);
@@ -650,5 +1020,126 @@ mod tests {
         // Not keywords
         assert!(!is_rust_keyword("my_function"));
         assert!(!is_rust_keyword("pricing"));
+    }
+
+    #[test]
+    fn test_type_name_for_unit_id() {
+        assert_eq!(
+            type_name_for_unit_id("pricing/checkout_quote"),
+            "CheckoutQuote"
+        );
+    }
+
+    #[test]
+    fn test_normalized_data_seam_collects_unique_deps() {
+        let spec = SpecStruct {
+            id: "pricing/checkout_quote".to_string(),
+            kind: "data".to_string(),
+            intent: Intent {
+                why: "Quote checkout totals".to_string(),
+            },
+            contract: None,
+            deps: vec![],
+            imports: vec![],
+            body: Body::default(),
+            local_tests: vec![],
+            links: None,
+            spec_version: None,
+            extensions: UnitExtensions {
+                data: Some(AuthoredDataShape {
+                    fields: IndexMap::from([
+                        (
+                            "subtotal".to_string(),
+                            AuthoredField {
+                                type_: "Decimal".to_string(),
+                            },
+                        ),
+                        (
+                            "tax_rate".to_string(),
+                            AuthoredField {
+                                type_: "Decimal".to_string(),
+                            },
+                        ),
+                    ]),
+                }),
+                constructors: vec![AuthoredConstructor {
+                    id: "new".to_string(),
+                    intent: Intent {
+                        why: "Create a quote".to_string(),
+                    },
+                    contract: Some(Contract {
+                        inputs: Some(IndexMap::from([
+                            ("subtotal".to_string(), "Decimal".to_string()),
+                            ("tax_rate".to_string(), "Decimal".to_string()),
+                        ])),
+                        returns: None,
+                        invariants: vec![],
+                    }),
+                    initializes: IndexMap::from([
+                        ("subtotal".to_string(), "subtotal".to_string()),
+                        ("tax_rate".to_string(), "tax_rate".to_string()),
+                    ]),
+                }],
+                methods: vec![
+                    AuthoredMethod {
+                        id: "discounted_subtotal".to_string(),
+                        intent: Intent {
+                            why: "Compute discounted subtotal".to_string(),
+                        },
+                        receiver: "shared_ref".to_string(),
+                        contract: Some(Contract {
+                            inputs: None,
+                            returns: Some("Decimal".to_string()),
+                            invariants: vec![],
+                        }),
+                        deps: vec!["pricing/apply_discount".to_string()],
+                        lowering: Some(AuthoredMethodLowering {
+                            rust: Some(AuthoredRustMethodLowering {
+                                body: "{ apply_discount(self.subtotal, Decimal::ZERO) }"
+                                    .to_string(),
+                            }),
+                        }),
+                    },
+                    AuthoredMethod {
+                        id: "total".to_string(),
+                        intent: Intent {
+                            why: "Compute final total".to_string(),
+                        },
+                        receiver: "shared_ref".to_string(),
+                        contract: Some(Contract {
+                            inputs: None,
+                            returns: Some("Decimal".to_string()),
+                            invariants: vec![],
+                        }),
+                        deps: vec![
+                            "pricing/apply_discount".to_string(),
+                            "pricing/apply_tax".to_string(),
+                        ],
+                        lowering: Some(AuthoredMethodLowering {
+                            rust: Some(AuthoredRustMethodLowering {
+                                body: "{ apply_tax(self.subtotal, self.tax_rate) }".to_string(),
+                            }),
+                        }),
+                    },
+                ],
+                backends: Some(AuthoredBackends {
+                    rust: Some(AuthoredRustBackend {
+                        derives: vec!["Clone".to_string(), "Debug".to_string()],
+                    }),
+                }),
+            },
+        };
+
+        let normalized = NormalizedDataSeam::from_spec(spec).unwrap();
+        assert_eq!(normalized.type_name, "CheckoutQuote");
+        assert_eq!(normalized.fields.len(), 2);
+        assert_eq!(
+            normalized.deps,
+            vec![
+                "pricing/apply_discount".to_string(),
+                "pricing/apply_tax".to_string(),
+            ]
+        );
+        assert_eq!(normalized.rust_backend.derives, vec!["Clone", "Debug"]);
     }
 }

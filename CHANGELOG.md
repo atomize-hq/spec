@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+## 0.10.0 - 2026-04-20
+
+### Added
+
+- **M12 data seams** — `spec` can now author one top-level `kind: data` seam with explicit shared fields, declarative constructors, inherent methods, and seam-owned local tests, then lower it into generated Rust as one `struct + impl`.
+- **Canonical ecommerce migration wedge** — `examples/ecommerce` now includes a real `kind: data` seam at `units/pricing/checkout_quote.unit.spec` plus a hand-written Rust baseline at `src/raw_baseline/pricing/checkout_quote.rs` for side-by-side comparison.
+
+### Changed
+
+- **The full CLI pipeline now treats a data seam as one truthful top-level unit** — kind-aware normalization, graph loading, generation, passport hashing, export, and status all preserve seam-level truth without promoting nested constructors or methods into separate tracked nodes.
+- **Validation and generation now understand data-seam semantics end to end** — method deps flow through graph/export/passport surfaces, Rust lowering emits seam derives and inherent methods, and identical cross-method dep reuse is allowed when it is semantically the same callable.
+- **Checkout molecule coverage now includes the migrated seam** — `pricing/checkout_flow.test.spec` covers `pricing/checkout_quote` and asserts the data seam agrees with the existing function-based checkout flow.
+- **Docs now show the exact M12 command loop** — `README.md`, `AGENTS.md`, `PLAN.md`, and `examples/ecommerce/README.md` document the repo-root `validate`, `build`, `test`, and `status` commands for the checkout quote migration wedge.
+
+### Fixed
+
+- **Data-seam validator failures are now caught earlier and more precisely** — the CLI rejects invalid method contracts, callable collisions, unsupported scoped generation, bad body shapes, and shared-semantic escape hatches with stable machine-readable diagnostics instead of leaking later generator/compiler failures.
+- **Workspace-scoped generation and plan scanning are less brittle** — scoped generation cleanup and library path rebasing stay rooted correctly, and hidden scratch units no longer pollute plan scans.
+- **Shipped ecommerce truth artifacts stay fresh** — the checked-in passports and molecule evidence now match the landed M12 contract hashes and provenance instead of drifting behind the branch.
+
 ## 0.9.0 - 2026-04-17
 
 ### Added

@@ -6,7 +6,10 @@
 //! are written atomically only after all generation succeeds.
 
 use crate::generator::write_generated_file;
-use crate::types::LoadedSpec;
+use crate::graph::top_level_deps;
+use crate::types::{
+    AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, LoadedSpec, UnitKind,
+};
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -70,9 +73,19 @@ pub struct PassportEvidence {
 pub struct Passport {
     pub spec_version: String,
     pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     pub intent: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contract: Option<PassportContract>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<AuthoredDataShape>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constructors: Vec<AuthoredConstructor>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub methods: Vec<AuthoredMethod>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backends: Option<AuthoredBackends>,
     pub deps: Vec<String>,
     pub local_tests: Vec<PassportLocalTest>,
     pub generated_at: String,
@@ -102,6 +115,7 @@ pub fn build_passport_with_evidence(
     evidence: Option<PassportEvidence>,
     contract_hash: Option<String>,
 ) -> Passport {
+    let is_data_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data));
     let contract = spec.spec.contract.as_ref().map(|c| PassportContract {
         inputs: c
             .inputs
@@ -126,9 +140,14 @@ pub fn build_passport_with_evidence(
             .clone()
             .unwrap_or_else(|| AUTHORED_SPEC_VERSION.to_string()),
         id: spec.spec.id.clone(),
+        kind: is_data_seam.then(|| spec.spec.kind.clone()),
         intent: spec.spec.intent.why.clone(),
         contract,
-        deps: spec.spec.deps.clone(),
+        data: spec.spec.extensions.data.clone(),
+        constructors: spec.spec.extensions.constructors.clone(),
+        methods: spec.spec.extensions.methods.clone(),
+        backends: spec.spec.extensions.backends.clone(),
+        deps: top_level_deps(spec),
         local_tests: spec
             .spec
             .local_tests
@@ -145,13 +164,35 @@ pub fn build_passport_with_evidence(
     }
 }
 
-/// Compute SHA-256 of the serialized contract field.
+#[derive(Serialize)]
+struct DataSeamHashSurface<'a> {
+    intent: &'a str,
+    data: Option<&'a AuthoredDataShape>,
+    constructors: &'a [AuthoredConstructor],
+    methods: &'a [AuthoredMethod],
+    backends: Option<&'a AuthoredBackends>,
+}
+
+/// Compute SHA-256 of the unit's top-level truth surface.
 ///
-/// Returns `None` when the spec has no contract block.
+/// Function units hash only the legacy top-level `contract` surface.
+/// Data seams hash the seam's authored top-level truth.
 pub fn compute_contract_hash(spec: &LoadedSpec) -> Option<String> {
-    let contract = spec.spec.contract.as_ref()?;
-    let json = serde_json::to_string(contract)
-        .expect("contract serialization cannot fail for well-formed spec");
+    let json = match spec.spec.unit_kind() {
+        Ok(UnitKind::Data) => serde_json::to_string(&DataSeamHashSurface {
+            intent: &spec.spec.intent.why,
+            data: spec.spec.extensions.data.as_ref(),
+            constructors: &spec.spec.extensions.constructors,
+            methods: &spec.spec.extensions.methods,
+            backends: spec.spec.extensions.backends.as_ref(),
+        })
+        .expect("data seam hash serialization cannot fail for well-formed spec"),
+        _ => {
+            let contract = spec.spec.contract.as_ref()?;
+            serde_json::to_string(contract)
+                .expect("contract serialization cannot fail for well-formed spec")
+        }
+    };
     let hash = Sha256::digest(json.as_bytes());
     Some(format!("sha256:{}", hex::encode(hash)))
 }
@@ -300,7 +341,11 @@ fn secs_to_gregorian(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Contract, Intent, LocalTest, SpecSource, SpecStruct};
+    use crate::types::{
+        AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Body, Contract,
+        Intent, LocalTest, SpecSource, SpecStruct, UnitExtensions,
+    };
     use indexmap::IndexMap;
     use tempfile::TempDir;
 
@@ -338,6 +383,116 @@ mod tests {
                     .collect(),
                 links: None,
                 spec_version: spec_version.map(String::from),
+                extensions: crate::types::UnitExtensions::default(),
+            },
+        }
+    }
+
+    fn make_loaded_data_seam(id: &str, file_path: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: file_path.to_string(),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "data".to_string(),
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
+                contract: None,
+                deps: vec!["legacy/ignored".to_string()],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![LocalTest {
+                    id: "total_basic".to_string(),
+                    expect: "CheckoutQuote::new(...).total() == expected".to_string(),
+                }],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions {
+                    data: Some(AuthoredDataShape {
+                        fields: IndexMap::from([
+                            (
+                                "subtotal".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "tax_rate".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![AuthoredConstructor {
+                        id: "new".to_string(),
+                        intent: Intent {
+                            why: "Create a quote".to_string(),
+                        },
+                        contract: Some(Contract {
+                            inputs: Some(IndexMap::from([
+                                ("subtotal".to_string(), "Decimal".to_string()),
+                                ("tax_rate".to_string(), "Decimal".to_string()),
+                            ])),
+                            returns: None,
+                            invariants: vec![],
+                        }),
+                        initializes: IndexMap::from([
+                            ("subtotal".to_string(), "subtotal".to_string()),
+                            ("tax_rate".to_string(), "tax_rate".to_string()),
+                        ]),
+                    }],
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "discounted_subtotal".to_string(),
+                            intent: Intent {
+                                why: "Compute discounted subtotal".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_discount".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ apply_discount(self.subtotal, Decimal::ZERO) }"
+                                        .to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "total".to_string(),
+                            intent: Intent {
+                                why: "Compute total".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![
+                                "pricing/apply_discount".to_string(),
+                                "pricing/apply_tax".to_string(),
+                            ],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ apply_tax(self.subtotal, self.tax_rate) }".to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec!["Clone".to_string(), "Debug".to_string()],
+                        }),
+                    }),
+                },
             },
         }
     }
@@ -402,6 +557,34 @@ mod tests {
         assert!(passport.local_tests.is_empty());
         assert!(passport.evidence.is_none());
         assert!(passport.contract_hash.is_none());
+    }
+
+    #[test]
+    fn build_passport_data_seam_serializes_top_level_truth_only() {
+        let spec = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+
+        let passport = build_passport(&spec, "2026-04-19T00:00:00Z");
+
+        assert_eq!(passport.kind, Some("data".to_string()));
+        assert!(passport.contract.is_none());
+        assert_eq!(
+            passport.deps,
+            vec![
+                "pricing/apply_discount".to_string(),
+                "pricing/apply_tax".to_string(),
+            ]
+        );
+        assert_eq!(passport.data.unwrap().fields.len(), 2);
+        assert_eq!(passport.constructors.len(), 1);
+        assert_eq!(passport.methods.len(), 2);
+        assert_eq!(
+            passport.backends.unwrap().rust.unwrap().derives,
+            vec!["Clone".to_string(), "Debug".to_string()]
+        );
+        assert_eq!(passport.local_tests.len(), 1);
     }
 
     #[test]
@@ -533,6 +716,51 @@ mod tests {
         assert_ne!(
             compute_contract_hash(&spec_ab),
             compute_contract_hash(&spec_ba)
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_present_for_data_seam() {
+        let spec = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+
+        assert!(
+            compute_contract_hash(&spec).is_some(),
+            "data seams must write a top-level truth hash"
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_changes_on_data_seam_intent_change() {
+        let spec_original = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.intent.why = "Changed seam intent".to_string();
+
+        assert_ne!(
+            compute_contract_hash(&spec_original),
+            compute_contract_hash(&spec_changed)
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_changes_on_data_seam_method_truth_change() {
+        let spec_original = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.extensions.methods[1]
+            .deps
+            .push("money/round".to_string());
+
+        assert_ne!(
+            compute_contract_hash(&spec_original),
+            compute_contract_hash(&spec_changed)
         );
     }
 

@@ -43,7 +43,8 @@
     "status": "partial",
     "units": [
       "pricing/apply_tax",
-      "pricing/calculate_total"
+      "pricing/calculate_total",
+      "pricing/checkout_quote"
     ],
     "molecule_tests": [
       "pricing/checkout_flow",

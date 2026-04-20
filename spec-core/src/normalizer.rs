@@ -1,13 +1,43 @@
-//! Normalizer module: Convert SpecStruct to ResolvedSpec (IR)
+//! Normalizer module: convert authored units into kind-aware normalized IR.
 //!
-//! Phase 3: Normalize parsed specs into canonical IR for generation.
+//! The legacy `normalize_spec` helper remains function-only for current callers.
 
-use crate::types::{ResolvedSpec, SpecStruct, is_rust_keyword};
+use crate::types::{NormalizedDataSeam, NormalizedUnit, ResolvedSpec, SpecStruct, is_rust_keyword};
 use crate::{Result, SpecError};
+
+pub fn normalize_unit(mut spec: SpecStruct) -> Result<NormalizedUnit> {
+    spec.id = canonicalize_id(&spec.id)?;
+
+    match spec
+        .unit_kind()
+        .map_err(|message| SpecError::SemanticValidation {
+            message,
+            path: String::new(),
+        })? {
+        crate::types::UnitKind::Function => {
+            Ok(NormalizedUnit::Function(ResolvedSpec::from_spec(spec)))
+        }
+        crate::types::UnitKind::Data => NormalizedDataSeam::from_spec(spec)
+            .map(NormalizedUnit::Data)
+            .map_err(|message| SpecError::SemanticValidation {
+                message,
+                path: String::new(),
+            }),
+    }
+}
 
 pub fn normalize_spec(mut spec: SpecStruct) -> Result<ResolvedSpec> {
     spec.id = canonicalize_id(&spec.id)?;
-    Ok(ResolvedSpec::from_spec(spec))
+    match spec.unit_kind().map_err(|message| SpecError::SemanticValidation {
+        message,
+        path: String::new(),
+    })? {
+        crate::types::UnitKind::Function => Ok(ResolvedSpec::from_spec(spec)),
+        crate::types::UnitKind::Data => Err(SpecError::SemanticValidation {
+            message: "normalize_spec only supports kind: function; use normalize_unit for kind-aware dispatch".to_string(),
+            path: String::new(),
+        }),
+    }
 }
 
 fn canonicalize_id(id: &str) -> Result<String> {
@@ -63,7 +93,8 @@ fn validate_canonical_id(id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Body, Intent};
+    use crate::types::{AuthoredDataShape, AuthoredField, Body, Intent, UnitExtensions};
+    use indexmap::IndexMap;
 
     fn make_spec(id: &str) -> SpecStruct {
         SpecStruct {
@@ -81,6 +112,7 @@ mod tests {
             local_tests: vec![],
             links: None,
             spec_version: None,
+            extensions: UnitExtensions::default(),
         }
     }
 
@@ -111,5 +143,33 @@ mod tests {
     fn rejects_keywords_defensively() {
         let err = normalize_spec(make_spec("pricing/type")).unwrap_err();
         assert!(err.to_string().contains("Rust reserved keyword"));
+    }
+
+    #[test]
+    fn normalize_unit_supports_data_seams() {
+        let mut spec = make_spec(" pricing/checkout_quote ");
+        spec.kind = "data".to_string();
+        spec.body = Body::default();
+        spec.extensions = UnitExtensions {
+            data: Some(AuthoredDataShape {
+                fields: IndexMap::from([(
+                    "subtotal".to_string(),
+                    AuthoredField {
+                        type_: "Decimal".to_string(),
+                    },
+                )]),
+            }),
+            ..UnitExtensions::default()
+        };
+
+        let normalized = normalize_unit(spec).unwrap();
+        match normalized {
+            NormalizedUnit::Data(unit) => {
+                assert_eq!(unit.id, "pricing/checkout_quote");
+                assert_eq!(unit.type_name, "CheckoutQuote");
+                assert_eq!(unit.fields.len(), 1);
+            }
+            other => panic!("expected data unit, got {other:?}"),
+        }
     }
 }

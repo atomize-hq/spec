@@ -21,7 +21,7 @@
 ## Project docs
 
 - [`CHANGELOG.md`](CHANGELOG.md): shipped release history
-- [`PLAN.md`](PLAN.md): active implementation roadmap through M11
+- [`PLAN.md`](PLAN.md): active implementation roadmap through M12, with shipped M11 context
 - [`DECISIONS.md`](DECISIONS.md): project-level decisions that stay stable across releases
 - [`TODOS.md`](TODOS.md): backlog and follow-up inventory
 - [`AGENTS.md`](AGENTS.md): agent workflow and machine-readable `spec` authoring loop
@@ -49,16 +49,20 @@ spec generate examples/ecommerce/units
 
 ## Spec format
 
-Each unit is a YAML document with these required fields:
+Each unit is a YAML document with these common required fields:
 
 - `id`: hierarchical unit id like `pricing/apply_discount`
-- `kind`: currently `function`
+- `kind`: authored unit shape, currently `function` or `data`
 - `intent.why`: why the unit exists
-- `body.rust`: the function body as a Rust block expression (`{ ... }`, braces included)
 
-Optional fields include `contract`, `deps`, `imports`, `local_tests`, and `links`.
+Kind-specific authored fields:
 
-`spec` generates the complete `pub fn` signature from `contract.inputs` and `contract.returns`. A minimal unit with a contract looks like:
+| `kind` | Required authored fields | Optional authored fields | Forbidden top-level fields |
+| --- | --- | --- | --- |
+| `function` | `contract`, `body.rust` | `deps`, `imports`, `local_tests`, `links` | none |
+| `data` | `data.fields`, one or more `constructors`, one or more `methods` | `local_tests`, `links`, `backends.rust` | `contract`, `deps`, `imports`, `body.rust` |
+
+For `kind: function`, `spec` generates the complete `pub fn` signature from `contract.inputs` and `contract.returns`. A minimal unit with a contract looks like:
 
 ```yaml
 id: pricing/apply_tax
@@ -88,6 +92,73 @@ pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
     round(taxed)
 }
 ```
+
+For `kind: data`, one `.unit.spec` file authors a top-level data seam with shared fields plus one or more nested constructors and one or more nested methods. A minimal seam based on the canonical M12 `pricing/checkout_quote` example looks like:
+
+```yaml
+id: pricing/checkout_quote
+kind: data
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+    discount_rate:
+      type: rust_decimal::Decimal
+    tax_rate:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
+          }
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+```
+
+`kind: data` keeps shared semantics in `data.fields`, `constructors`, and `methods`. Rust-specific lowering stays inside `methods[].lowering.rust.body` and `backends.rust`.
 
 ## Migrating from 0.2.x
 
@@ -124,39 +195,41 @@ Running `spec validate` on a 0.2.x unit will emit a clear migration error pointi
 
 ## Example
 
-The ecommerce example demonstrates four units, two molecule tests, one checked-in plan artifact, and tracked molecule evidence so the shipped example stays green on a fresh clone:
+The ecommerce example demonstrates the canonical M12 migration wedge alongside the existing pricing units, two molecule tests, one checked-in plan artifact, and tracked molecule evidence so the shipped example stays green on a fresh clone:
 
 - `money/round`
 - `pricing/apply_discount`
 - `pricing/apply_tax`
 - `pricing/calculate_total`
+- `pricing/checkout_quote` (`kind: data`)
 - `pricing/checkout_flow`
 - `pricing/discount_plus_tax`
 - `plans/refactors/checkout-tax-refactor.plan.spec`
+- `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs` (hand-written Rust baseline for the same seam)
 
-The example crate is intentionally minimal. It provides a realistic place to keep unit specs and a Rust project scaffold that can host generated output. The checked-in `pricing/*.test.evidence.json` files are generated artifacts for this canonical example, not hand-authored source.
+The example crate is intentionally minimal. It provides a realistic place to keep unit specs, a hand-written Rust baseline for the M12 data-seam migration, and a Rust project scaffold that can host generated output. The checked-in `pricing/*.test.evidence.json` files are generated artifacts for this canonical example, not hand-authored source.
 
 ## Commands
 
 ```bash
-spec validate <path>                      # schema + semantic validation
-spec validate <path> --no-strict          # downgrade missing deps to warnings
-spec validate <path> --format json        # machine-readable JSON output for agents
-spec generate <path>                      # emit .rs files (default: {crate_root}/src/generated)
-spec generate <path> --output <dir>       # emit .rs files to explicit directory
+spec validate <unit-or-root>              # directory or single .unit.spec: schema + semantic validation
+spec validate <unit-or-root> --no-strict  # downgrade missing deps to warnings
+spec validate <unit-or-root> --format json # machine-readable JSON output for agents
+spec generate <units-dir>                 # directory only: emit .rs files (default: {crate_root}/src/generated)
+spec generate <units-dir> --output <dir>  # explicit output directory
 
-spec build <path>                         # validate → generate → cargo build
-spec build <path> --output <dir>          # explicit output directory
-spec test  <path>                         # spec build → cargo test, writes passports + molecule evidence
-spec test  <path> --output <dir>          # explicit output directory
+spec build <units-dir>                    # directory only: validate → generate → cargo build
+spec build <units-dir> --output <dir>     # explicit output directory
+spec test  <path>                         # directory, single .unit.spec, or single .test.spec
+spec test  <path> --output <dir>          # explicit output directory for directory-scoped test runs
 spec test  <path/to/unit.unit.spec>       # scope to a single unit (filter by module path)
 spec test  <path/to/test.test.spec>       # run one molecule test and write only its .test.evidence.json
 
-spec status <path>                        # per-root unit and molecule-test health
-spec status <path> --format json          # machine-readable status for agents
+spec status <unit-or-root>                # directory or single .unit.spec: per-root unit and molecule-test health
+spec status <unit-or-root> --format json  # machine-readable status for agents
 
-spec export <path>                        # emit JSON bundle to stdout
-spec export <path> --output <file>        # write JSON bundle to file
+spec export <unit-or-root>                # directory or single .unit.spec: emit JSON bundle to stdout
+spec export <unit-or-root> --output <file> # write JSON bundle to file
 
 spec plan validate <file>                 # validate one .plan.spec file and compute local impact
 spec plan validate <file> --format json   # machine-readable plan validation + computed impact
@@ -164,11 +237,23 @@ spec plan export <file>                   # emit dedicated plan bundle to stdout
 spec plan export <file> --output <file>   # write dedicated plan bundle to file
 ```
 
-`validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
+Canonical M12 example loop from the repo root:
 
-`spec build` and `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests.
+```bash
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/checkout_quote.unit.spec --format json
+cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec
+cargo run -p spec-cli -- status examples/ecommerce --format json
+```
 
-When you pass a single `.unit.spec` file to `spec validate`, `spec generate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
+`validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict, is directory-scoped only, and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
+
+`spec build` and directory-scoped `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec build` is directory-scoped only. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests.
+
+When you pass a single `.unit.spec` file to `spec validate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
+
+Single-file `spec test` runs generate Rust into an isolated internal build surface. They do not rewrite your checked-out `src/generated/` tree, and `--output` is accepted only for directory-scoped `test` runs.
 
 `spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read.
 
@@ -184,7 +269,7 @@ For both `.unit.spec` and directory-scoped `.test.spec` validation, the path seg
 
 `spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport plus molecule-evidence trail that records what was actually observed to pass. In this repo, the canonical ecommerce example ships both unit passports and molecule evidence so `spec status .` is a trustworthy starting point on a fresh clone.
 
-The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate`, `generate`, and `test` stay on that unit and do not pull sibling molecule tests into the run.
+The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate` and `test` stay on that unit and do not pull sibling molecule tests into the run.
 
 ```bash
 spec validate examples/ecommerce/units --format json
@@ -192,7 +277,7 @@ spec validate examples/ecommerce/units --format json
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "status": "invalid",
   "errors": [
     {
@@ -207,6 +292,9 @@ spec validate examples/ecommerce/units --format json
 ```
 
 That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose. Pre-validation workspace-config failures, including broken `[libraries]` entries, also stay in this JSON contract for `validate --format json`.
+`warnings` is a structured array in `schema_version: 3`, so machine consumers can key off stable warning codes instead of parsing display text.
+
+For molecule tests, `covers` declares the semantic exercised-unit set. Add explicit `.test.spec` `imports` when the Rust body needs names in scope. If `imports` is omitted, validation emits a deprecation warning and generation temporarily falls back to cover-derived implicit imports for backward compatibility.
 
 For plan artifacts, the machine-readable loop is:
 
@@ -224,7 +312,7 @@ Valid plan responses reuse the same top-level envelope and add `plan_id` plus de
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "status": "valid",
   "errors": [],
   "warnings": [],

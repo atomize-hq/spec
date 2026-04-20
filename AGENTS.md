@@ -21,11 +21,19 @@ Key routing rules:
 Use this workflow when editing `.unit.spec` files or responding to validation and test feedback.
 
 - Touch source specs, not generated output or observed artifacts. Edit `.unit.spec` or `.test.spec` files, then let `spec` regenerate `.rs` files, `.spec.passport.json`, and `.test.evidence.json` artifacts.
-- Follow the 5-step loop: `spec status .` to find invalid, stale, or missing-evidence units, `spec validate [path] --format json` to read machine-parsable failures, edit the `.unit.spec`, run `spec build [path]`, then run `spec test [path]` and repeat until everything is green.
+- Follow the 5-step loop: `spec status .` to find invalid, stale, or missing-evidence units, `spec validate <unit-or-root> --format json` to read machine-parsable failures, edit the source `.unit.spec` or `.test.spec`, run `spec build <units-dir>` when you need to regenerate the shared output tree, then run `spec test <unit.unit.spec>` for exact-unit proof or `spec test <file.test.spec>` for a single molecule test and repeat until everything is green.
 - Treat `spec validate --format json` as the primary feedback channel. Read `status`, `errors`, and `warnings` from stdout; this includes pre-validation workspace-config failures such as broken `[libraries]` entries. Each error object includes a stable `SPEC_*` machine code, the unit path when applicable, and any relevant structured fields such as `dep`, `field`, or `value`.
 - A passport is the co-located `.spec.passport.json` record for a unit. It is "done" only when the unit validates, builds, tests, and has fresh passport evidence from `spec test`.
 - A stale unit is marked with `~` in `spec status` when the passport's stored contract hash no longer matches the current spec contract. Treat stale as work to redo, not as success.
 - For molecule tests, run `spec test path/to/file.test.spec` to execute only that interaction test and refresh only its co-located `.test.evidence.json` artifact.
+- For `kind: data`, keep shared seam semantics in `data.fields`, `constructors`, and `methods`. Do not author top-level `contract`, `deps`, `imports`, or `body.rust`.
+- Canonical M12 wedge loop:
+  `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/checkout_quote.unit.spec --format json`
+  `cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec`
+  `cargo run -p spec-cli -- status examples/ecommerce --format json`
+  Single-file `spec test` uses an isolated internal output tree; do not pass `--output`.
 
 ## Plan Artifact Workflow
 

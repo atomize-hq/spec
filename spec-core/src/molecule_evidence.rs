@@ -197,7 +197,9 @@ pub fn ensure_gitignore_entry(spec_root: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use crate::types::{
-        Body, Intent, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct,
+        AuthoredDataShape, AuthoredField, AuthoredMethod, AuthoredMethodLowering,
+        AuthoredRustMethodLowering, Body, Intent, MoleculeTestSource, MoleculeTestStruct,
+        SpecSource, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
     use tempfile::TempDir;
@@ -227,11 +229,16 @@ mod tests {
                 local_tests: vec![],
                 links: None,
                 spec_version: Some("0.3.0".to_string()),
+                extensions: crate::types::UnitExtensions::default(),
             },
         }
     }
 
     fn loaded_test(body: &str) -> LoadedMoleculeTest {
+        loaded_test_covering("pricing/apply_tax", body)
+    }
+
+    fn loaded_test_covering(cover_id: &str, body: &str) -> LoadedMoleculeTest {
         LoadedMoleculeTest {
             source: MoleculeTestSource {
                 file_path: "pricing/checkout_flow.test.spec".to_string(),
@@ -242,11 +249,61 @@ mod tests {
                 intent: Intent {
                     why: "test".to_string(),
                 },
-                covers: vec!["pricing/apply_tax".to_string()],
+                covers: vec![cover_id.to_string()],
+                imports: None,
                 body: Body {
                     rust: body.to_string(),
                 },
                 spec_version: Some("0.3.0".to_string()),
+            },
+        }
+    }
+
+    fn loaded_data_spec(id: &str, intent_why: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: format!("{id}.unit.spec"),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "data".to_string(),
+                intent: Intent {
+                    why: intent_why.to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions {
+                    data: Some(AuthoredDataShape {
+                        fields: IndexMap::from([(
+                            "subtotal".to_string(),
+                            AuthoredField {
+                                type_: "Decimal".to_string(),
+                            },
+                        )]),
+                    }),
+                    constructors: vec![],
+                    methods: vec![AuthoredMethod {
+                        id: "total".to_string(),
+                        intent: Intent {
+                            why: "Return total".to_string(),
+                        },
+                        receiver: "shared_ref".to_string(),
+                        contract: None,
+                        deps: vec!["pricing/apply_tax".to_string()],
+                        lowering: Some(AuthoredMethodLowering {
+                            rust: Some(AuthoredRustMethodLowering {
+                                body: "{ self.subtotal }".to_string(),
+                            }),
+                        }),
+                    }],
+                    backends: None,
+                },
             },
         }
     }
@@ -346,6 +403,29 @@ mod tests {
         );
         evidence.covered_unit_contract_hashes = BTreeMap::from([(
             "pricing/apply_tax".to_string(),
+            Some("sha256:old".to_string()),
+        )]);
+
+        assert!(molecule_evidence_is_stale(&evidence, &test, &specs_by_id));
+    }
+
+    #[test]
+    fn molecule_evidence_is_stale_when_covered_data_seam_hash_changes() {
+        let test = loaded_test_covering("pricing/checkout_quote", "{ assert!(true); }");
+        let specs_by_id = HashMap::from([(
+            "pricing/checkout_quote".to_string(),
+            loaded_data_spec("pricing/checkout_quote", "updated intent"),
+        )]);
+        let mut evidence = build_molecule_evidence(
+            &test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-17T00:00:00Z",
+            &specs_by_id,
+            None,
+        );
+        evidence.covered_unit_contract_hashes = BTreeMap::from([(
+            "pricing/checkout_quote".to_string(),
             Some("sha256:old".to_string()),
         )]);
 

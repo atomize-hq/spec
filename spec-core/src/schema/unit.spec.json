@@ -3,17 +3,18 @@
   "title": "Unit Spec",
   "description": "Schema for .unit.spec semantic unit files",
   "type": "object",
-  "required": ["id", "kind", "intent", "body"],
+  "required": ["id", "kind", "intent"],
   "additionalProperties": false,
-  "properties": {
-    "id": {
+  "definitions": {
+    "unit_id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$",
       "description": "Hierarchical unit ID. Each segment must be a valid Rust identifier (no keywords)."
     },
-    "kind": {
+    "nested_id": {
       "type": "string",
-      "enum": ["function"]
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$"
     },
     "intent": {
       "type": "object",
@@ -32,32 +33,30 @@
       "properties": {
         "inputs": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "returns": {
           "type": "string"
         },
         "invariants": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
-    "deps": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^(?:[a-z][a-z0-9_]*::)?[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$"
-      }
+    "dep_ref": {
+      "type": "string",
+      "pattern": "^(?:[a-z][a-z0-9_]*::)?[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$"
     },
-    "imports": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*(::([a-zA-Z_][a-zA-Z0-9_]*))+$"
-      }
+    "import_path": {
+      "type": "string",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*(::([a-zA-Z_][a-zA-Z0-9_]*))+$"
     },
-    "body": {
+    "function_body": {
       "type": "object",
       "required": ["rust"],
       "additionalProperties": false,
@@ -69,22 +68,26 @@
         }
       }
     },
-    "local_tests": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["id", "expect"],
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^[a-z][a-z0-9_]*$"
-          },
-          "expect": {
-            "type": "string",
-            "minLength": 1
-          }
+    "data_body": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rust": {
+          "type": "string"
+        }
+      }
+    },
+    "local_test": {
+      "type": "object",
+      "required": ["id", "expect"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/nested_id"
+        },
+        "expect": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -94,14 +97,252 @@
       "properties": {
         "molecule_tests": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
+    },
+    "data_field": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "data_shape": {
+      "type": "object",
+      "required": ["fields"],
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/data_field"
+          }
+        }
+      }
+    },
+    "constructor": {
+      "type": "object",
+      "required": ["id", "intent", "initializes"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/nested_id"
+        },
+        "intent": {
+          "$ref": "#/definitions/intent"
+        },
+        "contract": {
+          "$ref": "#/definitions/contract"
+        },
+        "initializes": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "method_rust_lowering": {
+      "type": "object",
+      "required": ["body"],
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "method_lowering": {
+      "type": "object",
+      "required": ["rust"],
+      "additionalProperties": false,
+      "properties": {
+        "rust": {
+          "$ref": "#/definitions/method_rust_lowering"
+        }
+      }
+    },
+    "method": {
+      "type": "object",
+      "required": ["id", "intent", "receiver", "contract", "lowering"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/nested_id"
+        },
+        "intent": {
+          "$ref": "#/definitions/intent"
+        },
+        "receiver": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contract": {
+          "$ref": "#/definitions/contract"
+        },
+        "deps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/dep_ref"
+          }
+        },
+        "lowering": {
+          "$ref": "#/definitions/method_lowering"
+        }
+      }
+    },
+    "rust_backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "derives": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "backends": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rust": {
+          "$ref": "#/definitions/rust_backend"
+        }
+      }
+    }
+  },
+  "properties": {
+    "id": {
+      "$ref": "#/definitions/unit_id"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["function", "data"]
+    },
+    "intent": {
+      "$ref": "#/definitions/intent"
+    },
+    "contract": {
+      "$ref": "#/definitions/contract"
+    },
+    "deps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/dep_ref"
+      }
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/import_path"
+      }
+    },
+    "body": {
+      "type": "object"
+    },
+    "local_tests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/local_test"
+      }
+    },
+    "links": {
+      "$ref": "#/definitions/links"
     },
     "spec_version": {
       "type": "string",
       "description": "The spec format version this unit was authored for. Use full semver: \"0.3.0\".",
       "examples": ["0.3.0"]
+    },
+    "data": {
+      "$ref": "#/definitions/data_shape"
+    },
+    "constructors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/constructor"
+      }
+    },
+    "methods": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/method"
+      }
+    },
+    "backends": {
+      "$ref": "#/definitions/backends"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "function"
+          }
+        }
+      },
+      "then": {
+        "required": ["body"],
+        "properties": {
+          "body": {
+            "$ref": "#/definitions/function_body"
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": ["data"]
+            },
+            {
+              "required": ["constructors"]
+            },
+            {
+              "required": ["methods"]
+            },
+            {
+              "required": ["backends"]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "data"
+          }
+        }
+      },
+      "then": {
+        "required": ["data", "constructors", "methods"],
+        "properties": {
+          "body": {
+            "$ref": "#/definitions/data_body"
+          }
+        }
+      }
+    }
+  ]
 }

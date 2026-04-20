@@ -12,10 +12,13 @@
 //! `"covers"` edges have `test`/`unit` string fields.
 
 use crate::AUTHORED_SPEC_VERSION;
-use crate::graph::{SpecEdge, SpecGraph};
+use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
 use crate::passport::{ArtifactProvenance, Passport, passport_path_for};
 use crate::plan::{LoadedPlan, PlanComputedImpact, PlanReport, PlanStruct};
-use crate::types::{Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest};
+use crate::types::{
+    AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, Contract, DepRef,
+    LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -41,9 +44,19 @@ pub struct ExportBundle {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExportUnit {
     pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     pub intent: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contract: Option<Contract>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<AuthoredDataShape>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constructors: Vec<AuthoredConstructor>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub methods: Vec<AuthoredMethod>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backends: Option<AuthoredBackends>,
     pub deps: Vec<ExportDepRef>,
     pub local_tests: Vec<LocalTest>,
     pub source_file: String,
@@ -60,6 +73,8 @@ pub struct ExportMoleculeTest {
     pub id: String,
     pub intent: String,
     pub covers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imports: Option<Vec<String>>,
     pub source_file: String,
 }
 
@@ -235,13 +250,17 @@ impl From<&DepRef> for ExportDepRef {
 
 impl From<&LoadedSpec> for ExportUnit {
     fn from(spec: &LoadedSpec) -> Self {
+        let is_data_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data));
         Self {
             id: spec.spec.id.clone(),
+            kind: is_data_seam.then(|| spec.spec.kind.clone()),
             intent: spec.spec.intent.why.clone(),
             contract: spec.spec.contract.clone(),
-            deps: spec
-                .spec
-                .deps
+            data: spec.spec.extensions.data.clone(),
+            constructors: spec.spec.extensions.constructors.clone(),
+            methods: spec.spec.extensions.methods.clone(),
+            backends: spec.spec.extensions.backends.clone(),
+            deps: top_level_deps(spec)
                 .iter()
                 .map(|dep| {
                     let dep_ref = DepRef::parse(dep)
@@ -261,6 +280,7 @@ impl From<&LoadedMoleculeTest> for ExportMoleculeTest {
             id: test.test.id.clone(),
             intent: test.test.intent.why.clone(),
             covers: test.test.covers.clone(),
+            imports: test.test.imports.clone(),
             source_file: test.source.file_path.clone(),
         }
     }
@@ -276,7 +296,11 @@ mod tests {
         LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
         PlanComputedImpactStatus, PlanReport, PlanSource, PlanStruct,
     };
-    use crate::types::{Body, Intent, SpecSource, SpecStruct};
+    use crate::types::{
+        AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Body, Intent,
+        SpecSource, SpecStruct, UnitExtensions,
+    };
     use indexmap::IndexMap;
     use tempfile::TempDir;
 
@@ -314,6 +338,155 @@ mod tests {
                 }],
                 links: None,
                 spec_version: Some("9.9.9".to_string()),
+                extensions: crate::types::UnitExtensions::default(),
+            },
+        }
+    }
+
+    fn loaded_data_seam(dir: &TempDir, rel_path: &str, id: &str) -> LoadedSpec {
+        let source_path = dir.path().join(rel_path);
+        if let Some(parent) = source_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&source_path, "placeholder").unwrap();
+
+        LoadedSpec {
+            source: SpecSource {
+                file_path: source_path.display().to_string(),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "data".to_string(),
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
+                contract: None,
+                deps: vec!["legacy/ignored".to_string()],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![LocalTest {
+                    id: "total_basic".to_string(),
+                    expect: "CheckoutQuote::new(...).total() == expected".to_string(),
+                }],
+                links: None,
+                spec_version: Some("9.9.9".to_string()),
+                extensions: UnitExtensions {
+                    data: Some(AuthoredDataShape {
+                        fields: IndexMap::from([
+                            (
+                                "subtotal".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "tax_rate".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![AuthoredConstructor {
+                        id: "new".to_string(),
+                        intent: Intent {
+                            why: "Create a quote".to_string(),
+                        },
+                        contract: Some(Contract {
+                            inputs: Some(IndexMap::from([
+                                ("subtotal".to_string(), "Decimal".to_string()),
+                                ("tax_rate".to_string(), "Decimal".to_string()),
+                            ])),
+                            returns: None,
+                            invariants: vec![],
+                        }),
+                        initializes: IndexMap::from([
+                            ("subtotal".to_string(), "subtotal".to_string()),
+                            ("tax_rate".to_string(), "tax_rate".to_string()),
+                        ]),
+                    }],
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "discounted_subtotal".to_string(),
+                            intent: Intent {
+                                why: "Compute discounted subtotal".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_discount".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ apply_discount(self.subtotal, Decimal::ZERO) }"
+                                        .to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "total".to_string(),
+                            intent: Intent {
+                                why: "Compute total".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![
+                                "pricing/apply_discount".to_string(),
+                                "pricing/apply_tax".to_string(),
+                            ],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ apply_tax(self.subtotal, self.tax_rate) }".to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec!["Clone".to_string(), "Debug".to_string()],
+                        }),
+                    }),
+                },
+            },
+        }
+    }
+
+    fn loaded_molecule_test(
+        dir: &TempDir,
+        rel_path: &str,
+        id: &str,
+        covers: Vec<&str>,
+        imports: Option<Vec<&str>>,
+    ) -> LoadedMoleculeTest {
+        let source_path = dir.path().join(rel_path);
+        if let Some(parent) = source_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&source_path, "placeholder").unwrap();
+
+        LoadedMoleculeTest {
+            source: crate::types::MoleculeTestSource {
+                file_path: source_path.display().to_string(),
+                id: id.to_string(),
+            },
+            test: crate::types::MoleculeTestStruct {
+                id: id.to_string(),
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
+                covers: covers.into_iter().map(str::to_string).collect(),
+                imports: imports.map(|values| values.into_iter().map(str::to_string).collect()),
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
+                spec_version: None,
             },
         }
     }
@@ -368,6 +541,7 @@ mod tests {
                     why: "Why pricing/apply_tax_behavior".to_string(),
                 },
                 covers: vec!["money/round".to_string(), "pricing/apply_tax".to_string()],
+                imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
                 },
@@ -420,6 +594,67 @@ mod tests {
         assert_eq!(bundle.schema_version, 3);
         assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
         assert_ne!(bundle.schema_version.to_string(), bundle.spec_version);
+    }
+
+    #[test]
+    fn export_molecule_test_preserves_non_empty_imports() {
+        let dir = TempDir::new().unwrap();
+        let molecule_test = loaded_molecule_test(
+            &dir,
+            "tests/pricing/checkout_flow.test.spec",
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount"],
+            Some(vec![
+                "rust_decimal::Decimal",
+                "crate::pricing::apply_discount::apply_discount",
+            ]),
+        );
+
+        let exported = ExportMoleculeTest::from(&molecule_test);
+
+        assert_eq!(
+            exported.imports,
+            Some(vec![
+                "rust_decimal::Decimal".to_string(),
+                "crate::pricing::apply_discount::apply_discount".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn export_molecule_test_preserves_explicit_empty_imports() {
+        let dir = TempDir::new().unwrap();
+        let molecule_test = loaded_molecule_test(
+            &dir,
+            "tests/pricing/checkout_flow.test.spec",
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount"],
+            Some(vec![]),
+        );
+
+        let exported = ExportMoleculeTest::from(&molecule_test);
+        let json = serde_json::to_value(&exported).unwrap();
+
+        assert_eq!(exported.imports, Some(vec![]));
+        assert_eq!(json["imports"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn export_molecule_test_omits_missing_imports() {
+        let dir = TempDir::new().unwrap();
+        let molecule_test = loaded_molecule_test(
+            &dir,
+            "tests/pricing/checkout_flow.test.spec",
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount"],
+            None,
+        );
+
+        let exported = ExportMoleculeTest::from(&molecule_test);
+        let json = serde_json::to_value(&exported).unwrap();
+
+        assert_eq!(exported.imports, None);
+        assert!(json.get("imports").is_none(), "{json}");
     }
 
     #[test]
@@ -564,6 +799,45 @@ mod tests {
         let bundle = build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", Some(&provenance));
 
         assert_eq!(bundle.provenance, Some(provenance));
+    }
+
+    #[test]
+    fn build_export_bundle_additively_includes_data_seam_truth() {
+        let dir = TempDir::new().unwrap();
+        let seam = loaded_data_seam(
+            &dir,
+            "units/pricing/checkout_quote.unit.spec",
+            "pricing/checkout_quote",
+        );
+
+        let bundle = build_export_bundle(&[seam], &[], "2026-04-19T00:00:00Z", None);
+
+        assert_eq!(bundle.units.len(), 1);
+        assert_eq!(bundle.units[0].kind, Some("data".to_string()));
+        assert!(bundle.units[0].contract.is_none());
+        assert_eq!(bundle.units[0].data.as_ref().unwrap().fields.len(), 2);
+        assert_eq!(bundle.units[0].constructors.len(), 1);
+        assert_eq!(bundle.units[0].methods.len(), 2);
+        assert_eq!(
+            bundle.units[0].deps,
+            vec![
+                ExportDepRef::local("pricing/apply_discount"),
+                ExportDepRef::local("pricing/apply_tax"),
+            ]
+        );
+        assert_eq!(
+            bundle.graph.edges,
+            vec![
+                ExportEdge::Dep {
+                    from: ExportDepRef::local("pricing/checkout_quote"),
+                    to: ExportDepRef::local("pricing/apply_discount"),
+                },
+                ExportEdge::Dep {
+                    from: ExportDepRef::local("pricing/checkout_quote"),
+                    to: ExportDepRef::local("pricing/apply_tax"),
+                },
+            ]
+        );
     }
 
     #[test]
