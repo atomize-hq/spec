@@ -10626,6 +10626,15 @@ data:
   fields:
     subtotal:
       type: i32
+constructors:
+  - id: new
+    intent:
+      why: Create alpha.
+    contract:
+      inputs:
+        subtotal: i32
+    initializes:
+      subtotal: subtotal
 methods:
   - id: total
     intent:
@@ -10656,6 +10665,15 @@ data:
   fields:
     subtotal:
       type: i32
+constructors:
+  - id: new
+    intent:
+      why: Create beta.
+    contract:
+      inputs:
+        subtotal: i32
+    initializes:
+      subtotal: subtotal
 methods:
   - id: total
     intent:
@@ -10683,9 +10701,21 @@ methods:
     assert_eq!(json["status"], "invalid");
     let errors = json["errors"].as_array().unwrap();
     assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_CYCLIC_DEP"),
+        "expected SPEC_CYCLIC_DEP, got: {errors:?}"
+    );
+    assert!(
         errors.iter().any(|err| err["cycle"]
             == serde_json::json!(["pricing/alpha", "pricing/beta", "pricing/alpha"])),
         "{json}"
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_SCHEMA_VALIDATION"),
+        "unexpected SPEC_SCHEMA_VALIDATION, got: {errors:?}"
     );
 }
 
