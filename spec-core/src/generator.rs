@@ -656,34 +656,38 @@ pub fn generate_molecule_tests_code(
     tests: &[&ResolvedMoleculeTest],
     units_by_id: &HashMap<&str, &NormalizedUnit>,
 ) -> Result<String> {
-    // Collect all unique cover_ids in alphabetical order for deterministic output
-    let mut cover_id_seen: HashSet<&str> = HashSet::new();
-    let mut all_cover_ids: Vec<&str> = Vec::new();
-    for test in tests {
-        for cover_id in &test.covers {
-            if cover_id_seen.insert(cover_id.as_str()) {
-                all_cover_ids.push(cover_id.as_str());
-            }
-        }
-    }
-    all_cover_ids.sort_unstable();
-
-    // Collect imports from covered specs, deduplicated in stable insertion order
     let mut import_seen: HashSet<String> = HashSet::new();
-    let mut all_imports: Vec<String> = Vec::new();
-    for cover_id in &all_cover_ids {
-        let unit = units_by_id
-            .get(cover_id)
-            .ok_or_else(|| SpecError::Generator {
-                message: format!(
-                "covered unit '{}' not found in spec set (should have been caught by validation)",
-                cover_id
-            ),
-            })?;
-        if let NormalizedUnit::Function(spec) = unit {
-            for import in &spec.imports {
-                if import_seen.insert(import.clone()) {
-                    all_imports.push(import.clone());
+    let mut import_lines: Vec<String> = Vec::new();
+
+    for test in tests {
+        if let Some(imports) = &test.imports {
+            for import in imports {
+                let line = format!("use {import};");
+                if import_seen.insert(line.clone()) {
+                    import_lines.push(line);
+                }
+            }
+        } else {
+            for cover_id in &test.covers {
+                let unit = units_by_id
+                    .get(cover_id.as_str())
+                    .ok_or_else(|| SpecError::Generator {
+                        message: format!(
+                            "covered unit '{}' not found in spec set (should have been caught by validation)",
+                            cover_id
+                        ),
+                    })?;
+                if let NormalizedUnit::Function(spec) = unit {
+                    for import in &spec.imports {
+                        let line = format!("use {import};");
+                        if import_seen.insert(line.clone()) {
+                            import_lines.push(line);
+                        }
+                    }
+                }
+                let line = format!("use {}", covered_unit_use_path(unit));
+                if import_seen.insert(line.clone()) {
+                    import_lines.push(line);
                 }
             }
         }
@@ -691,24 +695,12 @@ pub fn generate_molecule_tests_code(
 
     let mut output = String::new();
 
-    // Emit external import use statements
-    for import in &all_imports {
-        output.push_str(&format!("use {};\n", import));
-    }
-
-    if !all_imports.is_empty() && !all_cover_ids.is_empty() {
+    for line in &import_lines {
+        output.push_str(line);
         output.push('\n');
     }
 
-    // Emit `use crate::...` for each covered unit.
-    for cover_id in &all_cover_ids {
-        let unit = units_by_id
-            .get(cover_id)
-            .expect("covered unit presence already checked above");
-        output.push_str(&format!("use {}\n", covered_unit_use_path(unit)));
-    }
-
-    if !all_cover_ids.is_empty() {
+    if !import_lines.is_empty() {
         output.push('\n');
     }
 
@@ -988,6 +980,7 @@ mod tests {
             module_path,
             intent_why: format!("Test {id}"),
             covers: covers.into_iter().map(str::to_string).collect(),
+            imports: None,
             body_rust: body_rust.to_string(),
             spec_version: None,
         }
@@ -1879,6 +1872,31 @@ mod tests {
         let code = generate_molecule_tests_code(&[&test], &units_by_id).unwrap();
 
         assert!(code.contains("use crate::pricing::checkout_quote::CheckoutQuote;"));
+    }
+
+    #[test]
+    fn generate_molecule_tests_code_explicit_imports_skip_cover_derived_imports() {
+        let mut test = make_resolved_molecule_test(
+            "pricing/discount_plus_tax",
+            vec!["pricing/apply_discount", "pricing/apply_tax", "money/round"],
+            "{ let discounted = apply_discount(Decimal::ONE, Decimal::ONE); let taxed = apply_tax(discounted, Decimal::ONE); assert!(taxed >= Decimal::ZERO); }",
+        );
+        test.imports = Some(vec![
+            "rust_decimal::Decimal".to_string(),
+            "crate::pricing::apply_discount::apply_discount".to_string(),
+            "crate::pricing::apply_tax::apply_tax".to_string(),
+        ]);
+        let units_by_id: HashMap<&str, &NormalizedUnit> = HashMap::new();
+
+        let code = generate_molecule_tests_code(&[&test], &units_by_id).unwrap();
+
+        assert!(code.contains("use rust_decimal::Decimal;"));
+        assert!(code.contains("use crate::pricing::apply_discount::apply_discount;"));
+        assert!(code.contains("use crate::pricing::apply_tax::apply_tax;"));
+        assert!(
+            !code.contains("use crate::money::round::round;"),
+            "explicit imports should not synthesize imports from semantic-only covers"
+        );
     }
 
     #[test]

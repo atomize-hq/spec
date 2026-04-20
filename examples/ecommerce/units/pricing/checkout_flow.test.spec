@@ -6,6 +6,11 @@ covers:
   - pricing/apply_discount
   - pricing/calculate_total
   - pricing/checkout_quote
+imports:
+  - rust_decimal::Decimal
+  - crate::pricing::apply_discount::apply_discount
+  - crate::pricing::calculate_total::calculate_total
+  - crate::pricing::checkout_quote::CheckoutQuote
 body:
   rust: |
     {

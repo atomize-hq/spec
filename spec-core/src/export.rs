@@ -73,6 +73,8 @@ pub struct ExportMoleculeTest {
     pub id: String,
     pub intent: String,
     pub covers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imports: Option<Vec<String>>,
     pub source_file: String,
 }
 
@@ -278,6 +280,7 @@ impl From<&LoadedMoleculeTest> for ExportMoleculeTest {
             id: test.test.id.clone(),
             intent: test.test.intent.why.clone(),
             covers: test.test.covers.clone(),
+            imports: test.test.imports.clone(),
             source_file: test.source.file_path.clone(),
         }
     }
@@ -455,6 +458,39 @@ mod tests {
         }
     }
 
+    fn loaded_molecule_test(
+        dir: &TempDir,
+        rel_path: &str,
+        id: &str,
+        covers: Vec<&str>,
+        imports: Option<Vec<&str>>,
+    ) -> LoadedMoleculeTest {
+        let source_path = dir.path().join(rel_path);
+        if let Some(parent) = source_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&source_path, "placeholder").unwrap();
+
+        LoadedMoleculeTest {
+            source: crate::types::MoleculeTestSource {
+                file_path: source_path.display().to_string(),
+                id: id.to_string(),
+            },
+            test: crate::types::MoleculeTestStruct {
+                id: id.to_string(),
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
+                covers: covers.into_iter().map(str::to_string).collect(),
+                imports: imports.map(|values| values.into_iter().map(str::to_string).collect()),
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
+                spec_version: None,
+            },
+        }
+    }
+
     fn loaded_plan() -> LoadedPlan {
         LoadedPlan {
             source: PlanSource {
@@ -505,6 +541,7 @@ mod tests {
                     why: "Why pricing/apply_tax_behavior".to_string(),
                 },
                 covers: vec!["money/round".to_string(), "pricing/apply_tax".to_string()],
+                imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
                 },
@@ -557,6 +594,67 @@ mod tests {
         assert_eq!(bundle.schema_version, 3);
         assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
         assert_ne!(bundle.schema_version.to_string(), bundle.spec_version);
+    }
+
+    #[test]
+    fn export_molecule_test_preserves_non_empty_imports() {
+        let dir = TempDir::new().unwrap();
+        let molecule_test = loaded_molecule_test(
+            &dir,
+            "tests/pricing/checkout_flow.test.spec",
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount"],
+            Some(vec![
+                "rust_decimal::Decimal",
+                "crate::pricing::apply_discount::apply_discount",
+            ]),
+        );
+
+        let exported = ExportMoleculeTest::from(&molecule_test);
+
+        assert_eq!(
+            exported.imports,
+            Some(vec![
+                "rust_decimal::Decimal".to_string(),
+                "crate::pricing::apply_discount::apply_discount".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn export_molecule_test_preserves_explicit_empty_imports() {
+        let dir = TempDir::new().unwrap();
+        let molecule_test = loaded_molecule_test(
+            &dir,
+            "tests/pricing/checkout_flow.test.spec",
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount"],
+            Some(vec![]),
+        );
+
+        let exported = ExportMoleculeTest::from(&molecule_test);
+        let json = serde_json::to_value(&exported).unwrap();
+
+        assert_eq!(exported.imports, Some(vec![]));
+        assert_eq!(json["imports"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn export_molecule_test_omits_missing_imports() {
+        let dir = TempDir::new().unwrap();
+        let molecule_test = loaded_molecule_test(
+            &dir,
+            "tests/pricing/checkout_flow.test.spec",
+            "pricing/checkout_flow",
+            vec!["pricing/apply_discount"],
+            None,
+        );
+
+        let exported = ExportMoleculeTest::from(&molecule_test);
+        let json = serde_json::to_value(&exported).unwrap();
+
+        assert_eq!(exported.imports, None);
+        assert!(json.get("imports").is_none(), "{json}");
     }
 
     #[test]

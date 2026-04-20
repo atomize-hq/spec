@@ -292,6 +292,7 @@ mod tests {
                     why: format!("Why {id}"),
                 },
                 covers: covers.into_iter().map(str::to_string).collect(),
+                imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
                 },

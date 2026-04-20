@@ -60,7 +60,7 @@ type CollectedSpecs = (
 type PlanValidationInputs = (
     ValidationSpecCollection,
     Vec<spec_core::SpecError>,
-    Vec<String>,
+    Vec<spec_core::SpecWarning>,
     Vec<LoadedMoleculeTest>,
 );
 type DiagnosticMap = BTreeMap<String, Vec<String>>;
@@ -106,7 +106,7 @@ impl ValidationSpecCollection {
     }
 }
 
-const VALIDATE_JSON_SCHEMA_VERSION: u8 = 2;
+const VALIDATE_JSON_SCHEMA_VERSION: u8 = 3;
 const STATUS_JSON_SCHEMA_VERSION: u8 = 3;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
@@ -121,7 +121,7 @@ struct JsonValidateResponse {
     schema_version: u8,
     status: &'static str,
     errors: Vec<JsonErrorEntry>,
-    warnings: Vec<String>,
+    warnings: Vec<JsonWarningEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plan_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -179,6 +179,16 @@ struct JsonErrorEntry {
     path2: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cycle: Option<Vec<String>>,
+}
+
+#[derive(Clone, Serialize)]
+struct JsonWarningEntry {
+    code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    message: String,
 }
 
 fn workspace_config_error_to_json_entry(err: &WorkspaceConfigError) -> JsonErrorEntry {
@@ -669,7 +679,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
                 .into_iter()
                 .chain(validation_warnings)
                 .chain(molecule_warnings)
-                .map(|warning| warning.to_string())
+                .map(|warning| spec_warning_to_json_entry(&warning))
                 .collect();
             let has_errors = !errors.is_empty();
 
@@ -1528,7 +1538,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 schema_version: VALIDATE_JSON_SCHEMA_VERSION,
                 status: "invalid",
                 errors: vec![spec_error_to_json_entry(&err, &id_by_path)],
-                warnings,
+                warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
                 plan_id: None,
                 computed_impact: None,
             })?;
@@ -1554,7 +1564,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
             schema_version: VALIDATE_JSON_SCHEMA_VERSION,
             status: "valid",
             errors: vec![],
-            warnings,
+            warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
             plan_id: Some(report.plan_id),
             computed_impact: Some(report.computed_impact),
         }),
@@ -1586,7 +1596,10 @@ fn plan_export_command(path: &Path, output: Option<&Path>) -> Result<()> {
 
     let report = build_plan_report(&plan, &validation_specs.root_specs, &molecule_tests)?;
     let mut bundle = build_plan_export_bundle(&plan, &report, &rfc3339_now());
-    bundle.warnings = warnings;
+    bundle.warnings = warnings
+        .into_iter()
+        .map(|warning| warning.to_string())
+        .collect();
     let json = serde_json::to_string_pretty(&bundle)?;
 
     match output {
@@ -1603,7 +1616,7 @@ fn plan_export_command(path: &Path, output: Option<&Path>) -> Result<()> {
 
 fn emit_plan_validate_failure(
     validation_errors: Vec<spec_core::SpecError>,
-    warnings: Vec<String>,
+    warnings: Vec<spec_core::SpecWarning>,
     id_by_path: &HashMap<String, String>,
     format: OutputFormat,
 ) -> Result<()> {
@@ -1631,7 +1644,7 @@ fn emit_plan_validate_failure(
                     .iter()
                     .map(|err| spec_error_to_json_entry(err, id_by_path))
                     .collect(),
-                warnings,
+                warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
                 plan_id: None,
                 computed_impact: None,
             };
@@ -3542,7 +3555,7 @@ fn plan_validation_inputs(
     context: &WorkspaceContext,
 ) -> Result<PlanValidationInputs> {
     let units_root = library_root.join("units");
-    let validation_specs = collect_plan_validation_specs(library_root, &context.libraries)?;
+    let mut validation_specs = collect_plan_validation_specs(library_root, &context.libraries)?;
     let validation_options = ValidationOptions {
         strict_deps: true,
         allow_unsafe_local_test_expect: context.config.validation.allow_unsafe_local_test_expect,
@@ -3566,21 +3579,12 @@ fn plan_validation_inputs(
         validate_molecule_tests(&molecule_report.tests, &validation_specs.root_specs);
     validation_errors.extend(molecule_errors);
 
-    let warnings = validation_specs
-        .loader_warnings
-        .iter()
-        .map(ToString::to_string)
-        .chain(
-            validation_warnings
-                .into_iter()
-                .map(|warning| warning.to_string()),
-        )
-        .chain(
-            molecule_warnings
-                .into_iter()
-                .map(|warning| warning.to_string()),
-        )
-        .chain(molecule_report.warnings.iter().map(ToString::to_string))
+    let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
+    let warnings = loader_warnings
+        .into_iter()
+        .chain(validation_warnings)
+        .chain(molecule_warnings)
+        .chain(molecule_report.warnings)
         .collect();
 
     Ok((
@@ -4296,6 +4300,39 @@ fn spec_error_to_json_entry(
     }
 }
 
+fn spec_warning_code(warning: &spec_core::SpecWarning) -> &'static str {
+    match warning {
+        spec_core::SpecWarning::MissingDep { .. } => "SPEC_MISSING_DEP_WARNING",
+        spec_core::SpecWarning::SymlinkCycleSkipped { .. } => "SPEC_SYMLINK_CYCLE_SKIPPED",
+        spec_core::SpecWarning::MissingSpecVersion { .. } => "SPEC_MISSING_SPEC_VERSION",
+        spec_core::SpecWarning::MoleculeTestNoCoveredUnits { .. } => {
+            "SPEC_MOLECULE_TEST_NO_COVERED_UNITS"
+        }
+        spec_core::SpecWarning::MoleculeImplicitImportsDeprecated { .. } => {
+            "SPEC_MOLECULE_IMPLICIT_IMPORTS_DEPRECATED"
+        }
+    }
+}
+
+fn spec_warning_to_json_entry(warning: &spec_core::SpecWarning) -> JsonWarningEntry {
+    let (path, id) = match warning {
+        spec_core::SpecWarning::MissingDep { path, .. }
+        | spec_core::SpecWarning::SymlinkCycleSkipped { path }
+        | spec_core::SpecWarning::MissingSpecVersion { path, .. } => (Some(path.clone()), None),
+        spec_core::SpecWarning::MoleculeTestNoCoveredUnits { test_id, test_path }
+        | spec_core::SpecWarning::MoleculeImplicitImportsDeprecated { test_id, test_path } => {
+            (Some(test_path.clone()), Some(test_id.clone()))
+        }
+    };
+
+    JsonWarningEntry {
+        code: spec_warning_code(warning).to_string(),
+        path,
+        id,
+        message: warning.to_string(),
+    }
+}
+
 fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
     match err {
         spec_core::SpecError::DuplicateId { file1, file2, .. } => {
@@ -4493,7 +4530,10 @@ fn warning_key(warning: &spec_core::SpecWarning) -> String {
         spec_core::SpecWarning::MissingDep { path, .. }
         | spec_core::SpecWarning::SymlinkCycleSkipped { path }
         | spec_core::SpecWarning::MissingSpecVersion { path, .. } => path.clone(),
-        spec_core::SpecWarning::MoleculeTestNoCoveredUnits { test_path, .. } => test_path.clone(),
+        spec_core::SpecWarning::MoleculeTestNoCoveredUnits { test_path, .. }
+        | spec_core::SpecWarning::MoleculeImplicitImportsDeprecated { test_path, .. } => {
+            test_path.clone()
+        }
     }
 }
 

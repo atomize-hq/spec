@@ -734,6 +734,8 @@ pub struct MoleculeTestStruct {
     pub intent: Intent,
     #[serde(default)]
     pub covers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imports: Option<Vec<String>>,
     pub body: Body,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spec_version: Option<String>,
@@ -764,6 +766,7 @@ pub struct ResolvedMoleculeTest {
     pub module_path: String,
     pub intent_why: String,
     pub covers: Vec<String>,
+    pub imports: Option<Vec<String>>,
     pub body_rust: String,
     pub spec_version: Option<String>,
 }
@@ -783,6 +786,7 @@ impl ResolvedMoleculeTest {
             module_path,
             intent_why: loaded.test.intent.why.clone(),
             covers: loaded.test.covers.clone(),
+            imports: loaded.test.imports.clone(),
             body_rust: loaded.test.body.rust.clone(),
             spec_version: loaded.test.spec_version.clone(),
         }

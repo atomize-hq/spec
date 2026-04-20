@@ -1419,24 +1419,32 @@ structure to represent the unit/test/edge model without over-engineering it.
 ```yaml
 # pricing.test.spec
 id: pricing/checkout_flow
-intent: "Verify discount + tax chain produces correct totals end-to-end."
+intent:
+  why: "Verify discount + tax chain produces correct totals end-to-end."
 covers:
   - pricing/apply_discount
   - pricing/apply_tax
   - money/round
+imports:
+  - rust_decimal::Decimal
+  - crate::pricing::apply_discount::apply_discount
+  - crate::pricing::apply_tax::apply_tax
 body:
   rust: |
-    let discounted = apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2));
-    let total = apply_tax(discounted, Decimal::new(725, 4));
-    assert_eq!(total, Decimal::new(10725, 2));
+    {
+      let discounted = apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2));
+      let total = apply_tax(discounted, Decimal::new(725, 4));
+      assert_eq!(total, Decimal::new(10725, 2));
+    }
 ```
 
 - `id`: same namespace as unit ids, conventionally `{namespace}/test_name`
 - `intent`: why this molecule test exists
 - `covers`: declared unit ids. spec validates all ids exist in the loaded spec set.
   These are programmer claims, not observed coverage — same epistemic status as `deps`.
+- `imports`: optional Rust `use` paths for names the body needs in scope. Omit it only to rely on the temporary deprecated cover-derived fallback.
 - `body.rust`: test function body. spec generates a `#[test]` function. This IS code
-  injection — spec validates it compiles and the declared units are importable; it does not
+  injection — spec validates it compiles and the declared coverage/import metadata is coherent; it does not
   validate semantic correctness beyond that.
 
 ### Validation Rules
@@ -1446,13 +1454,16 @@ body:
 - Body validation: same `is_safe_expr` rules as local test `expect` (block expression,
   no unsafe).
 - A `.test.spec` file that declares no `covers` is a warning, not an error.
+- A `.test.spec` file that omits `imports` emits a deprecation warning because cover-derived implicit imports are transitional compatibility behavior.
 
 ### Generation
 
 `spec generate` and `spec build` process `.test.spec` files alongside `.unit.spec` files.
 Each molecule test generates a `#[test]` function in a dedicated `molecule_tests.rs` file
-(or per-namespace `{namespace}/molecule_tests.rs`). The generated function imports all
-covered units and runs the body.
+(or per-namespace `{namespace}/molecule_tests.rs`). `covers` is the semantic coverage list.
+When `.test.spec` authors provide `imports`, generated Rust uses those imports exactly. When
+`imports` is omitted, the generator temporarily falls back to cover-derived implicit imports and
+validation emits a deprecation warning so authored molecule tests can migrate cleanly.
 
 ### Minimal Graph in spec-core
 

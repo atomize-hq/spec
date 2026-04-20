@@ -250,6 +250,7 @@ mod tests {
                     why: "test".to_string(),
                 },
                 covers: vec![cover_id.to_string()],
+                imports: None,
                 body: Body {
                     rust: body.to_string(),
                 },

@@ -1292,14 +1292,14 @@ fn spec_validate_json_zero_units() {
     assert!(output.status.success());
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
     assert_eq!(json["status"], "valid");
     assert_eq!(json["errors"], serde_json::json!([]));
     assert_eq!(json["warnings"], serde_json::json!([]));
 }
 
 #[test]
-fn spec_validate_json_schema_version_is_2() {
+fn spec_validate_json_schema_version_is_3() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
     write_spec(
@@ -1321,7 +1321,7 @@ body:
     assert!(output.status.success());
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
 }
 
 #[test]
@@ -5703,6 +5703,45 @@ body:
     write_spec(units_dir, relative_path, &content);
 }
 
+fn write_molecule_test_spec_with_imports(
+    units_dir: &Path,
+    relative_path: &str,
+    id: &str,
+    covers: &[&str],
+    imports: &[&str],
+) {
+    let covers_yaml = if covers.is_empty() {
+        "covers: []".to_string()
+    } else {
+        let items: Vec<String> = covers.iter().map(|c| format!("  - {c}")).collect();
+        format!("covers:\n{}", items.join("\n"))
+    };
+    let imports_yaml = if imports.is_empty() {
+        "imports: []".to_string()
+    } else {
+        let items: Vec<String> = imports
+            .iter()
+            .map(|import| format!("  - {import}"))
+            .collect();
+        format!("imports:\n{}", items.join("\n"))
+    };
+    let content = format!(
+        r#"id: {id}
+spec_version: "0.3.0"
+intent:
+  why: Test molecule for {id}.
+{covers_yaml}
+{imports_yaml}
+body:
+  rust: |
+    {{
+        assert!(true);
+    }}
+"#
+    );
+    write_spec(units_dir, relative_path, &content);
+}
+
 fn write_two_unit_molecule_fixture(units_dir: &Path) -> PathBuf {
     write_spec(
         units_dir,
@@ -5914,6 +5953,98 @@ body:
 }
 
 #[test]
+fn molecule_test_with_explicit_imports_keeps_transitive_cover_semantic_only() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+    let output_dir = temp_dir.path().join("generated");
+
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round money values.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { value }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    { subtotal }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+spec_version: "0.3.0"
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    { subtotal }
+"#,
+    );
+    write_molecule_test_spec_with_imports(
+        &units_dir,
+        "pricing/discount_plus_tax.test.spec",
+        "pricing/discount_plus_tax",
+        &["pricing/apply_discount", "pricing/apply_tax", "money/round"],
+        &[
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount",
+            "crate::pricing::apply_tax::apply_tax",
+        ],
+    );
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join(".spec-generated"), "").unwrap();
+
+    let output = run(&[
+        "generate",
+        units_dir.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "molecule test with explicit imports should generate successfully",
+        &output,
+    );
+
+    let generated = fs::read_to_string(output_dir.join("pricing/molecule_tests.rs")).unwrap();
+    assert!(
+        generated.contains("use crate::pricing::apply_discount::apply_discount;"),
+        "expected explicit callable import\n{generated}"
+    );
+    assert!(
+        generated.contains("use crate::pricing::apply_tax::apply_tax;"),
+        "expected explicit callable import\n{generated}"
+    );
+    assert!(
+        !generated.contains("use crate::money::round::round;"),
+        "semantic-only transitive cover should not become an import\n{generated}"
+    );
+}
+
+#[test]
 fn molecule_only_namespace_generates_module_tree() {
     let temp_dir = temp_repo_dir();
     let units_dir = temp_dir.path().join("units");
@@ -6121,6 +6252,125 @@ body:
     assert!(
         !covers_edges.is_empty(),
         "graph.edges should have at least one covers edge"
+    );
+}
+
+#[test]
+fn export_preserves_molecule_test_imports_surface() {
+    let temp_dir = temp_repo_dir();
+    let units_dir = temp_dir.path().join("units");
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+intent:
+  why: Apply a discount.
+spec_version: "0.3.0"
+body:
+  rust: |
+    { }
+"#,
+    );
+
+    write_molecule_test_spec_with_imports(
+        &units_dir,
+        "pricing/discount_test.test.spec",
+        "pricing/discount_test",
+        &["pricing/apply_discount"],
+        &[
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount",
+        ],
+    );
+    write_molecule_test_spec_with_imports(
+        &units_dir,
+        "pricing/empty_imports.test.spec",
+        "pricing/empty_imports",
+        &["pricing/apply_discount"],
+        &[],
+    );
+    write_molecule_test_spec(
+        &units_dir,
+        "pricing/implicit_imports.test.spec",
+        "pricing/implicit_imports",
+        &["pricing/apply_discount"],
+    );
+
+    let output = run(&["export", units_dir.to_str().unwrap()]);
+    assert_output_success("export_preserves_molecule_test_imports_surface", &output);
+
+    let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let molecule_tests = bundle["molecule_tests"].as_array().unwrap();
+
+    let explicit = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/discount_test")
+        .unwrap();
+    assert_eq!(
+        explicit["imports"],
+        serde_json::json!([
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount"
+        ])
+    );
+
+    let empty = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/empty_imports")
+        .unwrap();
+    assert_eq!(empty["imports"], serde_json::json!([]));
+
+    let implicit = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/implicit_imports")
+        .unwrap();
+    assert!(
+        implicit.get("imports").is_none(),
+        "omitted imports should stay omitted: {implicit}"
+    );
+}
+
+#[test]
+fn export_ecommerce_example_includes_authored_molecule_test_imports() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+
+    let output = run_in(&ecommerce_dir, &["export", "units"]);
+    assert_output_success(
+        "export_ecommerce_example_includes_authored_molecule_test_imports",
+        &output,
+    );
+
+    let bundle = parse_stdout_json(&output);
+    let molecule_tests = bundle["molecule_tests"].as_array().unwrap();
+
+    let checkout_flow = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/checkout_flow")
+        .unwrap();
+    assert_eq!(
+        checkout_flow["imports"],
+        serde_json::json!([
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount",
+            "crate::pricing::calculate_total::calculate_total",
+            "crate::pricing::checkout_quote::CheckoutQuote"
+        ])
+    );
+
+    let discount_plus_tax = molecule_tests
+        .iter()
+        .find(|test| test["id"] == "pricing/discount_plus_tax")
+        .unwrap();
+    assert_eq!(
+        discount_plus_tax["imports"],
+        serde_json::json!([
+            "rust_decimal::Decimal",
+            "crate::pricing::apply_discount::apply_discount",
+            "crate::pricing::apply_tax::apply_tax"
+        ])
     );
 }
 
@@ -6559,6 +6809,13 @@ body:
 
     let json = parse_stdout_json(&output);
     assert_eq!(json["status"], "invalid");
+    let warnings = json["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1, "expected one deprecation warning");
+    assert_eq!(
+        warnings[0]["code"],
+        "SPEC_MOLECULE_IMPLICIT_IMPORTS_DEPRECATED"
+    );
+    assert_eq!(warnings[0]["id"], "pricing/rounding_flow");
     let errors = json["errors"].as_array().unwrap();
     assert_eq!(
         errors.len(),
@@ -7675,7 +7932,7 @@ fn validate_json_surfaces_missing_library_path_as_machine_readable_error() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
     assert_eq!(json["status"], "invalid");
     assert_eq!(json["warnings"], serde_json::json!([]));
     let errors = json["errors"].as_array().unwrap();

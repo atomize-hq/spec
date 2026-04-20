@@ -277,7 +277,7 @@ spec validate examples/ecommerce/units --format json
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "status": "invalid",
   "errors": [
     {
@@ -292,6 +292,9 @@ spec validate examples/ecommerce/units --format json
 ```
 
 That JSON form is meant for agents: parse `status`, `errors`, and `warnings` instead of scraping terminal prose. Pre-validation workspace-config failures, including broken `[libraries]` entries, also stay in this JSON contract for `validate --format json`.
+`warnings` is a structured array in `schema_version: 3`, so machine consumers can key off stable warning codes instead of parsing display text.
+
+For molecule tests, `covers` declares the semantic exercised-unit set. Add explicit `.test.spec` `imports` when the Rust body needs names in scope. If `imports` is omitted, validation emits a deprecation warning and generation temporarily falls back to cover-derived implicit imports for backward compatibility.
 
 For plan artifacts, the machine-readable loop is:
 
@@ -309,7 +312,7 @@ Valid plan responses reuse the same top-level envelope and add `plan_id` plus de
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "status": "valid",
   "errors": [],
   "warnings": [],

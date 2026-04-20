@@ -267,6 +267,11 @@ pub enum SpecWarning {
 
     #[error("⚠ molecule test '{test_id}' has no covered units at {test_path}")]
     MoleculeTestNoCoveredUnits { test_id: String, test_path: String },
+
+    #[error(
+        "⚠ molecule test '{test_id}' omits imports at {test_path}; cover-derived implicit imports are deprecated, add explicit imports or `imports: []`"
+    )]
+    MoleculeImplicitImportsDeprecated { test_id: String, test_path: String },
 }
 
 #[cfg(test)]

@@ -6,6 +6,10 @@ covers:
   - pricing/apply_discount
   - pricing/apply_tax
   - money/round
+imports:
+  - rust_decimal::Decimal
+  - crate::pricing::apply_discount::apply_discount
+  - crate::pricing::apply_tax::apply_tax
 body:
   rust: |
     {

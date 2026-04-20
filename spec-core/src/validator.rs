@@ -1119,6 +1119,13 @@ pub fn validate_molecule_test_covers(
         });
     }
 
+    if test.test.imports.is_none() {
+        warnings.push(SpecWarning::MoleculeImplicitImportsDeprecated {
+            test_id: test.test.id.clone(),
+            test_path: test.source.file_path.clone(),
+        });
+    }
+
     for cover_id in &test.test.covers {
         let dep_ref = match DepRef::parse(cover_id) {
             Ok(dep_ref) => dep_ref,
@@ -1148,7 +1155,9 @@ pub fn validate_molecule_test_covers(
         }
     }
 
-    if let Some((cover1, cover2, fn_name)) = has_callable_collision(&existing_covers) {
+    if test.test.imports.is_none()
+        && let Some((cover1, cover2, fn_name)) = has_callable_collision(&existing_covers)
+    {
         errors.push(SpecError::MoleculeCoversCollision {
             cover1: cover1.clone(),
             cover2: cover2.clone(),
@@ -1233,6 +1242,7 @@ mod tests {
                     why: format!("Test molecule spec for {}", id),
                 },
                 covers: covers.into_iter().map(str::to_string).collect(),
+                imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
                 },
@@ -1815,7 +1825,11 @@ local_tests:
 
         let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
 
-        assert!(warnings.is_empty());
+        assert_eq!(warnings.len(), 1);
+        assert!(matches!(
+            warnings[0],
+            SpecWarning::MoleculeImplicitImportsDeprecated { .. }
+        ));
         assert_eq!(errors.len(), 1);
         match &errors[0] {
             SpecError::MoleculeCoversCollision {
@@ -1836,6 +1850,28 @@ local_tests:
     }
 
     #[test]
+    fn test_validate_molecule_test_covers_allows_collision_with_explicit_imports() {
+        let mut molecule_test =
+            create_molecule_test_spec("pricing/rounding_flow", vec!["money/round", "utils/round"]);
+        molecule_test.test.imports = Some(vec![]);
+        let unit_ids: HashSet<&str> = ["money/round", "utils/round"].into_iter().collect();
+
+        let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
+
+        assert!(
+            errors.is_empty(),
+            "explicit imports should disable cover collision errors"
+        );
+        assert!(
+            warnings.iter().all(|warning| !matches!(
+                warning,
+                SpecWarning::MoleculeImplicitImportsDeprecated { .. }
+            )),
+            "explicit imports should suppress implicit-import deprecation warnings"
+        );
+    }
+
+    #[test]
     fn test_validate_molecule_test_covers_rejects_cross_library_cover_without_collision() {
         let molecule_test = create_molecule_test_spec(
             "pricing/rounding_flow",
@@ -1845,7 +1881,11 @@ local_tests:
 
         let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
 
-        assert!(warnings.is_empty());
+        assert_eq!(warnings.len(), 1);
+        assert!(matches!(
+            warnings[0],
+            SpecWarning::MoleculeImplicitImportsDeprecated { .. }
+        ));
         assert_eq!(errors.len(), 1);
         match &errors[0] {
             SpecError::CrossLibraryMoleculeCoverUnsupported {
@@ -3416,6 +3456,7 @@ methods:
                     why: "test".to_string(),
                 },
                 covers: vec![],
+                imports: None,
                 body: Body {
                     rust: body.to_string(),
                 },
@@ -3527,10 +3568,11 @@ methods:
 
     #[test]
     fn covers_unknown_unit_id_returns_covers_not_found_error() {
-        let molecule_test = create_molecule_test_spec(
+        let mut molecule_test = create_molecule_test_spec(
             "pricing/checkout_flow",
             vec!["pricing/apply_discount", "pricing/unknown_unit"],
         );
+        molecule_test.test.imports = Some(vec![]);
         let unit_ids: HashSet<&str> = ["pricing/apply_discount"].into_iter().collect();
 
         let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
@@ -3553,10 +3595,11 @@ methods:
 
     #[test]
     fn covers_all_known_unit_ids_returns_no_errors() {
-        let molecule_test = create_molecule_test_spec(
+        let mut molecule_test = create_molecule_test_spec(
             "pricing/checkout_flow",
             vec!["pricing/apply_discount", "pricing/apply_tax"],
         );
+        molecule_test.test.imports = Some(vec![]);
         let unit_ids: HashSet<&str> = ["pricing/apply_discount", "pricing/apply_tax"]
             .into_iter()
             .collect();
@@ -3575,7 +3618,20 @@ methods:
         let (errors, warnings) = validate_molecule_test_covers(&molecule_test, &unit_ids);
 
         assert!(errors.is_empty(), "empty covers should not be an error");
-        assert_eq!(warnings.len(), 1, "expected one warning for empty covers");
+        assert_eq!(
+            warnings.len(),
+            2,
+            "expected empty-covers and implicit-import warnings"
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| matches!(warning, SpecWarning::MoleculeTestNoCoveredUnits { .. }))
+        );
+        assert!(warnings.iter().any(|warning| matches!(
+            warning,
+            SpecWarning::MoleculeImplicitImportsDeprecated { .. }
+        )));
     }
 
     // ── validate_no_duplicate_molecule_test_ids ───────────────────────────────
@@ -3631,6 +3687,47 @@ body:
         assert!(
             result.is_ok(),
             "valid molecule test YAML should pass: {result:?}"
+        );
+    }
+
+    #[test]
+    fn raw_molecule_test_yaml_valid_imports_pass() {
+        let yaml = r#"
+id: pricing/checkout_flow
+intent:
+  why: "Verify discount + tax chain."
+imports:
+  - rust_decimal::Decimal
+  - crate::pricing::apply_discount::apply_discount
+body:
+  rust: |
+    { assert!(true); }
+"#;
+        let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
+        let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
+        assert!(
+            result.is_ok(),
+            "valid molecule test imports should pass: {result:?}"
+        );
+    }
+
+    #[test]
+    fn raw_molecule_test_yaml_invalid_import_is_rejected() {
+        let yaml = r#"
+id: pricing/checkout_flow
+intent:
+  why: "Verify discount + tax chain."
+imports:
+  - Decimal
+body:
+  rust: |
+    { assert!(true); }
+"#;
+        let value: serde_yaml_bw::Value = serde_yaml_bw::from_str(yaml).unwrap();
+        let result = validate_raw_molecule_test_yaml(&value, "pricing/checkout_flow.test.spec");
+        assert!(
+            result.is_err(),
+            "invalid molecule test import should fail schema validation"
         );
     }
 
