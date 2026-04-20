@@ -32,7 +32,7 @@
       "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-04-20T11:10:54Z",
+  "generated_at": "2026-04-20T12:09:31Z",
   "source_file": "examples/ecommerce/units/pricing/calculate_total.unit.spec",
   "evidence": {
     "build_status": "pass",
