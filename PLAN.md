@@ -126,20 +126,20 @@ intent:
 data:
   fields:
     subtotal:
-      type: Decimal
+      type: rust_decimal::Decimal
     discount_rate:
-      type: Decimal
+      type: rust_decimal::Decimal
     tax_rate:
-      type: Decimal
+      type: rust_decimal::Decimal
 constructors:
   - id: new
     intent:
       why: Create a quote from explicit subtotal and rates.
     contract:
       inputs:
-        subtotal: Decimal
-        discount_rate: Decimal
-        tax_rate: Decimal
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
     initializes:
       subtotal: subtotal
       discount_rate: discount_rate
@@ -150,7 +150,7 @@ methods:
       why: Return the discounted subtotal before tax.
     receiver: shared_ref
     contract:
-      returns: Decimal
+      returns: rust_decimal::Decimal
     deps:
       - pricing/apply_discount
     lowering:
@@ -164,7 +164,7 @@ methods:
       why: Return the final checkout total after discount and tax.
     receiver: shared_ref
     contract:
-      returns: Decimal
+      returns: rust_decimal::Decimal
     deps:
       - pricing/apply_discount
       - pricing/apply_tax
@@ -177,7 +177,7 @@ methods:
           }
 local_tests:
   - id: total_basic
-    expect: CheckoutQuote::new(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)).total() == Decimal::new(96525, 3)
+    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
 backends:
   rust:
     derives:
@@ -185,6 +185,8 @@ backends:
       - Debug
       - PartialEq
 ```
+
+`kind: data` forbids top-level `imports`, so shared seam field and contract types must be fully qualified in the authored spec itself.
 
 ### Authoring Rules
 

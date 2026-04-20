@@ -10447,6 +10447,202 @@ fn validate_json_accepts_kind_data_without_placeholder_body() {
 }
 
 #[test]
+fn validate_json_accepts_kind_data_with_empty_placeholder_body() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+body: {}
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+    discount_rate:
+      type: rust_decimal::Decimal
+    tax_rate:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
+          }
+local_tests:
+  - id: discounted_subtotal_basic
+    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)
+  - id: total_basic
+    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
+links:
+  molecule_tests:
+    - pricing/checkout_flow
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#,
+    );
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success(
+        "validate should accept kind:data with empty placeholder body",
+        &output,
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "valid");
+}
+
+#[test]
+fn validate_json_rejects_kind_data_with_shared_body_as_semantic_error() {
+    let (_temp_dir, project_dir) = setup_m12_data_seam_project();
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+body:
+  rust: |
+    {
+        unreachable!("escape hatch")
+    }
+data:
+  fields:
+    subtotal:
+      type: rust_decimal::Decimal
+    discount_rate:
+      type: rust_decimal::Decimal
+    tax_rate:
+      type: rust_decimal::Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
+        discount_rate: rust_decimal::Decimal
+        tax_rate: rust_decimal::Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: rust_decimal::Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.discounted_subtotal(), self.tax_rate)
+          }
+"#,
+    );
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_quote.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(!output.status.success(), "validate should fail");
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error["code"] == "SPEC_SEMANTIC_VALIDATION"),
+        "{json}"
+    );
+    assert!(
+        errors
+            .iter()
+            .all(|error| error["code"] != "SPEC_YAML_PARSE"),
+        "{json}"
+    );
+}
+
+#[test]
 fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
 

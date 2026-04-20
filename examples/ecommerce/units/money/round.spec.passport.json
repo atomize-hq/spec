@@ -13,7 +13,7 @@
   },
   "deps": [],
   "local_tests": [],
-  "generated_at": "2026-04-20T16:28:21Z",
+  "generated_at": "2026-04-20T18:11:32Z",
   "source_file": "examples/ecommerce/units/money/round.unit.spec",
   "evidence": {
     "build_status": "pass",

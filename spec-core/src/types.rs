@@ -42,6 +42,7 @@ pub struct Intent {
 /// Body containing the native Rust implementation
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Body {
+    #[serde(default)]
     pub rust: String,
 }
 

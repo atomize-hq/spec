@@ -68,6 +68,15 @@
         }
       }
     },
+    "data_body": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rust": {
+          "type": "string"
+        }
+      }
+    },
     "local_test": {
       "type": "object",
       "required": ["id", "expect"],
@@ -327,7 +336,12 @@
         }
       },
       "then": {
-        "required": ["data", "constructors", "methods"]
+        "required": ["data", "constructors", "methods"],
+        "properties": {
+          "body": {
+            "$ref": "#/definitions/data_body"
+          }
+        }
       }
     }
   ]

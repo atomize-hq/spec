@@ -1424,6 +1424,128 @@ backends:
     }
 
     #[test]
+    fn test_validate_raw_yaml_accepts_kind_data_shape_with_empty_placeholder_body() {
+        let yaml = r#"
+id: pricing/checkout_quote
+kind: data
+intent:
+  why: Quote a checkout total.
+body: {}
+data:
+  fields:
+    subtotal:
+      type: Decimal
+    tax_rate:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+        tax_rate: Decimal
+    initializes:
+      subtotal: subtotal
+      tax_rate: tax_rate
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.subtotal, self.tax_rate)
+          }
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(
+            result.is_ok(),
+            "Expected kind:data body placeholder to pass schema validation: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_validate_raw_yaml_rejects_kind_data_shape_with_unknown_body_key() {
+        let yaml = r#"
+id: pricing/checkout_quote
+kind: data
+intent:
+  why: Quote a checkout total.
+body:
+  unexpected: true
+data:
+  fields:
+    subtotal:
+      type: Decimal
+    tax_rate:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: Decimal
+        tax_rate: Decimal
+    initializes:
+      subtotal: subtotal
+      tax_rate: tax_rate
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.subtotal, self.tax_rate)
+          }
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+
+        let err = validate_raw_yaml(&value, "test.unit.spec")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Schema validation failed"), "{err}");
+        assert!(err.contains("unexpected"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_raw_yaml_rejects_kind_function_shape_with_empty_placeholder_body() {
+        let yaml = r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Apply tax.
+contract:
+  returns: Decimal
+body: {}
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+
+        let err = validate_raw_yaml(&value, "test.unit.spec")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Schema validation failed"), "{err}");
+        assert!(err.contains("rust"), "{err}");
+    }
+
+    #[test]
     fn test_validate_raw_yaml_rejects_kind_data_without_constructors() {
         let yaml = r#"
 id: pricing/checkout_quote
@@ -1833,6 +1955,15 @@ local_tests:
     #[test]
     fn test_validate_data_semantic_valid_spec() {
         let spec = create_data_spec("pricing/checkout_quote");
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn test_validate_data_semantic_valid_spec_with_empty_placeholder_body() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.body = Body::default();
+
         let result = validate_semantic(&spec);
         assert!(result.is_ok(), "{result:?}");
     }
