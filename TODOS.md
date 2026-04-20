@@ -150,3 +150,11 @@
 ## M11 Follow-ups
 
 - [x] **Ship canonical ecommerce molecule evidence** — Completed main (2026-04-18). `examples/ecommerce` now tracks the generated `pricing/checkout_flow.test.evidence.json` and `pricing/discount_plus_tax.test.evidence.json` artifacts so `spec status .` stays truthful on a fresh clone. Refresh with `spec test examples/ecommerce/units --output examples/ecommerce/src/generated` whenever the molecule specs or covered unit contracts change.
+
+## Post-M11 seam follow-ups
+
+- [ ] **Promotion path: nested behaviors → first-class tracked nodes** — The first data seam milestone should keep one top-level seam ID as the tracked truth surface for validation, passports, and status, with constructors/methods modeled as nested behaviors. This TODO captures the deliberate future promotion path when real usage shows seam-level tracking is too coarse. Define the criteria for promotion, what must stay stable in the authored model, and which truth surfaces would change when nested behaviors become independently tracked. **Why:** protects the reduced-scope decision from turning into accidental forever-ontology. **Depends on:** first seam shipping and real usage evidence that seam-level tracking is insufficient.
+
+- [ ] **Escape-hatch gate before second-language work** — Backend-specific escape hatches are allowed only as optional, namespaced, lowering-only details. Before any second-language backend begins, define and enforce the review gate for what qualifies as an allowed escape hatch, what tests must exist for one, and what conditions must be met before Rust-specific lowering details are considered contained enough to not poison the shared core. **Why:** prevents target-specific details from quietly becoming shared semantics. **Depends on:** first seam shipping and actual escape-hatch usage patterns in examples/tests.
+
+- [ ] **Canonical example as compatibility surface** — Once the first data seam ships, treat the canonical example as a maintained contract surface, not demo garnish. When authored seam shape, CLI loop, or escape-hatch rules change, update the example, README commands, AGENTS workflow, and example-backed integration tests together. **Why:** the shipped example is part of the product and agent teaching surface, and example drift creates fake green confidence. **Depends on:** the first data seam example existing.

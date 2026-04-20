@@ -1,5 +1,610 @@
 <!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260416-194312.md -->
-# M11 — Post-M10 Trust Hardening
+# M12 — Orthogonal Core + Rust Data Seam
+
+Status: **Implementation-ready** (2026-04-19). Source strategy is the approved design at
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-design-20260419-095932.md` plus the
+engineering test-plan artifact at
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-eng-review-test-plan-20260419-105826.md`,
+with the CEO review tightening folded directly into this section.
+
+This milestone is not "full Rust support". That slogan is how you end up building a language
+cathedral before a user gets a better workflow. M12 proves one real seam:
+
+1. one authored semantic data seam in one `.unit.spec` file
+2. lowered to one Rust `struct + impl`
+3. tracked as one top-level truth surface for validate, build, test, status, export, and passport
+4. anchored by one canonical migration of a real pricing seam that is more governable for an
+   agent than the raw Rust file version
+
+---
+
+## Milestone Summary
+
+```text
+M12a  Shared seam model + kind dispatch      required
+M12b  Schema + validator for `kind: data`    required
+M12c  Rust lowering + generation             required
+M12d  Seam-level passport/status/export      required
+M12e  Canonical migration example + docs     required
+```
+
+**Lake to boil in M12**
+- `spec` stops being function-shaped only and can author one real data seam with nested behavior.
+- The new seam is orthogonal by construction: shared semantics first, Rust lowering second.
+- The canonical example is a migration of one real pricing seam, not a toy syntax demo.
+- The user-outcome test is explicit: the migrated seam must be easier for an agent to inspect,
+  modify, validate, and prove than the raw-file version.
+
+**Explicitly not in M12**
+- traits, enums, generic bounds, macros, visibility matrices, or arbitrary module item soup
+- nested constructors/methods as first-class graph, status, or passport nodes
+- second-language backends
+- cross-library seam identity
+- truth-surface redesign beyond additive seam support where the code forces it
+
+---
+
+## Step 0 — Scope Challenge
+
+### The User Job
+
+- A Rust user can migrate one real pricing module seam from freehand Rust into one authored
+  semantic seam and keep the normal `spec validate -> spec build -> spec test -> spec status`
+  loop.
+- An AI agent can read one file and see the seam's fields, constructor contract, method contracts,
+  local tests, and Rust-specific lowering details without inferring those facts from arbitrary
+  module text.
+- The system stays honest about what is and is not first-class: the seam is tracked as one node
+  now, and nested behaviors stay explicit-but-nested until a later milestone earns promotion.
+
+### What Already Exists
+
+| Sub-problem | Existing surface | Reuse in M12 |
+|---|---|---|
+| Function-unit validation/build/test/status loop | `spec-cli/src/commands.rs`, `spec-core/src/validator.rs`, `spec-core/src/generator.rs`, `spec-core/src/passport.rs` | Reuse the current command loop and truth surfaces. M12 adds one seam kind to that loop instead of inventing a second pipeline. |
+| Unit-level truth surfaces | `spec-core/src/passport.rs`, `spec-cli/src/commands.rs` health/status logic | Reuse seam-level passport/status semantics. Do not create nested behavior passports or status rows in M12. |
+| Declared graph + impact | `spec-core/src/graph.rs` | Reuse the existing top-level unit graph contract exactly. The new seam contributes one top-level node, not per-method graph nodes. |
+| Molecule coverage model | `.test.spec` plus `covers` edges and `*.test.evidence.json` | Reuse end-to-end example verification. The canonical migrated seam should slot into the current molecule-test story, not bypass it. |
+| Canonical pricing domain | `examples/ecommerce/units/pricing/*`, `examples/ecommerce/README.md` | Reuse the existing pricing domain as the migration wedge. It already teaches price calculation and gives M12 a believable user story. |
+
+### Minimum Change Set
+
+The smallest complete M12 is:
+
+1. Add one new authored seam kind, `kind: data`, in the existing `.unit.spec` file family.
+2. Split data ownership cleanly:
+   - raw authored data seam
+   - normalized shared semantic seam
+   - Rust lowering representation
+3. Centralize seam-kind dispatch so validator, generator, export, and passport/status logic branch
+   once on kind instead of scattering ad hoc checks everywhere.
+4. Lower one shared data seam into one Rust `struct + impl`, with explicit constructors and
+   inherent methods.
+5. Keep seam truth at one top-level tracked unit ID.
+6. Ship one canonical migrated pricing seam with raw-Rust baseline, generated Rust output, local
+   tests, molecule coverage, and docs that teach the migration story.
+
+### Opinionated Recommendation
+
+Do the complete version. Do not bolt Rust item kinds onto the current function-native
+`ResolvedSpec`, do not hide shared meaning inside `body.rust`, and do not ship a "look, a struct"
+demo without a real migration wedge.
+
+---
+
+## Locked Boundary
+
+- M12 adds exactly one new authored top-level kind: `kind: data`.
+- The file extension stays `.unit.spec`. M12 is a new authored shape inside the current unit file
+  family, not a parallel artifact type.
+- One data seam file owns one top-level unit ID such as `pricing/checkout_quote`.
+- Constructors and methods are explicit nested behaviors inside that seam file, but they are not
+  first-class graph nodes, status rows, or passports in M12.
+- Shared semantic meaning must be authored in explicit fields:
+  - seam fields
+  - constructor signatures and initialization mapping
+  - method receiver mode
+  - method signatures
+- Rust-specific authored details are allowed only in namespaced lowering blocks and optional
+  backend escape hatches. They may affect lowering only, not shared semantics.
+- M12 keeps passport/status/export changes additive-only where possible. If the code can support
+  the seam without changing a truth surface, do not widen that surface just because it feels neat.
+- The canonical example is a migration of one real pricing seam in `examples/ecommerce`, not a
+  greenfield geometry or blog-post object.
+
+---
+
+## Authored Schema (`kind: data`)
+
+The first cut should be boringly explicit:
+
+```yaml
+id: pricing/checkout_quote
+kind: data
+intent:
+  why: Quote a checkout total from subtotal plus discount and tax rates.
+data:
+  fields:
+    subtotal:
+      type: Decimal
+    discount_rate:
+      type: Decimal
+    tax_rate:
+      type: Decimal
+constructors:
+  - id: new
+    intent:
+      why: Create a quote from explicit subtotal and rates.
+    contract:
+      inputs:
+        subtotal: Decimal
+        discount_rate: Decimal
+        tax_rate: Decimal
+    initializes:
+      subtotal: subtotal
+      discount_rate: discount_rate
+      tax_rate: tax_rate
+methods:
+  - id: discounted_subtotal
+    intent:
+      why: Return the discounted subtotal before tax.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              apply_discount(self.subtotal, self.discount_rate)
+          }
+  - id: total
+    intent:
+      why: Return the final checkout total after discount and tax.
+    receiver: shared_ref
+    contract:
+      returns: Decimal
+    deps:
+      - pricing/apply_discount
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              let discounted = apply_discount(self.subtotal, self.discount_rate);
+              apply_tax(discounted, self.tax_rate)
+          }
+local_tests:
+  - id: total_basic
+    expect: CheckoutQuote::new(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)).total() == Decimal::new(96525, 3)
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+```
+
+### Authoring Rules
+
+- `id`, `kind`, and `intent.why` stay required for all unit kinds.
+- `kind: data` requires `data.fields`.
+- `data.fields` is an ordered map keyed by field name. Each field requires `type`.
+- Constructors are explicit nested behaviors. In the first cut, constructor initialization is
+  declarative: `initializes.<field> = <input-name>`.
+- Methods are explicit nested behaviors with:
+  - `id`
+  - `intent.why`
+  - `receiver`
+  - `contract`
+  - optional `deps`
+  - backend lowering block
+- The first cut supports `receiver: shared_ref` only. Mutation and ownership transfer stay out of
+  scope until the shared model proves itself.
+- `local_tests` remain seam-owned and compile inside the generated seam's `#[cfg(test)]` module.
+- `backends.rust` is optional and additive only. The first cut supports `derives` there and
+  nothing that can redefine shared meaning.
+
+### Explicit Deferrals
+
+- No field defaults in M12. Constructors make initialization explicit and avoid forcing literal or
+  default-expression policy into the first shared model.
+- No shared field-level invariants in M12. The authored shape should get real behavior and truth
+  surfaces first. Invariants can land after the seam shape proves useful.
+- No user-authored arbitrary Rust constructor bodies in M12. Constructor semantics stay
+  declarative so the shared model owns initialization shape.
+
+---
+
+## Architecture
+
+### Ownership Split
+
+M12 only stays orthogonal if each layer has one job.
+
+| Layer | Purpose | Must own | Must not own |
+|---|---|---|---|
+| Raw authored form | Parse YAML into kind-aware authored structs | exact authored shape, file-facing schema, kind dispatch input | normalization shortcuts, Rust generation details |
+| Normalized shared seam | shared semantic truth for one data seam | field list, constructor signatures + init mapping, method signatures, seam-owned local tests | Rust `struct` syntax, derives, text emission |
+| Rust lowering form | Rust-specific projection of the normalized seam | struct name, field list in Rust form, impl blocks, generated helper names, derives | source-of-truth semantics or hidden overrides |
+
+### Type Direction
+
+The current function path stays intact, but it cannot remain the only IR shape.
+
+```text
+AuthoredUnit
+  ├── FunctionUnitSpec (existing)
+  └── DataSeamSpec (new)
+
+NormalizedUnit
+  ├── NormalizedFunctionUnit (existing function path)
+  └── NormalizedDataSeam (new shared seam)
+
+RustLoweredUnit
+  ├── RustFunctionLowering
+  └── RustDataSeamLowering
+```
+
+**Locked architecture rule:** do not keep stretching the current function-native `ResolvedSpec`
+until it secretly becomes a data seam carrier. That is just Rust-first expansion in a trench coat.
+
+### Dispatch Rule
+
+Centralize seam-kind dispatch in one place per subsystem:
+
+- schema/parser dispatch once on `kind`
+- validator dispatch once on normalized unit kind
+- generator/lowering dispatch once on normalized unit kind
+- export/passport/status treat both kinds as top-level units and should not grow scattered
+  `if kind == "data"` branches around the codebase
+
+### Truth Surface Rule
+
+- `spec validate/build/test/status/export` continue to work at the top-level unit seam.
+- One `pricing/checkout_quote.spec.passport.json` records the seam, not separate constructor or
+  method passports.
+- `SpecGraph` sees one node for `pricing/checkout_quote`.
+- Molecule tests cover the seam ID, not nested behavior IDs.
+
+This is the deliberate reduced-scope decision. The promotion path for nested behaviors already
+lives in `TODOS.md`; M12 should not smuggle that future into this implementation.
+
+---
+
+## Canonical Migration Wedge
+
+The canonical example should migrate one real pricing seam, not synthesize a cute demo object.
+
+### Chosen seam
+
+`pricing/checkout_quote`
+
+### Why this seam
+
+- It lives in the repo's canonical pricing domain, so it teaches something users already care
+  about.
+- It bundles real state plus real behavior:
+  - subtotal
+  - discount rate
+  - tax rate
+  - constructor
+  - discounted-subtotal method
+  - total method
+- It composes with the existing function units and molecule tests instead of replacing the whole
+  example at once.
+
+### Migration contract
+
+The canonical example should include both:
+
+1. a raw Rust baseline module representing the same pricing seam
+2. the migrated `kind: data` seam authored in `spec`
+
+The docs should make the comparison explicit:
+
+- raw Rust baseline: freehand module text, manual reasoning, ad hoc test targeting
+- migrated seam: explicit fields, explicit behaviors, seam-level local tests, machine-readable
+  validation, passport, and status
+
+### User-outcome success criterion
+
+The migration is successful only if the migrated seam is easier for an agent to:
+
+1. inspect
+2. modify
+3. validate
+4. prove
+
+than the raw-file version.
+
+That must be shown concretely in the example docs and tests, not asserted by taste.
+
+---
+
+## Escape-Hatch Policy
+
+Rust-specific escape hatches are allowed only as optional, namespaced, lowering-only details.
+
+### Allowed in M12
+
+- `backends.rust.derives`
+- `methods[].lowering.rust.body`
+
+### Not allowed in M12
+
+- overriding shared field names or field types
+- overriding constructor signatures or initialization mapping
+- overriding method `receiver`
+- overriding method contract inputs or returns
+- adding hidden fields that exist only in Rust lowering
+- redefining the seam's top-level ID or nested behavior IDs
+
+### Enforcement rule
+
+Validation must reject any authored Rust-specific field that tries to replace shared semantic
+meaning instead of decorate lowering.
+
+This is why the negative test suite matters. If the escape hatch can silently change what the seam
+means, the shared model is fake.
+
+---
+
+## Implementation Slices
+
+### Slice 1 — Shared seam model + kind dispatch
+
+**Goal:** give M12 a real shared-core spine instead of teaching the function IR new tricks until it
+collapses.
+
+**Primary files**
+- `spec-core/src/types.rs`
+- `spec-core/src/lib.rs`
+- `spec-core/src/validator.rs`
+- `spec-core/src/generator.rs`
+- `spec-cli/src/commands.rs`
+
+**Work**
+- Add authored `kind: data` structs.
+- Add normalized shared seam structs.
+- Add Rust lowering structs for the seam.
+- Centralize kind dispatch in validator/generator/export/passport entry points.
+
+### Slice 2 — Schema + validator for `kind: data`
+
+**Goal:** make the authored file shape explicit and machine-checkable from day one.
+
+**Primary files**
+- `spec-core/src/schema/unit.spec.json`
+- `spec-core/src/validator.rs`
+- `spec-cli/tests/cli.rs`
+
+**Work**
+- Extend schema for `kind: data`.
+- Validate:
+  - field names and field types
+  - constructor IDs and unique initialization coverage
+  - method IDs, receiver enum, and contracts
+  - escape-hatch boundary rules
+- Keep `kind: function` behavior unchanged.
+
+### Slice 3 — Rust lowering + generation
+
+**Goal:** lower one shared seam into one readable Rust `struct + impl`.
+
+**Primary files**
+- `spec-core/src/generator.rs`
+- `spec-core/src/loader.rs`
+- `spec-core/src/syntax.rs`
+
+**Work**
+- Generate `pub struct CheckoutQuote { ... }`.
+- Generate one inherent `impl CheckoutQuote { ... }` block containing constructor and methods.
+- Generate seam-owned local tests under the seam module's `#[cfg(test)]`.
+- Preserve existing function generation output unchanged.
+
+### Slice 4 — Seam-level passport, status, and export support
+
+**Goal:** make the new seam truthful in the existing loop without widening tracking granularity.
+
+**Primary files**
+- `spec-core/src/passport.rs`
+- `spec-core/src/export.rs`
+- `spec-core/src/graph.rs`
+- `spec-cli/src/commands.rs`
+
+**Work**
+- Ensure the passport contract can represent a top-level data seam without pretending nested
+  behaviors are separate units.
+- Keep status at the seam level.
+- Keep graph identity at the seam level.
+- Extend export additively only where downstream consumers need the new seam shape.
+
+### Slice 5 — Canonical migrated example + docs
+
+**Goal:** prove the product story with one real migration wedge.
+
+**Primary files**
+- `examples/ecommerce/units/pricing/*`
+- `examples/ecommerce/src/*`
+- `examples/ecommerce/README.md`
+- `README.md`
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `spec-cli/tests/cli.rs`
+
+**Work**
+- Add the raw Rust baseline module for `pricing/checkout_quote`.
+- Add the migrated `kind: data` seam for the same pricing job.
+- Add molecule coverage using the current test surface.
+- Document the comparison and the agent loop around it.
+
+---
+
+## Test Review
+
+### Required Test Matrix
+
+| Codepath / behavior | Test layer | Required coverage |
+|---|---|---|
+| `kind: function` regression guard | CLI integration + unit | Existing function units still validate, generate, build, test, and report status exactly as before. |
+| Parse and validate one `kind: data` seam | CLI integration + unit | Valid seam passes; malformed field/method/constructor shape fails with stable machine-readable diagnostics. |
+| Shared seam normalization | spec-core unit | Shared field list, constructor signatures, method signatures, and receiver semantics normalize once and stay typed. |
+| Rust lowering | spec-core unit | One normalized seam lowers to one Rust `struct + impl` with stable readable output. |
+| Escape-hatch boundary | CLI integration + unit | Rust-specific lowering data cannot override shared field types, constructor meaning, receiver mode, or method contract. |
+| Seam local tests | CLI integration | `spec test path/to/seam.unit.spec` writes fresh seam passport evidence and passes/fails truthfully. |
+| Graph/status/passport granularity | CLI integration + unit | One seam yields one top-level unit status/passport/export node, not nested behavior nodes. |
+| Canonical migration example | CLI integration | The migrated seam validates, builds, tests, and appears truthful in `spec status`. |
+| User-outcome comparison | docs + integration | Example docs show the raw-file baseline and migrated seam comparison using exact runnable commands. |
+
+### Critical Flows
+
+- Shared authored seam -> normalization -> Rust lowering -> generated Rust compiles
+- Shared authored seam + local tests -> `spec test` -> seam passport evidence is fresh
+- Existing `kind: function` unit -> full loop unchanged
+- Canonical raw Rust baseline -> migrated seam -> docs and tests stay aligned
+
+### Negative Tests That Must Exist
+
+- Rust escape hatch attempts to override a shared field type
+- Rust escape hatch attempts to override method return type
+- Constructor leaves a required field uninitialized
+- Duplicate constructor or method IDs
+- Unsupported receiver mode
+- Nested behavior accidentally leaks into graph/status/passport/export as its own node
+
+---
+
+## Failure Modes
+
+| Codepath | Real failure | Test required | Error handling | User-visible outcome | Critical gap today |
+|---|---|---|---|---|---|
+| Shared/target model split | `ResolvedSpec` quietly absorbs seam-only fields and becomes a junk drawer | yes | refuse architecture shortcut in implementation | future second-language work becomes refactor tax | yes |
+| Kind dispatch | scattered `kind == "data"` branches drift across validator/generator/status | yes | central dispatch required | one command works, another lies | yes |
+| Escape hatch | Rust-only field silently changes shared meaning | yes | validation failure | false orthogonality | yes |
+| Tracking granularity | constructors/methods become accidental graph or passport nodes | yes | seam-level truth-surface rule | status/export drift from plan | yes |
+| Canonical example | docs compare against a toy or unstated raw baseline | yes | docs + tests anchored to exact files | fake product story | yes |
+| Function regression | existing function units break while data seam lands | yes | regression suite gate | shipped trust loop regresses | yes |
+
+**Critical-gap rule for M12:** no data seam ships unless the function path regression suite is
+green and the escape-hatch negative suite proves Rust details cannot override shared meaning.
+
+---
+
+## Performance Review
+
+- Normalize once per flow.
+- Lower to Rust once per flow.
+- Pass typed normalized/lowered structs forward instead of re-deriving method and field shape in
+  each subsystem.
+- Do not add caching in M12. The expensive work is not large enough to justify making kind
+  dispatch and truth surfaces harder to reason about.
+
+---
+
+## Parallelization / Lanes
+
+M12 is partially parallelizable after the kind contract is locked.
+
+**Gate 0, do this first and sequentially**
+- Lock the authored `kind: data` schema
+- Lock the shared normalized seam shape
+- Lock the seam-level truth-surface rule
+
+**Lane A, seam model lane**
+- authored structs
+- normalized seam structs
+- central kind dispatch
+
+**Lane B, validator + lowering lane**
+- schema and semantic validation
+- Rust lowering
+- generation output
+
+**Lane C, truth-surface lane**
+- passport/status/export integration
+- graph and CLI behavior at seam level
+
+**Lane D, canonical example lane**
+- raw Rust baseline
+- migrated seam
+- docs and end-to-end tests
+
+**Execution order**
+1. Lock Gate 0
+2. Launch Lane A
+3. Launch Lane B after Lane A types are stable
+4. Launch Lane C after the normalized seam contract is stable
+5. Finish with Lane D after the generated shape and CLI loop are stable
+
+**Conflict flags**
+- `spec-core/src/types.rs`, `spec-core/src/validator.rs`, `spec-core/src/generator.rs`, and
+  `spec-cli/src/commands.rs` are all hot files. Do not parallelize two lanes that both invent
+  the seam contract in those files.
+- The canonical example should wait until the generated Rust shape is stable, or the docs will
+  churn for no user value.
+
+---
+
+## What NOT in M12 Scope
+
+- enums, traits, generic bounds, macros, or module-wide arbitrary item support
+- `shared_mut` or owned receiver modes
+- constructor bodies authored as arbitrary Rust
+- nested behavior promotion into first-class tracked nodes
+- second-language lowering
+- cross-library seam identity or cross-library method coverage semantics
+
+---
+
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | Design | Choose orthogonal core + Rust data seam | Taste, decided | Future-proof core first | Rust is the proving ground, not the ontology. | Rust-first item expansion |
+| 2 | Eng | Keep one top-level tracked seam ID in M12 | Mechanical | Explicit scope | The first milestone needs truthful seam-level status/passport behavior without inventing nested-node governance. | Per-method tracking in M12 |
+| 3 | Eng | Split authored, normalized, and Rust-lowered ownership | Mechanical | Clear data ownership | The current function-native IR cannot honestly carry the new seam by accretion. | Stretching `ResolvedSpec` further |
+| 4 | CEO | Canonical example must be a migration of one real pricing seam | Taste, decided | Product truth | A real user feels migration value. A toy struct demo teaches nothing. | Greenfield geometry demo |
+| 5 | CEO | Add governability as the success criterion | Taste, decided | User outcome over syntax | The point is not "supports structs"; it is "agents can work this seam better than a raw file." | Syntax-demo success metric |
+| 6 | Eng | Escape hatches are lowering-only and namespaced | Mechanical | Contain target-specific debt | Rust-specific details are inevitable, but they cannot define shared meaning. | Hidden Rust-only semantic fields |
+| 7 | Eng | Keep function-path regression tests mandatory | Mechanical | Trust first | M11 just made the default loop credible. M12 cannot spend that trust casually. | "We will fix function regressions later" |
+
+---
+
+## Implementation Order
+
+```text
+1. Lock `kind: data` authored schema and seam-level truth-surface contract
+2. Implement authored + normalized + Rust-lowered seam structs
+3. Centralize kind dispatch across validator/generator/export/passport entry points
+4. Implement schema + semantic validation for `kind: data`
+5. Implement Rust lowering and generation for one `struct + impl` seam
+6. Keep seam passport/status/export behavior truthful at one top-level unit ID
+7. Land function-regression and escape-hatch negative suites
+8. Add canonical migrated pricing seam, raw Rust baseline, docs, and integration tests
+9. Re-review before widening into mutability, enums, or second-language work
+```
+
+### Success Criteria
+
+- A user can author one `kind: data` seam with:
+  - ordered fields
+  - one declarative constructor
+  - one or more shared-ref methods
+  - seam-owned local tests
+- The authored model cleanly separates:
+  - shared semantic seam
+  - Rust lowering representation
+- `spec validate`, `spec build`, `spec test`, and `spec status` stay truthful for the seam.
+- Existing `kind: function` units remain fully green through the current loop.
+- The canonical pricing migration includes both a raw Rust baseline and the migrated seam.
+- The example and docs prove the governability claim with exact runnable commands and tests.
+- Rust-specific escape hatches are proven, by negative tests, to be lowering-only.
+
+---
+
+## M11 — Post-M10 Trust Hardening
 
 Status: **Implementation-ready** (2026-04-17). Source strategy is the CEO plan at
 `~/.gstack/projects/atomize-hq-spec/ceo-plans/2026-04-17-post-m10-trust-hardening.md`,
