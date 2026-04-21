@@ -27,11 +27,11 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 - A stale unit is marked with `~` in `spec status` when the passport's stored contract hash no longer matches the current spec contract. Treat stale as work to redo, not as success.
 - For molecule tests, run `spec test path/to/file.test.spec` to execute only that interaction test and refresh only its co-located `.test.evidence.json` artifact.
 - For `kind: data`, keep shared seam semantics in `data.fields`, `constructors`, and `methods`. Do not author top-level `contract`, `deps`, `imports`, or `body.rust`.
-- Canonical M12 wedge loop:
-  `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/checkout_quote.unit.spec --format json`
+- Canonical M13 wedge loop:
+  `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json`
   `cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated`
-  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec`
-  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy.unit.spec`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`
   `cargo run -p spec-cli -- status examples/ecommerce --format json`
   Single-file `spec test` uses an isolated internal output tree; do not pass `--output`.
 
