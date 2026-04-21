@@ -3,7 +3,10 @@
 //! This module provides the foundation for M8's full graph layer.
 //! It models units, molecule tests, and the edges between them (dep and covers).
 
-use crate::types::{DepRef, LoadedMoleculeTest, LoadedSpec, UnitKind, ordered_unique_deps};
+use crate::types::{
+    DepRef, LoadedMoleculeTest, LoadedSpec, NormalizedUnit, ResolvedSpec, UnitKind,
+    ordered_unique_deps, type_name_for_unit_id,
+};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -56,6 +59,92 @@ impl Ord for SpecEdge {
 pub struct ImpactSet {
     pub units: Vec<String>,
     pub molecule_tests: Vec<String>,
+}
+
+/// Kind-aware projection reused across graph, CLI, and molecule codegen call paths.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitProjection {
+    top_level_deps: Vec<String>,
+    cover_imports: Vec<String>,
+}
+
+impl UnitProjection {
+    fn new(top_level_deps: Vec<String>, cover_imports: Vec<String>) -> Self {
+        Self {
+            top_level_deps,
+            cover_imports,
+        }
+    }
+
+    pub fn top_level_deps(&self) -> &[String] {
+        &self.top_level_deps
+    }
+
+    pub fn local_dep_ids(&self) -> Vec<String> {
+        self.top_level_deps
+            .iter()
+            .filter_map(|dep| DepRef::parse(dep).ok())
+            .filter(|dep| dep.library_alias().is_none())
+            .map(|dep| dep.unit_id().to_string())
+            .collect()
+    }
+
+    pub fn cover_imports(&self) -> &[String] {
+        &self.cover_imports
+    }
+}
+
+pub enum ProjectedUnitRef<'a> {
+    Loaded(&'a LoadedSpec),
+    Normalized(&'a NormalizedUnit),
+}
+
+pub fn project_unit(unit: ProjectedUnitRef<'_>) -> UnitProjection {
+    match unit {
+        ProjectedUnitRef::Loaded(spec) => match spec.spec.unit_kind() {
+            Ok(UnitKind::Data) => UnitProjection::new(
+                projected_data_method_deps(
+                    spec.spec
+                        .extensions
+                        .methods
+                        .iter()
+                        .flat_map(|method| method.deps.iter().map(String::as_str)),
+                ),
+                vec![data_cover_import_path(&spec.spec.id)],
+            ),
+            _ => UnitProjection::new(
+                spec.spec.deps.clone(),
+                function_cover_import_paths(&spec.spec.id, &spec.spec.imports),
+            ),
+        },
+        ProjectedUnitRef::Normalized(unit) => match unit {
+            NormalizedUnit::Function(spec) => UnitProjection::new(
+                spec.deps.clone(),
+                function_cover_import_paths(&spec.id, &spec.imports),
+            ),
+            NormalizedUnit::Data(unit) => {
+                UnitProjection::new(unit.deps.clone(), vec![data_cover_import_path(&unit.id)])
+            }
+        },
+    }
+}
+
+fn projected_data_method_deps<'a>(deps: impl Iterator<Item = &'a str>) -> Vec<String> {
+    ordered_unique_deps(deps)
+}
+
+fn function_cover_import_paths(unit_id: &str, imports: &[String]) -> Vec<String> {
+    let mut cover_imports = imports.to_vec();
+    cover_imports.push(ResolvedSpec::dep_to_use_path(unit_id));
+    cover_imports
+}
+
+fn data_cover_import_path(unit_id: &str) -> String {
+    format!(
+        "crate::{}::{};",
+        unit_id.replace('/', "::"),
+        type_name_for_unit_id(unit_id)
+    )
 }
 
 /// The full spec graph: units, molecule tests, and edges between them
@@ -221,16 +310,9 @@ impl SpecGraph {
 }
 
 pub fn top_level_deps(spec: &LoadedSpec) -> Vec<String> {
-    match spec.spec.unit_kind() {
-        Ok(UnitKind::Data) => ordered_unique_deps(
-            spec.spec
-                .extensions
-                .methods
-                .iter()
-                .flat_map(|method| method.deps.iter().map(String::as_str)),
-        ),
-        _ => spec.spec.deps.clone(),
-    }
+    project_unit(ProjectedUnitRef::Loaded(spec))
+        .top_level_deps()
+        .to_vec()
 }
 
 #[cfg(test)]

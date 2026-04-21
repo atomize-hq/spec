@@ -6,11 +6,11 @@
 //! - generate `mod.rs` contents
 //! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
 
+use crate::graph::{ProjectedUnitRef, project_unit};
 use crate::syntax::validate_expect_expr;
 use crate::types::{
     DepRef, LocalTest, MethodReceiver, NormalizedDataSeam, NormalizedUnit, ResolvedMoleculeTest,
     ResolvedSpec, RustDataSeamLowering, RustInherentMethodLowering, has_callable_collision,
-    type_name_for_unit_id,
 };
 use crate::{Result, SpecError};
 use indexmap::IndexMap;
@@ -677,17 +677,11 @@ pub fn generate_molecule_tests_code(
                             cover_id
                         ),
                     })?;
-                if let NormalizedUnit::Function(spec) = unit {
-                    for import in &spec.imports {
-                        let line = format!("use {import};");
-                        if import_seen.insert(line.clone()) {
-                            import_lines.push(line);
-                        }
+                for import in project_unit(ProjectedUnitRef::Normalized(unit)).cover_imports() {
+                    let line = format!("use {import}");
+                    if import_seen.insert(line.clone()) {
+                        import_lines.push(line);
                     }
-                }
-                let line = format!("use {}", covered_unit_use_path(unit));
-                if import_seen.insert(line.clone()) {
-                    import_lines.push(line);
                 }
             }
         }
@@ -757,17 +751,6 @@ pub fn generate_and_write_molecule_tests(
     }
 
     Ok(generated_paths)
-}
-
-fn covered_unit_use_path(unit: &NormalizedUnit) -> String {
-    match unit {
-        NormalizedUnit::Function(spec) => ResolvedSpec::dep_to_use_path(&spec.id),
-        NormalizedUnit::Data(unit) => format!(
-            "crate::{}::{};",
-            unit.id.replace('/', "::"),
-            type_name_for_unit_id(&unit.id)
-        ),
-    }
 }
 
 fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
