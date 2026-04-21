@@ -14,7 +14,7 @@ Both implement the same pricing job: choose one discount strategy, compute `disc
 
 The new `units/pricing/discount_policy_checkout_flow.test.spec` molecule test covers the M13 `sum` seam together with the existing `pricing/checkout_quote` `data` seam and `pricing/apply_tax` function unit so the example proves a mixed-kind checkout flow, not just enum syntax.
 
-The original M12 `pricing/checkout_quote` seam remains in place as a sibling example. Worker C does not rewrite it.
+The original M12 `pricing/checkout_quote` seam remains in place as a sibling example.
 
 ## Locked adversarial score table
 

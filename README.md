@@ -211,7 +211,7 @@ The ecommerce example demonstrates the canonical M13 migration wedge alongside t
 - `pricing/discount_plus_tax`
 - `plans/refactors/checkout-tax-refactor.plan.spec`
 - `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs` (hand-written Rust baseline for the canonical M13 seam)
-- `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs` (hand-written Rust baseline for the same seam)
+- `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs` (hand-written Rust baseline for the canonical M12 data seam)
 
 Recorded adversarial calibration for the M13 wedge is locked: `pricing/discount_policy` scored `19`, `pricing/checkout_quote` scored `16`, and `pricing/discount_plus_tax` scored `14`. Canonical wedge remains `pricing/discount_policy`.
 
