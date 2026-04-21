@@ -16,8 +16,8 @@ use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
 use crate::passport::{ArtifactProvenance, Passport, passport_path_for};
 use crate::plan::{LoadedPlan, PlanComputedImpact, PlanReport, PlanStruct};
 use crate::types::{
-    AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, Contract, DepRef,
-    LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
+    AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
+    Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -51,6 +51,8 @@ pub struct ExportUnit {
     pub contract: Option<Contract>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<AuthoredDataShape>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sum: Option<AuthoredSumShape>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constructors: Vec<AuthoredConstructor>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -250,13 +252,14 @@ impl From<&DepRef> for ExportDepRef {
 
 impl From<&LoadedSpec> for ExportUnit {
     fn from(spec: &LoadedSpec) -> Self {
-        let is_data_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data));
+        let is_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum));
         Self {
             id: spec.spec.id.clone(),
-            kind: is_data_seam.then(|| spec.spec.kind.clone()),
+            kind: is_seam.then(|| spec.spec.kind.clone()),
             intent: spec.spec.intent.why.clone(),
             contract: spec.spec.contract.clone(),
             data: spec.spec.extensions.data.clone(),
+            sum: spec.spec.extensions.sum.clone(),
             constructors: spec.spec.extensions.constructors.clone(),
             methods: spec.spec.extensions.methods.clone(),
             backends: spec.spec.extensions.backends.clone(),
@@ -298,8 +301,8 @@ mod tests {
     };
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
-        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Body, Intent,
-        SpecSource, SpecStruct, UnitExtensions,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
+        AuthoredSumVariant, Body, Intent, SpecSource, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
     use tempfile::TempDir;
@@ -451,6 +454,122 @@ mod tests {
                     backends: Some(AuthoredBackends {
                         rust: Some(AuthoredRustBackend {
                             derives: vec!["Clone".to_string(), "Debug".to_string()],
+                        }),
+                    }),
+                    sum: None,
+                },
+            },
+        }
+    }
+
+    fn loaded_sum_seam(dir: &TempDir, rel_path: &str, id: &str) -> LoadedSpec {
+        let source_path = dir.path().join(rel_path);
+        if let Some(parent) = source_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&source_path, "placeholder").unwrap();
+
+        LoadedSpec {
+            source: SpecSource {
+                file_path: source_path.display().to_string(),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "sum".to_string(),
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
+                contract: None,
+                deps: vec!["legacy/ignored".to_string()],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![LocalTest {
+                    id: "label_basic".to_string(),
+                    expect: "CheckoutStatus::Pending.label() == \"pending\"".to_string(),
+                }],
+                links: None,
+                spec_version: Some("9.9.9".to_string()),
+                extensions: UnitExtensions {
+                    data: None,
+                    sum: Some(AuthoredSumShape {
+                        variants: IndexMap::from([
+                            (
+                                "pending".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::new(),
+                                },
+                            ),
+                            (
+                                "quoted_total".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([
+                                        (
+                                            "subtotal".to_string(),
+                                            AuthoredField {
+                                                type_: "i32".to_string(),
+                                            },
+                                        ),
+                                        (
+                                            "tax_rate".to_string(),
+                                            AuthoredField {
+                                                type_: "i32".to_string(),
+                                            },
+                                        ),
+                                    ]),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![],
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "label".to_string(),
+                            intent: Intent {
+                                why: "Return a variant label".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("&'static str".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_discount".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ \"pending\" }".to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "total".to_string(),
+                            intent: Intent {
+                                why: "Return a computed total".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("i32".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![
+                                "pricing/apply_discount".to_string(),
+                                "pricing/apply_tax".to_string(),
+                            ],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ 0 }".to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec![
+                                "Clone".to_string(),
+                                "Debug".to_string(),
+                                "PartialEq".to_string(),
+                            ],
                         }),
                     }),
                 },
@@ -834,6 +953,65 @@ mod tests {
                 },
                 ExportEdge::Dep {
                     from: ExportDepRef::local("pricing/checkout_quote"),
+                    to: ExportDepRef::local("pricing/apply_tax"),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn build_export_bundle_additively_includes_sum_seam_truth() {
+        let dir = TempDir::new().unwrap();
+        let seam = loaded_sum_seam(
+            &dir,
+            "units/pricing/checkout_status.unit.spec",
+            "pricing/checkout_status",
+        );
+
+        let bundle = build_export_bundle(&[seam], &[], "2026-04-19T00:00:00Z", None);
+
+        assert_eq!(bundle.units.len(), 1);
+        assert_eq!(bundle.units[0].kind, Some("sum".to_string()));
+        assert!(bundle.units[0].contract.is_none());
+        let variants = &bundle.units[0].sum.as_ref().unwrap().variants;
+        assert_eq!(
+            variants.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec!["pending", "quoted_total"]
+        );
+        assert_eq!(variants["quoted_total"].fields["subtotal"].type_, "i32");
+        assert_eq!(bundle.units[0].constructors.len(), 0);
+        assert_eq!(bundle.units[0].methods.len(), 2);
+        assert_eq!(
+            bundle.units[0].deps,
+            vec![
+                ExportDepRef::local("pricing/apply_discount"),
+                ExportDepRef::local("pricing/apply_tax"),
+            ]
+        );
+        assert_eq!(
+            bundle.units[0]
+                .backends
+                .as_ref()
+                .unwrap()
+                .rust
+                .as_ref()
+                .unwrap()
+                .derives,
+            vec![
+                "Clone".to_string(),
+                "Debug".to_string(),
+                "PartialEq".to_string(),
+            ]
+        );
+        assert_eq!(
+            bundle.graph.edges,
+            vec![
+                ExportEdge::Dep {
+                    from: ExportDepRef::local("pricing/checkout_status"),
+                    to: ExportDepRef::local("pricing/apply_discount"),
+                },
+                ExportEdge::Dep {
+                    from: ExportDepRef::local("pricing/checkout_status"),
                     to: ExportDepRef::local("pricing/apply_tax"),
                 },
             ]

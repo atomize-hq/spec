@@ -6,11 +6,12 @@
 //! - generate `mod.rs` contents
 //! - owned-tree orphan cleanup with `.spec-generated` marker safety rails
 
+use crate::graph::{ProjectedUnitRef, project_unit};
 use crate::syntax::validate_expect_expr;
 use crate::types::{
-    DepRef, LocalTest, MethodReceiver, NormalizedDataSeam, NormalizedUnit, ResolvedMoleculeTest,
-    ResolvedSpec, RustDataSeamLowering, RustInherentMethodLowering, has_callable_collision,
-    type_name_for_unit_id,
+    DepRef, LocalTest, MethodReceiver, NormalizedDataSeam, NormalizedSumSeam, NormalizedUnit,
+    ResolvedMoleculeTest, ResolvedSpec, RustDataSeamLowering, RustInherentMethodLowering,
+    RustSumSeamLowering, has_callable_collision,
 };
 use crate::{Result, SpecError};
 use indexmap::IndexMap;
@@ -208,8 +209,53 @@ pub fn lower_data_seam(unit: &NormalizedDataSeam) -> Result<RustDataSeamLowering
     })
 }
 
+pub fn lower_sum_seam(unit: &NormalizedSumSeam) -> Result<RustSumSeamLowering> {
+    let methods = unit
+        .methods
+        .iter()
+        .map(|method| RustInherentMethodLowering {
+            id: method.id.clone(),
+            is_constructor: false,
+            receiver: Some(method.receiver),
+            inputs: method.contract.inputs.clone().unwrap_or_default(),
+            returns: method.contract.returns.clone(),
+            body_rust: method.rust_body.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    Ok(RustSumSeamLowering {
+        id: unit.id.clone(),
+        module_path: unit.module_path.clone(),
+        enum_name: unit.enum_name.clone(),
+        variants: unit
+            .variants
+            .iter()
+            .map(|variant| crate::types::RustSumVariantLowering {
+                id: variant.id.clone(),
+                variant_name: variant.variant_name.clone(),
+                fields: variant
+                    .fields
+                    .iter()
+                    .map(|field| crate::types::RustSumVariantFieldLowering {
+                        name: field.name.clone(),
+                        type_: field.type_.clone(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        methods,
+        local_tests: unit.local_tests.clone(),
+        deps: unit.deps.clone(),
+        derives: unit.rust_backend.derives.clone(),
+    })
+}
+
 pub fn generate_data_seam_code(unit: &NormalizedDataSeam) -> Result<String> {
     generate_data_seam_code_with_options(unit, &GenerateOptions::default())
+}
+
+pub fn generate_sum_seam_code(unit: &NormalizedSumSeam) -> Result<String> {
+    generate_sum_seam_code_with_options(unit, &GenerateOptions::default())
 }
 
 pub fn generate_data_seam_code_with_options(
@@ -219,7 +265,7 @@ pub fn generate_data_seam_code_with_options(
     let lowering = lower_data_seam(unit)?;
     let dep_statements = build_dep_statements(&lowering.deps, &unit.id)?;
     validate_data_inherent_callables(unit, &lowering)?;
-    validate_data_derives(unit, &lowering)?;
+    validate_rust_derives(&format!("data seam '{}'", unit.id), &lowering.derives)?;
     let mut output = String::new();
 
     for statement in dep_statements {
@@ -253,6 +299,48 @@ pub fn generate_data_seam_code_with_options(
     Ok(output)
 }
 
+pub fn generate_sum_seam_code_with_options(
+    unit: &NormalizedSumSeam,
+    options: &GenerateOptions,
+) -> Result<String> {
+    let lowering = lower_sum_seam(unit)?;
+    let dep_statements = build_dep_statements(&lowering.deps, &unit.id)?;
+    validate_sum_inherent_callables(unit, &lowering)?;
+    validate_sum_variant_names(unit, &lowering)?;
+    validate_rust_derives(&format!("sum seam '{}'", unit.id), &lowering.derives)?;
+    let mut output = String::new();
+
+    for statement in dep_statements {
+        output.push_str(&statement);
+        output.push('\n');
+    }
+
+    if !lowering.deps.is_empty() {
+        output.push('\n');
+    }
+
+    if let Some(doc_comment) = build_doc_comment(&unit.intent_why) {
+        output.push_str(&doc_comment);
+    }
+
+    if !lowering.derives.is_empty() {
+        output.push_str(&format!("#[derive({})]\n", lowering.derives.join(", ")));
+    }
+
+    output.push_str(&render_sum_enum(&lowering));
+    output.push('\n');
+    output.push('\n');
+    output.push_str(&render_sum_impl(unit, &lowering));
+    output.push('\n');
+
+    if let Some(tests) = render_local_tests(&unit.id, &lowering.local_tests, options)? {
+        output.push('\n');
+        output.push_str(&tests);
+    }
+
+    Ok(output)
+}
+
 fn validate_data_inherent_callables(
     unit: &NormalizedDataSeam,
     lowering: &RustDataSeamLowering,
@@ -276,12 +364,62 @@ fn validate_data_inherent_callables(
     Ok(())
 }
 
-fn validate_data_derives(unit: &NormalizedDataSeam, lowering: &RustDataSeamLowering) -> Result<()> {
-    for (index, derive) in lowering.derives.iter().enumerate() {
+fn validate_sum_inherent_callables(
+    unit: &NormalizedSumSeam,
+    lowering: &RustSumSeamLowering,
+) -> Result<()> {
+    let callable_ids = lowering
+        .methods
+        .iter()
+        .map(|method| method.id.clone())
+        .collect::<Vec<_>>();
+
+    if let Some((first, second, callable_name)) = has_callable_collision(&callable_ids) {
+        return Err(SpecError::Generator {
+            message: format!(
+                "sum seam '{}' contains duplicate inherent callable '{}': '{}' and '{}'",
+                unit.id, callable_name, first, second
+            ),
+        });
+    }
+
+    Ok(())
+}
+
+fn validate_sum_variant_names(
+    unit: &NormalizedSumSeam,
+    lowering: &RustSumSeamLowering,
+) -> Result<()> {
+    let mut seen = HashMap::new();
+    for (index, variant) in lowering.variants.iter().enumerate() {
+        if variant.variant_name == lowering.enum_name {
+            return Err(SpecError::Generator {
+                message: format!(
+                    "sum seam '{}' projects variant '{}' to '{}', which conflicts with enum name '{}'",
+                    unit.id, variant.id, variant.variant_name, lowering.enum_name
+                ),
+            });
+        }
+        if let Some((first_id, first_index)) =
+            seen.insert(variant.variant_name.clone(), (variant.id.clone(), index))
+        {
+            return Err(SpecError::Generator {
+                message: format!(
+                    "sum seam '{}' projects variants '{}' and '{}' to duplicate Rust variant name '{}' (indices {} and {})",
+                    unit.id, first_id, variant.id, variant.variant_name, first_index, index
+                ),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_rust_derives(owner: &str, derives: &[String]) -> Result<()> {
+    for (index, derive) in derives.iter().enumerate() {
         syn::parse_str::<syn::Path>(derive).map_err(|err| SpecError::Generator {
             message: format!(
-                "data seam '{}' has invalid backends.rust.derives[{}] '{}': {}",
-                unit.id, index, derive, err
+                "{owner} has invalid backends.rust.derives[{index}] '{derive}': {err}",
             ),
         })?;
     }
@@ -304,6 +442,7 @@ pub fn generate_normalized_unit_code_with_options(
     match unit {
         NormalizedUnit::Function(spec) => generate_code_with_options(spec, options),
         NormalizedUnit::Data(unit) => generate_data_seam_code_with_options(unit, options),
+        NormalizedUnit::Sum(unit) => generate_sum_seam_code_with_options(unit, options),
     }
 }
 
@@ -351,6 +490,29 @@ fn render_data_struct(lowering: &RustDataSeamLowering) -> String {
         .join("\n");
 
     format!("pub struct {} {{\n{}\n}}", lowering.struct_name, fields)
+}
+
+fn render_sum_enum(lowering: &RustSumSeamLowering) -> String {
+    let variants = lowering
+        .variants
+        .iter()
+        .map(|variant| {
+            if variant.fields.is_empty() {
+                format!("    {},", variant.variant_name)
+            } else {
+                let fields = variant
+                    .fields
+                    .iter()
+                    .map(|field| format!("        {}: {},", field.name, field.type_))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                format!("    {} {{\n{}\n    }},", variant.variant_name, fields)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("pub enum {} {{\n{}\n}}", lowering.enum_name, variants)
 }
 
 fn receiver_param(receiver: MethodReceiver) -> &'static str {
@@ -417,6 +579,29 @@ fn render_data_impl(unit: &NormalizedDataSeam, lowering: &RustDataSeamLowering) 
         format!("impl {} {{\n}}", lowering.struct_name)
     } else {
         format!("impl {} {{\n{}\n}}", lowering.struct_name, items.join("\n"))
+    }
+}
+
+fn render_sum_impl(unit: &NormalizedSumSeam, lowering: &RustSumSeamLowering) -> String {
+    let mut items = Vec::new();
+
+    for (source, lowered) in unit.methods.iter().zip(&lowering.methods) {
+        let mut item = String::new();
+        if let Some(doc_comment) = build_doc_comment(&source.intent_why) {
+            item.push_str(&indent_block(&doc_comment, 4));
+        }
+        item.push_str("    ");
+        item.push_str(&render_inherent_method_signature(lowered));
+        item.push(' ');
+        item.push_str(lowered.body_rust.trim());
+        item.push('\n');
+        items.push(item);
+    }
+
+    if items.is_empty() {
+        format!("impl {} {{\n}}", lowering.enum_name)
+    } else {
+        format!("impl {} {{\n{}\n}}", lowering.enum_name, items.join("\n"))
     }
 }
 
@@ -656,13 +841,17 @@ pub fn generate_molecule_tests_code(
     tests: &[&ResolvedMoleculeTest],
     units_by_id: &HashMap<&str, &NormalizedUnit>,
 ) -> Result<String> {
+    fn render_use_import(import: &str) -> String {
+        format!("use {};", import.trim_end_matches(';'))
+    }
+
     let mut import_seen: HashSet<String> = HashSet::new();
     let mut import_lines: Vec<String> = Vec::new();
 
     for test in tests {
         if let Some(imports) = &test.imports {
             for import in imports {
-                let line = format!("use {import};");
+                let line = render_use_import(import);
                 if import_seen.insert(line.clone()) {
                     import_lines.push(line);
                 }
@@ -677,17 +866,11 @@ pub fn generate_molecule_tests_code(
                             cover_id
                         ),
                     })?;
-                if let NormalizedUnit::Function(spec) = unit {
-                    for import in &spec.imports {
-                        let line = format!("use {import};");
-                        if import_seen.insert(line.clone()) {
-                            import_lines.push(line);
-                        }
+                for import in project_unit(ProjectedUnitRef::Normalized(unit)).cover_imports() {
+                    let line = render_use_import(import);
+                    if import_seen.insert(line.clone()) {
+                        import_lines.push(line);
                     }
-                }
-                let line = format!("use {}", covered_unit_use_path(unit));
-                if import_seen.insert(line.clone()) {
-                    import_lines.push(line);
                 }
             }
         }
@@ -757,17 +940,6 @@ pub fn generate_and_write_molecule_tests(
     }
 
     Ok(generated_paths)
-}
-
-fn covered_unit_use_path(unit: &NormalizedUnit) -> String {
-    match unit {
-        NormalizedUnit::Function(spec) => ResolvedSpec::dep_to_use_path(&spec.id),
-        NormalizedUnit::Data(unit) => format!(
-            "crate::{}::{};",
-            unit.id.replace('/', "::"),
-            type_name_for_unit_id(&unit.id)
-        ),
-    }
 }
 
 fn build_use_groups(spec: &ResolvedSpec) -> Result<(Vec<String>, Vec<String>)> {
@@ -957,8 +1129,9 @@ mod tests {
         AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustMethodLowering, Body, Contract, Intent, LocalTest,
         MethodReceiver, NormalizedConstructor, NormalizedDataField, NormalizedDataSeam,
-        NormalizedMethod, NormalizedUnit, ResolvedMoleculeTest, ResolvedSpec, RustDataSeamBackend,
-        SpecStruct, UnitExtensions,
+        NormalizedMethod, NormalizedSumSeam, NormalizedSumVariant, NormalizedSumVariantField,
+        NormalizedUnit, ResolvedMoleculeTest, ResolvedSpec, RustDataSeamBackend,
+        RustSumSeamBackend, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
     #[cfg(unix)]
@@ -1090,6 +1263,52 @@ mod tests {
             links: None,
             spec_version: None,
             rust_backend: RustDataSeamBackend {
+                derives: vec!["Clone".to_string(), "Debug".to_string()],
+            },
+        }
+    }
+
+    fn test_sum_seam() -> NormalizedSumSeam {
+        NormalizedSumSeam {
+            id: "pricing/checkout_status".to_string(),
+            intent_why: "Track checkout status.".to_string(),
+            enum_name: "CheckoutStatus".to_string(),
+            module_path: "pricing".to_string(),
+            variants: vec![
+                NormalizedSumVariant {
+                    id: "pending".to_string(),
+                    variant_name: "Pending".to_string(),
+                    fields: vec![],
+                },
+                NormalizedSumVariant {
+                    id: "quoted_total".to_string(),
+                    variant_name: "QuotedTotal".to_string(),
+                    fields: vec![NormalizedSumVariantField {
+                        name: "subtotal".to_string(),
+                        type_: "rust_decimal::Decimal".to_string(),
+                    }],
+                },
+            ],
+            methods: vec![NormalizedMethod {
+                id: "label".to_string(),
+                intent_why: "Expose a stable label.".to_string(),
+                receiver: MethodReceiver::SharedRef,
+                contract: Contract {
+                    inputs: None,
+                    returns: Some("&'static str".to_string()),
+                    invariants: vec![],
+                },
+                deps: vec![],
+                rust_body: "{\n        match self {\n            Self::Pending => \"pending\",\n            Self::QuotedTotal { .. } => \"quoted_total\",\n        }\n    }".to_string(),
+            }],
+            deps: vec![],
+            local_tests: vec![LocalTest {
+                id: "happy_path".to_string(),
+                expect: "CheckoutStatus::Pending.label() == \"pending\"".to_string(),
+            }],
+            links: None,
+            spec_version: None,
+            rust_backend: RustSumSeamBackend {
                 derives: vec!["Clone".to_string(), "Debug".to_string()],
             },
         }
@@ -1441,6 +1660,42 @@ mod tests {
     }
 
     #[test]
+    fn generate_normalized_unit_code_emits_sum_enum_impl_and_tests() {
+        let code = generate_normalized_unit_code(&NormalizedUnit::Sum(test_sum_seam())).unwrap();
+
+        assert!(code.contains("/// Track checkout status."));
+        assert!(code.contains("#[derive(Clone, Debug)]"));
+        assert!(code.contains("pub enum CheckoutStatus {"));
+        assert!(code.contains("Pending,"));
+        assert!(code.contains("QuotedTotal {"));
+        assert!(code.contains("subtotal: rust_decimal::Decimal,"));
+        assert!(code.contains("impl CheckoutStatus {"));
+        assert!(code.contains("pub fn label(&self) -> &'static str {"));
+        assert!(code.contains("Self::Pending => \"pending\""));
+        assert!(code.contains("Self::QuotedTotal { .. } => \"quoted_total\""));
+        assert!(code.contains("#[cfg(test)]\nmod tests {"));
+        assert!(code.contains("assert!(CheckoutStatus::Pending.label() == \"pending\");"));
+    }
+
+    #[test]
+    fn generate_sum_seam_code_rejects_projected_variant_name_collision() {
+        let mut seam = test_sum_seam();
+        seam.variants.push(NormalizedSumVariant {
+            id: "quoted__total".to_string(),
+            variant_name: "QuotedTotal".to_string(),
+            fields: vec![],
+        });
+
+        let err = generate_sum_seam_code(&seam).unwrap_err().to_string();
+        assert!(
+            err.contains("duplicate Rust variant name 'QuotedTotal'"),
+            "{err}"
+        );
+        assert!(err.contains("quoted_total"), "{err}");
+        assert!(err.contains("quoted__total"), "{err}");
+    }
+
+    #[test]
     fn generate_data_seam_code_rejects_dep_collision() {
         let mut seam = test_data_seam();
         seam.deps = vec![
@@ -1532,6 +1787,7 @@ mod tests {
                     },
                 ],
                 backends: None,
+                sum: None,
             },
         })
         .unwrap();

@@ -1,0 +1,107 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/discount_policy",
+  "kind": "sum",
+  "intent": "Represent mutually exclusive discount strategies for checkout pricing.",
+  "sum": {
+    "variants": {
+      "none": {},
+      "percentage": {
+        "fields": {
+          "rate": {
+            "type": "rust_decimal::Decimal"
+          }
+        }
+      },
+      "fixed_amount": {
+        "fields": {
+          "amount": {
+            "type": "rust_decimal::Decimal"
+          }
+        }
+      }
+    }
+  },
+  "methods": [
+    {
+      "id": "discount_amount",
+      "intent": {
+        "why": "Return the discount amount to subtract from the subtotal."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "inputs": {
+          "subtotal": "rust_decimal::Decimal"
+        },
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [],
+      "lowering": {
+        "rust": {
+          "body": "{\n    match self {\n        Self::None => rust_decimal::Decimal::ZERO,\n        Self::Percentage { rate } => subtotal * *rate,\n        Self::FixedAmount { amount } => (*amount).min(subtotal),\n    }\n}\n"
+        }
+      }
+    },
+    {
+      "id": "discounted_subtotal",
+      "intent": {
+        "why": "Return the subtotal after applying the selected discount strategy."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "inputs": {
+          "subtotal": "rust_decimal::Decimal"
+        },
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [],
+      "lowering": {
+        "rust": {
+          "body": "{\n    subtotal - self.discount_amount(subtotal)\n}\n"
+        }
+      }
+    }
+  ],
+  "backends": {
+    "rust": {
+      "derives": [
+        "Clone",
+        "Debug",
+        "PartialEq"
+      ]
+    }
+  },
+  "deps": [],
+  "local_tests": [
+    {
+      "id": "none_has_zero_discount_amount",
+      "expect": "DiscountPolicy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO"
+    },
+    {
+      "id": "none_leaves_subtotal_unchanged",
+      "expect": "DiscountPolicy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)"
+    }
+  ],
+  "generated_at": "2026-04-21T17:24:34Z",
+  "source_file": "examples/ecommerce/units/pricing/discount_policy.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "none_has_zero_discount_amount",
+        "status": "pass"
+      },
+      {
+        "id": "none_leaves_subtotal_unchanged",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-04-21T17:24:37Z",
+    "provenance": {
+      "git_commit_sha": "6370731246f82f3d4e9ca73df20c1a515e0d5e1d"
+    }
+  },
+  "contract_hash": "sha256:0370d747e0c8be24f85161ba1a6a254d0bfaa31d021a393985d240fd169363fb"
+}

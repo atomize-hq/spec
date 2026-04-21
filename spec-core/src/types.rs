@@ -3,7 +3,7 @@
 //! This module defines the core data structures used throughout the spec pipeline:
 //! - SpecStruct: Raw parsed form from YAML (mirrors schema)
 //! - ResolvedSpec: Normalized function-unit IR used by the generator
-//! - NormalizedUnit / NormalizedDataSeam: kind-aware M12 unit normalization
+//! - NormalizedUnit / NormalizedDataSeam / NormalizedSumSeam: kind-aware unit normalization
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -76,6 +76,8 @@ pub struct Links {
 pub struct UnitExtensions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<AuthoredDataShape>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sum: Option<AuthoredSumShape>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constructors: Vec<AuthoredConstructor>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -87,6 +89,18 @@ pub struct UnitExtensions {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct AuthoredDataShape {
     #[serde(default)]
+    pub fields: IndexMap<String, AuthoredField>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredSumShape {
+    #[serde(default)]
+    pub variants: IndexMap<String, AuthoredSumVariant>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AuthoredSumVariant {
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub fields: IndexMap<String, AuthoredField>,
 }
 
@@ -146,6 +160,7 @@ pub struct AuthoredRustBackend {
 pub enum UnitKind {
     Function,
     Data,
+    Sum,
 }
 
 impl UnitKind {
@@ -153,6 +168,7 @@ impl UnitKind {
         match self {
             Self::Function => "function",
             Self::Data => "data",
+            Self::Sum => "sum",
         }
     }
 }
@@ -164,6 +180,7 @@ impl TryFrom<&str> for UnitKind {
         match value {
             "function" => Ok(Self::Function),
             "data" => Ok(Self::Data),
+            "sum" => Ok(Self::Sum),
             other => Err(format!("unsupported unit kind '{other}'")),
         }
     }
@@ -207,6 +224,7 @@ pub struct ResolvedSpec {
 pub enum NormalizedUnit {
     Function(ResolvedSpec),
     Data(NormalizedDataSeam),
+    Sum(NormalizedSumSeam),
 }
 
 impl NormalizedUnit {
@@ -214,6 +232,7 @@ impl NormalizedUnit {
         match self {
             Self::Function(unit) => &unit.id,
             Self::Data(unit) => &unit.id,
+            Self::Sum(unit) => &unit.id,
         }
     }
 
@@ -221,6 +240,7 @@ impl NormalizedUnit {
         match self {
             Self::Function(unit) => &unit.module_path,
             Self::Data(unit) => &unit.module_path,
+            Self::Sum(unit) => &unit.module_path,
         }
     }
 
@@ -228,6 +248,7 @@ impl NormalizedUnit {
         match self {
             Self::Function(_) => UnitKind::Function,
             Self::Data(_) => UnitKind::Data,
+            Self::Sum(_) => UnitKind::Sum,
         }
     }
 }
@@ -250,6 +271,34 @@ pub struct NormalizedDataSeam {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NormalizedDataField {
+    pub name: String,
+    pub type_: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalizedSumSeam {
+    pub id: String,
+    pub intent_why: String,
+    pub enum_name: String,
+    pub module_path: String,
+    pub variants: Vec<NormalizedSumVariant>,
+    pub methods: Vec<NormalizedMethod>,
+    pub deps: Vec<String>,
+    pub local_tests: Vec<LocalTest>,
+    pub links: Option<Links>,
+    pub spec_version: Option<String>,
+    pub rust_backend: RustSumSeamBackend,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalizedSumVariant {
+    pub id: String,
+    pub variant_name: String,
+    pub fields: Vec<NormalizedSumVariantField>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalizedSumVariantField {
     pub name: String,
     pub type_: String,
 }
@@ -301,6 +350,11 @@ pub struct RustDataSeamBackend {
     pub derives: Vec<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RustSumSeamBackend {
+    pub derives: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RustDataSeamLowering {
     pub id: String,
@@ -312,6 +366,31 @@ pub struct RustDataSeamLowering {
     pub local_tests: Vec<LocalTest>,
     pub deps: Vec<String>,
     pub derives: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustSumSeamLowering {
+    pub id: String,
+    pub module_path: String,
+    pub enum_name: String,
+    pub variants: Vec<RustSumVariantLowering>,
+    pub methods: Vec<RustInherentMethodLowering>,
+    pub local_tests: Vec<LocalTest>,
+    pub deps: Vec<String>,
+    pub derives: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustSumVariantLowering {
+    pub id: String,
+    pub variant_name: String,
+    pub fields: Vec<RustSumVariantFieldLowering>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustSumVariantFieldLowering {
+    pub name: String,
+    pub type_: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -573,12 +652,7 @@ impl ResolvedSpec {
 
 impl NormalizedDataSeam {
     pub fn from_spec(spec: SpecStruct) -> std::result::Result<Self, String> {
-        let parts: Vec<&str> = spec.id.split('/').collect();
-        let module_path = if parts.len() > 1 {
-            parts[..parts.len() - 1].join("/")
-        } else {
-            String::new()
-        };
+        let module_path = module_path_for_unit_id(&spec.id);
 
         let fields = spec
             .extensions
@@ -611,28 +685,7 @@ impl NormalizedDataSeam {
             })
             .collect::<Vec<_>>();
 
-        let methods = spec
-            .extensions
-            .methods
-            .iter()
-            .map(|method| {
-                Ok(NormalizedMethod {
-                    id: method.id.clone(),
-                    intent_why: method.intent.why.clone(),
-                    receiver: MethodReceiver::try_from(method.receiver.as_str())?,
-                    contract: method.contract.clone().ok_or_else(|| {
-                        format!("kind:data method '{}' is missing contract", method.id)
-                    })?,
-                    deps: method.deps.clone(),
-                    rust_body: method
-                        .lowering
-                        .as_ref()
-                        .and_then(|lowering| lowering.rust.as_ref())
-                        .map(|rust| rust.body.clone())
-                        .unwrap_or_default(),
-                })
-            })
-            .collect::<std::result::Result<Vec<_>, String>>()?;
+        let methods = normalize_authored_methods(&spec.extensions.methods, "data")?;
         let deps = ordered_unique_deps(
             methods
                 .iter()
@@ -652,16 +705,96 @@ impl NormalizedDataSeam {
             links: spec.links,
             spec_version: spec.spec_version,
             rust_backend: RustDataSeamBackend {
-                derives: spec
-                    .extensions
-                    .backends
-                    .as_ref()
-                    .and_then(|backends| backends.rust.as_ref())
-                    .map(|rust| rust.derives.clone())
-                    .unwrap_or_default(),
+                derives: authored_rust_backend_derives(spec.extensions.backends.as_ref()),
             },
         })
     }
+}
+
+impl NormalizedSumSeam {
+    pub fn from_spec(spec: SpecStruct) -> std::result::Result<Self, String> {
+        let module_path = module_path_for_unit_id(&spec.id);
+        let variants = spec
+            .extensions
+            .sum
+            .as_ref()
+            .map(|sum| {
+                sum.variants
+                    .iter()
+                    .map(|(id, variant)| NormalizedSumVariant {
+                        id: id.clone(),
+                        variant_name: type_name_for_identifier(id),
+                        fields: variant
+                            .fields
+                            .iter()
+                            .map(|(name, field)| NormalizedSumVariantField {
+                                name: name.clone(),
+                                type_: field.type_.clone(),
+                            })
+                            .collect(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let methods = normalize_authored_methods(&spec.extensions.methods, "sum")?;
+        let deps = ordered_unique_deps(
+            methods
+                .iter()
+                .flat_map(|method| method.deps.iter().map(String::as_str)),
+        );
+
+        Ok(Self {
+            enum_name: type_name_for_unit_id(&spec.id),
+            id: spec.id,
+            intent_why: spec.intent.why,
+            module_path,
+            variants,
+            methods,
+            deps,
+            local_tests: spec.local_tests,
+            links: spec.links,
+            spec_version: spec.spec_version,
+            rust_backend: RustSumSeamBackend {
+                derives: authored_rust_backend_derives(spec.extensions.backends.as_ref()),
+            },
+        })
+    }
+}
+
+fn normalize_authored_methods(
+    methods: &[AuthoredMethod],
+    seam_kind: &str,
+) -> std::result::Result<Vec<NormalizedMethod>, String> {
+    methods
+        .iter()
+        .map(|method| {
+            Ok(NormalizedMethod {
+                id: method.id.clone(),
+                intent_why: method.intent.why.clone(),
+                receiver: MethodReceiver::try_from(method.receiver.as_str())?,
+                contract: method.contract.clone().ok_or_else(|| {
+                    format!(
+                        "kind:{seam_kind} method '{}' is missing contract",
+                        method.id
+                    )
+                })?,
+                deps: method.deps.clone(),
+                rust_body: method
+                    .lowering
+                    .as_ref()
+                    .and_then(|lowering| lowering.rust.as_ref())
+                    .map(|rust| rust.body.clone())
+                    .unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
+fn authored_rust_backend_derives(backends: Option<&AuthoredBackends>) -> Vec<String> {
+    backends
+        .and_then(|backends| backends.rust.as_ref())
+        .map(|rust| rust.derives.clone())
+        .unwrap_or_default()
 }
 
 /// Get the callable name (last segment) from a hierarchical spec ID.
@@ -680,7 +813,11 @@ pub fn module_path_for_unit_id(unit_id: &str) -> String {
 }
 
 pub fn type_name_for_unit_id(unit_id: &str) -> String {
-    callable_name(unit_id)
+    type_name_for_identifier(callable_name(unit_id))
+}
+
+pub fn type_name_for_identifier(identifier: &str) -> String {
+    identifier
         .split('_')
         .filter(|segment| !segment.is_empty())
         .map(|segment| {
@@ -1127,6 +1264,7 @@ mod tests {
                         derives: vec!["Clone".to_string(), "Debug".to_string()],
                     }),
                 }),
+                sum: None,
             },
         };
 

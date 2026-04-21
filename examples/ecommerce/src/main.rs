@@ -8,7 +8,7 @@ pub mod raw_baseline;
 
 fn main() -> Result<()> {
     println!(
-        "ecommerce example: compare src/raw_baseline/pricing/checkout_quote.rs with units/pricing/checkout_quote.unit.spec"
+        "ecommerce example: compare src/raw_baseline/pricing/discount_policy.rs with units/pricing/discount_policy.unit.spec"
     );
     Ok(())
 }

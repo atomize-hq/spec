@@ -130,6 +130,38 @@
         }
       }
     },
+    "sum_variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/data_field"
+          }
+        }
+      }
+    },
+    "sum_shape": {
+      "type": "object",
+      "required": ["variants"],
+      "additionalProperties": false,
+      "properties": {
+        "variants": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/definitions/nested_id"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/sum_variant"
+          }
+        }
+      }
+    },
     "constructor": {
       "type": "object",
       "required": ["id", "intent", "initializes"],
@@ -235,7 +267,7 @@
     },
     "kind": {
       "type": "string",
-      "enum": ["function", "data"]
+      "enum": ["function", "data", "sum"]
     },
     "intent": {
       "$ref": "#/definitions/intent"
@@ -274,6 +306,9 @@
     },
     "data": {
       "$ref": "#/definitions/data_shape"
+    },
+    "sum": {
+      "$ref": "#/definitions/sum_shape"
     },
     "constructors": {
       "type": "array",
@@ -321,6 +356,9 @@
               "required": ["methods"]
             },
             {
+              "required": ["sum"]
+            },
+            {
               "required": ["backends"]
             }
           ]
@@ -341,6 +379,40 @@
           "body": {
             "$ref": "#/definitions/data_body"
           }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": ["sum"]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "sum"
+          }
+        }
+      },
+      "then": {
+        "required": ["sum", "methods"],
+        "properties": {
+          "body": {
+            "$ref": "#/definitions/data_body"
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": ["data"]
+            },
+            {
+              "required": ["constructors"]
+            }
+          ]
         }
       }
     }

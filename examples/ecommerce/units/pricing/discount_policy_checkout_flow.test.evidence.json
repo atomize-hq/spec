@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "pricing/discount_policy_checkout_flow",
+  "source_file": "examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec",
+  "covers": [
+    "pricing/discount_policy",
+    "pricing/checkout_quote",
+    "pricing/apply_tax"
+  ],
+  "status": "pass",
+  "observed_at": "2026-04-21T17:24:38Z",
+  "test_body_hash": "sha256:98b1a7bc35a658227b147d9f6898bb54764ace9d2676abeb3dcbf3425874afe6",
+  "covered_unit_contract_hashes": {
+    "pricing/apply_tax": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df",
+    "pricing/checkout_quote": "sha256:695d9bfd431059f5d8c63d717f2953bd1a03db50a9b8c70309791d4b6d3bbefb",
+    "pricing/discount_policy": "sha256:0370d747e0c8be24f85161ba1a6a254d0bfaa31d021a393985d240fd169363fb"
+  },
+  "provenance": {
+    "git_commit_sha": "6370731246f82f3d4e9ca73df20c1a515e0d5e1d"
+  }
+}

@@ -52,7 +52,7 @@ spec generate examples/ecommerce/units
 Each unit is a YAML document with these common required fields:
 
 - `id`: hierarchical unit id like `pricing/apply_discount`
-- `kind`: authored unit shape, currently `function` or `data`
+- `kind`: authored unit shape, currently `function`, `data`, or `sum`
 - `intent.why`: why the unit exists
 
 Kind-specific authored fields:
@@ -61,6 +61,7 @@ Kind-specific authored fields:
 | --- | --- | --- | --- |
 | `function` | `contract`, `body.rust` | `deps`, `imports`, `local_tests`, `links` | none |
 | `data` | `data.fields`, one or more `constructors`, one or more `methods` | `local_tests`, `links`, `backends.rust` | `contract`, `deps`, `imports`, `body.rust` |
+| `sum` | `sum.variants`, one or more `methods` | `local_tests`, `links`, `backends.rust` | `contract`, `deps`, `imports`, `body.rust`, `constructors` |
 
 For `kind: function`, `spec` generates the complete `pub fn` signature from `contract.inputs` and `contract.returns`. A minimal unit with a contract looks like:
 
@@ -160,6 +161,8 @@ backends:
 
 `kind: data` keeps shared semantics in `data.fields`, `constructors`, and `methods`. Rust-specific lowering stays inside `methods[].lowering.rust.body` and `backends.rust`.
 
+`kind: sum` follows the same seam boundary: keep shared semantics in `sum.variants` and `methods`. Enum cases are authored via `sum.variants`, not `constructors`. Rust-specific lowering stays inside `methods[].lowering.rust.body` and `backends.rust`.
+
 ## Migrating from 0.2.x
 
 In 0.2.x, `body.rust` contained the full function declaration:
@@ -195,19 +198,24 @@ Running `spec validate` on a 0.2.x unit will emit a clear migration error pointi
 
 ## Example
 
-The ecommerce example demonstrates the canonical M12 migration wedge alongside the existing pricing units, two molecule tests, one checked-in plan artifact, and tracked molecule evidence so the shipped example stays green on a fresh clone:
+The ecommerce example demonstrates the canonical M13 migration wedge alongside the existing pricing units, three molecule tests, one checked-in plan artifact, and tracked molecule evidence so the shipped example stays green on a fresh clone:
 
 - `money/round`
 - `pricing/apply_discount`
 - `pricing/apply_tax`
 - `pricing/calculate_total`
+- `pricing/discount_policy` (`kind: sum`)
 - `pricing/checkout_quote` (`kind: data`)
 - `pricing/checkout_flow`
+- `pricing/discount_policy_checkout_flow`
 - `pricing/discount_plus_tax`
 - `plans/refactors/checkout-tax-refactor.plan.spec`
-- `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs` (hand-written Rust baseline for the same seam)
+- `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs` (hand-written Rust baseline for the canonical M13 seam)
+- `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs` (hand-written Rust baseline for the canonical M12 data seam)
 
-The example crate is intentionally minimal. It provides a realistic place to keep unit specs, a hand-written Rust baseline for the M12 data-seam migration, and a Rust project scaffold that can host generated output. The checked-in `pricing/*.test.evidence.json` files are generated artifacts for this canonical example, not hand-authored source.
+Recorded adversarial calibration for the M13 wedge is locked: `pricing/discount_policy` scored `19`, `pricing/checkout_quote` scored `16`, and `pricing/discount_plus_tax` scored `14`. Canonical wedge remains `pricing/discount_policy`.
+
+The example crate is intentionally minimal. It provides a realistic place to keep unit specs, hand-written Rust baselines for the M12 and M13 migration wedges, and a Rust project scaffold that can host generated output. The checked-in `pricing/*.test.evidence.json` files are generated artifacts for this canonical example, not hand-authored source.
 
 ## Commands
 
@@ -237,13 +245,13 @@ spec plan export <file>                   # emit dedicated plan bundle to stdout
 spec plan export <file> --output <file>   # write dedicated plan bundle to file
 ```
 
-Canonical M12 example loop from the repo root:
+Canonical M13 example loop from the repo root:
 
 ```bash
-cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/checkout_quote.unit.spec --format json
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json
 cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_quote.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec
 cargo run -p spec-cli -- status examples/ecommerce --format json
 ```
 

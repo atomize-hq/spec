@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.11.0 - 2026-04-21
+
+### Added
+
+- **M13 sum seams** — `spec` can now author one top-level `kind: sum` seam with explicit ordered variants, named payload fields, seam-owned methods, and seam-owned local tests, then lower it into generated Rust as one `enum + impl`.
+- **Canonical ecommerce M13 wedge** — `examples/ecommerce` now ships the `pricing/discount_policy` migration wedge as both a hand-written Rust baseline and an authored `kind: sum` seam, plus a mixed-kind molecule proof that composes the new seam with the existing `pricing/checkout_quote` data seam and `pricing/apply_tax` function unit.
+
+### Changed
+
+- **Mixed-kind trust surfaces now stay aligned through one shared dep/import projection seam** — graph edges, exact-unit single-file `spec test`, molecule imports, passport deps, and export deps all project `function`, `data`, and `sum` units through the same top-level dependency story instead of re-deriving kind-specific behavior in multiple places.
+- **Validation, normalization, and code generation now treat `kind: sum` as a first-class authored shape** — schema rules, semantic validation, normalization, lowering, and generated Rust all preserve shared seam truth while keeping Rust-specific details inside method lowering and backend derives.
+- **Passport, export, and status now expose truthful additive `sum` metadata** — sum seams participate in contract-hash staleness, passport/export authored-shape projection, mixed-tree status reporting, and checked-in example artifacts without widening nested variants into separate tracked nodes.
+- **The docs and plan now teach the exact M13 loop** — `PLAN.md`, `README.md`, `AGENTS.md`, and `examples/ecommerce/README.md` all point at the `discount_policy` validate/build/test/status flow, record the adversarial wedge score table, and explain the `kind: sum` seam boundary explicitly.
+
+### Fixed
+
+- **Projected Rust identifier failures now stop at validation time** — sum variants that normalize into invalid or colliding Rust names are rejected before code generation instead of leaking through as later compiler failures.
+- **Molecule imports for mixed-kind seams are now warning-clean and explicit** — the new M13 molecule coverage uses explicit imports and the shared projection helper, so the ecommerce example keeps compiling cleanly under strict consumers while preserving truthful coverage metadata.
+- **Canonical ecommerce proof artifacts are fresh again** — the checked-in passports and molecule evidence now match the landed M13 contract hashes, provenance, and mixed-kind example flow instead of drifting behind the branch.
+
 ## 0.10.0 - 2026-04-20
 
 ### Added

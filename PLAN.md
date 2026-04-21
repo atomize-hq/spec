@@ -1,35 +1,29 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260420-223206.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m13-autoplan-restore-20260421-070636.md -->
 # M13 — Orthogonal Core + Sum Seam
 
-Status: **Draft, CEO phase written** (2026-04-20). Source strategy is the fresh post-M12
+Status: **Draft, plan-solidified** (2026-04-21). Reviewed via `/autoplan` across the 2026-04-20
+CEO pass and the 2026-04-21 engineering-solidification pass. Source inputs are the post-M12
 office-hours design at
 `~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-design-20260420-220723.md`, the earlier
-M13-focused shape study at
+M13 shape study at
 `~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-design-20260420-215839.md`, and the
 shipped M12 seam architecture already present in `spec-core/src/types.rs`,
-`spec-core/src/validator.rs`, `spec-core/src/generator.rs`, and `spec-cli/src/commands.rs`.
+`spec-core/src/normalizer.rs`, `spec-core/src/validator.rs`, `spec-core/src/generator.rs`,
+`spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-core/src/graph.rs`, and
+`spec-cli/src/commands.rs`.
 
-This milestone is not "full enum support." That is how you quietly hand Rust the ontology again.
-M13 proves one second seam shape:
-
-1. one authored semantic **sum seam** in one `.unit.spec` file
-2. lowered to one Rust `enum + impl`
-3. tracked as one top-level truth surface for validate, build, test, status, export, and passport
-4. anchored by one canonical migration of a real pricing choice seam that is more governable for
-   an agent than the raw Rust file version
-5. wrapped in one explicit post-M13 decision gate so the next milestone is chosen by evidence,
-   not roadmap momentum
+This section is the M13 implementation contract. Historical roadmap material below it is record,
+not current scope. Two separate implementers should be able to read this section and converge on
+the same diff shape.
 
 UI scope: **no**. This is a CLI/type-system milestone. Any design-review false positives from the
-word `form` or `render` in old roadmap text do not count.
-
----
+word `form` or `render` in older roadmap text do not count.
 
 ## Milestone Summary
 
 ```text
 M13a  Preflight hardening + compatibility gate   required
-M13b  Shared sum model + schema/validator        required
+M13b  Shared sum model + schema / validator      required
 M13c  Rust lowering + enum generation            required
 M13d  Seam-level truth surfaces stay honest      required
 M13e  Canonical migration wedge + docs           required
@@ -37,33 +31,18 @@ M13f  Post-M13 decision gate                     required
 ```
 
 **Lake to boil in M13**
-- `spec` proves the core again with a second seam kind, not wider Rust item coverage.
-- The new seam is orthogonal by construction: explicit shared variant semantics first, Rust enum
-  lowering second.
+- `spec` proves the core again with a second seam kind, not with wider Rust item coverage.
+- The new seam stays orthogonal by construction: explicit shared variant semantics first, Rust
+  enum lowering second.
 - The canonical example is a migration of one real pricing choice seam, not a toy `Result<T, E>`
   demo.
 - The user-outcome test is explicit: the migrated seam must be easier for an agent to inspect,
   branch on, modify, validate, and prove than the raw Rust file version.
-- M13 must leave the project with a cleaner next question: second-backend readiness or
+- M13 must leave the project with a cleaner next question: backend-readiness or
   truth-surface/governance refinement.
 
-**Explicitly not in M13**
-- full Rust enum breadth: tuple variants, generic bounds, visibility policy, macros, reprs,
-  trait impl authoring, pattern-matching DSLs, custom derives beyond the existing backend escape
-  hatch shape
-- nested variant behaviors as first-class graph nodes, status rows, or passports
-- second-language backends
-- cross-library seam identity changes
-- semantic evals / contract-vs-body scoring
-- reverse ingestion, retrieval, or repo intelligence
-
----
-
-## Step 0 — Scope Challenge
-
-### The User Job
-
-- A Rust user can migrate one real **choice-like** pricing seam from freehand Rust into one
+**User job**
+- A Rust maintainer can migrate one real choice-like pricing seam from freehand Rust into one
   authored semantic seam and keep the normal
   `spec validate -> spec build -> spec test -> spec status` loop.
 - An AI agent can read one file and see variants, payloads, method signatures, local tests, and
@@ -72,154 +51,19 @@ M13f  Post-M13 decision gate                     required
 - The system stays honest about what is and is not first-class: the sum seam is tracked as one
   node now, and variant-local behavior stays nested until a later milestone earns promotion.
 
-### Actual Buyer + Painful Workflow
+**Actual buyer**
+- Primary buyer: the AI-heavy Rust maintainer who owns pricing or policy logic and wants agents to
+  make safe edits without spelunking through arbitrary enum branches by hand.
 
-Primary buyer for this milestone: the AI-heavy Rust maintainer who owns pricing or policy logic
-and wants agents to make safe edits without spelunking through arbitrary enum branches by hand.
-
-Painful workflow M13 is trying to improve:
-
-1. find the hand-written Rust enum or branching policy surface
-2. infer which variants matter, what payload they carry, and which methods branch on them
-3. change the logic without breaking unrelated paths
-4. prove the edit with the normal trust loop
+**Painful workflow this milestone must improve**
+1. Find the handwritten Rust enum or branching policy surface.
+2. Infer which variants matter, what payload they carry, and which methods branch on them.
+3. Change the logic without breaking unrelated paths.
+4. Prove the edit with the normal trust loop.
 
 If M13 cannot make that workflow materially faster or safer, it should fail honestly. The point is
 not "another seam kind exists." The point is "real branching policy edits get easier to author,
 inspect, and verify."
-
-### Premise Challenge
-
-1. **Is this the right problem to solve?** Yes, if the real question after M12 is whether the
-   authored core generalizes. No, if the team mainly needs cleanup or external multi-language
-   proof right now. The current repo state points to "prove the core again," not "cleanup only"
-   and not "ship a second backend now."
-2. **What is the actual user outcome?** A user or agent can author and trust a second semantic
-   shape, one built around mutually exclusive states or strategies, without falling back to raw
-   Rust for the important branching structure.
-3. **What happens if we do nothing?** The project stalls in an awkward middle ground: M12 could be
-   a clever one-off seam, and the roadmap would still be guessing whether the shared model is real.
-
-### What Already Exists
-
-| Sub-problem | Existing surface | Reuse in M13 |
-|---|---|---|
-| Kind-aware authored unit parsing | `spec-core/src/types.rs` (`UnitKind`, `NormalizedUnit`, authored extensions) | Add one new top-level kind alongside `function` and `data`. Do not invent a parallel loader. |
-| Kind-aware semantic validation | `spec-core/src/validator.rs` dispatches `UnitKind::Function` vs `UnitKind::Data` | Extend the same dispatch model to `sum` instead of creating a special-case side pipeline. |
-| Rust lowering split | `spec-core/src/generator.rs` already lowers `NormalizedDataSeam` into `RustDataSeamLowering` | Mirror the same ownership split for a Rust enum seam. |
-| Seam-level truth surfaces | `spec-cli/src/commands.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs` | Reuse the current top-level unit passport/status/export posture. Do not promote variants yet. |
-| Canonical migration pattern | `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs`, `examples/ecommerce/units/pricing/checkout_quote.unit.spec`, `examples/ecommerce/README.md` | Reuse the side-by-side raw-Rust vs migrated-spec teaching pattern. |
-| Molecule evidence model | `.test.spec`, `*.test.evidence.json`, molecule status plane | Reuse the same end-to-end proof strategy for the new sum seam. |
-
-### Minimum Change Set
-
-The smallest complete M13 is:
-
-1. Add one new authored seam kind, `kind: sum`, in the existing `.unit.spec` family.
-2. Split ownership cleanly:
-   - raw authored sum seam
-   - normalized shared semantic seam
-   - Rust enum lowering representation
-3. Centralize seam-kind dispatch so parser, validator, generator, export, and passport/status
-   branch once on kind instead of scattering enum-specific checks everywhere.
-4. Lower one shared sum seam into one Rust `enum + impl`.
-5. Keep seam truth at one top-level tracked unit ID.
-6. Ship one canonical migrated pricing choice seam with raw-Rust baseline, generated Rust output,
-   local tests, molecule coverage, and docs that teach the migration story.
-7. Add one explicit post-M13 decision gate so M14 is chosen by observed pressure, not vibes.
-
-### Dream State Mapping
-
-```text
-CURRENT STATE                  THIS PLAN                        12-MONTH IDEAL
-M12 proves one record-like     M13 proves one choice-like      `spec` owns a small set of
-seam (`kind: data`) and        seam (`kind: sum`) on the       shared semantic seam kinds
-keeps seam truth top-level.    same truth surfaces and         that lower cleanly to Rust
-                               canonical-example pattern.      and at least one second target.
-                                                              Next work is governance or a
-                                                              second backend, not ontology rescue.
-```
-
-### Implementation Alternatives
-
-```text
-APPROACH A: Trust-First Consolidation
-  Summary: Spend M13 only on M12 hardening, docs, examples, escape-hatch policy, and fixture
-           coverage. Do not add a new seam kind yet.
-  Effort:  M
-  Risk:    Low
-  Pros:    Lowest implementation risk
-           Improves teaching surface immediately
-           Keeps trust loop stable
-  Cons:    Learns very little about core durability
-           Risks indefinite cleanup mode
-           Leaves the roadmap question unresolved
-  Reuses:  Current M12 seam, current example, current truth surfaces
-
-APPROACH B: Orthogonal Sum Seam
-  Summary: Add one shared sum seam kind, lower it to Rust enums, and prove it with one real
-           pricing migration wedge while keeping seam truth top-level.
-  Effort:  L
-  Risk:    Medium
-  Pros:    Best proof that M12 was a real core milestone
-           Stronger agent story around state and branching
-           Keeps Rust in the proving-ground role
-  Cons:    Exposes new truth-surface pressure
-           Needs strict not-in-scope discipline
-           Touches more core files than a trust-only pass
-  Reuses:  M12 kind-aware normalization/lowering split, CLI loop, canonical-example pattern
-
-APPROACH C: Second Backend Pilot
-  Summary: Keep the authored model mostly as-is and spend M13 on another target language for the
-           existing function and data seams.
-  Effort:  XL
-  Risk:    High
-  Pros:    Fastest external multi-language story
-           Forces the lowering boundary to get real
-  Cons:    High risk of exporting M12 assumptions into another target
-           Adds distribution/support burden too early
-           Muddies whether failures are core-model or backend failures
-  Reuses:  Existing authored shapes, current export/passport story
-
-APPROACH D: Workflow / Migration-First Trust Proving
-  Summary: Skip a new seam kind for now. Focus on migration ergonomics, reverse-authoring aids,
-           or policy-review workflows around existing Rust enums and branching code.
-  Effort:  M-L
-  Risk:    Medium
-  Pros:    More directly tied to user workflow pain
-           Clarifies whether ontology expansion is really the bottleneck
-           Could strengthen the moat around trust + migration UX
-  Cons:    Pressures the workflow but not the authored core itself
-           Risks postponing the core-generalization question again
-           Could devolve into tooling glue without a clearer semantic model
-  Reuses:  Existing CLI loop, current examples, existing review/export/evidence surfaces
-```
-
-**Recommendation:** Choose **Approach B**. It is the complete but still bounded proof point. M12
-already proved the first seam shape. M13 should prove the second one before spending backend
-budget, but the workflow-first alternative is now explicit and can be rejected on the record
-instead of being silently absent.
-
-### Mode Selection
-
-Autoplan default: **SELECTIVE EXPANSION**.
-
-Complexity check: this milestone necessarily crosses more than 8 files because seam kinds touch
-schema, types, validator, generator, export, passport/status wiring, tests, examples, and docs.
-That is not fluff. It is the actual blast radius of a truth-surface milestone.
-
-Accepted scope under selective expansion:
-- add one new authored sum seam kind
-- include a bounded preflight hardening pack inside the milestone
-- include one explicit post-M13 decision gate in the plan
-
-Deferred to `TODOS.md`, not M13:
-- nested behavior promotion criteria beyond the sum-seam evidence we gather here
-- second-backend execution
-- semantic evals / contract-vs-body scoring
-- reverse ingestion / repo intelligence
-
----
 
 ## Locked Boundary
 
@@ -236,12 +80,22 @@ Deferred to `TODOS.md`, not M13:
   - method signatures
 - Rust-specific authored details are allowed only in namespaced lowering blocks and optional
   backend escape hatches. They may affect lowering only, not shared semantics.
+- `lowering.rust.body` remains trusted raw Rust in M13. This milestone measures escape-hatch
+  pressure. It does not claim sandboxed safety.
 - M13 keeps passport/status/export changes additive-only where possible. If the code can support
   the seam without widening a truth surface, do not widen it just because enums feel special.
 - The canonical example is a migration of one real pricing choice seam in `examples/ecommerce`,
   not a greenfield ADT showcase.
 
----
+**Explicitly not in M13**
+- full Rust enum breadth: tuple variants, generic bounds, visibility policy, macros, reprs,
+  trait impl authoring, pattern-matching DSLs, or custom derives beyond the existing backend
+  escape-hatch shape
+- nested variant behaviors as first-class graph nodes, status rows, or passports
+- second-language backends
+- cross-library seam identity changes
+- semantic evals / contract-vs-body scoring
+- reverse ingestion, retrieval, or repo intelligence
 
 ## Canonical Migration Wedge
 
@@ -260,17 +114,35 @@ Why this wedge:
 
 `pricing/discount_policy` is the **teachable** wedge, not the only wedge.
 
-M13 must also include one adversarial calibration pass before schema lock:
+Before schema lock, M13 must include one adversarial calibration pass:
 - scan the repo and immediate target domain for the ugliest real branching surface available
 - score candidate wedges by business frequency, failure cost, and branching complexity
-- record why `discount_policy` still wins, or replace it if a materially harsher wedge exists
+- evaluate exactly these candidates:
+  - `pricing/discount_policy` as the teachable default
+  - the branching surface currently embodied by `pricing/checkout_quote`
+  - the combined discount-plus-tax policy flow represented today by `pricing/discount_plus_tax`
+- score each candidate on a 1-5 scale for:
+  - business frequency
+  - failure cost
+  - branching complexity
+  - escape-hatch pressure after mapping to explicit shared semantics
+- treat lower escape-hatch pressure as the better score
+- choose the highest total score
+- tie-break in this order:
+  - lower escape-hatch pressure
+  - higher branching complexity
+  - keep `pricing/discount_policy` if still tied
+- record the score table in the M13 implementation notes or PR description
+- default outcome for this plan: `pricing/discount_policy` remains the canonical wedge unless one
+  of the named candidates beats it by at least 2 total points
 
 If only the teachable wedge works and the adversarial wedge collapses into escape hatches, that is
 evidence against the ontology-expansion thesis, not a detail to hand-wave away.
 
 ### Raw Rust baseline
 
-The baseline should be one hand-written Rust enum in `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs`:
+The baseline should be one handwritten Rust enum in
+`examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs`:
 
 ```rust
 use rust_decimal::Decimal;
@@ -297,7 +169,7 @@ impl DiscountPolicy {
 }
 ```
 
-### Authored Schema (`kind: sum`)
+### Authored schema (`kind: sum`)
 
 The first cut should be boringly explicit:
 
@@ -365,7 +237,7 @@ backends:
 `kind: sum` follows the same M12 rule as `kind: data`: shared seam field and contract types must
 be fully qualified in the authored spec itself. No top-level `imports`.
 
-### Authoring Rules
+### Authoring rules
 
 - `id`, `kind`, and `intent.why` stay required for all unit kinds.
 - `kind: sum` requires `sum.variants`.
@@ -384,22 +256,28 @@ be fully qualified in the authored spec itself. No top-level `imports`.
 - `backends.rust` is optional and additive only. The first cut supports `derives` there and
   nothing that can redefine shared meaning.
 
-### Explicit Deferrals
+## What Already Exists
 
-- No tuple variants in M13.
-- No shared pattern-matching DSL in M13. Branch behavior still lives in backend lowering blocks.
-- No variant-specific passports, status rows, or graph edges.
-- No mutation or ownership-transfer receiver modes.
-- No custom user-authored trait impls, reprs, or visibility policy.
-- No exhaustiveness-checking surface beyond normal schema/validator requirements.
+| Sub-problem | Existing code surface | M13 reuse / correction |
+|---|---|---|
+| Kind-aware authored unit parsing | `spec-core/src/types.rs` (`UnitKind`, `NormalizedUnit`, authored extensions) | Add one new top-level kind alongside `function` and `data`. Do not invent a parallel loader. |
+| Kind-aware normalization | `spec-core/src/normalizer.rs::normalize_unit`, `spec-core/src/types.rs::NormalizedDataSeam::from_spec` | Mirror the same ownership split for `NormalizedSumSeam`; do not add a parallel loader. |
+| Kind-aware semantic validation | `spec-core/src/validator.rs` dispatches `UnitKind::Function` vs `UnitKind::Data` | Extend the same dispatch model to `sum` instead of creating a side pipeline. |
+| Rust lowering split | `spec-core/src/generator.rs` already lowers `NormalizedDataSeam` into `RustDataSeamLowering` | Mirror the same ownership split for a Rust enum seam. |
+| Kind-aware top-level dep projection | `spec-core/src/graph.rs::top_level_deps`, `spec-cli/src/commands.rs::local_dep_ids` | Replace duplicated `data`-only branching with one shared helper before adding `sum`. |
+| Molecule imports over mixed unit kinds | `spec-core/src/generator.rs::covered_unit_use_path`, `generate_molecule_tests_code` | Extend the same import projection path to `sum`, not ad hoc per call site. |
+| Top-level truth surfaces | `spec-core/src/passport.rs::build_passport_with_evidence`, `compute_contract_hash`, `spec-core/src/export.rs::build_export_bundle`, `spec-cli/src/commands.rs::compute_health_status` | Keep one seam-level truth loop, but project authored `sum` metadata additively and hash it honestly. |
+| Canonical migration wedge pattern | `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs`, `examples/ecommerce/units/pricing/checkout_quote.unit.spec`, `examples/ecommerce/README.md` | Reuse the raw-vs-migrated teaching pattern for `discount_policy`, plus parity and molecule coverage. |
+| Molecule evidence model | `.test.spec`, `*.test.evidence.json`, molecule status plane | Reuse the same end-to-end proof strategy for the new sum seam. |
 
----
+## Architecture Review
 
-## Architecture
+M13 only stays orthogonal if each layer has one job. The existing repo already proves the failure
+mode to avoid: `spec-core/src/graph.rs::top_level_deps`, `spec-cli/src/commands.rs::local_dep_ids`,
+and `spec-core/src/generator.rs::covered_unit_use_path` each reconstruct kind-aware truth in
+slightly different places. `sum` cannot ship safely on top of that duplication.
 
-### Ownership Split
-
-M13 only stays orthogonal if each layer has one job.
+### Ownership split
 
 | Layer | Purpose | Must own | Must not own |
 |---|---|---|---|
@@ -407,9 +285,7 @@ M13 only stays orthogonal if each layer has one job.
 | Normalized shared seam | shared semantic truth for one sum seam | variant list, payload fields, method signatures, seam-owned local tests | Rust enum syntax, derives, emitted `match` text |
 | Rust lowering form | Rust-specific projection of the normalized seam | enum name, Rust variant casing, impl blocks, derives | source-of-truth semantics or hidden overrides |
 
-### Type Direction
-
-The current function/data path stays intact, but it cannot remain the only richer IR shape.
+### Type direction
 
 ```text
 AuthoredUnit
@@ -429,22 +305,20 @@ RustLoweredUnit
 ```
 
 **Locked architecture rule:** do not keep stretching the current function-native `ResolvedSpec`
-until it secretly becomes an enum carrier. That is just Rust-first expansion again.
+until it secretly becomes an enum carrier. That is Rust-first expansion again.
 
-### Dispatch Rule
+### Dispatch rule
 
 Centralize seam-kind dispatch in one place per subsystem:
-
 - schema/parser dispatch once on `kind`
 - validator dispatch once on normalized unit kind
 - generator dispatch once on normalized unit kind
-- export/passport/status use existing top-level unit surfaces and project kind-aware contract data
-  through them
+- export/passport/status project kind-aware contract data through the existing top-level truth
+  surfaces
 
-### Truth Surfaces
+### Truth surfaces
 
 M13 keeps the same high-level promise as M12:
-
 - one `.unit.spec` source file
 - one top-level unit ID
 - one passport record
@@ -454,135 +328,195 @@ M13 keeps the same high-level promise as M12:
 The sum seam may contain multiple variants and multiple methods, but those stay nested until real
 usage proves seam-level tracking too coarse.
 
-### System Architecture
+### System architecture
 
 ```text
 authored .unit.spec
     │
-    ▼
-raw loader + schema check
+    ├── schema branch (`unit.spec.json`)
+    ├── semantic validation (`validator.rs`)
+    ├── normalize_unit(...)
+    │     └── NormalizedSumSeam
     │
-    ▼
-kind dispatch (`function` / `data` / `sum`)
+    ├── shared dep / import projection seam
+    │     ├── graph edges / export deps
+    │     ├── single-file `spec test` closure
+    │     └── molecule import generation
     │
-    ▼
-normalized shared seam
+    ├── Rust lowering (`RustSumSeamLowering`)
+    │     └── enum + impl + local tests
     │
-    ├── validate shared semantics
-    ├── project deps / tests / contract hash
-    └── lower to Rust enum
-            │
-            ▼
-       generated Rust + tests
-            │
-            ▼
-   build / test / status / export / passport
+    └── top-level truth surfaces
+          ├── passport projection + contract hash
+          ├── status health / stale detection
+          └── export bundle projection
 ```
 
-### Error & Rescue Registry
+### Error & rescue registry
 
-| Method / Codepath | What can go wrong | Exception / failure class | Rescued? | Rescue action | User sees |
-|---|---|---|---|---|---|
-| `spec validate <sum.unit.spec>` | unknown seam fields, bad variant IDs, invalid payload types | schema / semantic validation error | Y | fail fast with stable `SPEC_*` diagnostics | explicit validation failure |
-| sum normalization | duplicate callable names, invalid variant map, bad receiver modes | normalization error | Y | fail fast before generation | explicit validation/build failure |
-| Rust lowering | invalid derive path, duplicate emitted names, malformed lowering body | generator error | Y | fail fast with context naming seam + method | explicit build failure |
-| `spec build` on mixed kinds | sum seam compiles but generated module graph drifts | cargo build failure | Y | stop build, preserve failure evidence path | explicit build failure |
-| `spec status` after contract change | stored hash does not match current sum contract | stale status | Y | show stale row, require re-test | explicit `stale` status |
+| Method / Codepath | What can go wrong | Failure class | Rescue action | User sees |
+|---|---|---|---|---|
+| `spec validate <sum.unit.spec>` | unknown seam fields, bad variant IDs, invalid payload types | schema / semantic validation error | fail fast with stable `SPEC_*` diagnostics | explicit validation failure |
+| sum normalization | duplicate callable names, invalid variant map, bad receiver modes | normalization error | fail fast before generation | explicit validation/build failure |
+| Rust lowering | invalid derive path, duplicate emitted names, malformed lowering body | generator error | fail fast with context naming seam + method | explicit build failure |
+| `spec build` on mixed kinds | sum seam compiles but generated module graph drifts | cargo build failure | stop build, preserve failure evidence path | explicit build failure |
+| `spec status` after contract change | stored hash does not match current sum contract | stale status | show stale row, require re-test | explicit `stale` status |
 
-### Failure Modes Registry
+## Implementation Slices
 
-| Codepath | Failure mode | Rescued? | Test? | User sees? | Logged? |
-|---|---|---|---|---|---|
-| schema validation | variant name collides with method/type naming | Y | required | validation error | yes |
-| lowering | named payload fields generate invalid Rust casing/path | Y | required | build failure | yes |
-| passport/status | mixed function/data/sum tree reports wrong status | Y | required | incorrect trust loop if missed | yes |
-| canonical example | raw baseline and migrated seam drift semantically | Y | required | misleading docs/example | yes |
-| decision gate | M14 chosen without explicit trigger evidence | N | docs check | roadmap drift | n/a |
-
-No row is allowed to land with `Rescued = N`, `Test = N`, and a silent user outcome.
-
----
-
-## Slice Plan
-
-### M13a — Preflight Hardening + Compatibility Gate
+### M13a — Preflight hardening + compatibility gate
 
 Purpose: make M12's teaching surface explicit enough that M13 pressure does not create fake
 confidence.
 
-Required work:
-- lock the canonical example posture: raw baseline + migrated seam + docs + molecule evidence move
-  together
-- codify the M13 escape-hatch rule as an extension of the post-M11 TODO, not a vague future note
-- add fixture coverage proving mixed `function` + `data` + `sum` trees report truthful
-  validate/status/export/passport behavior
+**Files**
+- `spec-core/src/graph.rs`
+- `spec-core/src/generator.rs`
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+- fixture files as needed under `spec-cli/tests/fixtures/`
 
-Out of scope inside this slice:
-- redesigning truth surfaces
-- building second-backend policy in full
+**Required work**
+- Lock the canonical example posture: raw baseline, migrated seam, docs, and molecule evidence
+  move together.
+- Codify the M13 escape-hatch rule as an extension of the post-M11 TODO, not a vague future note.
+- Add one canonical kind-aware dep/import projection helper so graph edges, exact-unit closure,
+  and molecule import generation do not each re-derive top-level deps differently for `sum`.
+- Add fixture coverage proving mixed `function` + `data` + `sum` trees report truthful
+  validate/status/export/passport behavior.
 
-### M13b — Shared Sum Model + Schema / Validator
+**Exit condition**
+- There is exactly one shared dep/import projection seam reused by graph, CLI exact-unit closure,
+  and molecule generation.
+
+### M13b — Shared sum model + schema / validator
 
 Purpose: make `kind: sum` a first-class authored shape without letting Rust dictate the schema.
 
-Required work:
-- extend authored types in `spec-core/src/types.rs`
-- extend JSON schema for `.unit.spec`
-- add semantic validation for:
+**Files**
+- `spec-core/src/types.rs`
+- `spec-core/src/schema/unit.spec.json`
+- `spec-core/src/validator.rs`
+- `spec-core/src/normalizer.rs`
+- focused unit tests in `spec-core/`
+
+**Required work**
+- Extend authored types in `spec-core/src/types.rs`.
+- Extend JSON schema for `.unit.spec` with an explicit `kind: sum` branch, `minProperties` /
+  `required` rules for variants, and `not` guards that keep function-only top-level fields out of
+  `sum`.
+- Add semantic validation for:
   - ordered unique variant IDs
   - payload field typing
-  - collision checks across variants, methods, and generated type names
+  - collision checks across variants, methods, and generated Rust-emitted type names
   - receiver rules
   - backend-lowering presence rules
 
-### M13c — Rust Lowering + Enum Generation
+**Exit condition**
+- `kind: sum` validates as a first-class authored unit shape and rejects invalid mixed surfaces
+  before generation.
+
+### M13c — Rust lowering + enum generation
 
 Purpose: lower the shared sum seam into bounded Rust enum output.
 
-Required work:
-- add `NormalizedSumSeam` and `RustSumSeamLowering`
-- generate Rust `enum + impl`
-- support seam-owned local tests
-- maintain existing dep/import behavior boundaries
+**Files**
+- `spec-core/src/types.rs`
+- `spec-core/src/generator.rs`
+- `spec-core/src/normalizer.rs`
+- generator-focused tests in `spec-core/`
 
-### M13d — Seam-Level Truth Surfaces Stay Honest
+**Required work**
+- Add `NormalizedSumSeam` and `RustSumSeamLowering`.
+- Generate Rust `enum + impl`.
+- Support seam-owned local tests.
+- Route enum lowering, single-file generation scope, and molecule-test imports through the shared
+  dep/import projection helper instead of adding a third `kind: data` special case.
+- Reject Rust-emitted-name collisions after projection, not only authored-name collisions.
+
+**Exit condition**
+- One valid `kind: sum` seam lowers to one readable Rust `enum + impl + #[cfg(test)]` block with
+  no new ad hoc kind branches outside the planned seam.
+
+### M13d — Seam-level truth surfaces stay honest
 
 Purpose: keep the trust loop truthful across all three seam kinds.
 
-Required work:
-- passport serialization for `kind: sum`
-- status correctness for mixed trees
-- export correctness for mixed trees
-- contract-hash staleness on sum seams
-- variant-aware evidence or export annotations sufficient to test whether seam-level truth is too
-  coarse, without promoting variants to first-class graph nodes yet
+**Files**
+- `spec-core/src/passport.rs`
+- `spec-core/src/export.rs`
+- `spec-cli/src/commands.rs`
+- regression tests in `spec-core/` and `spec-cli/tests/cli.rs`
 
-### M13e — Canonical Migration Wedge + Docs
+**Required work**
+- Passport serialization for `kind: sum`.
+- Status correctness for mixed trees.
+- Export correctness for mixed trees.
+- Contract-hash staleness on sum seams.
+- Add additive `sum` projection in passport/export carrying ordered variant metadata, payload
+  fields, methods, and derives as the exact machine-readable probe for "is seam-level truth too
+  coarse?"
+- Keep runtime evidence top-level only. Do not add per-variant runtime evidence in M13.
+
+**Exit condition**
+- Mixed `function` + `data` + `sum` trees stay truthful across validate, build, test, status,
+  export, and passport flows.
+
+### M13e — Canonical migration wedge + docs
 
 Purpose: prove the seam with a real domain example instead of syntax theater.
 
-Required work:
-- add raw Rust baseline `discount_policy.rs`
-- author `units/pricing/discount_policy.unit.spec`
-- add local tests plus at least one molecule test covering the new seam in context
-- refresh `examples/ecommerce/README.md`
-- keep example commands fresh in AGENTS workflow text if needed
+**Files**
+- `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs`
+- `examples/ecommerce/src/raw_baseline/pricing/mod.rs`
+- `examples/ecommerce/units/pricing/discount_policy.unit.spec`
+- `examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`
+- `examples/ecommerce/README.md`
+- `README.md` and `AGENTS.md` only if command/workflow teaching must change
 
-### M13f — Post-M13 Decision Gate
+**Required work**
+- Add the raw Rust baseline `discount_policy.rs`.
+- Author `units/pricing/discount_policy.unit.spec`.
+- Add local tests plus the molecule test
+  `examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`.
+- That molecule test must cover exactly these unit IDs:
+  - `pricing/discount_policy` for the new `sum` seam
+  - `pricing/checkout_quote` for the existing `data` seam
+  - `pricing/apply_tax` for one existing `function` unit
+- The molecule body must prove one end-to-end parity story:
+  - `DiscountPolicy::Percentage { rate }` and `DiscountPolicy::FixedAmount { amount }` both
+    produce discounted subtotals that agree with the generated seam behavior expected by the
+    migrated checkout flow
+  - `CheckoutQuote` remains aligned with the same discounted subtotal for the percentage path
+  - `apply_tax` still composes correctly on top of the discounted subtotal so the mixed-kind proof
+    exercises `function` + `data` + `sum` together
+- Refresh `examples/ecommerce/README.md`.
+- Keep example commands fresh in AGENTS workflow text if needed.
+
+**Exit condition**
+- The raw baseline and authored seam stay semantically aligned under tests, and the example teaches
+  the migration story without hand-waving.
+
+### M13f — Post-M13 decision gate
 
 Purpose: avoid a fuzzy M14.
 
-Required work:
-- write the trigger table into this plan
-- name the two default follow-on paths:
+**Files**
+- `PLAN.md`
+- `TODOS.md` only if a deferred item becomes newly explicit
+
+**Required work**
+- Keep the trigger table in this plan current.
+- Name the two default follow-on paths:
   - backend-readiness gate
   - truth-surface / governance refinement
 
----
+**Exit condition**
+- M14 direction is chosen from evidence gathered in M13, not from roadmap inertia.
 
-## Test Plan
+## Test Review
 
-### New Codepaths
+### New codepaths
 
 ```text
 NEW AUTHORED SHAPE
@@ -603,81 +537,203 @@ NEW EXAMPLE PATHS
   - molecule coverage in ecommerce pricing flow
 ```
 
-### Coverage Diagram
+### Coverage diagram
 
 ```text
 CODE PATH COVERAGE
 ===========================
 [+] spec-core/src/types.rs
-    ├── [GAP] add authored + normalized + lowered sum seam structs
-    └── [GAP] collision helpers updated for sum naming surface
+    ├── add authored + normalized + lowered sum seam structs
+    └── add post-projection emitted-name collision checks for enum type / variants / methods
 
-[+] spec-core/src/validator.rs
-    ├── [GAP] schema accepts `kind: sum`
-    ├── [GAP] variant/payload semantic validation
-    └── [GAP] mixed-kind regression tests
+[+] spec-core/src/schema/unit.spec.json + spec-core/src/validator.rs
+    ├── explicit `kind: sum` schema branch with `required`, `not`, and empty-map rejection
+    ├── variant/payload / receiver / lowering semantic validation
+    └── mixed-kind regression tests for invalid authored surfaces
+
+[+] spec-core/src/graph.rs + spec-cli/src/commands.rs + spec-core/src/generator.rs
+    ├── shared top-level dep / import projection helper
+    ├── single-file `spec test` scope includes local deps for `sum`
+    └── molecule imports stay truthful for mixed function / data / sum trees
 
 [+] spec-core/src/generator.rs
-    ├── [GAP] enum lowering happy path
-    ├── [GAP] duplicate emitted-name rejection
-    └── [GAP] seam-owned local tests compile under generated enum
+    ├── enum lowering happy path
+    ├── duplicate emitted-name rejection
+    └── seam-owned local tests compile under generated enum
 
 [+] spec-core/src/passport.rs / export.rs / spec-cli/src/commands.rs
-    ├── [GAP] passport projection for sum seam
-    ├── [GAP] status stale/failing/untested for mixed trees
-    └── [GAP] export payload truth for mixed trees
+    ├── passport projection for sum seam
+    ├── status stale/failing/untested for mixed trees
+    └── additive authored `sum` projection for the M13 truth-surface probe
 
 USER / AGENT FLOW COVERAGE
 ===========================
 [+] Author choice-like seam
-    ├── [GAP] validate happy path
-    ├── [GAP] invalid variant payload types
-    └── [GAP] invalid lowering body / name collisions
+    ├── validate happy path
+    ├── invalid variant payload types
+    └── invalid lowering body / emitted-name collisions
 
 [+] Build + prove canonical wedge
-    ├── [GAP] raw baseline and migrated seam stay aligned
-    ├── [GAP] local tests on enum seam
-    └── [GAP] molecule test in pricing flow
+    ├── raw baseline and migrated seam stay aligned
+    ├── local tests on enum seam
+    └── `pricing/discount_policy_checkout_flow.test.spec` proves the mixed function / data / sum flow
 
 [+] Trust loop
-    ├── [GAP] `spec status` after untouched build
-    ├── [GAP] `spec status` after contract drift without `spec test`
-    └── [GAP] `spec export` mixed-kind truth surface
+    ├── exact-unit `spec test units/pricing/discount_policy.unit.spec`
+    ├── molecule `spec test units/pricing/discount_policy_checkout_flow.test.spec`
+    ├── repo-root and library-root invocation parity
+    ├── `spec status` after untouched build
+    ├── `spec status` after contract drift without `spec test`
+    └── `spec export` mixed-kind truth surface
 ```
 
-### Required Test Matrix
+### Required test matrix
 
 - Unit tests:
   - authored type normalization for `kind: sum`
   - validator rejection cases
   - lowering and codegen cases
   - passport/export projection
+  - emitted-name collision rejection after Rust projection
 - CLI integration tests:
   - `validate --format json`
   - `build`
-  - `test`
+  - `test` on a directory
+  - `test` on one `discount_policy.unit.spec` from repo root and library root
+  - `test` on `discount_policy_checkout_flow.test.spec` from repo root and library root
   - `status --format json`
   - `export`
 - Example-backed tests:
   - canonical wedge validate/build/test/status loop
   - raw baseline parity checks
+  - mixed function/data/sum molecule import path
 - Regression tests:
   - existing `kind: function` unaffected
   - existing `kind: data` unaffected
   - mixed tree status/export order and truth
+  - top-level dep projection stays identical across graph, CLI scope building, and molecule codegen
 
-### Test Plan Artifact
+### Test plan artifact
 
-Create during the eng phase at:
-`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-eng-review-test-plan-<timestamp>.md`
+Primary artifact for this pass:
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m13-m13-test-plan-20260421-070636.md`
 
-Seed contents should cover:
-- affected route / surface: CLI `validate`, `build`, `test`, `status`, `export`
-- key interactions: author sum seam, build mixed-kind tree, verify canonical example
-- edge cases: invalid variant payloads, collision cases, stale status after contract change
-- critical paths: end-to-end canonical wedge loop plus mixed-kind trust-loop regressions
+## Performance Review
 
----
+No material performance issue blocks M13. The existing hot-ish paths,
+`ordered_unique_deps`, `local_dep_ids`, graph edge projection, and test-evidence correlation stay
+small relative to one new seam kind and one canonical example. Do not widen M13 into a
+performance refactor.
+
+## Parallelization / Lanes
+
+M13 is partially parallelizable, but only after the shared kind-aware dep/import seam is locked.
+
+**Gate 0, do this first and sequentially**
+- Lock the shared dep/import projection helper and the exact files that consume it.
+- Do not start `sum` schema or truth-surface work until this seam exists.
+
+**Lane A, authored-model lane**
+- `spec-core/src/types.rs`
+- `spec-core/src/schema/unit.spec.json`
+- `spec-core/src/validator.rs`
+- `spec-core/src/normalizer.rs`
+- `spec-core/src/generator.rs`
+
+Scope:
+- authored `sum` types
+- normalization
+- schema validation
+- semantic validation
+- Rust lowering and enum generation
+
+**Lane B, truth-surface lane**
+- `spec-core/src/passport.rs`
+- `spec-core/src/export.rs`
+- `spec-cli/src/commands.rs`
+- focused `spec-cli/tests/cli.rs` coverage for status/export/exact-unit proof
+
+Scope:
+- passport projection
+- export projection
+- status truth
+- exact-unit `spec test` closure for mixed kinds
+
+**Lane C, example/docs/regression lane**
+- `examples/ecommerce/`
+- `spec-cli/tests/cli.rs`
+- `README.md`
+- `AGENTS.md` only if workflow text must change
+
+Scope:
+- canonical wedge
+- molecule coverage
+- raw-baseline parity
+- docs and command examples
+
+**Execution order**
+1. Gate 0 sequential.
+2. Launch Lane A.
+3. After Gate 0 is merged, Lane B may run in parallel with the latter part of Lane A.
+4. Merge A + B.
+5. Run Lane C last against the merged lowering and truth-surface contracts.
+
+**Conflict rules**
+- Lanes A and B may not begin from independent dep/import assumptions.
+- Lane C must stay last because it consumes finalized lowering and truth-surface contracts.
+- No lane is allowed to invent a second additive `sum` projection shape. Passport and export must
+  share the same authored truth story.
+
+## Failure Modes
+
+| Codepath | Failure mode | Test coverage required | Error handling | User outcome if missed | Critical gap? |
+|---|---|---|---|---|---|
+| dep/import projection | `sum` deps show up in generation but disappear in graph, export, or single-file `spec test` scope | shared projection-helper regression suite across graph / CLI / generator | none today | false-green trust surfaces or missing exact-unit proof inputs | **yes** |
+| Rust-emitted naming | authored variants normalize to colliding Rust names only after projection | validator + codegen rejection fixtures | build failure only | explicit compile failure | no |
+| top-level trust surface | `compute_contract_hash` omits authored `sum` metadata and stale detection lies | passport hash regression tests | none today | stale edits look valid | **yes** |
+| lowering trust boundary | `lowering.rust.body` uses raw Rust escape hatches to carry semantics the shared model does not express | fixture coverage + escape-hatch line-count metric | documented trust boundary only | hidden semantics in backend-only code | no, but tracked kill metric |
+| canonical wedge parity | raw baseline and migrated seam drift apart on one branch | local + molecule parity tests | explicit test failure | teachable example becomes fake confidence | no |
+| roadmap follow-through | M14 is chosen without explicit trigger evidence | plan/doc review | none | roadmap drift | **yes** |
+
+## What NOT in M13 Scope
+
+- tuple variants, generic enums, trait impl authoring, visibility matrices, macros, repr policy
+  because Rust breadth is not the goal here
+- variant-level passports, status rows, or graph nodes because top-level seam truth remains the
+  M13 contract
+- backend-specific lowering sandboxing beyond explicit trust-boundary docs and escape-hatch
+  accounting because full Rust-body containment is an ocean, not this lake
+- second-backend implementation or cross-library `sum` identity changes because M13 is still
+  proving the authored core against Rust
+- per-variant runtime evidence because M13 only needs enough additive authored projection to judge
+  whether seam-level truth is too coarse
+- semantic evals / contract-vs-body scoring because they still sit downstream of trustworthy
+  authored surfaces
+- reverse ingestion / retrieval / repo intelligence because they are product-adjacent but too early
+  for this proof
+
+## Implementation Order
+
+```text
+1. Land the shared dep/import projection seam and lock its call sites
+2. Add authored `kind: sum` types plus schema/validator/normalizer support
+3. Add `NormalizedSumSeam` + `RustSumSeamLowering` + enum codegen
+4. Project `sum` truth through passport/export/status/contract-hash surfaces
+5. Add the canonical ecommerce wedge, molecule coverage, and parity tests
+6. Refresh README / AGENTS workflow text if the new example changes the teaching surface
+7. Re-run the full exact-unit + mixed-kind trust loop and evaluate the post-M13 decision gate
+```
+
+**Acceptance commands**
+
+```bash
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json
+cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec
+cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+```
 
 ## Success Criteria / Kill Metrics
 
@@ -698,7 +754,7 @@ M13 is successful only if all of these are true:
 
 Kill the "expand ontology first" thesis for M14 if either of these happens:
 - the wedge needs too much Rust-specific escape hatch to stay believable
-- seam-level truth plus variant-aware evidence still cannot localize which branch is wrong
+- seam-level truth plus additive `sum` projection still cannot localize which branch is wrong
 
 ## Post-M13 Decision Gate
 
@@ -722,19 +778,6 @@ Kill the "expand ontology first" thesis for M14 if either of these happens:
 - escape-hatch policy is written and enforced
 - the team can name exactly which authored fields are shared-core versus backend-only
 
----
-
-## NOT in Scope
-
-- tuple variants, generic enums, trait impl authoring, visibility matrices, macros, repr policy
-  — Rust breadth is not the goal here
-- variant-level passports or status rows — top-level seam truth remains the contract in M13
-- second-backend implementation — earned only after M12 + M13 both lower cleanly
-- semantic evals / contract-vs-body scoring — still downstream of trustworthy authored surfaces
-- reverse ingestion / retrieval / repo intelligence — product-facing, but too early for this proof
-
----
-
 ## Dream State Delta
 
 If M13 lands cleanly, the project stops asking "can `spec` do anything beyond functions and one
@@ -743,84 +786,48 @@ in stronger governance over the authored truth?"
 
 That is the whole game. M13 should turn ontology anxiety into evidence.
 
----
+## Review-Locked Decisions
 
-## CEO Dual Voices
+- Use `kind: sum`, not `kind: enum`, so Rust does not retake the ontology.
+- Keep seam truth top-level in M13. Variants stay nested.
+- Use `pricing/discount_policy` as the teachable wedge, but require one adversarial wedge
+  calibration pass before schema lock.
+- Require one shared dep/import projection seam before any `sum`-specific code lands.
+- Define the truth-surface probe as additive authored `sum` projection in passport/export, not
+  per-variant runtime evidence.
+- Treat `lowering.rust.body` as trusted raw Rust and track escape-hatch pressure explicitly.
+- Require exact-unit and mixed-kind molecule regressions from both repo root and library root.
+- Skip design review because this milestone has no real UI scope.
 
-### CODEX SAYS (CEO — strategy challenge)
+## M13 Review Record (2026-04-21)
 
-- The draft still risks solving an internal confidence problem instead of a buyer pain point.
-- Branch semantics remain heavily Rust-authored in `lowering.rust.body`, so the shared-core claim
-  can be overstated if M13 does not set a hard escape-hatch ceiling.
-- `pricing/discount_policy` is teachable, but too polite on its own to falsify the model.
-- The prior alternatives list was too framework-biased and underweighted workflow / migration UX.
-- The post-M13 gate was too qualitative. It now needs hard kill metrics.
+**CEO pressure now baked into the plan**
+- The milestone needed a named buyer and a painful workflow, not just "prove a second seam."
+- The wedge needed adversarial calibration so the model can fail honestly if it only works on tidy
+  examples.
+- The competitive story is workflow speed, trust, and migration ergonomics, not schema novelty.
+- The post-M13 gate needed hard kill metrics, not qualitative vibes.
 
-### CLAUDE SUBAGENT (CEO — strategic independence)
+**Engineering pressure now baked into the plan**
+- The plan needed one canonical dep/import projection seam or `sum` would drift across graph,
+  exact-unit proof, molecule imports, export, and status.
+- Rust-emitted-name collision checks needed to happen after projection, not only at the authored
+  name layer.
+- The truth-surface probe needed an exact additive passport/export shape, not a vague future note.
+- The test plan needed exact-unit isolated-generation coverage and mixed-kind molecule coverage
+  from multiple working directories.
 
-- The milestone needs a named buyer and a painful workflow, not just "prove a second seam shape."
-- The wedge needs an adversarial calibration pass so the milestone can fail honestly if the model
-  is only good at tidy examples.
-- Seam-level truth may be too coarse for sum seams; variant-aware evidence must be tested
-  explicitly.
-- Competitive risk is not the schema itself. The moat, if any, is workflow speed, trust, and
-  migration ergonomics.
+**Completion summary**
+- Architecture direction: **locked** around `kind: sum`, top-level seam truth, and explicit
+  lowering separation.
+- What already exists: **written**
+- Error/rescue registry: **written**
+- Failure modes: **written**
+- Test review: **written**
+- Parallelization: **written**
+- Design phase: **skipped, no UI scope**
+- Current status: **ready for implementation against this plan section**
 
-### CEO DUAL VOICES — CONSENSUS TABLE
-
-```text
-═══════════════════════════════════════════════════════════════
-  Dimension                           Claude  Codex  Consensus
-  ──────────────────────────────────── ─────── ─────── ─────────
-  1. Premises valid?                  no      no      CONFIRMED concern
-  2. Right problem to solve?          partial partial CONFIRMED concern
-  3. Scope calibration correct?       no      no      CONFIRMED concern
-  4. Alternatives sufficiently        no      no      CONFIRMED concern
-     explored?
-  5. Competitive / market risks       no      no      CONFIRMED concern
-     covered?
-  6. 6-month trajectory sound?        partial partial CONFIRMED concern
-═══════════════════════════════════════════════════════════════
-```
-
-Result:
-- Codex: 8 concerns
-- Claude subagent: 5 issues
-- Consensus: 6/6 dimensions raised meaningful pressure
-- Action taken in this draft: buyer/workflow named, workflow-first alternative added, adversarial
-  wedge calibration added, variant-evidence probe added, kill metrics added
-
----
-
-## Decision Audit Trail
-
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-|---|---|---|---|---|---|---|
-| 1 | Intake | Replace current top-of-file milestone with M13, preserve historical roadmap below | Mechanical | Pragmatic | `PLAN.md` already uses the top section as the current milestone contract. Replacing only that block keeps history and makes the current work obvious. | Creating a second competing current-plan file |
-| 2 | CEO | Choose a second seam kind over trust-only cleanup | Taste, surfaced | Completeness | Cleanup alone is safer but does not answer whether the shared core generalizes. The complete proof point is one more seam shape. | Hardening-only M13 |
-| 3 | CEO | Use `kind: sum`, not `kind: enum` | Taste, surfaced | Explicit over clever | `sum` keeps Rust out of the ontology while still mapping clearly to Rust enums in lowering. | Rust-first `kind: enum` naming |
-| 4 | CEO | Choose `pricing/discount_policy` as the canonical wedge | Taste, surfaced | Pragmatic | It is real pricing logic, variant-heavy enough to pressure the model, and teachable next to `checkout_quote`. | Toy `Result` example, unrelated domain wedge |
-| 5 | CEO | Keep seam truth top-level for M13 | Mechanical | DRY | The repo already has one coherent seam-level truth loop. Promoting variants now would widen ontology and truth surfaces before evidence says to. | Variant-level passports/status rows in M13 |
-| 6 | CEO | Include a bounded preflight hardening pack inside M13 | Mechanical | Boil lakes | The example, docs, and trust-loop contracts are part of the same lake. Hardening them inside M13 is cheaper than pretending they are separate. | Treating hardening as a separate milestone |
-| 7 | CEO | Skip design-review phase | Mechanical | Pragmatic | This milestone has no real UI scope. Running a design pass because old roadmap text says `form` would be fake work. | Forcing a plan-design-review phase |
-
----
-
-## Completion Summary
-
-- Step 0: Scope Challenge — **M13 framed as one second seam-shape proof, not backend sprawl**
-- Architecture direction — **locked** around `kind: sum`, top-level seam truth, and Rust-lowering separation
-- Canonical wedge — **chosen** as `pricing/discount_policy`
-- NOT in scope — **written**
-- What already exists — **written**
-- Dream state delta — **written**
-- Error / rescue registry — **seeded**
-- Failure modes — **seeded**
-- Decision audit trail — **written**
-- Design phase — **skipped, no UI scope**
-- Current status — **awaiting premise confirmation before the eng pass**
-
----
 # Historical Roadmap (M6–M10)
 
 Status: **M10 Delivered** (2026-04-17). `v0.8.0` ships the first local-library `.plan.spec`

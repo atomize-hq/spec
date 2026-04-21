@@ -190,6 +190,66 @@ backends:
     );
 }
 
+fn write_m13_sum_seam(dir: &Path, relative_path: &str, id: &str, deps: &[&str]) {
+    let deps_yaml = if deps.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "    deps:\n{}\n",
+            deps.iter()
+                .map(|dep| format!("      - {dep}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
+
+    write_spec(
+        dir,
+        relative_path,
+        &format!(
+            r#"
+id: {id}
+kind: sum
+intent:
+  why: Exercise M13 sum seam passport/export/status coverage.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+sum:
+  variants:
+    pending: {{}}
+    quoted_total:
+      fields:
+        subtotal:
+          type: i32
+methods:
+  - id: rounded_total
+    intent:
+      why: Return the rounded subtotal for quoted totals.
+    receiver: shared_ref
+    contract:
+      returns: i32
+{deps_yaml}    lowering:
+      rust:
+        body: |
+          {{
+              match self {{
+                  CheckoutStatus::Pending => 0,
+                  CheckoutStatus::QuotedTotal {{ subtotal }} => round(*subtotal),
+              }}
+          }}
+local_tests:
+  - id: quoted_total_rounds
+    expect: "CheckoutStatus::Pending.rounded_total() == 0"
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#
+        ),
+    );
+}
+
 fn write_m9_app_cargo_toml(app_root: &Path, dependency_aliases: &[&str]) {
     let dependency_lines = dependency_aliases
         .iter()
@@ -595,6 +655,200 @@ body:
         );
         assert_eq!(quote.total(), rust_decimal::Decimal::new(96525, 3));
     }
+"#,
+    );
+
+    (temp_dir, project_dir)
+}
+
+fn setup_m13_sum_seam_project() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path().join("m13-sum-seam");
+    let units_dir = project_dir.join("units");
+
+    write_file(
+        &project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "m13-sum-seam"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+"#,
+    );
+    write_file(
+        &project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a flat discount.
+contract:
+  inputs:
+    subtotal: i32
+    discount: i32
+  returns: i32
+body:
+  rust: |
+    {
+        subtotal - discount
+    }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a flat tax amount.
+contract:
+  inputs:
+    subtotal: i32
+    tax_rate: i32
+  returns: i32
+body:
+  rust: |
+    {
+        subtotal + tax_rate
+    }
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/checkout_quote.unit.spec",
+        r#"
+id: pricing/checkout_quote
+kind: data
+spec_version: "0.3.0"
+intent:
+  why: Capture a quoted subtotal and tax rate.
+data:
+  fields:
+    subtotal:
+      type: i32
+    tax_rate:
+      type: i32
+constructors:
+  - id: new
+    intent:
+      why: Create a quote.
+    contract:
+      inputs:
+        subtotal: i32
+        tax_rate: i32
+    initializes:
+      subtotal: subtotal
+      tax_rate: tax_rate
+methods:
+  - id: total
+    intent:
+      why: Return the total.
+    receiver: shared_ref
+    contract:
+      returns: i32
+    deps:
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              apply_tax(self.subtotal, self.tax_rate)
+          }
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/checkout_status.unit.spec",
+        r#"
+id: pricing/checkout_status
+kind: sum
+spec_version: "0.3.0"
+intent:
+  why: Track checkout state as a seam-owned enum.
+sum:
+  variants:
+    pending: {}
+    quoted_total:
+      fields:
+        subtotal:
+          type: i32
+        tax_rate:
+          type: i32
+    failed:
+      fields:
+        code:
+          type: i32
+methods:
+  - id: label
+    intent:
+      why: Return a variant label.
+    receiver: shared_ref
+    contract:
+      returns: "&'static str"
+    deps:
+      - pricing/apply_discount
+    lowering:
+      rust:
+        body: |
+          {
+              match self {
+                  Self::Pending => "pending",
+                  Self::QuotedTotal { .. } => {
+                      let _ = apply_discount(1, 0);
+                      "quoted_total"
+                  }
+                  Self::Failed { .. } => "failed",
+              }
+          }
+  - id: total
+    intent:
+      why: Return the checkout total for quoted totals.
+    receiver: shared_ref
+    contract:
+      returns: i32
+    deps:
+      - pricing/apply_discount
+      - pricing/apply_tax
+    lowering:
+      rust:
+        body: |
+          {
+              match self {
+                  Self::Pending => 0,
+                  Self::QuotedTotal { subtotal, tax_rate } => {
+                      let discounted = apply_discount(*subtotal, 1);
+                      apply_tax(discounted, *tax_rate)
+                  }
+                  Self::Failed { .. } => 0,
+              }
+          }
+local_tests:
+  - id: quoted_total_total
+    expect: "CheckoutStatus::Pending.total() == 0"
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
 "#,
     );
 
@@ -4133,7 +4387,7 @@ fn spec_status_checked_in_ecommerce_example_is_green() {
             .all(|unit| unit["status"] == "valid"),
         "{json}"
     );
-    assert_eq!(status_molecule_tests(&json).len(), 2, "{json}");
+    assert_eq!(status_molecule_tests(&json).len(), 3, "{json}");
     assert!(
         status_molecule_tests(&json)
             .iter()
@@ -4148,6 +4402,10 @@ fn spec_status_checked_in_ecommerce_example_falls_back_to_untested_without_molec
     fs::remove_file(ecommerce_dir.join("units/pricing/checkout_flow.test.evidence.json")).unwrap();
     fs::remove_file(ecommerce_dir.join("units/pricing/discount_plus_tax.test.evidence.json"))
         .unwrap();
+    fs::remove_file(
+        ecommerce_dir.join("units/pricing/discount_policy_checkout_flow.test.evidence.json"),
+    )
+    .unwrap();
 
     let output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
     assert!(
@@ -4162,7 +4420,7 @@ fn spec_status_checked_in_ecommerce_example_falls_back_to_untested_without_molec
             .all(|unit| unit["status"] == "valid"),
         "{json}"
     );
-    assert_eq!(status_molecule_tests(&json).len(), 2, "{json}");
+    assert_eq!(status_molecule_tests(&json).len(), 3, "{json}");
     assert!(
         status_molecule_tests(&json)
             .iter()
@@ -4605,7 +4863,7 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         .find(|root| root["root"] == "ecommerce")
         .expect("expected ecommerce root in repo status");
     let molecule_tests = ecommerce_root["molecule_tests"].as_array().unwrap();
-    assert_eq!(molecule_tests.len(), 2, "{json}");
+    assert_eq!(molecule_tests.len(), 3, "{json}");
     assert!(
         molecule_tests.iter().all(|test| test["status"] == "valid"),
         "{json}"
@@ -10266,7 +10524,11 @@ fn plan_validate_remove_plan_uses_current_graph_impact() {
     assert_eq!(json["computed_impact"]["status"], "complete");
     assert_eq!(
         json["computed_impact"]["molecule_tests"],
-        serde_json::json!(["pricing/checkout_flow", "pricing/discount_plus_tax"])
+        serde_json::json!([
+            "pricing/checkout_flow",
+            "pricing/discount_plus_tax",
+            "pricing/discount_policy_checkout_flow"
+        ])
     );
 }
 
@@ -11023,6 +11285,349 @@ fn data_seam_status_stale_after_intent_change() {
         .expect("expected checkout_quote status row");
     assert_eq!(checkout_quote["status"], "stale");
     assert_eq!(checkout_quote["reason"], "contract changed since last test");
+}
+
+#[test]
+fn sum_seam_cli_validate_build_status_export_round_trip() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, project_dir) = setup_m13_sum_seam_project();
+
+    let validate_output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_status.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success("validate should accept sum seam", &validate_output);
+
+    let build_output = run_in(
+        &project_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "build should succeed for mixed function/data/sum tree",
+        &build_output,
+    );
+
+    let test_output = run_in(
+        &project_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "directory test should succeed for mixed sum seam tree",
+        &test_output,
+    );
+
+    let passport_path = project_dir.join("units/pricing/checkout_status.spec.passport.json");
+    assert!(passport_path.exists(), "expected sum seam passport");
+    let passport_raw = read_passport(&passport_path);
+    let pending_pos = passport_raw.find("\"pending\": {").unwrap();
+    let quoted_total_pos = passport_raw.find("\"quoted_total\": {").unwrap();
+    let failed_pos = passport_raw.find("\"failed\": {").unwrap();
+    assert!(
+        pending_pos < quoted_total_pos && quoted_total_pos < failed_pos,
+        "expected sum variants to preserve authored order: {passport_raw}"
+    );
+    let passport = read_passport_json(&passport_path);
+    assert_eq!(passport["kind"], "sum");
+    assert_eq!(
+        passport["sum"]["variants"]["quoted_total"]["fields"]["subtotal"]["type"],
+        "i32"
+    );
+    assert_eq!(passport["methods"][0]["id"], "label");
+    assert_eq!(passport["methods"][1]["id"], "total");
+    assert_eq!(
+        passport["backends"]["rust"]["derives"],
+        serde_json::json!(["Clone", "Debug", "PartialEq"])
+    );
+    assert_eq!(
+        passport["deps"],
+        serde_json::json!(["pricing/apply_discount", "pricing/apply_tax"])
+    );
+    assert_eq!(passport["evidence"]["test_results"][0]["status"], "pass");
+    assert!(
+        passport["contract_hash"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:"),
+        "{passport}"
+    );
+
+    let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
+    assert_output_success("status should be valid after sum seam test", &status_output);
+    let status_json = parse_stdout_json(&status_output);
+    let sum_rows = status_units(&status_json)
+        .iter()
+        .filter(|entry| entry["id"] == "pricing/checkout_status")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        sum_rows.len(),
+        1,
+        "expected one status row for the sum seam"
+    );
+    assert_eq!(sum_rows[0]["status"], "valid");
+
+    let export_output = run_in(&project_dir, &["export", "units"]);
+    assert_output_success(
+        "export should succeed for mixed sum seam project",
+        &export_output,
+    );
+    let export_stdout = String::from_utf8_lossy(&export_output.stdout);
+    let pending_pos = export_stdout.find("\"pending\": {").unwrap();
+    let quoted_total_pos = export_stdout.find("\"quoted_total\": {").unwrap();
+    let failed_pos = export_stdout.find("\"failed\": {").unwrap();
+    assert!(
+        pending_pos < quoted_total_pos && quoted_total_pos < failed_pos,
+        "expected export sum variants to preserve authored order: {export_stdout}"
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_units = export_json["units"].as_array().unwrap();
+    let exported_sum_units = exported_units
+        .iter()
+        .filter(|entry| entry["id"] == "pricing/checkout_status")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        exported_sum_units.len(),
+        1,
+        "expected one export entry for the sum seam"
+    );
+    let exported_sum = exported_sum_units[0];
+    assert_eq!(exported_sum["kind"], "sum");
+    assert_eq!(
+        exported_sum["sum"]["variants"]["quoted_total"]["fields"]["tax_rate"]["type"],
+        "i32"
+    );
+    assert_eq!(
+        exported_sum["deps"],
+        serde_json::json!([
+            {"library": null, "id": "pricing/apply_discount"},
+            {"library": null, "id": "pricing/apply_tax"}
+        ])
+    );
+    assert_eq!(
+        export_json["passports"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["id"] == "pricing/checkout_status")
+            .count(),
+        1,
+        "expected one passport entry for the sum seam in export"
+    );
+}
+
+#[test]
+fn sum_seam_validate_rejects_projected_invalid_rust_identifier_as_semantic_error() {
+    let (_temp_dir, project_dir) = setup_m13_sum_seam_project();
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_status.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_status
+kind: sum
+intent:
+  why: Exercise M13 projected identifier validation.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+sum:
+  variants:
+    self_: {{}}
+    quoted_total:
+      fields:
+        subtotal:
+          type: i32
+methods:
+  - id: rounded_total
+    intent:
+      why: Return the rounded subtotal for quoted totals.
+    receiver: shared_ref
+    contract:
+      returns: i32
+    lowering:
+      rust:
+        body: |
+          {{
+              match self {{
+                  CheckoutStatus::Self => 0,
+                  CheckoutStatus::QuotedTotal {{ subtotal }} => *subtotal,
+              }}
+          }}
+local_tests:
+  - id: quoted_total_rounds
+    expect: "CheckoutStatus::QuotedTotal {{ subtotal: 2 }}.rounded_total() == 2"
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#
+        ),
+    );
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_status.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one semantic error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SEMANTIC_VALIDATION");
+    assert_eq!(error["unit"], "pricing/checkout_status");
+    assert_eq!(error["path"], "units/pricing/checkout_status.unit.spec");
+    let message = error["message"].as_str().unwrap();
+    assert!(
+        message.contains("sum.variants[0].id"),
+        "unexpected error payload: {error:?}"
+    );
+    assert!(
+        message.contains("'Self'"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
+fn sum_seam_single_file_test_accepts_cross_library_method_dep_with_cargo_alias() {
+    if !cargo_available() {
+        return;
+    }
+
+    let fixture = setup_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_m9_app_cargo_toml(&fixture.app_root, &["shared"]);
+    write_m9_shared_round_crate_fixture(&fixture);
+    write_m13_sum_seam(
+        &fixture.app_root.join("units"),
+        "pricing/checkout_status.unit.spec",
+        "pricing/checkout_status",
+        &["shared::money/round"],
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        &format!(
+            r#"
+id: money/round
+kind: function
+intent:
+  why: Round a subtotal.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+contract:
+  inputs:
+    value: i32
+  returns: i32
+body:
+  rust: |
+    {{
+        value
+    }}
+"#
+        ),
+    );
+
+    let output = run_in(
+        &fixture.app_root,
+        &[
+            "test",
+            "units/pricing/checkout_status.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file spec test should accept cross-library method deps for sum seams",
+        &output,
+    );
+    assert!(
+        fixture
+            .app_root
+            .join("units/pricing/checkout_status.spec.passport.json")
+            .exists(),
+        "expected sum seam passport after single-file test"
+    );
+}
+
+#[test]
+fn sum_seam_status_stale_after_intent_change() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, project_dir) = setup_m13_sum_seam_project();
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "test",
+            "units/pricing/checkout_status.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("single-file sum seam test should succeed", &output);
+
+    let spec_path = project_dir.join("units/pricing/checkout_status.unit.spec");
+    let updated = fs::read_to_string(&spec_path).unwrap().replace(
+        "Track checkout state as a seam-owned enum.",
+        "Track checkout state with updated intent wording.",
+    );
+    fs::write(&spec_path, updated).unwrap();
+
+    let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status should be non-zero for stale sum seam"
+    );
+
+    let status_json = parse_stdout_json(&status_output);
+    let checkout_status = status_units(&status_json)
+        .iter()
+        .find(|entry| entry["id"] == "pricing/checkout_status")
+        .expect("expected checkout_status status row");
+    assert_eq!(checkout_status["status"], "stale");
+    assert_eq!(
+        checkout_status["reason"],
+        "contract changed since last test"
+    );
 }
 
 #[test]

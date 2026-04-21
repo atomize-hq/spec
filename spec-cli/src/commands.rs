@@ -10,7 +10,7 @@ use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
     generate_unit_code_with_options, safe_output_path_with_project_root, write_generated_file,
 };
-use spec_core::graph::top_level_deps;
+use spec_core::graph::{ProjectedUnitRef, project_unit, top_level_deps};
 use spec_core::loader::{
     DirectoryLoadReport, discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec,
     load_directory_report, load_directory_report_bounded, load_file, load_molecule_test_directory,
@@ -3324,27 +3324,7 @@ fn resolve_molecule_test_library_root(path: &Path, context: &WorkspaceContext) -
 }
 
 fn local_dep_ids(spec: &LoadedSpec) -> Vec<String> {
-    let authored_deps: Vec<String> = match spec.spec.unit_kind() {
-        Ok(spec_core::types::UnitKind::Data) => {
-            let mut deps = Vec::new();
-            for method in &spec.spec.extensions.methods {
-                for dep in &method.deps {
-                    if !deps.contains(dep) {
-                        deps.push(dep.clone());
-                    }
-                }
-            }
-            deps
-        }
-        _ => spec.spec.deps.clone(),
-    };
-
-    authored_deps
-        .iter()
-        .filter_map(|dep| DepRef::parse(dep).ok())
-        .filter(|dep| dep.library_alias().is_none())
-        .map(|dep| dep.unit_id().to_string())
-        .collect()
+    project_unit(ProjectedUnitRef::Loaded(spec)).local_dep_ids()
 }
 
 fn materialize_single_file_generation_scope(
