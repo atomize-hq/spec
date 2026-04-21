@@ -1,4 +1,627 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m13-autoplan-restore-20260421-070636.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260421-144420.md -->
+# M14 — Proof Freshness + Truth Surfaces
+
+Status: **Draft, plan-solidified** (2026-04-21). M13 shipped at `v0.11.0` via `feat: ship M13 sum seams`
+(`dca1009`), so this section replaces M13 as the current implementation contract. Source inputs are
+the shipped M13 plan and code in `spec-core/src/passport.rs`, `spec-core/src/export.rs`,
+`spec-cli/src/commands.rs`, `spec-core/src/plan.rs`, `spec-core/src/validator.rs`,
+`examples/ecommerce/units/pricing/discount_policy.unit.spec`, and
+`examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`.
+
+This section is the M14 implementation contract. Historical roadmap material below it is record,
+not current scope. Two separate implementers should be able to read this section and converge on
+the same diff shape and the same proof obligations.
+
+UI scope: **no**. This is a trust-loop and truth-surface milestone for the CLI, plan artifacts,
+passports, status, export, and the canonical ecommerce seam.
+
+## Milestone Summary
+
+```text
+M14a  Shared-vs-backend proof contract         required
+M14b  Freshness-honest passports/status/export required
+M14c  Plan acceptance closure against impact   required
+M14d  Canonical seam proof expansion           required
+M14e  Escape-hatch gate + truth markers        required
+M14f  Post-M14 decision gate                   required
+```
+
+**Lake to boil in M14**
+- Make `green` mean something tighter than "the authored seam still parses and the last test once
+  passed."
+- Separate three truths the repo currently conflates:
+  - shared authored meaning
+  - backend-specific lowering / execution behavior
+  - observed proof coverage freshness
+- Keep the top-level seam node model from M13. Do not turn variants into first-class graph/status
+  nodes yet.
+- Use the existing `pricing/discount_policy` wedge again. The right M14 proof is not a fresh
+  ontology demo. It is proving that one real seam can be changed and reviewed honestly.
+- Defer second-backend work until the repo can distinguish "shared meaning changed" from
+  "backend lowering changed" without hand-waving.
+
+**User job**
+- An AI-heavy Rust maintainer edits one real policy seam, runs
+  `spec validate -> spec build -> spec test -> spec status -> spec export`, and can trust the
+  resulting artifacts to answer:
+  - did the shared seam meaning change?
+  - did only backend lowering change?
+  - which proof surfaces are now stale or incomplete?
+  - did the declared retest set in a `.plan.spec` actually cover the impacted blast radius?
+
+**Actual buyer**
+- Primary buyer remains the AI-heavy Rust maintainer reviewing or making policy edits with agent
+  help. M14 is not for a hypothetical multi-backend platform buyer yet.
+
+**Painful workflow this milestone must improve**
+1. Edit a real seam such as `pricing/discount_policy`.
+2. Run the normal trust loop.
+3. Decide whether the change affected shared authored meaning, backend-only lowering, or both.
+4. Decide whether the available local tests, molecule tests, export bundle, and plan acceptance set
+   still prove enough.
+
+If M14 cannot make that workflow more honest and more localized, a second backend will just widen
+the blast radius of fake-green confidence.
+
+## Locked Boundary
+
+- M14 adds **no new seam kind** and **no new backend**.
+- M14 keeps the M13 top-level seam-node model. One seam still produces one unit row, one passport,
+  and one export unit entry.
+- M14 must make three truths explicit and reusable across every truth surface:
+  - authored seam truth
+  - backend / execution truth
+  - observed proof freshness
+- M14 may add additive metadata to passports, export, status, and plan validation, but it must not
+  promote nested variant or method behaviors into first-class graph nodes.
+- `spec plan validate --format json` must stop trusting authored acceptance lists at face value.
+  It must compare them against computed impact and surface omissions explicitly.
+- `pricing/discount_policy` remains the canonical seam wedge. M14 deepens proof on that seam
+  instead of introducing a fresh ontology demo.
+- Escape hatches remain allowed in M14, but they stop being invisible. They must be marked and
+  gated.
+- Explicitly not in M14:
+  - second-backend implementation
+  - first-class variant or method graph nodes
+  - full sandboxing or elimination of `lowering.rust.body`
+  - semantic LLM contract-vs-body scoring
+  - new seam kinds or wider Rust item coverage
+
+## Premises
+
+1. M13 proved that `spec` can represent a second seam shape in Rust. It did **not** prove the
+   trust loop is precise enough for backend expansion.
+2. The next bottleneck is proof freshness and truth partitioning, not another authored seam kind.
+3. The repo should not claim backend-readiness while `methods[].lowering.rust.body` is still the
+   primary escape hatch and its semantics are under-specified.
+4. M14 should keep one top-level seam node per unit and add additive proof metadata before it even
+   considers promoting variants or methods to first-class tracked nodes.
+5. The default M15 question after this milestone should become: "is the core now honest enough for
+   backend travel?" not "can we paper over honesty gaps with another generator?"
+
+## Dream State
+
+```text
+CURRENT (after M13)
+  authored seam proves shape
+  status proves top-level freshness
+  export serializes passports as found on disk
+  plan acceptance may understate the real retest set
+
+M14 TARGET
+  authored truth, backend truth, and observed proof freshness are explicit
+  stale export/passport state is surfaced, not silently serialized as current
+  plan acceptance is checked against computed impact
+  canonical seam proof covers all meaningful discount branches
+  escape hatches are marked and gated before any backend story widens
+
+12-MONTH IDEAL
+  shared semantics and backend lowering are cleanly partitioned
+  proof artifacts localize what changed and what remains unproven
+  a second backend is a bounded lowering problem, not a trust-model rewrite
+```
+
+## Implementation Alternatives
+
+| Approach | What it does | Pros | Cons | Verdict |
+|---|---|---|---|---|
+| A. Backend-readiness gate now | Formalize backend-safe fields and start preparing for another target | Fastest route to the multi-language story | Pretends the current truth model is already honest enough to travel | reject |
+| B. Proof freshness + truth surfaces | Tighten status/export/passport/plan honesty around the shipped M13 seam | Directly serves the current buyer and makes future backend work safer | Less flashy than another backend story | **chosen** |
+| C. Hybrid "small backend prep" | Mix truth-surface work with a little backend prep | Feels balanced | Usually turns a governance milestone into a fuzzy half-step | reject |
+
+**Why B wins**
+- Both outside voices converged on the same pressure: the repo is still better at proving authored
+  shape integrity than backend freshness and proof completeness.
+- The current buyer is Rust-first. Backend breadth is still a story; proof honesty is a current
+  workflow bottleneck.
+- M14 can still codify the backend boundary, but only as a gate and marker surface, not as new
+  backend implementation.
+
+## What Already Exists
+
+| Sub-problem | Existing code surface | M14 reuse / correction |
+|---|---|---|
+| Top-level seam truth hash | `spec-core/src/passport.rs::compute_contract_hash` | Reuse the hash machinery, but split or annotate authored-vs-backend freshness instead of treating one top-level digest as the whole truth. |
+| Health status | `spec-cli/src/commands.rs::compute_health_status` | Reuse the current status ladder, but teach it to reason about backend/execution freshness and export honesty. |
+| Export projection | `spec-core/src/export.rs::build_export_bundle`, `load_passports_for_specs` | Reuse export bundle shape, but stop serializing stale passports as silently current truth. |
+| Plan impact | `spec-core/src/plan.rs::build_plan_report`, `SpecGraph::impact` | Reuse computed impact. Add acceptance-vs-impact closure checks instead of trusting authored acceptance lists at face value. |
+| Canonical seam wedge | `examples/ecommerce/units/pricing/discount_policy.unit.spec`, `pricing/discount_policy_checkout_flow.test.spec` | Reuse the exact M13 wedge and deepen its proof surface instead of inventing a new example. |
+| Escape-hatch trust boundary | `methods[].lowering.rust.body`, `backends.rust`, validator seam rules | Reuse the bounded lowering shape, but make its policy explicit, observable, and reviewable. |
+
+## Architecture Review
+
+M14 is a truth-partitioning milestone. The repo already has the right raw surfaces. What it lacks
+is a coherent contract for how those surfaces relate when the authored seam and the executable
+backend drift in different ways.
+
+### Ownership split
+
+| Layer | Owns | Must not own |
+|---|---|---|
+| Authored seam truth | intent, sum/data/function structure, shared signatures, declared deps, seam-owned proof metadata | backend-only implementation detail |
+| Backend lowering truth | Rust lowering body, derives, emitted-shape fingerprint, backend markers | pretending to be the only semantic source of truth |
+| Observed proof truth | test evidence, stale/fresh markers, plan acceptance closure | hidden assumptions about impact coverage |
+
+### Truth surfaces
+
+- **Passport** remains the co-located unit proof record, but it must stop collapsing authored,
+  backend, and observed proof freshness into one opaque story.
+- **Status** remains the primary CLI trust loop, but it must project the same freshness contract as
+  passport data instead of re-deriving a looser one.
+- **Export** remains the AI / review bundle, but it must never serialize stale proof as if it were
+  current.
+- **Plan validation** remains the proof-closure surface for planned work, but it must compare
+  authored acceptance against computed impact instead of trusting the authored list as complete.
+
+### System architecture
+
+```text
+authored unit / plan
+  │
+  ├── authored truth digest
+  ├── backend / execution fingerprint
+  └── computed impact
+        │
+        ├── spec test / molecule evidence
+        ├── passport freshness state
+        ├── status freshness state
+        └── export freshness / warning state
+```
+
+### M14 thesis
+
+- `status` and `export` must tell the same freshness story about a unit.
+- A plan that understates impacted validation or molecule proof is not "valid enough."
+- The canonical seam's passport must reflect proof breadth that matches real branch behavior, not
+  only the easiest local branch.
+- Escape hatches remain allowed, but they stop being invisible.
+
+### Error & Rescue Registry
+
+| Step | Failure | Detection | Rescue |
+|---|---|---|---|
+| Edit seam lowering only | generated/backend behavior changes while passport still looks current | backend/execution fingerprint mismatch | mark stale and require fresh `spec test` evidence |
+| Export after drift | `spec export` serializes a parseable but stale passport as if current | export freshness check against live unit | annotate stale passport or demote to warning |
+| Validate plan | acceptance list omits impacted molecule tests | acceptance-vs-impact diff | warn or fail in strict mode with missing proof ids |
+| Review canonical seam | branch-specific behavior remains molecule-only and under-localized | branch coverage summary in passport/export | expand atom tests and additive seam proof metadata |
+| Expand backends later | backend-only semantics hide inside raw Rust escape hatch | explicit escape-hatch markers + policy gate | block backend expansion until the gate is satisfied |
+
+### Security & Threat Model
+
+The biggest security-like risk in M14 is not adversarial input. It is semantic dishonesty.
+
+- `methods[].lowering.rust.body` is still trusted raw Rust. Today the validator mainly guarantees
+  "this parses as a Rust block" for seam lowering. That is fine for M13, but it is too weak for a
+  backend-readiness story.
+- Escape hatches must become explicit proof state:
+  - when a seam uses backend-only semantics, passports/export/status should be able to say so
+  - the plan should state what tests are mandatory when that happens
+- M14 should not attempt full sandboxing of lowering bodies. That is an ocean. The lake here is:
+  mark the seam, gate it, and require proof that matches the escape-hatch class.
+
+### Data Flow & Interaction Edge Cases
+
+Critical review questions:
+
+- If only `methods[].lowering.rust.body` changes, what should go stale?
+- If only `backends.rust.derives` changes, what should go stale?
+- If the authored seam stays the same but generator behavior changes, which artifact becomes
+  untrustworthy first?
+- If a `.plan.spec` names too few impacted molecule tests, where does that surface?
+- If a seam has three meaningful branches but only one local atom proof, how does a reviewer see
+  that gap without reading the raw spec manually?
+
+Required M14 answers:
+
+- Status must distinguish authored-truth freshness from backend/execution freshness.
+- Export must never silently present stale passports as current truth.
+- Plan validation must surface missing impacted proof, not just unknown proof ids.
+- Canonical seam proof metadata must show whether each meaningful branch is covered by atom tests,
+  molecule tests, or only implicit coverage.
+
+## Code Quality Review
+
+The repo already has the right direction: one graph surface, one export bundle, one status ladder.
+The quality risk is duplicated truth logic drifting apart.
+
+M14 must avoid:
+- one freshness rule in `status` and another in `export`
+- one proof-closure story in plans and another in review docs
+- a second additive seam-proof projection shape that disagrees with passport/export/status
+
+One implementation seam should own freshness projection and be reused by:
+- passport writing
+- status computation
+- export projection
+- plan proof-closure checks where relevant
+
+## Implementation Slices
+
+1. **Shared freshness contract**
+   - Primary modules: `spec-core` truth helpers, `passport`, `export`, `status`
+   - Define one reusable authored-vs-backend-vs-observed freshness model.
+   - Lock stale-reason vocabulary once. Do not let passport, status, and export invent competing
+     semantics.
+
+2. **Passport + status honesty**
+   - Primary modules: `spec-core/src/passport.rs`, `spec-cli/src/commands.rs`
+   - Persist the richer freshness state into passports.
+   - Make `spec status` consume that same contract and project specific stale reasons for authored
+     drift, backend drift, and missing proof.
+
+3. **Export freshness projection**
+   - Primary modules: `spec-core/src/export.rs`, export fixtures
+   - Make export consume the shared freshness contract and surface stale passports honestly.
+   - Prefer explicit stale annotation over silent replay of outdated proof.
+
+4. **Plan proof-closure checks**
+   - Primary modules: `spec-core/src/plan.rs`, `spec-core/src/validator.rs`, plan CLI JSON fixtures
+   - Compare `acceptance.validate[]` and `acceptance.molecule_tests[]` against computed impact.
+   - Surface missing impacted proof deterministically in text and `--format json`.
+
+5. **Canonical seam proof expansion**
+   - Primary modules: `examples/ecommerce/units/pricing/discount_policy.unit.spec`,
+     `examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`
+   - Add direct atom proof for `none`, `percentage`, `fixed_amount`, and capped fixed-amount
+     behavior.
+   - Project enough proof metadata that a reviewer can tell which branch is directly proven.
+
+6. **Escape-hatch markers + review gate**
+   - Primary modules: seam validation, passport/export/status projection, docs
+   - Mark backend-only semantics explicitly.
+   - Add the policy hook that says escape-hatch use requires the matching proof path before any
+     backend-readiness story widens.
+
+7. **Regression + verification pass**
+   - Primary modules: `spec-cli/tests/cli.rs`, `spec-core` unit tests, example trust-loop commands
+   - Re-run the canonical seam trust loop, plan validation examples, and stale-proof regressions
+     against the final contract.
+
+## Test Review
+
+### New codepaths
+
+```text
+PROOF FRESHNESS
+  - authored truth digest vs backend/execution fingerprint
+  - status stale reason projection
+  - export stale/fresh projection
+
+PLAN CLOSURE
+  - computed impact vs authored acceptance lists
+  - missing impacted molecule tests surfacing
+
+CANONICAL SEAM PROOF BREADTH
+  - atom coverage for none / percentage / fixed_amount
+  - additive proof metadata for seam-localized review
+
+ESCAPE-HATCH GATE
+  - marker projection
+  - policy enforcement and required proof path
+```
+
+### Coverage diagram
+
+```text
+[+] spec-core/src/passport.rs
+    ├── split or annotate authored-truth and backend/execution freshness
+    ├── project additive seam proof metadata
+    └── carry escape-hatch markers explicitly
+
+[+] spec-cli/src/commands.rs
+    ├── compute_health_status reads the richer freshness state
+    └── stale reasons stay specific enough for review
+
+[+] spec-core/src/export.rs
+    ├── freshness-aware passport loading / projection
+    └── stale passports surface as explicit state or warnings
+
+[+] spec-core/src/plan.rs
+    ├── compare acceptance.validate[] to computed impacted units
+    └── compare acceptance.molecule_tests[] to computed impacted molecule tests
+
+[+] examples/ecommerce/units/pricing/discount_policy.unit.spec
+    ├── add atom tests for percentage path
+    └── add atom tests for fixed_amount normal and capped path
+```
+
+### Required test matrix
+
+- Unit tests:
+  - freshness-projection helpers
+  - export freshness annotation / warning behavior
+  - acceptance-vs-impact diff logic in plan reporting
+  - escape-hatch marker projection
+- CLI integration tests:
+  - `status --format json` after authored-truth change
+  - `status --format json` after backend-only lowering change
+  - `export` when a passport is stale
+  - `plan validate --format json` when acceptance omits impacted molecule tests
+- Example-backed tests:
+  - canonical `discount_policy` seam atom coverage for `none`, `percentage`, `fixed_amount`, and
+    capped fixed amount
+  - canonical seam stale/fresh behavior after targeted edits
+- Regression tests:
+  - existing function/data seam status semantics remain intact
+  - molecule status plane stays separate from unit status unless M14 explicitly widens that rule
+  - no divergent freshness logic between passport/status/export
+
+### Test plan artifact
+
+Primary artifact for this pass:
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-m14-test-plan-20260421-145220.md`
+
+## Performance Review
+
+No performance issue should drive M14 scope. The dominant risk is semantic dishonesty, not runtime
+cost. Recomputing freshness and comparing plan acceptance to computed impact are cheap relative to
+the build/test loop already required.
+
+## Parallelization / Lanes
+
+M14 is partially parallelizable, but only after the freshness contract is locked.
+
+### Dependency table
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| 1. Shared freshness contract | `spec-core` truth helpers, passport truth model | - |
+| 2. Passport + status honesty | `passport`, `spec-cli` status, CLI JSON fixtures | 1 |
+| 3. Export freshness projection | `export`, export fixtures | 1 |
+| 4. Plan proof-closure checks | `plan` validation, validator diagnostics, plan fixtures | 1 |
+| 5. Canonical seam proof expansion | `examples/ecommerce`, example molecule coverage | 2, 3, 4 |
+| 6. Escape-hatch markers + gate | seam validation, truth-surface projection, docs | 2, 3, 4 |
+| 7. Final regression + trust-loop verification | `spec-cli/tests`, `spec-core` regressions, example commands | 5, 6 |
+
+### Parallel lanes
+
+- **Gate 0, sequential:** Step 1 must land first. Every other slice depends on the same
+  authored-vs-backend-vs-observed contract.
+- **Lane A, freshness consumers:** Step 2 -> Step 3
+  - Shared modules: passport / status / export truth surfaces
+  - Keep this lane sequential because the same freshness vocabulary and projection helpers are
+    reused end to end.
+- **Lane B, proof-closure lane:** Step 4
+  - Independent once Gate 0 is locked
+  - Focuses on plan impact, acceptance closure, and plan JSON diagnostics
+- **Lane C, example + policy lane:** Step 5 -> Step 6
+  - Starts after Lanes A and B converge, because the example proof and the escape-hatch gate need
+    the final freshness and plan-closure contracts
+- **Lane D, final integration lane:** Step 7
+  - Runs last against the merged truth surfaces, plan closure, canonical seam proof, and policy
+    gate
+
+### Execution order
+
+1. Run Gate 0 sequentially.
+2. Launch Lane A and Lane B in parallel worktrees.
+3. Merge Lane A and Lane B.
+4. Run Lane C on top of the merged contract.
+5. Run Lane D last for end-to-end regression and trust-loop verification.
+
+### Conflict flags
+
+- Lane A and Lane B both eventually consume the shared freshness vocabulary. If Step 1 is not
+  locked first, they will drift and create merge churn.
+- Keep `spec-cli/tests/cli.rs` mostly out of parallel lanes until the final integration pass. It
+  is the natural conflict magnet for M14.
+- Do not let Lane C start from provisional stale-reason names. The canonical example and docs must
+  teach the final contract, not the intermediate one.
+
+## Failure Modes
+
+| Codepath | Failure mode | Test coverage required | Error handling | User outcome if missed | Critical gap? |
+|---|---|---|---|---|---|
+| freshness projection | backend-only change still reports `valid` | status + passport regression fixtures | explicit stale reason | fake-green proof after real behavior drift | **yes** |
+| export projection | stale passport serialized as current truth | export freshness fixtures | stale annotation or warning | AI/reviewer consumes outdated truth | **yes** |
+| plan proof closure | `acceptance.molecule_tests[]` understates impacted blast radius | plan validate JSON fixtures | warning or invalid in strict mode | plan says "done" before required proof ran | **yes** |
+| canonical seam proof | percentage/fixed branches remain only indirectly proven | atom + molecule wedge tests | explicit proof metadata gap | reviewers overtrust one seam from incomplete local proof | no, but must close in M14 |
+| escape-hatch gate | backend-only semantics stay invisible in truth artifacts | marker + policy fixtures | explicit marker and review gate | backend travel starts from dishonest semantics | **yes** |
+
+## What NOT in M14 Scope
+
+- second-backend implementation, because the current trust contract is not honest enough to travel
+- first-class variant or method graph nodes, because that is a larger ontology change than M14
+  needs
+- semantic LLM contract-vs-body scoring, because proof freshness and truth partitioning come first
+- full sandboxing or elimination of `lowering.rust.body`, because explicit gating is the lake and
+  hard containment is the ocean
+- new seam kinds or wider Rust item coverage, because M14 is about reviewing one shipped seam
+  honestly
+
+## Implementation Order
+
+```text
+1. Lock the shared freshness contract: authored truth, backend/execution truth, observed proof
+2. Teach passports and status to project that contract consistently
+3. Teach export to surface freshness honestly instead of replaying stale passports blindly
+4. Add plan acceptance-vs-impact closure checks
+5. Expand canonical discount_policy atom proof coverage
+6. Add escape-hatch markers and the M14 review gate
+7. Re-run the ecommerce trust loop and plan validation examples, then evaluate the post-M14 gate
+```
+
+## Success Criteria / Kill Metrics
+
+M14 is successful only if all of these are true:
+
+1. A maintainer can tell whether a seam edit changed authored meaning, backend lowering, or both.
+2. `spec status` and `spec export` tell the same freshness story for the same unit.
+3. `spec plan validate --format json` surfaces when authored acceptance lists understate the
+   computed blast radius.
+4. The canonical `pricing/discount_policy` seam has direct atom proof for all meaningful discount
+   branches.
+5. Escape-hatch use is explicitly marked and gated in the truth surfaces.
+
+Kill the "second backend next" thesis for M15 if either of these happens:
+- backend/execution freshness still cannot be surfaced honestly without collapsing back into one
+  opaque top-level hash
+- the canonical seam still requires reviewers to read raw Rust to know which branch is unproven
+
+## Post-M14 Decision Gate
+
+### Choose backend-readiness next if:
+
+- authored truth and backend/execution freshness are clearly partitioned
+- status/export/passport agree on stale/fresh state
+- plan acceptance closure is honest enough to drive implementation review
+- escape-hatch policy is explicit, enforced, and teachable
+
+### Choose deeper governance next if:
+
+- branch- or method-local proof still feels too coarse after additive proof metadata
+- reviewers still cannot localize semantic drift without reading raw lowering bodies
+- the highest-value missing signal is still "the code compiles, but the meaning is wrong"
+
+### Do not choose second backend unless:
+
+- M12 + M13 seam families both pass the M14 freshness contract
+- the repo can name which truth is authored, which is backend, and which is observed proof
+- escape-hatch usage is observable enough that backend travel is a bounded policy question
+
+## Dream State Delta
+
+If M14 lands cleanly, the project stops asking "can we serialize another backend soon?" and starts
+asking the better question: "does the trust loop now tell the truth tightly enough that backend
+travel would be honest?"
+
+That is the real leverage. M14 should make green mean trustworthy.
+
+## Review-Locked Decisions
+
+- Choose truth-surface / governance refinement for M14, not backend-readiness.
+- Keep one top-level unit node per seam in M14. Variants remain nested.
+- Additive proof metadata is allowed; first-class variant nodes are not.
+- Freshness must be shared across passport/status/export, not reimplemented separately.
+- Plan acceptance must be checked against computed impact instead of trusted as authored gospel.
+- `pricing/discount_policy` remains the canonical wedge and gains full atom proof coverage.
+- Escape hatches remain allowed, but they become marked, gated, and part of the truth story.
+- Design review is skipped because there is no UI scope.
+
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | CEO | Choose M14 truth-surface refinement over backend-readiness | mechanical | P1 choose completeness | Current buyer pain is proof honesty, not another backend story | backend-readiness now |
+| 2 | CEO | Keep top-level seam tracking in M14 | mechanical | P5 explicit over clever | Additive proof metadata solves the immediate review gap without redesigning graph ontology | variant-first tracked nodes |
+| 3 | CEO | Reuse `pricing/discount_policy` as the canonical M14 wedge | mechanical | P4 DRY | The shipped M13 seam is the right place to prove review honesty | new demo wedge |
+| 4 | Eng | Unify freshness logic across passport/status/export | mechanical | P5 explicit over clever | Divergent freshness semantics would recreate fake-green drift in three places | per-surface freshness rules |
+| 5 | Eng | Add plan acceptance-vs-impact closure checks in M14 | mechanical | P1 choose completeness | A plan that omits impacted proof is not a trustworthy plan artifact | doc-only guidance |
+| 6 | Eng | Make escape-hatch usage observable and gated, not banned outright | taste | P3 pragmatic | The repo already relies on lowering escape hatches; explicit markers and required proof are the lake | full sandboxing or silent trust |
+
+## M14 Review Record (2026-04-21)
+
+### Premise challenge
+
+- The repo already proved `kind: sum` in Rust. It did **not** prove that the trust loop can
+  localize or explain freshness once authored truth and backend truth drift separately.
+- The buyer for the next milestone is still a Rust maintainer reviewing agent edits. A second
+  backend is not yet a buyer problem. It is still a future story.
+- The most expensive regret would be widening backend claims while `status` and `export` can still
+  overstate freshness or proof completeness.
+
+### CEO dual voices
+
+CODEX SAYS (CEO — strategy challenge)
+- Backend-readiness is mostly narrative right now.
+- M14 should prove semantic truth and proof freshness for the real buyer before any backend travel.
+- The underexplored alternatives are semantic proof localization, export freshness honesty, and an
+  explicit escape-hatch gate.
+
+CLAUDE SUBAGENT (CEO — strategic independence)
+- The outside subagent agreed on the direction but cited stale worktree internals, so its repo
+  specifics were not accepted as authority.
+- The durable signal still matched the main review: truth-surface refinement beats backend
+  readiness.
+
+CEO DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Premises valid?                  mixed    yes     DISAGREE
+  2. Right problem to solve?          yes      yes     CONFIRMED
+  3. Scope calibration correct?       yes      yes     CONFIRMED
+  4. Alternatives explored enough?    mixed    no      DISAGREE
+  5. Competitive / market risks?      mixed    yes     DISAGREE
+  6. 6-month trajectory sound?        yes      yes     CONFIRMED
+═══════════════════════════════════════════════════════════════
+
+### Eng dual voices
+
+CODEX SAYS (eng — architecture challenge)
+- The next bottleneck is semantic truth partitioning, not more codegen breadth.
+- `status` and `export` still rely on coarse seam-level freshness, and `methods[].lowering.rust.body`
+  remains an under-specified semantic backdoor.
+- Backend-readiness is a governance milestone wearing a codegen costume.
+
+CLAUDE SUBAGENT (eng — independent review)
+- The subagent confirmed the same pressure from a different angle:
+  - freshness is authored-hash only today
+  - export can tell a greener story than status
+  - plans do not yet enforce proof closure against computed impact
+  - canonical seam proof is still too coarse at the branch level
+
+ENG DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Architecture sound?              yes      yes     CONFIRMED
+  2. Test coverage sufficient?        no       no      CONFIRMED
+  3. Performance risks addressed?     yes      yes     CONFIRMED
+  4. Security threats covered?        no       no      CONFIRMED
+  5. Error paths handled?             mixed    no      DISAGREE
+  6. Deployment risk manageable?      yes      yes     CONFIRMED
+═══════════════════════════════════════════════════════════════
+
+### Cross-phase themes
+
+- **Theme: M14 is about proof honesty, not backend breadth.** Flagged independently in CEO and eng
+  review.
+- **Theme: escape-hatch policy must become explicit before backend travel.** Flagged independently
+  in CEO and eng review.
+- **Theme: canonical seam proof is still too coarse for review-grade trust.** Flagged independently
+  in CEO and eng review.
+
+### Completion summary
+
+| Item | Status |
+|---|---|
+| Mode selected | SELECTIVE EXPANSION |
+| Premise challenge | written |
+| What already exists | written |
+| Dream state delta | written |
+| Error & rescue registry | written |
+| Failure modes | written |
+| NOT in scope | written |
+| Implementation slices | written |
+| Test plan artifact | written |
+| Parallelization | written |
+| Design phase | skipped, no UI scope |
+| CEO outside voice | complete |
+| Eng outside voice | complete |
+| Current status | ready for implementation against this M14 section |
+| Verdict | choose truth-surface / governance refinement |
+
 # M13 — Orthogonal Core + Sum Seam
 
 Status: **Draft, plan-solidified** (2026-04-21). Reviewed via `/autoplan` across the 2026-04-20
