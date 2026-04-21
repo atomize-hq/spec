@@ -841,13 +841,17 @@ pub fn generate_molecule_tests_code(
     tests: &[&ResolvedMoleculeTest],
     units_by_id: &HashMap<&str, &NormalizedUnit>,
 ) -> Result<String> {
+    fn render_use_import(import: &str) -> String {
+        format!("use {};", import.trim_end_matches(';'))
+    }
+
     let mut import_seen: HashSet<String> = HashSet::new();
     let mut import_lines: Vec<String> = Vec::new();
 
     for test in tests {
         if let Some(imports) = &test.imports {
             for import in imports {
-                let line = format!("use {import};");
+                let line = render_use_import(import);
                 if import_seen.insert(line.clone()) {
                     import_lines.push(line);
                 }
@@ -863,7 +867,7 @@ pub fn generate_molecule_tests_code(
                         ),
                     })?;
                 for import in project_unit(ProjectedUnitRef::Normalized(unit)).cover_imports() {
-                    let line = format!("use {import}");
+                    let line = render_use_import(import);
                     if import_seen.insert(line.clone()) {
                         import_lines.push(line);
                     }

@@ -4387,7 +4387,7 @@ fn spec_status_checked_in_ecommerce_example_is_green() {
             .all(|unit| unit["status"] == "valid"),
         "{json}"
     );
-    assert_eq!(status_molecule_tests(&json).len(), 2, "{json}");
+    assert_eq!(status_molecule_tests(&json).len(), 3, "{json}");
     assert!(
         status_molecule_tests(&json)
             .iter()
@@ -4402,6 +4402,10 @@ fn spec_status_checked_in_ecommerce_example_falls_back_to_untested_without_molec
     fs::remove_file(ecommerce_dir.join("units/pricing/checkout_flow.test.evidence.json")).unwrap();
     fs::remove_file(ecommerce_dir.join("units/pricing/discount_plus_tax.test.evidence.json"))
         .unwrap();
+    fs::remove_file(
+        ecommerce_dir.join("units/pricing/discount_policy_checkout_flow.test.evidence.json"),
+    )
+    .unwrap();
 
     let output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
     assert!(
@@ -4416,7 +4420,7 @@ fn spec_status_checked_in_ecommerce_example_falls_back_to_untested_without_molec
             .all(|unit| unit["status"] == "valid"),
         "{json}"
     );
-    assert_eq!(status_molecule_tests(&json).len(), 2, "{json}");
+    assert_eq!(status_molecule_tests(&json).len(), 3, "{json}");
     assert!(
         status_molecule_tests(&json)
             .iter()
@@ -4859,7 +4863,7 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         .find(|root| root["root"] == "ecommerce")
         .expect("expected ecommerce root in repo status");
     let molecule_tests = ecommerce_root["molecule_tests"].as_array().unwrap();
-    assert_eq!(molecule_tests.len(), 2, "{json}");
+    assert_eq!(molecule_tests.len(), 3, "{json}");
     assert!(
         molecule_tests.iter().all(|test| test["status"] == "valid"),
         "{json}"
@@ -10520,7 +10524,11 @@ fn plan_validate_remove_plan_uses_current_graph_impact() {
     assert_eq!(json["computed_impact"]["status"], "complete");
     assert_eq!(
         json["computed_impact"]["molecule_tests"],
-        serde_json::json!(["pricing/checkout_flow", "pricing/discount_plus_tax"])
+        serde_json::json!([
+            "pricing/checkout_flow",
+            "pricing/discount_plus_tax",
+            "pricing/discount_policy_checkout_flow"
+        ])
     );
 }
 

@@ -48,7 +48,8 @@
     ],
     "molecule_tests": [
       "pricing/checkout_flow",
-      "pricing/discount_plus_tax"
+      "pricing/discount_plus_tax",
+      "pricing/discount_policy_checkout_flow"
     ],
     "unresolved": [
       {

@@ -2314,18 +2314,12 @@ local_tests:
     #[test]
     fn test_validate_sum_semantic_rejects_projected_variant_name_collision() {
         let mut spec = create_sum_spec("pricing/checkout_status");
-        spec.spec
-            .extensions
-            .sum
-            .as_mut()
-            .unwrap()
-            .variants
-            .insert(
-                "quoted__total".to_string(),
-                AuthoredSumVariant {
-                    fields: IndexMap::new(),
-                },
-            );
+        spec.spec.extensions.sum.as_mut().unwrap().variants.insert(
+            "quoted__total".to_string(),
+            AuthoredSumVariant {
+                fields: IndexMap::new(),
+            },
+        );
 
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
@@ -2341,8 +2335,7 @@ local_tests:
         let mut spec = create_sum_spec("pricing/checkout_status");
         let sum = spec.spec.extensions.sum.as_mut().unwrap();
         let variant = sum.variants.shift_remove("pending").unwrap();
-        sum.variants
-            .insert("checkout_status".to_string(), variant);
+        sum.variants.insert("checkout_status".to_string(), variant);
 
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
