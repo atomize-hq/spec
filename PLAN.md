@@ -514,6 +514,9 @@ Required work:
 - lock the canonical example posture: raw baseline + migrated seam + docs + molecule evidence move
   together
 - codify the M13 escape-hatch rule as an extension of the post-M11 TODO, not a vague future note
+- add one canonical kind-aware dep / import projection helper so `spec-core/src/graph.rs`,
+  `spec-cli/src/commands.rs`, and molecule-test generation do not each re-derive top-level deps
+  differently for `sum`
 - add fixture coverage proving mixed `function` + `data` + `sum` trees report truthful
   validate/status/export/passport behavior
 
@@ -527,11 +530,13 @@ Purpose: make `kind: sum` a first-class authored shape without letting Rust dict
 
 Required work:
 - extend authored types in `spec-core/src/types.rs`
-- extend JSON schema for `.unit.spec`
+- extend JSON schema for `.unit.spec` with an explicit `kind: sum` branch, `minProperties` /
+  `required` rules for variants, and `not` guards that keep function-only top-level fields out of
+  `sum`
 - add semantic validation for:
   - ordered unique variant IDs
   - payload field typing
-  - collision checks across variants, methods, and generated type names
+  - collision checks across variants, methods, and generated Rust-emitted type names
   - receiver rules
   - backend-lowering presence rules
 
@@ -543,7 +548,10 @@ Required work:
 - add `NormalizedSumSeam` and `RustSumSeamLowering`
 - generate Rust `enum + impl`
 - support seam-owned local tests
-- maintain existing dep/import behavior boundaries
+- route enum lowering, single-file generation scope, and molecule-test imports through the shared
+  dep / import projection helper instead of adding a third `kind: data`-style special case
+- state the trust boundary plainly: `lowering.rust.body` remains trusted raw Rust in M13, and the
+  milestone measures escape-hatch pressure instead of claiming sandboxed safety
 
 ### M13d — Seam-Level Truth Surfaces Stay Honest
 
@@ -554,8 +562,11 @@ Required work:
 - status correctness for mixed trees
 - export correctness for mixed trees
 - contract-hash staleness on sum seams
-- variant-aware evidence or export annotations sufficient to test whether seam-level truth is too
-  coarse, without promoting variants to first-class graph nodes yet
+- additive `sum` projection in passport / export that carries ordered variant metadata, payload
+  fields, methods, and derives as the exact machine-readable probe for "is seam-level truth too
+  coarse?"
+- no per-variant runtime evidence in M13; use the additive authored projection plus top-level test
+  evidence to decide whether M14 must promote finer-grained truth surfaces
 
 ### M13e — Canonical Migration Wedge + Docs
 
@@ -577,6 +588,29 @@ Required work:
 - name the two default follow-on paths:
   - backend-readiness gate
   - truth-surface / governance refinement
+
+### NOT in scope (eng lock)
+
+- variant-level passports, status rows, or graph nodes
+  rationale: M13 must prove one top-level seam truth surface before widening ontology again
+- backend-specific lowering sandboxing beyond explicit trust-boundary docs and escape-hatch
+  accounting
+  rationale: full Rust-body containment is an ocean, not this milestone's lake
+- second-backend execution or cross-library `sum` identity changes
+  rationale: M13 is still proving the authored core against Rust, not spending backend budget
+- per-variant runtime evidence
+  rationale: M13 only needs enough authored projection to judge whether seam-level truth is too
+  coarse
+
+### What already exists (eng lock)
+
+| Sub-problem | Existing code surface | M13 reuse / correction |
+|---|---|---|
+| Kind-aware top-level dep projection | `spec-core/src/graph.rs::top_level_deps`, `spec-cli/src/commands.rs::local_dep_ids` | Replace duplicated `data`-only branching with one shared helper before adding `sum`. |
+| Kind-aware normalization | `spec-core/src/normalizer.rs::normalize_unit`, `spec-core/src/types.rs::NormalizedDataSeam::from_spec` | Mirror the same ownership split for `NormalizedSumSeam`; do not add a parallel loader. |
+| Molecule imports over mixed unit kinds | `spec-core/src/generator.rs::covered_unit_use_path`, `generate_molecule_tests_code` | Extend the same import projection path to `sum`, not ad hoc per call site. |
+| Top-level truth surfaces | `spec-core/src/passport.rs::build_passport_with_evidence`, `compute_contract_hash`, `spec-core/src/export.rs::build_export_bundle`, `spec-cli/src/commands.rs::compute_health_status` | Keep one seam-level truth loop, but project authored `sum` metadata additively and hash it honestly. |
+| Canonical migration wedge pattern | `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs`, `examples/ecommerce/units/pricing/checkout_quote.unit.spec`, `examples/ecommerce/README.md` | Reuse the raw-vs-migrated teaching pattern for `discount_policy`, plus parity and molecule coverage. |
 
 ---
 
@@ -610,12 +644,17 @@ CODE PATH COVERAGE
 ===========================
 [+] spec-core/src/types.rs
     ├── [GAP] add authored + normalized + lowered sum seam structs
-    └── [GAP] collision helpers updated for sum naming surface
+    └── [GAP] post-projection emitted-name collision checks for enum type / variants / methods
 
-[+] spec-core/src/validator.rs
-    ├── [GAP] schema accepts `kind: sum`
-    ├── [GAP] variant/payload semantic validation
-    └── [GAP] mixed-kind regression tests
+[+] spec-core/src/schema/unit.spec.json + spec-core/src/validator.rs
+    ├── [GAP] explicit `kind: sum` schema branch with `required`, `not`, and empty-map rejection
+    ├── [GAP] variant/payload / receiver / lowering semantic validation
+    └── [GAP] mixed-kind regression tests for invalid authored surfaces
+
+[+] spec-core/src/graph.rs + spec-cli/src/commands.rs + spec-core/src/generator.rs
+    ├── [GAP] shared top-level dep / import projection helper
+    ├── [GAP] single-file `spec test` scope includes local deps for `sum`
+    └── [GAP] molecule imports stay truthful for mixed function / data / sum trees
 
 [+] spec-core/src/generator.rs
     ├── [GAP] enum lowering happy path
@@ -625,21 +664,24 @@ CODE PATH COVERAGE
 [+] spec-core/src/passport.rs / export.rs / spec-cli/src/commands.rs
     ├── [GAP] passport projection for sum seam
     ├── [GAP] status stale/failing/untested for mixed trees
-    └── [GAP] export payload truth for mixed trees
+    └── [GAP] additive authored `sum` projection for the M13 truth-surface probe
 
 USER / AGENT FLOW COVERAGE
 ===========================
 [+] Author choice-like seam
     ├── [GAP] validate happy path
     ├── [GAP] invalid variant payload types
-    └── [GAP] invalid lowering body / name collisions
+    └── [GAP] invalid lowering body / emitted-name collisions
 
 [+] Build + prove canonical wedge
     ├── [GAP] raw baseline and migrated seam stay aligned
     ├── [GAP] local tests on enum seam
-    └── [GAP] molecule test in pricing flow
+    └── [GAP] molecule test in pricing flow with mixed function / data / sum imports
 
 [+] Trust loop
+    ├── [GAP] exact-unit `spec test units/pricing/discount_policy.unit.spec`
+    ├── [GAP] molecule `spec test units/pricing/<new>.test.spec`
+    ├── [GAP] repo-root and library-root invocation parity
     ├── [GAP] `spec status` after untouched build
     ├── [GAP] `spec status` after contract drift without `spec test`
     └── [GAP] `spec export` mixed-kind truth surface
@@ -652,30 +694,45 @@ USER / AGENT FLOW COVERAGE
   - validator rejection cases
   - lowering and codegen cases
   - passport/export projection
+  - emitted-name collision rejection after Rust projection
 - CLI integration tests:
   - `validate --format json`
   - `build`
-  - `test`
+  - `test` on a directory
+  - `test` on one `discount_policy.unit.spec` from repo root and library root
+  - `test` on one mixed-kind molecule `.test.spec` from repo root and library root
   - `status --format json`
   - `export`
 - Example-backed tests:
   - canonical wedge validate/build/test/status loop
   - raw baseline parity checks
+  - mixed function / data / sum molecule import path
 - Regression tests:
   - existing `kind: function` unaffected
   - existing `kind: data` unaffected
   - mixed tree status/export order and truth
+  - top-level dep projection stays identical across graph, CLI scope building, and molecule codegen
 
 ### Test Plan Artifact
 
-Create during the eng phase at:
-`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-eng-review-test-plan-<timestamp>.md`
+Written during the eng phase at:
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-eng-review-test-plan-20260421-065439.md`
 
 Seed contents should cover:
 - affected route / surface: CLI `validate`, `build`, `test`, `status`, `export`
 - key interactions: author sum seam, build mixed-kind tree, verify canonical example
 - edge cases: invalid variant payloads, collision cases, stale status after contract change
 - critical paths: end-to-end canonical wedge loop plus mixed-kind trust-loop regressions
+
+### Failure Modes Registry
+
+| Codepath | Failure mode | Test coverage required | Error handling | User outcome if missed | Critical gap? |
+|---|---|---|---|---|---|
+| dep / import projection | `sum` deps show up in generation but disappear in graph, export, or single-file `spec test` scope | shared projection helper regression suite across graph / CLI / generator | none today | false-green trust surfaces or missing exact-unit proof inputs | **yes** |
+| Rust-emitted naming | authored variants normalize to colliding Rust names only after projection | validator + codegen rejection fixtures | build failure only | explicit compile failure | no |
+| top-level trust surface | `compute_contract_hash` omits authored `sum` metadata and stale detection lies | passport hash regression tests | none today | stale edits look valid | **yes** |
+| lowering trust boundary | `lowering.rust.body` uses raw Rust escape hatches to carry semantics the shared model does not express | fixture coverage + escape-hatch line-count metric | documented trust boundary only | hidden semantics in backend-only code | no, but tracked kill metric |
+| canonical wedge parity | raw baseline and migrated seam drift apart on one branch | local + molecule parity tests | explicit test failure | teachable example becomes fake confidence | no |
 
 ---
 
@@ -803,6 +860,11 @@ Result:
 | 5 | CEO | Keep seam truth top-level for M13 | Mechanical | DRY | The repo already has one coherent seam-level truth loop. Promoting variants now would widen ontology and truth surfaces before evidence says to. | Variant-level passports/status rows in M13 |
 | 6 | CEO | Include a bounded preflight hardening pack inside M13 | Mechanical | Boil lakes | The example, docs, and trust-loop contracts are part of the same lake. Hardening them inside M13 is cheaper than pretending they are separate. | Treating hardening as a separate milestone |
 | 7 | CEO | Skip design-review phase | Mechanical | Pragmatic | This milestone has no real UI scope. Running a design pass because old roadmap text says `form` would be fake work. | Forcing a plan-design-review phase |
+| 8 | Eng | Keep scope as-is, but force one shared dep / import projection helper before sum-specific code | Mechanical | Explicit over clever | `top_level_deps`, `local_dep_ids`, and molecule import generation already drift for `data`. M13 should fix the seam before adding a third branch. | Repeating `kind: data` special cases for `sum` |
+| 9 | Eng | Define the variant-aware probe as additive authored `sum` projection in passport / export, not per-variant runtime evidence | Taste, surfaced | Pragmatic | It gives M13 a concrete machine-readable truth probe without widening runtime ontology or inventing a half-baked observation system. | Leaving the probe undefined or adding per-variant runtime evidence in M13 |
+| 10 | Eng | Narrow the trust claim around `lowering.rust.body` and track escape-hatch pressure explicitly | Taste, surfaced | Pragmatic | Full Rust-body containment is too large for M13. The honest move is to keep the escape hatch explicit, measured, and decision-gated. | Pretending M13 sandboxes lowering bodies, or silently ignoring the trust surface |
+| 11 | Eng | Add emitted-name collision validation after Rust projection | Mechanical | Completeness | `type_name_for_unit_id` already collapses underscore forms. M13 must reject variant / method / type collisions before generation, not at compiler error time. | Author-name-only validation |
+| 12 | Eng | Require exact-unit and mixed-kind molecule regressions for `spec test` from repo root and library root | Mechanical | Boil lakes | The isolated single-file test path is the most fragile trust path in this repo. Cover it now, while M13 is already touching the same seam. | Directory-only `spec test` coverage |
 
 ---
 
@@ -818,7 +880,197 @@ Result:
 - Failure modes — **seeded**
 - Decision audit trail — **written**
 - Design phase — **skipped, no UI scope**
-- Current status — **awaiting premise confirmation before the eng pass**
+- Current status — **eng review written, awaiting final approval gate**
+
+---
+
+## Eng Review (Autoplan Phase 3, 2026-04-21)
+
+**Review scope:** `PLAN.md` M13 section, grounded against
+[spec-core/src/types.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/types.rs:1),
+[spec-core/src/normalizer.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/normalizer.rs:1),
+[spec-core/src/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/validator.rs:1),
+[spec-core/src/generator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/generator.rs:1),
+[spec-core/src/graph.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/graph.rs:1),
+[spec-core/src/passport.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/passport.rs:1),
+[spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs:1),
+[spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs:1),
+and the ecommerce canonical wedge files under `examples/ecommerce/`.
+
+### Step 0 — Scope Challenge
+
+Scope stays accepted as-is. M13 necessarily crosses more than 8 files because the truth surface is
+already split across schema, types, validator, normalizer, generator, graph/export, passport, and
+CLI health code. That is real blast radius, not plan fluff.
+
+The engineering correction is ordering, not reduction. The first M13 slice must land one shared
+kind-aware dep / import projection seam before `sum` exists anywhere else. Without that, the repo
+would repeat the current `data` drift between `spec-core/src/graph.rs::top_level_deps`,
+`spec-cli/src/commands.rs::local_dep_ids`, and `spec-core/src/generator.rs::covered_unit_use_path`.
+
+Search check: this milestone does not introduce external infrastructure, concurrency, or a new
+distribution artifact. The useful "search before building" move here was repo-native: trace the
+existing M12 kind-dispatch seams and reuse them instead of importing new libraries or abstractions.
+Distribution check is N/A because M13 extends the existing `spec` CLI rather than shipping a new
+artifact type.
+
+### CODEX SAYS (eng — architecture challenge)
+
+- **Critical:** the plan needed one canonical dep / import projection API or `sum` would drift
+  across graph edges, single-file `spec test`, molecule imports, export, and status.
+- **High:** the variant-aware truth probe was too vague. It now needs an exact additive passport /
+  export shape instead of a hand-wavy "some annotation."
+- **High:** name-collision coverage was authored-name-only. It now needs Rust-emitted-name
+  validation after projection.
+- **High:** the trust claim around `lowering.rust.body` was overstated relative to current
+  validation. The plan now treats it as trusted raw Rust plus a measured kill metric.
+- **High:** the test plan was missing the exact-unit isolated-generation path and mixed-kind
+  molecule import path most likely to break late.
+- **Medium:** the schema branch for `sum` was underspecified around empty maps and illegal mixed
+  authored surfaces.
+
+### CLAUDE SUBAGENT (eng — independent review)
+
+Subagent unavailable in this thread by session policy. This eng pass ran in `codex-only` outside
+voice mode rather than pretending a second independent voice existed.
+
+### ENG DUAL VOICES — CONSENSUS TABLE
+
+```text
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Architecture sound?              N/A     no      codex-only concern
+  2. Test coverage sufficient?        N/A     no      codex-only concern
+  3. Performance risks addressed?     N/A     yes     codex-only clear
+  4. Security / trust covered?        N/A     no      codex-only concern
+  5. Error paths handled?             N/A     no      codex-only concern
+  6. Deployment risk manageable?      N/A     yes     no new artifact
+═══════════════════════════════════════════════════════════════
+```
+
+Result:
+- Codex: 6 concrete concerns
+- Claude subagent: unavailable
+- Source: `codex-only`
+
+### Architecture Review
+
+The plan is now implementation-ready only if it treats unit-kind dispatch as a single seam, not a
+set of loosely synchronized `match` statements. The existing repo already proves the failure mode:
+`spec-core/src/graph.rs::top_level_deps` and `spec-cli/src/commands.rs::local_dep_ids` each
+reconstruct top-level deps for `kind: data`, while `spec-core/src/generator.rs::covered_unit_use_path`
+does separate mixed-kind import branching for molecule tests. `sum` cannot be added safely on top
+of that duplication.
+
+The architecture change is small but mandatory: authored `sum` metadata flows through schema and
+semantic validation, then `normalize_unit`, then one shared dep / import projection helper, then
+generator, passport, export, and CLI status/test surfaces. That keeps "one top-level seam truth"
+real instead of rhetorical.
+
+```text
+M13 ARCHITECTURE
+===========================
+.unit.spec (kind: sum)
+    │
+    ├── schema branch (`unit.spec.json`)
+    ├── semantic validation (`validator.rs`)
+    ├── normalize_unit(...)
+    │     └── NormalizedSumSeam
+    │
+    ├── shared dep / import projection seam
+    │     ├── graph edges / export deps
+    │     ├── single-file `spec test` closure
+    │     └── molecule import generation
+    │
+    ├── Rust lowering (`RustSumSeamLowering`)
+    │     └── enum + impl + local tests
+    │
+    └── top-level truth surfaces
+          ├── passport projection + contract hash
+          ├── status health / stale detection
+          └── export bundle projection
+```
+
+### Code Quality Review
+
+The highest-leverage code-quality correction is to validate the names Rust will actually see.
+`type_name_for_unit_id` in [spec-core/src/types.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/types.rs:682)
+collapses underscore-separated segments into PascalCase, while current collision helpers only
+compare authored IDs. M13 now explicitly requires post-projection checks for enum type, variant,
+and method namespace collisions before codegen.
+
+The second correction is honesty about trust surfaces. Today
+[spec-core/src/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/validator.rs:713)
+only requires `lowering.rust.body` to parse as a Rust block. That is not sandboxing. The plan now
+states this plainly and turns escape-hatch usage into a measured kill metric instead of an implied
+safety property.
+
+### Test Review
+
+The coverage diagram above is now the authoritative execution map for M13. The key addition from
+this eng pass is that the fragile path is not just "build the enum." It is "run exact-unit proof
+and mixed-kind molecule proof through isolated generation scopes from different working
+directories." That is where this repo has broken before.
+
+Required regressions are now explicit:
+- `spec test examples/ecommerce/units/pricing/discount_policy.unit.spec` from repo root
+- `spec test units/pricing/discount_policy.unit.spec` from `examples/ecommerce/`
+- one mixed-kind molecule `.test.spec` that imports / covers `function`, `data`, and `sum`
+- parity tests between raw baseline `discount_policy.rs` and generated seam behavior
+- stale-hash tests proving authored `sum` metadata changes move `status` to `stale`
+
+### Performance Review
+
+No material performance issue is blocking M13. I checked the existing hot-ish paths,
+`ordered_unique_deps`, `local_dep_ids`, graph edge projection, and test-evidence correlation.
+They remain small relative to one new seam kind and one canonical example. Do not widen M13 into a
+performance refactor.
+
+### Worktree Parallelization Strategy
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| Shared dep / import projection seam | `spec-core/`, `spec-cli/` | — |
+| Sum schema + validator + normalizer | `spec-core/` | shared dep / import projection seam |
+| Sum lowering + codegen | `spec-core/` | sum schema + validator + normalizer |
+| Truth surfaces (passport / export / status / single-file test) | `spec-core/`, `spec-cli/` | shared dep / import projection seam |
+| Canonical example + docs + regressions | `examples/ecommerce/`, `spec-cli/tests`, `spec-core/tests`, docs | sum lowering + codegen, truth surfaces |
+
+Parallel lanes:
+- Lane A: shared dep / import projection seam → sum schema / validator / normalizer → sum lowering / codegen
+- Lane B: truth surfaces (passport / export / status / single-file test) after the shared dep / import seam lands
+- Lane C: example + docs + regressions after Lane A and Lane B merge
+
+Execution order: launch Lane A first. When the shared dep / import seam is in, start Lane B in a
+parallel worktree. Merge A + B. Then run Lane C sequentially against the merged truth surfaces.
+
+Conflict flags:
+- Lanes A and B both touch `spec-core/` and `spec-cli/`, so they cannot start together safely
+- Lane C should stay last because it consumes finalized lowering and truth-surface contracts
+
+### Cross-Phase Themes
+
+- **Truth over convenience** — the CEO pass and the eng pass both converged on the same pressure:
+  do not widen ontology or trust claims faster than the repo can project and verify them honestly.
+- **Workflow credibility depends on exact proof paths** — the buyer story only matters if exact-unit
+  `spec test`, mixed-kind molecule coverage, and stale detection stay truthful under real repo
+  invocation patterns.
+
+### Eng Completion Summary
+
+- Step 0: Scope Challenge — **scope accepted as-is, execution order tightened around one shared dep / import seam**
+- Architecture Review: **2 issues found**
+- Code Quality Review: **2 issues found**
+- Test Review: **diagram updated, 5 critical regressions added**
+- Performance Review: **0 issues found**
+- NOT in scope: **written**
+- What already exists: **written**
+- TODOS.md updates: **0 new items proposed**
+- Failure modes: **2 critical gaps flagged**
+- Outside voice: **ran (codex-only)**
+- Parallelization: **3 lanes, 1 parallel handoff, 2 sequential stages**
+- Lake Score: **5/5 recommendations chose the complete option**
 
 ---
 # Historical Roadmap (M6–M10)
