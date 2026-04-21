@@ -3866,7 +3866,7 @@ local_tests:
     let json = parse_stdout_json(&output);
     let units = json["units"].as_array().unwrap();
     assert_eq!(units[0]["status"], "stale");
-    assert_eq!(units[0]["reason"], "contract changed since last test");
+    assert_eq!(units[0]["reason"], "authored truth changed since last test");
     assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
 }
 
@@ -4650,7 +4650,7 @@ local_tests:
     let json = parse_stdout_json(&output);
     let units = json["units"].as_array().unwrap();
     assert_eq!(units[0]["status"], "stale");
-    assert_eq!(units[0]["reason"], "contract changed since last test");
+    assert_eq!(units[0]["reason"], "authored truth changed since last test");
     assert_eq!(units[0]["evidence_at"], "2024-01-02T03:04:05Z");
 }
 
@@ -10326,10 +10326,14 @@ changes:
     acceptance:
       validate:
         - pricing/apply_tax
+        - pricing/calculate_total
+        - pricing/checkout_quote
       molecule_tests:
         - pricing/checkout_flow
+        - pricing/discount_plus_tax
+        - pricing/discount_policy_checkout_flow
       notes:
-        - "tiered-rate behavior is covered by checkout_flow"
+        - "current blast radius stays fully covered"
 notes:
   - "M10 plans are local-library only."
 "#;
@@ -10367,8 +10371,12 @@ changes:
     acceptance:
       validate:
         - pricing/apply_tax
+        - pricing/calculate_total
+        - pricing/checkout_quote
       molecule_tests:
         - pricing/checkout_flow
+        - pricing/discount_plus_tax
+        - pricing/discount_policy_checkout_flow
 "#;
 
 fn setup_m10_plan_fixture(
@@ -11284,7 +11292,10 @@ fn data_seam_status_stale_after_intent_change() {
         .find(|entry| entry["id"] == "pricing/checkout_quote")
         .expect("expected checkout_quote status row");
     assert_eq!(checkout_quote["status"], "stale");
-    assert_eq!(checkout_quote["reason"], "contract changed since last test");
+    assert_eq!(
+        checkout_quote["reason"],
+        "authored truth changed since last test"
+    );
 }
 
 #[test]
@@ -11626,7 +11637,7 @@ fn sum_seam_status_stale_after_intent_change() {
     assert_eq!(checkout_status["status"], "stale");
     assert_eq!(
         checkout_status["reason"],
-        "contract changed since last test"
+        "authored truth changed since last test"
     );
 }
 

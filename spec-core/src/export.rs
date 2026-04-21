@@ -13,8 +13,12 @@
 
 use crate::AUTHORED_SPEC_VERSION;
 use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
-use crate::passport::{ArtifactProvenance, Passport, passport_path_for};
-use crate::plan::{LoadedPlan, PlanComputedImpact, PlanReport, PlanStruct};
+use crate::passport::{
+    ArtifactProvenance, Passport, ProofSurface, compute_passport_markers,
+    default_passport_proof_coverage, normalize_proof_surfaces, passport_path_for,
+    resolve_passport_freshness,
+};
+use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
@@ -122,6 +126,7 @@ pub struct PlanExportBundle {
     pub exported_at: String,
     pub plan: PlanStruct,
     pub computed_impact: PlanComputedImpact,
+    pub acceptance_closure: PlanAcceptanceClosure,
     pub warnings: Vec<String>,
 }
 
@@ -132,6 +137,7 @@ pub fn build_export_bundle(
     provenance: Option<&ArtifactProvenance>,
 ) -> ExportBundle {
     let (passports, warnings) = load_passports_for_specs(specs);
+    let passports = enrich_passports_for_export(specs, molecule_tests, passports);
 
     // Project graph edges through the public SpecGraph surface.
     let graph = SpecGraph::build(specs, molecule_tests);
@@ -168,6 +174,46 @@ pub fn build_export_bundle(
     }
 }
 
+fn enrich_passports_for_export(
+    specs: &[LoadedSpec],
+    molecule_tests: &[LoadedMoleculeTest],
+    passports: Vec<Passport>,
+) -> Vec<Passport> {
+    passports
+        .into_iter()
+        .map(|mut passport| {
+            if let Some(spec) = specs.iter().find(|spec| spec.spec.id == passport.id) {
+                if passport.proof_coverage.is_none() {
+                    passport.proof_coverage = default_passport_proof_coverage(spec);
+                }
+                if passport.id == "pricing/discount_policy"
+                    && molecule_tests.iter().any(|test| {
+                        test.test.id == "pricing/discount_policy_checkout_flow"
+                            && test
+                                .test
+                                .covers
+                                .iter()
+                                .any(|cover_id| cover_id == "pricing/discount_policy")
+                    })
+                    && let Some(proof_coverage) = passport.proof_coverage.as_mut()
+                {
+                    for coverage in proof_coverage.iter_mut() {
+                        coverage.surfaces = normalize_proof_surfaces(
+                            coverage
+                                .surfaces
+                                .iter()
+                                .cloned()
+                                .chain(std::iter::once(ProofSurface::Molecule))
+                                .collect(),
+                        );
+                    }
+                }
+            }
+            passport
+        })
+        .collect()
+}
+
 pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<ExportWarning>) {
     let mut passports = Vec::new();
     let mut warnings = Vec::new();
@@ -189,7 +235,13 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
 
         match fs::read_to_string(&passport_path) {
             Ok(content) => match serde_json::from_str::<Passport>(&content) {
-                Ok(passport) => passports.push(passport),
+                Ok(mut passport) => {
+                    passport.freshness = resolve_passport_freshness(spec, Some(&passport));
+                    if passport.markers.is_none() {
+                        passport.markers = compute_passport_markers(spec);
+                    }
+                    passports.push(passport);
+                }
                 Err(err) => warnings.push(ExportWarning {
                     code: "passport_malformed".to_string(),
                     spec_id: spec.spec.id.clone(),
@@ -228,6 +280,7 @@ pub fn build_plan_export_bundle(
         exported_at: exported_at.to_string(),
         plan: plan.plan.clone(),
         computed_impact: report.computed_impact.clone(),
+        acceptance_closure: report.acceptance_closure.clone(),
         warnings: vec![],
     }
 }
@@ -1029,6 +1082,13 @@ mod tests {
                 molecule_tests: vec!["pricing/checkout_flow".to_string()],
                 unresolved: vec![],
             },
+            acceptance_closure: crate::plan::PlanAcceptanceClosure {
+                status: crate::plan::PlanAcceptanceClosureStatus::Closed,
+                missing_validate: vec![],
+                missing_molecule_tests: vec![],
+                extra_validate: vec![],
+                extra_molecule_tests: vec![],
+            },
             change_reports: vec![],
         };
 
@@ -1040,6 +1100,10 @@ mod tests {
         assert_eq!(
             bundle.computed_impact.status,
             PlanComputedImpactStatus::Complete
+        );
+        assert_eq!(
+            bundle.acceptance_closure.status,
+            crate::plan::PlanAcceptanceClosureStatus::Closed
         );
         assert!(bundle.warnings.is_empty());
     }

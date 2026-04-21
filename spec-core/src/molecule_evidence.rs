@@ -3,7 +3,10 @@
 //! Molecule evidence is intentionally separate from unit passports so unit health
 //! and molecule health remain independent trust planes.
 
-use crate::passport::{ArtifactProvenance, compute_contract_hash};
+use crate::passport::{
+    ArtifactProvenance, PassportFreshnessSnapshot, compute_contract_hash,
+    compute_passport_freshness_snapshot,
+};
 use crate::types::{LoadedMoleculeTest, LoadedSpec};
 use crate::{Result, SpecError};
 use serde::{Deserialize, Serialize};
@@ -50,6 +53,8 @@ pub struct MoleculeEvidence {
     pub observed_at: String,
     pub test_body_hash: String,
     pub covered_unit_contract_hashes: BTreeMap<String, Option<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub covered_unit_freshness: BTreeMap<String, PassportFreshnessSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provenance: Option<ArtifactProvenance>,
 }
@@ -133,6 +138,23 @@ pub fn covered_unit_contract_hashes_for_test(
     hashes
 }
 
+pub fn covered_unit_freshness_for_test(
+    test: &LoadedMoleculeTest,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> BTreeMap<String, PassportFreshnessSnapshot> {
+    let mut freshness_by_id = BTreeMap::new();
+    for cover_id in &test.test.covers {
+        freshness_by_id.insert(
+            cover_id.clone(),
+            specs_by_id
+                .get(cover_id)
+                .and_then(compute_passport_freshness_snapshot)
+                .unwrap_or_default(),
+        );
+    }
+    freshness_by_id
+}
+
 pub fn build_molecule_evidence(
     test: &LoadedMoleculeTest,
     status: MoleculeEvidenceStatus,
@@ -151,6 +173,7 @@ pub fn build_molecule_evidence(
         observed_at: observed_at.to_string(),
         test_body_hash: compute_molecule_test_body_hash(test),
         covered_unit_contract_hashes: covered_unit_contract_hashes_for_test(test, specs_by_id),
+        covered_unit_freshness: covered_unit_freshness_for_test(test, specs_by_id),
         provenance: provenance.cloned(),
     }
 }
@@ -162,6 +185,11 @@ pub fn molecule_evidence_is_stale(
 ) -> bool {
     if evidence.test_body_hash != compute_molecule_test_body_hash(test) {
         return true;
+    }
+
+    if !evidence.covered_unit_freshness.is_empty() {
+        return evidence.covered_unit_freshness
+            != covered_unit_freshness_for_test(test, specs_by_id);
     }
 
     evidence.covered_unit_contract_hashes
@@ -339,6 +367,13 @@ mod tests {
                 "pricing/apply_tax".to_string(),
                 Some("sha256:contract".to_string()),
             )]),
+            covered_unit_freshness: BTreeMap::from([(
+                "pricing/apply_tax".to_string(),
+                PassportFreshnessSnapshot {
+                    authored_truth_digest: Some("sha256:contract".to_string()),
+                    backend_execution_digest: None,
+                },
+            )]),
             provenance: None,
         };
 
@@ -406,6 +441,7 @@ mod tests {
             "pricing/apply_tax".to_string(),
             Some("sha256:old".to_string()),
         )]);
+        evidence.covered_unit_freshness.clear();
 
         assert!(molecule_evidence_is_stale(&evidence, &test, &specs_by_id));
     }
@@ -429,8 +465,37 @@ mod tests {
             "pricing/checkout_quote".to_string(),
             Some("sha256:old".to_string()),
         )]);
+        evidence.covered_unit_freshness.clear();
 
         assert!(molecule_evidence_is_stale(&evidence, &test, &specs_by_id));
+    }
+
+    #[test]
+    fn molecule_evidence_is_stale_when_covered_backend_execution_digest_changes() {
+        let test = loaded_test_covering("pricing/checkout_quote", "{ assert!(true); }");
+        let original = loaded_data_spec("pricing/checkout_quote", "original intent");
+        let mut changed = original.clone();
+        changed.spec.extensions.methods[0]
+            .lowering
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .body = "{ self.subtotal + 1 }".to_string();
+
+        let original_specs = HashMap::from([("pricing/checkout_quote".to_string(), original)]);
+        let changed_specs = HashMap::from([("pricing/checkout_quote".to_string(), changed)]);
+        let evidence = build_molecule_evidence(
+            &test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-17T00:00:00Z",
+            &original_specs,
+            None,
+        );
+
+        assert!(molecule_evidence_is_stale(&evidence, &test, &changed_specs));
     }
 
     #[test]

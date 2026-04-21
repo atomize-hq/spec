@@ -24,14 +24,17 @@ use spec_core::molecule_evidence::{
 };
 use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
-    ArtifactProvenance, PassportEvidence, PassportTestResult, build_passport_with_evidence,
-    compute_contract_hash, ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
+    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker, PassportTestResult,
+    build_passport_with_evidence, compute_contract_hash, compute_passport_markers,
+    ensure_gitignore_entry, read_passport, resolve_passport_freshness, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
     parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
 };
-use spec_core::plan::{PlanComputedImpact, build_plan_report};
+use spec_core::plan::{
+    PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
+};
 #[cfg(test)]
 use spec_core::types::ResolvedSpec;
 use spec_core::types::{
@@ -126,6 +129,8 @@ struct JsonValidateResponse {
     plan_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     computed_impact: Option<PlanComputedImpact>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acceptance_closure: Option<PlanAcceptanceClosure>,
 }
 
 #[derive(Serialize)]
@@ -156,6 +161,10 @@ struct JsonStatusEntry {
     errors: Vec<JsonErrorEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
     evidence_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    freshness: Option<PassportFreshness>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    markers: Option<Vec<PassportMarker>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -228,6 +237,7 @@ fn emit_json_validate_workspace_config_failure(err: &WorkspaceConfigError) -> Re
         warnings: vec![],
         plan_id: None,
         computed_impact: None,
+        acceptance_closure: None,
     })?;
     std::process::exit(1);
 }
@@ -690,6 +700,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
                 warnings,
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             };
             emit_json_validate_response(&response)?;
 
@@ -711,6 +722,7 @@ struct HealthStatus {
 fn compute_health_status(
     errors: &[JsonErrorEntry],
     passport: Option<&spec_core::passport::Passport>,
+    freshness: Option<&PassportFreshness>,
     live_hash: Option<&str>,
 ) -> HealthStatus {
     // 1. invalid
@@ -751,22 +763,32 @@ fn compute_health_status(
         }
     }
 
-    // 3. stale — contract hash changed since last test, including added/removed contracts.
-    //    Only fires when a passport exists (i.e. the unit has been tested before).
-    //    Without a passport there is nothing to compare against — falls through to untested.
-    let stored_hash = passport.and_then(|p| p.contract_hash.as_deref());
+    // 3. stale — authored/backend freshness changed since last test.
     if passport.is_some() {
-        let hash_changed = match (stored_hash, live_hash) {
-            (Some(stored), Some(live)) => stored != live,
-            (None, Some(_)) | (Some(_), None) => true, // contract added or removed since last test
-            (None, None) => false,
-        };
-        if hash_changed {
+        if let Some(reason) = freshness_stale_reason(freshness) {
             return HealthStatus {
                 status: HealthState::Stale,
-                reason: Some("contract changed since last test".to_string()),
+                reason: Some(reason),
                 evidence_at,
             };
+        }
+        if passport
+            .and_then(|passport| passport.freshness.as_ref())
+            .is_none()
+        {
+            let stored_hash = passport.and_then(|passport| passport.contract_hash.as_deref());
+            let hash_changed = match (stored_hash, live_hash) {
+                (Some(stored), Some(live)) => stored != live,
+                (None, Some(_)) | (Some(_), None) => true,
+                (None, None) => false,
+            };
+            if hash_changed {
+                return HealthStatus {
+                    status: HealthState::Stale,
+                    reason: Some("authored truth changed since last test".to_string()),
+                    evidence_at,
+                };
+            }
         }
     }
 
@@ -804,6 +826,26 @@ fn compute_health_status(
         status: HealthState::Valid,
         reason: None,
         evidence_at,
+    }
+}
+
+fn freshness_stale_reason(freshness: Option<&PassportFreshness>) -> Option<String> {
+    let freshness = freshness?;
+    match (
+        freshness.authored_truth_status,
+        freshness.backend_execution_status,
+    ) {
+        (
+            spec_core::passport::FreshnessStatus::Stale,
+            spec_core::passport::FreshnessStatus::Stale,
+        ) => Some("authored truth and backend execution changed since last test".to_string()),
+        (spec_core::passport::FreshnessStatus::Stale, _) => {
+            Some("authored truth changed since last test".to_string())
+        }
+        (_, spec_core::passport::FreshnessStatus::Stale) => {
+            Some("backend execution changed since last test".to_string())
+        }
+        _ => None,
     }
 }
 
@@ -1190,11 +1232,18 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                     None
                 }
             };
+            let freshness = resolve_passport_freshness(spec, passport.as_ref());
+            let markers = compute_passport_markers(spec);
             let live_hash = compute_contract_hash(spec);
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
-            let health = compute_health_status(&errors, passport.as_ref(), live_hash.as_deref());
+            let health = compute_health_status(
+                &errors,
+                passport.as_ref(),
+                freshness.as_ref(),
+                live_hash.as_deref(),
+            );
             if !health.status.is_valid() {
                 needs_nonzero_exit = true;
             }
@@ -1205,6 +1254,8 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 reason: health.reason,
                 errors,
                 evidence_at: health.evidence_at,
+                freshness,
+                markers,
             });
         }
 
@@ -1226,6 +1277,8 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                         reason: health.reason,
                         errors,
                         evidence_at: health.evidence_at,
+                        freshness: None,
+                        markers: None,
                     });
                     continue;
                 }
@@ -1241,6 +1294,8 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 reason: health.reason,
                 errors,
                 evidence_at: health.evidence_at,
+                freshness: None,
+                markers: None,
             });
         }
 
@@ -1479,6 +1534,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 warnings: vec![],
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             })?;
             std::process::exit(1);
         }
@@ -1495,6 +1551,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 warnings: vec![],
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             })?;
             std::process::exit(1);
         }
@@ -1515,6 +1572,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                     warnings: vec![],
                     plan_id: None,
                     computed_impact: None,
+                    acceptance_closure: None,
                 })?;
                 std::process::exit(1);
             }
@@ -1541,15 +1599,27 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             })?;
             std::process::exit(1);
         }
         Err(err) => return Err(err.into()),
     };
+    let has_plan_failures = matches!(
+        report.computed_impact.status,
+        spec_core::plan::PlanComputedImpactStatus::Partial
+    ) || matches!(
+        report.acceptance_closure.status,
+        PlanAcceptanceClosureStatus::Open
+    );
 
     match format {
         OutputFormat::Text => {
-            println!("✅ plan '{}' valid", report.plan_id);
+            if has_plan_failures {
+                println!("❌ plan '{}' invalid", report.plan_id);
+            } else {
+                println!("✅ plan '{}' valid", report.plan_id);
+            }
             println!(
                 "computed impact: {} unit{}, {} molecule test{}, {} unresolved",
                 report.computed_impact.units.len(),
@@ -1558,16 +1628,55 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 pluralize(report.computed_impact.molecule_tests.len()),
                 report.computed_impact.unresolved.len()
             );
+            if !report.acceptance_closure.missing_validate.is_empty() {
+                println!(
+                    "missing validate coverage: {}",
+                    report.acceptance_closure.missing_validate.join(", ")
+                );
+            }
+            if !report.acceptance_closure.missing_molecule_tests.is_empty() {
+                println!(
+                    "missing molecule coverage: {}",
+                    report.acceptance_closure.missing_molecule_tests.join(", ")
+                );
+            }
+            if !report.acceptance_closure.extra_validate.is_empty() {
+                println!(
+                    "extra validate coverage: {}",
+                    report.acceptance_closure.extra_validate.join(", ")
+                );
+            }
+            if !report.acceptance_closure.extra_molecule_tests.is_empty() {
+                println!(
+                    "extra molecule coverage: {}",
+                    report.acceptance_closure.extra_molecule_tests.join(", ")
+                );
+            }
+            if has_plan_failures {
+                std::process::exit(1);
+            }
             Ok(())
         }
-        OutputFormat::Json => emit_json_validate_response(&JsonValidateResponse {
-            schema_version: VALIDATE_JSON_SCHEMA_VERSION,
-            status: "valid",
-            errors: vec![],
-            warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
-            plan_id: Some(report.plan_id),
-            computed_impact: Some(report.computed_impact),
-        }),
+        OutputFormat::Json => {
+            let response = JsonValidateResponse {
+                schema_version: VALIDATE_JSON_SCHEMA_VERSION,
+                status: if has_plan_failures {
+                    "invalid"
+                } else {
+                    "valid"
+                },
+                errors: vec![],
+                warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
+                plan_id: Some(report.plan_id),
+                computed_impact: Some(report.computed_impact),
+                acceptance_closure: Some(report.acceptance_closure),
+            };
+            emit_json_validate_response(&response)?;
+            if has_plan_failures {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
     }
 }
 
@@ -1647,6 +1756,7 @@ fn emit_plan_validate_failure(
                 warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             };
             emit_json_validate_response(&response)?;
             std::process::exit(1);

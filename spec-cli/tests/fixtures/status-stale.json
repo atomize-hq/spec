@@ -7,9 +7,14 @@
         {
           "id": "pricing/apply_discount",
           "status": "stale",
-          "reason": "contract changed since last test",
+          "reason": "authored truth changed since last test",
           "errors": [],
-          "evidence_at": "2024-01-02T03:04:05Z"
+          "evidence_at": "2024-01-02T03:04:05Z",
+          "freshness": {
+            "authored_truth_digest": "sha256:6feb5def7c4ada9bfe851de461c9bbb3ec6e61466fecaa0031dd187c6e65793a",
+            "authored_truth_status": "stale",
+            "backend_execution_status": "unknown"
+          }
         }
       ],
       "molecule_tests": []
@@ -19,9 +24,14 @@
     {
       "id": "pricing/apply_discount",
       "status": "stale",
-      "reason": "contract changed since last test",
+      "reason": "authored truth changed since last test",
       "errors": [],
-      "evidence_at": "2024-01-02T03:04:05Z"
+      "evidence_at": "2024-01-02T03:04:05Z",
+      "freshness": {
+        "authored_truth_digest": "sha256:6feb5def7c4ada9bfe851de461c9bbb3ec6e61466fecaa0031dd187c6e65793a",
+        "authored_truth_status": "stale",
+        "backend_execution_status": "unknown"
+      }
     }
   ]
 }

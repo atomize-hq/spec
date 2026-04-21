@@ -8,14 +8,27 @@
     "pricing/apply_tax"
   ],
   "status": "pass",
-  "observed_at": "2026-04-21T17:24:38Z",
+  "observed_at": "2026-04-21T20:12:12Z",
   "test_body_hash": "sha256:98b1a7bc35a658227b147d9f6898bb54764ace9d2676abeb3dcbf3425874afe6",
   "covered_unit_contract_hashes": {
     "pricing/apply_tax": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df",
-    "pricing/checkout_quote": "sha256:695d9bfd431059f5d8c63d717f2953bd1a03db50a9b8c70309791d4b6d3bbefb",
-    "pricing/discount_policy": "sha256:0370d747e0c8be24f85161ba1a6a254d0bfaa31d021a393985d240fd169363fb"
+    "pricing/checkout_quote": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+    "pricing/discount_policy": "sha256:ef008ec2283a6fb5c51d12766a41ed81673ceb9f5e909d78eb058c8de7886b53"
+  },
+  "covered_unit_freshness": {
+    "pricing/apply_tax": {
+      "authored_truth_digest": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df"
+    },
+    "pricing/checkout_quote": {
+      "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+      "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205"
+    },
+    "pricing/discount_policy": {
+      "authored_truth_digest": "sha256:ef008ec2283a6fb5c51d12766a41ed81673ceb9f5e909d78eb058c8de7886b53",
+      "backend_execution_digest": "sha256:06039f3e8df3a5ebeb557763c70a82a999f315e054df964a4af0bf7fd531f2e1"
+    }
   },
   "provenance": {
-    "git_commit_sha": "6370731246f82f3d4e9ca73df20c1a515e0d5e1d"
+    "git_commit_sha": "ecbec463a79b9b626670f11d896a33b2a222c513"
   }
 }

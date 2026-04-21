@@ -5,7 +5,7 @@
   "warnings": [],
   "plan_id": "checkout-tax-refactor",
   "computed_impact": {
-    "status": "partial",
+    "status": "complete",
     "units": [
       "pricing/apply_tax",
       "pricing/calculate_total",
@@ -16,12 +16,13 @@
       "pricing/discount_plus_tax",
       "pricing/discount_policy_checkout_flow"
     ],
-    "unresolved": [
-      {
-        "unit": "pricing/tiered_rate",
-        "action": "add",
-        "reason": "current graph has no node for action=add"
-      }
-    ]
+    "unresolved": []
+  },
+  "acceptance_closure": {
+    "status": "closed",
+    "missing_validate": [],
+    "missing_molecule_tests": [],
+    "extra_validate": [],
+    "extra_molecule_tests": []
   }
 }
