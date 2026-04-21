@@ -349,6 +349,22 @@ fn validate_keyword_segment(segment: &str, authored: &str, file_path: &str) -> R
     Ok(())
 }
 
+fn validate_projected_rust_identifier(
+    spec: &LoadedSpec,
+    field: &str,
+    authored: &str,
+    projected: &str,
+) -> Result<()> {
+    syn::parse_str::<syn::Ident>(projected).map_err(|_| {
+        semantic_error(
+            spec,
+            format!("{field} '{authored}' projects to invalid Rust identifier '{projected}'"),
+        )
+    })?;
+
+    Ok(())
+}
+
 fn has_dep_ref_collision(deps: &[DepRef]) -> Option<(&DepRef, &DepRef)> {
     for (i, first) in deps.iter().enumerate() {
         for second in &deps[i + 1..] {
@@ -630,6 +646,12 @@ fn validate_sum_variants(spec: &LoadedSpec) -> Result<Vec<ValidatedSumVariant>> 
 
         validate_keyword_segment(variant_id, variant_id, &spec.source.file_path)?;
         let variant_name = type_name_for_identifier(variant_id);
+        validate_projected_rust_identifier(
+            spec,
+            &format!("sum.variants[{index}].id"),
+            variant_id,
+            &variant_name,
+        )?;
         if variant_name == enum_name {
             return Err(semantic_error(
                 spec,
@@ -2328,6 +2350,30 @@ local_tests:
         );
         assert!(err.contains("quoted_total"), "{err}");
         assert!(err.contains("quoted__total"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_sum_semantic_rejects_projected_invalid_rust_identifier() {
+        let mut spec = create_sum_spec("pricing/checkout_status");
+        let sum = spec.spec.extensions.sum.as_mut().unwrap();
+        let variant = sum.variants.shift_remove("pending").unwrap();
+        sum.variants.insert("self_".to_string(), variant);
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(err.contains("sum.variants[1].id"), "{err}");
+        assert!(err.contains("'self_'"), "{err}");
+        assert!(err.contains("'Self'"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_sum_semantic_allows_projected_pascal_case_keyword_like_name() {
+        let mut spec = create_sum_spec("pricing/checkout_status");
+        let sum = spec.spec.extensions.sum.as_mut().unwrap();
+        let variant = sum.variants.shift_remove("pending").unwrap();
+        sum.variants.insert("super_".to_string(), variant);
+
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
     }
 
     #[test]

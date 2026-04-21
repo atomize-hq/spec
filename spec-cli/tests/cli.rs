@@ -11437,6 +11437,91 @@ fn sum_seam_cli_validate_build_status_export_round_trip() {
 }
 
 #[test]
+fn sum_seam_validate_rejects_projected_invalid_rust_identifier_as_semantic_error() {
+    let (_temp_dir, project_dir) = setup_m13_sum_seam_project();
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_status.unit.spec",
+        &format!(
+            r#"
+id: pricing/checkout_status
+kind: sum
+intent:
+  why: Exercise M13 projected identifier validation.
+spec_version: "{AUTHORED_SPEC_VERSION}"
+sum:
+  variants:
+    self_: {{}}
+    quoted_total:
+      fields:
+        subtotal:
+          type: i32
+methods:
+  - id: rounded_total
+    intent:
+      why: Return the rounded subtotal for quoted totals.
+    receiver: shared_ref
+    contract:
+      returns: i32
+    lowering:
+      rust:
+        body: |
+          {{
+              match self {{
+                  CheckoutStatus::Self => 0,
+                  CheckoutStatus::QuotedTotal {{ subtotal }} => *subtotal,
+              }}
+          }}
+local_tests:
+  - id: quoted_total_rounds
+    expect: "CheckoutStatus::QuotedTotal {{ subtotal: 2 }}.rounded_total() == 2"
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+      - PartialEq
+"#
+        ),
+    );
+
+    let output = run_in(
+        &project_dir,
+        &[
+            "validate",
+            "units/pricing/checkout_status.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(!output.status.success(), "validate should fail");
+    assert!(
+        output.stderr.is_empty(),
+        "expected no stderr, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["status"], "invalid");
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "expected one semantic error");
+
+    let error = &errors[0];
+    assert_eq!(error["code"], "SPEC_SEMANTIC_VALIDATION");
+    assert_eq!(error["unit"], "pricing/checkout_status");
+    assert_eq!(error["path"], "units/pricing/checkout_status.unit.spec");
+    let message = error["message"].as_str().unwrap();
+    assert!(
+        message.contains("sum.variants[0].id"),
+        "unexpected error payload: {error:?}"
+    );
+    assert!(
+        message.contains("'Self'"),
+        "unexpected error payload: {error:?}"
+    );
+}
+
+#[test]
 fn sum_seam_single_file_test_accepts_cross_library_method_dep_with_cargo_alias() {
     if !cargo_available() {
         return;
