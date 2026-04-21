@@ -26,7 +26,7 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 - A passport is the co-located `.spec.passport.json` record for a unit. It is "done" only when the unit validates, builds, tests, and has fresh passport evidence from `spec test`.
 - A stale unit is marked with `~` in `spec status` when the passport's stored contract hash no longer matches the current spec contract. Treat stale as work to redo, not as success.
 - For molecule tests, run `spec test path/to/file.test.spec` to execute only that interaction test and refresh only its co-located `.test.evidence.json` artifact.
-- For `kind: data`, keep shared seam semantics in `data.fields`, `constructors`, and `methods`. Do not author top-level `contract`, `deps`, `imports`, or `body.rust`.
+- For seam kinds, keep shared semantics inside the seam container and nested behaviors: `kind: data` uses `data.fields`, `constructors`, and `methods`; `kind: sum` uses `sum.variants` and `methods`. Do not author top-level `contract`, `deps`, `imports`, or `body.rust` for seam kinds.
 - Canonical M13 wedge loop:
   `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json`
   `cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated`

@@ -52,7 +52,7 @@ spec generate examples/ecommerce/units
 Each unit is a YAML document with these common required fields:
 
 - `id`: hierarchical unit id like `pricing/apply_discount`
-- `kind`: authored unit shape, currently `function` or `data`
+- `kind`: authored unit shape, currently `function`, `data`, or `sum`
 - `intent.why`: why the unit exists
 
 Kind-specific authored fields:
@@ -61,6 +61,7 @@ Kind-specific authored fields:
 | --- | --- | --- | --- |
 | `function` | `contract`, `body.rust` | `deps`, `imports`, `local_tests`, `links` | none |
 | `data` | `data.fields`, one or more `constructors`, one or more `methods` | `local_tests`, `links`, `backends.rust` | `contract`, `deps`, `imports`, `body.rust` |
+| `sum` | `sum.variants`, one or more `methods` | `local_tests`, `links`, `backends.rust` | `contract`, `deps`, `imports`, `body.rust`, `constructors` |
 
 For `kind: function`, `spec` generates the complete `pub fn` signature from `contract.inputs` and `contract.returns`. A minimal unit with a contract looks like:
 
@@ -159,6 +160,8 @@ backends:
 ```
 
 `kind: data` keeps shared semantics in `data.fields`, `constructors`, and `methods`. Rust-specific lowering stays inside `methods[].lowering.rust.body` and `backends.rust`.
+
+`kind: sum` follows the same seam boundary: keep shared semantics in `sum.variants` and `methods`. Enum cases are authored via `sum.variants`, not `constructors`. Rust-specific lowering stays inside `methods[].lowering.rust.body` and `backends.rust`.
 
 ## Migrating from 0.2.x
 
