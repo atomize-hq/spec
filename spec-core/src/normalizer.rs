@@ -2,7 +2,10 @@
 //!
 //! The legacy `normalize_spec` helper remains function-only for current callers.
 
-use crate::types::{NormalizedDataSeam, NormalizedUnit, ResolvedSpec, SpecStruct, is_rust_keyword};
+use crate::types::{
+    NormalizedDataSeam, NormalizedSumSeam, NormalizedUnit, ResolvedSpec, SpecStruct,
+    is_rust_keyword,
+};
 use crate::{Result, SpecError};
 
 pub fn normalize_unit(mut spec: SpecStruct) -> Result<NormalizedUnit> {
@@ -23,6 +26,12 @@ pub fn normalize_unit(mut spec: SpecStruct) -> Result<NormalizedUnit> {
                 message,
                 path: String::new(),
             }),
+        crate::types::UnitKind::Sum => NormalizedSumSeam::from_spec(spec)
+            .map(NormalizedUnit::Sum)
+            .map_err(|message| SpecError::SemanticValidation {
+                message,
+                path: String::new(),
+            }),
     }
 }
 
@@ -33,7 +42,7 @@ pub fn normalize_spec(mut spec: SpecStruct) -> Result<ResolvedSpec> {
         path: String::new(),
     })? {
         crate::types::UnitKind::Function => Ok(ResolvedSpec::from_spec(spec)),
-        crate::types::UnitKind::Data => Err(SpecError::SemanticValidation {
+        crate::types::UnitKind::Data | crate::types::UnitKind::Sum => Err(SpecError::SemanticValidation {
             message: "normalize_spec only supports kind: function; use normalize_unit for kind-aware dispatch".to_string(),
             path: String::new(),
         }),
@@ -93,7 +102,11 @@ fn validate_canonical_id(id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{AuthoredDataShape, AuthoredField, Body, Intent, UnitExtensions};
+    use crate::types::{
+        AuthoredDataShape, AuthoredField, AuthoredMethod, AuthoredMethodLowering,
+        AuthoredRustMethodLowering, AuthoredSumShape, AuthoredSumVariant, Body, Contract, Intent,
+        UnitExtensions,
+    };
     use indexmap::IndexMap;
 
     fn make_spec(id: &str) -> SpecStruct {
@@ -170,6 +183,68 @@ mod tests {
                 assert_eq!(unit.fields.len(), 1);
             }
             other => panic!("expected data unit, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn normalize_unit_supports_sum_seams() {
+        let mut spec = make_spec(" pricing/checkout_status ");
+        spec.kind = "sum".to_string();
+        spec.body = Body::default();
+        spec.extensions = UnitExtensions {
+            sum: Some(AuthoredSumShape {
+                variants: IndexMap::from([
+                    (
+                        "pending".to_string(),
+                        AuthoredSumVariant {
+                            fields: IndexMap::new(),
+                        },
+                    ),
+                    (
+                        "quoted_total".to_string(),
+                        AuthoredSumVariant {
+                            fields: IndexMap::from([(
+                                "subtotal".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            )]),
+                        },
+                    ),
+                ]),
+            }),
+            methods: vec![AuthoredMethod {
+                id: "label".to_string(),
+                intent: Intent {
+                    why: "Expose a stable label.".to_string(),
+                },
+                receiver: "shared_ref".to_string(),
+                contract: Some(Contract {
+                    inputs: None,
+                    returns: Some("&'static str".to_string()),
+                    invariants: vec![],
+                }),
+                deps: vec![],
+                lowering: Some(AuthoredMethodLowering {
+                    rust: Some(AuthoredRustMethodLowering {
+                        body: "{ match self { Self::Pending => \"pending\", Self::QuotedTotal { .. } => \"quoted_total\" } }".to_string(),
+                    }),
+                }),
+            }],
+            ..UnitExtensions::default()
+        };
+
+        let normalized = normalize_unit(spec).unwrap();
+        match normalized {
+            NormalizedUnit::Sum(unit) => {
+                assert_eq!(unit.id, "pricing/checkout_status");
+                assert_eq!(unit.enum_name, "CheckoutStatus");
+                assert_eq!(unit.variants.len(), 2);
+                assert_eq!(unit.variants[0].variant_name, "Pending");
+                assert_eq!(unit.variants[1].variant_name, "QuotedTotal");
+                assert_eq!(unit.methods.len(), 1);
+            }
+            other => panic!("expected sum unit, got {other:?}"),
         }
     }
 }

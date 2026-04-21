@@ -303,6 +303,7 @@ mod tests {
                         }),
                     }],
                     backends: None,
+                    sum: None,
                 },
             },
         }

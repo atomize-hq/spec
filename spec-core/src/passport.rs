@@ -492,6 +492,7 @@ mod tests {
                             derives: vec!["Clone".to_string(), "Debug".to_string()],
                         }),
                     }),
+                    sum: None,
                 },
             },
         }

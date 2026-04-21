@@ -102,7 +102,7 @@ pub enum ProjectedUnitRef<'a> {
 pub fn project_unit(unit: ProjectedUnitRef<'_>) -> UnitProjection {
     match unit {
         ProjectedUnitRef::Loaded(spec) => match spec.spec.unit_kind() {
-            Ok(UnitKind::Data) => UnitProjection::new(
+            Ok(UnitKind::Data) | Ok(UnitKind::Sum) => UnitProjection::new(
                 projected_data_method_deps(
                     spec.spec
                         .extensions
@@ -123,6 +123,9 @@ pub fn project_unit(unit: ProjectedUnitRef<'_>) -> UnitProjection {
                 function_cover_import_paths(&spec.id, &spec.imports),
             ),
             NormalizedUnit::Data(unit) => {
+                UnitProjection::new(unit.deps.clone(), vec![data_cover_import_path(&unit.id)])
+            }
+            NormalizedUnit::Sum(unit) => {
                 UnitProjection::new(unit.deps.clone(), vec![data_cover_import_path(&unit.id)])
             }
         },
@@ -320,9 +323,9 @@ mod tests {
     use super::*;
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
-        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Body, Contract,
-        Intent, Links, MoleculeTestSource, MoleculeTestStruct, SpecSource, SpecStruct,
-        UnitExtensions,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
+        AuthoredSumVariant, Body, Contract, Intent, Links, MoleculeTestSource, MoleculeTestStruct,
+        SpecSource, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
 
@@ -476,6 +479,78 @@ mod tests {
                             derives: vec!["Clone".to_string()],
                         }),
                     }),
+                    sum: None,
+                },
+            },
+        }
+    }
+
+    fn make_loaded_sum_seam(id: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: format!("{id}.unit.spec"),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "sum".to_string(),
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
+                contract: None,
+                deps: vec!["legacy/ignored".to_string()],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![],
+                links: None,
+                spec_version: None,
+                extensions: UnitExtensions {
+                    data: None,
+                    sum: Some(AuthoredSumShape {
+                        variants: IndexMap::from([
+                            (
+                                "pending".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::new(),
+                                },
+                            ),
+                            (
+                                "quoted_total".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([(
+                                        "subtotal".to_string(),
+                                        AuthoredField {
+                                            type_: "Decimal".to_string(),
+                                        },
+                                    )]),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![],
+                    methods: vec![AuthoredMethod {
+                        id: "label".to_string(),
+                        intent: Intent {
+                            why: "Return a label".to_string(),
+                        },
+                        receiver: "shared_ref".to_string(),
+                        contract: Some(Contract {
+                            inputs: None,
+                            returns: Some("&'static str".to_string()),
+                            invariants: vec![],
+                        }),
+                        deps: vec!["pricing/apply_tax".to_string()],
+                        lowering: Some(AuthoredMethodLowering {
+                            rust: Some(AuthoredRustMethodLowering {
+                                body: "{ \"pending\" }".to_string(),
+                            }),
+                        }),
+                    }],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec!["Clone".to_string()],
+                        }),
+                    }),
                 },
             },
         }
@@ -541,6 +616,13 @@ mod tests {
                 "pricing/apply_tax".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn top_level_deps_uses_sum_method_deps() {
+        let seam = make_loaded_sum_seam("pricing/checkout_status");
+
+        assert_eq!(top_level_deps(&seam), vec!["pricing/apply_tax".to_string()]);
     }
 
     #[test]

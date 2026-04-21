@@ -7,10 +7,12 @@
 use crate::graph::top_level_deps;
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
-    Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec, MethodReceiver,
-    QualifiedUnitRef, UnitKind, callable_name, has_callable_collision, ordered_unique_deps,
+    AuthoredField, Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec,
+    MethodReceiver, QualifiedUnitRef, UnitKind, callable_name, has_callable_collision,
+    ordered_unique_deps, type_name_for_identifier, type_name_for_unit_id,
 };
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
+use indexmap::IndexMap;
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
 use std::collections::{HashMap, HashSet};
@@ -195,6 +197,7 @@ pub fn validate_semantic_with_options(
     {
         UnitKind::Function => validate_function_semantic(spec, options),
         UnitKind::Data => validate_data_semantic(spec, options),
+        UnitKind::Sum => validate_sum_semantic(spec, options),
     }
 }
 
@@ -273,10 +276,20 @@ fn validate_data_semantic(spec: &LoadedSpec, options: &ValidationOptions) -> Res
     validate_data_escape_hatches(spec)?;
     validate_data_fields(spec)?;
     validate_data_behavior_presence(spec)?;
-    validate_data_rust_backend(spec)?;
+    validate_seam_rust_backend(spec)?;
     let constructors = validate_data_constructors(spec)?;
-    let methods = validate_data_methods(spec)?;
+    let methods = validate_seam_methods(spec, "data")?;
     validate_data_seam_collisions(spec, &constructors, &methods)?;
+    validate_local_test_expects(spec, options)?;
+    Ok(())
+}
+
+fn validate_sum_semantic(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
+    validate_sum_escape_hatches(spec)?;
+    let variants = validate_sum_variants(spec)?;
+    validate_seam_rust_backend(spec)?;
+    let methods = validate_seam_methods(spec, "sum")?;
+    validate_sum_seam_collisions(spec, &variants, &methods)?;
     validate_local_test_expects(spec, options)?;
     Ok(())
 }
@@ -364,6 +377,13 @@ struct ValidatedDataMethod {
     index: usize,
     id: String,
     deps: Vec<ValidatedMethodDep>,
+}
+
+#[derive(Debug, Clone)]
+struct ValidatedSumVariant {
+    index: usize,
+    id: String,
+    variant_name: String,
 }
 
 fn validate_local_test_expects(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
@@ -463,28 +483,79 @@ fn validate_data_escape_hatches(spec: &LoadedSpec) -> Result<()> {
     Ok(())
 }
 
-fn validate_data_fields(spec: &LoadedSpec) -> Result<()> {
-    let Some(data) = spec.spec.extensions.data.as_ref() else {
-        return Err(semantic_error(spec, "kind:data requires data.fields"));
-    };
+fn validate_sum_escape_hatches(spec: &LoadedSpec) -> Result<()> {
+    if spec.spec.contract.is_some() {
+        return Err(semantic_error(
+            spec,
+            "kind:sum must not use top-level contract; shared seam semantics belong in sum.variants and methods",
+        ));
+    }
+    if !spec.spec.deps.is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:sum must not use top-level deps; attach deps to individual methods instead",
+        ));
+    }
+    if !spec.spec.imports.is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:sum must not use top-level imports; Rust-specific escape hatches are limited to methods[].lowering.rust.body and backends.rust.derives",
+        ));
+    }
+    if !spec.spec.body.rust.trim().is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:sum must leave body.rust empty; shared seam behavior belongs in methods[].lowering.rust.body",
+        ));
+    }
+    if spec.spec.extensions.data.is_some() {
+        return Err(semantic_error(
+            spec,
+            "kind:sum must not declare data.fields; sum seams own variants instead",
+        ));
+    }
+    if !spec.spec.extensions.constructors.is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:sum must not declare constructors; enum cases are authored via sum.variants",
+        ));
+    }
 
-    for (name, field) in &data.fields {
+    Ok(())
+}
+
+fn validate_named_fields(
+    spec: &LoadedSpec,
+    fields: &IndexMap<String, AuthoredField>,
+    field_root: &str,
+) -> Result<()> {
+    for (name, field) in fields {
         validate_keyword_segment(name, name, &spec.source.file_path)?;
         syn::parse_str::<syn::Ident>(name).map_err(|_| {
             semantic_error(
                 spec,
-                format!("data.fields.{name} must use a snake_case identifier (e.g. subtotal)"),
+                format!("{field_root}.{name} must use a snake_case identifier (e.g. subtotal)"),
             )
         })?;
         syn::parse_str::<syn::Type>(&field.type_).map_err(|err| {
             SpecError::ContractTypeInvalid {
-                field: format!("data.fields.{name}.type"),
+                field: format!("{field_root}.{name}.type"),
                 type_str: field.type_.clone(),
                 message: err.to_string(),
                 path: spec.source.file_path.clone(),
             }
         })?;
     }
+
+    Ok(())
+}
+
+fn validate_data_fields(spec: &LoadedSpec) -> Result<()> {
+    let Some(data) = spec.spec.extensions.data.as_ref() else {
+        return Err(semantic_error(spec, "kind:data requires data.fields"));
+    };
+
+    validate_named_fields(spec, &data.fields, "data.fields")?;
 
     Ok(())
 }
@@ -506,7 +577,7 @@ fn validate_data_behavior_presence(spec: &LoadedSpec) -> Result<()> {
     Ok(())
 }
 
-fn validate_data_rust_backend(spec: &LoadedSpec) -> Result<()> {
+fn validate_seam_rust_backend(spec: &LoadedSpec) -> Result<()> {
     let derives = spec
         .spec
         .extensions
@@ -528,6 +599,71 @@ fn validate_data_rust_backend(spec: &LoadedSpec) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn validate_sum_variants(spec: &LoadedSpec) -> Result<Vec<ValidatedSumVariant>> {
+    let Some(sum) = spec.spec.extensions.sum.as_ref() else {
+        return Err(semantic_error(spec, "kind:sum requires sum.variants"));
+    };
+    if sum.variants.is_empty() {
+        return Err(semantic_error(
+            spec,
+            "kind:sum requires at least one sum.variants entry",
+        ));
+    }
+
+    let enum_name = type_name_for_unit_id(&spec.spec.id);
+    let mut seen_ids = HashSet::new();
+    let mut seen_variant_names: HashMap<String, (usize, String)> = HashMap::new();
+    let mut variants = Vec::new();
+
+    for (index, (variant_id, variant)) in sum.variants.iter().enumerate() {
+        if !seen_ids.insert(variant_id.as_str()) {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "duplicate sum variant id '{}' at sum.variants[{index}]",
+                    variant_id
+                ),
+            ));
+        }
+
+        validate_keyword_segment(variant_id, variant_id, &spec.source.file_path)?;
+        let variant_name = type_name_for_identifier(variant_id);
+        if variant_name == enum_name {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "sum.variants[{index}].id '{}' projects to Rust variant name '{variant_name}', which conflicts with the emitted enum name '{enum_name}'",
+                    variant_id
+                ),
+            ));
+        }
+        if let Some((first_index, first_id)) =
+            seen_variant_names.insert(variant_name.clone(), (index, variant_id.clone()))
+        {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "sum.variants[{index}].id '{}' projects to Rust variant name '{variant_name}', which conflicts with sum.variants[{first_index}].id '{}'",
+                    variant_id, first_id
+                ),
+            ));
+        }
+
+        validate_named_fields(
+            spec,
+            &variant.fields,
+            &format!("sum.variants[{index}].fields"),
+        )?;
+        variants.push(ValidatedSumVariant {
+            index,
+            id: variant_id.clone(),
+            variant_name,
+        });
+    }
+
+    Ok(variants)
 }
 
 fn validate_data_constructors(spec: &LoadedSpec) -> Result<Vec<ValidatedDataConstructor>> {
@@ -630,7 +766,10 @@ fn validate_data_constructors(spec: &LoadedSpec) -> Result<Vec<ValidatedDataCons
     Ok(constructors)
 }
 
-fn validate_data_methods(spec: &LoadedSpec) -> Result<Vec<ValidatedDataMethod>> {
+fn validate_seam_methods(
+    spec: &LoadedSpec,
+    seam_kind: &'static str,
+) -> Result<Vec<ValidatedDataMethod>> {
     let mut seen_ids = HashSet::new();
     let owner_callable_name = callable_name(&spec.spec.id);
     let mut methods = Vec::new();
@@ -648,8 +787,8 @@ fn validate_data_methods(spec: &LoadedSpec) -> Result<Vec<ValidatedDataMethod>> 
             semantic_error(
                 spec,
                 format!(
-                    "methods[{index}].receiver uses unsupported mode '{}'; only 'shared_ref' is supported in M12",
-                    method.receiver
+                    "methods[{index}].receiver uses unsupported mode '{}'; only 'shared_ref' is supported for kind:{seam_kind}",
+                    method.receiver,
                 ),
             )
         })?;
@@ -657,7 +796,7 @@ fn validate_data_methods(spec: &LoadedSpec) -> Result<Vec<ValidatedDataMethod>> 
         let contract = method.contract.as_ref().ok_or_else(|| {
             semantic_error(
                 spec,
-                format!("methods[{index}].contract is required for kind:data"),
+                format!("methods[{index}].contract is required for kind:{seam_kind}"),
             )
         })?;
         validate_contract_types(
@@ -719,7 +858,9 @@ fn validate_data_methods(spec: &LoadedSpec) -> Result<Vec<ValidatedDataMethod>> 
             .ok_or_else(|| {
                 semantic_error(
                     spec,
-                    format!("methods[{index}].lowering.rust.body must be provided for kind:data"),
+                    format!(
+                        "methods[{index}].lowering.rust.body must be provided for kind:{seam_kind}"
+                    ),
                 )
             })?;
         syn::parse_str::<syn::Block>(rust_body).map_err(|err| {
@@ -758,6 +899,44 @@ fn validate_data_seam_collisions(
                 format!(
                     "constructors[{}].id '{}' conflicts with methods[{}].id '{}'",
                     constructor.index, constructor.id, method.index, method.id
+                ),
+            ));
+        }
+    }
+
+    let seam_deps = ordered_unique_deps(
+        methods
+            .iter()
+            .flat_map(|method| method.deps.iter().map(|dep| dep.authored.as_str())),
+    );
+    let seam_dep_refs = parse_dep_refs(&seam_deps).map_err(|err| invalid_dep_error(err, spec))?;
+    if let Some((dep1, dep2)) = has_dep_ref_collision(&seam_dep_refs) {
+        return Err(SpecError::DepCollision {
+            dep1: dep1.authored().to_string(),
+            dep2: dep2.authored().to_string(),
+            fn_name: dep1.callable_name().to_string(),
+            path: spec.source.file_path.clone(),
+        });
+    }
+
+    Ok(())
+}
+
+fn validate_sum_seam_collisions(
+    spec: &LoadedSpec,
+    variants: &[ValidatedSumVariant],
+    methods: &[ValidatedDataMethod],
+) -> Result<()> {
+    let mut seen_variant_names: HashMap<&str, (&str, usize)> = HashMap::new();
+    for variant in variants {
+        if let Some((first_id, first_index)) =
+            seen_variant_names.insert(variant.variant_name.as_str(), (&variant.id, variant.index))
+        {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "sum.variants[{}].id '{}' projects to Rust variant name '{}', which conflicts with sum.variants[{}].id '{}'",
+                    variant.index, variant.id, variant.variant_name, first_index, first_id,
                 ),
             ));
         }
@@ -1198,9 +1377,9 @@ mod tests {
     use super::*;
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
-        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Body, Contract,
-        Intent, LocalTest, MoleculeTestSource, MoleculeTestStruct, QualifiedUnitRef, SpecSource,
-        SpecStruct, UnitExtensions,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
+        AuthoredSumVariant, Body, Contract, Intent, LocalTest, MoleculeTestSource,
+        MoleculeTestStruct, QualifiedUnitRef, SpecSource, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
 
@@ -1330,6 +1509,77 @@ mod tests {
                             derives: vec!["Clone".to_string(), "Debug".to_string()],
                         }),
                     }),
+                    sum: None,
+                },
+            },
+        }
+    }
+
+    fn create_sum_spec(id: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: format!("test/{}.unit.spec", id),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "sum".to_string(),
+                intent: Intent {
+                    why: format!("Test sum seam for {}", id),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![],
+                links: None,
+                spec_version: None,
+                extensions: UnitExtensions {
+                    sum: Some(AuthoredSumShape {
+                        variants: IndexMap::from([
+                            (
+                                "pending".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::new(),
+                                },
+                            ),
+                            (
+                                "quoted_total".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([(
+                                        "subtotal".to_string(),
+                                        AuthoredField {
+                                            type_: "Decimal".to_string(),
+                                        },
+                                    )]),
+                                },
+                            ),
+                        ]),
+                    }),
+                    methods: vec![AuthoredMethod {
+                        id: "label".to_string(),
+                        intent: Intent {
+                            why: "Return a stable label".to_string(),
+                        },
+                        receiver: "shared_ref".to_string(),
+                        contract: Some(Contract {
+                            inputs: None,
+                            returns: Some("&'static str".to_string()),
+                            invariants: vec![],
+                        }),
+                        deps: vec![],
+                        lowering: Some(AuthoredMethodLowering {
+                            rust: Some(AuthoredRustMethodLowering {
+                                body: "{ match self { Self::Pending => \"pending\", Self::QuotedTotal { .. } => \"quoted_total\" } }".to_string(),
+                            }),
+                        }),
+                    }],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec!["Clone".to_string(), "Debug".to_string()],
+                        }),
+                    }),
+                    ..UnitExtensions::default()
                 },
             },
         }
@@ -1480,6 +1730,52 @@ methods:
         assert!(
             result.is_ok(),
             "Expected kind:data body placeholder to pass schema validation: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_validate_raw_yaml_accepts_kind_sum_shape_without_placeholder_body() {
+        let yaml = r#"
+id: pricing/checkout_status
+kind: sum
+intent:
+  why: Track checkout state.
+sum:
+  variants:
+    pending: {}
+    quoted_total:
+      fields:
+        subtotal:
+          type: Decimal
+methods:
+  - id: label
+    intent:
+      why: Return a stable label.
+    receiver: shared_ref
+    contract:
+      returns: "&'static str"
+    lowering:
+      rust:
+        body: |
+          {
+              match self {
+                  Self::Pending => "pending",
+                  Self::QuotedTotal { .. } => "quoted_total",
+              }
+          }
+backends:
+  rust:
+    derives:
+      - Clone
+      - Debug
+"#;
+        let value: YamlValue = serde_yaml_bw::from_str(yaml).unwrap();
+
+        let result = validate_raw_yaml(&value, "test.unit.spec");
+        assert!(
+            result.is_ok(),
+            "Expected valid kind:sum shape to pass schema validation: {:?}",
             result
         );
     }
@@ -2006,6 +2302,53 @@ local_tests:
 
         let result = validate_semantic(&spec);
         assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn test_validate_sum_semantic_valid_spec() {
+        let spec = create_sum_spec("pricing/checkout_status");
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn test_validate_sum_semantic_rejects_projected_variant_name_collision() {
+        let mut spec = create_sum_spec("pricing/checkout_status");
+        spec.spec
+            .extensions
+            .sum
+            .as_mut()
+            .unwrap()
+            .variants
+            .insert(
+                "quoted__total".to_string(),
+                AuthoredSumVariant {
+                    fields: IndexMap::new(),
+                },
+            );
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("projects to Rust variant name 'QuotedTotal'"),
+            "{err}"
+        );
+        assert!(err.contains("quoted_total"), "{err}");
+        assert!(err.contains("quoted__total"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_sum_semantic_rejects_variant_name_collision_with_enum_name() {
+        let mut spec = create_sum_spec("pricing/checkout_status");
+        let sum = spec.spec.extensions.sum.as_mut().unwrap();
+        let variant = sum.variants.shift_remove("pending").unwrap();
+        sum.variants
+            .insert("checkout_status".to_string(), variant);
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("conflicts with the emitted enum name 'CheckoutStatus'"),
+            "{err}"
+        );
     }
 
     #[test]
