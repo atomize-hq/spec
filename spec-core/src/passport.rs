@@ -8,7 +8,8 @@
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
 use crate::types::{
-    AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, LoadedSpec, UnitKind,
+    AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
+    LoadedSpec, UnitKind,
 };
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,8 @@ pub struct Passport {
     pub contract: Option<PassportContract>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<AuthoredDataShape>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sum: Option<AuthoredSumShape>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constructors: Vec<AuthoredConstructor>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -115,7 +118,7 @@ pub fn build_passport_with_evidence(
     evidence: Option<PassportEvidence>,
     contract_hash: Option<String>,
 ) -> Passport {
-    let is_data_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data));
+    let is_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum));
     let contract = spec.spec.contract.as_ref().map(|c| PassportContract {
         inputs: c
             .inputs
@@ -140,10 +143,11 @@ pub fn build_passport_with_evidence(
             .clone()
             .unwrap_or_else(|| AUTHORED_SPEC_VERSION.to_string()),
         id: spec.spec.id.clone(),
-        kind: is_data_seam.then(|| spec.spec.kind.clone()),
+        kind: is_seam.then(|| spec.spec.kind.clone()),
         intent: spec.spec.intent.why.clone(),
         contract,
         data: spec.spec.extensions.data.clone(),
+        sum: spec.spec.extensions.sum.clone(),
         constructors: spec.spec.extensions.constructors.clone(),
         methods: spec.spec.extensions.methods.clone(),
         backends: spec.spec.extensions.backends.clone(),
@@ -173,6 +177,15 @@ struct DataSeamHashSurface<'a> {
     backends: Option<&'a AuthoredBackends>,
 }
 
+#[derive(Serialize)]
+struct SumSeamHashSurface<'a> {
+    intent: &'a str,
+    sum: Option<&'a AuthoredSumShape>,
+    constructors: &'a [AuthoredConstructor],
+    methods: &'a [AuthoredMethod],
+    backends: Option<&'a AuthoredBackends>,
+}
+
 /// Compute SHA-256 of the unit's top-level truth surface.
 ///
 /// Function units hash only the legacy top-level `contract` surface.
@@ -187,6 +200,14 @@ pub fn compute_contract_hash(spec: &LoadedSpec) -> Option<String> {
             backends: spec.spec.extensions.backends.as_ref(),
         })
         .expect("data seam hash serialization cannot fail for well-formed spec"),
+        Ok(UnitKind::Sum) => serde_json::to_string(&SumSeamHashSurface {
+            intent: &spec.spec.intent.why,
+            sum: spec.spec.extensions.sum.as_ref(),
+            constructors: &spec.spec.extensions.constructors,
+            methods: &spec.spec.extensions.methods,
+            backends: spec.spec.extensions.backends.as_ref(),
+        })
+        .expect("sum seam hash serialization cannot fail for well-formed spec"),
         _ => {
             let contract = spec.spec.contract.as_ref()?;
             serde_json::to_string(contract)
@@ -343,8 +364,9 @@ mod tests {
     use super::*;
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
-        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Body, Contract,
-        Intent, LocalTest, SpecSource, SpecStruct, UnitExtensions,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
+        AuthoredSumVariant, Body, Contract, Intent, LocalTest, SpecSource, SpecStruct,
+        UnitExtensions,
     };
     use indexmap::IndexMap;
     use tempfile::TempDir;
@@ -498,6 +520,115 @@ mod tests {
         }
     }
 
+    fn make_loaded_sum_seam(id: &str, file_path: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: file_path.to_string(),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "sum".to_string(),
+                intent: Intent {
+                    why: format!("Why {id}"),
+                },
+                contract: None,
+                deps: vec!["legacy/ignored".to_string()],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![LocalTest {
+                    id: "label_basic".to_string(),
+                    expect: "CheckoutStatus::Pending.label() == \"pending\"".to_string(),
+                }],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions {
+                    data: None,
+                    sum: Some(AuthoredSumShape {
+                        variants: IndexMap::from([
+                            (
+                                "pending".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::new(),
+                                },
+                            ),
+                            (
+                                "quoted_total".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([
+                                        (
+                                            "subtotal".to_string(),
+                                            AuthoredField {
+                                                type_: "i32".to_string(),
+                                            },
+                                        ),
+                                        (
+                                            "tax_rate".to_string(),
+                                            AuthoredField {
+                                                type_: "i32".to_string(),
+                                            },
+                                        ),
+                                    ]),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![],
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "label".to_string(),
+                            intent: Intent {
+                                why: "Return a variant label".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("&'static str".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_discount".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ \"pending\" }".to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "total".to_string(),
+                            intent: Intent {
+                                why: "Return a computed total".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("i32".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![
+                                "pricing/apply_discount".to_string(),
+                                "pricing/apply_tax".to_string(),
+                            ],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ 0 }".to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec![
+                                "Clone".to_string(),
+                                "Debug".to_string(),
+                                "PartialEq".to_string(),
+                            ],
+                        }),
+                    }),
+                },
+            },
+        }
+    }
+
     #[test]
     fn build_passport_full_contract() {
         let mut inputs = IndexMap::new();
@@ -584,6 +715,42 @@ mod tests {
         assert_eq!(
             passport.backends.unwrap().rust.unwrap().derives,
             vec!["Clone".to_string(), "Debug".to_string()]
+        );
+        assert_eq!(passport.local_tests.len(), 1);
+    }
+
+    #[test]
+    fn build_passport_sum_seam_serializes_top_level_truth_only() {
+        let spec = make_loaded_sum_seam(
+            "pricing/checkout_status",
+            "units/pricing/checkout_status.unit.spec",
+        );
+
+        let passport = build_passport(&spec, "2026-04-19T00:00:00Z");
+
+        assert_eq!(passport.kind, Some("sum".to_string()));
+        assert!(passport.contract.is_none());
+        assert_eq!(
+            passport.deps,
+            vec![
+                "pricing/apply_discount".to_string(),
+                "pricing/apply_tax".to_string(),
+            ]
+        );
+        let variants = passport.sum.unwrap().variants;
+        assert_eq!(
+            variants.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec!["pending", "quoted_total"]
+        );
+        assert_eq!(variants["quoted_total"].fields["subtotal"].type_, "i32");
+        assert_eq!(passport.methods.len(), 2);
+        assert_eq!(
+            passport.backends.unwrap().rust.unwrap().derives,
+            vec![
+                "Clone".to_string(),
+                "Debug".to_string(),
+                "PartialEq".to_string(),
+            ]
         );
         assert_eq!(passport.local_tests.len(), 1);
     }
@@ -741,6 +908,79 @@ mod tests {
         );
         let mut spec_changed = spec_original.clone();
         spec_changed.spec.intent.why = "Changed seam intent".to_string();
+
+        assert_ne!(
+            compute_contract_hash(&spec_original),
+            compute_contract_hash(&spec_changed)
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_present_for_sum_seam() {
+        let spec = make_loaded_sum_seam(
+            "pricing/checkout_status",
+            "units/pricing/checkout_status.unit.spec",
+        );
+
+        assert!(
+            compute_contract_hash(&spec).is_some(),
+            "sum seams must write a top-level truth hash"
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_changes_on_sum_seam_variant_reorder() {
+        let spec_original = make_loaded_sum_seam(
+            "pricing/checkout_status",
+            "units/pricing/checkout_status.unit.spec",
+        );
+        let mut spec_reordered = spec_original.clone();
+        spec_reordered.spec.extensions.sum = Some(AuthoredSumShape {
+            variants: IndexMap::from([
+                (
+                    "quoted_total".to_string(),
+                    AuthoredSumVariant {
+                        fields: IndexMap::from([
+                            (
+                                "subtotal".to_string(),
+                                AuthoredField {
+                                    type_: "i32".to_string(),
+                                },
+                            ),
+                            (
+                                "tax_rate".to_string(),
+                                AuthoredField {
+                                    type_: "i32".to_string(),
+                                },
+                            ),
+                        ]),
+                    },
+                ),
+                (
+                    "pending".to_string(),
+                    AuthoredSumVariant {
+                        fields: IndexMap::new(),
+                    },
+                ),
+            ]),
+        });
+
+        assert_ne!(
+            compute_contract_hash(&spec_original),
+            compute_contract_hash(&spec_reordered)
+        );
+    }
+
+    #[test]
+    fn test_contract_hash_changes_on_sum_seam_method_truth_change() {
+        let spec_original = make_loaded_sum_seam(
+            "pricing/checkout_status",
+            "units/pricing/checkout_status.unit.spec",
+        );
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.extensions.methods[1]
+            .deps
+            .push("money/round".to_string());
 
         assert_ne!(
             compute_contract_hash(&spec_original),
