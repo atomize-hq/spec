@@ -1,46 +1,61 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260416-194312.md -->
-# M12 — Orthogonal Core + Rust Data Seam
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260420-223206.md -->
+# M13 — Orthogonal Core + Sum Seam
 
-Status: **Implementation-ready** (2026-04-19). Source strategy is the approved design at
-`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-design-20260419-095932.md` plus the
-engineering test-plan artifact at
-`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-eng-review-test-plan-20260419-105826.md`,
-with the CEO review tightening folded directly into this section.
+Status: **Draft, CEO phase written** (2026-04-20). Source strategy is the fresh post-M12
+office-hours design at
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-design-20260420-220723.md`, the earlier
+M13-focused shape study at
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-design-20260420-215839.md`, and the
+shipped M12 seam architecture already present in `spec-core/src/types.rs`,
+`spec-core/src/validator.rs`, `spec-core/src/generator.rs`, and `spec-cli/src/commands.rs`.
 
-This milestone is not "full Rust support". That slogan is how you end up building a language
-cathedral before a user gets a better workflow. M12 proves one real seam:
+This milestone is not "full enum support." That is how you quietly hand Rust the ontology again.
+M13 proves one second seam shape:
 
-1. one authored semantic data seam in one `.unit.spec` file
-2. lowered to one Rust `struct + impl`
+1. one authored semantic **sum seam** in one `.unit.spec` file
+2. lowered to one Rust `enum + impl`
 3. tracked as one top-level truth surface for validate, build, test, status, export, and passport
-4. anchored by one canonical migration of a real pricing seam that is more governable for an
-   agent than the raw Rust file version
+4. anchored by one canonical migration of a real pricing choice seam that is more governable for
+   an agent than the raw Rust file version
+5. wrapped in one explicit post-M13 decision gate so the next milestone is chosen by evidence,
+   not roadmap momentum
+
+UI scope: **no**. This is a CLI/type-system milestone. Any design-review false positives from the
+word `form` or `render` in old roadmap text do not count.
 
 ---
 
 ## Milestone Summary
 
 ```text
-M12a  Shared seam model + kind dispatch      required
-M12b  Schema + validator for `kind: data`    required
-M12c  Rust lowering + generation             required
-M12d  Seam-level passport/status/export      required
-M12e  Canonical migration example + docs     required
+M13a  Preflight hardening + compatibility gate   required
+M13b  Shared sum model + schema/validator        required
+M13c  Rust lowering + enum generation            required
+M13d  Seam-level truth surfaces stay honest      required
+M13e  Canonical migration wedge + docs           required
+M13f  Post-M13 decision gate                     required
 ```
 
-**Lake to boil in M12**
-- `spec` stops being function-shaped only and can author one real data seam with nested behavior.
-- The new seam is orthogonal by construction: shared semantics first, Rust lowering second.
-- The canonical example is a migration of one real pricing seam, not a toy syntax demo.
+**Lake to boil in M13**
+- `spec` proves the core again with a second seam kind, not wider Rust item coverage.
+- The new seam is orthogonal by construction: explicit shared variant semantics first, Rust enum
+  lowering second.
+- The canonical example is a migration of one real pricing choice seam, not a toy `Result<T, E>`
+  demo.
 - The user-outcome test is explicit: the migrated seam must be easier for an agent to inspect,
-  modify, validate, and prove than the raw-file version.
+  branch on, modify, validate, and prove than the raw Rust file version.
+- M13 must leave the project with a cleaner next question: second-backend readiness or
+  truth-surface/governance refinement.
 
-**Explicitly not in M12**
-- traits, enums, generic bounds, macros, visibility matrices, or arbitrary module item soup
-- nested constructors/methods as first-class graph, status, or passport nodes
+**Explicitly not in M13**
+- full Rust enum breadth: tuple variants, generic bounds, visibility policy, macros, reprs,
+  trait impl authoring, pattern-matching DSLs, custom derives beyond the existing backend escape
+  hatch shape
+- nested variant behaviors as first-class graph nodes, status rows, or passports
 - second-language backends
-- cross-library seam identity
-- truth-surface redesign beyond additive seam support where the code forces it
+- cross-library seam identity changes
+- semantic evals / contract-vs-body scoring
+- reverse ingestion, retrieval, or repo intelligence
 
 ---
 
@@ -48,136 +63,297 @@ M12e  Canonical migration example + docs     required
 
 ### The User Job
 
-- A Rust user can migrate one real pricing module seam from freehand Rust into one authored
-  semantic seam and keep the normal `spec validate -> spec build -> spec test -> spec status`
-  loop.
-- An AI agent can read one file and see the seam's fields, constructor contract, method contracts,
-  local tests, and Rust-specific lowering details without inferring those facts from arbitrary
-  module text.
-- The system stays honest about what is and is not first-class: the seam is tracked as one node
-  now, and nested behaviors stay explicit-but-nested until a later milestone earns promotion.
+- A Rust user can migrate one real **choice-like** pricing seam from freehand Rust into one
+  authored semantic seam and keep the normal
+  `spec validate -> spec build -> spec test -> spec status` loop.
+- An AI agent can read one file and see variants, payloads, method signatures, local tests, and
+  Rust-specific lowering details without reverse-engineering branching semantics from arbitrary
+  `match` blocks.
+- The system stays honest about what is and is not first-class: the sum seam is tracked as one
+  node now, and variant-local behavior stays nested until a later milestone earns promotion.
+
+### Actual Buyer + Painful Workflow
+
+Primary buyer for this milestone: the AI-heavy Rust maintainer who owns pricing or policy logic
+and wants agents to make safe edits without spelunking through arbitrary enum branches by hand.
+
+Painful workflow M13 is trying to improve:
+
+1. find the hand-written Rust enum or branching policy surface
+2. infer which variants matter, what payload they carry, and which methods branch on them
+3. change the logic without breaking unrelated paths
+4. prove the edit with the normal trust loop
+
+If M13 cannot make that workflow materially faster or safer, it should fail honestly. The point is
+not "another seam kind exists." The point is "real branching policy edits get easier to author,
+inspect, and verify."
+
+### Premise Challenge
+
+1. **Is this the right problem to solve?** Yes, if the real question after M12 is whether the
+   authored core generalizes. No, if the team mainly needs cleanup or external multi-language
+   proof right now. The current repo state points to "prove the core again," not "cleanup only"
+   and not "ship a second backend now."
+2. **What is the actual user outcome?** A user or agent can author and trust a second semantic
+   shape, one built around mutually exclusive states or strategies, without falling back to raw
+   Rust for the important branching structure.
+3. **What happens if we do nothing?** The project stalls in an awkward middle ground: M12 could be
+   a clever one-off seam, and the roadmap would still be guessing whether the shared model is real.
 
 ### What Already Exists
 
-| Sub-problem | Existing surface | Reuse in M12 |
+| Sub-problem | Existing surface | Reuse in M13 |
 |---|---|---|
-| Function-unit validation/build/test/status loop | `spec-cli/src/commands.rs`, `spec-core/src/validator.rs`, `spec-core/src/generator.rs`, `spec-core/src/passport.rs` | Reuse the current command loop and truth surfaces. M12 adds one seam kind to that loop instead of inventing a second pipeline. |
-| Unit-level truth surfaces | `spec-core/src/passport.rs`, `spec-cli/src/commands.rs` health/status logic | Reuse seam-level passport/status semantics. Do not create nested behavior passports or status rows in M12. |
-| Declared graph + impact | `spec-core/src/graph.rs` | Reuse the existing top-level unit graph contract exactly. The new seam contributes one top-level node, not per-method graph nodes. |
-| Molecule coverage model | `.test.spec` plus `covers` edges and `*.test.evidence.json` | Reuse end-to-end example verification. The canonical migrated seam should slot into the current molecule-test story, not bypass it. |
-| Canonical pricing domain | `examples/ecommerce/units/pricing/*`, `examples/ecommerce/README.md` | Reuse the existing pricing domain as the migration wedge. It already teaches price calculation and gives M12 a believable user story. |
+| Kind-aware authored unit parsing | `spec-core/src/types.rs` (`UnitKind`, `NormalizedUnit`, authored extensions) | Add one new top-level kind alongside `function` and `data`. Do not invent a parallel loader. |
+| Kind-aware semantic validation | `spec-core/src/validator.rs` dispatches `UnitKind::Function` vs `UnitKind::Data` | Extend the same dispatch model to `sum` instead of creating a special-case side pipeline. |
+| Rust lowering split | `spec-core/src/generator.rs` already lowers `NormalizedDataSeam` into `RustDataSeamLowering` | Mirror the same ownership split for a Rust enum seam. |
+| Seam-level truth surfaces | `spec-cli/src/commands.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs` | Reuse the current top-level unit passport/status/export posture. Do not promote variants yet. |
+| Canonical migration pattern | `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs`, `examples/ecommerce/units/pricing/checkout_quote.unit.spec`, `examples/ecommerce/README.md` | Reuse the side-by-side raw-Rust vs migrated-spec teaching pattern. |
+| Molecule evidence model | `.test.spec`, `*.test.evidence.json`, molecule status plane | Reuse the same end-to-end proof strategy for the new sum seam. |
 
 ### Minimum Change Set
 
-The smallest complete M12 is:
+The smallest complete M13 is:
 
-1. Add one new authored seam kind, `kind: data`, in the existing `.unit.spec` file family.
-2. Split data ownership cleanly:
-   - raw authored data seam
+1. Add one new authored seam kind, `kind: sum`, in the existing `.unit.spec` family.
+2. Split ownership cleanly:
+   - raw authored sum seam
    - normalized shared semantic seam
-   - Rust lowering representation
-3. Centralize seam-kind dispatch so validator, generator, export, and passport/status logic branch
-   once on kind instead of scattering ad hoc checks everywhere.
-4. Lower one shared data seam into one Rust `struct + impl`, with explicit constructors and
-   inherent methods.
+   - Rust enum lowering representation
+3. Centralize seam-kind dispatch so parser, validator, generator, export, and passport/status
+   branch once on kind instead of scattering enum-specific checks everywhere.
+4. Lower one shared sum seam into one Rust `enum + impl`.
 5. Keep seam truth at one top-level tracked unit ID.
-6. Ship one canonical migrated pricing seam with raw-Rust baseline, generated Rust output, local
-   tests, molecule coverage, and docs that teach the migration story.
+6. Ship one canonical migrated pricing choice seam with raw-Rust baseline, generated Rust output,
+   local tests, molecule coverage, and docs that teach the migration story.
+7. Add one explicit post-M13 decision gate so M14 is chosen by observed pressure, not vibes.
 
-### Opinionated Recommendation
+### Dream State Mapping
 
-Do the complete version. Do not bolt Rust item kinds onto the current function-native
-`ResolvedSpec`, do not hide shared meaning inside `body.rust`, and do not ship a "look, a struct"
-demo without a real migration wedge.
+```text
+CURRENT STATE                  THIS PLAN                        12-MONTH IDEAL
+M12 proves one record-like     M13 proves one choice-like      `spec` owns a small set of
+seam (`kind: data`) and        seam (`kind: sum`) on the       shared semantic seam kinds
+keeps seam truth top-level.    same truth surfaces and         that lower cleanly to Rust
+                               canonical-example pattern.      and at least one second target.
+                                                              Next work is governance or a
+                                                              second backend, not ontology rescue.
+```
+
+### Implementation Alternatives
+
+```text
+APPROACH A: Trust-First Consolidation
+  Summary: Spend M13 only on M12 hardening, docs, examples, escape-hatch policy, and fixture
+           coverage. Do not add a new seam kind yet.
+  Effort:  M
+  Risk:    Low
+  Pros:    Lowest implementation risk
+           Improves teaching surface immediately
+           Keeps trust loop stable
+  Cons:    Learns very little about core durability
+           Risks indefinite cleanup mode
+           Leaves the roadmap question unresolved
+  Reuses:  Current M12 seam, current example, current truth surfaces
+
+APPROACH B: Orthogonal Sum Seam
+  Summary: Add one shared sum seam kind, lower it to Rust enums, and prove it with one real
+           pricing migration wedge while keeping seam truth top-level.
+  Effort:  L
+  Risk:    Medium
+  Pros:    Best proof that M12 was a real core milestone
+           Stronger agent story around state and branching
+           Keeps Rust in the proving-ground role
+  Cons:    Exposes new truth-surface pressure
+           Needs strict not-in-scope discipline
+           Touches more core files than a trust-only pass
+  Reuses:  M12 kind-aware normalization/lowering split, CLI loop, canonical-example pattern
+
+APPROACH C: Second Backend Pilot
+  Summary: Keep the authored model mostly as-is and spend M13 on another target language for the
+           existing function and data seams.
+  Effort:  XL
+  Risk:    High
+  Pros:    Fastest external multi-language story
+           Forces the lowering boundary to get real
+  Cons:    High risk of exporting M12 assumptions into another target
+           Adds distribution/support burden too early
+           Muddies whether failures are core-model or backend failures
+  Reuses:  Existing authored shapes, current export/passport story
+
+APPROACH D: Workflow / Migration-First Trust Proving
+  Summary: Skip a new seam kind for now. Focus on migration ergonomics, reverse-authoring aids,
+           or policy-review workflows around existing Rust enums and branching code.
+  Effort:  M-L
+  Risk:    Medium
+  Pros:    More directly tied to user workflow pain
+           Clarifies whether ontology expansion is really the bottleneck
+           Could strengthen the moat around trust + migration UX
+  Cons:    Pressures the workflow but not the authored core itself
+           Risks postponing the core-generalization question again
+           Could devolve into tooling glue without a clearer semantic model
+  Reuses:  Existing CLI loop, current examples, existing review/export/evidence surfaces
+```
+
+**Recommendation:** Choose **Approach B**. It is the complete but still bounded proof point. M12
+already proved the first seam shape. M13 should prove the second one before spending backend
+budget, but the workflow-first alternative is now explicit and can be rejected on the record
+instead of being silently absent.
+
+### Mode Selection
+
+Autoplan default: **SELECTIVE EXPANSION**.
+
+Complexity check: this milestone necessarily crosses more than 8 files because seam kinds touch
+schema, types, validator, generator, export, passport/status wiring, tests, examples, and docs.
+That is not fluff. It is the actual blast radius of a truth-surface milestone.
+
+Accepted scope under selective expansion:
+- add one new authored sum seam kind
+- include a bounded preflight hardening pack inside the milestone
+- include one explicit post-M13 decision gate in the plan
+
+Deferred to `TODOS.md`, not M13:
+- nested behavior promotion criteria beyond the sum-seam evidence we gather here
+- second-backend execution
+- semantic evals / contract-vs-body scoring
+- reverse ingestion / repo intelligence
 
 ---
 
 ## Locked Boundary
 
-- M12 adds exactly one new authored top-level kind: `kind: data`.
-- The file extension stays `.unit.spec`. M12 is a new authored shape inside the current unit file
+- M13 adds exactly one new authored top-level kind: `kind: sum`.
+- The file extension stays `.unit.spec`. M13 is a new authored shape inside the current unit file
   family, not a parallel artifact type.
-- One data seam file owns one top-level unit ID such as `pricing/checkout_quote`.
-- Constructors and methods are explicit nested behaviors inside that seam file, but they are not
-  first-class graph nodes, status rows, or passports in M12.
+- One sum seam file owns one top-level unit ID such as `pricing/discount_policy`.
+- Variants are explicit nested members of that seam file, but they are not first-class graph
+  nodes, status rows, or passports in M13.
 - Shared semantic meaning must be authored in explicit fields:
-  - seam fields
-  - constructor signatures and initialization mapping
+  - variant IDs
+  - variant payload fields
   - method receiver mode
   - method signatures
 - Rust-specific authored details are allowed only in namespaced lowering blocks and optional
   backend escape hatches. They may affect lowering only, not shared semantics.
-- M12 keeps passport/status/export changes additive-only where possible. If the code can support
-  the seam without changing a truth surface, do not widen that surface just because it feels neat.
-- The canonical example is a migration of one real pricing seam in `examples/ecommerce`, not a
-  greenfield geometry or blog-post object.
+- M13 keeps passport/status/export changes additive-only where possible. If the code can support
+  the seam without widening a truth surface, do not widen it just because enums feel special.
+- The canonical example is a migration of one real pricing choice seam in `examples/ecommerce`,
+  not a greenfield ADT showcase.
 
 ---
 
-## Authored Schema (`kind: data`)
+## Canonical Migration Wedge
+
+### Chosen seam
+
+Use `pricing/discount_policy` as the M13 migration wedge.
+
+Why this wedge:
+- It is real pricing logic, not a tutorial prop.
+- It pressures the core with mutually exclusive variants and payloads.
+- It keeps the domain next to the M12 `checkout_quote` seam, so the example remains teachable.
+- It is cross-language in shape. "No discount / percentage / fixed amount" is not Rust-native
+  ontology.
+
+### Adversarial calibration
+
+`pricing/discount_policy` is the **teachable** wedge, not the only wedge.
+
+M13 must also include one adversarial calibration pass before schema lock:
+- scan the repo and immediate target domain for the ugliest real branching surface available
+- score candidate wedges by business frequency, failure cost, and branching complexity
+- record why `discount_policy` still wins, or replace it if a materially harsher wedge exists
+
+If only the teachable wedge works and the adversarial wedge collapses into escape hatches, that is
+evidence against the ontology-expansion thesis, not a detail to hand-wave away.
+
+### Raw Rust baseline
+
+The baseline should be one hand-written Rust enum in `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs`:
+
+```rust
+use rust_decimal::Decimal;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DiscountPolicy {
+    None,
+    Percentage { rate: Decimal },
+    FixedAmount { amount: Decimal },
+}
+
+impl DiscountPolicy {
+    pub fn discount_amount(&self, subtotal: Decimal) -> Decimal {
+        match self {
+            Self::None => Decimal::ZERO,
+            Self::Percentage { rate } => subtotal * *rate,
+            Self::FixedAmount { amount } => (*amount).min(subtotal),
+        }
+    }
+
+    pub fn discounted_subtotal(&self, subtotal: Decimal) -> Decimal {
+        subtotal - self.discount_amount(subtotal)
+    }
+}
+```
+
+### Authored Schema (`kind: sum`)
 
 The first cut should be boringly explicit:
 
 ```yaml
-id: pricing/checkout_quote
-kind: data
+id: pricing/discount_policy
+kind: sum
 intent:
-  why: Quote a checkout total from subtotal plus discount and tax rates.
-data:
-  fields:
-    subtotal:
-      type: rust_decimal::Decimal
-    discount_rate:
-      type: rust_decimal::Decimal
-    tax_rate:
-      type: rust_decimal::Decimal
-constructors:
-  - id: new
+  why: Represent mutually exclusive discount strategies for checkout pricing.
+sum:
+  variants:
+    none: {}
+    percentage:
+      fields:
+        rate:
+          type: rust_decimal::Decimal
+    fixed_amount:
+      fields:
+        amount:
+          type: rust_decimal::Decimal
+methods:
+  - id: discount_amount
     intent:
-      why: Create a quote from explicit subtotal and rates.
+      why: Return the discount amount to subtract from the subtotal.
+    receiver: shared_ref
     contract:
       inputs:
         subtotal: rust_decimal::Decimal
-        discount_rate: rust_decimal::Decimal
-        tax_rate: rust_decimal::Decimal
-    initializes:
-      subtotal: subtotal
-      discount_rate: discount_rate
-      tax_rate: tax_rate
-methods:
+      returns: rust_decimal::Decimal
+    deps: []
+    lowering:
+      rust:
+        body: |
+          {
+              match self {
+                  Self::None => rust_decimal::Decimal::ZERO,
+                  Self::Percentage { rate } => subtotal * *rate,
+                  Self::FixedAmount { amount } => (*amount).min(subtotal),
+              }
+          }
   - id: discounted_subtotal
     intent:
-      why: Return the discounted subtotal before tax.
+      why: Return the subtotal after applying the selected discount strategy.
     receiver: shared_ref
     contract:
+      inputs:
+        subtotal: rust_decimal::Decimal
       returns: rust_decimal::Decimal
-    deps:
-      - pricing/apply_discount
     lowering:
       rust:
         body: |
           {
-              apply_discount(self.subtotal, self.discount_rate)
-          }
-  - id: total
-    intent:
-      why: Return the final checkout total after discount and tax.
-    receiver: shared_ref
-    contract:
-      returns: rust_decimal::Decimal
-    deps:
-      - pricing/apply_discount
-      - pricing/apply_tax
-    lowering:
-      rust:
-        body: |
-          {
-              let discounted = apply_discount(self.subtotal, self.discount_rate);
-              apply_tax(discounted, self.tax_rate)
+              subtotal - self.discount_amount(subtotal)
           }
 local_tests:
-  - id: total_basic
-    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
+  - id: fixed_amount_caps_at_subtotal
+    expect: DiscountPolicy::FixedAmount { amount: rust_decimal::Decimal::new(2000, 2) }.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO
 backends:
   rust:
     derives:
@@ -186,36 +362,36 @@ backends:
       - PartialEq
 ```
 
-`kind: data` forbids top-level `imports`, so shared seam field and contract types must be fully qualified in the authored spec itself.
+`kind: sum` follows the same M12 rule as `kind: data`: shared seam field and contract types must
+be fully qualified in the authored spec itself. No top-level `imports`.
 
 ### Authoring Rules
 
 - `id`, `kind`, and `intent.why` stay required for all unit kinds.
-- `kind: data` requires `data.fields`.
-- `data.fields` is an ordered map keyed by field name. Each field requires `type`.
-- Constructors are explicit nested behaviors. In the first cut, constructor initialization is
-  declarative: `initializes.<field> = <input-name>`.
-- Methods are explicit nested behaviors with:
+- `kind: sum` requires `sum.variants`.
+- `sum.variants` is an ordered map keyed by variant name.
+- Each variant may be unit-like (`{}`) or payload-bearing via `fields`.
+- The first cut supports **named payload fields only**. No tuple variants.
+- Methods remain seam-owned nested behaviors with:
   - `id`
   - `intent.why`
   - `receiver`
   - `contract`
   - optional `deps`
   - backend lowering block
-- The first cut supports `receiver: shared_ref` only. Mutation and ownership transfer stay out of
-  scope until the shared model proves itself.
+- The first cut supports `receiver: shared_ref` only.
 - `local_tests` remain seam-owned and compile inside the generated seam's `#[cfg(test)]` module.
 - `backends.rust` is optional and additive only. The first cut supports `derives` there and
   nothing that can redefine shared meaning.
 
 ### Explicit Deferrals
 
-- No field defaults in M12. Constructors make initialization explicit and avoid forcing literal or
-  default-expression policy into the first shared model.
-- No shared field-level invariants in M12. The authored shape should get real behavior and truth
-  surfaces first. Invariants can land after the seam shape proves useful.
-- No user-authored arbitrary Rust constructor bodies in M12. Constructor semantics stay
-  declarative so the shared model owns initialization shape.
+- No tuple variants in M13.
+- No shared pattern-matching DSL in M13. Branch behavior still lives in backend lowering blocks.
+- No variant-specific passports, status rows, or graph edges.
+- No mutation or ownership-transfer receiver modes.
+- No custom user-authored trait impls, reprs, or visibility policy.
+- No exhaustiveness-checking surface beyond normal schema/validator requirements.
 
 ---
 
@@ -223,34 +399,37 @@ backends:
 
 ### Ownership Split
 
-M12 only stays orthogonal if each layer has one job.
+M13 only stays orthogonal if each layer has one job.
 
 | Layer | Purpose | Must own | Must not own |
 |---|---|---|---|
 | Raw authored form | Parse YAML into kind-aware authored structs | exact authored shape, file-facing schema, kind dispatch input | normalization shortcuts, Rust generation details |
-| Normalized shared seam | shared semantic truth for one data seam | field list, constructor signatures + init mapping, method signatures, seam-owned local tests | Rust `struct` syntax, derives, text emission |
-| Rust lowering form | Rust-specific projection of the normalized seam | struct name, field list in Rust form, impl blocks, generated helper names, derives | source-of-truth semantics or hidden overrides |
+| Normalized shared seam | shared semantic truth for one sum seam | variant list, payload fields, method signatures, seam-owned local tests | Rust enum syntax, derives, emitted `match` text |
+| Rust lowering form | Rust-specific projection of the normalized seam | enum name, Rust variant casing, impl blocks, derives | source-of-truth semantics or hidden overrides |
 
 ### Type Direction
 
-The current function path stays intact, but it cannot remain the only IR shape.
+The current function/data path stays intact, but it cannot remain the only richer IR shape.
 
 ```text
 AuthoredUnit
   ├── FunctionUnitSpec (existing)
-  └── DataSeamSpec (new)
+  ├── DataSeamSpec     (existing)
+  └── SumSeamSpec      (new)
 
 NormalizedUnit
-  ├── NormalizedFunctionUnit (existing function path)
-  └── NormalizedDataSeam (new shared seam)
+  ├── Function(ResolvedSpec)
+  ├── Data(NormalizedDataSeam)
+  └── Sum(NormalizedSumSeam)
 
 RustLoweredUnit
   ├── RustFunctionLowering
-  └── RustDataSeamLowering
+  ├── RustDataSeamLowering
+  └── RustSumSeamLowering
 ```
 
 **Locked architecture rule:** do not keep stretching the current function-native `ResolvedSpec`
-until it secretly becomes a data seam carrier. That is just Rust-first expansion in a trench coat.
+until it secretly becomes an enum carrier. That is just Rust-first expansion again.
 
 ### Dispatch Rule
 
@@ -258,828 +437,358 @@ Centralize seam-kind dispatch in one place per subsystem:
 
 - schema/parser dispatch once on `kind`
 - validator dispatch once on normalized unit kind
-- generator/lowering dispatch once on normalized unit kind
-- export/passport/status treat both kinds as top-level units and should not grow scattered
-  `if kind == "data"` branches around the codebase
+- generator dispatch once on normalized unit kind
+- export/passport/status use existing top-level unit surfaces and project kind-aware contract data
+  through them
 
-### Truth Surface Rule
+### Truth Surfaces
 
-- `spec validate/build/test/status/export` continue to work at the top-level unit seam.
-- One `pricing/checkout_quote.spec.passport.json` records the seam, not separate constructor or
-  method passports.
-- `SpecGraph` sees one node for `pricing/checkout_quote`.
-- Molecule tests cover the seam ID, not nested behavior IDs.
+M13 keeps the same high-level promise as M12:
 
-This is the deliberate reduced-scope decision. The promotion path for nested behaviors already
-lives in `TODOS.md`; M12 should not smuggle that future into this implementation.
+- one `.unit.spec` source file
+- one top-level unit ID
+- one passport record
+- one status row
+- one export unit entry
 
----
+The sum seam may contain multiple variants and multiple methods, but those stay nested until real
+usage proves seam-level tracking too coarse.
 
-## Canonical Migration Wedge
+### System Architecture
 
-The canonical example should migrate one real pricing seam, not synthesize a cute demo object.
+```text
+authored .unit.spec
+    │
+    ▼
+raw loader + schema check
+    │
+    ▼
+kind dispatch (`function` / `data` / `sum`)
+    │
+    ▼
+normalized shared seam
+    │
+    ├── validate shared semantics
+    ├── project deps / tests / contract hash
+    └── lower to Rust enum
+            │
+            ▼
+       generated Rust + tests
+            │
+            ▼
+   build / test / status / export / passport
+```
 
-### Chosen seam
+### Error & Rescue Registry
 
-`pricing/checkout_quote`
+| Method / Codepath | What can go wrong | Exception / failure class | Rescued? | Rescue action | User sees |
+|---|---|---|---|---|---|
+| `spec validate <sum.unit.spec>` | unknown seam fields, bad variant IDs, invalid payload types | schema / semantic validation error | Y | fail fast with stable `SPEC_*` diagnostics | explicit validation failure |
+| sum normalization | duplicate callable names, invalid variant map, bad receiver modes | normalization error | Y | fail fast before generation | explicit validation/build failure |
+| Rust lowering | invalid derive path, duplicate emitted names, malformed lowering body | generator error | Y | fail fast with context naming seam + method | explicit build failure |
+| `spec build` on mixed kinds | sum seam compiles but generated module graph drifts | cargo build failure | Y | stop build, preserve failure evidence path | explicit build failure |
+| `spec status` after contract change | stored hash does not match current sum contract | stale status | Y | show stale row, require re-test | explicit `stale` status |
 
-### Why this seam
+### Failure Modes Registry
 
-- It lives in the repo's canonical pricing domain, so it teaches something users already care
-  about.
-- It bundles real state plus real behavior:
-  - subtotal
-  - discount rate
-  - tax rate
-  - constructor
-  - discounted-subtotal method
-  - total method
-- It composes with the existing function units and molecule tests instead of replacing the whole
-  example at once.
+| Codepath | Failure mode | Rescued? | Test? | User sees? | Logged? |
+|---|---|---|---|---|---|
+| schema validation | variant name collides with method/type naming | Y | required | validation error | yes |
+| lowering | named payload fields generate invalid Rust casing/path | Y | required | build failure | yes |
+| passport/status | mixed function/data/sum tree reports wrong status | Y | required | incorrect trust loop if missed | yes |
+| canonical example | raw baseline and migrated seam drift semantically | Y | required | misleading docs/example | yes |
+| decision gate | M14 chosen without explicit trigger evidence | N | docs check | roadmap drift | n/a |
 
-### Migration contract
-
-The canonical example should include both:
-
-1. a raw Rust baseline module representing the same pricing seam
-2. the migrated `kind: data` seam authored in `spec`
-
-The docs should make the comparison explicit:
-
-- raw Rust baseline: freehand module text, manual reasoning, ad hoc test targeting
-- migrated seam: explicit fields, explicit behaviors, seam-level local tests, machine-readable
-  validation, passport, and status
-
-### User-outcome success criterion
-
-The migration is successful only if the migrated seam is easier for an agent to:
-
-1. inspect
-2. modify
-3. validate
-4. prove
-
-than the raw-file version.
-
-That must be shown concretely in the example docs and tests, not asserted by taste.
-
----
-
-## Escape-Hatch Policy
-
-Rust-specific escape hatches are allowed only as optional, namespaced, lowering-only details.
-
-### Allowed in M12
-
-- `backends.rust.derives`
-- `methods[].lowering.rust.body`
-
-### Not allowed in M12
-
-- overriding shared field names or field types
-- overriding constructor signatures or initialization mapping
-- overriding method `receiver`
-- overriding method contract inputs or returns
-- adding hidden fields that exist only in Rust lowering
-- redefining the seam's top-level ID or nested behavior IDs
-
-### Enforcement rule
-
-Validation must reject any authored Rust-specific field that tries to replace shared semantic
-meaning instead of decorate lowering.
-
-This is why the negative test suite matters. If the escape hatch can silently change what the seam
-means, the shared model is fake.
+No row is allowed to land with `Rescued = N`, `Test = N`, and a silent user outcome.
 
 ---
 
-## Implementation Slices
+## Slice Plan
 
-### Slice 1 — Shared seam model + kind dispatch
+### M13a — Preflight Hardening + Compatibility Gate
 
-**Goal:** give M12 a real shared-core spine instead of teaching the function IR new tricks until it
-collapses.
+Purpose: make M12's teaching surface explicit enough that M13 pressure does not create fake
+confidence.
 
-**Primary files**
-- `spec-core/src/types.rs`
-- `spec-core/src/lib.rs`
-- `spec-core/src/validator.rs`
-- `spec-core/src/generator.rs`
-- `spec-cli/src/commands.rs`
+Required work:
+- lock the canonical example posture: raw baseline + migrated seam + docs + molecule evidence move
+  together
+- codify the M13 escape-hatch rule as an extension of the post-M11 TODO, not a vague future note
+- add fixture coverage proving mixed `function` + `data` + `sum` trees report truthful
+  validate/status/export/passport behavior
 
-**Work**
-- Add authored `kind: data` structs.
-- Add normalized shared seam structs.
-- Add Rust lowering structs for the seam.
-- Centralize kind dispatch in validator/generator/export/passport entry points.
+Out of scope inside this slice:
+- redesigning truth surfaces
+- building second-backend policy in full
 
-### Slice 2 — Schema + validator for `kind: data`
+### M13b — Shared Sum Model + Schema / Validator
 
-**Goal:** make the authored file shape explicit and machine-checkable from day one.
+Purpose: make `kind: sum` a first-class authored shape without letting Rust dictate the schema.
 
-**Primary files**
-- `spec-core/src/schema/unit.spec.json`
-- `spec-core/src/validator.rs`
-- `spec-cli/tests/cli.rs`
+Required work:
+- extend authored types in `spec-core/src/types.rs`
+- extend JSON schema for `.unit.spec`
+- add semantic validation for:
+  - ordered unique variant IDs
+  - payload field typing
+  - collision checks across variants, methods, and generated type names
+  - receiver rules
+  - backend-lowering presence rules
 
-**Work**
-- Extend schema for `kind: data`.
-- Validate:
-  - field names and field types
-  - constructor IDs and unique initialization coverage
-  - method IDs, receiver enum, and contracts
-  - escape-hatch boundary rules
-- Keep `kind: function` behavior unchanged.
+### M13c — Rust Lowering + Enum Generation
 
-### Slice 3 — Rust lowering + generation
+Purpose: lower the shared sum seam into bounded Rust enum output.
 
-**Goal:** lower one shared seam into one readable Rust `struct + impl`.
+Required work:
+- add `NormalizedSumSeam` and `RustSumSeamLowering`
+- generate Rust `enum + impl`
+- support seam-owned local tests
+- maintain existing dep/import behavior boundaries
 
-**Primary files**
-- `spec-core/src/generator.rs`
-- `spec-core/src/loader.rs`
-- `spec-core/src/syntax.rs`
+### M13d — Seam-Level Truth Surfaces Stay Honest
 
-**Work**
-- Generate `pub struct CheckoutQuote { ... }`.
-- Generate one inherent `impl CheckoutQuote { ... }` block containing constructor and methods.
-- Generate seam-owned local tests under the seam module's `#[cfg(test)]`.
-- Preserve existing function generation output unchanged.
+Purpose: keep the trust loop truthful across all three seam kinds.
 
-### Slice 4 — Seam-level passport, status, and export support
+Required work:
+- passport serialization for `kind: sum`
+- status correctness for mixed trees
+- export correctness for mixed trees
+- contract-hash staleness on sum seams
+- variant-aware evidence or export annotations sufficient to test whether seam-level truth is too
+  coarse, without promoting variants to first-class graph nodes yet
 
-**Goal:** make the new seam truthful in the existing loop without widening tracking granularity.
+### M13e — Canonical Migration Wedge + Docs
 
-**Primary files**
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
-- `spec-core/src/graph.rs`
-- `spec-cli/src/commands.rs`
+Purpose: prove the seam with a real domain example instead of syntax theater.
 
-**Work**
-- Ensure the passport contract can represent a top-level data seam without pretending nested
-  behaviors are separate units.
-- Keep status at the seam level.
-- Keep graph identity at the seam level.
-- Extend export additively only where downstream consumers need the new seam shape.
+Required work:
+- add raw Rust baseline `discount_policy.rs`
+- author `units/pricing/discount_policy.unit.spec`
+- add local tests plus at least one molecule test covering the new seam in context
+- refresh `examples/ecommerce/README.md`
+- keep example commands fresh in AGENTS workflow text if needed
 
-### Slice 5 — Canonical migrated example + docs
+### M13f — Post-M13 Decision Gate
 
-**Goal:** prove the product story with one real migration wedge.
+Purpose: avoid a fuzzy M14.
 
-**Primary files**
-- `examples/ecommerce/units/pricing/*`
-- `examples/ecommerce/src/*`
-- `examples/ecommerce/README.md`
-- `README.md`
-- `AGENTS.md`
-- `CHANGELOG.md`
-- `spec-cli/tests/cli.rs`
-
-**Work**
-- Add the raw Rust baseline module for `pricing/checkout_quote`.
-- Add the migrated `kind: data` seam for the same pricing job.
-- Add molecule coverage using the current test surface.
-- Document the comparison and the agent loop around it.
+Required work:
+- write the trigger table into this plan
+- name the two default follow-on paths:
+  - backend-readiness gate
+  - truth-surface / governance refinement
 
 ---
 
-## Test Review
+## Test Plan
+
+### New Codepaths
+
+```text
+NEW AUTHORED SHAPE
+  - parse and validate `kind: sum`
+  - normalize variants + payloads + methods
+
+NEW LOWERING PATH
+  - lower `NormalizedSumSeam` to `RustSumSeamLowering`
+  - generate enum code + impl + local tests
+
+NEW TRUST PATHS
+  - passport projection for sum seams
+  - status truth for mixed function/data/sum trees
+  - export bundle truth for mixed trees
+
+NEW EXAMPLE PATHS
+  - raw baseline vs migrated sum seam
+  - molecule coverage in ecommerce pricing flow
+```
+
+### Coverage Diagram
+
+```text
+CODE PATH COVERAGE
+===========================
+[+] spec-core/src/types.rs
+    ├── [GAP] add authored + normalized + lowered sum seam structs
+    └── [GAP] collision helpers updated for sum naming surface
+
+[+] spec-core/src/validator.rs
+    ├── [GAP] schema accepts `kind: sum`
+    ├── [GAP] variant/payload semantic validation
+    └── [GAP] mixed-kind regression tests
+
+[+] spec-core/src/generator.rs
+    ├── [GAP] enum lowering happy path
+    ├── [GAP] duplicate emitted-name rejection
+    └── [GAP] seam-owned local tests compile under generated enum
+
+[+] spec-core/src/passport.rs / export.rs / spec-cli/src/commands.rs
+    ├── [GAP] passport projection for sum seam
+    ├── [GAP] status stale/failing/untested for mixed trees
+    └── [GAP] export payload truth for mixed trees
+
+USER / AGENT FLOW COVERAGE
+===========================
+[+] Author choice-like seam
+    ├── [GAP] validate happy path
+    ├── [GAP] invalid variant payload types
+    └── [GAP] invalid lowering body / name collisions
+
+[+] Build + prove canonical wedge
+    ├── [GAP] raw baseline and migrated seam stay aligned
+    ├── [GAP] local tests on enum seam
+    └── [GAP] molecule test in pricing flow
+
+[+] Trust loop
+    ├── [GAP] `spec status` after untouched build
+    ├── [GAP] `spec status` after contract drift without `spec test`
+    └── [GAP] `spec export` mixed-kind truth surface
+```
 
 ### Required Test Matrix
 
-| Codepath / behavior | Test layer | Required coverage |
-|---|---|---|
-| `kind: function` regression guard | CLI integration + unit | Existing function units still validate, generate, build, test, and report status exactly as before. |
-| Parse and validate one `kind: data` seam | CLI integration + unit | Valid seam passes; malformed field/method/constructor shape fails with stable machine-readable diagnostics. |
-| Shared seam normalization | spec-core unit | Shared field list, constructor signatures, method signatures, and receiver semantics normalize once and stay typed. |
-| Rust lowering | spec-core unit | One normalized seam lowers to one Rust `struct + impl` with stable readable output. |
-| Escape-hatch boundary | CLI integration + unit | Rust-specific lowering data cannot override shared field types, constructor meaning, receiver mode, or method contract. |
-| Seam local tests | CLI integration | `spec test path/to/seam.unit.spec` writes fresh seam passport evidence and passes/fails truthfully. |
-| Graph/status/passport granularity | CLI integration + unit | One seam yields one top-level unit status/passport/export node, not nested behavior nodes. |
-| Canonical migration example | CLI integration | The migrated seam validates, builds, tests, and appears truthful in `spec status`. |
-| User-outcome comparison | docs + integration | Example docs show the raw-file baseline and migrated seam comparison using exact runnable commands. |
-
-### Critical Flows
-
-- Shared authored seam -> normalization -> Rust lowering -> generated Rust compiles
-- Shared authored seam + local tests -> `spec test` -> seam passport evidence is fresh
-- Existing `kind: function` unit -> full loop unchanged
-- Canonical raw Rust baseline -> migrated seam -> docs and tests stay aligned
-
-### Negative Tests That Must Exist
-
-- Rust escape hatch attempts to override a shared field type
-- Rust escape hatch attempts to override method return type
-- Constructor leaves a required field uninitialized
-- Duplicate constructor or method IDs
-- Unsupported receiver mode
-- Nested behavior accidentally leaks into graph/status/passport/export as its own node
-
----
-
-## Failure Modes
-
-| Codepath | Real failure | Test required | Error handling | User-visible outcome | Critical gap today |
-|---|---|---|---|---|---|
-| Shared/target model split | `ResolvedSpec` quietly absorbs seam-only fields and becomes a junk drawer | yes | refuse architecture shortcut in implementation | future second-language work becomes refactor tax | yes |
-| Kind dispatch | scattered `kind == "data"` branches drift across validator/generator/status | yes | central dispatch required | one command works, another lies | yes |
-| Escape hatch | Rust-only field silently changes shared meaning | yes | validation failure | false orthogonality | yes |
-| Tracking granularity | constructors/methods become accidental graph or passport nodes | yes | seam-level truth-surface rule | status/export drift from plan | yes |
-| Canonical example | docs compare against a toy or unstated raw baseline | yes | docs + tests anchored to exact files | fake product story | yes |
-| Function regression | existing function units break while data seam lands | yes | regression suite gate | shipped trust loop regresses | yes |
-
-**Critical-gap rule for M12:** no data seam ships unless the function path regression suite is
-green and the escape-hatch negative suite proves Rust details cannot override shared meaning.
-
----
-
-## Performance Review
-
-- Normalize once per flow.
-- Lower to Rust once per flow.
-- Pass typed normalized/lowered structs forward instead of re-deriving method and field shape in
-  each subsystem.
-- Do not add caching in M12. The expensive work is not large enough to justify making kind
-  dispatch and truth surfaces harder to reason about.
-
----
-
-## Parallelization / Lanes
-
-M12 is partially parallelizable after the kind contract is locked.
-
-**Gate 0, do this first and sequentially**
-- Lock the authored `kind: data` schema
-- Lock the shared normalized seam shape
-- Lock the seam-level truth-surface rule
-
-**Lane A, seam model lane**
-- authored structs
-- normalized seam structs
-- central kind dispatch
-
-**Lane B, validator + lowering lane**
-- schema and semantic validation
-- Rust lowering
-- generation output
-
-**Lane C, truth-surface lane**
-- passport/status/export integration
-- graph and CLI behavior at seam level
-
-**Lane D, canonical example lane**
-- raw Rust baseline
-- migrated seam
-- docs and end-to-end tests
-
-**Execution order**
-1. Lock Gate 0
-2. Launch Lane A
-3. Launch Lane B after Lane A types are stable
-4. Launch Lane C after the normalized seam contract is stable
-5. Finish with Lane D after the generated shape and CLI loop are stable
-
-**Conflict flags**
-- `spec-core/src/types.rs`, `spec-core/src/validator.rs`, `spec-core/src/generator.rs`, and
-  `spec-cli/src/commands.rs` are all hot files. Do not parallelize two lanes that both invent
-  the seam contract in those files.
-- The canonical example should wait until the generated Rust shape is stable, or the docs will
-  churn for no user value.
-
----
-
-## What NOT in M12 Scope
-
-- enums, traits, generic bounds, macros, or module-wide arbitrary item support
-- `shared_mut` or owned receiver modes
-- constructor bodies authored as arbitrary Rust
-- nested behavior promotion into first-class tracked nodes
-- second-language lowering
-- cross-library seam identity or cross-library method coverage semantics
-
----
-
-## Decision Audit Trail
-
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-|---|---|---|---|---|---|---|
-| 1 | Design | Choose orthogonal core + Rust data seam | Taste, decided | Future-proof core first | Rust is the proving ground, not the ontology. | Rust-first item expansion |
-| 2 | Eng | Keep one top-level tracked seam ID in M12 | Mechanical | Explicit scope | The first milestone needs truthful seam-level status/passport behavior without inventing nested-node governance. | Per-method tracking in M12 |
-| 3 | Eng | Split authored, normalized, and Rust-lowered ownership | Mechanical | Clear data ownership | The current function-native IR cannot honestly carry the new seam by accretion. | Stretching `ResolvedSpec` further |
-| 4 | CEO | Canonical example must be a migration of one real pricing seam | Taste, decided | Product truth | A real user feels migration value. A toy struct demo teaches nothing. | Greenfield geometry demo |
-| 5 | CEO | Add governability as the success criterion | Taste, decided | User outcome over syntax | The point is not "supports structs"; it is "agents can work this seam better than a raw file." | Syntax-demo success metric |
-| 6 | Eng | Escape hatches are lowering-only and namespaced | Mechanical | Contain target-specific debt | Rust-specific details are inevitable, but they cannot define shared meaning. | Hidden Rust-only semantic fields |
-| 7 | Eng | Keep function-path regression tests mandatory | Mechanical | Trust first | M11 just made the default loop credible. M12 cannot spend that trust casually. | "We will fix function regressions later" |
-
----
-
-## Implementation Order
-
-```text
-1. Lock `kind: data` authored schema and seam-level truth-surface contract
-2. Implement authored + normalized + Rust-lowered seam structs
-3. Centralize kind dispatch across validator/generator/export/passport entry points
-4. Implement schema + semantic validation for `kind: data`
-5. Implement Rust lowering and generation for one `struct + impl` seam
-6. Keep seam passport/status/export behavior truthful at one top-level unit ID
-7. Land function-regression and escape-hatch negative suites
-8. Add canonical migrated pricing seam, raw Rust baseline, docs, and integration tests
-9. Re-review before widening into mutability, enums, or second-language work
-```
-
-### Success Criteria
-
-- A user can author one `kind: data` seam with:
-  - ordered fields
-  - one or more declarative constructors
-  - one or more shared-ref methods
-  - seam-owned local tests
-- The authored model cleanly separates:
-  - shared semantic seam
-  - Rust lowering representation
-- `spec validate`, `spec build`, `spec test`, and `spec status` stay truthful for the seam.
-- Existing `kind: function` units remain fully green through the current loop.
-- The canonical pricing migration includes both a raw Rust baseline and the migrated seam.
-- The example and docs prove the governability claim with exact runnable commands and tests.
-- Rust-specific escape hatches are proven, by negative tests, to be lowering-only.
-
----
-
-## M11 — Post-M10 Trust Hardening
-
-Status: **Implementation-ready** (2026-04-17). Source strategy is the CEO plan at
-`~/.gstack/projects/atomize-hq-spec/ceo-plans/2026-04-17-post-m10-trust-hardening.md`,
-with this document serving as the engineering-grade execution plan.
-
-This milestone is not a feature grab-bag. It closes the last trust gaps in the default
-agent loop:
-
-1. `spec status .` from repo root must discover real library roots instead of flattening
-   the whole repo into one fake namespace.
-2. Molecule tests must gain first-class observed evidence without contaminating unit
-   passport semantics.
-3. The repo must ship one real `.plan.spec` example, one current story in docs, and one
-   explicit local toolchain contract.
-
----
-
-## Milestone Summary
-
-```
-M11a  Bounded source-root discovery      required
-M11b  Molecule evidence artifact         required
-M11c  Molecule execution + status plane  required
-M11d  Example, docs, toolchain sync      required
-```
-
-**Lake to boil in M11**
-- Repo-root `spec status .` becomes trustworthy in this repo.
-- Molecule tests stop being declaration-only and become observed verification.
-- One checked-in `.plan.spec` example becomes the regression anchor for M10 docs and tests.
-
-**Explicitly not in M11**
-- `spec-cli/src/commands.rs` split
-- Workspace-global graph identity
-- Semantic contract-vs-body evals
-- `links.molecule_tests` removal
-- New package/distribution rails beyond the existing CI/release pipeline
-
----
-
-## Step 0 — Scope Challenge
-
-### What Already Exists
-
-| Sub-problem | Existing surface | Reuse in M11 |
-|---|---|---|
-| Unit health and stale detection | `spec-cli/src/commands.rs` `compute_health_status` + `status_command`; `spec-core/src/passport.rs` | Reuse unit plane exactly. Do not overload it with molecule evidence. |
-| Repo-bounded scanning | `load_directory_report_bounded()`, `load_molecule_test_directory_report_bounded()`, `resolve_plan_library_root()` | Reuse the bounded walker model and the “directory owning units/” root heuristic. |
-| Local graph impact | `spec-core/src/graph.rs`, `spec-core/src/plan.rs` | Reuse current graph and impact logic. No workspace-graph promotion in this milestone. |
-| Plan validation/export coverage | `spec-cli/tests/cli.rs` M10 fixture tests | Reuse the fixture harness, but anchor it to a checked-in example file instead of temp-only plans. |
-| Toolchain version truth | `Cargo.toml` workspace `rust-version = "1.89.0"` and CI toolchain pin | Reuse the chosen version; add local `rust-toolchain.toml` so local dev matches CI. |
-
-### Minimum Change Set
-
-The smallest complete M11 is:
-
-1. Add one dedicated molecule evidence artifact type and stale model.
-2. Replace unbounded repo scans with source-root discovery plus bounded per-root loading.
-3. Add explicit molecule execution semantics.
-4. Extend `spec status` text + JSON to report unit and molecule planes separately.
-5. Ship one checked-in `.plan.spec` example and wire docs/tests to that exact path.
-6. Add `rust-toolchain.toml`.
-
-### Complexity Check
-
-This is a medium milestone, but it is still one lake, not an ocean:
-
-- Primary code seams: `spec-cli/src/commands.rs`, `spec-core/src/loader.rs`,
-  `spec-core/src/passport.rs` plus one new molecule-evidence module, `spec-cli/tests/cli.rs`,
-  README/AGENTS/CHANGELOG/examples, and `rust-toolchain.toml`.
-- No new binary, service, package, or runtime dependency model.
-- No new distribution pipeline. Existing GitHub Actions + release workflow already cover the
-  shipped CLI artifact.
-
-### Opinionated Recommendation
-
-Do the complete version. Do not ship a `.gstack/` blacklist, do not stuff molecule outcomes into
-unit passports, and do not land a checked-in example without tests pointing at it.
-
----
-
-## Locked Engineering Decisions
-
-1. **Molecule evidence gets a dedicated co-located artifact.**
-   Chosen path: `<name>.test.evidence.json` adjacent to `<name>.test.spec`.
-   Example: `examples/ecommerce/units/pricing/checkout_flow.test.spec` →
-   `examples/ecommerce/units/pricing/checkout_flow.test.evidence.json`.
-
-2. **Unit passports remain unit-only.**
-   `spec-core/src/passport.rs` continues to model only `.unit.spec` authored truth plus local-test
-   observed evidence. No molecule fields are added to `Passport`.
-
-3. **Repo-root scans become source-root discovery, not ignore-list growth.**
-   When the invocation path is the repo root or an arbitrary parent directory, the CLI first
-   discovers candidate library roots by finding directories that own `units/`, then runs the
-   existing bounded loaders inside each root. Duplicate local IDs across roots stay isolated.
-
-4. **Zero discovered roots is non-green.**
-   `spec status .` returning “nothing found” with exit 0 is no longer acceptable for a trust tool.
-   Text mode prints a non-green diagnostic. JSON mode returns a top-level discovery error and exits 1.
-
-5. **Explicit molecule runs are supported.**
-   `spec test <file.test.spec>` is added for one-molecule execution. Directory runs continue to
-   refresh all molecule evidence in that root. `spec test <file.unit.spec>` stays unit-only.
-
-6. **Status becomes a two-plane contract.**
-   `spec status` reports:
-   - per-root unit health
-   - per-root molecule-test health
-   Exit code is 1 if either plane is non-green.
-
-7. **Status JSON is a breaking contract change.**
-   Bump `schema_version` from `2` to `3` for status output so machine consumers can detect the new
-   top-level shape.
-
-8. **Molecule stale detection is hash-based and explicit.**
-   Molecule evidence is stale if either:
-   - the authored `.test.spec` body/metadata hash changes, or
-   - any covered unit contract hash changes since the last molecule run.
-
-9. **No `commands.rs` split in this milestone.**
-   The file is large, but the trust gap is higher leverage than a structural PR right now.
-
----
-
-## Architecture
-
-### Current vs Target
-
-```
-CURRENT
-=======
-spec status <path>
-  -> collect_validation_specs()
-     -> collect_specs(path)
-        -> file: load one .unit.spec
-        -> dir:  load_directory_report(path)        [unbounded]
-     -> collect_local_support_specs()               [bounded only for single-file deps]
-     -> imported libraries                           [mixed bounded/unbounded behavior]
-  -> read unit passports
-  -> compute unit-only health
-  -> render one flat unit list
-
-
-TARGET
-======
-spec status <path>
-  -> resolve invocation scope
-     -> unit file       -> one library root + one target unit
-     -> molecule file   -> one library root + one target molecule test
-     -> library dir     -> one library root
-     -> repo root/parent-> discover library roots inside repo boundary
-  -> for each library root
-     -> load units with bounded walker
-     -> load molecule tests with bounded walker
-     -> read unit passports
-     -> read molecule evidence artifacts
-     -> compute:
-        - unit plane
-        - molecule plane
-  -> render per-root sections
-  -> exit 1 if any root has non-green unit or molecule status
-```
-
-### Artifact Boundaries
-
-```
-.unit.spec --------------------> .spec.passport.json
-  authored contract                  observed local-test evidence
-  local test contract                contract_hash
-
-.test.spec --------------------> .test.evidence.json
-  authored covers + body             observed molecule-test evidence
-                                     test_body_hash
-                                     covered_unit_contract_hashes
-```
-
-### Proposed Status JSON Shape
-
-```
-{
-  "schema_version": 3,
-  "roots": [
-    {
-      "root": "examples/ecommerce",
-      "units": [...],
-      "molecule_tests": [...]
-    }
-  ],
-  "loader_errors": [...]
-}
-```
-
-This preserves the existing top-level loader error bucket while making root boundaries explicit.
-
-### Molecule Evidence Contract
-
-`*.test.evidence.json` should contain:
-
-- `schema_version`
-- `id`
-- `source_file`
-- `covers`
-- `status` (`pass`, `fail`, `unknown`, `build_fail`, `timeout`, `stale`)
-- `reason`
-- `observed_at`
-- `test_body_hash`
-- `covered_unit_contract_hashes`
-- `provenance.git_commit_sha` when available
-
-`status` is explicit because the CEO plan already locked distinct observed states. Do not infer
-`build_fail` or `timeout` from freeform prose later.
-
----
-
-## Implementation Slices
-
-### Slice 1 — Bounded Source-Root Discovery
-
-**Goal:** make repo-root invocations truthful without flattening unrelated roots.
-
-**Primary files**
-- `spec-cli/src/commands.rs`
-- `spec-core/src/loader.rs`
-- `spec-cli/tests/cli.rs`
-
-**Work**
-- Add a shared discovery helper that resolves one or more library roots inside the repo boundary.
-- Replace directory-path `collect_specs()` unbounded loading with discovery + bounded per-root loading.
-- Route imported-library and support-spec loading through the same bounded seam.
-- Make zero discovered roots an explicit non-green result in text and JSON.
-
-**Why first**
-- It removes the biggest source of false trust.
-- It keeps later molecule status work root-scoped instead of patching a flat model that will be deleted.
-
-### Slice 2 — Molecule Evidence Artifact
-
-**Goal:** represent molecule observed truth without touching unit passport semantics.
-
-**Primary files**
-- `spec-core/src/passport.rs` or new sibling module `spec-core/src/molecule_evidence.rs`
-- `spec-core/src/lib.rs`
-- `spec-cli/src/commands.rs`
-- `spec-core/src/export.rs`
-
-**Work**
-- Introduce the new evidence struct and read/write helpers.
-- Define `test_body_hash` and `covered_unit_contract_hashes`.
-- Add stale computation helpers.
-- Optionally include molecule evidence in export bundles if it materially helps downstream consumers.
-
-**Why second**
-- Status integration needs a real artifact to read.
-- The artifact boundary is the main guardrail against polluting unit health.
-
-### Slice 3 — Explicit Molecule Execution
-
-**Goal:** make “directory-scoped or explicit molecule-test runs” real instead of aspirational.
-
-**Primary files**
-- `spec-cli/src/commands.rs`
-- `spec-core/src/generator.rs`
-- `spec-core/src/pipeline.rs`
-- `spec-cli/tests/cli.rs`
-
-**Work**
-- Accept `.test.spec` as a valid `spec test` file input.
-- Resolve the target library root, generate the necessary units for compilation, and derive a cargo
-  filter for the generated `molecule_tests.rs` function name.
-- Write only the targeted molecule evidence artifact for single-molecule runs.
-- Keep `spec test <file.unit.spec>` unit-only. No silent molecule refresh on unit runs.
-
-**Decision**
-- Add explicit `.test.spec` file support now. Directory-only semantics would violate the CEO plan
-  and keep the “explicit molecule run” story hand-wavy.
-
-### Slice 4 — Status Plane Integration
-
-**Goal:** ship one coherent contract change instead of multiple half-migrations.
-
-**Primary files**
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/fixtures/status-*.json`
-- `spec-cli/tests/cli.rs`
-- `AGENTS.md`
-
-**Work**
-- Keep existing unit health logic unchanged.
-- Add molecule health computation and rendering.
-- Group status output by discovered library root.
-- Bump `spec status --format json` to `schema_version: 3`.
-- Exit 1 if any unit or molecule test is non-green.
-
-### Slice 5 — Example, Docs, Toolchain
-
-**Goal:** make the shipped story testable by users and by CI.
-
-**Primary files**
-- `examples/ecommerce/plans/*.plan.spec`
-- `examples/ecommerce/README.md`
-- `README.md`
-- `AGENTS.md`
-- `.claude/skills/spec/SKILL.md`
-- `CHANGELOG.md`
-- `rust-toolchain.toml`
-- `spec-cli/tests/cli.rs`
-
-**Work**
-- Commit one real `.plan.spec` example under `examples/ecommerce/plans/`.
-- Add at least one CLI test that reads that exact file instead of synthesizing everything through temp fixtures.
-- Update docs to point to the checked-in example path.
-- Add `rust-toolchain.toml` pinned to `1.89.0`.
-
----
-
-## Test Review
-
-### Code Path Coverage
-
-```
-CODE PATH COVERAGE
-==================
-[+] Root discovery
-    ├── [GAP] repo root with 2+ library roots and duplicate local IDs
-    ├── [GAP] library dir invocation resolves one root only
-    ├── [GAP] zero discovered roots returns non-green text + JSON
-    └── [★★ TESTED] bounded plan-root symlink escape behavior already exists
-
-[+] Molecule evidence artifact
-    ├── [GAP] missing evidence file -> untested/unknown molecule status
-    ├── [GAP] stale when .test.spec body changes
-    ├── [GAP] stale when covered unit contract hash changes
-    ├── [GAP] build_fail and timeout states serialize distinctly
-    └── [GAP] malformed evidence file becomes structured diagnostic, not raw stderr
-
-[+] Explicit molecule execution
-    ├── [GAP] spec test <file.test.spec> runs one generated molecule test
-    ├── [GAP] spec test <dir> refreshes all molecule evidence in that root
-    ├── [★★ TESTED] spec test <file.unit.spec> stays unit-only today
-    └── [GAP] zero matching molecule tests fails cleanly
-
-[+] Status contract
-    ├── [GAP] text output renders separate UNIT / MOLECULE sections per root
-    ├── [GAP] JSON schema_version 3 root grouping
-    ├── [GAP] exit 1 when molecule plane is non-green and unit plane is green
-    └── [★★ TESTED] existing unit-plane status states remain intact
-
-[+] Example/docs/toolchain
-    ├── [GAP] checked-in example validates from its committed path
-    ├── [GAP] checked-in example exports from its committed path
-    ├── [GAP] README/AGENTS/skill doc all point at same example path
-    └── [GAP] rust-toolchain.toml matches workspace + CI pin
-```
-
-### User Flow Coverage
-
-```
-USER FLOW COVERAGE
-==================
-[+] Repo-root agent loop
-    ├── [GAP] user runs `spec status .` at repo root and sees per-root truth
-    ├── [GAP] user sees non-green result when no spec roots are discovered
-    └── [GAP] user is not blocked by duplicate IDs across examples
-
-[+] Molecule author loop
-    ├── [GAP] author edits one `.test.spec`, runs `spec test path/to/file.test.spec`
-    ├── [GAP] stale molecule evidence becomes visible after covered unit contract changes
-    └── [GAP] failing molecule test does not poison unit passport health
-
-[+] M10 onboarding loop
-    ├── [GAP] user copies the checked-in `.plan.spec` example path from README
-    ├── [GAP] `spec plan validate` succeeds on that exact file
-    └── [GAP] `spec plan export` succeeds on that exact file
-```
-
-### Required Test Additions
-
-- `spec-cli/tests/cli.rs`
-  - repo-root status with multiple discovered roots
-  - zero-root non-green text + JSON behavior
-  - `spec test <file.test.spec>` success/failure/zero-match paths
-  - molecule status exit code behavior
-  - checked-in example validate/export from committed path
-- `spec-core` unit tests
-  - molecule evidence read/write round-trip
-  - stale detection from body hash
-  - stale detection from covered unit contract hash delta
-  - malformed molecule evidence diagnostics
-- JSON fixtures
-  - `status-rooted-valid.json`
-  - `status-rooted-molecule-failing.json`
-  - `status-rooted-zero-roots.json`
+- Unit tests:
+  - authored type normalization for `kind: sum`
+  - validator rejection cases
+  - lowering and codegen cases
+  - passport/export projection
+- CLI integration tests:
+  - `validate --format json`
+  - `build`
+  - `test`
+  - `status --format json`
+  - `export`
+- Example-backed tests:
+  - canonical wedge validate/build/test/status loop
+  - raw baseline parity checks
+- Regression tests:
+  - existing `kind: function` unaffected
+  - existing `kind: data` unaffected
+  - mixed tree status/export order and truth
 
 ### Test Plan Artifact
 
-This review writes a dedicated QA-facing artifact under `~/.gstack/projects/atomize-hq-spec/`
-covering repo-root status, single-molecule execution, example `.plan.spec` validation/export,
-and stale/failing molecule evidence transitions.
+Create during the eng phase at:
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-main-eng-review-test-plan-<timestamp>.md`
+
+Seed contents should cover:
+- affected route / surface: CLI `validate`, `build`, `test`, `status`, `export`
+- key interactions: author sum seam, build mixed-kind tree, verify canonical example
+- edge cases: invalid variant payloads, collision cases, stale status after contract change
+- critical paths: end-to-end canonical wedge loop plus mixed-kind trust-loop regressions
 
 ---
 
-## Failure Modes
+## Success Criteria / Kill Metrics
 
-| Codepath | Real failure | Test required | Error handling | User-visible outcome | Critical gap today |
-|---|---|---|---|---|---|
-| Repo-root discovery | Duplicate local IDs across roots get flattened | Yes | Not today | False invalid/failing status | Yes |
-| Bounded scan | Symlinked external spec slips into root scan | Yes | Partially today | Trust boundary violated | Yes |
-| Molecule evidence read | Malformed `.test.evidence.json` crashes status | Yes | Not today | Silent or raw error noise | Yes |
-| Molecule stale logic | Covered unit contract changes but molecule status stays green | Yes | Not today | False green broader verification | Yes |
-| Explicit molecule run | Cargo filter matches zero tests | Yes | Not today | False evidence write or confusing success | Yes |
-| Status rendering | Molecule fail hidden behind unit-only output | Yes | Not today | User sees green when broader verification failed | Yes |
-| Example docs | README path drifts from committed example | Yes | Not today | Broken onboarding | No |
-| Concurrent writes | Two runs mutate same generated tree and evidence files | Yes | Warn-only for passports | Nondeterministic outputs | Medium |
+M13 is successful only if all of these are true:
 
-**Critical-gap rule for M11:** no path above ships without both a regression test and a structured,
-user-visible failure surface.
+1. A maintainer or agent can migrate one real branching pricing seam into `kind: sum` without
+   widening into raw-Rust-first authoring for the important branching structure.
+2. The migrated seam remains teachable **and** survives one adversarial wedge check without
+   collapsing into special pleading.
+3. Mixed `function` + `data` + `sum` trees stay truthful across validate, build, test, status,
+   export, and passport flows.
+4. The canonical example plus its raw baseline stay semantically aligned under test.
+5. The sum seam improves the target workflow measurably. Track at least:
+   - migration/edit time vs raw Rust baseline
+   - agent edit success rate on the canonical seam
+   - parity drift count between raw baseline and authored seam
+   - escape-hatch line count required to make the wedge work
 
----
+Kill the "expand ontology first" thesis for M14 if either of these happens:
+- the wedge needs too much Rust-specific escape hatch to stay believable
+- seam-level truth plus variant-aware evidence still cannot localize which branch is wrong
 
-## Worktree Parallelization Strategy
+## Post-M13 Decision Gate
 
-### Dependency Table
+### Choose backend-readiness next if:
 
-| Step | Modules touched | Depends on |
-|---|---|---|
-| A. Source-root discovery | `spec-cli/src`, `spec-core/src/loader.rs`, `spec-cli/tests` | — |
-| B. Molecule evidence contract | `spec-core/src`, `spec-cli/src`, `spec-core/src/export.rs` | — |
-| C. Explicit molecule execution | `spec-cli/src`, `spec-core/src/generator.rs`, `spec-core/src/pipeline.rs`, `spec-cli/tests` | B |
-| D. Status plane integration | `spec-cli/src`, `spec-cli/tests`, `AGENTS.md` | A, B, C |
-| E. Example/docs/toolchain sync | `examples/ecommerce`, repo docs, `.claude/skills`, root config | D for final wording; example file can start earlier |
+- M13 lands without forcing truth-surface redesign
+- the escape-hatch boundary still looks contained
+- the canonical example stays teachable without special pleading
+- the authored core still feels obviously cross-language in shape
 
-### Parallel Lanes
+### Choose truth-surface / governance next if:
 
-- `Lane A`: Source-root discovery
-  `A1 discovery helper -> A2 bounded status/validate wiring -> A3 zero-root diagnostics`
-- `Lane B`: Molecule artifact contract
-  `B1 evidence schema -> B2 read/write helpers -> B3 stale hash helpers`
-- `Lane C`: Explicit molecule execution
-  waits for `Lane B`, then `C1 .test.spec input support -> C2 cargo filter mapping -> C3 targeted evidence write`
-- `Lane D`: Status integration
-  waits for `Lane A + Lane C`, then `D1 text rendering -> D2 JSON schema_version 3 -> D3 fixtures/exit code`
-- `Lane E`: Docs/example/toolchain
-  can start the example file early, but final README/AGENTS/CHANGELOG/skill edits wait for `Lane D`
+- M13 makes seam-level tracking feel fake or too coarse
+- nested behaviors want to become first-class tracked truth
+- status/passport/export start looking under-specified for real agent use
+- the biggest remaining gap is "it compiles but the meaning is wrong"
 
-### Execution Order
+### Do not choose second backend unless:
 
-1. Launch `Lane A` and `Lane B` in parallel worktrees.
-2. Merge both.
-3. Launch `Lane C`.
-4. Merge `Lane C`, then do `Lane D`.
-5. Finish with `Lane E`.
-
-### Conflict Flags
-
-- `Lane A` and `Lane B` both touch `spec-cli/src/commands.rs`. Keep ownership split by function block
-  or merge `A` first, then rebase `B` before landing.
-- `Lane C` and `Lane D` both touch `spec-cli/src/commands.rs` and `spec-cli/tests/cli.rs`. These should
-  be sequential after `Lane B`.
-- `Lane E` is low conflict if it avoids `commands.rs`.
+- both M12 and M13 seams lower cleanly from explicit shared semantics
+- escape-hatch policy is written and enforced
+- the team can name exactly which authored fields are shared-core versus backend-only
 
 ---
 
 ## NOT in Scope
 
-- `spec-cli/src/commands.rs` split: real debt, but it does not increase trust on the user path this week.
-- Workspace graph promotion: duplicate IDs across roots are solved by boundary-preserving discovery, not
-  by inventing a new global identity layer.
-- `links.molecule_tests` removal: keep as follow-up once molecule evidence/status lands and the repo has
-  one fully migrated truth story.
-- Semantic evals / LLM scoring: still downstream of observed verification.
-- Lock-based concurrency overhaul: M11 should add regression coverage and document the shared-output race;
-  a real locking design can follow if multi-writer pain remains.
+- tuple variants, generic enums, trait impl authoring, visibility matrices, macros, repr policy
+  — Rust breadth is not the goal here
+- variant-level passports or status rows — top-level seam truth remains the contract in M13
+- second-backend implementation — earned only after M12 + M13 both lower cleanly
+- semantic evals / contract-vs-body scoring — still downstream of trustworthy authored surfaces
+- reverse ingestion / retrieval / repo intelligence — product-facing, but too early for this proof
+
+---
+
+## Dream State Delta
+
+If M13 lands cleanly, the project stops asking "can `spec` do anything beyond functions and one
+record seam?" and starts asking the better question: "is the next leverage in another backend or
+in stronger governance over the authored truth?"
+
+That is the whole game. M13 should turn ontology anxiety into evidence.
+
+---
+
+## CEO Dual Voices
+
+### CODEX SAYS (CEO — strategy challenge)
+
+- The draft still risks solving an internal confidence problem instead of a buyer pain point.
+- Branch semantics remain heavily Rust-authored in `lowering.rust.body`, so the shared-core claim
+  can be overstated if M13 does not set a hard escape-hatch ceiling.
+- `pricing/discount_policy` is teachable, but too polite on its own to falsify the model.
+- The prior alternatives list was too framework-biased and underweighted workflow / migration UX.
+- The post-M13 gate was too qualitative. It now needs hard kill metrics.
+
+### CLAUDE SUBAGENT (CEO — strategic independence)
+
+- The milestone needs a named buyer and a painful workflow, not just "prove a second seam shape."
+- The wedge needs an adversarial calibration pass so the milestone can fail honestly if the model
+  is only good at tidy examples.
+- Seam-level truth may be too coarse for sum seams; variant-aware evidence must be tested
+  explicitly.
+- Competitive risk is not the schema itself. The moat, if any, is workflow speed, trust, and
+  migration ergonomics.
+
+### CEO DUAL VOICES — CONSENSUS TABLE
+
+```text
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Premises valid?                  no      no      CONFIRMED concern
+  2. Right problem to solve?          partial partial CONFIRMED concern
+  3. Scope calibration correct?       no      no      CONFIRMED concern
+  4. Alternatives sufficiently        no      no      CONFIRMED concern
+     explored?
+  5. Competitive / market risks       no      no      CONFIRMED concern
+     covered?
+  6. 6-month trajectory sound?        partial partial CONFIRMED concern
+═══════════════════════════════════════════════════════════════
+```
+
+Result:
+- Codex: 8 concerns
+- Claude subagent: 5 issues
+- Consensus: 6/6 dimensions raised meaningful pressure
+- Action taken in this draft: buyer/workflow named, workflow-first alternative added, adversarial
+  wedge calibration added, variant-evidence probe added, kill metrics added
 
 ---
 
@@ -1087,48 +796,31 @@ user-visible failure surface.
 
 | # | Phase | Decision | Classification | Principle | Rationale | Rejected |
 |---|---|---|---|---|---|---|
-| 1 | CEO→Eng | Add dedicated `*.test.evidence.json` artifact | Mechanical | Explicit over clever | Unit passports are already the unit-health truth surface. Reusing them for molecule runs would blur semantics immediately. | Extending `Passport` with molecule fields |
-| 2 | Eng | Do discovery-first before status work | Mechanical | Pragmatic | Root boundaries determine the shape of every later status row. Fixing status first would mean rewriting it twice. | `.gstack/` ignore-list patch |
-| 3 | Eng | Support `spec test <file.test.spec>` in M11 | Taste, decided | Completeness | The CEO plan already promises explicit molecule runs. Keeping directory-only semantics would leave the core workflow incomplete. | Directory-only molecule execution |
-| 4 | Eng | Bump status JSON to schema_version 3 | Mechanical | Explicit over clever | The top-level contract changes materially. Silent additive drift would punish machine consumers. | Sneaking molecule data into schema_version 2 |
-| 5 | Eng | Make zero discovered roots exit non-zero | Mechanical | Completeness | “Nothing found” is a trust failure in this repo, not a success. | Exit 0 with informational text |
-| 6 | Eng | Anchor M10 example in `examples/ecommerce/plans/` | Mechanical | DRY | Existing ecommerce example already demonstrates local-library units and molecule tests. It is the right place to prove the plan workflow too. | New synthetic example crate |
-| 7 | Eng | Add `rust-toolchain.toml` now | Mechanical | Minimal diff | The version is already chosen in workspace metadata and CI. Pinning locally is a cheap consistency fix. | Leaving local toolchain implicit |
-| 8 | Eng | Defer `commands.rs` split again | Taste, decided | Pragmatic | This milestone already hits the same file heavily. Mixing structural churn with trust-boundary behavior changes increases review risk. | Structural PR in the middle of M11 |
+| 1 | Intake | Replace current top-of-file milestone with M13, preserve historical roadmap below | Mechanical | Pragmatic | `PLAN.md` already uses the top section as the current milestone contract. Replacing only that block keeps history and makes the current work obvious. | Creating a second competing current-plan file |
+| 2 | CEO | Choose a second seam kind over trust-only cleanup | Taste, surfaced | Completeness | Cleanup alone is safer but does not answer whether the shared core generalizes. The complete proof point is one more seam shape. | Hardening-only M13 |
+| 3 | CEO | Use `kind: sum`, not `kind: enum` | Taste, surfaced | Explicit over clever | `sum` keeps Rust out of the ontology while still mapping clearly to Rust enums in lowering. | Rust-first `kind: enum` naming |
+| 4 | CEO | Choose `pricing/discount_policy` as the canonical wedge | Taste, surfaced | Pragmatic | It is real pricing logic, variant-heavy enough to pressure the model, and teachable next to `checkout_quote`. | Toy `Result` example, unrelated domain wedge |
+| 5 | CEO | Keep seam truth top-level for M13 | Mechanical | DRY | The repo already has one coherent seam-level truth loop. Promoting variants now would widen ontology and truth surfaces before evidence says to. | Variant-level passports/status rows in M13 |
+| 6 | CEO | Include a bounded preflight hardening pack inside M13 | Mechanical | Boil lakes | The example, docs, and trust-loop contracts are part of the same lake. Hardening them inside M13 is cheaper than pretending they are separate. | Treating hardening as a separate milestone |
+| 7 | CEO | Skip design-review phase | Mechanical | Pragmatic | This milestone has no real UI scope. Running a design pass because old roadmap text says `form` would be fake work. | Forcing a plan-design-review phase |
 
 ---
 
 ## Completion Summary
 
-- Step 0: Scope Challenge — scope accepted with one concrete addition: explicit `.test.spec` execution
-- Architecture Review: 4 major architectural constraints locked
-- Code Quality Review: 2 structural risks called out (`commands.rs` size, mixed bounded/unbounded loading)
-- Test Review: diagram produced, 16 concrete gaps identified
-- Performance Review: no primary runtime-performance risk; main risk is correctness and concurrency, not throughput
-- NOT in scope: written
-- What already exists: written
-- TODOS.md updates: none required to start M11; existing follow-ups remain valid
-- Failure modes: 0 unplanned critical gaps remain; all current-state trust gaps are covered by named slices and regression work
-- Outside voice: ran (Codex + Claude explorer)
-- Parallelization: 5 lanes, 2 parallel / 3 sequential
-- Lake Score: 8/8 recommendations chose the complete option
-
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | 5 proposals accepted, 0 deferred into M11 |
-| Codex Review | `/codex review` | Independent 2nd opinion | 1 | CLEAR | Discovery-first and separate molecule artifact boundary confirmed |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 8 issues folded into slice order, test plan, and status contract |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
-
-**CODEX:** The outside review agreed that the real work is discovery boundaries plus a dedicated molecule evidence artifact, not superficial repo junk filtering.
-**CROSS-MODEL:** Main review, Codex, and the explorer subagent independently converged on the same slice order: discovery first, artifact second, status integration after both.
-**UNRESOLVED:** 0
-**VERDICT:** CEO + ENG CLEARED — ready to implement M11.
+- Step 0: Scope Challenge — **M13 framed as one second seam-shape proof, not backend sprawl**
+- Architecture direction — **locked** around `kind: sum`, top-level seam truth, and Rust-lowering separation
+- Canonical wedge — **chosen** as `pricing/discount_policy`
+- NOT in scope — **written**
+- What already exists — **written**
+- Dream state delta — **written**
+- Error / rescue registry — **seeded**
+- Failure modes — **seeded**
+- Decision audit trail — **written**
+- Design phase — **skipped, no UI scope**
+- Current status — **awaiting premise confirmation before the eng pass**
 
 ---
-
 # Historical Roadmap (M6–M10)
 
 Status: **M10 Delivered** (2026-04-17). `v0.8.0` ships the first local-library `.plan.spec`
