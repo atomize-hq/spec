@@ -8,7 +8,7 @@
     "pricing/apply_tax"
   ],
   "status": "pass",
-  "observed_at": "2026-04-21T16:49:17Z",
+  "observed_at": "2026-04-21T17:18:30Z",
   "test_body_hash": "sha256:98b1a7bc35a658227b147d9f6898bb54764ace9d2676abeb3dcbf3425874afe6",
   "covered_unit_contract_hashes": {
     "pricing/apply_tax": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df",
@@ -16,6 +16,6 @@
     "pricing/discount_policy": "sha256:0370d747e0c8be24f85161ba1a6a254d0bfaa31d021a393985d240fd169363fb"
   },
   "provenance": {
-    "git_commit_sha": "db1ea18f3215b9dc5643293e1333c01c3a0e6efb"
+    "git_commit_sha": "96cc05c795796232225d1b50fd6683c4d5d9391a"
   }
 }
