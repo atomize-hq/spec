@@ -65,11 +65,13 @@ Each unit or molecule test row has a `status` field:
 | invalid    | ✗      | Validation errors; see `errors[]`                     |
 | failing    | ✗      | Build failed or a test result is `fail`               |
 | stale      | ~      | Contract changed since last `spec test` run           |
-| incomplete | ?      | Evidence exists but ≥1 test result is `unknown`       |
+| incomplete | ?      | Proof is incomplete (for example `unknown` evidence or an open marked-seam gate) |
 | untested   | —      | No passport or no evidence field                      |
 | valid      | ✓      | All checks pass                                       |
 
 `reason` is present for non-valid, non-invalid rows. Exit code 1 for any non-valid unit or molecule test.
+
+Marked seam unit rows may also include additive `escape_hatch_gate` metadata. In M14 the required surfaces are always `atom` and `molecule`, `atom` requires current local proof rather than historical passing evidence, and an open gate uses a stable reason like `missing required escape-hatch proof: atom, molecule`. Live `spec status` / `spec export` recompute the gate from current passport freshness and molecule evidence even if a stored passport also carries the gate field. An open gate demotes only an otherwise-`valid` marked seam to `incomplete`; a unit that is already `stale` remains `stale`.
 
 Breaking changes from schema_version 1: `stale: bool` field removed; `reason: Option<String>`
 added; new state values `failing`, `incomplete`, `untested` added (old values remain valid).
@@ -95,12 +97,13 @@ test body is permitted but has the same implications as writing them in any othe
 
 ## Molecule Test Status Propagation
 
-Molecule test failure does **not** propagate to unit status. A failing molecule test affects only
-the molecule test's own status row. Unit status is determined solely by:
+For ordinary units, molecule test failure does **not** propagate to unit status. A failing
+molecule test affects only the molecule test's own status row.
 
-- Unit validation (schema + semantic)
-- `spec test` evidence for that unit's local tests
-- `contract_hash` staleness
+For marked seam units in M14, `escape_hatch_gate` is recomputed live for both `spec status` and
+`spec export` from current passport freshness and molecule evidence. An open gate can demote an
+otherwise-`valid` unit to `incomplete`, but it does not override a unit that is already `stale`.
 
-This boundary prevents the "five units fail because one molecule test failed" ambiguity. A unit
-can be `valid` while a molecule test that covers it is failing — these are independent signals.
+This boundary prevents the "five units fail because one molecule test failed" ambiguity while still
+letting marked seams require current `atom` and `molecule` proof. An ordinary unit can be `valid`
+while a molecule test that covers it is failing — these are independent signals.

@@ -257,13 +257,13 @@ cargo run -p spec-cli -- status examples/ecommerce --format json
 
 `validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict, is directory-scoped only, and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
 
-`spec build` and directory-scoped `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec build` is directory-scoped only. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests.
+`spec build` and directory-scoped `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec build` is directory-scoped only. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests. Passports persist a `freshness_anchor` snapshot as the proof anchor from the last unit test run, while `freshness` is a live projection against the current spec. Marked seam passports may also carry additive `escape_hatch_gate` metadata. In M14 that gate requires both `atom` and `molecule` proof; `atom` is present only when the authored local tests pass and the seam's projected freshness is still current, and an open gate uses a stable reason like `missing required escape-hatch proof: molecule`.
 
 When you pass a single `.unit.spec` file to `spec validate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
 
 Single-file `spec test` runs generate Rust into an isolated internal build surface. They do not rewrite your checked-out `src/generated/` tree, and `--output` is accepted only for directory-scoped `test` runs.
 
-`spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read.
+`spec export` emits a machine-readable JSON bundle containing all units, passports, dependency graph edges, and warnings for any passports that could not be read. Stored `escape_hatch_gate` metadata may appear in passports, but live `spec status` and `spec export` recompute the gate from current passport freshness and molecule evidence rather than trusting the stored field blindly. Canonical seam `proof_coverage` also adds the `molecule` surface only when a covering molecule evidence artifact is both current and passing.
 
 `spec plan validate` and `spec plan export` are single-file commands. They accept exactly one `.plan.spec` file, resolve the enclosing library root by walking up to the directory that owns `units/`, validate the authored change set against the current graph, and compute advisory impact for the current local library only. `add` changes stay truthful by contributing `unresolved[]` entries instead of fabricated impact. The repo ships a checked-in example at `examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec`.
 
@@ -362,10 +362,12 @@ Valid plan responses reuse the same top-level envelope and add `plan_id` plus de
 
 `roots[].units` and `roots[].molecule_tests` are the authoritative per-root planes. The top-level `units` array remains as a flattened compatibility view for existing consumers. Workspace-config failures that happen before any row can be computed surface as top-level `loader_errors` entries instead of raw stderr text, and zero discovered roots is a non-green status result.
 
+For marked seam units, `status` rows may also include additive `escape_hatch_gate` metadata. In M14 the required surfaces are always `["atom", "molecule"]`, and live `spec status` / `spec export` recompute that gate from current passport freshness and molecule evidence. An open gate can demote an otherwise-`valid` marked seam to `incomplete`, but a seam that is already `stale` remains `stale`.
+
 - `✓` valid
 - `✗` invalid or failing
 - `~` stale
-- `?` incomplete
+- `?` incomplete (for example `unknown` evidence or an open marked-seam gate)
 - `—` untested
 
 Use the companion skill at [`.claude/skills/spec/SKILL.md`](.claude/skills/spec/SKILL.md) when you want the full workflow spelled out for an AI coding session.

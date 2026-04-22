@@ -5,15 +5,18 @@
 //! `.unit.spec` source file. Passports are derived artifacts (gitignored) and
 //! are written atomically only after all generation succeeds.
 
+use crate::escape_hatch::{EscapeHatchGate, evaluate_escape_hatch_gate};
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
+use crate::molecule_evidence::{MoleculeEvidence, molecule_evidence_is_current_pass};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
-    Contract, Intent, LoadedSpec, UnitKind,
+    Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
 };
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -102,6 +105,20 @@ pub struct PassportFreshness {
     pub backend_execution_status: FreshnessStatus,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectedPassportTruth {
+    pub freshness: Option<PassportFreshness>,
+    pub markers: Option<Vec<PassportMarker>>,
+    pub proof_coverage: Option<Vec<PassportProofCoverage>>,
+    pub escape_hatch_gate: Option<EscapeHatchGate>,
+}
+
+pub struct PassportProjectionContext<'a> {
+    pub molecule_tests: &'a [LoadedMoleculeTest],
+    pub molecule_evidence_by_id: &'a HashMap<String, MoleculeEvidence>,
+    pub specs_by_id: &'a HashMap<String, LoadedSpec>,
+}
+
 /// Explicit marker for backend-only escape hatches on seam units.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PassportMarker {
@@ -159,17 +176,31 @@ pub struct Passport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence: Option<PassportEvidence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freshness_anchor: Option<PassportFreshnessSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub freshness: Option<PassportFreshness>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub markers: Option<Vec<PassportMarker>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proof_coverage: Option<Vec<PassportProofCoverage>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escape_hatch_gate: Option<EscapeHatchGate>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "deserialize_optional_sha256_digest"
     )]
     pub contract_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PassportBuildMetadata {
+    pub evidence: Option<PassportEvidence>,
+    pub freshness_anchor: Option<PassportFreshnessSnapshot>,
+    pub contract_hash: Option<String>,
+    pub freshness: Option<PassportFreshness>,
+    pub markers: Option<Vec<PassportMarker>>,
+    pub proof_coverage: Option<Vec<PassportProofCoverage>>,
 }
 
 /// Build a Passport from a LoadedSpec.
@@ -188,26 +219,72 @@ pub fn build_passport_with_evidence(
     contract_hash: Option<String>,
 ) -> Passport {
     let has_evidence = evidence.is_some();
+    let freshness_anchor = passport_freshness_anchor_for_write(spec, has_evidence);
+    let freshness = resolve_passport_freshness_with_anchor(
+        spec,
+        freshness_anchor.as_ref(),
+        contract_hash.as_deref(),
+        None,
+    );
     build_passport_with_metadata(
         spec,
         generated_at,
-        evidence,
-        contract_hash,
-        passport_freshness_for_write(spec, has_evidence),
-        compute_passport_markers(spec),
-        default_passport_proof_coverage(spec),
+        PassportBuildMetadata {
+            evidence,
+            freshness_anchor,
+            contract_hash,
+            freshness,
+            markers: compute_passport_markers(spec),
+            proof_coverage: default_passport_proof_coverage(spec),
+        },
+    )
+}
+
+/// Build a Passport without minting any new proof state.
+///
+/// This is for non-test callers such as `spec build` / `spec generate`. They
+/// may refresh authored metadata, markers, and proof-coverage projections, but
+/// they must preserve the last observed proof anchor written by `spec test`.
+pub fn build_passport_preserving_proof_state(
+    spec: &LoadedSpec,
+    generated_at: &str,
+    existing: Option<&Passport>,
+    contract_hash: Option<String>,
+) -> Passport {
+    let freshness_anchor = preserved_freshness_anchor(existing);
+    let freshness = resolve_passport_freshness_with_anchor(
+        spec,
+        freshness_anchor.as_ref(),
+        contract_hash.as_deref(),
+        None,
+    );
+    build_passport_with_metadata(
+        spec,
+        generated_at,
+        PassportBuildMetadata {
+            evidence: existing.and_then(|passport| passport.evidence.clone()),
+            freshness_anchor,
+            contract_hash,
+            freshness,
+            markers: compute_passport_markers(spec),
+            proof_coverage: default_passport_proof_coverage(spec),
+        },
     )
 }
 
 pub fn build_passport_with_metadata(
     spec: &LoadedSpec,
     generated_at: &str,
-    evidence: Option<PassportEvidence>,
-    contract_hash: Option<String>,
-    freshness: Option<PassportFreshness>,
-    markers: Option<Vec<PassportMarker>>,
-    proof_coverage: Option<Vec<PassportProofCoverage>>,
+    metadata: PassportBuildMetadata,
 ) -> Passport {
+    let PassportBuildMetadata {
+        evidence,
+        freshness_anchor,
+        contract_hash,
+        freshness,
+        markers,
+        proof_coverage,
+    } = metadata;
     let is_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum));
     let contract = spec.spec.contract.as_ref().map(|c| PassportContract {
         inputs: c
@@ -254,9 +331,11 @@ pub fn build_passport_with_metadata(
         generated_at: generated_at.to_string(),
         source_file: spec.source.file_path.clone(),
         evidence,
+        freshness_anchor,
         freshness,
         markers,
         proof_coverage,
+        escape_hatch_gate: None,
         contract_hash,
     }
 }
@@ -442,46 +521,119 @@ pub fn passport_freshness_for_write(
     spec: &LoadedSpec,
     has_evidence: bool,
 ) -> Option<PassportFreshness> {
-    compute_passport_freshness_snapshot(spec).map(|snapshot| PassportFreshness {
-        authored_truth_status: if has_evidence && snapshot.authored_truth_digest.is_some() {
-            FreshnessStatus::Fresh
-        } else {
-            FreshnessStatus::Unknown
-        },
-        backend_execution_status: if has_evidence && snapshot.backend_execution_digest.is_some() {
-            FreshnessStatus::Fresh
-        } else {
-            FreshnessStatus::Unknown
-        },
-        snapshot,
-    })
+    resolve_passport_freshness_with_anchor(
+        spec,
+        passport_freshness_anchor_for_write(spec, has_evidence).as_ref(),
+        None,
+        None,
+    )
 }
 
 pub fn resolve_passport_freshness(
     spec: &LoadedSpec,
     passport: Option<&Passport>,
 ) -> Option<PassportFreshness> {
-    let snapshot = compute_passport_freshness_snapshot(spec)?;
-    let stored = passport.and_then(|passport| passport.freshness.as_ref());
-    let (authored_truth_status, backend_execution_status) = if let Some(stored) = stored {
-        (
-            resolve_freshness_status(
-                stored.snapshot.authored_truth_digest.as_deref(),
-                snapshot.authored_truth_digest.as_deref(),
-            ),
-            resolve_freshness_status(
-                stored.snapshot.backend_execution_digest.as_deref(),
-                snapshot.backend_execution_digest.as_deref(),
-            ),
-        )
+    let anchor = stored_freshness_anchor(passport);
+    let legacy_authored_truth_present = passport.map(|passport| {
+        passport.contract.is_some()
+            || passport.data.is_some()
+            || passport.sum.is_some()
+            || !passport.constructors.is_empty()
+            || !passport.methods.is_empty()
+    });
+    let legacy_contract_hash = if anchor.is_some() {
+        None
     } else {
-        (FreshnessStatus::Unknown, FreshnessStatus::Unknown)
+        passport.and_then(|passport| passport.contract_hash.as_deref())
     };
+    resolve_passport_freshness_with_anchor(
+        spec,
+        anchor.as_ref(),
+        legacy_contract_hash,
+        legacy_authored_truth_present,
+    )
+}
+
+pub fn project_passport_truth(
+    spec: &LoadedSpec,
+    passport: Option<&Passport>,
+    context: &PassportProjectionContext<'_>,
+) -> ProjectedPassportTruth {
+    ProjectedPassportTruth {
+        freshness: resolve_passport_freshness(spec, passport),
+        markers: compute_passport_markers(spec),
+        proof_coverage: project_passport_proof_coverage(spec, context),
+        escape_hatch_gate: evaluate_escape_hatch_gate(
+            spec,
+            passport,
+            context.molecule_tests,
+            context.molecule_evidence_by_id,
+            context.specs_by_id,
+        ),
+    }
+}
+
+pub fn apply_projected_passport_truth(
+    passport: &mut Passport,
+    projected_truth: ProjectedPassportTruth,
+) {
+    passport.freshness = projected_truth.freshness;
+    passport.markers = projected_truth.markers;
+    passport.proof_coverage = projected_truth.proof_coverage;
+    passport.escape_hatch_gate = projected_truth.escape_hatch_gate;
+}
+
+fn resolve_passport_freshness_with_anchor(
+    spec: &LoadedSpec,
+    freshness_anchor: Option<&PassportFreshnessSnapshot>,
+    legacy_contract_hash: Option<&str>,
+    legacy_authored_truth_present: Option<bool>,
+) -> Option<PassportFreshness> {
+    let snapshot = compute_passport_freshness_snapshot(spec)?;
+    let authored_truth_status = resolve_authored_truth_status(
+        freshness_anchor,
+        legacy_contract_hash,
+        legacy_authored_truth_present,
+        &snapshot,
+    );
+    let backend_execution_status = resolve_freshness_status(
+        freshness_anchor.and_then(|anchor| anchor.backend_execution_digest.as_deref()),
+        snapshot.backend_execution_digest.as_deref(),
+    );
     Some(PassportFreshness {
         authored_truth_status,
         backend_execution_status,
         snapshot,
     })
+}
+
+fn resolve_authored_truth_status(
+    freshness_anchor: Option<&PassportFreshnessSnapshot>,
+    legacy_contract_hash: Option<&str>,
+    legacy_authored_truth_present: Option<bool>,
+    snapshot: &PassportFreshnessSnapshot,
+) -> FreshnessStatus {
+    if let Some(stored) = freshness_anchor {
+        return resolve_freshness_status(
+            stored.authored_truth_digest.as_deref(),
+            snapshot.authored_truth_digest.as_deref(),
+        );
+    }
+
+    let status = resolve_freshness_status(
+        legacy_contract_hash,
+        snapshot.authored_truth_digest.as_deref(),
+    );
+    if let (FreshnessStatus::Unknown, Some(stored_present)) =
+        (status, legacy_authored_truth_present)
+    {
+        return resolve_freshness_presence_status(
+            stored_present,
+            snapshot.authored_truth_digest.is_some(),
+        );
+    }
+
+    status
 }
 
 fn resolve_freshness_status(
@@ -490,9 +642,91 @@ fn resolve_freshness_status(
 ) -> FreshnessStatus {
     match (stored_digest, live_digest) {
         (Some(stored), Some(live)) if stored == live => FreshnessStatus::Fresh,
-        (Some(_), Some(_)) | (Some(_), None) | (None, Some(_)) => FreshnessStatus::Stale,
-        (None, None) => FreshnessStatus::Unknown,
+        (Some(_), Some(_)) | (Some(_), None) => FreshnessStatus::Stale,
+        (None, _) => FreshnessStatus::Unknown,
     }
+}
+
+fn resolve_freshness_presence_status(stored_present: bool, live_present: bool) -> FreshnessStatus {
+    match (stored_present, live_present) {
+        (true, true) => FreshnessStatus::Unknown,
+        (true, false) | (false, true) => FreshnessStatus::Stale,
+        (false, false) => FreshnessStatus::Unknown,
+    }
+}
+
+fn stored_freshness_anchor(passport: Option<&Passport>) -> Option<PassportFreshnessSnapshot> {
+    passport
+        .and_then(|passport| passport.freshness_anchor.clone())
+        .or_else(|| {
+            passport.and_then(|passport| {
+                passport
+                    .freshness
+                    .as_ref()
+                    .map(|freshness| freshness.snapshot.clone())
+            })
+        })
+        .or_else(|| {
+            passport.and_then(|passport| {
+                passport
+                    .contract_hash
+                    .as_ref()
+                    .map(|contract_hash| PassportFreshnessSnapshot {
+                        authored_truth_digest: Some(contract_hash.clone()),
+                        backend_execution_digest: None,
+                    })
+            })
+        })
+}
+
+fn preserved_freshness_anchor(passport: Option<&Passport>) -> Option<PassportFreshnessSnapshot> {
+    stored_freshness_anchor(passport)
+}
+
+fn passport_freshness_anchor_for_write(
+    spec: &LoadedSpec,
+    has_evidence: bool,
+) -> Option<PassportFreshnessSnapshot> {
+    has_evidence
+        .then(|| compute_passport_freshness_snapshot(spec))
+        .flatten()
+}
+
+fn project_passport_proof_coverage(
+    spec: &LoadedSpec,
+    context: &PassportProjectionContext<'_>,
+) -> Option<Vec<PassportProofCoverage>> {
+    let mut proof_coverage = default_passport_proof_coverage(spec)?;
+    let molecule_surface_present = context
+        .molecule_tests
+        .iter()
+        .filter(|test| {
+            test.test
+                .covers
+                .iter()
+                .any(|cover_id| cover_id == &spec.spec.id)
+        })
+        .any(|test| {
+            context
+                .molecule_evidence_by_id
+                .get(&test.test.id)
+                .is_some_and(|evidence| {
+                    molecule_evidence_is_current_pass(evidence, test, context.specs_by_id)
+                })
+        });
+    if molecule_surface_present {
+        for coverage in &mut proof_coverage {
+            coverage.surfaces = normalize_proof_surfaces(
+                coverage
+                    .surfaces
+                    .iter()
+                    .cloned()
+                    .chain(std::iter::once(ProofSurface::Molecule))
+                    .collect(),
+            );
+        }
+    }
+    Some(proof_coverage)
 }
 
 fn canonical_discount_policy_proof_coverage(
@@ -1106,6 +1340,7 @@ mod tests {
             ])
         );
         assert!(passport.proof_coverage.is_none());
+        assert!(passport.escape_hatch_gate.is_none());
     }
 
     #[test]
@@ -1154,6 +1389,7 @@ mod tests {
             })
         );
         assert!(passport.proof_coverage.is_none());
+        assert!(passport.escape_hatch_gate.is_none());
     }
 
     #[test]
@@ -1687,6 +1923,13 @@ mod tests {
         );
 
         assert_eq!(
+            passport.freshness_anchor,
+            Some(PassportFreshnessSnapshot {
+                authored_truth_digest: compute_authored_truth_digest(&spec),
+                backend_execution_digest: None,
+            })
+        );
+        assert_eq!(
             passport.freshness,
             Some(PassportFreshness {
                 snapshot: PassportFreshnessSnapshot {
@@ -1696,6 +1939,168 @@ mod tests {
                 authored_truth_status: FreshnessStatus::Fresh,
                 backend_execution_status: FreshnessStatus::Unknown,
             })
+        );
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_preserves_anchor_and_reprojects_freshness() {
+        let mut inputs = IndexMap::new();
+        inputs.insert("subtotal".to_string(), "i32".to_string());
+        let source_path = "units/pricing/apply_tax.unit.spec";
+        let original_spec = make_loaded_spec(
+            "pricing/apply_tax",
+            source_path,
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs.clone()),
+                returns: Some("i32".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![("basic", "true")],
+        );
+        let changed_spec = make_loaded_spec(
+            "pricing/apply_tax",
+            source_path,
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs),
+                returns: Some("i64".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![("basic", "true")],
+        );
+        let existing = build_passport_with_evidence(
+            &original_spec,
+            "2026-04-04T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: None,
+            }),
+            compute_contract_hash(&original_spec),
+        );
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &changed_spec,
+            "2026-04-05T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
+        assert_eq!(rebuilt.evidence, existing.evidence);
+        assert_eq!(rebuilt.freshness_anchor, existing.freshness_anchor);
+        assert_eq!(
+            rebuilt.freshness,
+            Some(PassportFreshness {
+                snapshot: PassportFreshnessSnapshot {
+                    authored_truth_digest: compute_authored_truth_digest(&changed_spec),
+                    backend_execution_digest: None,
+                },
+                authored_truth_status: FreshnessStatus::Stale,
+                backend_execution_status: FreshnessStatus::Unknown,
+            })
+        );
+        assert_eq!(rebuilt.contract_hash, existing.contract_hash);
+        assert_eq!(rebuilt.generated_at, "2026-04-05T00:00:00Z");
+        assert_eq!(rebuilt.contract.unwrap().returns.as_deref(), Some("i64"));
+    }
+
+    #[test]
+    fn resolve_passport_freshness_uses_legacy_contract_hash_when_freshness_missing() {
+        let mut inputs = IndexMap::new();
+        inputs.insert("subtotal".to_string(), "i32".to_string());
+        let original_spec = make_loaded_spec(
+            "pricing/apply_tax",
+            "units/pricing/apply_tax.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs.clone()),
+                returns: Some("i32".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+        let changed_spec = make_loaded_spec(
+            "pricing/apply_tax",
+            "units/pricing/apply_tax.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs),
+                returns: Some("i64".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+        let legacy_passport = Passport {
+            freshness: None,
+            contract_hash: compute_contract_hash(&original_spec),
+            ..build_passport(&original_spec, "2026-04-04T00:00:00Z")
+        };
+
+        let freshness = resolve_passport_freshness(&changed_spec, Some(&legacy_passport))
+            .expect("freshness should resolve");
+
+        assert_eq!(freshness.authored_truth_status, FreshnessStatus::Stale);
+        assert_eq!(freshness.backend_execution_status, FreshnessStatus::Unknown);
+        assert_eq!(
+            freshness.snapshot.authored_truth_digest,
+            compute_authored_truth_digest(&changed_spec)
+        );
+        assert_eq!(freshness.snapshot.backend_execution_digest, None);
+    }
+
+    #[test]
+    fn resolve_passport_freshness_marks_legacy_contract_addition_as_stale() {
+        let original_spec = make_loaded_spec(
+            "pricing/apply_discount",
+            "units/pricing/apply_discount.unit.spec",
+            Some("0.3.0"),
+            None,
+            vec![],
+            vec![],
+        );
+        let changed_spec = make_loaded_spec(
+            "pricing/apply_discount",
+            "units/pricing/apply_discount.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: None,
+                returns: Some("bool".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+        let legacy_passport = Passport {
+            evidence: Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: None,
+            }),
+            freshness: None,
+            freshness_anchor: None,
+            contract_hash: None,
+            ..build_passport(&original_spec, "2026-04-04T00:00:00Z")
+        };
+
+        let freshness = resolve_passport_freshness(&changed_spec, Some(&legacy_passport))
+            .expect("freshness should resolve");
+
+        assert_eq!(freshness.authored_truth_status, FreshnessStatus::Stale);
+        assert_eq!(freshness.backend_execution_status, FreshnessStatus::Unknown);
+        assert_eq!(
+            freshness.snapshot.authored_truth_digest,
+            compute_authored_truth_digest(&changed_spec)
         );
     }
 
@@ -1775,6 +2180,10 @@ mod tests {
         assert!(
             !json.contains("\"proof_coverage\""),
             "function passports should omit proof coverage: {json}"
+        );
+        assert!(
+            !json.contains("\"escape_hatch_gate\""),
+            "function passports should omit escape hatch gate metadata: {json}"
         );
     }
 

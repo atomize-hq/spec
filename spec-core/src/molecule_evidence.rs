@@ -196,6 +196,15 @@ pub fn molecule_evidence_is_stale(
         != covered_unit_contract_hashes_for_test(test, specs_by_id)
 }
 
+pub fn molecule_evidence_is_current_pass(
+    evidence: &MoleculeEvidence,
+    test: &LoadedMoleculeTest,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> bool {
+    evidence.status == MoleculeEvidenceStatus::Pass
+        && !molecule_evidence_is_stale(evidence, test, specs_by_id)
+}
+
 pub fn ensure_gitignore_entry(spec_root: &Path) -> Result<()> {
     const ENTRY: &str = "**/*.test.evidence.json";
     let gitignore_path = spec_root.join(".gitignore");

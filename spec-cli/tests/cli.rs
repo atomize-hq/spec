@@ -4397,7 +4397,7 @@ fn spec_status_checked_in_ecommerce_example_is_green() {
 }
 
 #[test]
-fn spec_status_checked_in_ecommerce_example_falls_back_to_untested_without_molecule_evidence() {
+fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_molecule_evidence() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
     fs::remove_file(ecommerce_dir.join("units/pricing/checkout_flow.test.evidence.json")).unwrap();
     fs::remove_file(ecommerce_dir.join("units/pricing/discount_plus_tax.test.evidence.json"))
@@ -4414,10 +4414,30 @@ fn spec_status_checked_in_ecommerce_example_falls_back_to_untested_without_molec
     );
 
     let json = parse_stdout_json(&output);
+    let checkout_quote = status_units(&json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .unwrap();
+    assert_eq!(checkout_quote["status"], "incomplete", "{json}");
+    assert_eq!(
+        checkout_quote["reason"], "missing required escape-hatch proof: molecule",
+        "{json}"
+    );
+    let discount_policy = status_units(&json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .unwrap();
+    assert_eq!(discount_policy["status"], "incomplete", "{json}");
+    assert_eq!(
+        discount_policy["reason"], "missing required escape-hatch proof: molecule",
+        "{json}"
+    );
     assert!(
         status_units(&json)
             .iter()
-            .all(|unit| unit["status"] == "valid"),
+            .filter(|unit| unit["status"] == "valid")
+            .count()
+            >= 4,
         "{json}"
     );
     assert_eq!(status_molecule_tests(&json).len(), 3, "{json}");
@@ -7523,10 +7543,16 @@ body:
         "single-file molecule test should not write sibling evidence"
     );
     assert!(
-        !units_dir
+        units_dir
             .join("pricing/apply_tax.spec.passport.json")
             .exists(),
-        "single-file molecule test should not write unit passports"
+        "single-file molecule test should refresh covered unit passports"
+    );
+    assert!(
+        units_dir
+            .join("pricing/apply_discount.spec.passport.json")
+            .exists(),
+        "single-file molecule test should refresh all covered unit passports"
     );
 }
 
@@ -11212,7 +11238,7 @@ methods:
 }
 
 #[test]
-fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
+fn data_seam_single_file_test_writes_passport_and_leaves_gate_open_without_molecule_proof() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
 
     let output = run_in(
@@ -11235,6 +11261,11 @@ fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
         "rust_decimal::Decimal"
     );
     assert_eq!(passport["evidence"]["test_results"][0]["status"], "pass");
+    assert_eq!(passport["escape_hatch_gate"]["status"], "open");
+    assert_eq!(
+        passport["escape_hatch_gate"]["missing_surfaces"],
+        serde_json::json!(["molecule"])
+    );
     assert!(
         passport["contract_hash"]
             .as_str()
@@ -11250,7 +11281,11 @@ fn data_seam_single_file_test_writes_passport_and_status_stays_valid() {
         .iter()
         .find(|entry| entry["id"] == "pricing/checkout_quote")
         .expect("expected checkout_quote status row");
-    assert_eq!(checkout_quote["status"], "valid");
+    assert_eq!(checkout_quote["status"], "incomplete");
+    assert_eq!(
+        checkout_quote["reason"],
+        "missing required escape-hatch proof: molecule"
+    );
 }
 
 #[test]
@@ -11383,9 +11418,13 @@ fn sum_seam_cli_validate_build_status_export_round_trip() {
             .starts_with("sha256:"),
         "{passport}"
     );
+    assert_eq!(passport["escape_hatch_gate"]["status"], "open");
+    assert_eq!(
+        passport["escape_hatch_gate"]["missing_surfaces"],
+        serde_json::json!(["molecule"])
+    );
 
     let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
-    assert_output_success("status should be valid after sum seam test", &status_output);
     let status_json = parse_stdout_json(&status_output);
     let sum_rows = status_units(&status_json)
         .iter()
@@ -11396,7 +11435,11 @@ fn sum_seam_cli_validate_build_status_export_round_trip() {
         1,
         "expected one status row for the sum seam"
     );
-    assert_eq!(sum_rows[0]["status"], "valid");
+    assert_eq!(sum_rows[0]["status"], "incomplete");
+    assert_eq!(
+        sum_rows[0]["reason"],
+        "missing required escape-hatch proof: molecule"
+    );
 
     let export_output = run_in(&project_dir, &["export", "units"]);
     assert_output_success(
@@ -11444,6 +11487,17 @@ fn sum_seam_cli_validate_build_status_export_round_trip() {
             .count(),
         1,
         "expected one passport entry for the sum seam in export"
+    );
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == "pricing/checkout_status")
+        .unwrap();
+    assert_eq!(exported_passport["escape_hatch_gate"]["status"], "open");
+    assert_eq!(
+        exported_passport["escape_hatch_gate"]["missing_surfaces"],
+        serde_json::json!(["molecule"])
     );
 }
 
