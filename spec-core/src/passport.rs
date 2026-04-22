@@ -5,15 +5,18 @@
 //! `.unit.spec` source file. Passports are derived artifacts (gitignored) and
 //! are written atomically only after all generation succeeds.
 
+use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_escape_hatch_gate};
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
+use crate::molecule_evidence::MoleculeEvidence;
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
-    LoadedSpec, UnitKind,
+    Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
 };
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -69,6 +72,89 @@ pub struct PassportEvidence {
     pub provenance: Option<ArtifactProvenance>,
 }
 
+/// Split freshness metadata for authored semantics vs backend execution details.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PassportFreshnessSnapshot {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_sha256_digest"
+    )]
+    pub authored_truth_digest: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_sha256_digest"
+    )]
+    pub backend_execution_digest: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum FreshnessStatus {
+    Fresh,
+    Stale,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PassportFreshness {
+    #[serde(flatten)]
+    pub snapshot: PassportFreshnessSnapshot,
+    pub authored_truth_status: FreshnessStatus,
+    pub backend_execution_status: FreshnessStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectedPassportTruth {
+    pub freshness: Option<PassportFreshness>,
+    pub markers: Option<Vec<PassportMarker>>,
+    pub proof_coverage: Option<Vec<PassportProofCoverage>>,
+    pub escape_hatch_gate: Option<EscapeHatchGate>,
+}
+
+pub struct PassportProjectionContext<'a> {
+    pub molecule_tests: &'a [LoadedMoleculeTest],
+    pub molecule_evidence_by_id: &'a HashMap<String, MoleculeEvidence>,
+    pub specs_by_id: &'a HashMap<String, LoadedSpec>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CanonicalProofCoverageDefinition {
+    id: &'static str,
+    explicit_atom_local_test_id: Option<&'static str>,
+}
+
+/// Explicit marker for backend-only escape hatches on seam units.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PassportMarker {
+    pub id: PassportMarkerId,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PassportMarkerId {
+    MethodLoweringRustBody,
+    BackendRustDerives,
+}
+
+/// Additive proof-coverage metadata for seam-localized review surfaces.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PassportProofCoverage {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surfaces: Vec<ProofSurface>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ProofSurface {
+    Atom,
+    Molecule,
+    ImplicitOnly,
+}
+
 /// The full passport document for one unit.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Passport {
@@ -95,12 +181,32 @@ pub struct Passport {
     pub source_file: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence: Option<PassportEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freshness_anchor: Option<PassportFreshnessSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freshness: Option<PassportFreshness>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markers: Option<Vec<PassportMarker>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_coverage: Option<Vec<PassportProofCoverage>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escape_hatch_gate: Option<EscapeHatchGate>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_contract_hash"
+        deserialize_with = "deserialize_optional_sha256_digest"
     )]
     pub contract_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PassportBuildMetadata {
+    pub evidence: Option<PassportEvidence>,
+    pub freshness_anchor: Option<PassportFreshnessSnapshot>,
+    pub contract_hash: Option<String>,
+    pub freshness: Option<PassportFreshness>,
+    pub markers: Option<Vec<PassportMarker>>,
+    pub proof_coverage: Option<Vec<PassportProofCoverage>>,
 }
 
 /// Build a Passport from a LoadedSpec.
@@ -118,6 +224,73 @@ pub fn build_passport_with_evidence(
     evidence: Option<PassportEvidence>,
     contract_hash: Option<String>,
 ) -> Passport {
+    let has_evidence = evidence.is_some();
+    let freshness_anchor = passport_freshness_anchor_for_write(spec, has_evidence);
+    let freshness = resolve_passport_freshness_with_anchor(
+        spec,
+        freshness_anchor.as_ref(),
+        contract_hash.as_deref(),
+        None,
+    );
+    build_passport_with_metadata(
+        spec,
+        generated_at,
+        PassportBuildMetadata {
+            evidence,
+            freshness_anchor,
+            contract_hash,
+            freshness,
+            markers: compute_passport_markers(spec),
+            proof_coverage: default_passport_proof_coverage(spec),
+        },
+    )
+}
+
+/// Build a Passport without minting any new proof state.
+///
+/// This is for non-test callers such as `spec build` / `spec generate`. They
+/// may refresh authored metadata, markers, and proof-coverage projections, but
+/// they must preserve the last observed proof anchor written by `spec test`.
+pub fn build_passport_preserving_proof_state(
+    spec: &LoadedSpec,
+    generated_at: &str,
+    existing: Option<&Passport>,
+    contract_hash: Option<String>,
+) -> Passport {
+    let freshness_anchor = preserved_freshness_anchor(existing);
+    let freshness = resolve_passport_freshness_with_anchor(
+        spec,
+        freshness_anchor.as_ref(),
+        contract_hash.as_deref(),
+        None,
+    );
+    build_passport_with_metadata(
+        spec,
+        generated_at,
+        PassportBuildMetadata {
+            evidence: existing.and_then(|passport| passport.evidence.clone()),
+            freshness_anchor,
+            contract_hash,
+            freshness,
+            markers: compute_passport_markers(spec),
+            proof_coverage: default_passport_proof_coverage(spec),
+        },
+    )
+}
+
+pub fn build_passport_with_metadata(
+    spec: &LoadedSpec,
+    generated_at: &str,
+    metadata: PassportBuildMetadata,
+) -> Passport {
+    let PassportBuildMetadata {
+        evidence,
+        freshness_anchor,
+        contract_hash,
+        freshness,
+        markers,
+        proof_coverage,
+    } = metadata;
     let is_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum));
     let contract = spec.spec.contract.as_ref().map(|c| PassportContract {
         inputs: c
@@ -164,58 +337,476 @@ pub fn build_passport_with_evidence(
         generated_at: generated_at.to_string(),
         source_file: spec.source.file_path.clone(),
         evidence,
+        freshness_anchor,
+        freshness,
+        markers,
+        proof_coverage,
+        escape_hatch_gate: None,
         contract_hash,
     }
 }
 
 #[derive(Serialize)]
-struct DataSeamHashSurface<'a> {
+struct DataSeamAuthoredTruthSurface<'a> {
     intent: &'a str,
     data: Option<&'a AuthoredDataShape>,
     constructors: &'a [AuthoredConstructor],
-    methods: &'a [AuthoredMethod],
-    backends: Option<&'a AuthoredBackends>,
+    methods: Vec<AuthoredMethodTruthSurface<'a>>,
 }
 
 #[derive(Serialize)]
-struct SumSeamHashSurface<'a> {
+struct SumSeamAuthoredTruthSurface<'a> {
     intent: &'a str,
     sum: Option<&'a AuthoredSumShape>,
     constructors: &'a [AuthoredConstructor],
-    methods: &'a [AuthoredMethod],
-    backends: Option<&'a AuthoredBackends>,
+    methods: Vec<AuthoredMethodTruthSurface<'a>>,
+}
+
+#[derive(Serialize)]
+struct AuthoredMethodTruthSurface<'a> {
+    id: &'a str,
+    intent: &'a Intent,
+    receiver: &'a str,
+    contract: Option<&'a Contract>,
+    deps: &'a [String],
+}
+
+#[derive(Serialize)]
+struct SeamBackendExecutionSurface<'a> {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    method_lowering_rust_bodies: Vec<&'a str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    rust_derives: Vec<&'a str>,
 }
 
 /// Compute SHA-256 of the unit's top-level truth surface.
 ///
 /// Function units hash only the legacy top-level `contract` surface.
-/// Data seams hash the seam's authored top-level truth.
+/// Data/sum seams hash the shared authored seam surface without backend-only
+/// lowering or derive details.
 pub fn compute_contract_hash(spec: &LoadedSpec) -> Option<String> {
+    compute_authored_truth_digest(spec)
+}
+
+/// Compute the M14 digest snapshot for one unit.
+pub fn compute_passport_freshness_snapshot(spec: &LoadedSpec) -> Option<PassportFreshnessSnapshot> {
+    Some(PassportFreshnessSnapshot {
+        authored_truth_digest: compute_authored_truth_digest(spec),
+        backend_execution_digest: compute_backend_execution_digest(spec),
+    })
+}
+
+/// Compute the shared authored-truth digest for one unit.
+pub fn compute_authored_truth_digest(spec: &LoadedSpec) -> Option<String> {
     let json = match spec.spec.unit_kind() {
-        Ok(UnitKind::Data) => serde_json::to_string(&DataSeamHashSurface {
+        Ok(UnitKind::Data) => serde_json::to_string(&DataSeamAuthoredTruthSurface {
             intent: &spec.spec.intent.why,
             data: spec.spec.extensions.data.as_ref(),
             constructors: &spec.spec.extensions.constructors,
-            methods: &spec.spec.extensions.methods,
-            backends: spec.spec.extensions.backends.as_ref(),
+            methods: authored_method_truth_surfaces(&spec.spec.extensions.methods),
         })
-        .expect("data seam hash serialization cannot fail for well-formed spec"),
-        Ok(UnitKind::Sum) => serde_json::to_string(&SumSeamHashSurface {
+        .expect("data seam authored-truth serialization cannot fail for well-formed spec"),
+        Ok(UnitKind::Sum) => serde_json::to_string(&SumSeamAuthoredTruthSurface {
             intent: &spec.spec.intent.why,
             sum: spec.spec.extensions.sum.as_ref(),
             constructors: &spec.spec.extensions.constructors,
-            methods: &spec.spec.extensions.methods,
-            backends: spec.spec.extensions.backends.as_ref(),
+            methods: authored_method_truth_surfaces(&spec.spec.extensions.methods),
         })
-        .expect("sum seam hash serialization cannot fail for well-formed spec"),
+        .expect("sum seam authored-truth serialization cannot fail for well-formed spec"),
         _ => {
             let contract = spec.spec.contract.as_ref()?;
             serde_json::to_string(contract)
                 .expect("contract serialization cannot fail for well-formed spec")
         }
     };
-    let hash = Sha256::digest(json.as_bytes());
-    Some(format!("sha256:{}", hex::encode(hash)))
+
+    Some(sha256_digest(&json))
+}
+
+/// Compute the backend-only execution digest for seam escape hatches.
+pub fn compute_backend_execution_digest(spec: &LoadedSpec) -> Option<String> {
+    let seam_kind = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum));
+    if !seam_kind {
+        return None;
+    }
+
+    let method_lowering_rust_bodies: Vec<&str> = spec
+        .spec
+        .extensions
+        .methods
+        .iter()
+        .filter_map(|method| {
+            method
+                .lowering
+                .as_ref()
+                .and_then(|lowering| lowering.rust.as_ref())
+                .map(|rust| rust.body.as_str())
+        })
+        .collect();
+    let rust_derives: Vec<&str> = spec
+        .spec
+        .extensions
+        .backends
+        .as_ref()
+        .and_then(|backends| backends.rust.as_ref())
+        .map(|rust| rust.derives.iter().map(String::as_str).collect())
+        .unwrap_or_default();
+
+    if method_lowering_rust_bodies.is_empty() && rust_derives.is_empty() {
+        return None;
+    }
+
+    let json = serde_json::to_string(&SeamBackendExecutionSurface {
+        method_lowering_rust_bodies,
+        rust_derives,
+    })
+    .expect("seam backend-execution serialization cannot fail for well-formed spec");
+    Some(sha256_digest(&json))
+}
+
+/// Compute explicit backend-only markers for seam units.
+pub fn compute_passport_markers(spec: &LoadedSpec) -> Option<Vec<PassportMarker>> {
+    match spec.spec.unit_kind() {
+        Ok(UnitKind::Data | UnitKind::Sum) => {
+            let mut markers = Vec::new();
+            if spec
+                .spec
+                .extensions
+                .backends
+                .as_ref()
+                .and_then(|backends| backends.rust.as_ref())
+                .map(|rust| !rust.derives.is_empty())
+                .unwrap_or(false)
+            {
+                markers.push(PassportMarker {
+                    id: PassportMarkerId::BackendRustDerives,
+                    path: "backends.rust.derives".to_string(),
+                });
+            }
+
+            for method in &spec.spec.extensions.methods {
+                if method
+                    .lowering
+                    .as_ref()
+                    .and_then(|lowering| lowering.rust.as_ref())
+                    .is_some()
+                {
+                    markers.push(PassportMarker {
+                        id: PassportMarkerId::MethodLoweringRustBody,
+                        path: format!("methods.{}.lowering.rust.body", method.id),
+                    });
+                }
+            }
+
+            if markers.is_empty() {
+                None
+            } else {
+                Some(markers)
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Default proof-coverage hook for seam-localized review metadata.
+pub fn default_passport_proof_coverage(spec: &LoadedSpec) -> Option<Vec<PassportProofCoverage>> {
+    let authored_local_test_ids = spec
+        .spec
+        .local_tests
+        .iter()
+        .map(|test| test.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+
+    canonical_proof_coverage_definitions(spec).map(|definitions| {
+        definitions
+            .iter()
+            .map(|definition| PassportProofCoverage {
+                id: definition.id.to_string(),
+                surfaces: normalize_proof_surfaces(branch_proof_surfaces(
+                    definition,
+                    &authored_local_test_ids,
+                    false,
+                    false,
+                )),
+            })
+            .collect()
+    })
+}
+
+pub fn normalize_proof_surfaces(mut surfaces: Vec<ProofSurface>) -> Vec<ProofSurface> {
+    surfaces.sort_by_key(|surface| match surface {
+        ProofSurface::Atom => 0,
+        ProofSurface::Molecule => 1,
+        ProofSurface::ImplicitOnly => 2,
+    });
+    surfaces.dedup();
+    surfaces
+}
+
+pub fn passport_freshness_for_write(
+    spec: &LoadedSpec,
+    has_evidence: bool,
+) -> Option<PassportFreshness> {
+    resolve_passport_freshness_with_anchor(
+        spec,
+        passport_freshness_anchor_for_write(spec, has_evidence).as_ref(),
+        None,
+        None,
+    )
+}
+
+pub fn resolve_passport_freshness(
+    spec: &LoadedSpec,
+    passport: Option<&Passport>,
+) -> Option<PassportFreshness> {
+    let anchor = stored_freshness_anchor(passport);
+    let legacy_authored_truth_present = passport.map(|passport| {
+        passport.contract.is_some()
+            || passport.data.is_some()
+            || passport.sum.is_some()
+            || !passport.constructors.is_empty()
+            || !passport.methods.is_empty()
+    });
+    let legacy_contract_hash = if anchor.is_some() {
+        None
+    } else {
+        passport.and_then(|passport| passport.contract_hash.as_deref())
+    };
+    resolve_passport_freshness_with_anchor(
+        spec,
+        anchor.as_ref(),
+        legacy_contract_hash,
+        legacy_authored_truth_present,
+    )
+}
+
+pub fn project_passport_truth(
+    spec: &LoadedSpec,
+    passport: Option<&Passport>,
+    context: &PassportProjectionContext<'_>,
+) -> ProjectedPassportTruth {
+    ProjectedPassportTruth {
+        freshness: resolve_passport_freshness(spec, passport),
+        markers: compute_passport_markers(spec),
+        proof_coverage: project_passport_proof_coverage(spec, passport, context),
+        escape_hatch_gate: evaluate_escape_hatch_gate(
+            spec,
+            passport,
+            context.molecule_tests,
+            context.molecule_evidence_by_id,
+            context.specs_by_id,
+        ),
+    }
+}
+
+pub fn apply_projected_passport_truth(
+    passport: &mut Passport,
+    projected_truth: ProjectedPassportTruth,
+) {
+    passport.freshness = projected_truth.freshness;
+    passport.markers = projected_truth.markers;
+    passport.proof_coverage = projected_truth.proof_coverage;
+    passport.escape_hatch_gate = projected_truth.escape_hatch_gate;
+}
+
+fn resolve_passport_freshness_with_anchor(
+    spec: &LoadedSpec,
+    freshness_anchor: Option<&PassportFreshnessSnapshot>,
+    legacy_contract_hash: Option<&str>,
+    legacy_authored_truth_present: Option<bool>,
+) -> Option<PassportFreshness> {
+    let snapshot = compute_passport_freshness_snapshot(spec)?;
+    let authored_truth_status = resolve_authored_truth_status(
+        freshness_anchor,
+        legacy_contract_hash,
+        legacy_authored_truth_present,
+        &snapshot,
+    );
+    let backend_execution_status = resolve_freshness_status(
+        freshness_anchor.and_then(|anchor| anchor.backend_execution_digest.as_deref()),
+        snapshot.backend_execution_digest.as_deref(),
+    );
+    Some(PassportFreshness {
+        authored_truth_status,
+        backend_execution_status,
+        snapshot,
+    })
+}
+
+fn resolve_authored_truth_status(
+    freshness_anchor: Option<&PassportFreshnessSnapshot>,
+    legacy_contract_hash: Option<&str>,
+    legacy_authored_truth_present: Option<bool>,
+    snapshot: &PassportFreshnessSnapshot,
+) -> FreshnessStatus {
+    if let Some(stored) = freshness_anchor {
+        return resolve_freshness_status(
+            stored.authored_truth_digest.as_deref(),
+            snapshot.authored_truth_digest.as_deref(),
+        );
+    }
+
+    let status = resolve_freshness_status(
+        legacy_contract_hash,
+        snapshot.authored_truth_digest.as_deref(),
+    );
+    if let (FreshnessStatus::Unknown, Some(stored_present)) =
+        (status, legacy_authored_truth_present)
+    {
+        return resolve_freshness_presence_status(
+            stored_present,
+            snapshot.authored_truth_digest.is_some(),
+        );
+    }
+
+    status
+}
+
+fn resolve_freshness_status(
+    stored_digest: Option<&str>,
+    live_digest: Option<&str>,
+) -> FreshnessStatus {
+    match (stored_digest, live_digest) {
+        (Some(stored), Some(live)) if stored == live => FreshnessStatus::Fresh,
+        (Some(_), Some(_)) | (Some(_), None) => FreshnessStatus::Stale,
+        (None, _) => FreshnessStatus::Unknown,
+    }
+}
+
+fn resolve_freshness_presence_status(stored_present: bool, live_present: bool) -> FreshnessStatus {
+    match (stored_present, live_present) {
+        (true, true) => FreshnessStatus::Unknown,
+        (true, false) | (false, true) => FreshnessStatus::Stale,
+        (false, false) => FreshnessStatus::Unknown,
+    }
+}
+
+fn stored_freshness_anchor(passport: Option<&Passport>) -> Option<PassportFreshnessSnapshot> {
+    passport
+        .and_then(|passport| passport.freshness_anchor.clone())
+        .or_else(|| {
+            passport.and_then(|passport| {
+                passport
+                    .freshness
+                    .as_ref()
+                    .map(|freshness| freshness.snapshot.clone())
+            })
+        })
+        .or_else(|| {
+            passport.and_then(|passport| {
+                passport
+                    .contract_hash
+                    .as_ref()
+                    .map(|contract_hash| PassportFreshnessSnapshot {
+                        authored_truth_digest: Some(contract_hash.clone()),
+                        backend_execution_digest: None,
+                    })
+            })
+        })
+}
+
+fn preserved_freshness_anchor(passport: Option<&Passport>) -> Option<PassportFreshnessSnapshot> {
+    stored_freshness_anchor(passport)
+}
+
+fn passport_freshness_anchor_for_write(
+    spec: &LoadedSpec,
+    has_evidence: bool,
+) -> Option<PassportFreshnessSnapshot> {
+    has_evidence
+        .then(|| compute_passport_freshness_snapshot(spec))
+        .flatten()
+}
+
+fn project_passport_proof_coverage(
+    spec: &LoadedSpec,
+    passport: Option<&Passport>,
+    context: &PassportProjectionContext<'_>,
+) -> Option<Vec<PassportProofCoverage>> {
+    let definitions = canonical_proof_coverage_definitions(spec)?;
+    let authored_local_test_ids = spec
+        .spec
+        .local_tests
+        .iter()
+        .map(|test| test.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    let current_surfaces = current_proof_surfaces(
+        spec,
+        passport,
+        context.molecule_tests,
+        context.molecule_evidence_by_id,
+        context.specs_by_id,
+    );
+
+    Some(
+        definitions
+            .iter()
+            .map(|definition| PassportProofCoverage {
+                id: definition.id.to_string(),
+                surfaces: normalize_proof_surfaces(branch_proof_surfaces(
+                    definition,
+                    &authored_local_test_ids,
+                    current_surfaces.atom,
+                    current_surfaces.molecule,
+                )),
+            })
+            .collect(),
+    )
+}
+
+fn canonical_proof_coverage_definitions(
+    spec: &LoadedSpec,
+) -> Option<&'static [CanonicalProofCoverageDefinition]> {
+    if spec.spec.id != "pricing/discount_policy" {
+        return None;
+    }
+
+    const DISCOUNT_POLICY_COVERAGE: &[CanonicalProofCoverageDefinition] = &[
+        CanonicalProofCoverageDefinition {
+            id: "variant.none",
+            explicit_atom_local_test_id: Some("variant_none"),
+        },
+        CanonicalProofCoverageDefinition {
+            id: "variant.percentage",
+            explicit_atom_local_test_id: Some("variant_percentage"),
+        },
+        CanonicalProofCoverageDefinition {
+            id: "variant.fixed_amount",
+            explicit_atom_local_test_id: Some("variant_fixed_amount"),
+        },
+        CanonicalProofCoverageDefinition {
+            id: "behavior.fixed_amount_capped",
+            explicit_atom_local_test_id: Some("behavior_fixed_amount_capped"),
+        },
+    ];
+
+    Some(DISCOUNT_POLICY_COVERAGE)
+}
+
+fn branch_proof_surfaces(
+    definition: &CanonicalProofCoverageDefinition,
+    authored_local_test_ids: &std::collections::BTreeSet<&str>,
+    current_atom_present: bool,
+    current_molecule_present: bool,
+) -> Vec<ProofSurface> {
+    let has_current_explicit_atom =
+        definition
+            .explicit_atom_local_test_id
+            .is_some_and(|local_test_id| {
+                authored_local_test_ids.contains(local_test_id) && current_atom_present
+            });
+
+    let mut surfaces = Vec::new();
+    if has_current_explicit_atom {
+        surfaces.push(ProofSurface::Atom);
+    }
+    if current_molecule_present {
+        surfaces.push(ProofSurface::Molecule);
+    }
+    if !has_current_explicit_atom {
+        surfaces.push(ProofSurface::ImplicitOnly);
+    }
+    surfaces
 }
 
 /// Return the passport file path for a given source `.unit.spec` path.
@@ -278,14 +869,34 @@ pub fn write_passport(passport: &Passport, source_file_path: &Path) -> Result<()
     write_generated_file(&passport_path.display().to_string(), &json)
 }
 
-fn deserialize_contract_hash<'de, D>(
+fn authored_method_truth_surfaces(
+    methods: &[AuthoredMethod],
+) -> Vec<AuthoredMethodTruthSurface<'_>> {
+    methods
+        .iter()
+        .map(|method| AuthoredMethodTruthSurface {
+            id: method.id.as_str(),
+            intent: &method.intent,
+            receiver: method.receiver.as_str(),
+            contract: method.contract.as_ref(),
+            deps: method.deps.as_slice(),
+        })
+        .collect()
+}
+
+fn sha256_digest(json: &str) -> String {
+    let hash = Sha256::digest(json.as_bytes());
+    format!("sha256:{}", hex::encode(hash))
+}
+
+fn deserialize_optional_sha256_digest<'de, D>(
     deserializer: D,
 ) -> std::result::Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let contract_hash = Option::<String>::deserialize(deserializer)?;
-    Ok(contract_hash.filter(|hash| hash.starts_with("sha256:")))
+    let digest = Option::<String>::deserialize(deserializer)?;
+    Ok(digest.filter(|hash| hash.starts_with("sha256:")))
 }
 
 /// Emit `**/*.spec.passport.json` to `<spec_root>/.gitignore` if not already
@@ -362,11 +973,12 @@ fn secs_to_gregorian(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::molecule_evidence::{MoleculeEvidenceStatus, build_molecule_evidence};
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
-        AuthoredSumVariant, Body, Contract, Intent, LocalTest, SpecSource, SpecStruct,
-        UnitExtensions,
+        AuthoredSumVariant, Body, Contract, Intent, LocalTest, MoleculeTestSource,
+        MoleculeTestStruct, SpecSource, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
     use tempfile::TempDir;
@@ -629,6 +1241,79 @@ mod tests {
         }
     }
 
+    fn make_discount_policy_sum_seam(local_test_ids: &[&str]) -> LoadedSpec {
+        let mut spec = make_loaded_sum_seam(
+            "pricing/discount_policy",
+            "units/pricing/discount_policy.unit.spec",
+        );
+        spec.spec.intent.why =
+            "Represent mutually exclusive discount strategies for checkout pricing.".to_string();
+        spec.spec.local_tests = local_test_ids
+            .iter()
+            .map(|local_test_id| LocalTest {
+                id: (*local_test_id).to_string(),
+                expect: "true".to_string(),
+            })
+            .collect();
+        spec
+    }
+
+    fn make_discount_policy_molecule_test() -> LoadedMoleculeTest {
+        LoadedMoleculeTest {
+            source: MoleculeTestSource {
+                file_path: "units/pricing/discount_policy_checkout_flow.test.spec".to_string(),
+                id: "pricing/discount_policy_checkout_flow".to_string(),
+            },
+            test: MoleculeTestStruct {
+                id: "pricing/discount_policy_checkout_flow".to_string(),
+                intent: Intent {
+                    why: "Cover the discount policy seam".to_string(),
+                },
+                covers: vec!["pricing/discount_policy".to_string()],
+                imports: None,
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
+                spec_version: Some("0.3.0".to_string()),
+            },
+        }
+    }
+
+    fn make_current_passport(spec: &LoadedSpec) -> Passport {
+        build_passport_with_evidence(
+            spec,
+            "2026-04-21T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-21T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            compute_contract_hash(spec),
+        )
+    }
+
+    fn proof_coverage_surfaces_for(
+        proof_coverage: &[PassportProofCoverage],
+        coverage_id: &str,
+    ) -> Vec<ProofSurface> {
+        proof_coverage
+            .iter()
+            .find(|coverage| coverage.id == coverage_id)
+            .expect("expected proof coverage entry")
+            .surfaces
+            .clone()
+    }
+
     #[test]
     fn build_passport_full_contract() {
         let mut inputs = IndexMap::new();
@@ -657,6 +1342,19 @@ mod tests {
         assert_eq!(passport.generated_at, "2026-04-04T00:00:00Z");
         assert_eq!(passport.source_file, "units/pricing/apply_tax.unit.spec");
         assert!(passport.contract_hash.is_none());
+        assert_eq!(
+            passport.freshness,
+            Some(PassportFreshness {
+                snapshot: PassportFreshnessSnapshot {
+                    authored_truth_digest: compute_authored_truth_digest(&spec),
+                    backend_execution_digest: None,
+                },
+                authored_truth_status: FreshnessStatus::Unknown,
+                backend_execution_status: FreshnessStatus::Unknown,
+            })
+        );
+        assert!(passport.markers.is_none());
+        assert!(passport.proof_coverage.is_none());
 
         let c = passport.contract.unwrap();
         assert_eq!(c.inputs.len(), 2);
@@ -689,6 +1387,19 @@ mod tests {
         assert!(passport.local_tests.is_empty());
         assert!(passport.evidence.is_none());
         assert!(passport.contract_hash.is_none());
+        assert_eq!(
+            passport.freshness,
+            Some(PassportFreshness {
+                snapshot: PassportFreshnessSnapshot {
+                    authored_truth_digest: compute_authored_truth_digest(&spec),
+                    backend_execution_digest: None,
+                },
+                authored_truth_status: FreshnessStatus::Unknown,
+                backend_execution_status: FreshnessStatus::Unknown,
+            })
+        );
+        assert!(passport.markers.is_none());
+        assert!(passport.proof_coverage.is_none());
     }
 
     #[test]
@@ -717,6 +1428,36 @@ mod tests {
             vec!["Clone".to_string(), "Debug".to_string()]
         );
         assert_eq!(passport.local_tests.len(), 1);
+        assert_eq!(
+            passport.freshness,
+            Some(PassportFreshness {
+                snapshot: PassportFreshnessSnapshot {
+                    authored_truth_digest: compute_authored_truth_digest(&spec),
+                    backend_execution_digest: compute_backend_execution_digest(&spec),
+                },
+                authored_truth_status: FreshnessStatus::Unknown,
+                backend_execution_status: FreshnessStatus::Unknown,
+            })
+        );
+        assert_eq!(
+            passport.markers,
+            Some(vec![
+                PassportMarker {
+                    id: PassportMarkerId::BackendRustDerives,
+                    path: "backends.rust.derives".to_string(),
+                },
+                PassportMarker {
+                    id: PassportMarkerId::MethodLoweringRustBody,
+                    path: "methods.discounted_subtotal.lowering.rust.body".to_string(),
+                },
+                PassportMarker {
+                    id: PassportMarkerId::MethodLoweringRustBody,
+                    path: "methods.total.lowering.rust.body".to_string(),
+                },
+            ])
+        );
+        assert!(passport.proof_coverage.is_none());
+        assert!(passport.escape_hatch_gate.is_none());
     }
 
     #[test]
@@ -753,6 +1494,19 @@ mod tests {
             ]
         );
         assert_eq!(passport.local_tests.len(), 1);
+        assert_eq!(
+            passport.freshness,
+            Some(PassportFreshness {
+                snapshot: PassportFreshnessSnapshot {
+                    authored_truth_digest: compute_authored_truth_digest(&spec),
+                    backend_execution_digest: compute_backend_execution_digest(&spec),
+                },
+                authored_truth_status: FreshnessStatus::Unknown,
+                backend_execution_status: FreshnessStatus::Unknown,
+            })
+        );
+        assert!(passport.proof_coverage.is_none());
+        assert!(passport.escape_hatch_gate.is_none());
     }
 
     #[test]
@@ -1006,6 +1760,65 @@ mod tests {
     }
 
     #[test]
+    fn test_authored_truth_digest_ignores_backend_only_seam_changes() {
+        let spec_original = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.extensions.methods[0]
+            .lowering
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .body = "{ self.subtotal }".to_string();
+        spec_changed
+            .spec
+            .extensions
+            .backends
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .derives
+            .push("PartialEq".to_string());
+
+        assert_eq!(
+            compute_authored_truth_digest(&spec_original),
+            compute_authored_truth_digest(&spec_changed)
+        );
+        assert_ne!(
+            compute_backend_execution_digest(&spec_original),
+            compute_backend_execution_digest(&spec_changed)
+        );
+    }
+
+    #[test]
+    fn test_backend_execution_digest_ignores_authored_only_seam_changes() {
+        let spec_original = make_loaded_sum_seam(
+            "pricing/checkout_status",
+            "units/pricing/checkout_status.unit.spec",
+        );
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.intent.why = "Changed authored truth".to_string();
+        spec_changed.spec.extensions.methods[0]
+            .deps
+            .push("money/round".to_string());
+
+        assert_ne!(
+            compute_authored_truth_digest(&spec_original),
+            compute_authored_truth_digest(&spec_changed)
+        );
+        assert_eq!(
+            compute_backend_execution_digest(&spec_original),
+            compute_backend_execution_digest(&spec_changed)
+        );
+    }
+
+    #[test]
     fn test_read_passport_returns_none_for_missing() {
         let dir = TempDir::new().unwrap();
         let source_path = dir.path().join("apply_tax.unit.spec");
@@ -1198,6 +2011,390 @@ mod tests {
     }
 
     #[test]
+    fn build_passport_with_evidence_marks_available_freshness_as_fresh() {
+        let mut inputs = IndexMap::new();
+        inputs.insert("subtotal".to_string(), "i32".to_string());
+        let spec = make_loaded_spec(
+            "pricing/apply_tax",
+            "units/pricing/apply_tax.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs),
+                returns: Some("i32".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+
+        let passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-04T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: None,
+            }),
+            compute_contract_hash(&spec),
+        );
+
+        assert_eq!(
+            passport.freshness_anchor,
+            Some(PassportFreshnessSnapshot {
+                authored_truth_digest: compute_authored_truth_digest(&spec),
+                backend_execution_digest: None,
+            })
+        );
+        assert_eq!(
+            passport.freshness,
+            Some(PassportFreshness {
+                snapshot: PassportFreshnessSnapshot {
+                    authored_truth_digest: compute_authored_truth_digest(&spec),
+                    backend_execution_digest: None,
+                },
+                authored_truth_status: FreshnessStatus::Fresh,
+                backend_execution_status: FreshnessStatus::Unknown,
+            })
+        );
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_preserves_anchor_and_reprojects_freshness() {
+        let mut inputs = IndexMap::new();
+        inputs.insert("subtotal".to_string(), "i32".to_string());
+        let source_path = "units/pricing/apply_tax.unit.spec";
+        let original_spec = make_loaded_spec(
+            "pricing/apply_tax",
+            source_path,
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs.clone()),
+                returns: Some("i32".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![("basic", "true")],
+        );
+        let changed_spec = make_loaded_spec(
+            "pricing/apply_tax",
+            source_path,
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs),
+                returns: Some("i64".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![("basic", "true")],
+        );
+        let existing = build_passport_with_evidence(
+            &original_spec,
+            "2026-04-04T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: None,
+            }),
+            compute_contract_hash(&original_spec),
+        );
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &changed_spec,
+            "2026-04-05T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
+        assert_eq!(rebuilt.evidence, existing.evidence);
+        assert_eq!(rebuilt.freshness_anchor, existing.freshness_anchor);
+        assert_eq!(
+            rebuilt.freshness,
+            Some(PassportFreshness {
+                snapshot: PassportFreshnessSnapshot {
+                    authored_truth_digest: compute_authored_truth_digest(&changed_spec),
+                    backend_execution_digest: None,
+                },
+                authored_truth_status: FreshnessStatus::Stale,
+                backend_execution_status: FreshnessStatus::Unknown,
+            })
+        );
+        assert_eq!(rebuilt.contract_hash, existing.contract_hash);
+        assert_eq!(rebuilt.generated_at, "2026-04-05T00:00:00Z");
+        assert_eq!(rebuilt.contract.unwrap().returns.as_deref(), Some("i64"));
+    }
+
+    #[test]
+    fn resolve_passport_freshness_uses_legacy_contract_hash_when_freshness_missing() {
+        let mut inputs = IndexMap::new();
+        inputs.insert("subtotal".to_string(), "i32".to_string());
+        let original_spec = make_loaded_spec(
+            "pricing/apply_tax",
+            "units/pricing/apply_tax.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs.clone()),
+                returns: Some("i32".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+        let changed_spec = make_loaded_spec(
+            "pricing/apply_tax",
+            "units/pricing/apply_tax.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(inputs),
+                returns: Some("i64".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+        let legacy_passport = Passport {
+            freshness: None,
+            contract_hash: compute_contract_hash(&original_spec),
+            ..build_passport(&original_spec, "2026-04-04T00:00:00Z")
+        };
+
+        let freshness = resolve_passport_freshness(&changed_spec, Some(&legacy_passport))
+            .expect("freshness should resolve");
+
+        assert_eq!(freshness.authored_truth_status, FreshnessStatus::Stale);
+        assert_eq!(freshness.backend_execution_status, FreshnessStatus::Unknown);
+        assert_eq!(
+            freshness.snapshot.authored_truth_digest,
+            compute_authored_truth_digest(&changed_spec)
+        );
+        assert_eq!(freshness.snapshot.backend_execution_digest, None);
+    }
+
+    #[test]
+    fn resolve_passport_freshness_marks_legacy_contract_addition_as_stale() {
+        let original_spec = make_loaded_spec(
+            "pricing/apply_discount",
+            "units/pricing/apply_discount.unit.spec",
+            Some("0.3.0"),
+            None,
+            vec![],
+            vec![],
+        );
+        let changed_spec = make_loaded_spec(
+            "pricing/apply_discount",
+            "units/pricing/apply_discount.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: None,
+                returns: Some("bool".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![],
+        );
+        let legacy_passport = Passport {
+            evidence: Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![],
+                observed_at: "2026-04-04T00:01:00Z".to_string(),
+                provenance: None,
+            }),
+            freshness: None,
+            freshness_anchor: None,
+            contract_hash: None,
+            ..build_passport(&original_spec, "2026-04-04T00:00:00Z")
+        };
+
+        let freshness = resolve_passport_freshness(&changed_spec, Some(&legacy_passport))
+            .expect("freshness should resolve");
+
+        assert_eq!(freshness.authored_truth_status, FreshnessStatus::Stale);
+        assert_eq!(freshness.backend_execution_status, FreshnessStatus::Unknown);
+        assert_eq!(
+            freshness.snapshot.authored_truth_digest,
+            compute_authored_truth_digest(&changed_spec)
+        );
+    }
+
+    #[test]
+    fn normalize_proof_surfaces_orders_and_deduplicates() {
+        assert_eq!(
+            normalize_proof_surfaces(vec![
+                ProofSurface::ImplicitOnly,
+                ProofSurface::Atom,
+                ProofSurface::Molecule,
+                ProofSurface::Atom,
+            ]),
+            vec![
+                ProofSurface::Atom,
+                ProofSurface::Molecule,
+                ProofSurface::ImplicitOnly,
+            ]
+        );
+    }
+
+    #[test]
+    fn project_passport_proof_coverage_reports_current_atom_and_molecule_surfaces() {
+        let spec = make_discount_policy_sum_seam(&[
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]);
+        let passport = make_current_passport(&spec);
+        let molecule_test = make_discount_policy_molecule_test();
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+        let molecule_evidence = build_molecule_evidence(
+            &molecule_test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-21T00:00:00Z",
+            &specs_by_id,
+            None,
+        );
+        let molecule_evidence_by_id =
+            HashMap::from([(molecule_test.test.id.clone(), molecule_evidence)]);
+        let context = PassportProjectionContext {
+            molecule_tests: std::slice::from_ref(&molecule_test),
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
+
+        let proof_coverage =
+            project_passport_proof_coverage(&spec, Some(&passport), &context).unwrap();
+
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.none"),
+            vec![ProofSurface::Atom, ProofSurface::Molecule]
+        );
+    }
+
+    #[test]
+    fn project_passport_proof_coverage_drops_atom_when_passport_is_stale() {
+        let original = make_discount_policy_sum_seam(&[
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]);
+        let passport = make_current_passport(&original);
+        let mut changed = original.clone();
+        changed.spec.intent.why = "Represent revised discount policy".to_string();
+        let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
+        let molecule_evidence_by_id = HashMap::new();
+        let context = PassportProjectionContext {
+            molecule_tests: &[],
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
+
+        let proof_coverage =
+            project_passport_proof_coverage(&changed, Some(&passport), &context).unwrap();
+
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.none"),
+            vec![ProofSurface::ImplicitOnly]
+        );
+    }
+
+    #[test]
+    fn project_passport_proof_coverage_keeps_current_molecule_when_atom_is_stale() {
+        let original = make_discount_policy_sum_seam(&[
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]);
+        let passport = make_current_passport(&original);
+        let mut changed = original.clone();
+        changed.spec.intent.why = "Represent revised discount policy".to_string();
+        let molecule_test = make_discount_policy_molecule_test();
+        let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
+        let molecule_evidence = build_molecule_evidence(
+            &molecule_test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-21T00:00:00Z",
+            &specs_by_id,
+            None,
+        );
+        let molecule_evidence_by_id =
+            HashMap::from([(molecule_test.test.id.clone(), molecule_evidence)]);
+        let context = PassportProjectionContext {
+            molecule_tests: std::slice::from_ref(&molecule_test),
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
+
+        let proof_coverage =
+            project_passport_proof_coverage(&changed, Some(&passport), &context).unwrap();
+
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.none"),
+            vec![ProofSurface::Molecule, ProofSurface::ImplicitOnly]
+        );
+    }
+
+    #[test]
+    fn project_passport_proof_coverage_uses_current_authored_local_test_set_per_branch() {
+        let mut changed = make_discount_policy_sum_seam(&[
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]);
+        changed.spec.local_tests = vec![
+            LocalTest {
+                id: "variant_percentage".to_string(),
+                expect: "true".to_string(),
+            },
+            LocalTest {
+                id: "variant_fixed_amount".to_string(),
+                expect: "true".to_string(),
+            },
+            LocalTest {
+                id: "behavior_fixed_amount_capped".to_string(),
+                expect: "true".to_string(),
+            },
+        ];
+        let passport = make_current_passport(&changed);
+        let molecule_test = make_discount_policy_molecule_test();
+        let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
+        let molecule_evidence = build_molecule_evidence(
+            &molecule_test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-21T00:00:00Z",
+            &specs_by_id,
+            None,
+        );
+        let molecule_evidence_by_id =
+            HashMap::from([(molecule_test.test.id.clone(), molecule_evidence)]);
+        let context = PassportProjectionContext {
+            molecule_tests: std::slice::from_ref(&molecule_test),
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
+
+        let proof_coverage =
+            project_passport_proof_coverage(&changed, Some(&passport), &context).unwrap();
+
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.none"),
+            vec![ProofSurface::Molecule, ProofSurface::ImplicitOnly]
+        );
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.percentage"),
+            vec![ProofSurface::Atom, ProofSurface::Molecule]
+        );
+    }
+
+    #[test]
     fn legacy_passport_evidence_without_provenance_still_deserializes() {
         let passport: Passport = serde_json::from_str(
             r#"{
@@ -1243,9 +2440,23 @@ mod tests {
 
         assert!(passport.evidence.is_none());
         assert!(passport.contract_hash.is_none());
+        assert!(passport.markers.is_none());
+        assert!(passport.proof_coverage.is_none());
         assert!(
             !json.contains("\"evidence\""),
             "static passport should not serialize evidence: {json}"
+        );
+        assert!(
+            !json.contains("\"markers\""),
+            "function passports should omit markers: {json}"
+        );
+        assert!(
+            !json.contains("\"proof_coverage\""),
+            "function passports should omit proof coverage: {json}"
+        );
+        assert!(
+            !json.contains("\"escape_hatch_gate\""),
+            "function passports should omit escape hatch gate metadata: {json}"
         );
     }
 

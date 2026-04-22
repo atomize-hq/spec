@@ -13,13 +13,18 @@
 
 use crate::AUTHORED_SPEC_VERSION;
 use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
-use crate::passport::{ArtifactProvenance, Passport, passport_path_for};
-use crate::plan::{LoadedPlan, PlanComputedImpact, PlanReport, PlanStruct};
+use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
+use crate::passport::{
+    ArtifactProvenance, Passport, PassportProjectionContext, apply_projected_passport_truth,
+    passport_path_for, project_passport_truth,
+};
+use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -122,6 +127,7 @@ pub struct PlanExportBundle {
     pub exported_at: String,
     pub plan: PlanStruct,
     pub computed_impact: PlanComputedImpact,
+    pub acceptance_closure: PlanAcceptanceClosure,
     pub warnings: Vec<String>,
 }
 
@@ -131,7 +137,19 @@ pub fn build_export_bundle(
     exported_at: &str,
     provenance: Option<&ArtifactProvenance>,
 ) -> ExportBundle {
-    let (passports, warnings) = load_passports_for_specs(specs);
+    let (passports, warnings) = read_passports_for_specs(specs);
+    let specs_by_id: HashMap<String, LoadedSpec> = specs
+        .iter()
+        .map(|spec| (spec.spec.id.clone(), spec.clone()))
+        .collect();
+    let molecule_evidence_by_id = load_molecule_evidence_for_tests(molecule_tests);
+    let passports = enrich_passports_for_export(
+        specs,
+        molecule_tests,
+        &molecule_evidence_by_id,
+        &specs_by_id,
+        passports,
+    );
 
     // Project graph edges through the public SpecGraph surface.
     let graph = SpecGraph::build(specs, molecule_tests);
@@ -168,7 +186,46 @@ pub fn build_export_bundle(
     }
 }
 
-pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<ExportWarning>) {
+fn enrich_passports_for_export(
+    specs: &[LoadedSpec],
+    molecule_tests: &[LoadedMoleculeTest],
+    molecule_evidence_by_id: &HashMap<String, MoleculeEvidence>,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+    passports: Vec<Passport>,
+) -> Vec<Passport> {
+    let projection_context = PassportProjectionContext {
+        molecule_tests,
+        molecule_evidence_by_id,
+        specs_by_id,
+    };
+    passports
+        .into_iter()
+        .map(|mut passport| {
+            if let Some(spec) = specs.iter().find(|spec| spec.spec.id == passport.id) {
+                let projected_truth =
+                    project_passport_truth(spec, Some(&passport), &projection_context);
+                apply_projected_passport_truth(&mut passport, projected_truth);
+            }
+            passport
+        })
+        .collect()
+}
+
+fn load_molecule_evidence_for_tests(
+    molecule_tests: &[LoadedMoleculeTest],
+) -> HashMap<String, MoleculeEvidence> {
+    molecule_tests
+        .iter()
+        .filter_map(|test| {
+            read_molecule_evidence(Path::new(&test.source.file_path))
+                .ok()
+                .flatten()
+                .map(|evidence| (test.test.id.clone(), evidence))
+        })
+        .collect()
+}
+
+fn read_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<ExportWarning>) {
     let mut passports = Vec::new();
     let mut warnings = Vec::new();
 
@@ -217,6 +274,33 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
     (passports, warnings)
 }
 
+pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<ExportWarning>) {
+    let (passports, warnings) = read_passports_for_specs(specs);
+    let specs_by_id: HashMap<String, LoadedSpec> = specs
+        .iter()
+        .map(|spec| (spec.spec.id.clone(), spec.clone()))
+        .collect();
+    let empty_molecule_tests: &[LoadedMoleculeTest] = &[];
+    let empty_molecule_evidence: HashMap<String, MoleculeEvidence> = HashMap::new();
+    let projection_context = PassportProjectionContext {
+        molecule_tests: empty_molecule_tests,
+        molecule_evidence_by_id: &empty_molecule_evidence,
+        specs_by_id: &specs_by_id,
+    };
+    let passports = passports
+        .into_iter()
+        .map(|mut passport| {
+            if let Some(spec) = specs.iter().find(|spec| spec.spec.id == passport.id) {
+                let projected_truth =
+                    project_passport_truth(spec, Some(&passport), &projection_context);
+                apply_projected_passport_truth(&mut passport, projected_truth);
+            }
+            passport
+        })
+        .collect();
+    (passports, warnings)
+}
+
 pub fn build_plan_export_bundle(
     plan: &LoadedPlan,
     report: &PlanReport,
@@ -228,6 +312,7 @@ pub fn build_plan_export_bundle(
         exported_at: exported_at.to_string(),
         plan: plan.plan.clone(),
         computed_impact: report.computed_impact.clone(),
+        acceptance_closure: report.acceptance_closure.clone(),
         warnings: vec![],
     }
 }
@@ -292,8 +377,13 @@ impl From<&LoadedMoleculeTest> for ExportMoleculeTest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus, EscapeHatchProofSurface};
+    use crate::molecule_evidence::{
+        MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
+    };
     use crate::passport::{
-        PassportEvidence, PassportTestResult, build_passport_with_evidence, write_passport,
+        PassportEvidence, PassportTestResult, ProofSurface, build_passport_with_evidence,
+        write_passport,
     };
     use crate::plan::{
         LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
@@ -302,7 +392,8 @@ mod tests {
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
-        AuthoredSumVariant, Body, Intent, SpecSource, SpecStruct, UnitExtensions,
+        AuthoredSumVariant, Body, Intent, MoleculeTestSource, MoleculeTestStruct, SpecSource,
+        SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
     use tempfile::TempDir;
@@ -575,6 +666,70 @@ mod tests {
                 },
             },
         }
+    }
+
+    fn loaded_discount_policy_sum_seam(dir: &TempDir) -> LoadedSpec {
+        let mut spec = loaded_sum_seam(
+            dir,
+            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_policy",
+        );
+        spec.spec.intent.why =
+            "Represent mutually exclusive discount strategies for checkout pricing.".to_string();
+        spec.spec.local_tests = [
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]
+        .into_iter()
+        .map(|local_test_id| LocalTest {
+            id: local_test_id.to_string(),
+            expect: "true".to_string(),
+        })
+        .collect();
+        spec
+    }
+
+    fn covering_molecule_test(dir: &TempDir, id: &str, cover_id: &str) -> LoadedMoleculeTest {
+        let source_path = dir
+            .path()
+            .join("units/pricing/discount_policy_checkout_flow.test.spec");
+        if let Some(parent) = source_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&source_path, "placeholder").unwrap();
+
+        LoadedMoleculeTest {
+            source: MoleculeTestSource {
+                file_path: source_path.display().to_string(),
+                id: id.to_string(),
+            },
+            test: MoleculeTestStruct {
+                id: id.to_string(),
+                intent: Intent {
+                    why: "cover the seam".to_string(),
+                },
+                covers: vec![cover_id.to_string()],
+                imports: None,
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
+                spec_version: Some("0.3.0".to_string()),
+            },
+        }
+    }
+
+    fn proof_coverage_surfaces(passport: &Passport, coverage_id: &str) -> Vec<ProofSurface> {
+        passport
+            .proof_coverage
+            .as_ref()
+            .expect("expected proof coverage metadata")
+            .iter()
+            .find(|coverage| coverage.id == coverage_id)
+            .expect("expected proof coverage entry")
+            .surfaces
+            .clone()
     }
 
     fn loaded_molecule_test(
@@ -857,6 +1012,191 @@ mod tests {
     }
 
     #[test]
+    fn load_passports_for_specs_uses_legacy_contract_hash_freshness() {
+        let dir = TempDir::new().unwrap();
+        let original_spec = loaded_spec(
+            &dir,
+            "units/pricing/apply_tax.unit.spec",
+            "pricing/apply_tax",
+            vec![],
+        );
+        let mut changed_spec = original_spec.clone();
+        changed_spec.spec.contract.as_mut().unwrap().returns = Some("i64".to_string());
+
+        let mut legacy_passport = build_passport_with_evidence(
+            &original_spec,
+            "2026-04-05T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&original_spec),
+        );
+        legacy_passport.freshness = None;
+        write_passport(&legacy_passport, Path::new(&original_spec.source.file_path)).unwrap();
+
+        let (passports, warnings) = load_passports_for_specs(&[changed_spec.clone()]);
+
+        assert!(warnings.is_empty());
+        assert_eq!(passports.len(), 1);
+        let freshness = passports[0]
+            .freshness
+            .as_ref()
+            .expect("export should project freshness");
+        assert_eq!(
+            freshness.authored_truth_status,
+            crate::passport::FreshnessStatus::Stale
+        );
+        assert_eq!(
+            freshness.backend_execution_status,
+            crate::passport::FreshnessStatus::Unknown
+        );
+        assert_eq!(
+            freshness.snapshot.authored_truth_digest,
+            crate::passport::compute_authored_truth_digest(&changed_spec)
+        );
+    }
+
+    #[test]
+    fn export_recomputes_escape_hatch_gate_from_current_evidence() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_discount_policy_sum_seam(&dir);
+        let molecule_test = covering_molecule_test(
+            &dir,
+            "pricing/discount_policy_checkout_flow",
+            "pricing/discount_policy",
+        );
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+
+        let mut passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-21T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-21T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&spec),
+        );
+        passport.escape_hatch_gate = Some(EscapeHatchGate {
+            status: EscapeHatchGateStatus::Open,
+            required_surfaces: vec![
+                EscapeHatchProofSurface::Atom,
+                EscapeHatchProofSurface::Molecule,
+            ],
+            present_surfaces: vec![EscapeHatchProofSurface::Atom],
+            missing_surfaces: vec![EscapeHatchProofSurface::Molecule],
+            reason: Some("missing required escape-hatch proof: molecule".to_string()),
+        });
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let molecule_evidence = build_molecule_evidence(
+            &molecule_test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-21T00:00:00Z",
+            &specs_by_id,
+            None,
+        );
+        write_molecule_evidence(
+            &molecule_evidence,
+            Path::new(&molecule_test.source.file_path),
+        )
+        .unwrap();
+
+        let bundle = build_export_bundle(
+            std::slice::from_ref(&spec),
+            std::slice::from_ref(&molecule_test),
+            "2026-04-21T00:00:00Z",
+            None,
+        );
+        let gate = bundle.passports[0]
+            .escape_hatch_gate
+            .as_ref()
+            .expect("marked seam should project a gate");
+
+        assert_eq!(gate.status, EscapeHatchGateStatus::Closed);
+        assert_eq!(
+            gate.present_surfaces,
+            vec![
+                EscapeHatchProofSurface::Atom,
+                EscapeHatchProofSurface::Molecule,
+            ]
+        );
+        assert!(gate.missing_surfaces.is_empty());
+        assert_eq!(gate.reason, None);
+        assert_eq!(
+            proof_coverage_surfaces(&bundle.passports[0], "variant.none"),
+            vec![ProofSurface::Atom, ProofSurface::Molecule]
+        );
+    }
+
+    #[test]
+    fn export_reprojects_stale_branch_proof_coverage_from_current_surfaces() {
+        let dir = TempDir::new().unwrap();
+        let original_spec = loaded_discount_policy_sum_seam(&dir);
+        let mut changed_spec = original_spec.clone();
+        changed_spec.spec.intent.why = "Represent revised discount policy".to_string();
+
+        let passport = build_passport_with_evidence(
+            &original_spec,
+            "2026-04-21T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: original_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-21T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&original_spec),
+        );
+        write_passport(&passport, Path::new(&original_spec.source.file_path)).unwrap();
+
+        let bundle = build_export_bundle(
+            std::slice::from_ref(&changed_spec),
+            &[],
+            "2026-04-21T00:00:00Z",
+            None,
+        );
+        let exported = &bundle.passports[0];
+        let gate = exported
+            .escape_hatch_gate
+            .as_ref()
+            .expect("marked seam should project a gate");
+
+        assert_eq!(gate.status, EscapeHatchGateStatus::Open);
+        assert!(gate.present_surfaces.is_empty());
+        assert_eq!(
+            proof_coverage_surfaces(exported, "variant.none"),
+            vec![ProofSurface::ImplicitOnly]
+        );
+    }
+
+    #[test]
     fn export_unit_and_graph_dep_refs_are_structured_in_schema_v3() {
         let dir = TempDir::new().unwrap();
         let spec = loaded_spec(
@@ -1029,6 +1369,13 @@ mod tests {
                 molecule_tests: vec!["pricing/checkout_flow".to_string()],
                 unresolved: vec![],
             },
+            acceptance_closure: crate::plan::PlanAcceptanceClosure {
+                status: crate::plan::PlanAcceptanceClosureStatus::Closed,
+                missing_validate: vec![],
+                missing_molecule_tests: vec![],
+                extra_validate: vec![],
+                extra_molecule_tests: vec![],
+            },
             change_reports: vec![],
         };
 
@@ -1040,6 +1387,10 @@ mod tests {
         assert_eq!(
             bundle.computed_impact.status,
             PlanComputedImpactStatus::Complete
+        );
+        assert_eq!(
+            bundle.acceptance_closure.status,
+            crate::plan::PlanAcceptanceClosureStatus::Closed
         );
         assert!(bundle.warnings.is_empty());
     }

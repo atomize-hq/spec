@@ -8,6 +8,10 @@
           "id": "pricing/apply_discount",
           "status": "failing",
           "reason": "build failed",
+          "freshness": {
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          },
           "errors": [],
           "evidence_at": "2024-01-02T03:04:05Z"
         }
@@ -20,6 +24,10 @@
       "id": "pricing/apply_discount",
       "status": "failing",
       "reason": "build failed",
+      "freshness": {
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      },
       "errors": [],
       "evidence_at": "2024-01-02T03:04:05Z"
     }

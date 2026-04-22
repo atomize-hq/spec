@@ -13,25 +13,18 @@
         "action": "modify",
         "acceptance": {
           "validate": [
-            "pricing/apply_tax"
+            "pricing/apply_tax",
+            "pricing/calculate_total",
+            "pricing/checkout_quote"
           ],
           "molecule_tests": [
-            "pricing/checkout_flow"
+            "pricing/checkout_flow",
+            "pricing/discount_plus_tax",
+            "pricing/discount_policy_checkout_flow"
           ],
           "notes": [
-            "tiered-rate behavior is covered by checkout_flow"
+            "current blast radius stays fully covered"
           ]
-        }
-      },
-      {
-        "unit": "pricing/tiered_rate",
-        "action": "add",
-        "acceptance": {
-          "validate": [
-            "pricing/tiered_rate"
-          ],
-          "molecule_tests": [],
-          "notes": []
         }
       }
     ],
@@ -40,7 +33,7 @@
     ]
   },
   "computed_impact": {
-    "status": "partial",
+    "status": "complete",
     "units": [
       "pricing/apply_tax",
       "pricing/calculate_total",
@@ -51,13 +44,14 @@
       "pricing/discount_plus_tax",
       "pricing/discount_policy_checkout_flow"
     ],
-    "unresolved": [
-      {
-        "unit": "pricing/tiered_rate",
-        "action": "add",
-        "reason": "current graph has no node for action=add"
-      }
-    ]
+    "unresolved": []
+  },
+  "acceptance_closure": {
+    "status": "closed",
+    "missing_validate": [],
+    "missing_molecule_tests": [],
+    "extra_validate": [],
+    "extra_molecule_tests": []
   },
   "warnings": []
 }

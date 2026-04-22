@@ -100,7 +100,7 @@
       "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-04-21T17:24:34Z",
+  "generated_at": "2026-04-22T14:29:41Z",
   "source_file": "examples/ecommerce/units/pricing/checkout_quote.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -114,10 +114,46 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-20T22:54:09Z",
+    "observed_at": "2026-04-21T20:05:59Z",
     "provenance": {
-      "git_commit_sha": "d20fbc60089fb2ec83a250e159c732a9c196845d"
+      "git_commit_sha": "ecbec463a79b9b626670f11d896a33b2a222c513"
     }
   },
-  "contract_hash": "sha256:695d9bfd431059f5d8c63d717f2953bd1a03db50a9b8c70309791d4b6d3bbefb"
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+    "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+    "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "fresh"
+  },
+  "markers": [
+    {
+      "id": "backend_rust_derives",
+      "path": "backends.rust.derives"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.discounted_subtotal.lowering.rust.body"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.total.lowering.rust.body"
+    }
+  ],
+  "escape_hatch_gate": {
+    "status": "closed",
+    "required_surfaces": [
+      "atom",
+      "molecule"
+    ],
+    "present_surfaces": [
+      "atom",
+      "molecule"
+    ],
+    "missing_surfaces": []
+  },
+  "contract_hash": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87"
 }

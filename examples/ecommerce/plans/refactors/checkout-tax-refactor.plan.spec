@@ -7,14 +7,13 @@ changes:
     acceptance:
       validate:
         - pricing/apply_tax
+        - pricing/calculate_total
+        - pricing/checkout_quote
       molecule_tests:
         - pricing/checkout_flow
+        - pricing/discount_plus_tax
+        - pricing/discount_policy_checkout_flow
       notes:
-        - "tiered-rate behavior is covered by checkout_flow"
-  - unit: pricing/tiered_rate
-    action: add
-    acceptance:
-      validate:
-        - pricing/tiered_rate
+        - "current blast radius stays fully covered"
 notes:
   - "M10 plans are local-library only."

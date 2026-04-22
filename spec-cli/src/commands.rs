@@ -5,6 +5,7 @@ use crate::config::{
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
+use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
 use spec_core::export::{build_export_bundle, build_plan_export_bundle};
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
@@ -19,19 +20,24 @@ use spec_core::loader::{
 };
 use spec_core::molecule_evidence::{
     MoleculeEvidence, MoleculeEvidenceStatus, build_molecule_evidence,
-    ensure_gitignore_entry as ensure_molecule_evidence_gitignore_entry, molecule_evidence_is_stale,
-    read_molecule_evidence, write_molecule_evidence,
+    ensure_gitignore_entry as ensure_molecule_evidence_gitignore_entry,
+    molecule_evidence_is_current_pass, molecule_evidence_is_stale, read_molecule_evidence,
+    write_molecule_evidence,
 };
 use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
-    ArtifactProvenance, PassportEvidence, PassportTestResult, build_passport_with_evidence,
-    compute_contract_hash, ensure_gitignore_entry, read_passport, rfc3339_now, write_passport,
+    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
+    PassportProjectionContext, PassportTestResult, apply_projected_passport_truth,
+    build_passport_preserving_proof_state, build_passport_with_evidence, compute_contract_hash,
+    ensure_gitignore_entry, project_passport_truth, read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
     parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
 };
-use spec_core::plan::{PlanComputedImpact, build_plan_report};
+use spec_core::plan::{
+    PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
+};
 #[cfg(test)]
 use spec_core::types::ResolvedSpec;
 use spec_core::types::{
@@ -126,6 +132,8 @@ struct JsonValidateResponse {
     plan_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     computed_impact: Option<PlanComputedImpact>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acceptance_closure: Option<PlanAcceptanceClosure>,
 }
 
 #[derive(Serialize)]
@@ -156,6 +164,12 @@ struct JsonStatusEntry {
     errors: Vec<JsonErrorEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
     evidence_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    freshness: Option<PassportFreshness>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    markers: Option<Vec<PassportMarker>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    escape_hatch_gate: Option<EscapeHatchGate>,
 }
 
 #[derive(Clone, Serialize)]
@@ -228,6 +242,7 @@ fn emit_json_validate_workspace_config_failure(err: &WorkspaceConfigError) -> Re
         warnings: vec![],
         plan_id: None,
         computed_impact: None,
+        acceptance_closure: None,
     })?;
     std::process::exit(1);
 }
@@ -303,7 +318,9 @@ impl Serialize for HealthState {
 
 struct PassportWritePlan<'a> {
     passport_root: &'a Path,
+    gate_root: &'a Path,
     specs: &'a [LoadedSpec],
+    gate_specs: &'a [LoadedSpec],
 }
 
 struct ConcurrentPassportWriteGuard {
@@ -690,6 +707,7 @@ fn validate_command(path: &Path, no_strict: bool, format: OutputFormat) -> Resul
                 warnings,
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             };
             emit_json_validate_response(&response)?;
 
@@ -711,7 +729,7 @@ struct HealthStatus {
 fn compute_health_status(
     errors: &[JsonErrorEntry],
     passport: Option<&spec_core::passport::Passport>,
-    live_hash: Option<&str>,
+    freshness: Option<&PassportFreshness>,
 ) -> HealthStatus {
     // 1. invalid
     if !errors.is_empty() {
@@ -751,23 +769,15 @@ fn compute_health_status(
         }
     }
 
-    // 3. stale — contract hash changed since last test, including added/removed contracts.
-    //    Only fires when a passport exists (i.e. the unit has been tested before).
-    //    Without a passport there is nothing to compare against — falls through to untested.
-    let stored_hash = passport.and_then(|p| p.contract_hash.as_deref());
-    if passport.is_some() {
-        let hash_changed = match (stored_hash, live_hash) {
-            (Some(stored), Some(live)) => stored != live,
-            (None, Some(_)) | (Some(_), None) => true, // contract added or removed since last test
-            (None, None) => false,
+    // 3. stale — authored/backend freshness changed since last test.
+    if passport.is_some()
+        && let Some(reason) = freshness_stale_reason(freshness)
+    {
+        return HealthStatus {
+            status: HealthState::Stale,
+            reason: Some(reason),
+            evidence_at,
         };
-        if hash_changed {
-            return HealthStatus {
-                status: HealthState::Stale,
-                reason: Some("contract changed since last test".to_string()),
-                evidence_at,
-            };
-        }
     }
 
     // 4. incomplete — unobserved tests (requires evidence)
@@ -807,6 +817,47 @@ fn compute_health_status(
     }
 }
 
+fn apply_escape_hatch_gate_to_health(
+    mut health: HealthStatus,
+    gate: Option<&EscapeHatchGate>,
+) -> HealthStatus {
+    if health.status == HealthState::Valid
+        && let Some(gate) = gate
+        && gate.status == EscapeHatchGateStatus::Open
+    {
+        health.status = HealthState::Incomplete;
+        health.reason = gate.reason.clone();
+    }
+    health
+}
+
+fn freshness_stale_reason(freshness: Option<&PassportFreshness>) -> Option<String> {
+    let freshness = freshness?;
+    match (
+        freshness.authored_truth_status,
+        freshness.backend_execution_status,
+    ) {
+        (
+            spec_core::passport::FreshnessStatus::Stale,
+            spec_core::passport::FreshnessStatus::Stale,
+        ) => Some("authored truth and backend execution changed since last test".to_string()),
+        (spec_core::passport::FreshnessStatus::Stale, _) => {
+            Some("authored truth changed since last test".to_string())
+        }
+        (_, spec_core::passport::FreshnessStatus::Stale) => {
+            Some("backend execution changed since last test".to_string())
+        }
+        _ => None,
+    }
+}
+
+fn plan_validate_has_failures(report: &spec_core::plan::PlanReport) -> bool {
+    matches!(
+        report.acceptance_closure.status,
+        PlanAcceptanceClosureStatus::Open
+    )
+}
+
 fn compute_molecule_health_status(
     errors: &[JsonErrorEntry],
     evidence: Option<&MoleculeEvidence>,
@@ -838,6 +889,13 @@ fn compute_molecule_health_status(
             reason: Some(evidence.reason.clone().unwrap_or_else(|| {
                 "covered unit contract changed since last molecule test".to_string()
             })),
+            evidence_at,
+        };
+    }
+    if molecule_evidence_is_current_pass(evidence, test, specs_by_id) {
+        return HealthStatus {
+            status: HealthState::Valid,
+            reason: None,
             evidence_at,
         };
     }
@@ -883,11 +941,7 @@ fn compute_molecule_health_status(
             ),
             evidence_at,
         },
-        MoleculeEvidenceStatus::Pass => HealthStatus {
-            status: HealthState::Valid,
-            reason: None,
-            evidence_at,
-        },
+        MoleculeEvidenceStatus::Pass => unreachable!("current pass handled above"),
         MoleculeEvidenceStatus::Stale => unreachable!("handled above"),
     }
 }
@@ -1174,6 +1228,21 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             .iter()
             .map(|spec| (spec.spec.id.clone(), spec.clone()))
             .collect();
+        let molecule_evidence_by_id: HashMap<String, MoleculeEvidence> = molecule_report
+            .tests
+            .iter()
+            .filter_map(|test| {
+                read_molecule_evidence(Path::new(&test.source.file_path))
+                    .ok()
+                    .flatten()
+                    .map(|evidence| (test.test.id.clone(), evidence))
+            })
+            .collect();
+        let projection_context = PassportProjectionContext {
+            molecule_tests: &molecule_report.tests,
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
 
         let mut units = Vec::with_capacity(validation_specs.root_specs.len());
         for spec in &validation_specs.root_specs {
@@ -1190,11 +1259,18 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                     None
                 }
             };
-            let live_hash = compute_contract_hash(spec);
+            let projected_truth =
+                project_passport_truth(spec, passport.as_ref(), &projection_context);
+            let freshness = projected_truth.freshness.clone();
+            let markers = projected_truth.markers.clone();
+            let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
-            let health = compute_health_status(&errors, passport.as_ref(), live_hash.as_deref());
+            let health = apply_escape_hatch_gate_to_health(
+                compute_health_status(&errors, passport.as_ref(), freshness.as_ref()),
+                escape_hatch_gate.as_ref(),
+            );
             if !health.status.is_valid() {
                 needs_nonzero_exit = true;
             }
@@ -1205,6 +1281,9 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 reason: health.reason,
                 errors,
                 evidence_at: health.evidence_at,
+                freshness,
+                markers,
+                escape_hatch_gate,
             });
         }
 
@@ -1226,6 +1305,9 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                         reason: health.reason,
                         errors,
                         evidence_at: health.evidence_at,
+                        freshness: None,
+                        markers: None,
+                        escape_hatch_gate: None,
                     });
                     continue;
                 }
@@ -1241,6 +1323,9 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 reason: health.reason,
                 errors,
                 evidence_at: health.evidence_at,
+                freshness: None,
+                markers: None,
+                escape_hatch_gate: None,
             });
         }
 
@@ -1479,6 +1564,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 warnings: vec![],
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             })?;
             std::process::exit(1);
         }
@@ -1495,6 +1581,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 warnings: vec![],
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             })?;
             std::process::exit(1);
         }
@@ -1515,6 +1602,7 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                     warnings: vec![],
                     plan_id: None,
                     computed_impact: None,
+                    acceptance_closure: None,
                 })?;
                 std::process::exit(1);
             }
@@ -1541,15 +1629,21 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             })?;
             std::process::exit(1);
         }
         Err(err) => return Err(err.into()),
     };
+    let has_plan_failures = plan_validate_has_failures(&report);
 
     match format {
         OutputFormat::Text => {
-            println!("✅ plan '{}' valid", report.plan_id);
+            if has_plan_failures {
+                println!("❌ plan '{}' invalid", report.plan_id);
+            } else {
+                println!("✅ plan '{}' valid", report.plan_id);
+            }
             println!(
                 "computed impact: {} unit{}, {} molecule test{}, {} unresolved",
                 report.computed_impact.units.len(),
@@ -1558,16 +1652,55 @@ fn plan_validate_command(path: &Path, format: OutputFormat) -> Result<()> {
                 pluralize(report.computed_impact.molecule_tests.len()),
                 report.computed_impact.unresolved.len()
             );
+            if !report.acceptance_closure.missing_validate.is_empty() {
+                println!(
+                    "missing validate coverage: {}",
+                    report.acceptance_closure.missing_validate.join(", ")
+                );
+            }
+            if !report.acceptance_closure.missing_molecule_tests.is_empty() {
+                println!(
+                    "missing molecule coverage: {}",
+                    report.acceptance_closure.missing_molecule_tests.join(", ")
+                );
+            }
+            if !report.acceptance_closure.extra_validate.is_empty() {
+                println!(
+                    "extra validate coverage: {}",
+                    report.acceptance_closure.extra_validate.join(", ")
+                );
+            }
+            if !report.acceptance_closure.extra_molecule_tests.is_empty() {
+                println!(
+                    "extra molecule coverage: {}",
+                    report.acceptance_closure.extra_molecule_tests.join(", ")
+                );
+            }
+            if has_plan_failures {
+                std::process::exit(1);
+            }
             Ok(())
         }
-        OutputFormat::Json => emit_json_validate_response(&JsonValidateResponse {
-            schema_version: VALIDATE_JSON_SCHEMA_VERSION,
-            status: "valid",
-            errors: vec![],
-            warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
-            plan_id: Some(report.plan_id),
-            computed_impact: Some(report.computed_impact),
-        }),
+        OutputFormat::Json => {
+            let response = JsonValidateResponse {
+                schema_version: VALIDATE_JSON_SCHEMA_VERSION,
+                status: if has_plan_failures {
+                    "invalid"
+                } else {
+                    "valid"
+                },
+                errors: vec![],
+                warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
+                plan_id: Some(report.plan_id),
+                computed_impact: Some(report.computed_impact),
+                acceptance_closure: Some(report.acceptance_closure),
+            };
+            emit_json_validate_response(&response)?;
+            if has_plan_failures {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
     }
 }
 
@@ -1647,6 +1780,7 @@ fn emit_plan_validate_failure(
                 warnings: warnings.iter().map(spec_warning_to_json_entry).collect(),
                 plan_id: None,
                 computed_impact: None,
+                acceptance_closure: None,
             };
             emit_json_validate_response(&response)?;
             std::process::exit(1);
@@ -1715,9 +1849,14 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
     let generated = generate_specs(path, &resolved_output, &project_root)?;
     if !generated.specs.is_empty() {
         finalize_passports(
-            spec_root,
-            &generated.specs,
+            &PassportWritePlan {
+                passport_root: spec_root,
+                gate_root: spec_root,
+                specs: &generated.specs,
+                gate_specs: &generated.specs,
+            },
             &generated.generated_at,
+            None,
             None,
             None,
         )?;
@@ -1957,19 +2096,30 @@ fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<Gen
 }
 
 fn finalize_passports(
-    passport_root: &Path,
-    specs: &[LoadedSpec],
+    plan: &PassportWritePlan<'_>,
     generated_at: &str,
     evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
     contract_hash_by_spec: Option<&BTreeMap<String, String>>,
+    molecule_evidence_overrides: Option<&BTreeMap<String, MoleculeEvidence>>,
 ) -> Result<()> {
-    if specs.is_empty() {
+    if plan.specs.is_empty() {
         return Ok(());
     }
 
-    let _writer_guard = ConcurrentPassportWriteGuard::begin(passport_root);
-    write_passports(specs, generated_at, evidence_by_spec, contract_hash_by_spec)?;
-    ensure_gitignore_entry(passport_root)
+    let _writer_guard = ConcurrentPassportWriteGuard::begin(plan.passport_root);
+    let gate_context = build_live_escape_hatch_context(
+        plan.gate_root,
+        plan.gate_specs,
+        molecule_evidence_overrides,
+    );
+    write_passports(
+        plan.specs,
+        generated_at,
+        evidence_by_spec,
+        contract_hash_by_spec,
+        &gate_context,
+    )?;
+    ensure_gitignore_entry(plan.passport_root)
         .with_context(|| "Failed to update .gitignore for passport files")?;
     Ok(())
 }
@@ -1994,40 +2144,91 @@ fn write_passports(
     generated_at: &str,
     evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
     contract_hash_by_spec: Option<&BTreeMap<String, String>>,
+    gate_context: &LiveEscapeHatchContext,
 ) -> Result<()> {
+    let projection_context = PassportProjectionContext {
+        molecule_tests: &gate_context.molecule_tests,
+        molecule_evidence_by_id: &gate_context.molecule_evidence_by_id,
+        specs_by_id: &gate_context.specs_by_id,
+    };
     for spec in specs {
         let source_path = Path::new(&spec.source.file_path);
 
-        let (evidence, contract_hash) = if evidence_by_spec.is_none() {
+        let mut passport = if evidence_by_spec.is_none() {
             // Non-test caller (spec generate / spec build): preserve any evidence
-            // and contract_hash already on disk so we don't erase data written by
-            // a prior `spec test` run.  If no baseline hash exists yet (fresh
-            // project or first generate), compute one from the current contract so
-            // that stale detection works before the first `spec test` run.
+            // and freshness anchors already on disk so we don't erase data written by
+            // a prior `spec test` run. If no baseline hash exists yet (fresh
+            // project or first generate), bootstrap one from the current
+            // authored truth so legacy stale detection still works before the
+            // first `spec test` run.
             let existing = read_passport(source_path).ok().flatten();
-            let ev = existing.as_ref().and_then(|p| p.evidence.clone());
-            let hash = existing
-                .and_then(|p| p.contract_hash)
+            let contract_hash = existing
+                .as_ref()
+                .and_then(|passport| passport.contract_hash.clone())
                 .or_else(|| compute_contract_hash(spec));
-            (ev, hash)
+            build_passport_preserving_proof_state(
+                spec,
+                generated_at,
+                existing.as_ref(),
+                contract_hash,
+            )
         } else {
             // Test caller: always use freshly-computed values (None is correct for
             // specs that have no contract).
-            let ev = evidence_by_spec
+            let evidence = evidence_by_spec
                 .and_then(|map| map.get(&spec.spec.id))
                 .cloned();
-            let hash = contract_hash_by_spec
+            let contract_hash = contract_hash_by_spec
                 .and_then(|map| map.get(&spec.spec.id))
                 .cloned();
-            (ev, hash)
+            build_passport_with_evidence(spec, generated_at, evidence, contract_hash)
         };
-
-        let passport = build_passport_with_evidence(spec, generated_at, evidence, contract_hash);
+        let projected_truth = project_passport_truth(spec, Some(&passport), &projection_context);
+        apply_projected_passport_truth(&mut passport, projected_truth);
         write_passport(&passport, source_path)
             .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
     }
 
     Ok(())
+}
+
+struct LiveEscapeHatchContext {
+    molecule_tests: Vec<LoadedMoleculeTest>,
+    molecule_evidence_by_id: HashMap<String, MoleculeEvidence>,
+    specs_by_id: HashMap<String, LoadedSpec>,
+}
+
+fn build_live_escape_hatch_context(
+    gate_root: &Path,
+    gate_specs: &[LoadedSpec],
+    molecule_evidence_overrides: Option<&BTreeMap<String, MoleculeEvidence>>,
+) -> LiveEscapeHatchContext {
+    let molecule_tests = load_molecule_test_directory(gate_root).unwrap_or_default();
+    let mut molecule_evidence_by_id: HashMap<String, MoleculeEvidence> = molecule_tests
+        .iter()
+        .filter_map(|test| {
+            read_molecule_evidence(Path::new(&test.source.file_path))
+                .ok()
+                .flatten()
+                .map(|evidence| (test.test.id.clone(), evidence))
+        })
+        .collect();
+    if let Some(overrides) = molecule_evidence_overrides {
+        molecule_evidence_by_id.extend(
+            overrides
+                .iter()
+                .map(|(id, evidence)| (id.clone(), evidence.clone())),
+        );
+    }
+
+    LiveEscapeHatchContext {
+        molecule_tests,
+        molecule_evidence_by_id,
+        specs_by_id: gate_specs
+            .iter()
+            .map(|spec| (spec.spec.id.clone(), spec.clone()))
+            .collect(),
+    }
 }
 
 struct PipelineContext {
@@ -2240,7 +2441,18 @@ fn build_command(
 
     let generated = generate_specs(path, &resolved_output, &ctx.project_root)?;
     if !generated.specs.is_empty() {
-        finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
+        finalize_passports(
+            &PassportWritePlan {
+                passport_root: path,
+                gate_root: path,
+                specs: &generated.specs,
+                gate_specs: &generated.specs,
+            },
+            &generated.generated_at,
+            None,
+            None,
+            None,
+        )?;
     }
 
     let result = run_cargo_build(
@@ -2277,6 +2489,7 @@ fn test_command(
     let mut molecule_evidence_root: Option<PathBuf> = None;
     let mut molecule_tests_for_evidence = Vec::<LoadedMoleculeTest>::new();
     let mut molecule_specs_by_id = HashMap::<String, LoadedSpec>::new();
+    let mut gate_root = path.to_path_buf();
 
     let (generation_scope, pipeline_scope) = if path.is_file() {
         if output.is_some() {
@@ -2296,6 +2509,7 @@ fn test_command(
             let library_root = resolve_unit_library_root(path, context).ok_or_else(|| {
                 anyhow::anyhow!("failed to resolve library root for {}", path.display())
             })?;
+            gate_root = library_root.clone();
             let generation_tempdir =
                 materialize_single_file_generation_scope(&library_root, &generation_specs, &[])?;
             let generation_scope = generation_tempdir.path().join("units");
@@ -2314,6 +2528,7 @@ fn test_command(
                 resolve_molecule_test_library_root(path, context).ok_or_else(|| {
                     anyhow::anyhow!("failed to resolve library root for {}", path.display())
                 })?;
+            gate_root = library_root.clone();
             let report = load_directory_report_bounded(&library_root, &library_root)?;
             if !report.errors.is_empty() {
                 let mut errors = DiagnosticMap::new();
@@ -2410,12 +2625,24 @@ fn test_command(
     let _single_file_generation_scope = single_file_generation_scope;
     let _single_file_test_project_scope = single_file_test_project_scope;
     if target_spec.is_none() && target_molecule_test.is_none() {
-        finalize_passports(path, &generated.specs, &generated.generated_at, None, None)?;
+        finalize_passports(
+            &PassportWritePlan {
+                passport_root: path,
+                gate_root: path,
+                specs: &generated.specs,
+                gate_specs: &generated.specs,
+            },
+            &generated.generated_at,
+            None,
+            None,
+            None,
+        )?;
     }
 
     let passport_write_plan = passport_write_plan(
         path,
         &pipeline_scope,
+        &gate_root,
         &generated.specs,
         target_spec.as_ref(),
     );
@@ -2455,15 +2682,7 @@ fn test_command(
         let evidence_by_spec =
             build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
         let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
-        if target_molecule_test.is_none() {
-            finalize_test_passports(
-                &passport_write_plan,
-                &generated.generated_at,
-                &evidence_by_spec,
-                contract_hash_by_spec.as_ref(),
-            )?;
-        }
-        if !molecule_tests_for_evidence.is_empty() {
+        let molecule_evidence = if !molecule_tests_for_evidence.is_empty() {
             let specs_by_id = if molecule_specs_by_id.is_empty() {
                 generated
                     .specs
@@ -2473,19 +2692,43 @@ fn test_command(
             } else {
                 molecule_specs_by_id.clone()
             };
-            let molecule_evidence = build_molecule_incomplete_evidence(
+            Some(build_molecule_incomplete_evidence(
                 &molecule_tests_for_evidence,
                 &specs_by_id,
                 MoleculeEvidenceStatus::Timeout,
                 Some("cargo build timed out"),
                 &observed_at,
                 provenance.as_ref(),
-            );
+            ))
+        } else {
+            None
+        };
+        if target_molecule_test.is_none() {
+            finalize_test_passports(
+                &passport_write_plan,
+                &generated.generated_at,
+                &evidence_by_spec,
+                contract_hash_by_spec.as_ref(),
+                molecule_evidence.as_ref(),
+            )?;
+        }
+        if let Some(molecule_evidence) = molecule_evidence.as_ref() {
             finalize_molecule_evidence(
                 molecule_evidence_root.as_deref().unwrap_or(path),
                 &molecule_tests_for_evidence,
-                &molecule_evidence,
+                molecule_evidence,
             )?;
+            if target_molecule_test.is_some() {
+                let gate_specs = gate_specs_for_refresh(&generated.specs, &molecule_specs_by_id);
+                refresh_covered_seam_passports(
+                    molecule_evidence_root.as_deref().unwrap_or(path),
+                    &gate_root,
+                    &gate_specs,
+                    &generated.generated_at,
+                    &molecule_tests_for_evidence,
+                    molecule_evidence,
+                )?;
+            }
         }
         bail!("❌ cargo build timed out{}", timeout_suffix(ctx.timeout));
     }
@@ -2494,15 +2737,7 @@ fn test_command(
         let evidence_by_spec =
             build_failure_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
         let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
-        if target_molecule_test.is_none() {
-            finalize_test_passports(
-                &passport_write_plan,
-                &generated.generated_at,
-                &evidence_by_spec,
-                contract_hash_by_spec.as_ref(),
-            )?;
-        }
-        if !molecule_tests_for_evidence.is_empty() {
+        let molecule_evidence = if !molecule_tests_for_evidence.is_empty() {
             let specs_by_id = if molecule_specs_by_id.is_empty() {
                 generated
                     .specs
@@ -2512,19 +2747,43 @@ fn test_command(
             } else {
                 molecule_specs_by_id.clone()
             };
-            let molecule_evidence = build_molecule_incomplete_evidence(
+            Some(build_molecule_incomplete_evidence(
                 &molecule_tests_for_evidence,
                 &specs_by_id,
                 MoleculeEvidenceStatus::BuildFail,
                 Some("cargo build failed"),
                 &observed_at,
                 provenance.as_ref(),
-            );
+            ))
+        } else {
+            None
+        };
+        if target_molecule_test.is_none() {
+            finalize_test_passports(
+                &passport_write_plan,
+                &generated.generated_at,
+                &evidence_by_spec,
+                contract_hash_by_spec.as_ref(),
+                molecule_evidence.as_ref(),
+            )?;
+        }
+        if let Some(molecule_evidence) = molecule_evidence.as_ref() {
             finalize_molecule_evidence(
                 molecule_evidence_root.as_deref().unwrap_or(path),
                 &molecule_tests_for_evidence,
-                &molecule_evidence,
+                molecule_evidence,
             )?;
+            if target_molecule_test.is_some() {
+                let gate_specs = gate_specs_for_refresh(&generated.specs, &molecule_specs_by_id);
+                refresh_covered_seam_passports(
+                    molecule_evidence_root.as_deref().unwrap_or(path),
+                    &gate_root,
+                    &gate_specs,
+                    &generated.generated_at,
+                    &molecule_tests_for_evidence,
+                    molecule_evidence,
+                )?;
+            }
         }
         bail!("❌ cargo build failed");
     }
@@ -2543,15 +2802,7 @@ fn test_command(
         let evidence_by_spec =
             build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
         let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
-        if target_molecule_test.is_none() {
-            finalize_test_passports(
-                &passport_write_plan,
-                &generated.generated_at,
-                &evidence_by_spec,
-                contract_hash_by_spec.as_ref(),
-            )?;
-        }
-        if !molecule_tests_for_evidence.is_empty() {
+        let molecule_evidence = if !molecule_tests_for_evidence.is_empty() {
             let specs_by_id = if molecule_specs_by_id.is_empty() {
                 generated
                     .specs
@@ -2561,19 +2812,43 @@ fn test_command(
             } else {
                 molecule_specs_by_id.clone()
             };
-            let molecule_evidence = build_molecule_incomplete_evidence(
+            Some(build_molecule_incomplete_evidence(
                 &molecule_tests_for_evidence,
                 &specs_by_id,
                 MoleculeEvidenceStatus::Timeout,
                 Some("cargo test timed out"),
                 &observed_at,
                 provenance.as_ref(),
-            );
+            ))
+        } else {
+            None
+        };
+        if target_molecule_test.is_none() {
+            finalize_test_passports(
+                &passport_write_plan,
+                &generated.generated_at,
+                &evidence_by_spec,
+                contract_hash_by_spec.as_ref(),
+                molecule_evidence.as_ref(),
+            )?;
+        }
+        if let Some(molecule_evidence) = molecule_evidence.as_ref() {
             finalize_molecule_evidence(
                 molecule_evidence_root.as_deref().unwrap_or(path),
                 &molecule_tests_for_evidence,
-                &molecule_evidence,
+                molecule_evidence,
             )?;
+            if target_molecule_test.is_some() {
+                let gate_specs = gate_specs_for_refresh(&generated.specs, &molecule_specs_by_id);
+                refresh_covered_seam_passports(
+                    molecule_evidence_root.as_deref().unwrap_or(path),
+                    &gate_root,
+                    &gate_specs,
+                    &generated.generated_at,
+                    &molecule_tests_for_evidence,
+                    molecule_evidence,
+                )?;
+            }
         }
         bail!("❌ cargo test timed out{}", timeout_suffix(ctx.timeout));
     }
@@ -2594,15 +2869,7 @@ fn test_command(
         provenance.as_ref(),
     )?;
     let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
-    if target_molecule_test.is_none() {
-        finalize_test_passports(
-            &passport_write_plan,
-            &generated.generated_at,
-            &evidence_by_spec,
-            contract_hash_by_spec.as_ref(),
-        )?;
-    }
-    if !molecule_tests_for_evidence.is_empty() {
+    let molecule_evidence = if !molecule_tests_for_evidence.is_empty() {
         let specs_by_id = if molecule_specs_by_id.is_empty() {
             generated
                 .specs
@@ -2610,21 +2877,45 @@ fn test_command(
                 .map(|spec| (spec.spec.id.clone(), spec.clone()))
                 .collect()
         } else {
-            molecule_specs_by_id
+            molecule_specs_by_id.clone()
         };
-        let molecule_evidence = build_test_molecule_evidence(
+        Some(build_test_molecule_evidence(
             &molecule_tests_for_evidence,
             &specs_by_id,
             &effective_prefix,
             &parsed_test_results,
             &observed_at,
             provenance.as_ref(),
-        );
+        ))
+    } else {
+        None
+    };
+    if target_molecule_test.is_none() {
+        finalize_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+            molecule_evidence.as_ref(),
+        )?;
+    }
+    if let Some(molecule_evidence) = molecule_evidence.as_ref() {
         finalize_molecule_evidence(
             molecule_evidence_root.as_deref().unwrap_or(path),
             &molecule_tests_for_evidence,
-            &molecule_evidence,
+            molecule_evidence,
         )?;
+        if target_molecule_test.is_some() {
+            let gate_specs = gate_specs_for_refresh(&generated.specs, &molecule_specs_by_id);
+            refresh_covered_seam_passports(
+                molecule_evidence_root.as_deref().unwrap_or(path),
+                &gate_root,
+                &gate_specs,
+                &generated.generated_at,
+                &molecule_tests_for_evidence,
+                molecule_evidence,
+            )?;
+        }
     }
     if test_result.exit_code != 0 {
         bail!("❌ cargo test failed");
@@ -2728,18 +3019,23 @@ fn build_incomplete_evidence(
 fn passport_write_plan<'a>(
     requested_path: &'a Path,
     spec_root: &'a Path,
+    gate_root: &'a Path,
     generated_specs: &'a [LoadedSpec],
     target_spec: Option<&'a LoadedSpec>,
 ) -> PassportWritePlan<'a> {
     if let Some(target_spec) = target_spec {
         PassportWritePlan {
             passport_root: spec_root,
+            gate_root,
             specs: std::slice::from_ref(target_spec),
+            gate_specs: generated_specs,
         }
     } else {
         PassportWritePlan {
             passport_root: requested_path,
+            gate_root,
             specs: generated_specs,
+            gate_specs: generated_specs,
         }
     }
 }
@@ -2749,14 +3045,58 @@ fn finalize_test_passports(
     generated_at: &str,
     evidence_by_spec: &BTreeMap<String, PassportEvidence>,
     contract_hash_by_spec: Option<&BTreeMap<String, String>>,
+    molecule_evidence_overrides: Option<&BTreeMap<String, MoleculeEvidence>>,
 ) -> Result<()> {
     finalize_passports(
-        plan.passport_root,
-        plan.specs,
+        plan,
         generated_at,
         Some(evidence_by_spec),
         contract_hash_by_spec,
+        molecule_evidence_overrides,
     )
+}
+
+fn refresh_covered_seam_passports(
+    passport_root: &Path,
+    gate_root: &Path,
+    gate_specs: &[LoadedSpec],
+    generated_at: &str,
+    molecule_tests: &[LoadedMoleculeTest],
+    molecule_evidence_by_id: &BTreeMap<String, MoleculeEvidence>,
+) -> Result<()> {
+    let covered_ids: HashSet<&str> = molecule_tests
+        .iter()
+        .flat_map(|test| test.test.covers.iter().map(String::as_str))
+        .collect();
+    let covered_specs: Vec<LoadedSpec> = gate_specs
+        .iter()
+        .filter(|spec| covered_ids.contains(spec.spec.id.as_str()))
+        .cloned()
+        .collect();
+
+    finalize_passports(
+        &PassportWritePlan {
+            passport_root,
+            gate_root,
+            specs: &covered_specs,
+            gate_specs,
+        },
+        generated_at,
+        None,
+        None,
+        Some(molecule_evidence_by_id),
+    )
+}
+
+fn gate_specs_for_refresh(
+    generated_specs: &[LoadedSpec],
+    original_specs_by_id: &HashMap<String, LoadedSpec>,
+) -> Vec<LoadedSpec> {
+    if original_specs_by_id.is_empty() {
+        generated_specs.to_vec()
+    } else {
+        original_specs_by_id.values().cloned().collect()
+    }
 }
 
 fn concurrent_passport_writer_registry_dir(passport_root: &Path, registry_base: &Path) -> PathBuf {
@@ -5208,6 +5548,138 @@ body:
                 Some(err.detail_message().as_str())
             );
         }
+    }
+
+    #[test]
+    fn compute_health_status_uses_shared_legacy_passport_freshness_resolution() {
+        let original = LoadedSpec {
+            source: spec_core::types::SpecSource {
+                file_path: "units/pricing/apply_tax.unit.spec".to_string(),
+                id: "pricing/apply_tax".to_string(),
+            },
+            spec: spec_core::types::SpecStruct {
+                id: "pricing/apply_tax".to_string(),
+                kind: "function".to_string(),
+                intent: spec_core::types::Intent {
+                    why: "apply tax".to_string(),
+                },
+                contract: Some(spec_core::types::Contract {
+                    inputs: Some(
+                        [("subtotal".to_string(), "i32".to_string())]
+                            .into_iter()
+                            .collect(),
+                    ),
+                    returns: Some("i32".to_string()),
+                    invariants: vec![],
+                }),
+                deps: vec![],
+                imports: vec![],
+                body: spec_core::types::Body {
+                    rust: "{ subtotal }".to_string(),
+                },
+                local_tests: vec![spec_core::types::LocalTest {
+                    id: "basic".to_string(),
+                    expect: "true".to_string(),
+                }],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: spec_core::types::UnitExtensions::default(),
+            },
+        };
+        let mut changed = original.clone();
+        changed.spec.contract.as_mut().unwrap().returns = Some("i64".to_string());
+
+        let mut legacy_passport = spec_core::passport::build_passport_with_evidence(
+            &original,
+            "2026-04-05T00:00:00Z",
+            Some(spec_core::passport::PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![spec_core::passport::PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            spec_core::passport::compute_contract_hash(&original),
+        );
+        legacy_passport.freshness = None;
+
+        let freshness =
+            spec_core::passport::resolve_passport_freshness(&changed, Some(&legacy_passport));
+        let health = compute_health_status(&[], Some(&legacy_passport), freshness.as_ref());
+
+        assert_eq!(health.status, HealthState::Stale);
+        assert_eq!(
+            health.reason.as_deref(),
+            Some("authored truth changed since last test")
+        );
+    }
+
+    #[test]
+    fn escape_hatch_gate_demotes_only_otherwise_valid_units() {
+        let valid_health = HealthStatus {
+            status: HealthState::Valid,
+            reason: None,
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let open_gate = EscapeHatchGate {
+            status: EscapeHatchGateStatus::Open,
+            required_surfaces: vec![
+                spec_core::escape_hatch::EscapeHatchProofSurface::Atom,
+                spec_core::escape_hatch::EscapeHatchProofSurface::Molecule,
+            ],
+            present_surfaces: vec![spec_core::escape_hatch::EscapeHatchProofSurface::Atom],
+            missing_surfaces: vec![spec_core::escape_hatch::EscapeHatchProofSurface::Molecule],
+            reason: Some("missing required escape-hatch proof: molecule".to_string()),
+        };
+
+        let demoted = apply_escape_hatch_gate_to_health(valid_health, Some(&open_gate));
+        assert_eq!(demoted.status, HealthState::Incomplete);
+        assert_eq!(
+            demoted.reason.as_deref(),
+            Some("missing required escape-hatch proof: molecule")
+        );
+
+        let stale_health = HealthStatus {
+            status: HealthState::Stale,
+            reason: Some("authored truth changed since last test".to_string()),
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let preserved = apply_escape_hatch_gate_to_health(stale_health, Some(&open_gate));
+        assert_eq!(preserved.status, HealthState::Stale);
+        assert_eq!(
+            preserved.reason.as_deref(),
+            Some("authored truth changed since last test")
+        );
+    }
+
+    #[test]
+    fn plan_validate_has_failures_ignores_partial_impact_when_closure_is_closed() {
+        let report = spec_core::plan::PlanReport {
+            plan_id: "add-only".to_string(),
+            computed_impact: spec_core::plan::PlanComputedImpact {
+                status: spec_core::plan::PlanComputedImpactStatus::Partial,
+                units: vec![],
+                molecule_tests: vec![],
+                unresolved: vec![spec_core::plan::PlanUnresolvedImpact {
+                    unit: "pricing/tiered_rate".to_string(),
+                    action: spec_core::plan::PlanChangeAction::Add,
+                    reason: "current graph has no node for action=add".to_string(),
+                }],
+            },
+            acceptance_closure: spec_core::plan::PlanAcceptanceClosure {
+                status: spec_core::plan::PlanAcceptanceClosureStatus::Closed,
+                missing_validate: vec![],
+                missing_molecule_tests: vec![],
+                extra_validate: vec!["pricing/tiered_rate".to_string()],
+                extra_molecule_tests: vec![],
+            },
+            change_reports: vec![],
+        };
+
+        assert!(!plan_validate_has_failures(&report));
     }
 
     #[test]

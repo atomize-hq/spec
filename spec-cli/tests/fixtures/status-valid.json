@@ -8,7 +8,12 @@
           "id": "pricing/apply_discount",
           "status": "valid",
           "errors": [],
-          "evidence_at": "2024-01-02T03:04:05Z"
+          "evidence_at": "2024-01-02T03:04:05Z",
+          "freshness": {
+            "authored_truth_digest": "sha256:4533bae8bd714eaf6c665bac95eb5694dc7812c5c6c579732a7197d97cc17fc0",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
         }
       ],
       "molecule_tests": []
@@ -19,7 +24,12 @@
       "id": "pricing/apply_discount",
       "status": "valid",
       "errors": [],
-      "evidence_at": "2024-01-02T03:04:05Z"
+      "evidence_at": "2024-01-02T03:04:05Z",
+      "freshness": {
+        "authored_truth_digest": "sha256:4533bae8bd714eaf6c665bac95eb5694dc7812c5c6c579732a7197d97cc17fc0",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
     }
   ]
 }

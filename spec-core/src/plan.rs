@@ -96,10 +96,27 @@ pub struct PlanChangeReport {
     pub unresolved_reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlanAcceptanceClosure {
+    pub status: PlanAcceptanceClosureStatus,
+    pub missing_validate: Vec<String>,
+    pub missing_molecule_tests: Vec<String>,
+    pub extra_validate: Vec<String>,
+    pub extra_molecule_tests: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PlanAcceptanceClosureStatus {
+    Closed,
+    Open,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlanReport {
     pub plan_id: String,
     pub computed_impact: PlanComputedImpact,
+    pub acceptance_closure: PlanAcceptanceClosure,
     pub change_reports: Vec<PlanChangeReport>,
 }
 
@@ -123,6 +140,8 @@ pub fn build_plan_report(
     let mut seen_change_units = HashSet::new();
     let mut union_units = BTreeSet::new();
     let mut union_molecule_tests = BTreeSet::new();
+    let mut accepted_units = BTreeSet::new();
+    let mut accepted_molecule_tests = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
     let mut change_reports = Vec::with_capacity(loaded_plan.plan.changes.len());
 
@@ -138,6 +157,7 @@ pub fn build_plan_report(
 
         for unit in &change.acceptance.validate {
             validate_local_plan_unit_ref(unit, &loaded_plan.source.file_path)?;
+            accepted_units.insert(unit.clone());
         }
 
         for test_id in &change.acceptance.molecule_tests {
@@ -147,6 +167,7 @@ pub fn build_plan_report(
                     path: loaded_plan.source.file_path.clone(),
                 });
             }
+            accepted_molecule_tests.insert(test_id.clone());
         }
 
         match change.action {
@@ -193,6 +214,25 @@ pub fn build_plan_report(
         }
     }
 
+    let resolved_units: Vec<_> = union_units.iter().cloned().collect();
+    let resolved_molecule_tests: Vec<_> = union_molecule_tests.iter().cloned().collect();
+    let missing_validate = union_units
+        .difference(&accepted_units)
+        .cloned()
+        .collect::<Vec<_>>();
+    let missing_molecule_tests = union_molecule_tests
+        .difference(&accepted_molecule_tests)
+        .cloned()
+        .collect::<Vec<_>>();
+    let extra_validate = accepted_units
+        .difference(&union_units)
+        .cloned()
+        .collect::<Vec<_>>();
+    let extra_molecule_tests = accepted_molecule_tests
+        .difference(&union_molecule_tests)
+        .cloned()
+        .collect::<Vec<_>>();
+
     Ok(PlanReport {
         plan_id: loaded_plan.plan.id.clone(),
         computed_impact: PlanComputedImpact {
@@ -201,9 +241,20 @@ pub fn build_plan_report(
             } else {
                 PlanComputedImpactStatus::Partial
             },
-            units: union_units.into_iter().collect(),
-            molecule_tests: union_molecule_tests.into_iter().collect(),
+            units: resolved_units,
+            molecule_tests: resolved_molecule_tests,
             unresolved: unresolved.into_iter().collect(),
+        },
+        acceptance_closure: PlanAcceptanceClosure {
+            status: if missing_validate.is_empty() && missing_molecule_tests.is_empty() {
+                PlanAcceptanceClosureStatus::Closed
+            } else {
+                PlanAcceptanceClosureStatus::Open
+            },
+            missing_validate,
+            missing_molecule_tests,
+            extra_validate,
+            extra_molecule_tests,
         },
         change_reports,
     })
@@ -579,6 +630,20 @@ bogus: nope
             report.computed_impact.unresolved[0].reason,
             "current graph has no node for action=add"
         );
+        assert_eq!(
+            report.acceptance_closure.status,
+            PlanAcceptanceClosureStatus::Open
+        );
+        assert_eq!(
+            report.acceptance_closure.missing_validate,
+            vec!["pricing/calculate_total".to_string()]
+        );
+        assert!(report.acceptance_closure.missing_molecule_tests.is_empty());
+        assert_eq!(
+            report.acceptance_closure.extra_validate,
+            vec!["pricing/tiered_rate".to_string()]
+        );
+        assert!(report.acceptance_closure.extra_molecule_tests.is_empty());
     }
 
     #[test]
@@ -618,5 +683,102 @@ bogus: nope
             }
             other => panic!("expected missing molecule test error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn build_plan_report_marks_closure_open_for_omitted_impacted_units_and_tests() {
+        let loaded_plan = LoadedPlan {
+            source: PlanSource {
+                file_path: "closure-open.plan.spec".to_string(),
+                id: "closure-open".to_string(),
+            },
+            plan: PlanStruct {
+                id: "closure-open".to_string(),
+                intent: Intent {
+                    why: "closure open".to_string(),
+                },
+                changes: vec![PlanChange {
+                    unit: "pricing/apply_tax".to_string(),
+                    action: PlanChangeAction::Modify,
+                    acceptance: PlanAcceptance {
+                        validate: vec!["pricing/apply_tax".to_string()],
+                        molecule_tests: vec![],
+                        notes: vec![],
+                    },
+                }],
+                notes: vec![],
+            },
+        };
+        let specs = vec![
+            loaded_spec("pricing/apply_tax", vec![]),
+            loaded_spec("pricing/calculate_total", vec!["pricing/apply_tax"]),
+        ];
+        let tests = vec![loaded_test(
+            "pricing/checkout_flow",
+            vec!["pricing/calculate_total"],
+        )];
+
+        let report = build_plan_report(&loaded_plan, &specs, &tests).unwrap();
+
+        assert_eq!(
+            report.acceptance_closure,
+            PlanAcceptanceClosure {
+                status: PlanAcceptanceClosureStatus::Open,
+                missing_validate: vec!["pricing/calculate_total".to_string()],
+                missing_molecule_tests: vec!["pricing/checkout_flow".to_string()],
+                extra_validate: vec![],
+                extra_molecule_tests: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn build_plan_report_marks_extra_acceptance_entries_without_error() {
+        let loaded_plan = LoadedPlan {
+            source: PlanSource {
+                file_path: "closure-extra.plan.spec".to_string(),
+                id: "closure-extra".to_string(),
+            },
+            plan: PlanStruct {
+                id: "closure-extra".to_string(),
+                intent: Intent {
+                    why: "closure extra".to_string(),
+                },
+                changes: vec![PlanChange {
+                    unit: "pricing/apply_tax".to_string(),
+                    action: PlanChangeAction::Modify,
+                    acceptance: PlanAcceptance {
+                        validate: vec![
+                            "pricing/apply_tax".to_string(),
+                            "pricing/calculate_total".to_string(),
+                        ],
+                        molecule_tests: vec![
+                            "pricing/checkout_flow".to_string(),
+                            "pricing/refund_flow".to_string(),
+                        ],
+                        notes: vec![],
+                    },
+                }],
+                notes: vec![],
+            },
+        };
+        let specs = vec![loaded_spec("pricing/apply_tax", vec![])];
+        let tests = vec![
+            loaded_test("pricing/checkout_flow", vec!["pricing/apply_tax"]),
+            loaded_test("pricing/refund_flow", vec!["pricing/other_unit"]),
+        ];
+
+        let report = build_plan_report(&loaded_plan, &specs, &tests).unwrap();
+
+        assert_eq!(
+            report.acceptance_closure,
+            PlanAcceptanceClosure {
+                status: PlanAcceptanceClosureStatus::Closed,
+                missing_validate: vec![],
+                missing_molecule_tests: vec![],
+                extra_validate: vec!["pricing/calculate_total".to_string()],
+                extra_molecule_tests: vec!["pricing/refund_flow".to_string()],
+            }
+        );
     }
 }

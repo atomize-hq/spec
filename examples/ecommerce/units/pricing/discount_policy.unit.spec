@@ -47,11 +47,69 @@ methods:
           {
               subtotal - self.discount_amount(subtotal)
           }
+  - id: percentage_example_holds
+    intent:
+      why: Support direct atom proof for the canonical percentage discount example.
+    receiver: shared_ref
+    contract:
+      returns: bool
+    lowering:
+      rust:
+        body: |
+          {
+              let policy = Self::Percentage {
+                  rate: rust_decimal::Decimal::new(10, 2),
+              };
+              policy.discount_amount(rust_decimal::Decimal::new(10000, 2))
+                  == rust_decimal::Decimal::new(1000, 2)
+                  && policy.discounted_subtotal(rust_decimal::Decimal::new(10000, 2))
+                      == rust_decimal::Decimal::new(9000, 2)
+          }
+  - id: fixed_amount_example_holds
+    intent:
+      why: Support direct atom proof for the canonical fixed-amount discount example.
+    receiver: shared_ref
+    contract:
+      returns: bool
+    lowering:
+      rust:
+        body: |
+          {
+              let policy = Self::FixedAmount {
+                  amount: rust_decimal::Decimal::new(1250, 2),
+              };
+              policy.discount_amount(rust_decimal::Decimal::new(5000, 2))
+                  == rust_decimal::Decimal::new(1250, 2)
+                  && policy.discounted_subtotal(rust_decimal::Decimal::new(5000, 2))
+                      == rust_decimal::Decimal::new(3750, 2)
+          }
+  - id: fixed_amount_capped_behavior_holds
+    intent:
+      why: Support direct atom proof for capped fixed-amount discount behavior.
+    receiver: shared_ref
+    contract:
+      returns: bool
+    lowering:
+      rust:
+        body: |
+          {
+              let policy = Self::FixedAmount {
+                  amount: rust_decimal::Decimal::new(2000, 2),
+              };
+              policy.discount_amount(rust_decimal::Decimal::new(1500, 2))
+                  == rust_decimal::Decimal::new(1500, 2)
+                  && policy.discounted_subtotal(rust_decimal::Decimal::new(1500, 2))
+                      == rust_decimal::Decimal::ZERO
+          }
 local_tests:
-  - id: none_has_zero_discount_amount
-    expect: DiscountPolicy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO
-  - id: none_leaves_subtotal_unchanged
-    expect: DiscountPolicy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)
+  - id: variant_none
+    expect: 'DiscountPolicy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO && DiscountPolicy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)'
+  - id: variant_percentage
+    expect: DiscountPolicy::None.percentage_example_holds()
+  - id: variant_fixed_amount
+    expect: DiscountPolicy::None.fixed_amount_example_holds()
+  - id: behavior_fixed_amount_capped
+    expect: DiscountPolicy::None.fixed_amount_capped_behavior_holds()
 backends:
   rust:
     derives:

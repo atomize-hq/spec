@@ -24,10 +24,10 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 - Follow the 5-step loop: `spec status .` to find invalid, stale, or missing-evidence units, `spec validate <unit-or-root> --format json` to read machine-parsable failures, edit the source `.unit.spec` or `.test.spec`, run `spec build <units-dir>` when you need to regenerate the shared output tree, then run `spec test <unit.unit.spec>` for exact-unit proof or `spec test <file.test.spec>` for a single molecule test and repeat until everything is green.
 - Treat `spec validate --format json` as the primary feedback channel. Read `status`, `errors`, and `warnings` from stdout; this includes pre-validation workspace-config failures such as broken `[libraries]` entries. Each error object includes a stable `SPEC_*` machine code, the unit path when applicable, and any relevant structured fields such as `dep`, `field`, or `value`.
 - A passport is the co-located `.spec.passport.json` record for a unit. It is "done" only when the unit validates, builds, tests, and has fresh passport evidence from `spec test`.
-- A stale unit is marked with `~` in `spec status` when the passport's stored contract hash no longer matches the current spec contract. Treat stale as work to redo, not as success.
+- A stale unit is marked with `~` in `spec status` when the current freshness projection says authored truth or backend execution changed since the last proof anchor. Treat stale as work to redo, not as success.
 - For molecule tests, run `spec test path/to/file.test.spec` to execute only that interaction test and refresh only its co-located `.test.evidence.json` artifact.
 - For seam kinds, keep shared semantics inside the seam container and nested behaviors: `kind: data` uses `data.fields`, `constructors`, and `methods`; `kind: sum` uses `sum.variants` and `methods`. Do not author top-level `contract`, `deps`, `imports`, or `body.rust` for seam kinds.
-- Canonical M13 wedge loop:
+- Canonical M14 wedge loop:
   `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json`
   `cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated`
   `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy.unit.spec`
@@ -65,11 +65,13 @@ Each unit or molecule test row has a `status` field:
 | invalid    | ✗      | Validation errors; see `errors[]`                     |
 | failing    | ✗      | Build failed or a test result is `fail`               |
 | stale      | ~      | Contract changed since last `spec test` run           |
-| incomplete | ?      | Evidence exists but ≥1 test result is `unknown`       |
+| incomplete | ?      | Proof is incomplete (for example `unknown` evidence or an open marked-seam gate) |
 | untested   | —      | No passport or no evidence field                      |
 | valid      | ✓      | All checks pass                                       |
 
 `reason` is present for non-valid, non-invalid rows. Exit code 1 for any non-valid unit or molecule test.
+
+Marked seam unit rows may also include additive `escape_hatch_gate` metadata. In M14 the required surfaces are always `atom` and `molecule`, `atom` requires current local proof rather than historical passing evidence, and an open gate uses a stable reason like `missing required escape-hatch proof: atom, molecule`. Live `spec status` / `spec export` recompute the gate from current passport freshness and molecule evidence even if a stored passport also carries the gate field. An open gate demotes only an otherwise-`valid` marked seam to `incomplete`; a unit that is already `stale` remains `stale`.
 
 Breaking changes from schema_version 1: `stale: bool` field removed; `reason: Option<String>`
 added; new state values `failing`, `incomplete`, `untested` added (old values remain valid).
@@ -95,12 +97,13 @@ test body is permitted but has the same implications as writing them in any othe
 
 ## Molecule Test Status Propagation
 
-Molecule test failure does **not** propagate to unit status. A failing molecule test affects only
-the molecule test's own status row. Unit status is determined solely by:
+For ordinary units, molecule test failure does **not** propagate to unit status. A failing
+molecule test affects only the molecule test's own status row.
 
-- Unit validation (schema + semantic)
-- `spec test` evidence for that unit's local tests
-- `contract_hash` staleness
+For marked seam units in M14, `escape_hatch_gate` is recomputed live for both `spec status` and
+`spec export` from current passport freshness and molecule evidence. An open gate can demote an
+otherwise-`valid` unit to `incomplete`, but it does not override a unit that is already `stale`.
 
-This boundary prevents the "five units fail because one molecule test failed" ambiguity. A unit
-can be `valid` while a molecule test that covers it is failing — these are independent signals.
+This boundary prevents the "five units fail because one molecule test failed" ambiguity while still
+letting marked seams require current `atom` and `molecule` proof. An ordinary unit can be `valid`
+while a molecule test that covers it is failing — these are independent signals.
