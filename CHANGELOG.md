@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.12.0 - 2026-04-22
+
+### Added
+
+- **M14 proof freshness and truth surfaces** — passports, status, and export now distinguish authored-truth freshness from backend-execution freshness instead of collapsing both into one opaque stale signal.
+- **Plan acceptance closure in machine-readable output** — `spec plan validate --format json` and plan export now surface `acceptance_closure`, so authored acceptance lists are checked against computed impact instead of trusted at face value.
+- **Canonical M14 regression coverage** — the CLI test suite now includes focused regressions for stale-proof projection, escape-hatch gate behavior, legacy passport freshness fallback, backend-only drift, and plan-closure honesty.
+
+### Changed
+
+- **`spec build` and `spec generate` now preserve prior proof state** — non-test passport writes keep existing evidence and freshness anchors on disk, then reproject current freshness/marker state instead of erasing prior `spec test` proof.
+- **Escape-hatch proof gates are now live truth surfaces** — marked seam units project backend markers, required proof surfaces, and gate state consistently through stored passports, `spec status`, and `spec export`.
+- **The canonical `pricing/discount_policy` seam now proves real branch breadth** — the example wedge carries direct atom proof for `none`, `percentage`, `fixed_amount`, and capped fixed-amount behavior, plus molecule proof that closes the escape-hatch gate.
+- **Agent and repo docs now teach the M14 trust loop** — `README.md` and `AGENTS.md` describe freshness as authored/backend truth, not just legacy contract-hash drift, and point at the current milestone framing.
+
+### Fixed
+
+- **Legacy passports now project freshness honestly** — units written before M14 still resolve authored drift correctly even when they only carry the old top-level contract hash and no freshness block.
+- **Export no longer overclaims molecule proof coverage** — canonical seam proof coverage only includes the `molecule` surface when current molecule evidence is both present and passing.
+- **Backend-only drift now reopens proof gates without inventing authored drift** — status and export agree when lowering changes but shared seam meaning does not, which prevents fake-green review surfaces.
+
 ## 0.11.0 - 2026-04-21
 
 ### Added
