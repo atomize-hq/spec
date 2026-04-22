@@ -5,10 +5,10 @@
 //! `.unit.spec` source file. Passports are derived artifacts (gitignored) and
 //! are written atomically only after all generation succeeds.
 
-use crate::escape_hatch::{EscapeHatchGate, evaluate_escape_hatch_gate};
+use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_escape_hatch_gate};
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
-use crate::molecule_evidence::{MoleculeEvidence, molecule_evidence_is_current_pass};
+use crate::molecule_evidence::MoleculeEvidence;
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
@@ -117,6 +117,12 @@ pub struct PassportProjectionContext<'a> {
     pub molecule_tests: &'a [LoadedMoleculeTest],
     pub molecule_evidence_by_id: &'a HashMap<String, MoleculeEvidence>,
     pub specs_by_id: &'a HashMap<String, LoadedSpec>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CanonicalProofCoverageDefinition {
+    id: &'static str,
+    explicit_atom_local_test_id: Option<&'static str>,
 }
 
 /// Explicit marker for backend-only escape hatches on seam units.
@@ -504,7 +510,27 @@ pub fn compute_passport_markers(spec: &LoadedSpec) -> Option<Vec<PassportMarker>
 
 /// Default proof-coverage hook for seam-localized review metadata.
 pub fn default_passport_proof_coverage(spec: &LoadedSpec) -> Option<Vec<PassportProofCoverage>> {
-    canonical_discount_policy_proof_coverage(spec)
+    let authored_local_test_ids = spec
+        .spec
+        .local_tests
+        .iter()
+        .map(|test| test.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+
+    canonical_proof_coverage_definitions(spec).map(|definitions| {
+        definitions
+            .iter()
+            .map(|definition| PassportProofCoverage {
+                id: definition.id.to_string(),
+                surfaces: normalize_proof_surfaces(branch_proof_surfaces(
+                    definition,
+                    &authored_local_test_ids,
+                    false,
+                    false,
+                )),
+            })
+            .collect()
+    })
 }
 
 pub fn normalize_proof_surfaces(mut surfaces: Vec<ProofSurface>) -> Vec<ProofSurface> {
@@ -562,7 +588,7 @@ pub fn project_passport_truth(
     ProjectedPassportTruth {
         freshness: resolve_passport_freshness(spec, passport),
         markers: compute_passport_markers(spec),
-        proof_coverage: project_passport_proof_coverage(spec, context),
+        proof_coverage: project_passport_proof_coverage(spec, passport, context),
         escape_hatch_gate: evaluate_escape_hatch_gate(
             spec,
             passport,
@@ -694,76 +720,93 @@ fn passport_freshness_anchor_for_write(
 
 fn project_passport_proof_coverage(
     spec: &LoadedSpec,
+    passport: Option<&Passport>,
     context: &PassportProjectionContext<'_>,
 ) -> Option<Vec<PassportProofCoverage>> {
-    let mut proof_coverage = default_passport_proof_coverage(spec)?;
-    let molecule_surface_present = context
-        .molecule_tests
-        .iter()
-        .filter(|test| {
-            test.test
-                .covers
-                .iter()
-                .any(|cover_id| cover_id == &spec.spec.id)
-        })
-        .any(|test| {
-            context
-                .molecule_evidence_by_id
-                .get(&test.test.id)
-                .is_some_and(|evidence| {
-                    molecule_evidence_is_current_pass(evidence, test, context.specs_by_id)
-                })
-        });
-    if molecule_surface_present {
-        for coverage in &mut proof_coverage {
-            coverage.surfaces = normalize_proof_surfaces(
-                coverage
-                    .surfaces
-                    .iter()
-                    .cloned()
-                    .chain(std::iter::once(ProofSurface::Molecule))
-                    .collect(),
-            );
-        }
-    }
-    Some(proof_coverage)
-}
-
-fn canonical_discount_policy_proof_coverage(
-    spec: &LoadedSpec,
-) -> Option<Vec<PassportProofCoverage>> {
-    if spec.spec.id != "pricing/discount_policy" {
-        return None;
-    }
-
-    let local_test_ids = spec
+    let definitions = canonical_proof_coverage_definitions(spec)?;
+    let authored_local_test_ids = spec
         .spec
         .local_tests
         .iter()
         .map(|test| test.id.as_str())
         .collect::<std::collections::BTreeSet<_>>();
+    let current_surfaces = current_proof_surfaces(
+        spec,
+        passport,
+        context.molecule_tests,
+        context.molecule_evidence_by_id,
+        context.specs_by_id,
+    );
 
     Some(
-        [
-            ("variant.none", "variant_none"),
-            ("variant.percentage", "variant_percentage"),
-            ("variant.fixed_amount", "variant_fixed_amount"),
-            (
-                "behavior.fixed_amount_capped",
-                "behavior_fixed_amount_capped",
-            ),
-        ]
-        .into_iter()
-        .map(|(coverage_id, local_test_id)| PassportProofCoverage {
-            id: coverage_id.to_string(),
-            surfaces: normalize_proof_surfaces(if local_test_ids.contains(local_test_id) {
-                vec![ProofSurface::Atom]
-            } else {
-                vec![ProofSurface::ImplicitOnly]
-            }),
-        })
-        .collect(),
+        definitions
+            .iter()
+            .map(|definition| PassportProofCoverage {
+                id: definition.id.to_string(),
+                surfaces: normalize_proof_surfaces(branch_proof_surfaces(
+                    definition,
+                    &authored_local_test_ids,
+                    current_surfaces.atom,
+                    current_surfaces.molecule,
+                )),
+            })
+            .collect(),
     )
+}
+
+fn canonical_proof_coverage_definitions(
+    spec: &LoadedSpec,
+) -> Option<&'static [CanonicalProofCoverageDefinition]> {
+    if spec.spec.id != "pricing/discount_policy" {
+        return None;
+    }
+
+    const DISCOUNT_POLICY_COVERAGE: &[CanonicalProofCoverageDefinition] = &[
+        CanonicalProofCoverageDefinition {
+            id: "variant.none",
+            explicit_atom_local_test_id: Some("variant_none"),
+        },
+        CanonicalProofCoverageDefinition {
+            id: "variant.percentage",
+            explicit_atom_local_test_id: Some("variant_percentage"),
+        },
+        CanonicalProofCoverageDefinition {
+            id: "variant.fixed_amount",
+            explicit_atom_local_test_id: Some("variant_fixed_amount"),
+        },
+        CanonicalProofCoverageDefinition {
+            id: "behavior.fixed_amount_capped",
+            explicit_atom_local_test_id: Some("behavior_fixed_amount_capped"),
+        },
+    ];
+
+    Some(DISCOUNT_POLICY_COVERAGE)
+}
+
+fn branch_proof_surfaces(
+    definition: &CanonicalProofCoverageDefinition,
+    authored_local_test_ids: &std::collections::BTreeSet<&str>,
+    current_atom_present: bool,
+    current_molecule_present: bool,
+) -> Vec<ProofSurface> {
+    let has_current_explicit_atom =
+        definition
+            .explicit_atom_local_test_id
+            .is_some_and(|local_test_id| {
+                authored_local_test_ids.contains(local_test_id) && current_atom_present
+            });
+
+    let mut surfaces = Vec::new();
+    if has_current_explicit_atom {
+        surfaces.push(ProofSurface::Atom);
+    }
+    if current_molecule_present {
+        surfaces.push(ProofSurface::Molecule);
+    }
+    if !has_current_explicit_atom {
+        surfaces.push(ProofSurface::ImplicitOnly);
+    }
+    surfaces
 }
 
 /// Return the passport file path for a given source `.unit.spec` path.
@@ -930,11 +973,12 @@ fn secs_to_gregorian(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::molecule_evidence::{MoleculeEvidenceStatus, build_molecule_evidence};
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
-        AuthoredSumVariant, Body, Contract, Intent, LocalTest, SpecSource, SpecStruct,
-        UnitExtensions,
+        AuthoredSumVariant, Body, Contract, Intent, LocalTest, MoleculeTestSource,
+        MoleculeTestStruct, SpecSource, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
     use tempfile::TempDir;
@@ -1195,6 +1239,79 @@ mod tests {
                 },
             },
         }
+    }
+
+    fn make_discount_policy_sum_seam(local_test_ids: &[&str]) -> LoadedSpec {
+        let mut spec = make_loaded_sum_seam(
+            "pricing/discount_policy",
+            "units/pricing/discount_policy.unit.spec",
+        );
+        spec.spec.intent.why =
+            "Represent mutually exclusive discount strategies for checkout pricing.".to_string();
+        spec.spec.local_tests = local_test_ids
+            .iter()
+            .map(|local_test_id| LocalTest {
+                id: (*local_test_id).to_string(),
+                expect: "true".to_string(),
+            })
+            .collect();
+        spec
+    }
+
+    fn make_discount_policy_molecule_test() -> LoadedMoleculeTest {
+        LoadedMoleculeTest {
+            source: MoleculeTestSource {
+                file_path: "units/pricing/discount_policy_checkout_flow.test.spec".to_string(),
+                id: "pricing/discount_policy_checkout_flow".to_string(),
+            },
+            test: MoleculeTestStruct {
+                id: "pricing/discount_policy_checkout_flow".to_string(),
+                intent: Intent {
+                    why: "Cover the discount policy seam".to_string(),
+                },
+                covers: vec!["pricing/discount_policy".to_string()],
+                imports: None,
+                body: Body {
+                    rust: "{ assert!(true); }".to_string(),
+                },
+                spec_version: Some("0.3.0".to_string()),
+            },
+        }
+    }
+
+    fn make_current_passport(spec: &LoadedSpec) -> Passport {
+        build_passport_with_evidence(
+            spec,
+            "2026-04-21T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-21T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            compute_contract_hash(spec),
+        )
+    }
+
+    fn proof_coverage_surfaces_for(
+        proof_coverage: &[PassportProofCoverage],
+        coverage_id: &str,
+    ) -> Vec<ProofSurface> {
+        proof_coverage
+            .iter()
+            .find(|coverage| coverage.id == coverage_id)
+            .expect("expected proof coverage entry")
+            .surfaces
+            .clone()
     }
 
     #[test]
@@ -2118,6 +2235,162 @@ mod tests {
                 ProofSurface::Molecule,
                 ProofSurface::ImplicitOnly,
             ]
+        );
+    }
+
+    #[test]
+    fn project_passport_proof_coverage_reports_current_atom_and_molecule_surfaces() {
+        let spec = make_discount_policy_sum_seam(&[
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]);
+        let passport = make_current_passport(&spec);
+        let molecule_test = make_discount_policy_molecule_test();
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+        let molecule_evidence = build_molecule_evidence(
+            &molecule_test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-21T00:00:00Z",
+            &specs_by_id,
+            None,
+        );
+        let molecule_evidence_by_id =
+            HashMap::from([(molecule_test.test.id.clone(), molecule_evidence)]);
+        let context = PassportProjectionContext {
+            molecule_tests: std::slice::from_ref(&molecule_test),
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
+
+        let proof_coverage =
+            project_passport_proof_coverage(&spec, Some(&passport), &context).unwrap();
+
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.none"),
+            vec![ProofSurface::Atom, ProofSurface::Molecule]
+        );
+    }
+
+    #[test]
+    fn project_passport_proof_coverage_drops_atom_when_passport_is_stale() {
+        let original = make_discount_policy_sum_seam(&[
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]);
+        let passport = make_current_passport(&original);
+        let mut changed = original.clone();
+        changed.spec.intent.why = "Represent revised discount policy".to_string();
+        let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
+        let molecule_evidence_by_id = HashMap::new();
+        let context = PassportProjectionContext {
+            molecule_tests: &[],
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
+
+        let proof_coverage =
+            project_passport_proof_coverage(&changed, Some(&passport), &context).unwrap();
+
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.none"),
+            vec![ProofSurface::ImplicitOnly]
+        );
+    }
+
+    #[test]
+    fn project_passport_proof_coverage_keeps_current_molecule_when_atom_is_stale() {
+        let original = make_discount_policy_sum_seam(&[
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]);
+        let passport = make_current_passport(&original);
+        let mut changed = original.clone();
+        changed.spec.intent.why = "Represent revised discount policy".to_string();
+        let molecule_test = make_discount_policy_molecule_test();
+        let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
+        let molecule_evidence = build_molecule_evidence(
+            &molecule_test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-21T00:00:00Z",
+            &specs_by_id,
+            None,
+        );
+        let molecule_evidence_by_id =
+            HashMap::from([(molecule_test.test.id.clone(), molecule_evidence)]);
+        let context = PassportProjectionContext {
+            molecule_tests: std::slice::from_ref(&molecule_test),
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
+
+        let proof_coverage =
+            project_passport_proof_coverage(&changed, Some(&passport), &context).unwrap();
+
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.none"),
+            vec![ProofSurface::Molecule, ProofSurface::ImplicitOnly]
+        );
+    }
+
+    #[test]
+    fn project_passport_proof_coverage_uses_current_authored_local_test_set_per_branch() {
+        let mut changed = make_discount_policy_sum_seam(&[
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]);
+        changed.spec.local_tests = vec![
+            LocalTest {
+                id: "variant_percentage".to_string(),
+                expect: "true".to_string(),
+            },
+            LocalTest {
+                id: "variant_fixed_amount".to_string(),
+                expect: "true".to_string(),
+            },
+            LocalTest {
+                id: "behavior_fixed_amount_capped".to_string(),
+                expect: "true".to_string(),
+            },
+        ];
+        let passport = make_current_passport(&changed);
+        let molecule_test = make_discount_policy_molecule_test();
+        let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
+        let molecule_evidence = build_molecule_evidence(
+            &molecule_test,
+            MoleculeEvidenceStatus::Pass,
+            None,
+            "2026-04-21T00:00:00Z",
+            &specs_by_id,
+            None,
+        );
+        let molecule_evidence_by_id =
+            HashMap::from([(molecule_test.test.id.clone(), molecule_evidence)]);
+        let context = PassportProjectionContext {
+            molecule_tests: std::slice::from_ref(&molecule_test),
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
+
+        let proof_coverage =
+            project_passport_proof_coverage(&changed, Some(&passport), &context).unwrap();
+
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.none"),
+            vec![ProofSurface::Molecule, ProofSurface::ImplicitOnly]
+        );
+        assert_eq!(
+            proof_coverage_surfaces_for(&proof_coverage, "variant.percentage"),
+            vec![ProofSurface::Atom, ProofSurface::Molecule]
         );
     }
 

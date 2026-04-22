@@ -30,6 +30,12 @@ pub struct EscapeHatchGate {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CurrentProofSurfaces {
+    pub atom: bool,
+    pub molecule: bool,
+}
+
 pub fn evaluate_escape_hatch_gate(
     spec: &LoadedSpec,
     passport: Option<&Passport>,
@@ -44,11 +50,18 @@ pub fn evaluate_escape_hatch_gate(
 
     let required_surfaces = required_surfaces();
     let mut present_surfaces = Vec::new();
+    let current_surfaces = current_proof_surfaces(
+        spec,
+        passport,
+        molecule_tests,
+        molecule_evidence_by_id,
+        specs_by_id,
+    );
 
-    if atom_surface_present(spec, passport) {
+    if current_surfaces.atom {
         present_surfaces.push(EscapeHatchProofSurface::Atom);
     }
-    if molecule_surface_present(spec, molecule_tests, molecule_evidence_by_id, specs_by_id) {
+    if current_surfaces.molecule {
         present_surfaces.push(EscapeHatchProofSurface::Molecule);
     }
 
@@ -77,6 +90,24 @@ fn required_surfaces() -> Vec<EscapeHatchProofSurface> {
         EscapeHatchProofSurface::Atom,
         EscapeHatchProofSurface::Molecule,
     ]
+}
+
+pub(crate) fn current_proof_surfaces(
+    spec: &LoadedSpec,
+    passport: Option<&Passport>,
+    molecule_tests: &[LoadedMoleculeTest],
+    molecule_evidence_by_id: &HashMap<String, MoleculeEvidence>,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> CurrentProofSurfaces {
+    CurrentProofSurfaces {
+        atom: atom_surface_present(spec, passport),
+        molecule: molecule_surface_present(
+            spec,
+            molecule_tests,
+            molecule_evidence_by_id,
+            specs_by_id,
+        ),
+    }
 }
 
 fn atom_surface_present(spec: &LoadedSpec, passport: Option<&Passport>) -> bool {

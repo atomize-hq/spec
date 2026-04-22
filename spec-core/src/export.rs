@@ -382,7 +382,8 @@ mod tests {
         MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
     };
     use crate::passport::{
-        PassportEvidence, PassportTestResult, build_passport_with_evidence, write_passport,
+        PassportEvidence, PassportTestResult, ProofSurface, build_passport_with_evidence,
+        write_passport,
     };
     use crate::plan::{
         LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
@@ -667,6 +668,29 @@ mod tests {
         }
     }
 
+    fn loaded_discount_policy_sum_seam(dir: &TempDir) -> LoadedSpec {
+        let mut spec = loaded_sum_seam(
+            dir,
+            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_policy",
+        );
+        spec.spec.intent.why =
+            "Represent mutually exclusive discount strategies for checkout pricing.".to_string();
+        spec.spec.local_tests = [
+            "variant_none",
+            "variant_percentage",
+            "variant_fixed_amount",
+            "behavior_fixed_amount_capped",
+        ]
+        .into_iter()
+        .map(|local_test_id| LocalTest {
+            id: local_test_id.to_string(),
+            expect: "true".to_string(),
+        })
+        .collect();
+        spec
+    }
+
     fn covering_molecule_test(dir: &TempDir, id: &str, cover_id: &str) -> LoadedMoleculeTest {
         let source_path = dir
             .path()
@@ -694,6 +718,18 @@ mod tests {
                 spec_version: Some("0.3.0".to_string()),
             },
         }
+    }
+
+    fn proof_coverage_surfaces(passport: &Passport, coverage_id: &str) -> Vec<ProofSurface> {
+        passport
+            .proof_coverage
+            .as_ref()
+            .expect("expected proof coverage metadata")
+            .iter()
+            .find(|coverage| coverage.id == coverage_id)
+            .expect("expected proof coverage entry")
+            .surfaces
+            .clone()
     }
 
     fn loaded_molecule_test(
@@ -1030,11 +1066,7 @@ mod tests {
     #[test]
     fn export_recomputes_escape_hatch_gate_from_current_evidence() {
         let dir = TempDir::new().unwrap();
-        let spec = loaded_sum_seam(
-            &dir,
-            "units/pricing/discount_policy.unit.spec",
-            "pricing/discount_policy",
-        );
+        let spec = loaded_discount_policy_sum_seam(&dir);
         let molecule_test = covering_molecule_test(
             &dir,
             "pricing/discount_policy_checkout_flow",
@@ -1109,6 +1141,59 @@ mod tests {
         );
         assert!(gate.missing_surfaces.is_empty());
         assert_eq!(gate.reason, None);
+        assert_eq!(
+            proof_coverage_surfaces(&bundle.passports[0], "variant.none"),
+            vec![ProofSurface::Atom, ProofSurface::Molecule]
+        );
+    }
+
+    #[test]
+    fn export_reprojects_stale_branch_proof_coverage_from_current_surfaces() {
+        let dir = TempDir::new().unwrap();
+        let original_spec = loaded_discount_policy_sum_seam(&dir);
+        let mut changed_spec = original_spec.clone();
+        changed_spec.spec.intent.why = "Represent revised discount policy".to_string();
+
+        let passport = build_passport_with_evidence(
+            &original_spec,
+            "2026-04-21T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: original_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-21T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&original_spec),
+        );
+        write_passport(&passport, Path::new(&original_spec.source.file_path)).unwrap();
+
+        let bundle = build_export_bundle(
+            std::slice::from_ref(&changed_spec),
+            &[],
+            "2026-04-21T00:00:00Z",
+            None,
+        );
+        let exported = &bundle.passports[0];
+        let gate = exported
+            .escape_hatch_gate
+            .as_ref()
+            .expect("marked seam should project a gate");
+
+        assert_eq!(gate.status, EscapeHatchGateStatus::Open);
+        assert!(gate.present_surfaces.is_empty());
+        assert_eq!(
+            proof_coverage_surfaces(exported, "variant.none"),
+            vec![ProofSurface::ImplicitOnly]
+        );
     }
 
     #[test]

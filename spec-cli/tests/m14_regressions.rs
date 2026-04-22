@@ -400,7 +400,7 @@ fn stale_marked_seam_reopens_gate_for_status_and_export() {
     assert_eq!(exported["escape_hatch_gate"]["status"], "open");
     assert_eq!(
         proof_coverage_surfaces(exported, "variant.none"),
-        &serde_json::json!(["atom"])
+        &serde_json::json!(["implicit_only"])
     );
     assert_eq!(
         exported["escape_hatch_gate"]["present_surfaces"],
@@ -698,7 +698,7 @@ fn export_omits_molecule_proof_coverage_when_molecule_evidence_is_stale() {
 
     assert_eq!(
         proof_coverage_surfaces(exported, "variant.none"),
-        &serde_json::json!(["atom"])
+        &serde_json::json!(["implicit_only"])
     );
     assert_eq!(
         status_unit["escape_hatch_gate"]["missing_surfaces"],
