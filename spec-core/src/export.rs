@@ -392,7 +392,7 @@ mod tests {
         LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
         PlanComputedImpactStatus, PlanReport, PlanSource, PlanStruct,
     };
-    use crate::semantic_review::{EvaluatorScope, SemanticReasonCode, evaluate_semantic_review};
+    use crate::semantic_review::evaluate_semantic_review;
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
@@ -1068,7 +1068,7 @@ mod tests {
     }
 
     #[test]
-    fn load_passports_for_specs_replaces_stale_sum_review_on_unsupported_kind() {
+    fn load_passports_for_specs_drops_stale_sum_review_on_unsupported_kind() {
         let dir = TempDir::new().unwrap();
         let original_spec = loaded_sum_seam(
             &dir,
@@ -1105,22 +1105,112 @@ mod tests {
 
         assert!(warnings.is_empty());
         assert_eq!(passports.len(), 1);
-        let review = passports[0]
-            .semantic_review
-            .as_ref()
-            .expect("unsupported review expected");
-        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
-        assert_eq!(
-            review.reason_codes,
-            vec![SemanticReasonCode::UnsupportedSurface]
+        assert!(passports[0].semantic_review.is_none());
+    }
+
+    #[test]
+    fn load_passports_for_specs_drops_unsupported_review_for_unsupported_kind() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_spec(
+            &dir,
+            "units/pricing/apply_discount.unit.spec",
+            "pricing/apply_discount",
+            vec![],
         );
-        assert!(
-            review
-                .summary
-                .contains("unit kind 'function' is not evaluated"),
-            "{}",
-            review.summary
+
+        let mut passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-05T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            None,
         );
+        passport.semantic_review = evaluate_semantic_review(&spec);
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let (passports, warnings) = load_passports_for_specs(std::slice::from_ref(&spec));
+
+        assert!(warnings.is_empty());
+        assert_eq!(passports.len(), 1);
+        assert!(passports[0].semantic_review.is_none());
+    }
+
+    #[test]
+    fn load_passports_for_specs_does_not_invent_unsupported_review_metadata() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_spec(
+            &dir,
+            "units/pricing/apply_discount.unit.spec",
+            "pricing/apply_discount",
+            vec![],
+        );
+
+        let passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-05T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            None,
+        );
+        assert!(passport.semantic_review.is_none());
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let (passports, warnings) = load_passports_for_specs(std::slice::from_ref(&spec));
+
+        assert!(warnings.is_empty());
+        assert_eq!(passports.len(), 1);
+        assert!(passports[0].semantic_review.is_none());
+    }
+
+    #[test]
+    fn build_export_bundle_does_not_invent_unsupported_review_metadata() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_spec(
+            &dir,
+            "units/pricing/apply_discount.unit.spec",
+            "pricing/apply_discount",
+            vec![],
+        );
+
+        let passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-05T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            None,
+        );
+        assert!(passport.semantic_review.is_none());
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let bundle = build_export_bundle(&[spec], &[], "2026-04-05T01:00:00Z", None);
+
+        assert!(bundle.warnings.is_empty());
+        assert_eq!(bundle.passports.len(), 1);
+        assert!(bundle.passports[0].semantic_review.is_none());
     }
 
     #[test]

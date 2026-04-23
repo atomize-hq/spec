@@ -1,11 +1,9 @@
-use crate::escape_hatch::summarize_escape_hatch_semantic_markers;
+use crate::escape_hatch::{is_helper_or_example_method, summarize_escape_hatch_semantic_markers};
 use crate::generator::lower_sum_seam;
 use crate::normalizer::normalize_unit;
-use crate::types::{
-    AuthoredMethod, AuthoredSumShape, LoadedSpec, NormalizedUnit, RustInherentMethodLowering,
-    UnitKind,
-};
+use crate::types::{AuthoredSumShape, LoadedSpec, NormalizedUnit, UnitKind};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -30,6 +28,7 @@ pub enum SemanticReasonCode {
     BackendOnlyExecutionMarker,
     ProofHelperOnlyMarker,
     DomainLoweringPresent,
+    OutsideHonestSupportedSubset,
     UnsupportedSurface,
 }
 
@@ -128,6 +127,19 @@ pub struct SemanticMarkerSummary {
     pub has_backend_derives: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SupportedSemanticRole {
+    DiscountAmount,
+    DiscountedSubtotal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SupportedBodyClassification {
+    Aligned,
+    Contradictory,
+    OutsideHonestSubset,
+}
+
 pub fn project_semantic_review(
     spec: &LoadedSpec,
     existing: Option<&SemanticReview>,
@@ -141,7 +153,10 @@ pub fn project_semantic_review(
                 .cloned(),
             SemanticProjectionMode::Refresh => evaluate_supported_sum_semantic_review(spec),
         },
-        EvaluatorScope::UnsupportedSurface => Some(unsupported_surface_review(unit_kind)),
+        EvaluatorScope::UnsupportedSurface => match mode {
+            SemanticProjectionMode::Preserve => None,
+            SemanticProjectionMode::Refresh => Some(unsupported_surface_review(unit_kind)),
+        },
     }
 }
 
@@ -213,7 +228,15 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     debug_assert!(matches!(spec.spec.unit_kind(), Ok(UnitKind::Sum)));
 
     let authored = build_authored_packet(spec)?;
-    let executable = build_executable_packet(spec)?;
+    let helper_method_ids = spec
+        .spec
+        .extensions
+        .methods
+        .iter()
+        .filter(|method| is_helper_or_example_method(method))
+        .map(|method| method.id.clone())
+        .collect::<HashSet<_>>();
+    let executable = build_executable_packet(spec, &helper_method_ids)?;
     let markers = summarize_markers(spec);
     let mut reasons = Vec::new();
     let mut authored_surfaces = authored_citations(spec, &authored);
@@ -231,6 +254,9 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         }
         if semantic_text_is_vague(&method.intent) {
             reasons.push(SemanticReasonCode::VagueMethodIntent);
+        }
+        if supported_role_for_method(method).is_none() {
+            reasons.push(SemanticReasonCode::OutsideHonestSupportedSubset);
         }
     }
     reasons.sort();
@@ -251,6 +277,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     if authored.variants != executable.variants {
         drift_reasons.push(SemanticReasonCode::VariantShapeMismatch);
     }
+    let mut under_specified_reasons = Vec::new();
 
     for authored_method in &authored.methods {
         match executable
@@ -266,16 +293,37 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
                     drift_reasons.push(SemanticReasonCode::MethodSignatureMismatch);
                 }
 
-                if authored_claims_capped_behavior(
-                    &authored.intent,
-                    authored_method.intent.as_str(),
-                ) && !body_reflects_capped_behavior(&executable_method.body_rust)
-                {
-                    drift_reasons.push(SemanticReasonCode::MethodBodyMissingCapBehavior);
+                match classify_supported_role_body(
+                    supported_role_for_method(authored_method)
+                        .expect("non-helper methods are pre-filtered to supported roles"),
+                    &executable_method.body_rust,
+                ) {
+                    SupportedBodyClassification::Aligned => {}
+                    SupportedBodyClassification::Contradictory => {
+                        drift_reasons.push(SemanticReasonCode::MethodBodyMissingCapBehavior);
+                    }
+                    SupportedBodyClassification::OutsideHonestSubset => {
+                        under_specified_reasons
+                            .push(SemanticReasonCode::OutsideHonestSupportedSubset);
+                    }
                 }
             }
             None => drift_reasons.push(SemanticReasonCode::MethodSignatureMismatch),
         }
+    }
+    under_specified_reasons.sort();
+    under_specified_reasons.dedup();
+
+    if !under_specified_reasons.is_empty() {
+        return Some(SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            reason_codes: under_specified_reasons,
+            summary: "supported semantic bodies fall outside the honest evaluator subset"
+                .to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::SupportedSumSurface,
+        });
     }
     drift_reasons.sort();
     drift_reasons.dedup();
@@ -342,7 +390,7 @@ fn build_authored_packet(spec: &LoadedSpec) -> Option<SemanticAuthoredPacket> {
         .extensions
         .methods
         .iter()
-        .filter(|method| !is_proof_helper_method(method))
+        .filter(|method| !is_helper_or_example_method(method))
         .map(|method| SemanticMethodPacket {
             id: method.id.clone(),
             intent: method.intent.why.clone(),
@@ -378,7 +426,10 @@ fn build_authored_packet(spec: &LoadedSpec) -> Option<SemanticAuthoredPacket> {
     })
 }
 
-fn build_executable_packet(spec: &LoadedSpec) -> Option<SemanticExecutablePacket> {
+fn build_executable_packet(
+    spec: &LoadedSpec,
+    helper_method_ids: &HashSet<String>,
+) -> Option<SemanticExecutablePacket> {
     let normalized = normalize_unit(spec.spec.clone()).ok()?;
     let NormalizedUnit::Sum(unit) = normalized else {
         return None;
@@ -402,7 +453,7 @@ fn build_executable_packet(spec: &LoadedSpec) -> Option<SemanticExecutablePacket
     let mut methods = lowering
         .methods
         .iter()
-        .filter(|method| !is_proof_helper_lowering(method))
+        .filter(|method| !helper_method_ids.contains(&method.id))
         .map(|method| SemanticExecutableMethodPacket {
             id: method.id.clone(),
             receiver: method
@@ -519,26 +570,6 @@ fn build_authored_variants(sum: &AuthoredSumShape) -> Vec<SemanticVariantPacket>
     variants
 }
 
-fn is_proof_helper_method(method: &AuthoredMethod) -> bool {
-    method.id.ends_with("_holds")
-        && method
-            .contract
-            .as_ref()
-            .and_then(|contract| contract.returns.as_deref())
-            == Some("bool")
-        && method
-            .contract
-            .as_ref()
-            .and_then(|contract| contract.inputs.as_ref())
-            .is_none_or(|inputs| inputs.is_empty())
-}
-
-fn is_proof_helper_lowering(method: &RustInherentMethodLowering) -> bool {
-    method.id.ends_with("_holds")
-        && method.returns.as_deref() == Some("bool")
-        && method.inputs.is_empty()
-}
-
 fn semantic_text_is_vague(text: &str) -> bool {
     let normalized = text.trim().to_ascii_lowercase();
     let word_count = normalized
@@ -552,41 +583,489 @@ fn semantic_text_is_vague(text: &str) -> bool {
         )
 }
 
-fn authored_claims_capped_behavior(unit_intent: &str, method_intent: &str) -> bool {
-    let combined = format!(
-        "{} {}",
-        unit_intent.to_ascii_lowercase(),
-        method_intent.to_ascii_lowercase()
-    );
-    [
-        "cap",
-        "capped",
-        "never below zero",
-        "not below zero",
-        "at most subtotal",
-    ]
-    .iter()
-    .any(|needle| combined.contains(needle))
+fn supported_role_for_method(method: &SemanticMethodPacket) -> Option<SupportedSemanticRole> {
+    if method.receiver != "shared_ref" || !type_is_decimal(method.returns.as_deref()?) {
+        return None;
+    }
+
+    let [subtotal] = method.inputs.as_slice() else {
+        return None;
+    };
+    if subtotal.name != "subtotal" || !type_is_decimal(&subtotal.type_) {
+        return None;
+    }
+
+    match method.id.as_str() {
+        "discount_amount" => Some(SupportedSemanticRole::DiscountAmount),
+        "discounted_subtotal" => Some(SupportedSemanticRole::DiscountedSubtotal),
+        _ => None,
+    }
 }
 
-fn body_reflects_capped_behavior(body: &str) -> bool {
-    let normalized = body.replace(char::is_whitespace, "");
-    normalized.contains(".min(") || normalized.contains("Decimal::ZERO")
+fn type_is_decimal(type_name: &str) -> bool {
+    type_name
+        .rsplit("::")
+        .next()
+        .is_some_and(|segment| segment == "Decimal")
+}
+
+fn classify_supported_role_body(
+    role: SupportedSemanticRole,
+    body: &str,
+) -> SupportedBodyClassification {
+    let Ok(block) = syn::parse_str::<syn::Block>(body) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+
+    match role {
+        SupportedSemanticRole::DiscountAmount => classify_discount_amount_body(&block),
+        SupportedSemanticRole::DiscountedSubtotal => classify_discounted_subtotal_body(&block),
+    }
+}
+
+fn classify_discount_amount_body(block: &syn::Block) -> SupportedBodyClassification {
+    let Some(tail_expr) = block_tail_expr(block) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(match_expr) = strip_expr_wrappers(tail_expr).and_then(expr_as_match) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    if !expr_is_ident(&match_expr.expr, "self") {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    }
+
+    let mut none_arm = None;
+    let mut percentage_arm = None;
+    let mut fixed_amount_arm = None;
+    for arm in &match_expr.arms {
+        if arm.guard.is_some() {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        }
+        match variant_name_from_pat(&arm.pat) {
+            Some("none") if none_arm.is_none() => none_arm = Some(&arm.body),
+            Some("percentage") if percentage_arm.is_none() => percentage_arm = Some(&arm.body),
+            Some("fixed_amount") if fixed_amount_arm.is_none() => {
+                fixed_amount_arm = Some(&arm.body)
+            }
+            _ => return SupportedBodyClassification::OutsideHonestSubset,
+        }
+    }
+
+    if !none_arm.is_some_and(|expr| expr_is_decimal_zero(expr))
+        || !percentage_arm.is_some_and(|expr| expr_is_subtotal_times_rate(expr))
+    {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    }
+
+    let Some(fixed_amount_expr) = fixed_amount_arm else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    if expr_is_capped_amount(fixed_amount_expr) {
+        SupportedBodyClassification::Aligned
+    } else if expr_is_uncapped_amount(fixed_amount_expr) {
+        SupportedBodyClassification::Contradictory
+    } else {
+        SupportedBodyClassification::OutsideHonestSubset
+    }
+}
+
+fn classify_discounted_subtotal_body(block: &syn::Block) -> SupportedBodyClassification {
+    let mut discount_aliases = HashSet::new();
+    if block.stmts.len() > 1 {
+        for stmt in &block.stmts[..block.stmts.len() - 1] {
+            match stmt {
+                syn::Stmt::Local(local) => {
+                    let Some(alias) = local_ident(local) else {
+                        return SupportedBodyClassification::OutsideHonestSubset;
+                    };
+                    let Some(init) = local
+                        .init
+                        .as_ref()
+                        .map(|init| strip_expr_wrappers(&init.expr).unwrap_or(&init.expr))
+                    else {
+                        return SupportedBodyClassification::OutsideHonestSubset;
+                    };
+                    if !expr_is_discount_amount_call(init) {
+                        return SupportedBodyClassification::OutsideHonestSubset;
+                    }
+                    discount_aliases.insert(alias.to_string());
+                }
+                _ => return SupportedBodyClassification::OutsideHonestSubset,
+            }
+        }
+    }
+
+    let Some(tail_expr) = block_tail_expr(block) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    if expr_is_discounted_subtotal_subtraction(tail_expr, &discount_aliases) {
+        SupportedBodyClassification::Aligned
+    } else {
+        SupportedBodyClassification::OutsideHonestSubset
+    }
+}
+
+fn block_tail_expr(block: &syn::Block) -> Option<&syn::Expr> {
+    match block.stmts.last()? {
+        syn::Stmt::Expr(expr, None) => Some(expr),
+        _ => None,
+    }
+}
+
+fn strip_expr_wrappers(expr: &syn::Expr) -> Option<&syn::Expr> {
+    match expr {
+        syn::Expr::Paren(inner) => strip_expr_wrappers(&inner.expr),
+        syn::Expr::Group(inner) => strip_expr_wrappers(&inner.expr),
+        syn::Expr::Block(inner) => block_tail_expr(&inner.block).and_then(strip_expr_wrappers),
+        _ => Some(expr),
+    }
+}
+
+fn expr_as_match(expr: &syn::Expr) -> Option<&syn::ExprMatch> {
+    match expr {
+        syn::Expr::Match(expr_match) => Some(expr_match),
+        _ => None,
+    }
+}
+
+fn variant_name_from_pat(pat: &syn::Pat) -> Option<&'static str> {
+    let ident = match pat {
+        syn::Pat::Path(path) => path.path.segments.last()?.ident.to_string(),
+        syn::Pat::Struct(path) => path.path.segments.last()?.ident.to_string(),
+        syn::Pat::TupleStruct(path) => path.path.segments.last()?.ident.to_string(),
+        _ => return None,
+    };
+    match ident.as_str() {
+        "None" => Some("none"),
+        "Percentage" => Some("percentage"),
+        "FixedAmount" => Some("fixed_amount"),
+        _ => None,
+    }
+}
+
+fn expr_is_decimal_zero(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Path(path) = expr else {
+        return false;
+    };
+    path_ends_with(&path.path, &["Decimal", "ZERO"])
+}
+
+fn expr_is_subtotal_times_rate(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Binary(binary) = expr else {
+        return false;
+    };
+    matches!(binary.op, syn::BinOp::Mul(_))
+        && ((expr_is_ident(&binary.left, "subtotal") && expr_is_rate_expr(&binary.right))
+            || (expr_is_ident(&binary.right, "subtotal") && expr_is_rate_expr(&binary.left)))
+}
+
+fn expr_is_rate_expr(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    match expr {
+        syn::Expr::Path(path) => path_is_ident(&path.path, "rate"),
+        syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Deref(_)) => {
+            expr_is_rate_expr(&unary.expr)
+        }
+        syn::Expr::MethodCall(call) if call.args.is_empty() => {
+            matches!(call.method.to_string().as_str(), "clone" | "to_owned")
+                && expr_is_rate_expr(&call.receiver)
+        }
+        _ => false,
+    }
+}
+
+fn expr_is_capped_amount(expr: &syn::Expr) -> bool {
+    expr_is_min_of_amount_and_subtotal(expr) || expr_is_explicit_capped_branch(expr)
+}
+
+fn expr_is_min_of_amount_and_subtotal(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::MethodCall(call) = expr else {
+        return false;
+    };
+    call.method == "min"
+        && call.args.len() == 1
+        && ((expr_is_amount_expr(&call.receiver) && expr_is_ident(&call.args[0], "subtotal"))
+            || (expr_is_ident(&call.receiver, "subtotal") && expr_is_amount_expr(&call.args[0])))
+}
+
+fn expr_is_explicit_capped_branch(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::If(expr_if) = expr else {
+        return false;
+    };
+    let Some((_, else_branch)) = &expr_if.else_branch else {
+        return false;
+    };
+    let Some(then_expr) = block_tail_expr(&expr_if.then_branch) else {
+        return false;
+    };
+    let Some(else_expr) = strip_expr_wrappers(else_branch) else {
+        return false;
+    };
+
+    match comparison_kind(&expr_if.cond) {
+        Some(ComparisonKind::AmountAboveSubtotal) => {
+            expr_is_ident(then_expr, "subtotal") && expr_is_amount_expr(else_expr)
+        }
+        Some(ComparisonKind::AmountAtMostSubtotal) => {
+            expr_is_amount_expr(then_expr) && expr_is_ident(else_expr, "subtotal")
+        }
+        None => false,
+    }
+}
+
+fn expr_is_uncapped_amount(expr: &syn::Expr) -> bool {
+    expr_is_amount_expr(expr)
+}
+
+fn expr_is_amount_expr(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    match expr {
+        syn::Expr::Path(path) => path_is_ident(&path.path, "amount"),
+        syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Deref(_)) => {
+            expr_is_amount_expr(&unary.expr)
+        }
+        syn::Expr::MethodCall(call) if call.args.is_empty() => {
+            matches!(call.method.to_string().as_str(), "clone" | "to_owned")
+                && expr_is_amount_expr(&call.receiver)
+        }
+        _ => false,
+    }
+}
+
+fn expr_is_discounted_subtotal_subtraction(
+    expr: &syn::Expr,
+    discount_aliases: &HashSet<String>,
+) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Binary(binary) = expr else {
+        return false;
+    };
+    matches!(binary.op, syn::BinOp::Sub(_))
+        && expr_is_ident(&binary.left, "subtotal")
+        && (expr_is_discount_amount_call(&binary.right)
+            || expr_is_discount_amount_alias(&binary.right, discount_aliases))
+}
+
+fn expr_is_discount_amount_call(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::MethodCall(call) = expr else {
+        return false;
+    };
+    call.method == "discount_amount"
+        && expr_is_ident(&call.receiver, "self")
+        && call.args.len() == 1
+        && expr_is_ident(&call.args[0], "subtotal")
+}
+
+fn expr_is_discount_amount_alias(expr: &syn::Expr, discount_aliases: &HashSet<String>) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Path(path) = expr else {
+        return false;
+    };
+    path.path
+        .get_ident()
+        .is_some_and(|ident| discount_aliases.contains(&ident.to_string()))
+}
+
+fn expr_is_ident(expr: &syn::Expr, ident: &str) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Path(path) = expr else {
+        return false;
+    };
+    path_is_ident(&path.path, ident)
+}
+
+fn path_is_ident(path: &syn::Path, ident: &str) -> bool {
+    path.get_ident().is_some_and(|segment| segment == ident)
+}
+
+fn path_ends_with(path: &syn::Path, suffix: &[&str]) -> bool {
+    let segments = path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>();
+    segments.ends_with(
+        &suffix
+            .iter()
+            .map(|segment| (*segment).to_string())
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn local_ident(local: &syn::Local) -> Option<&syn::Ident> {
+    let syn::Pat::Ident(pat_ident) = &local.pat else {
+        return None;
+    };
+    Some(&pat_ident.ident)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ComparisonKind {
+    AmountAboveSubtotal,
+    AmountAtMostSubtotal,
+}
+
+fn comparison_kind(expr: &syn::Expr) -> Option<ComparisonKind> {
+    let expr = strip_expr_wrappers(expr)?;
+    let syn::Expr::Binary(binary) = expr else {
+        return None;
+    };
+
+    match (&binary.left, &binary.op, &binary.right) {
+        (left, syn::BinOp::Gt(_), right)
+            if expr_is_amount_expr(left) && expr_is_ident(right, "subtotal") =>
+        {
+            Some(ComparisonKind::AmountAboveSubtotal)
+        }
+        (left, syn::BinOp::Ge(_), right)
+            if expr_is_amount_expr(left) && expr_is_ident(right, "subtotal") =>
+        {
+            Some(ComparisonKind::AmountAboveSubtotal)
+        }
+        (left, syn::BinOp::Lt(_), right)
+            if expr_is_ident(left, "subtotal") && expr_is_amount_expr(right) =>
+        {
+            Some(ComparisonKind::AmountAboveSubtotal)
+        }
+        (left, syn::BinOp::Le(_), right)
+            if expr_is_ident(left, "subtotal") && expr_is_amount_expr(right) =>
+        {
+            Some(ComparisonKind::AmountAboveSubtotal)
+        }
+        (left, syn::BinOp::Lt(_), right)
+            if expr_is_amount_expr(left) && expr_is_ident(right, "subtotal") =>
+        {
+            Some(ComparisonKind::AmountAtMostSubtotal)
+        }
+        (left, syn::BinOp::Le(_), right)
+            if expr_is_amount_expr(left) && expr_is_ident(right, "subtotal") =>
+        {
+            Some(ComparisonKind::AmountAtMostSubtotal)
+        }
+        (left, syn::BinOp::Gt(_), right)
+            if expr_is_ident(left, "subtotal") && expr_is_amount_expr(right) =>
+        {
+            Some(ComparisonKind::AmountAtMostSubtotal)
+        }
+        (left, syn::BinOp::Ge(_), right)
+            if expr_is_ident(left, "subtotal") && expr_is_amount_expr(right) =>
+        {
+            Some(ComparisonKind::AmountAtMostSubtotal)
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::{
-        AuthoredDataShape, AuthoredField, AuthoredMethodLowering, AuthoredRustBackend,
-        AuthoredRustMethodLowering, AuthoredSumVariant, Body, Contract, Intent, SpecSource,
-        SpecStruct, UnitExtensions,
+        AuthoredDataShape, AuthoredField, AuthoredMethod, AuthoredMethodLowering,
+        AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumVariant, Body, Contract,
+        Intent, SpecSource, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
+
+    fn decimal_contract_method(id: &str, intent: &str, body: &str) -> AuthoredMethod {
+        AuthoredMethod {
+            id: id.to_string(),
+            intent: Intent {
+                why: intent.to_string(),
+            },
+            receiver: "shared_ref".to_string(),
+            contract: Some(Contract {
+                inputs: Some(IndexMap::from([(
+                    "subtotal".to_string(),
+                    "Decimal".to_string(),
+                )])),
+                returns: Some("Decimal".to_string()),
+                invariants: vec![],
+            }),
+            deps: vec![],
+            lowering: Some(AuthoredMethodLowering {
+                rust: Some(AuthoredRustMethodLowering {
+                    body: body.to_string(),
+                }),
+            }),
+        }
+    }
+
+    fn helper_method(id: &str, body: &str) -> AuthoredMethod {
+        AuthoredMethod {
+            id: id.to_string(),
+            intent: Intent {
+                why: "Support a direct proof/example helper.".to_string(),
+            },
+            receiver: "shared_ref".to_string(),
+            contract: Some(Contract {
+                inputs: None,
+                returns: Some("bool".to_string()),
+                invariants: vec![],
+            }),
+            deps: vec![],
+            lowering: Some(AuthoredMethodLowering {
+                rust: Some(AuthoredRustMethodLowering {
+                    body: body.to_string(),
+                }),
+            }),
+        }
+    }
+
+    fn aligned_discount_amount_body() -> &'static str {
+        r#"{
+            match self {
+                Self::None => Decimal::ZERO,
+                Self::Percentage { rate } => subtotal * *rate,
+                Self::FixedAmount { amount } => (*amount).min(subtotal),
+            }
+        }"#
+    }
+
+    fn aligned_discounted_subtotal_body() -> &'static str {
+        r#"{
+            subtotal - self.discount_amount(subtotal)
+        }"#
+    }
 
     fn discount_policy_sum_spec() -> LoadedSpec {
         let mut variants = IndexMap::new();
         variants.insert("none".to_string(), AuthoredSumVariant::default());
+        variants.insert(
+            "percentage".to_string(),
+            AuthoredSumVariant {
+                fields: IndexMap::from([(
+                    "rate".to_string(),
+                    crate::types::AuthoredField {
+                        type_: "Decimal".to_string(),
+                    },
+                )]),
+            },
+        );
         variants.insert(
             "fixed_amount".to_string(),
             AuthoredSumVariant {
@@ -620,33 +1099,19 @@ mod tests {
                 spec_version: Some("0.3.0".to_string()),
                 extensions: UnitExtensions {
                     sum: Some(AuthoredSumShape { variants }),
-                    methods: vec![AuthoredMethod {
-                        id: "discount_amount".to_string(),
-                        intent: Intent {
-                            why: "Return the capped discount amount to subtract from the subtotal."
-                                .to_string(),
-                        },
-                        receiver: "shared_ref".to_string(),
-                        contract: Some(Contract {
-                            inputs: Some(IndexMap::from([(
-                                "subtotal".to_string(),
-                                "Decimal".to_string(),
-                            )])),
-                            returns: Some("Decimal".to_string()),
-                            invariants: vec![],
-                        }),
-                        deps: vec![],
-                        lowering: Some(AuthoredMethodLowering {
-                            rust: Some(AuthoredRustMethodLowering {
-                                body: "{ (*amount).min(subtotal) }".to_string(),
-                            }),
-                        }),
-                    }],
-                    backends: Some(crate::types::AuthoredBackends {
-                        rust: Some(AuthoredRustBackend {
-                            derives: vec!["Clone".to_string()],
-                        }),
-                    }),
+                    methods: vec![
+                        decimal_contract_method(
+                            "discount_amount",
+                            "Return the capped discount amount to subtract from the subtotal.",
+                            aligned_discount_amount_body(),
+                        ),
+                        decimal_contract_method(
+                            "discounted_subtotal",
+                            "Return the subtotal after applying the selected discount strategy.",
+                            aligned_discounted_subtotal_body(),
+                        ),
+                    ],
+                    backends: None,
                     ..UnitExtensions::default()
                 },
             },
@@ -668,6 +1133,16 @@ mod tests {
             rust: "{ subtotal }".to_string(),
         };
         spec.spec.extensions = UnitExtensions::default();
+        spec
+    }
+
+    fn discount_policy_sum_spec_with_backend_markers() -> LoadedSpec {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec.extensions.backends = Some(crate::types::AuthoredBackends {
+            rust: Some(AuthoredRustBackend {
+                derives: vec!["Clone".to_string()],
+            }),
+        });
         spec
     }
 
@@ -704,6 +1179,13 @@ mod tests {
     }
 
     #[test]
+    fn semantic_review_marks_aligned_discount_amount_and_discounted_subtotal() {
+        let review = evaluate_semantic_review(&discount_policy_sum_spec()).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(review.reason_codes, Vec::<SemanticReasonCode>::new());
+    }
+
+    #[test]
     fn semantic_review_marks_missing_cap_behavior_as_backend_leak() {
         let mut spec = discount_policy_sum_spec();
         spec.spec.extensions.methods[0]
@@ -713,13 +1195,120 @@ mod tests {
             .rust
             .as_mut()
             .unwrap()
-            .body = "{ amount.clone() }".to_string();
+            .body = "{ match self { Self::None => Decimal::ZERO, Self::Percentage { rate } => subtotal * *rate, Self::FixedAmount { amount } => amount.clone() } }".to_string();
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
         assert!(
             review
                 .reason_codes
                 .contains(&SemanticReasonCode::MethodBodyMissingCapBehavior)
+        );
+    }
+
+    #[test]
+    fn semantic_review_marks_backend_only_semantics_leaked_when_markers_present() {
+        let mut spec = discount_policy_sum_spec_with_backend_markers();
+        spec.spec.extensions.methods[0]
+            .lowering
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .body = "{ match self { Self::None => Decimal::ZERO, Self::Percentage { rate } => subtotal * *rate, Self::FixedAmount { amount } => amount.clone() } }".to_string();
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::MethodBodyMissingCapBehavior]
+        );
+    }
+
+    #[test]
+    fn semantic_review_helper_example_decimal_zero_does_not_mask_drift() {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec.extensions.methods.push(helper_method(
+            "fixed_amount_capped_example",
+            r#"{
+                Decimal::ZERO == Decimal::ZERO
+            }"#,
+        ));
+        spec.spec.extensions.methods[0]
+            .lowering
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .body = "{ match self { Self::None => Decimal::ZERO, Self::Percentage { rate } => subtotal * *rate, Self::FixedAmount { amount } => amount.clone() } }".to_string();
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::MethodBodyMissingCapBehavior]
+        );
+    }
+
+    #[test]
+    fn semantic_review_marks_extra_non_helper_method_as_under_specified() {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec.extensions.methods.push(decimal_contract_method(
+            "preview_discount_label",
+            "Return a preview amount for the current discount policy.",
+            "{ subtotal }",
+        ));
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::OutsideHonestSupportedSubset]
+        );
+    }
+
+    #[test]
+    fn semantic_review_marks_unrecognized_supported_role_body_as_under_specified() {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec.extensions.methods[1]
+            .lowering
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .body = r#"{
+                if subtotal == Decimal::ZERO {
+                    subtotal
+                } else {
+                    subtotal - self.discount_amount(subtotal)
+                }
+            }"#
+        .to_string();
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::OutsideHonestSupportedSubset]
+        );
+    }
+
+    #[test]
+    fn semantic_review_reports_backend_only_meaning_preserved_for_helper_markers() {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec.extensions.methods.push(helper_method(
+            "percentage_example",
+            r#"{
+                let policy = Self::Percentage { rate: Decimal::new(10, 2) };
+                policy.discounted_subtotal(Decimal::new(10000, 2)) == Decimal::new(9000, 2)
+            }"#,
+        ));
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::BackendOnlyMeaningPreserved);
+        assert_eq!(
+            review.reason_codes,
+            vec![
+                SemanticReasonCode::BackendOnlyExecutionMarker,
+                SemanticReasonCode::ProofHelperOnlyMarker,
+            ]
         );
     }
 
@@ -781,7 +1370,7 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_preserve_replaces_stale_supported_review_on_unsupported_kind() {
+    fn project_semantic_review_preserve_drops_supported_review_on_unsupported_kind() {
         let sum_spec = discount_policy_sum_spec();
         let supported_review = evaluate_semantic_review(&sum_spec).unwrap();
 
@@ -789,18 +1378,9 @@ mod tests {
             &discount_policy_function_spec(),
             Some(&supported_review),
             SemanticProjectionMode::Preserve,
-        )
-        .unwrap();
+        );
 
-        assert_eq!(preserved.verdict, SemanticVerdict::UnderSpecified);
-        assert_eq!(
-            preserved.evaluator_scope,
-            EvaluatorScope::UnsupportedSurface
-        );
-        assert_eq!(
-            preserved.reason_codes,
-            vec![SemanticReasonCode::UnsupportedSurface]
-        );
+        assert!(preserved.is_none());
     }
 
     #[test]
@@ -818,7 +1398,7 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_synthesizes_fresh_unsupported_metadata() {
+    fn project_semantic_review_only_refresh_synthesizes_fresh_unsupported_metadata() {
         let spec = discount_policy_function_spec();
         let existing = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
@@ -836,17 +1416,15 @@ mod tests {
         };
 
         let preserved =
-            project_semantic_review(&spec, Some(&existing), SemanticProjectionMode::Preserve)
-                .unwrap();
+            project_semantic_review(&spec, Some(&existing), SemanticProjectionMode::Preserve);
         let refreshed =
             project_semantic_review(&spec, Some(&existing), SemanticProjectionMode::Refresh)
                 .unwrap();
 
         let expected_summary = "unit kind 'function' is not evaluated by the M15 semantic reviewer";
-        assert_eq!(preserved.summary, expected_summary);
+        assert!(preserved.is_none());
         assert_eq!(refreshed.summary, expected_summary);
-        assert!(preserved.authored_surfaces.is_empty());
-        assert!(preserved.executable_surfaces.is_empty());
-        assert_eq!(preserved, refreshed);
+        assert!(refreshed.authored_surfaces.is_empty());
+        assert!(refreshed.executable_surfaces.is_empty());
     }
 }

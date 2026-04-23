@@ -136,7 +136,7 @@ pub(crate) fn collect_escape_hatch_semantic_markers(
             .is_some()
         {
             markers.push(EscapeHatchSemanticMarker {
-                kind: if is_proof_helper_method(method) {
+                kind: if is_helper_or_example_method(method) {
                     EscapeHatchSemanticMarkerKind::ProofHelperLowering
                 } else {
                     EscapeHatchSemanticMarkerKind::DomainLowering
@@ -263,8 +263,8 @@ fn format_open_reason(missing_surfaces: &[EscapeHatchProofSurface]) -> Option<St
     Some(format!("missing required escape-hatch proof: {joined}"))
 }
 
-fn is_proof_helper_method(method: &AuthoredMethod) -> bool {
-    method.id.ends_with("_holds")
+pub(crate) fn is_helper_or_example_method(method: &AuthoredMethod) -> bool {
+    method.receiver == "shared_ref"
         && method
             .contract
             .as_ref()
@@ -384,6 +384,27 @@ mod tests {
             id: "discount_policy_holds".to_string(),
             intent: Intent {
                 why: "Check the proof helper".to_string(),
+            },
+            receiver: "shared_ref".to_string(),
+            contract: Some(crate::types::Contract {
+                inputs: None,
+                returns: Some("bool".to_string()),
+                invariants: vec![],
+            }),
+            deps: vec![],
+            lowering: Some(AuthoredMethodLowering {
+                rust: Some(AuthoredRustMethodLowering {
+                    body: "{ true }".to_string(),
+                }),
+            }),
+        }
+    }
+
+    fn example_helper_method() -> AuthoredMethod {
+        AuthoredMethod {
+            id: "percentage_example".to_string(),
+            intent: Intent {
+                why: "Check the example helper".to_string(),
             },
             receiver: "shared_ref".to_string(),
             contract: Some(crate::types::Contract {
@@ -571,6 +592,13 @@ mod tests {
                 has_backend_rust_derives: false,
             }
         );
+    }
+
+    #[test]
+    fn helper_or_example_method_matches_holds_and_example_shapes() {
+        assert!(is_helper_or_example_method(&proof_helper_method()));
+        assert!(is_helper_or_example_method(&example_helper_method()));
+        assert!(!is_helper_or_example_method(&domain_method()));
     }
 
     #[test]

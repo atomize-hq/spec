@@ -864,9 +864,9 @@ fn canonical_semantic_review_wedge_projects_aligned_state() {
     assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
     assert_semantic_review(
         &passport["semantic_review"],
-        "aligned",
-        &[],
-        "authored semantics and executable lowering agree on the supported sum surface",
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker", "proof_helper_only_marker"],
+        "backend-only execution markers are present without changing authored meaning",
     );
 
     let status_output = run_spec(
@@ -881,9 +881,9 @@ fn canonical_semantic_review_wedge_projects_aligned_state() {
     assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
     assert_semantic_review(
         &status_unit["semantic_review"],
-        "aligned",
-        &[],
-        "authored semantics and executable lowering agree on the supported sum surface",
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker", "proof_helper_only_marker"],
+        "backend-only execution markers are present without changing authored meaning",
     );
 
     let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
@@ -893,9 +893,9 @@ fn canonical_semantic_review_wedge_projects_aligned_state() {
     assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
     assert_semantic_review(
         &exported["semantic_review"],
-        "aligned",
-        &[],
-        "authored semantics and executable lowering agree on the supported sum surface",
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker", "proof_helper_only_marker"],
+        "backend-only execution markers are present without changing authored meaning",
     );
 }
 
