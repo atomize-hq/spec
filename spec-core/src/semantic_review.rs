@@ -1036,6 +1036,28 @@ mod tests {
         }
     }
 
+    fn bool_domain_predicate_method(id: &str, body: &str) -> AuthoredMethod {
+        AuthoredMethod {
+            id: id.to_string(),
+            intent: Intent {
+                why: "Report whether the current discount policy has a real domain property."
+                    .to_string(),
+            },
+            receiver: "shared_ref".to_string(),
+            contract: Some(Contract {
+                inputs: None,
+                returns: Some("bool".to_string()),
+                invariants: vec![],
+            }),
+            deps: vec![],
+            lowering: Some(AuthoredMethodLowering {
+                rust: Some(AuthoredRustMethodLowering {
+                    body: body.to_string(),
+                }),
+            }),
+        }
+    }
+
     fn aligned_discount_amount_body() -> &'static str {
         r#"{
             match self {
@@ -1250,6 +1272,31 @@ mod tests {
     }
 
     #[test]
+    fn semantic_review_holds_helper_does_not_mask_drift() {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec.extensions.methods.push(helper_method(
+            "fixed_amount_capped_behavior_holds",
+            r#"{
+                Decimal::ZERO == Decimal::ZERO
+            }"#,
+        ));
+        spec.spec.extensions.methods[0]
+            .lowering
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .body = "{ match self { Self::None => Decimal::ZERO, Self::Percentage { rate } => subtotal * *rate, Self::FixedAmount { amount } => amount.clone() } }".to_string();
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::MethodBodyMissingCapBehavior]
+        );
+    }
+
+    #[test]
     fn semantic_review_marks_extra_non_helper_method_as_under_specified() {
         let mut spec = discount_policy_sum_spec();
         spec.spec.extensions.methods.push(decimal_contract_method(
@@ -1257,6 +1304,26 @@ mod tests {
             "Return a preview amount for the current discount policy.",
             "{ subtotal }",
         ));
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::OutsideHonestSupportedSubset]
+        );
+    }
+
+    #[test]
+    fn semantic_review_marks_bool_domain_predicate_as_under_specified() {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec
+            .extensions
+            .methods
+            .push(bool_domain_predicate_method(
+                "has_cap",
+                r#"{
+                matches!(self, Self::FixedAmount { .. })
+            }"#,
+            ));
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
         assert_eq!(

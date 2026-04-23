@@ -1071,3 +1071,93 @@ fn under_specified_wedge_projects_incomplete_health_consistently() {
         "authored semantic surfaces are too weak for honest evaluation",
     );
 }
+
+#[test]
+fn bool_domain_predicate_wedge_projects_under_specified_instead_of_false_green() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let wedge_root =
+        semantic_review_fixture_root(&fixture_dst, "false_green_bool_domain_predicate");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
+    let molecule_path = write_semantic_review_molecule(
+        &wedge_root,
+        "pricing/discount_policy_semantic_review_false_green_bool_domain_predicate",
+        "Close the bool-domain-predicate wedge so semantic review surfaces the extra authored method instead of treating it like proof glue.",
+        r#"    {
+        let subtotal = Decimal::new(1500, 2);
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+            amount: Decimal::new(2000, 2),
+        };
+
+        assert_eq!(capped.discount_amount(subtotal), subtotal);
+        assert_eq!(capped.discounted_subtotal(subtotal), Decimal::ZERO);
+        assert!(capped.has_cap());
+    }"#,
+    );
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "bool-domain-predicate wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &molecule_test_output,
+        "bool-domain-predicate wedge molecule test",
+    );
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &passport["semantic_review"],
+        "under_specified",
+        &["outside_honest_supported_subset"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", wedge_root.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(&status_output, 1, "bool-domain-predicate wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(status_unit["status"], "incomplete");
+    assert_eq!(
+        status_unit["reason"],
+        "semantic under-specified: authored semantic surfaces are too weak for honest evaluation"
+    );
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &status_unit["semantic_review"],
+        "under_specified",
+        &["outside_honest_supported_subset"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
+    assert_success(&export_output, "bool-domain-predicate wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &exported["semantic_review"],
+        "under_specified",
+        &["outside_honest_supported_subset"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+}

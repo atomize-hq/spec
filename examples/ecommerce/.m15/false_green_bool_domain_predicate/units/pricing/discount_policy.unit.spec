@@ -2,7 +2,7 @@ id: pricing/discount_policy
 kind: sum
 spec_version: "0.3.0"
 intent:
-  why: Represent checkout discount strategies that cap fixed discounts at the subtotal.
+  why: Represent checkout discount strategies with authored semantics that match the executable lowering.
 sum:
   variants:
     none: {}
@@ -30,7 +30,7 @@ methods:
               match self {
                   Self::None => rust_decimal::Decimal::ZERO,
                   Self::Percentage { rate } => subtotal * *rate,
-                  Self::FixedAmount { amount } => *amount,
+                  Self::FixedAmount { amount } => (*amount).min(subtotal),
               }
           }
   - id: discounted_subtotal
@@ -46,6 +46,18 @@ methods:
         body: |
           {
               subtotal - self.discount_amount(subtotal)
+          }
+  - id: has_cap
+    intent:
+      why: Report whether the current discount policy caps the fixed amount discount at the subtotal.
+    receiver: shared_ref
+    contract:
+      returns: bool
+    lowering:
+      rust:
+        body: |
+          {
+              matches!(self, Self::FixedAmount { .. })
           }
   - id: percentage_example
     intent:
@@ -67,7 +79,7 @@ methods:
           }
   - id: fixed_amount_example
     intent:
-      why: Prove the current fixed-amount discount example for semantic review.
+      why: Prove the canonical fixed-amount discount example for semantic review.
     receiver: shared_ref
     contract:
       returns: bool
@@ -85,7 +97,7 @@ methods:
           }
   - id: fixed_amount_capped_example
     intent:
-      why: Prove the current fixed-amount executable example for semantic review.
+      why: Prove the capped fixed-amount discount example for semantic review.
     receiver: shared_ref
     contract:
       returns: bool
@@ -97,9 +109,9 @@ methods:
                   amount: rust_decimal::Decimal::new(2000, 2),
               };
               policy.discount_amount(rust_decimal::Decimal::new(1500, 2))
-                  == rust_decimal::Decimal::new(2000, 2)
+                  == rust_decimal::Decimal::new(1500, 2)
                   && policy.discounted_subtotal(rust_decimal::Decimal::new(1500, 2))
-                      == rust_decimal::Decimal::new(-500, 2)
+                      == rust_decimal::Decimal::ZERO
           }
 local_tests:
   - id: variant_none

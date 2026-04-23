@@ -56,6 +56,12 @@ pub(crate) struct EscapeHatchSemanticMarkerSummary {
     pub has_backend_rust_derives: bool,
 }
 
+const ACCEPTED_EXAMPLE_HELPER_IDS: &[&str] = &[
+    "percentage_example",
+    "fixed_amount_example",
+    "fixed_amount_capped_example",
+];
+
 pub fn evaluate_escape_hatch_gate(
     spec: &LoadedSpec,
     passport: Option<&Passport>,
@@ -264,6 +270,10 @@ fn format_open_reason(missing_surfaces: &[EscapeHatchProofSurface]) -> Option<St
 }
 
 pub(crate) fn is_helper_or_example_method(method: &AuthoredMethod) -> bool {
+    has_helper_or_example_shape(method) && has_accepted_helper_or_example_name(method.id.as_str())
+}
+
+fn has_helper_or_example_shape(method: &AuthoredMethod) -> bool {
     method.receiver == "shared_ref"
         && method
             .contract
@@ -275,6 +285,10 @@ pub(crate) fn is_helper_or_example_method(method: &AuthoredMethod) -> bool {
             .as_ref()
             .and_then(|contract| contract.inputs.as_ref())
             .is_none_or(|inputs| inputs.is_empty())
+}
+
+fn has_accepted_helper_or_example_name(method_id: &str) -> bool {
+    method_id.ends_with("_holds") || ACCEPTED_EXAMPLE_HELPER_IDS.contains(&method_id)
 }
 
 impl EscapeHatchProofSurface {
@@ -405,6 +419,34 @@ mod tests {
             id: "percentage_example".to_string(),
             intent: Intent {
                 why: "Check the example helper".to_string(),
+            },
+            receiver: "shared_ref".to_string(),
+            contract: Some(crate::types::Contract {
+                inputs: None,
+                returns: Some("bool".to_string()),
+                invariants: vec![],
+            }),
+            deps: vec![],
+            lowering: Some(AuthoredMethodLowering {
+                rust: Some(AuthoredRustMethodLowering {
+                    body: "{ true }".to_string(),
+                }),
+            }),
+        }
+    }
+
+    fn accepted_example_helper_method(id: &str) -> AuthoredMethod {
+        let mut method = example_helper_method();
+        method.id = id.to_string();
+        method
+    }
+
+    fn bool_domain_predicate_method(id: &str) -> AuthoredMethod {
+        AuthoredMethod {
+            id: id.to_string(),
+            intent: Intent {
+                why: "Report a real domain predicate about the current discount policy."
+                    .to_string(),
             },
             receiver: "shared_ref".to_string(),
             contract: Some(crate::types::Contract {
@@ -597,8 +639,63 @@ mod tests {
     #[test]
     fn helper_or_example_method_matches_holds_and_example_shapes() {
         assert!(is_helper_or_example_method(&proof_helper_method()));
-        assert!(is_helper_or_example_method(&example_helper_method()));
+        for example_id in ACCEPTED_EXAMPLE_HELPER_IDS {
+            assert!(is_helper_or_example_method(
+                &accepted_example_helper_method(example_id)
+            ));
+        }
         assert!(!is_helper_or_example_method(&domain_method()));
+        assert!(!is_helper_or_example_method(&bool_domain_predicate_method(
+            "has_cap"
+        )));
+        assert!(!is_helper_or_example_method(&bool_domain_predicate_method(
+            "is_discountable"
+        )));
+    }
+
+    #[test]
+    fn bool_domain_predicate_lowering_is_collected_as_domain_marker() {
+        let spec = seam_with_markers(vec![bool_domain_predicate_method("has_cap")], vec![], false);
+
+        assert_eq!(
+            collect_escape_hatch_semantic_markers(&spec),
+            vec![EscapeHatchSemanticMarker {
+                kind: EscapeHatchSemanticMarkerKind::DomainLowering,
+                path: "methods.has_cap.lowering.rust.body".to_string(),
+            }]
+        );
+        assert_eq!(
+            summarize_escape_hatch_semantic_markers(&spec),
+            EscapeHatchSemanticMarkerSummary {
+                has_domain_lowering: true,
+                has_proof_helper_lowering: false,
+                has_backend_rust_derives: false,
+            }
+        );
+    }
+
+    #[test]
+    fn bool_domain_predicate_does_not_flip_marker_summary_to_proof_helper() {
+        let spec = seam_with_markers(
+            vec![bool_domain_predicate_method("is_discountable")],
+            Vec::new(),
+            false,
+        );
+
+        let markers = collect_escape_hatch_semantic_markers(&spec);
+        assert_eq!(markers.len(), 1);
+        assert_eq!(
+            markers[0].kind,
+            EscapeHatchSemanticMarkerKind::DomainLowering
+        );
+        assert_eq!(
+            summarize_escape_hatch_semantic_markers(&spec),
+            EscapeHatchSemanticMarkerSummary {
+                has_domain_lowering: true,
+                has_proof_helper_lowering: false,
+                has_backend_rust_derives: false,
+            }
+        );
     }
 
     #[test]
