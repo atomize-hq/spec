@@ -1,5 +1,452 @@
 <!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m15-autoplan-restore-20260422-213555.md -->
-# M15 — Semantic Governance + Eval
+# M15.5 — Semantic Review Trust Repair
+
+Status: **Draft, eng-reviewed** (2026-04-23). M15 is treated as landed on `feat/m15` at
+`d08df40` on April 23, 2026. This section is now the current implementation contract. The
+historical M15 draft remains below as record, not current scope.
+
+M15.5 is the bounded follow-up required before submit because the landed M15 cut exposed two trust
+regressions in the core semantic-review path:
+- lexical cap-detection in `spec-core/src/semantic_review.rs`
+- non-proof flows minting or rewriting semantic-review state via preserve-mode projection
+
+UI scope: **no**. This is a backend-only trust repair milestone for semantic-review evaluation,
+passport persistence, status/export projection, helper classification, and the canonical ecommerce
+sum seam.
+
+## M15 Landed
+
+M15 landed these capabilities on `feat/m15`:
+- shared `semantic_review` record projected through passport, status, and export
+- supported `kind: sum` evaluation surface with canonical aligned / drift / under-specified wedges
+- semantic verdict-to-health projection for supported sum seams
+- escape-hatch semantic classification surfaces
+- additive unsupported-surface semantic metadata for non-evaluator kinds
+
+M15.5 does **not** widen M15. It repairs the two trust regressions found in pre-submit review so
+the M15 story is honest enough to ship.
+
+## Review Decisions Locked
+
+These decisions were made in `/plan-eng-review` on April 23, 2026 and are part of the plan:
+- `1A` Extra non-helper methods outside the two supported semantic roles force `under_specified`.
+- `2A` `SemanticProjectionMode::Preserve` keeps compatible supported-sum reviews, but drops
+  unsupported reviews. Only proof-producing refresh paths may mint unsupported metadata.
+- `3A` Helper/example classification becomes one shared predicate in `spec-core`, not duplicated
+  local logic in `semantic_review.rs` and `escape_hatch.rs`.
+- `4A` The milestone requires both unit coverage and a CLI regression matrix proving that
+  proof-producing paths refresh semantic review and read/non-proof paths do not invent it.
+- `5B` No standalone TODO is added for future unsupported-kind retention; that remains out of
+  scope for M15.5.
+
+## Milestone Summary
+
+```text
+M15.5a  Replace lexical cap heuristics with role-scoped AST evaluation     required
+M15.5b  Narrow supported roles to two explicit method contracts            required
+M15.5c  Share helper/example classification across trust surfaces          required
+M15.5d  Make Preserve truly preserve-only                                  required
+M15.5e  Stop status/export/build from inventing unsupported metadata       required
+M15.5f  Flip the regression tests that currently lock in bad behavior      required
+M15.5g  Re-prove canonical wedges through passport/status/export           required
+```
+
+**Lake to boil in M15.5**
+- Make the M15 semantic verdict hard to game.
+- Make durable semantic truth writable only in proof-producing flows.
+- Keep the evaluator narrow and explicit instead of pretending to understand whole seams.
+- Fix the trust surface without widening to new kinds, new roles, or new artifact types.
+
+**User job**
+- An AI-heavy Rust maintainer edits `pricing/discount_policy`, runs the usual trust loop, and can
+  trust that:
+  - supported role evaluation is based on explicit method shape and AST classification, not
+    substring luck
+  - helper/example methods do not mask real drift
+  - `spec build`, `spec generate`, `spec status`, and `spec export` never mint fresh semantic
+    truth behind the user's back
+
+## Step 0: Scope Challenge
+
+### What already exists
+
+| Sub-problem | Existing code surface | M15.5 reuse / correction |
+|---|---|---|
+| Semantic-review contract owner | `spec-core/src/semantic_review.rs` | Reuse the existing module. Replace the brittle evaluator internals instead of introducing a second semantic path. |
+| Proof-vs-non-proof projection split | `spec-core/src/passport.rs`, `spec-cli/src/commands.rs`, `spec-core/src/export.rs` | Reuse the current `Refresh` vs `Preserve` plumbing, but change preserve semantics so it never synthesizes replacement truth. |
+| Canonical wedge and fixtures | `examples/ecommerce/.m15/*`, `spec-cli/tests/m14_regressions.rs` | Reuse the canonical `pricing/discount_policy` seam and re-prove it after the evaluator change. |
+| Escape-hatch marker summary | `spec-core/src/escape_hatch.rs` | Reuse marker collection and gate logic, but share helper/example classification so semantic review and escape-hatch surfaces agree. |
+| Existing parser dependency | `spec-core/Cargo.toml` `syn = { version = "2", features = ["full"] }` | Reuse `syn` for AST parsing rather than inventing a custom parser or keeping string matching. |
+
+### Minimum diff that still solves the problem
+
+- Keep one semantic-review module and one persisted `SemanticReview` record.
+- Replace only the evaluator core and preserve-mode semantics.
+- Reuse existing `spec test` proof-producing flows. M15.5 adds **no** new command.
+- Reuse the current canonical wedge instead of widening to more domains or kinds.
+
+### Complexity check
+
+- Expected blast radius remains bounded to `semantic_review.rs`, `escape_hatch.rs`,
+  `passport.rs`, `export.rs`, `commands.rs`, and the existing semantic-review tests/fixtures.
+- New files are not required. If this follow-up starts adding a second evaluator module, a new
+  artifact type, or kind-specific persistence metadata, that is overbuilt.
+
+### Search check
+
+- Boring-by-default choice: use `syn` for parsing supported-role bodies into `syn::Expr`.
+- Do **not** build a hand-rolled token parser.
+- Do **not** widen into general Rust semantic interpretation. The honest subset is small and closed.
+
+### TODO cross-reference
+
+- M15 closed the original long-running semantic contract-vs-body thesis from the old M5 backlog.
+- M15.5 is not a new roadmap branch. It is the trust-repair patch set required to make M15 honest.
+- Unsupported-surface retention beyond proof-producing flows is intentionally deferred. Do not
+  sneak it into this milestone.
+
+### Completeness check
+
+- The complete move is to fix both the evaluator and the persistence contract together.
+- The shortcut is to patch only the lexical heuristic or only the preserve bug. Reject that. Either
+  half alone leaves the user with fake-green trust.
+
+### Distribution check
+
+- M15.5 introduces no new artifact type.
+- Existing CLI packaging and release machinery stay sufficient.
+- The deliverable is code + regression coverage, not CI/publishing changes.
+
+## Architecture Review
+
+M15.5 is a trust-repair milestone. The main job is to make the semantic-review surface explicit,
+bounded, and mechanically honest.
+
+### Ownership split
+
+| Layer | Owns | Must not own |
+|---|---|---|
+| Role contract | which executable behaviors the evaluator is allowed to judge | inference from free-text intent strings |
+| Body classifier | whether a supported role is aligned, contradictory, or outside the honest subset | whole-seam semantic guessing |
+| Persistence contract | when semantic truth is preserved, dropped, or refreshed | opportunistic minting during read/non-proof flows |
+| Helper/example classifier | which methods are proof/example glue and excluded from drift checks | local one-off definitions per module |
+
+### Supported evaluator boundary
+
+On supported `kind: sum` seams, M15.5 evaluates **only** these two roles:
+
+```text
+discount_amount(subtotal) -> Decimal
+discounted_subtotal(subtotal) -> Decimal
+```
+
+Each supported role is identified by explicit method id plus contract shape:
+- receiver: `shared_ref`
+- `discount_amount`: one `subtotal` input, returns `Decimal`
+- `discounted_subtotal`: one `subtotal` input, returns `Decimal`
+
+Anything else must fall into one of two buckets:
+- excluded helper/example method
+- outside honest subset -> `under_specified`
+
+### Role-scoped AST evaluator
+
+The evaluator should parse `lowering.rust.body` with `syn` and classify only a closed set of
+honest executable shapes.
+
+```text
+supported sum seam
+  │
+  ├── shared helper/example classifier
+  │      ├── helper/example -> excluded from drift proof
+  │      └── non-helper -> continue
+  │
+  ├── supported role matcher
+  │      ├── discount_amount
+  │      ├── discounted_subtotal
+  │      └── anything else -> outside_honest_subset
+  │
+  └── AST classifier
+         ├── aligned
+         ├── contradictory
+         └── outside_honest_subset
+```
+
+For `discount_amount`, the honest subset is:
+- capped fixed-amount behavior using `.min(subtotal)` in the fixed-amount branch
+- explicit equivalent clamp branches that cap the fixed discount at `subtotal`
+- explicit contradictory uncapped forms for the fixed-amount branch
+
+For `discounted_subtotal`, the honest subset is:
+- `subtotal - self.discount_amount(subtotal)`
+- equivalent direct delegation/subtraction shapes
+
+If a supported role body cannot be honestly classified, the result is `under_specified`, not a
+guessed pass/fail.
+
+### Helper/example exclusion
+
+M15.5 replaces `_holds`-specific logic with one structural helper/example predicate shared by
+semantic review and escape-hatch classification.
+
+Helper/example method:
+- returns `bool`
+- receiver is `shared_ref`
+- has no inputs
+- is **not** one of the two supported semantic roles
+
+This explicitly covers:
+- existing `_holds` helpers
+- `percentage_example`
+- `fixed_amount_example`
+- `fixed_amount_capped_example`
+
+### Preserve vs Refresh contract
+
+M15.5 makes `SemanticProjectionMode::Preserve` truly preserve-only.
+
+```text
+Preserve
+  supported sum + compatible supported-sum review -> keep existing review
+  supported sum + incompatible/unsupported review -> drop to None
+  unsupported kind + any existing review -> drop to None
+
+Refresh
+  supported sum -> run the AST evaluator
+  unsupported kind -> mint additive unsupported-surface metadata
+```
+
+This is the core persistence rule:
+- `spec test` may refresh semantic truth
+- `spec build` / `spec generate` may not
+- `spec status` / `spec export` may project persisted truth, but may not invent replacement truth
+
+### Projection contract
+
+```text
+proof-producing flow
+  spec test
+    -> Refresh
+    -> write semantic_review
+
+non-proof flow
+  spec build / spec generate
+    -> Preserve
+    -> keep or drop semantic_review, never mint
+
+read flow
+  spec status / spec export
+    -> Preserve
+    -> project only what already exists on disk
+```
+
+## Code Quality Review
+
+The main code-quality risks are duplication and half-truths.
+
+M15.5 must avoid:
+- one helper/example classifier in `semantic_review.rs` and another in `escape_hatch.rs`
+- one notion of "supported role" in the evaluator and another in fixtures/tests
+- `Preserve` meaning "sometimes preserve, sometimes synthesize"
+- string matching creeping back in through a side helper
+
+### Concrete code-quality rules
+
+- Keep the supported-role matcher and AST classifier in `spec-core/src/semantic_review.rs`.
+- Extract the shared helper/example predicate into one reusable helper in `spec-core`.
+- Add one new `SemanticReasonCode` for non-helper methods outside the honest supported subset.
+- Do not add unsupported-kind identity fields just to preserve unsupported reviews. That is
+  explicitly not this milestone.
+- Keep changes explicit and local. No new abstraction layers beyond the shared helper classifier.
+
+## Test Review
+
+### New codepaths
+
+```text
+ROLE-SCOPED EVALUATION
+  - supported role matching by id + contract shape
+  - AST classification for discount_amount
+  - AST classification for discounted_subtotal
+  - outside-honest-subset under_specified path
+
+HELPER / EXAMPLE EXCLUSION
+  - one shared structural predicate
+  - helper/example tokens do not mask drift
+
+PERSISTENCE
+  - Preserve keeps or drops only
+  - Refresh mints new semantic truth
+
+READ VS WRITE FLOWS
+  - spec test refreshes
+  - build/generate/status/export do not invent semantic truth
+```
+
+### Coverage diagram
+
+```text
+CODE PATH COVERAGE
+===========================
+[+] spec-core/src/semantic_review.rs
+    │
+    ├── project_semantic_review(Preserve)
+    │   ├── keep compatible supported-sum review
+    │   ├── drop supported review on supported→unsupported kind change
+    │   ├── drop unsupported review in Preserve
+    │   └── Refresh may mint unsupported metadata
+    │
+    ├── evaluate_supported_sum_semantic_review()
+    │   ├── aligned discount_amount AST shape
+    │   ├── aligned discounted_subtotal delegation
+    │   ├── contradictory uncapped discount_amount
+    │   ├── helper/example method with `Decimal::ZERO` does not mask drift
+    │   ├── extra non-helper method -> outside_honest_subset
+    │   └── unrecognized supported-role body -> under_specified
+    │
+    └── shared helper/example classifier
+        ├── semantic review uses shared predicate
+        └── escape_hatch uses the same predicate
+
+[+] spec-core/src/passport.rs
+    └── build_passport_preserving_proof_state()
+        ├── keep supported-sum review when compatible
+        └── drop semantic_review on incompatible kind/scope change
+
+[+] spec-cli/tests/cli.rs
+    ├── spec test refreshes semantic review
+    ├── spec build/spec generate do not mint unsupported metadata
+    ├── spec status does not invent unsupported metadata on read
+    └── spec export does not invent unsupported metadata on read
+```
+
+### Required test matrix
+
+- Unit tests in `spec-core/src/semantic_review.rs`:
+  - aligned `discount_amount()` AST shape passes
+  - aligned `discounted_subtotal()` delegation passes
+  - uncapped `discount_amount()` fails
+  - helper/example method containing `Decimal::ZERO` does not mask drift
+  - extra non-helper method outside the two supported roles yields `under_specified`
+  - unrecognized supported-role body yields `under_specified`
+  - `Preserve` drops unsupported reviews and incompatible supported reviews
+  - `Refresh` can still mint unsupported metadata
+- Unit tests in `spec-core/src/passport.rs`:
+  - preserve path keeps compatible supported-sum review
+  - preserve path drops review instead of replacing it on kind/scope change
+- CLI regressions in `spec-cli/tests/cli.rs`:
+  - replace tests that currently expect preserve-mode synthesis of unsupported metadata
+  - prove `spec test` refreshes semantic review
+  - prove `spec build` / `spec generate` do not mint unsupported metadata
+  - prove `spec status` and `spec export` do not invent unsupported metadata on read
+- Canonical wedge regressions in `spec-cli/tests/m14_regressions.rs`:
+  - aligned wedge still projects aligned through passport/status/export
+  - drift wedge still projects failing semantic review
+  - under-specified wedge still projects incomplete semantic review
+
+### Regression rule
+
+These regressions are mandatory and not negotiable:
+- flip the current preserve-mode tests that codify unsupported-review synthesis
+- add the helper-token masking regression
+- add the outside-honest-subset regression
+
+### Test plan artifact
+
+Primary artifact for this pass:
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m15-eng-review-test-plan-20260423-112704.md`
+
+## Performance Review
+
+No performance issue should drive M15.5 scope. The AST classifier runs only in proof-producing
+flows, on two explicit roles, after work that already builds/tests code. Runtime cost is noise
+compared with the existing trust loop.
+
+## Failure Modes
+
+| Codepath | Failure mode | Test coverage required | Error handling | User outcome if missed | Critical gap? |
+|---|---|---|---|---|---|
+| role-scoped evaluator | helper/example token like `Decimal::ZERO` masks an uncapped implementation | unit regression in `semantic_review.rs` | explicit contradictory verdict | fake-green semantic trust | **yes** |
+| supported-role classifier | unrecognized body shape is guessed as aligned or drift | AST classifier tests | `under_specified` fallback | evaluator overclaims certainty | **yes** |
+| helper/example classification | semantic review and escape-hatch code disagree about what counts as helper glue | shared-predicate unit tests | one shared predicate | trust surfaces contradict each other | **yes** |
+| preserve path | `spec build` / `spec generate` rewrites durable semantic truth | passport + CLI preserve regressions | keep-or-drop only | non-proof flows mutate proof state | **yes** |
+| read path | `spec status` / `spec export` invent unsupported metadata on read | CLI regressions | project persisted truth only | user sees semantic claims that no proof flow wrote | **yes** |
+
+## What NOT in M15.5 Scope
+
+- widening beyond the two supported sum roles
+- evaluating `kind: data` or `kind: function`
+- adding unsupported-kind identity so preserve-mode can retain unsupported reviews
+- new CLI commands, new artifact types, or a general semantic-eval subsystem
+- first-class variant or method graph nodes
+- whole-seam or whole-graph semantic interpretation beyond the honest subset
+
+## Parallelization / Lanes
+
+M15.5 is parallelizable after the preserve/refresh contract is locked.
+
+### Dependency table
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| 1. Lock preserve/refresh contract | `semantic_review`, `passport`, `export`, `commands` | - |
+| 2. Role-scoped AST evaluator | `semantic_review`, semantic-review unit tests | 1 |
+| 3. Shared helper/example classifier | `semantic_review`, `escape_hatch`, unit tests | 1 |
+| 4. CLI projection regressions | `commands`, `export`, `passport`, `spec-cli/tests` | 1 |
+| 5. Canonical wedge re-proof | `spec-cli/tests/m14_regressions.rs`, fixtures | 2, 3, 4 |
+
+### Parallel lanes
+
+- **Gate 0, sequential:** Step 1 must land first. Every other slice depends on the same preserve
+  semantics.
+- **Lane A:** Step 2
+  - role-scoped AST evaluator and supported-role tests
+- **Lane B:** Step 3
+  - shared helper/example classifier and its adoption in escape-hatch logic
+- **Lane C:** Step 4
+  - CLI/projected-truth regressions proving read/non-proof flows do not mint semantic truth
+- **Lane D:** Step 5
+  - canonical wedge re-proof on top of the merged evaluator + persistence contract
+
+### Execution order
+
+1. Lock Step 1.
+2. Launch Lanes A, B, and C in parallel.
+3. Merge A + B + C.
+4. Run Lane D last for end-to-end wedge verification.
+
+### Conflict flags
+
+- `spec-core/src/semantic_review.rs` is the main conflict magnet. Keep one owner for supported-role
+  and preserve/refresh semantics.
+- `spec-cli/tests/cli.rs` is the second conflict magnet. Batch the read/non-proof regression edits.
+- Do not let helper-classifier changes and AST-classifier changes fork into separate local notions
+  of "semantic method."
+
+## Implementation Order
+
+```text
+1. Lock Preserve vs Refresh semantics
+2. Extract one shared helper/example classifier
+3. Replace lexical heuristics with supported-role AST classification
+4. Flip preserve/read-path regression expectations
+5. Re-prove the canonical wedges through passport/status/export
+6. Run the full M15.5 regression matrix
+```
+
+## Dream State Delta
+
+- **Before M15.5**
+  - M15 exists, but the verdict can still be gamed by substrings
+  - non-proof flows can still rewrite durable semantic-review state
+  - helper/example logic can drift across trust surfaces
+- **After M15.5**
+  - supported semantic verdicts are role-scoped and AST-based
+  - non-proof flows preserve or drop semantic truth, but never mint it
+  - helper/example classification is shared across semantic-review and escape-hatch logic
+  - the canonical M15 wedge is trustworthy enough to submit
+
+# Historical M15 Draft — Semantic Governance + Eval
 
 Status: **Draft, plan-solidified** (2026-04-22). M14 shipped at `v0.12.0` via
 `feat: ship M14 proof freshness and truth surfaces` (`6519dbe`), so this section replaces M14 as
@@ -4057,16 +4504,10 @@ This pass does not reopen shipped M6-M9 work. New M10-specific follow-ups to add
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 5 | clean (PLAN via /autoplan) | M10 narrowed to truthful local-library change intent plus derived impact, not planning theater |
-| Codex Review | `/codex review` | Independent 2nd opinion | 10+ | issues_found | M10: root resolution, action-sensitive impact semantics, dedicated plan export, and trust-boundary clarity |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 10 | **CLEAR (PLAN)** | M10 gaps made explicit: root-scoped loading, failure modes, test coverage, and parallelization |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 5 | CLEAR (PLAN) | 15 issues/gaps reviewed, 0 critical gaps, scope locked to role-scoped sum evaluation plus proof-only semantic persistence |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
-| DX Review | `/plan-devex-review` | Developer experience gaps | 1 | issues_open | score: 5/10 → 7/10, TTHW: 5min-local/BLOCKED-external |
 
-**CODEX (M10):** flagged the real missing pieces: root-scoped graph loading, explicit `action=add`
-uncertainty, stable plan JSON/export contracts, and path-boundary handling that does not widen
-the repo trust surface by accident.
 **UNRESOLVED:** 0
-**VERDICT:** PLAN LOCKED — start with the M10 schema and root-resolution contract, then land the
-`spec-core` plan types, then the `spec-cli` validate/export surface, then the regression suite
-before `/ship`.
+**VERDICT:** ENG CLEARED — ready to implement the M15 follow-up. Additional reviews are optional, not required.
