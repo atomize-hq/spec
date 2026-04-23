@@ -48,6 +48,7 @@ pub struct SemanticCitation {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SemanticReview {
     pub verdict: SemanticVerdict,
+    pub compatibility_key: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reason_codes: Vec<SemanticReasonCode>,
     pub summary: String,
@@ -140,6 +141,12 @@ enum SupportedBodyClassification {
     OutsideHonestSubset,
 }
 
+const SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY: &str = "sum.discount_policy.v1";
+
+fn unsupported_surface_compatibility_key(unit_kind: UnitKind) -> String {
+    format!("unsupported.{}.v1", unit_kind.as_str())
+}
+
 pub fn project_semantic_review(
     spec: &LoadedSpec,
     existing: Option<&SemanticReview>,
@@ -149,7 +156,10 @@ pub fn project_semantic_review(
     match evaluator_scope_for_kind(unit_kind) {
         EvaluatorScope::SupportedSumSurface => match mode {
             SemanticProjectionMode::Preserve => existing
-                .filter(|review| review.evaluator_scope == EvaluatorScope::SupportedSumSurface)
+                .filter(|review| {
+                    review.evaluator_scope == EvaluatorScope::SupportedSumSurface
+                        && review.compatibility_key == SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY
+                })
                 .cloned(),
             SemanticProjectionMode::Refresh => evaluate_supported_sum_semantic_review(spec),
         },
@@ -213,6 +223,7 @@ fn evaluator_scope_for_kind(unit_kind: UnitKind) -> EvaluatorScope {
 fn unsupported_surface_review(unit_kind: UnitKind) -> SemanticReview {
     SemanticReview {
         verdict: SemanticVerdict::UnderSpecified,
+        compatibility_key: unsupported_surface_compatibility_key(unit_kind),
         reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
         summary: format!(
             "unit kind '{}' is not evaluated by the M15 semantic reviewer",
@@ -265,6 +276,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     if !reasons.is_empty() {
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
             reason_codes: reasons,
             summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
             authored_surfaces,
@@ -317,6 +329,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     if !under_specified_reasons.is_empty() {
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
             reason_codes: under_specified_reasons,
             summary: "supported semantic bodies fall outside the honest evaluator subset"
                 .to_string(),
@@ -336,6 +349,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         };
         return Some(SemanticReview {
             verdict,
+            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
             reason_codes: drift_reasons,
             summary: "executable lowering contradicts authored semantic claims".to_string(),
             authored_surfaces,
@@ -351,6 +365,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         }
         return Some(SemanticReview {
             verdict: SemanticVerdict::BackendOnlyMeaningPreserved,
+            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
             reason_codes,
             summary: "backend-only execution markers are present without changing authored meaning"
                 .to_string(),
@@ -373,6 +388,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
 
     Some(SemanticReview {
         verdict: SemanticVerdict::Aligned,
+        compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
         reason_codes: Vec::new(),
         summary: "authored semantics and executable lowering agree on the supported sum surface"
             .to_string(),
@@ -1383,6 +1399,7 @@ mod tests {
     fn semantic_health_effect_only_demotes_supported_verdicts() {
         let supported_review = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
             reason_codes: vec![],
             summary: String::new(),
             authored_surfaces: vec![],
@@ -1409,6 +1426,10 @@ mod tests {
             assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
             assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
             assert_eq!(
+                review.compatibility_key,
+                unsupported_surface_compatibility_key(spec.spec.unit_kind().unwrap())
+            );
+            assert_eq!(
                 review.reason_codes,
                 vec![SemanticReasonCode::UnsupportedSurface]
             );
@@ -1425,7 +1446,7 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_preserve_keeps_supported_sum_review() {
+    fn project_semantic_review_preserve_keeps_matching_sum_compatibility_key() {
         let spec = discount_policy_sum_spec();
         let review = evaluate_semantic_review(&spec).unwrap();
 
@@ -1437,12 +1458,13 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_preserve_drops_supported_review_on_unsupported_kind() {
-        let sum_spec = discount_policy_sum_spec();
-        let supported_review = evaluate_semantic_review(&sum_spec).unwrap();
+    fn project_semantic_review_preserve_drops_mismatched_supported_compatibility_key() {
+        let spec = discount_policy_sum_spec();
+        let mut supported_review = evaluate_semantic_review(&spec).unwrap();
+        supported_review.compatibility_key = "sum.discount_policy.v0".to_string();
 
         let preserved = project_semantic_review(
-            &discount_policy_function_spec(),
+            &spec,
             Some(&supported_review),
             SemanticProjectionMode::Preserve,
         );
@@ -1451,7 +1473,8 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_preserve_drops_old_unsupported_review_when_kind_becomes_sum() {
+    fn project_semantic_review_preserve_drops_unsupported_surface_review_even_with_compatibility_key(
+    ) {
         let unsupported_review =
             evaluate_semantic_review(&discount_policy_function_spec()).unwrap();
 
@@ -1469,6 +1492,7 @@ mod tests {
         let spec = discount_policy_function_spec();
         let existing = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: "unsupported.function.v0".to_string(),
             reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
             summary: "stale unsupported summary".to_string(),
             authored_surfaces: vec![SemanticCitation {
