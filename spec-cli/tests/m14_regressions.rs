@@ -94,6 +94,41 @@ fn proof_coverage_surfaces<'a>(passport: &'a Value, coverage_id: &str) -> &'a Va
         .unwrap()
 }
 
+fn semantic_review_fixture_root(fixture_dst: &Path, name: &str) -> PathBuf {
+    fixture_dst.join(".m15").join(name)
+}
+
+fn write_semantic_review_molecule(
+    wedge_root: &Path,
+    id: &str,
+    intent: &str,
+    body: &str,
+) -> PathBuf {
+    let path = wedge_root.join("units/pricing/discount_policy_semantic_review.test.spec");
+    fs::write(
+        &path,
+        format!(
+            "id: {id}\nspec_version: \"0.3.0\"\nintent:\n  why: {intent}\ncovers:\n  - pricing/discount_policy\nimports:\n  - rust_decimal::Decimal\nbody:\n  rust: |\n{body}\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+fn assert_semantic_review(review: &Value, verdict: &str, reason_codes: &[&str], summary: &str) {
+    assert_eq!(review["verdict"], verdict);
+    if reason_codes.is_empty() {
+        assert!(review.get("reason_codes").is_none() || review["reason_codes"].is_null());
+    } else {
+        assert_eq!(
+            review["reason_codes"],
+            serde_json::json!(reason_codes.to_vec())
+        );
+    }
+    assert_eq!(review["summary"], summary);
+    assert_eq!(review["evaluator_scope"], "supported_sum_surface");
+}
+
 #[test]
 fn spec_build_does_not_clear_unit_staleness_without_retest() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
@@ -764,5 +799,275 @@ fn export_omits_molecule_proof_coverage_when_molecule_evidence_failed() {
     assert_eq!(
         exported["escape_hatch_gate"]["missing_surfaces"],
         serde_json::json!(["molecule"])
+    );
+}
+
+#[test]
+fn canonical_semantic_review_wedge_projects_aligned_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let wedge_root = semantic_review_fixture_root(&fixture_dst, "aligned");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
+    let molecule_path = write_semantic_review_molecule(
+        &wedge_root,
+        "pricing/discount_policy_semantic_review_aligned",
+        "Close the canonical aligned wedge by proving the authored discount semantics through a molecule test.",
+        r#"    {
+        let subtotal = Decimal::new(1500, 2);
+        let none = crate::pricing::discount_policy::DiscountPolicy::None;
+        assert_eq!(none.discount_amount(subtotal), Decimal::ZERO);
+        assert_eq!(none.discounted_subtotal(subtotal), subtotal);
+
+        let percentage = crate::pricing::discount_policy::DiscountPolicy::Percentage {
+            rate: Decimal::new(10, 2),
+        };
+        assert_eq!(
+            percentage.discount_amount(Decimal::new(10000, 2)),
+            Decimal::new(1000, 2)
+        );
+        assert_eq!(
+            percentage.discounted_subtotal(Decimal::new(10000, 2)),
+            Decimal::new(9000, 2)
+        );
+
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+            amount: Decimal::new(2000, 2),
+        };
+        assert_eq!(capped.discount_amount(subtotal), subtotal);
+        assert_eq!(capped.discounted_subtotal(subtotal), Decimal::ZERO);
+    }"#,
+    );
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "aligned wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&molecule_test_output, "aligned wedge molecule test");
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &passport["semantic_review"],
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported sum surface",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", wedge_root.to_str().unwrap(), "--format", "json"],
+    );
+    assert_success(&status_output, "aligned wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(status_unit["status"], "valid");
+    assert!(status_unit["reason"].is_null());
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &status_unit["semantic_review"],
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported sum surface",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
+    assert_success(&export_output, "aligned wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &exported["semantic_review"],
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported sum surface",
+    );
+}
+
+#[test]
+fn contradictory_lowering_wedge_projects_backend_only_semantics_leaked() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let wedge_root = semantic_review_fixture_root(&fixture_dst, "semantic_drift");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
+    let molecule_path = write_semantic_review_molecule(
+        &wedge_root,
+        "pricing/discount_policy_semantic_review_semantic_drift",
+        "Close the contradictory-lowering wedge so semantic review is the only failing signal.",
+        r#"    {
+        let subtotal = Decimal::new(1500, 2);
+        let uncapped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+            amount: Decimal::new(2000, 2),
+        };
+
+        assert_eq!(uncapped.discount_amount(subtotal), Decimal::new(2000, 2));
+        assert_eq!(
+            uncapped.discounted_subtotal(subtotal),
+            Decimal::new(-500, 2)
+        );
+    }"#,
+    );
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "semantic drift wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&molecule_test_output, "semantic drift wedge molecule test");
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &passport["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", wedge_root.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(&status_output, 1, "semantic drift wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(status_unit["status"], "failing");
+    assert_eq!(
+        status_unit["reason"],
+        "backend-only semantics leaked: executable lowering contradicts authored semantic claims"
+    );
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &status_unit["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
+    assert_success(&export_output, "semantic drift wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &exported["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+}
+
+#[test]
+fn under_specified_wedge_projects_incomplete_health_consistently() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let wedge_root = semantic_review_fixture_root(&fixture_dst, "under_specified");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
+    let molecule_path = write_semantic_review_molecule(
+        &wedge_root,
+        "pricing/discount_policy_semantic_review_under_specified",
+        "Close the vague-authorship wedge so status reflects semantic under-specification rather than missing proof.",
+        r#"    {
+        let subtotal = Decimal::new(1500, 2);
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+            amount: Decimal::new(2000, 2),
+        };
+
+        assert_eq!(capped.discount_amount(subtotal), subtotal);
+        assert_eq!(capped.discounted_subtotal(subtotal), Decimal::ZERO);
+    }"#,
+    );
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "under-specified wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&molecule_test_output, "under-specified wedge molecule test");
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &passport["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", wedge_root.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(&status_output, 1, "under-specified wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(status_unit["status"], "incomplete");
+    assert_eq!(
+        status_unit["reason"],
+        "semantic under-specified: authored semantic surfaces are too weak for honest evaluation"
+    );
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &status_unit["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
+    assert_success(&export_output, "under-specified wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &exported["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
     );
 }

@@ -9,6 +9,8 @@ use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_esca
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
 use crate::molecule_evidence::MoleculeEvidence;
+use crate::semantic_review::SemanticProjectionMode;
+use crate::semantic_review::{SemanticReview, project_semantic_review};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
@@ -111,12 +113,14 @@ pub struct ProjectedPassportTruth {
     pub markers: Option<Vec<PassportMarker>>,
     pub proof_coverage: Option<Vec<PassportProofCoverage>>,
     pub escape_hatch_gate: Option<EscapeHatchGate>,
+    pub semantic_review: Option<SemanticReview>,
 }
 
 pub struct PassportProjectionContext<'a> {
     pub molecule_tests: &'a [LoadedMoleculeTest],
     pub molecule_evidence_by_id: &'a HashMap<String, MoleculeEvidence>,
     pub specs_by_id: &'a HashMap<String, LoadedSpec>,
+    pub semantic_projection_mode: SemanticProjectionMode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -191,6 +195,8 @@ pub struct Passport {
     pub proof_coverage: Option<Vec<PassportProofCoverage>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub escape_hatch_gate: Option<EscapeHatchGate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_review: Option<SemanticReview>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -207,6 +213,7 @@ pub struct PassportBuildMetadata {
     pub freshness: Option<PassportFreshness>,
     pub markers: Option<Vec<PassportMarker>>,
     pub proof_coverage: Option<Vec<PassportProofCoverage>>,
+    pub semantic_review: Option<SemanticReview>,
 }
 
 /// Build a Passport from a LoadedSpec.
@@ -242,6 +249,7 @@ pub fn build_passport_with_evidence(
             freshness,
             markers: compute_passport_markers(spec),
             proof_coverage: default_passport_proof_coverage(spec),
+            semantic_review: None,
         },
     )
 }
@@ -274,6 +282,7 @@ pub fn build_passport_preserving_proof_state(
             freshness,
             markers: compute_passport_markers(spec),
             proof_coverage: default_passport_proof_coverage(spec),
+            semantic_review: existing.and_then(|passport| passport.semantic_review.clone()),
         },
     )
 }
@@ -290,6 +299,7 @@ pub fn build_passport_with_metadata(
         freshness,
         markers,
         proof_coverage,
+        semantic_review,
     } = metadata;
     let is_seam = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum));
     let contract = spec.spec.contract.as_ref().map(|c| PassportContract {
@@ -342,6 +352,7 @@ pub fn build_passport_with_metadata(
         markers,
         proof_coverage,
         escape_hatch_gate: None,
+        semantic_review,
         contract_hash,
     }
 }
@@ -596,6 +607,11 @@ pub fn project_passport_truth(
             context.molecule_evidence_by_id,
             context.specs_by_id,
         ),
+        semantic_review: project_semantic_review(
+            spec,
+            passport.and_then(|passport| passport.semantic_review.as_ref()),
+            context.semantic_projection_mode,
+        ),
     }
 }
 
@@ -607,6 +623,7 @@ pub fn apply_projected_passport_truth(
     passport.markers = projected_truth.markers;
     passport.proof_coverage = projected_truth.proof_coverage;
     passport.escape_hatch_gate = projected_truth.escape_hatch_gate;
+    passport.semantic_review = projected_truth.semantic_review;
 }
 
 fn resolve_passport_freshness_with_anchor(
@@ -2263,6 +2280,7 @@ mod tests {
             molecule_tests: std::slice::from_ref(&molecule_test),
             molecule_evidence_by_id: &molecule_evidence_by_id,
             specs_by_id: &specs_by_id,
+            semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
 
         let proof_coverage =
@@ -2291,6 +2309,7 @@ mod tests {
             molecule_tests: &[],
             molecule_evidence_by_id: &molecule_evidence_by_id,
             specs_by_id: &specs_by_id,
+            semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
 
         let proof_coverage =
@@ -2329,6 +2348,7 @@ mod tests {
             molecule_tests: std::slice::from_ref(&molecule_test),
             molecule_evidence_by_id: &molecule_evidence_by_id,
             specs_by_id: &specs_by_id,
+            semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
 
         let proof_coverage =
@@ -2379,6 +2399,7 @@ mod tests {
             molecule_tests: std::slice::from_ref(&molecule_test),
             molecule_evidence_by_id: &molecule_evidence_by_id,
             specs_by_id: &specs_by_id,
+            semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
 
         let proof_coverage =

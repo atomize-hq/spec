@@ -19,6 +19,7 @@ use crate::passport::{
     passport_path_for, project_passport_truth,
 };
 use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
+use crate::semantic_review::SemanticProjectionMode;
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
@@ -197,6 +198,7 @@ fn enrich_passports_for_export(
         molecule_tests,
         molecule_evidence_by_id,
         specs_by_id,
+        semantic_projection_mode: SemanticProjectionMode::Preserve,
     };
     passports
         .into_iter()
@@ -286,6 +288,7 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
         molecule_tests: empty_molecule_tests,
         molecule_evidence_by_id: &empty_molecule_evidence,
         specs_by_id: &specs_by_id,
+        semantic_projection_mode: SemanticProjectionMode::Preserve,
     };
     let passports = passports
         .into_iter()

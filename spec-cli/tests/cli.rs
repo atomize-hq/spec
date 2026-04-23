@@ -1,5 +1,16 @@
 use serde_json::Value;
 use spec_core::AUTHORED_SPEC_VERSION;
+use spec_core::loader::{load_file, load_molecule_test_file};
+use spec_core::molecule_evidence::{
+    MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
+};
+use spec_core::passport::{
+    PassportEvidence, PassportProjectionContext, PassportTestResult,
+    apply_projected_passport_truth, build_passport_with_evidence, compute_contract_hash,
+    project_passport_truth, write_passport,
+};
+use spec_core::semantic_review::SemanticProjectionMode;
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 #[cfg(unix)]
@@ -493,6 +504,156 @@ local_tests:
     .unwrap();
 
     pricing_dir.join("apply_discount.unit.spec")
+}
+
+fn write_semantic_status_project(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "semantic-status-project"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+"#,
+    );
+    write_file(
+        project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    write_spec(
+        &units_dir,
+        "pricing/discount_mode.unit.spec",
+        r#"
+id: pricing/discount_mode
+kind: sum
+intent:
+  why: Represent discount modes that cap fixed discounts at the subtotal.
+spec_version: "0.3.0"
+sum:
+  variants:
+    none: {}
+    fixed:
+      fields:
+        amount:
+          type: i32
+methods:
+  - id: discount_amount
+    intent:
+      why: Return the capped discount amount to subtract from the subtotal.
+    receiver: shared_ref
+    contract:
+      inputs:
+        subtotal: i32
+      returns: i32
+    lowering:
+      rust:
+        body: |
+          {
+              match self {
+                  Self::None => 0,
+                  Self::Fixed { amount } => (*amount).min(subtotal),
+              }
+          }
+  - id: capped_discount_example_holds
+    intent:
+      why: Support direct atom proof for the capped discount example.
+    receiver: shared_ref
+    contract:
+      returns: bool
+    lowering:
+      rust:
+        body: |
+          {
+              let fixed = Self::Fixed { amount: 10 };
+              fixed.discount_amount(5) == 5
+          }
+local_tests:
+  - id: capped_discount
+    expect: "DiscountMode::None.capped_discount_example_holds()"
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/discount_mode_flow.test.spec",
+        r#"
+id: pricing/discount_mode_flow
+spec_version: "0.3.0"
+intent:
+  why: Prove the capped discount seam behavior through molecule evidence.
+covers:
+  - pricing/discount_mode
+body:
+  rust: |
+    {
+        let fixed = crate::pricing::discount_mode::DiscountMode::Fixed { amount: 10 };
+        assert_eq!(fixed.discount_amount(5), 5);
+        let none = crate::pricing::discount_mode::DiscountMode::None;
+        assert_eq!(none.discount_amount(5), 0);
+    }
+"#,
+    );
+
+    units_dir
+}
+
+fn seed_semantic_status_artifacts(units_dir: &Path) {
+    const GENERATED_AT: &str = "2026-04-21T00:00:00Z";
+
+    let unit_path = units_dir.join("pricing/discount_mode.unit.spec");
+    let molecule_path = units_dir.join("pricing/discount_mode_flow.test.spec");
+
+    let spec = load_file(&unit_path).unwrap();
+    let molecule_test = load_molecule_test_file(&molecule_path).unwrap();
+    let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+    let passport_evidence = PassportEvidence {
+        build_status: "pass".to_string(),
+        test_results: spec
+            .spec
+            .local_tests
+            .iter()
+            .map(|test| PassportTestResult {
+                id: test.id.clone(),
+                status: "pass".to_string(),
+                reason: None,
+            })
+            .collect(),
+        observed_at: GENERATED_AT.to_string(),
+        provenance: None,
+    };
+    let molecule_evidence = build_molecule_evidence(
+        &molecule_test,
+        MoleculeEvidenceStatus::Pass,
+        None,
+        GENERATED_AT,
+        &specs_by_id,
+        None,
+    );
+    let molecule_evidence_by_id =
+        HashMap::from([(molecule_test.test.id.clone(), molecule_evidence.clone())]);
+
+    // Mirror the `spec test` write path closely enough for status/export reads
+    // without spawning Cargo inside these integration tests.
+    let mut passport = build_passport_with_evidence(
+        &spec,
+        GENERATED_AT,
+        Some(passport_evidence),
+        compute_contract_hash(&spec),
+    );
+    let projection_context = PassportProjectionContext {
+        molecule_tests: std::slice::from_ref(&molecule_test),
+        molecule_evidence_by_id: &molecule_evidence_by_id,
+        specs_by_id: &specs_by_id,
+        semantic_projection_mode: SemanticProjectionMode::Refresh,
+    };
+    let projected_truth = project_passport_truth(&spec, Some(&passport), &projection_context);
+    apply_projected_passport_truth(&mut passport, projected_truth);
+
+    write_passport(&passport, &unit_path).unwrap();
+    write_molecule_evidence(&molecule_evidence, &molecule_path).unwrap();
 }
 
 fn setup_m12_data_seam_project() -> (tempfile::TempDir, PathBuf) {
@@ -4446,6 +4607,103 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
             .iter()
             .all(|test| test["status"] == "untested"),
         "{json}"
+    );
+}
+
+#[test]
+fn spec_status_text_prints_semantic_review_story() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_semantic_status_project(project_dir);
+    seed_semantic_status_artifacts(&units_dir);
+
+    let output = run_in(project_dir, &["status", units_dir.to_str().unwrap()]);
+    assert_output_success("semantic status project spec status", &output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("pricing/discount_mode"), "{stdout}");
+    assert!(stdout.contains("valid"), "{stdout}");
+    assert!(
+        stdout.contains("backend-only meaning preserved"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn spec_status_json_and_export_include_semantic_review_without_bumping_schema() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_semantic_status_project(project_dir);
+    seed_semantic_status_artifacts(&units_dir);
+
+    let status_output = run_in(
+        project_dir,
+        &["status", units_dir.to_str().unwrap(), "--format", "json"],
+    );
+    assert_output_success("semantic status project json status", &status_output);
+    let status_json = parse_stdout_json(&status_output);
+    assert_eq!(status_json["schema_version"], 3);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_mode")
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert_eq!(
+        unit["semantic_review"]["verdict"], "backend_only_meaning_preserved",
+        "{status_json}"
+    );
+
+    let export_output = run_in(project_dir, &["export", units_dir.to_str().unwrap()]);
+    assert_output_success("semantic status project export", &export_output);
+    let export_json = parse_stdout_json(&export_output);
+    assert_eq!(export_json["schema_version"], 3);
+    let passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/discount_mode")
+        .unwrap();
+    assert_eq!(
+        passport["semantic_review"]["verdict"],
+        "backend_only_meaning_preserved"
+    );
+}
+
+#[test]
+fn spec_status_keeps_base_health_when_semantic_review_exists_on_stale_unit() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_semantic_status_project(project_dir);
+    seed_semantic_status_artifacts(&units_dir);
+
+    let unit_path = units_dir.join("pricing/discount_mode.unit.spec");
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replace(
+            "Represent discount modes that cap fixed discounts at the subtotal.",
+            "Represent discount modes that cap fixed discounts at the subtotal with revised authored truth.",
+        ),
+    )
+    .unwrap();
+
+    let status_output = run_in(
+        project_dir,
+        &["status", units_dir.to_str().unwrap(), "--format", "json"],
+    );
+    assert!(!status_output.status.success());
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_mode")
+        .unwrap();
+    assert_eq!(unit["status"], "stale", "{status_json}");
+    assert_eq!(
+        unit["reason"], "authored truth changed since last test",
+        "{status_json}"
+    );
+    assert_eq!(
+        unit["semantic_review"]["verdict"], "backend_only_meaning_preserved",
+        "{status_json}"
     );
 }
 

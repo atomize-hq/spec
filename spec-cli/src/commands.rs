@@ -38,6 +38,10 @@ use spec_core::pipeline::{
 use spec_core::plan::{
     PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
 };
+use spec_core::semantic_review::{
+    SemanticHealthEffect, SemanticProjectionMode, SemanticReview, semantic_health_effect,
+    semantic_review_summary,
+};
 #[cfg(test)]
 use spec_core::types::ResolvedSpec;
 use spec_core::types::{
@@ -170,6 +174,8 @@ struct JsonStatusEntry {
     markers: Option<Vec<PassportMarker>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     escape_hatch_gate: Option<EscapeHatchGate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    semantic_review: Option<SemanticReview>,
 }
 
 #[derive(Clone, Serialize)]
@@ -831,6 +837,29 @@ fn apply_escape_hatch_gate_to_health(
     health
 }
 
+fn apply_semantic_review_to_health(
+    mut health: HealthStatus,
+    semantic_review: Option<&SemanticReview>,
+) -> HealthStatus {
+    if health.status != HealthState::Valid {
+        return health;
+    }
+
+    match semantic_health_effect(semantic_review) {
+        SemanticHealthEffect::KeepBase => health,
+        SemanticHealthEffect::DemoteIncomplete => {
+            health.status = HealthState::Incomplete;
+            health.reason = semantic_review.map(semantic_review_summary);
+            health
+        }
+        SemanticHealthEffect::DemoteFailing => {
+            health.status = HealthState::Failing;
+            health.reason = semantic_review.map(semantic_review_summary);
+            health
+        }
+    }
+}
+
 fn freshness_stale_reason(freshness: Option<&PassportFreshness>) -> Option<String> {
     let freshness = freshness?;
     match (
@@ -1242,6 +1271,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             molecule_tests: &molecule_report.tests,
             molecule_evidence_by_id: &molecule_evidence_by_id,
             specs_by_id: &specs_by_id,
+            semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
 
         let mut units = Vec::with_capacity(validation_specs.root_specs.len());
@@ -1264,12 +1294,16 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             let freshness = projected_truth.freshness.clone();
             let markers = projected_truth.markers.clone();
             let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
+            let semantic_review = projected_truth.semantic_review.clone();
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
-            let health = apply_escape_hatch_gate_to_health(
-                compute_health_status(&errors, passport.as_ref(), freshness.as_ref()),
-                escape_hatch_gate.as_ref(),
+            let health = apply_semantic_review_to_health(
+                apply_escape_hatch_gate_to_health(
+                    compute_health_status(&errors, passport.as_ref(), freshness.as_ref()),
+                    escape_hatch_gate.as_ref(),
+                ),
+                semantic_review.as_ref(),
             );
             if !health.status.is_valid() {
                 needs_nonzero_exit = true;
@@ -1284,6 +1318,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 freshness,
                 markers,
                 escape_hatch_gate,
+                semantic_review,
             });
         }
 
@@ -1308,6 +1343,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                         freshness: None,
                         markers: None,
                         escape_hatch_gate: None,
+                        semantic_review: None,
                     });
                     continue;
                 }
@@ -1326,6 +1362,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 freshness: None,
                 markers: None,
                 escape_hatch_gate: None,
+                semantic_review: None,
             });
         }
 
@@ -1859,6 +1896,7 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
             None,
             None,
             None,
+            false,
         )?;
     }
     Ok(())
@@ -2101,6 +2139,7 @@ fn finalize_passports(
     evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
     contract_hash_by_spec: Option<&BTreeMap<String, String>>,
     molecule_evidence_overrides: Option<&BTreeMap<String, MoleculeEvidence>>,
+    refresh_semantic_review: bool,
 ) -> Result<()> {
     if plan.specs.is_empty() {
         return Ok(());
@@ -2118,6 +2157,7 @@ fn finalize_passports(
         evidence_by_spec,
         contract_hash_by_spec,
         &gate_context,
+        refresh_semantic_review,
     )?;
     ensure_gitignore_entry(plan.passport_root)
         .with_context(|| "Failed to update .gitignore for passport files")?;
@@ -2145,11 +2185,17 @@ fn write_passports(
     evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
     contract_hash_by_spec: Option<&BTreeMap<String, String>>,
     gate_context: &LiveEscapeHatchContext,
+    refresh_semantic_review: bool,
 ) -> Result<()> {
     let projection_context = PassportProjectionContext {
         molecule_tests: &gate_context.molecule_tests,
         molecule_evidence_by_id: &gate_context.molecule_evidence_by_id,
         specs_by_id: &gate_context.specs_by_id,
+        semantic_projection_mode: if refresh_semantic_review {
+            SemanticProjectionMode::Refresh
+        } else {
+            SemanticProjectionMode::Preserve
+        },
     };
     for spec in specs {
         let source_path = Path::new(&spec.source.file_path);
@@ -2452,6 +2498,7 @@ fn build_command(
             None,
             None,
             None,
+            false,
         )?;
     }
 
@@ -2636,6 +2683,7 @@ fn test_command(
             None,
             None,
             None,
+            false,
         )?;
     }
 
@@ -3053,6 +3101,7 @@ fn finalize_test_passports(
         Some(evidence_by_spec),
         contract_hash_by_spec,
         molecule_evidence_overrides,
+        true,
     )
 }
 
@@ -3085,6 +3134,7 @@ fn refresh_covered_seam_passports(
         None,
         None,
         Some(molecule_evidence_by_id),
+        true,
     )
 }
 
@@ -4736,6 +4786,9 @@ fn print_status_unit(unit: &JsonStatusUnit) {
         unit.id,
         unit.status.as_str()
     );
+    if let Some(review) = &unit.semantic_review {
+        println!("  · {}", semantic_review_summary(review));
+    }
     if unit.status == HealthState::Invalid {
         for entry in &unit.errors {
             println!("  · {}", json_error_entry_to_human(entry));
