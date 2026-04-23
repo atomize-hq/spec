@@ -1,4 +1,4 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m15-autoplan-restore-20260423-164942.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m15-autoplan-restore-20260423-181057.md -->
 # M15.5 — Semantic Review Trust Repair
 
 Status: **Landed, autoplan-reviewed** (2026-04-23). M15 landed on `feat/m15` at `d08df40`, and
@@ -1205,70 +1205,533 @@ Kill the "second backend next" thesis for M16 if either of these happens:
 - semantic review still collapses into opaque scoring or unexplained pass or fail output
 - the canonical seam still requires reviewers to read raw lowering bodies to localize meaning drift
 
-## Follow-On Widening Milestones
+# M16 — Widen Semantic Review to `kind: data`
 
-### M16 — Widen Semantic Eval to `kind: data`
+Status: **Draft, review-solidified** (2026-04-23). M15.5 landed on `feat/m15` through `503d59b`
+and repaired the sum-only trust regressions. This section replaces the earlier thin M16 stub with
+one implementation contract for widening semantic review to the shipped `kind: data` seam family.
+Source inputs for this pass are the landed M15.5 code in `spec-core/src/semantic_review.rs`,
+`spec-core/src/escape_hatch.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`,
+`spec-cli/src/commands.rs`, the data-seam lowering path in `spec-core/src/types.rs`,
+`spec-core/src/normalizer.rs`, `spec-core/src/generator.rs`, and the canonical ecommerce data seam
+at `examples/ecommerce/units/pricing/checkout_quote.unit.spec`.
 
-**Purpose**
-- Prove that the M15 evaluator contract can widen from the supported `sum` seam surface to the
-  shipped record-like seam family without redesigning verdict vocabulary or truth-surface projection.
+UI scope: **no**. This is a backend-only trust-surface widening milestone for semantic review,
+passport persistence, status/export projection, escape-hatch marker parity, and the canonical
+record-style checkout wedge.
 
-**What widens**
-- evaluator packet builder for `kind: data`
-- data-seam semantic drift, under-specified, and aligned fixtures
-- escape-hatch semantic classification on `methods[].lowering.rust.body` for data seams
+## Milestone Summary
 
-**What does not widen yet**
-- `kind: function`
-- cross-unit semantic coherence
+```text
+M16a  Add explicit evaluator compatibility keys for keep/drop semantics      required
+M16b  Reuse the existing data-seam lowering path to build authored/executable packets required
+M16c  Support one honest `kind: data` semantic surface on `pricing/checkout_quote`   required
+M16d  Re-prove passport/status/export preservation and stale-health precedence required
+M16e  Add canonical aligned / drift / under-specified data wedges            required
+M16f  Hold `kind: function` neutral and decide the M17 gate from evidence    required
+```
+
+**Lake to boil in M16**
+- Make `kind: data` capable of passing, failing, and going under-specified through the same
+  passport, status, and export truth surfaces as M15 sum seams.
+- Replace the current preserve-mode `sum vs unsupported` shortcut with a real compatibility rule
+  so widening does not turn stored semantic review into "whatever happened to be on disk".
+- Keep helper/example classification shared across semantic review and escape-hatch logic.
+- Preserve the M15.5 invariant that proof-producing flows refresh semantic truth and read/non-proof
+  flows only keep or drop it.
+- Keep `kind: function` neutral until M17 explicitly widens it.
+
+**User job**
+- An AI-heavy Rust maintainer edits `pricing/checkout_quote`, runs the usual trust loop, and can
+  trust that:
+  - supported `kind: data` semantic review is based on explicit field, constructor, and method
+    contracts, not vague kind-wide heuristics
+  - preserve-mode keeps only compatible stored review and drops incompatible review deterministically
+  - `spec status` and `spec export` show the same data-seam semantic story without overriding stale
+    or failing base health
+
+## Step 0: Scope Challenge
+
+### What already exists
+
+| Sub-problem | Existing code surface | M16 reuse / correction |
+|---|---|---|
+| Semantic review persistence + projection | `spec-core/src/semantic_review.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | Reuse the M15.5 truth-surface plumbing. Replace the hardcoded supported-sum preserve shortcut with an explicit compatibility key instead of adding a second persistence path. |
+| Data seam authored/executable lowering | `spec-core/src/types.rs`, `spec-core/src/normalizer.rs`, `spec-core/src/generator.rs::lower_data_seam` | Reuse the existing normalized data seam and Rust lowering. Do not hand-build a second data semantic IR from raw YAML. |
+| Canonical data wedge | `examples/ecommerce/units/pricing/checkout_quote.unit.spec`, `examples/ecommerce/units/pricing/checkout_flow.test.spec` | Reuse the shipped checkout quote seam as the canonical M16 wedge instead of inventing a new demo-only record type. |
+| Helper / example classification | `spec-core/src/escape_hatch.rs::is_helper_or_example_method` | Reuse the shared accepted-name-plus-shape predicate. M16 must not create a data-only helper rule in `semantic_review.rs`. |
+| Base freshness and base health precedence | `spec-core/src/passport.rs`, `spec-cli/src/commands.rs`, existing CLI status/export fixtures | Reuse the M14/M15.5 precedence rules. Semantic review remains a second truth surface, not a replacement for invalid, stale, failing, or incomplete base states. |
+
+### Minimum diff that still solves the problem
+
+- Keep one `SemanticReview` record and one projection pipeline.
+- Add one explicit evaluator compatibility key to stored semantic review.
+- Add one supported `kind: data` evaluator contract for the canonical `pricing/checkout_quote`
+  surface.
+- Reuse the existing data-seam lowering path and the existing CLI trust loop. M16 adds **no** new
+  command and **no** new artifact type.
+
+### Complexity check
+
+- Expected blast radius is bounded to `semantic_review.rs`, `passport.rs`, `export.rs`,
+  `commands.rs`, existing CLI regression tests, and the canonical ecommerce wedge helpers.
+- This is still engineered enough if M16 stays on one explicit `kind: data` surface. If it starts
+  broadening into generic data-seam semantic interpretation, stop and split the work before M17.
+
+### Search check
+
+- **[Layer 1]** Reuse `NormalizedDataSeam` and `lower_data_seam()` as the executable packet source.
+- **[Layer 1]** Reuse the shared helper/example predicate from `escape_hatch.rs`.
+- **[Layer 3]** The honest move is to support one explicit checkout-quote-shaped semantic surface,
+  not "generic data seam meaning" for arbitrary records. Anything broader in M16 becomes fake-green
+  inference disguised as architecture.
+
+### TODO cross-reference
+
+- M16 does **not** reopen the earlier data-seam validation backlog around method-dep qualification,
+  collision detection, or cross-library alias discovery. Those are separate correctness threads.
+- If this milestone discovers that the canonical checkout quote shape is still too implicit for
+  honest review, capture that as a follow-up instead of quietly widening the evaluator again.
+
+### Completeness check
+
+- The complete move is compatibility key + supported data evaluator + regression matrix together.
+- The shortcut is "teach `evaluate_semantic_review()` to return a data review" without preserve/drop
+  compatibility or stale-health regressions. Reject that. It saves almost no CC time and leaves the
+  truth surface dishonest.
+
+### Distribution check
+
+- M16 introduces no new distribution artifact.
+- Existing CLI build and release flows remain sufficient.
+- The deliverable is code + review fixtures + trust-loop evidence, not publishing changes.
+
+## Architecture Review
+
+M16 is the bridge between an already-shared projection layer and a still-sum-specific evaluator.
+That is the real architecture. The plan should say so plainly.
+
+### Ownership split
+
+| Layer | Owns | Must not own |
+|---|---|---|
+| Compatibility key | whether a stored review is still reusable for the current spec | vague "same kind, probably compatible" heuristics |
+| Data packet builder | authored fields/constructors/methods and executable lowered struct/methods | ad hoc YAML parsing disconnected from normalizer/generator |
+| Data body classifier | whether supported data roles are aligned, contradictory, or outside the honest subset | graph-wide reasoning across arbitrary dependencies |
+| Persistence contract | when semantic truth is refreshed vs kept vs dropped | speculative read-path recomputation |
+| Status projection | how supported semantic review may demote health after base health is known | replacing stale/invalid/failing base states |
+
+### Evaluator compatibility contract
+
+M15.5 currently persists only `evaluator_scope`, which is enough for "supported sum" vs
+"unsupported surface" and nothing more. M16 must make keep/drop semantics explicit.
+
+**Required additive field on `SemanticReview`**
+- `compatibility_key`
+
+**Concrete keys for the first honest widening**
+- `sum.discount_policy.v1`
+- `data.checkout_quote.v1`
+- unsupported-surface metadata stays additive and non-demoting
+
+**Preserve rules**
+
+```text
+Preserve
+  current supported contract + stored review with same compatibility_key -> keep
+  current supported contract + stored review with different compatibility_key -> drop
+  current supported contract + stored unsupported metadata -> drop
+  current unsupported surface + any stored supported review -> drop
+  current unsupported surface + stored unsupported metadata -> drop
+```
+
+**Refresh rules**
+
+```text
+Refresh
+  supported sum/data contract -> recompute review with current compatibility_key
+  unsupported surface -> mint additive unsupported metadata only
+```
+
+This is the minimum explicit contract that makes widening honest. Preserve-mode cannot keep saying
+"supported enough" once two supported surfaces exist.
+
+### Supported `kind: data` boundary
+
+M16 supports one explicit data semantic surface only:
+- unit id: `pricing/checkout_quote`
+- field contract: `subtotal`, `discount_rate`, `tax_rate`
+- constructor packet: `new(subtotal, discount_rate, tax_rate)`
+- semantic method roles:
+  - `discounted_subtotal() -> Decimal`
+  - `total() -> Decimal`
+
+Constructor shape participates in packet compatibility, but executable semantic classification is
+still anchored on method bodies. That keeps M16 explicit and avoids pretending constructors carry
+independent hidden behavior in Rust lowering.
+
+Anything outside that honest subset falls into one of two buckets:
+- excluded helper/example method
+- `under_specified`
+
+### Data packet + classifier
+
+M16 should reuse the same packet idea as M15.5, but with the actual data-seam lowering path:
+
+```text
+supported data seam
+  │
+  ├── shared helper/example classifier
+  │      ├── helper/example -> excluded from drift proof
+  │      └── non-helper -> continue
+  │
+  ├── compatibility key resolver
+  │      ├── checkout_quote surface -> data.checkout_quote.v1
+  │      └── anything else -> unsupported surface
+  │
+  ├── authored packet
+  │      ├── intent.why
+  │      ├── data.fields
+  │      ├── constructors
+  │      └── non-helper methods
+  │
+  ├── executable packet
+  │      └── NormalizedDataSeam -> lower_data_seam()
+  │
+  └── role-scoped body classifier
+         ├── discounted_subtotal -> aligned / contradictory / outside_honest_subset
+         └── total -> aligned / contradictory / outside_honest_subset
+```
+
+**Honest executable shapes in M16**
+- `discounted_subtotal()`:
+  - `apply_discount(self.subtotal, self.discount_rate)`
+  - equivalent temporary-binding or direct-delegation shapes only if they stay obviously local
+- `total()`:
+  - `apply_tax(self.discounted_subtotal(), self.tax_rate)`
+  - equivalent temporary-binding or direct-delegation shapes only if they stay obviously local
+
+**Explicitly not in the classifier**
+- arbitrary arithmetic expressions that "probably mean the same thing"
+- dependency-aware semantic tracing into `apply_discount` or `apply_tax`
+- generic support for all data seams that happen to have fields and methods
+
+### Truth-surface projection contract
+
+```text
+proof-producing flow
+  spec test
+    -> Refresh
+    -> write semantic_review with compatibility_key
+
+non-proof flow
+  spec build / spec generate
+    -> Preserve
+    -> keep compatible review or drop incompatible review, never mint replacement truth
+
+read flow
+  spec status / spec export
+    -> Preserve
+    -> project stored truth only, then apply semantic demotion only after base health is known
+```
+
+That preserves the M15.5 invariants while making widening deterministic.
+
+## Code Quality Review
+
+The main quality risks in M16 are duplicated kind-specific logic and overclaiming.
+
+### Concrete code-quality rules
+
+- Keep one semantic-review pipeline in `spec-core/src/semantic_review.rs`. Do not introduce a
+  `semantic_review_data.rs` side module that re-implements persistence rules.
+- Reuse `lower_data_seam()` for executable packet generation. Do not parse `methods[].lowering`
+  twice through a separate data-only path.
+- Keep the helper/example predicate shared in `escape_hatch.rs` and call it from semantic review
+  for both `sum` and `data`.
+- Keep verdict vocabulary shared. M16 may add data-specific citations or one explicit compatibility
+  field, but it must not fork into a new review schema.
+- Prefer explicit role matchers over generic AST cleverness. Ten lines of obvious matching beats a
+  "data semantic algebra" abstraction that nobody will trust at 2am Friday.
+- Continue using the existing regression harnesses. Renaming `spec-cli/tests/m14_regressions.rs`
+  is cleanup, not M16 scope.
+
+## Test Review
+
+### New codepaths
+
+```text
+COMPATIBILITY
+  - current spec -> compatibility_key resolution
+  - Preserve keep vs drop by compatibility_key
+  - Refresh writes the current compatibility_key
+
+DATA EVALUATION
+  - authored packet from `data.fields`, constructors, methods
+  - executable packet from `NormalizedDataSeam` -> `lower_data_seam()`
+  - discounted_subtotal role classification
+  - total role classification
+  - outside-honest-subset under_specified path
+
+TRUTH SURFACES
+  - spec test refreshes data semantic review
+  - build/generate/status/export keep or drop only
+  - stale base health still wins over semantic demotion
+
+HELPER / EXAMPLE PARITY
+  - shared helper/example predicate applied to data methods too
+  - escape-hatch markers and semantic-review exclusions stay aligned
+```
+
+### Coverage diagram
+
+```text
+CODE PATH COVERAGE
+===========================
+[+] Existing shared invariants
+    │
+    ├── [★★★ TESTED] Proof-only refresh vs preserve matrix — spec-cli/tests/cli.rs
+    ├── [★★★ TESTED] Stale base health wins over semantic review — spec-cli/tests/cli.rs
+    └── [★★★ TESTED] Passport/status/export project the same stored semantic story — spec-cli/tests/cli.rs
+
+[+] spec-core/src/semantic_review.rs
+    │
+    ├── [GAP] compatibility_key resolver returns `data.checkout_quote.v1`
+    ├── [GAP] Preserve keeps matching data review
+    ├── [GAP] Preserve drops old `sum.discount_policy.v1` review on a data seam
+    ├── [GAP] Preserve drops stale data review with mismatched compatibility_key
+    ├── [GAP] aligned `discounted_subtotal()` delegation
+    ├── [GAP] aligned `total()` delegation
+    ├── [GAP] contradictory `total()` or `discounted_subtotal()` body -> semantic drift / backend leak
+    ├── [GAP] vague authored truth or unsupported extra non-helper method -> under_specified
+    └── [GAP] helper/example data method does not mask drift
+
+[+] spec-core/src/passport.rs / spec-core/src/export.rs / spec-cli/src/commands.rs
+    │
+    ├── [GAP] `spec test` writes data semantic review with compatibility_key
+    ├── [GAP] `spec build` / `spec generate` drop incompatible data review, do not mint replacement truth
+    ├── [GAP] `spec status` keeps stale base health on data seams with semantic review
+    └── [GAP] `spec export` preserves the same data review story and citations
+
+USER FLOW COVERAGE
+===========================
+[+] Canonical checkout quote seam
+    │
+    ├── [GAP] Maintainer edits `pricing/checkout_quote`, runs `spec test`, sees aligned semantic review
+    ├── [GAP] Maintainer edits `pricing/checkout_quote`, introduces drift, sees failing semantic review
+    ├── [GAP] Maintainer weakens authored truth, sees under_specified semantic review
+    └── [GAP] Maintainer changes the seam after proof, sees stale base health still win
+
+─────────────────────────────────
+COVERAGE: 3 existing shared invariants already proven
+NEW M16 GAPS: 12 paths require new data-seam tests
+QUALITY TARGET: every new path should land at ★★★, not smoke-test coverage
+─────────────────────────────────
+```
+
+### Required test matrix
+
+- Unit tests in `spec-core/src/semantic_review.rs`:
+  - `compatibility_key_for_spec()` returns `data.checkout_quote.v1`
+  - Preserve keeps matching data reviews and drops mismatched supported reviews
+  - aligned `discounted_subtotal()` delegation passes
+  - aligned `total()` delegation passes
+  - contradictory bodies fail honestly
+  - vague intent or extra non-helper methods yield `under_specified`
+  - helper/example data methods stay excluded without masking drift
+- Projection tests in `spec-core/src/passport.rs` and `spec-core/src/export.rs`:
+  - preserve path keeps compatible data review
+  - preserve path drops mismatched compatibility keys
+  - export/status continue projecting stored truth only
+- CLI regressions in `spec-cli/tests/cli.rs`:
+  - `spec test` refreshes data semantic review
+  - `spec build`, `spec generate`, `spec status`, and `spec export` do not invent replacement
+    semantic truth for data seams
+  - stale base health still wins when a data seam also carries semantic review
+  - unsupported `kind: function` units remain neutral
+- Canonical wedge regressions in `spec-cli/tests/m14_regressions.rs`:
+  - aligned `checkout_quote` wedge
+  - semantic-drift `checkout_quote` wedge
+  - under-specified `checkout_quote` wedge
+
+### Regression rule
+
+These regressions are mandatory and not negotiable:
+- add a keep/drop regression for compatibility-key mismatch
+- add a false-green regression for helper/example data methods masking drift
+- add a stale-base-health regression for a data seam carrying semantic review
+
+### Test plan artifact
+
+Primary artifact for this pass:
+`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m15-m16-eng-review-test-plan-20260423-181215.md`
+
+## Performance Review
+
+M16 should not introduce a runtime or command-path performance story worth optimizing yet.
+
+- The evaluator still runs only in proof-producing flows.
+- Reusing `normalize_unit()` + `lower_data_seam()` is cheap compared with the existing `spec test`
+  pipeline and is the boring choice.
+- Do **not** add graph-wide dependency tracing or multi-unit semantic traversal in M16. That is the
+  fastest way to turn a bounded trust loop into a slow, low-confidence heuristic pass.
+
+## Failure Modes
+
+| Codepath | Failure mode | Test coverage required | Error handling | User outcome if missed | Critical gap? |
+|---|---|---|---|---|---|
+| compatibility key | preserve-mode keeps an old supported review across a kind or contract change | keep/drop regressions in `semantic_review.rs`, `passport.rs`, and CLI tests | explicit drop on mismatch | fake-green semantic review survives on disk | **yes** |
+| data role classifier | arbitrary arithmetic or extra domain methods are guessed as aligned | role-scoped unit regressions | `under_specified` fallback | evaluator overclaims certainty on data seams | **yes** |
+| helper/example parity | semantic review and escape-hatch classification disagree about which data methods are proof glue | shared-predicate parity tests | one shared predicate | trust surfaces contradict each other | **yes** |
+| truth-surface projection | `spec build`, `spec generate`, `spec status`, or `spec export` mint replacement data semantic truth | CLI regression matrix | preserve keep/drop only | read/non-proof flows rewrite durable proof state | **yes** |
+| health precedence | data semantic review overrides stale or failing base health | status/export regressions | apply semantic demotion only after base health is computed | users see the wrong top-level status | **yes** |
+| widening boundary | `kind:function` starts demoting health before M17 because support widened by accident | unsupported-surface CLI regressions | keep unsupported kinds additive-only | M17 scope lands accidentally inside M16 | **yes** |
+
+## What NOT in M16 Scope
+
+- widening to `kind: function`
 - second-backend work
+- cross-unit or whole-graph semantic coherence
+- new CLI commands, new schema artifact types, or a separate semantic review subsystem
+- generic "all data seams" semantic interpretation beyond the canonical checkout-quote surface
+- dependency-aware semantic tracing through `apply_discount` or `apply_tax`
 
-**Success bar**
-- `kind: data` can pass and fail semantic review through the same passport, status, and export
-  contract introduced in M15.
+## Parallelization / Lanes
 
-### M17 — Widen Semantic Eval to `kind: function`
+M16 is parallelizable after the compatibility contract is locked.
+
+### Dependency table
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| 1. Lock compatibility key + preserve contract | `semantic_review`, `passport`, `export`, `commands` | - |
+| 2. Build data authored/executable packets + role classifier | `semantic_review`, `types`, `normalizer`, `generator` | 1 |
+| 3. Prove helper/example parity on data seams | `semantic_review`, `escape_hatch`, `spec-core` tests | 1 |
+| 4. Add CLI truth-surface regressions | `commands`, `passport`, `export`, `spec-cli/tests` | 1 |
+| 5. Re-prove canonical data wedges | `spec-cli/tests/m14_regressions.rs`, ecommerce fixture helpers | 2, 3, 4 |
+
+### Parallel lanes
+
+- **Gate 0, sequential:** Step 1 must land first. Every other slice depends on the same
+  compatibility semantics.
+- **Lane A:** Step 2
+  - add the supported data packet builder and role-scoped classifier
+- **Lane B:** Step 3
+  - keep helper/example classification shared across semantic review and escape-hatch logic
+- **Lane C:** Step 4
+  - add CLI preserve/drop, stale-health, and unsupported-function regressions
+- **Lane D:** Step 5
+  - re-prove the canonical aligned / drift / under-specified data wedges after A + B + C merge
+
+### Execution order
+
+1. Lock Step 1.
+2. Launch Lanes A, B, and C in parallel worktrees.
+3. Merge A + B + C.
+4. Run Lane D last for end-to-end wedge verification.
+
+### Conflict flags
+
+- `spec-core/src/semantic_review.rs` is the main conflict magnet. Give one owner authority over
+  compatibility keys and supported data-role matching.
+- `spec-cli/tests/cli.rs` is the second conflict magnet. Batch preserve/drop and stale-health
+  regressions together.
+- Do not split helper/example rule changes and data classifier changes across separate local notions
+  of "semantic method".
+
+## Implementation Order
+
+```text
+1. Lock compatibility keys and preserve/drop semantics
+2. Reuse lower_data_seam() to build authored/executable packets for checkout_quote
+3. Add explicit data role classifiers for discounted_subtotal() and total()
+4. Add preserve/drop and stale-health regressions in passport/status/export/CLI
+5. Re-prove aligned, drift, and under-specified checkout_quote wedges
+6. Re-open the M17 gate only after the full M16 trust loop is green
+```
+
+## Success Criteria / Kill Metrics
+
+M16 is successful only if all of these are true:
+
+1. `pricing/checkout_quote` can project aligned, failing, and under-specified semantic review
+   through passport, status, and export.
+2. Preserve-mode keep/drop behavior is determined by explicit compatibility keys, not implicit kind
+   inference.
+3. `spec status` keeps stale or failing base health above semantic demotion for data seams.
+4. Helper/example classification stays shared across semantic review and escape-hatch logic.
+5. `kind:function` remains additive-only and neutral until M17 widens it explicitly.
+
+Kill the "M17 next" thesis if either of these happens:
+- M16 still requires opaque, wedge-specific exceptions that cannot be named as an explicit
+  compatibility contract
+- reviewers still need to reverse-engineer raw lowering bodies to understand why the checkout quote
+  seam passed or failed
+
+## M17 — Follow-On Widening to `kind: function`
 
 **Purpose**
-- Finish first-generation semantic review coverage across the original function model once both seam
-  families have already proven the evaluator contract.
+- Finish first-generation semantic review across all three shipped authored kinds only after M16
+  proves the compatibility contract is reusable and explicit.
+
+**Preconditions**
+- M15.5 sum trust repair remains clean
+- M16 data widening lands with explicit compatibility-key keep/drop semantics
+- unsupported `kind:function` metadata stayed neutral throughout M16
 
 **What widens**
-- evaluator packet builder for `kind: function`
-- function-unit semantic drift, under-specified, and aligned fixtures
-- shared docs and agent workflow updates that teach semantic review across all shipped kinds
+- supported function compatibility key(s)
+- function aligned / drift / under-specified wedges
+- final docs and agent-workflow updates so the semantic-review story matches what the repo actually
+  supports
 
 **What stays out**
-- second-backend work unless M15 and M16 semantic review are both clean
-- cross-unit semantic coherence or whole-graph meaning checks
+- second-backend work unless M15.5 + M16 + M17 semantic review are all clean
+- cross-unit semantic coherence or whole-graph semantic meaning checks
 
 **Success bar**
-- `kind: function`, `kind: data`, and `kind: sum` all participate in one shared semantic-review
-  product surface without widening the command model or verdict vocabulary.
+- `sum`, `data`, and `function` all participate in one explicit semantic-review contract without
+  rewriting the trust loop or inventing a second review subsystem.
 
-## Post-M15 Decision Gate
+## M16 Review-Locked Decisions
 
-### Choose backend-readiness next if:
+- Reuse the existing `SemanticReview` record and add one explicit `compatibility_key`; do not build
+  a second supported-kind persistence path.
+- Reuse `NormalizedDataSeam` + `lower_data_seam()` as the executable packet source.
+- Keep M16 honest by supporting one explicit canonical data surface, `pricing/checkout_quote`, not
+  arbitrary data seams.
+- Treat constructors as packet-compatibility truth, but keep executable semantic classification
+  anchored on explicit method roles.
+- Keep helper/example classification shared across semantic review and escape-hatch logic.
+- Leave `kind:function` additive-only until M17.
 
-- semantic review is explicit, explainable, and honest on the supported `sum` seam path
-- status, export, and passport agree on semantic-review state
-- escape-hatch semantics are classifiable enough that backend travel is a bounded policy question
-- the canonical seam can pass and fail semantic review for understandable reasons
+## Decision Audit Trail (M16 Review)
 
-### Choose deeper governance next if:
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | Scope | Use one canonical `kind:data` wedge, `pricing/checkout_quote` | mechanical | P4 DRY | The shipped data seam already exercises fields, constructors, methods, deps, and molecule coverage | new demo-only record seam |
+| 2 | Architecture | Add a persisted `compatibility_key` to `SemanticReview` | mechanical | P5 explicit over clever | Preserve-mode needs a deterministic keep/drop rule once more than one supported surface exists | implicit kind-only preserve logic |
+| 3 | Architecture | Reuse `lower_data_seam()` for executable packet building | mechanical | P4 DRY | The generator already owns the executable Rust truth for data seams | second YAML-to-semantic packet path |
+| 4 | Scope | Support one explicit checkout-quote data surface, not generic data meaning | mechanical | P5 explicit over clever | Honest narrowing is better than broad false-green inference | generic data-seam evaluator in M16 |
+| 5 | Eng | Keep helper/example classification shared across semantic review and escape-hatch logic | mechanical | P5 explicit over clever | Two helper predicates would recreate contradictory trust surfaces | data-only helper rule |
+| 6 | Tests | Require keep/drop, stale-health, and canonical wedge regressions together | mechanical | P1 choose completeness | The projection contract is the product surface, not an implementation detail | evaluator-only unit coverage |
+| 7 | Scope | Leave `kind:function` neutral until M17 | mechanical | P3 pragmatic | Widening two kinds at once would hide whether the compatibility contract is actually reusable | widening `data` and `function` together |
 
-- reviewers still cannot localize meaning drift without reading raw lowering bodies
-- under-specification remains the dominant outcome because authored truth is still too weak
-- the highest-value missing signal is still cross-unit semantic coherence rather than backend breadth
+## Completion Summary
 
-### Do not choose second backend unless:
-
-- M15 semantic review on `kind: sum` is clean enough that M16 widening to `kind: data` looks
-  additive rather than architectural
-- M15 and M16 semantic review on `sum` and `data` are both clean before `kind: function` widening
-  or backend travel is considered
-- the repo can name which meaning is authored, which meaning is executable, and which mismatches are still uncertain
-- escape-hatch usage is observable enough that backend travel is a bounded policy question instead of a semantic gamble
+| Item | Status |
+|---|---|
+| Scope challenge | written |
+| What already exists | written |
+| Architecture review | written |
+| Code quality review | written |
+| Test review | diagram + matrix + artifact linked |
+| Performance review | written |
+| Failure modes | written |
+| NOT in scope | written |
+| Parallelization | written |
+| Decision audit trail | written |
+| Current status | ready for implementation against this M16 section |
 
 ## Dream State Delta
 
