@@ -1,9 +1,10 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m15-autoplan-restore-20260422-213555.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m15-autoplan-restore-20260423-164942.md -->
 # M15.5 — Semantic Review Trust Repair
 
-Status: **Draft, eng-reviewed** (2026-04-23). M15 is treated as landed on `feat/m15` at
-`d08df40` on April 23, 2026. This section is now the current implementation contract. The
-historical M15 draft remains below as record, not current scope.
+Status: **Landed, autoplan-reviewed** (2026-04-23). M15 landed on `feat/m15` at `d08df40`, and
+the M15.5 trust-repair follow-up is treated as landed through `503d59b` on April 23, 2026. This
+section is now the current implementation contract and post-landing review record. The historical
+M15 draft remains below as record, not current scope.
 
 M15.5 is the bounded follow-up required before submit because the landed M15 cut exposed two trust
 regressions in the core semantic-review path:
@@ -30,10 +31,11 @@ the M15 story is honest enough to ship.
 
 These decisions were made in `/plan-eng-review` on April 23, 2026 and are part of the plan:
 - `1A` Extra non-helper methods outside the two supported semantic roles force `under_specified`.
-- `2A` `SemanticProjectionMode::Preserve` keeps compatible supported-sum reviews, but drops
-  unsupported reviews. Only proof-producing refresh paths may mint unsupported metadata.
-- `3A` Helper/example classification becomes one shared predicate in `spec-core`, not duplicated
-  local logic in `semantic_review.rs` and `escape_hatch.rs`.
+- `2A` `SemanticProjectionMode::Preserve` keeps only stored supported-sum reviews on supported-sum
+  units and drops unsupported reviews. Preserve is not semantic-staleness inference. Only
+  proof-producing refresh paths may mint unsupported metadata.
+- `3A` Helper/example classification becomes one shared accepted-name-plus-shape predicate in
+  `spec-core`, not duplicated local logic in `semantic_review.rs` and `escape_hatch.rs`.
 - `4A` The milestone requires both unit coverage and a CLI regression matrix proving that
   proof-producing paths refresh semantic review and read/non-proof paths do not invent it.
 - `5B` No standalone TODO is added for future unsupported-kind retention; that remains out of
@@ -186,20 +188,19 @@ guessed pass/fail.
 
 ### Helper/example exclusion
 
-M15.5 replaces `_holds`-specific logic with one structural helper/example predicate shared by
-semantic review and escape-hatch classification.
+M15.5 replaces `_holds`-specific logic with one shared helper/example predicate used by semantic
+review and escape-hatch classification.
 
 Helper/example method:
+- matches the accepted helper/example name set (`*_holds`, `percentage_example`,
+  `fixed_amount_example`, `fixed_amount_capped_example`)
 - returns `bool`
 - receiver is `shared_ref`
 - has no inputs
 - is **not** one of the two supported semantic roles
 
-This explicitly covers:
-- existing `_holds` helpers
-- `percentage_example`
-- `fixed_amount_example`
-- `fixed_amount_capped_example`
+This stays intentionally narrower than a purely structural bool predicate so real domain methods
+like `has_cap` or `is_discountable` do not disappear from review.
 
 ### Preserve vs Refresh contract
 
@@ -207,9 +208,9 @@ M15.5 makes `SemanticProjectionMode::Preserve` truly preserve-only.
 
 ```text
 Preserve
-  supported sum + compatible supported-sum review -> keep existing review
-  supported sum + incompatible/unsupported review -> drop to None
-  unsupported kind + any existing review -> drop to None
+  supported sum + stored supported-sum review -> keep existing review
+  supported sum + stored unsupported-surface review -> drop to None
+  unsupported kind + any stored review -> drop to None
 
 Refresh
   supported sum -> run the AST evaluator
@@ -220,6 +221,8 @@ This is the core persistence rule:
 - `spec test` may refresh semantic truth
 - `spec build` / `spec generate` may not
 - `spec status` / `spec export` may project persisted truth, but may not invent replacement truth
+- authored/backend freshness remains the separate stale detector; `Preserve` does not attempt to
+  infer semantic invalidation beyond evaluator scope
 
 ### Projection contract
 
@@ -271,7 +274,7 @@ ROLE-SCOPED EVALUATION
   - outside-honest-subset under_specified path
 
 HELPER / EXAMPLE EXCLUSION
-  - one shared structural predicate
+  - one shared accepted-name-plus-shape predicate
   - helper/example tokens do not mask drift
 
 PERSISTENCE
@@ -305,7 +308,7 @@ CODE PATH COVERAGE
     │   └── unrecognized supported-role body -> under_specified
     │
     └── shared helper/example classifier
-        ├── semantic review uses shared predicate
+        ├── semantic review uses the accepted-name-plus-shape predicate
         └── escape_hatch uses the same predicate
 
 [+] spec-core/src/passport.rs
@@ -445,6 +448,182 @@ M15.5 is parallelizable after the preserve/refresh contract is locked.
   - non-proof flows preserve or drop semantic truth, but never mint it
   - helper/example classification is shared across semantic-review and escape-hatch logic
   - the canonical M15 wedge is trustworthy enough to submit
+
+## M15.5 Review Record (2026-04-23)
+
+### Welcome back context
+
+- Last session on `feat/m15` finished `/review` successfully.
+- The latest checkpoint still pointed at the old M15 eng-review handoff. This pass re-grounded on
+  the landed code and the live trust surfaces instead of the pre-submit draft alone.
+
+### Evidence checked
+
+- Design context: `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-main-design-20260420-220723.md`
+- Base branch: `main`
+- Landed semantic commits on this branch:
+  - `d08df40` M15 initial semantic review ship
+  - `3bc6111`, `99f7b54`, `503d59b` M15.5 trust repair
+- Verified tests:
+  - `cargo test -p spec-core semantic_review -- --nocapture`
+  - `cargo test -p spec-core escape_hatch -- --nocapture`
+  - `cargo test -p spec-core passport -- --nocapture`
+  - `cargo test -p spec-cli --test m14_regressions canonical_semantic_review_wedge_projects_aligned_state -- --nocapture`
+  - `cargo test -p spec-cli --test m14_regressions contradictory_lowering_wedge_projects_backend_only_semantics_leaked -- --nocapture`
+  - `cargo test -p spec-cli --test m14_regressions under_specified_wedge_projects_incomplete_health_consistently -- --nocapture`
+  - `cargo test -p spec-cli --test m14_regressions bool_domain_predicate_wedge_projects_under_specified_instead_of_false_green -- --nocapture`
+  - `cargo test -p spec-cli --test cli unsupported_semantic_review_command_matrix_preserves_or_refreshes_by_flow -- --nocapture`
+  - `cargo test -p spec-cli --test cli spec_status_json_and_export_include_semantic_review_without_bumping_schema -- --nocapture`
+  - `cargo test -p spec-cli --test cli spec_status_keeps_base_health_when_semantic_review_exists_on_stale_unit -- --nocapture`
+- This pass produced a fresh test-plan artifact:
+  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m15-autoplan-test-plan-20260423-165614.md`
+
+### CEO outside voice
+
+CODEX SAYS (CEO — strategy challenge)
+- The semantic trust repair is real, but the product story is still too easy to overstate.
+- The repo should stop talking like semantic review is generally solved when the supported surface
+  is still one canonical sum wedge.
+- The next milestone should prove widening without pretending the current evaluator is already
+  general.
+
+CLAUDE SUBAGENT (CEO — strategic independence)
+- Unavailable in this run. Session policy for this thread does not allow delegated subagents unless
+  the user explicitly asks for delegation.
+
+CEO DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Premises valid?                  N/A      mixed   N/A
+  2. Right problem to solve?          N/A      yes     N/A
+  3. Scope calibration correct?       N/A      mixed   N/A
+  4. Alternatives explored enough?    N/A      no      N/A
+  5. Competitive / market risks?      N/A      mixed   N/A
+  6. 6-month trajectory sound?        N/A      mixed   N/A
+═══════════════════════════════════════════════════════════════
+
+### Eng outside voice
+
+CODEX SAYS (eng — architecture challenge)
+- The landed code repaired the two trust regressions, but the plan still overclaims that widening
+  is additive.
+- The helper/example rule must stay accepted-name-plus-shape, not purely structural, or real domain
+  methods can disappear from review.
+- The next widening milestone needs an explicit evaluator-compatibility contract so preserve/drop
+  behavior remains deterministic once more kinds participate.
+
+CLAUDE SUBAGENT (eng — independent review)
+- Unavailable in this run. Session policy for this thread does not allow delegated subagents unless
+  the user explicitly asks for delegation.
+
+ENG DUAL VOICES — CONSENSUS TABLE:
+═══════════════════════════════════════════════════════════════
+  Dimension                           Claude  Codex  Consensus
+  ──────────────────────────────────── ─────── ─────── ─────────
+  1. Architecture sound?              N/A      yes     N/A
+  2. Test coverage sufficient?        N/A      yes     N/A
+  3. Performance risks addressed?     N/A      yes     N/A
+  4. Security threats covered?        N/A      partial N/A
+  5. Error paths handled?             N/A      yes     N/A
+  6. Deployment risk manageable?      N/A      yes     N/A
+═══════════════════════════════════════════════════════════════
+
+### Review verdict
+
+- M15.5 pans out. The sum-seam semantic surface is now honest enough to use as the reference wedge
+  for widening.
+- The correct next move is **not** backend-readiness and **not** widening `data` and `function`
+  together.
+- The next milestone should widen to `kind: data` while extracting the shared evaluator contract
+  explicitly enough that `sum` stops being a special case in disguise.
+
+## Post-M15.5 Decision Gate
+
+### Choose widening next because:
+
+- the lexical false-green path is closed
+- non-proof flows no longer mint semantic truth
+- passport, status, and export agree on the supported sum semantic story
+- the canonical wedge now produces aligned, failing, and under-specified outcomes through the same
+  trust surfaces
+
+### Do not overclaim what M15.5 proved:
+
+- it did **not** prove that widening is already additive by construction
+- it did **not** prove that helper/example classification can become purely structural
+- it did **not** prove that `kind: function` should widen immediately after `kind: sum`
+- it did **not** add a preserve/drop compatibility contract beyond evaluator scope
+
+## Follow-On Widening Milestones
+
+### M16 — Widen Semantic Review to `kind: data`
+
+**Purpose**
+- Prove that the M15 semantic-review contract can widen to the shipped record-like seam family
+  without changing the command model or truth-surface vocabulary.
+
+**What this milestone must add**
+- one explicit cross-kind evaluator contract:
+  - supported evaluator scope per kind
+  - preserve/drop rules per scope
+  - evaluator contract version or equivalent compatibility key for stored reviews
+- data authored/executable packets that reuse the same verdict vocabulary:
+  - `aligned`
+  - `under_specified`
+  - `semantic_drift`
+  - `backend_only_meaning_preserved`
+  - `backend_only_semantics_leaked`
+- one canonical `kind: data` wedge with aligned, drift, and under-specified fixtures
+- CLI regression coverage proving:
+  - proof-only refresh still holds
+  - stale base health still wins over semantic demotion
+  - status/export/passport agree on the widened data story
+
+**What must stay out**
+- `kind: function`
+- second-backend work
+- cross-unit semantic coherence
+- whole-graph meaning evaluation
+
+**Success bar**
+- `kind: data` widens the same semantic-review product surface as `kind: sum`, and the repo can
+  name the compatibility rule for keeping vs dropping stored semantic reviews.
+
+### M17 — Widen Semantic Review to `kind: function`
+
+**Purpose**
+- Finish first-generation semantic review across the three shipped authored kinds only after M16
+  proves the evaluator contract is reusable instead of sum-specific.
+
+**Preconditions**
+- M16 lands cleanly on one canonical data wedge
+- preserve/drop compatibility for stored reviews is explicit and tested
+- helper/example classification is still shared and does not hide domain semantics
+
+**What widens**
+- function authored/executable packets
+- function aligned, drift, and under-specified fixtures
+- final docs and agent-workflow updates so the semantic-review story matches what the repo
+  actually supports
+
+**What stays out**
+- second-backend work unless M15 plus M16 plus M17 are all clean
+- cross-unit or whole-graph semantic coherence
+
+**Success bar**
+- `sum`, `data`, and `function` all participate in one explicit semantic-review contract without
+  rewriting the trust loop or inventing a second review subsystem.
+
+## Decision Audit Trail (M15.5 Review)
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | CEO | Treat M15.5 as sufficient to justify widening, but only to `kind: data` next | taste | P1 choose completeness | The landed sum wedge is finally honest enough to serve as the reference seam, but widening two more kinds at once would hide whether the contract is actually reusable | widening `data` and `function` together |
+| 2 | Eng | Align the plan with the landed accepted-name-plus-shape helper predicate | mechanical | P5 explicit over clever | The code and tests reject purely structural bool predicates as helpers; the plan should not reintroduce that ambiguity | purely structural helper classification |
+| 3 | Eng | Define preserve-mode as scope-preserving only in M15.5, then add a real compatibility key in M16 | mechanical | P3 pragmatic | That matches the shipped code and gives the next widening milestone a concrete contract to add instead of hand-wavy “compatible review” language | vague compatibility wording in M15.5 |
+| 4 | Scope | Keep backend-readiness out until at least M17 | mechanical | P2 boil lakes | The repo now has one honest seam family reference, not a proven cross-kind semantic layer | backend-readiness immediately after M15.5 |
+| 5 | Eng | Gate `kind: function` on a clean `kind: data` widening first | mechanical | P5 explicit over clever | `data` is the closer analog to seam truth surfaces and is the cheaper way to prove the evaluator contract is reusable | immediate `kind: function` widening |
 
 # Historical M15 Draft — Semantic Governance + Eval
 
