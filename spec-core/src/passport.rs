@@ -282,7 +282,11 @@ pub fn build_passport_preserving_proof_state(
             freshness,
             markers: compute_passport_markers(spec),
             proof_coverage: default_passport_proof_coverage(spec),
-            semantic_review: existing.and_then(|passport| passport.semantic_review.clone()),
+            semantic_review: project_semantic_review(
+                spec,
+                existing.and_then(|passport| passport.semantic_review.as_ref()),
+                SemanticProjectionMode::Preserve,
+            ),
         },
     )
 }
@@ -991,6 +995,9 @@ fn secs_to_gregorian(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
 mod tests {
     use super::*;
     use crate::molecule_evidence::{MoleculeEvidenceStatus, build_molecule_evidence};
+    use crate::semantic_review::{
+        EvaluatorScope, SemanticReasonCode, SemanticVerdict, evaluate_semantic_review,
+    };
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
@@ -2144,6 +2151,70 @@ mod tests {
         assert_eq!(rebuilt.contract_hash, existing.contract_hash);
         assert_eq!(rebuilt.generated_at, "2026-04-05T00:00:00Z");
         assert_eq!(rebuilt.contract.unwrap().returns.as_deref(), Some("i64"));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_replaces_stale_sum_review_after_kind_change() {
+        let sum_spec = make_discount_policy_sum_seam(&["variant_none"]);
+        let mut existing = make_current_passport(&sum_spec);
+        existing.semantic_review = evaluate_semantic_review(&sum_spec);
+
+        let changed_spec = make_loaded_spec(
+            "pricing/discount_policy",
+            "units/pricing/discount_policy.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(IndexMap::from([(
+                    "subtotal".to_string(),
+                    "i32".to_string(),
+                )])),
+                returns: Some("i32".to_string()),
+                invariants: vec![],
+            }),
+            vec![],
+            vec![("variant_none", "true")],
+        );
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &changed_spec,
+            "2026-04-22T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
+        let review = rebuilt
+            .semantic_review
+            .expect("unsupported review expected");
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::UnsupportedSurface]
+        );
+        assert!(
+            review
+                .summary
+                .contains("unit kind 'function' is not evaluated"),
+            "{}",
+            review.summary
+        );
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_keeps_supported_sum_review_when_kind_matches() {
+        let spec = make_discount_policy_sum_seam(&["variant_none"]);
+        let supported_review = evaluate_semantic_review(&spec).expect("sum review expected");
+        let mut existing = make_current_passport(&spec);
+        existing.semantic_review = Some(supported_review.clone());
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &spec,
+            "2026-04-22T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
+        assert_eq!(rebuilt.semantic_review, Some(supported_review));
     }
 
     #[test]

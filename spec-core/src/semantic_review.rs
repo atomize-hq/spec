@@ -30,6 +30,7 @@ pub enum SemanticReasonCode {
     BackendOnlyExecutionMarker,
     ProofHelperOnlyMarker,
     DomainLoweringPresent,
+    UnsupportedSurface,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -132,9 +133,15 @@ pub fn project_semantic_review(
     existing: Option<&SemanticReview>,
     mode: SemanticProjectionMode,
 ) -> Option<SemanticReview> {
-    match mode {
-        SemanticProjectionMode::Preserve => existing.cloned(),
-        SemanticProjectionMode::Refresh => evaluate_semantic_review(spec),
+    let unit_kind = spec.spec.unit_kind().ok()?;
+    match evaluator_scope_for_kind(unit_kind) {
+        EvaluatorScope::SupportedSumSurface => match mode {
+            SemanticProjectionMode::Preserve => existing
+                .filter(|review| review.evaluator_scope == EvaluatorScope::SupportedSumSurface)
+                .cloned(),
+            SemanticProjectionMode::Refresh => evaluate_supported_sum_semantic_review(spec),
+        },
+        EvaluatorScope::UnsupportedSurface => Some(unsupported_surface_review(unit_kind)),
     }
 }
 
@@ -174,9 +181,36 @@ pub fn semantic_review_summary(review: &SemanticReview) -> String {
 }
 
 pub fn evaluate_semantic_review(spec: &LoadedSpec) -> Option<SemanticReview> {
-    if !matches!(spec.spec.unit_kind(), Ok(UnitKind::Sum)) {
-        return None;
+    let unit_kind = spec.spec.unit_kind().ok()?;
+    match evaluator_scope_for_kind(unit_kind) {
+        EvaluatorScope::SupportedSumSurface => evaluate_supported_sum_semantic_review(spec),
+        EvaluatorScope::UnsupportedSurface => Some(unsupported_surface_review(unit_kind)),
     }
+}
+
+fn evaluator_scope_for_kind(unit_kind: UnitKind) -> EvaluatorScope {
+    match unit_kind {
+        UnitKind::Sum => EvaluatorScope::SupportedSumSurface,
+        UnitKind::Function | UnitKind::Data => EvaluatorScope::UnsupportedSurface,
+    }
+}
+
+fn unsupported_surface_review(unit_kind: UnitKind) -> SemanticReview {
+    SemanticReview {
+        verdict: SemanticVerdict::UnderSpecified,
+        reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
+        summary: format!(
+            "unit kind '{}' is not evaluated by the M15 semantic reviewer",
+            unit_kind.as_str()
+        ),
+        authored_surfaces: vec![],
+        executable_surfaces: vec![],
+        evaluator_scope: EvaluatorScope::UnsupportedSurface,
+    }
+}
+
+fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticReview> {
+    debug_assert!(matches!(spec.spec.unit_kind(), Ok(UnitKind::Sum)));
 
     let authored = build_authored_packet(spec)?;
     let executable = build_executable_packet(spec)?;
@@ -544,8 +578,9 @@ fn body_reflects_capped_behavior(body: &str) -> bool {
 mod tests {
     use super::*;
     use crate::types::{
-        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering,
-        AuthoredSumVariant, Body, Contract, Intent, SpecSource, SpecStruct, UnitExtensions,
+        AuthoredDataShape, AuthoredField, AuthoredMethodLowering, AuthoredRustBackend,
+        AuthoredRustMethodLowering, AuthoredSumVariant, Body, Contract, Intent, SpecSource,
+        SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
 
@@ -618,6 +653,43 @@ mod tests {
         }
     }
 
+    fn discount_policy_function_spec() -> LoadedSpec {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec.kind = "function".to_string();
+        spec.spec.contract = Some(Contract {
+            inputs: Some(IndexMap::from([(
+                "subtotal".to_string(),
+                "Decimal".to_string(),
+            )])),
+            returns: Some("Decimal".to_string()),
+            invariants: vec![],
+        });
+        spec.spec.body = Body {
+            rust: "{ subtotal }".to_string(),
+        };
+        spec.spec.extensions = UnitExtensions::default();
+        spec
+    }
+
+    fn discount_policy_data_spec() -> LoadedSpec {
+        let mut spec = discount_policy_sum_spec();
+        spec.spec.kind = "data".to_string();
+        spec.spec.contract = None;
+        spec.spec.body = Body::default();
+        spec.spec.extensions = UnitExtensions {
+            data: Some(AuthoredDataShape {
+                fields: IndexMap::from([(
+                    "subtotal".to_string(),
+                    AuthoredField {
+                        type_: "Decimal".to_string(),
+                    },
+                )]),
+            }),
+            ..UnitExtensions::default()
+        };
+        spec
+    }
+
     #[test]
     fn semantic_review_marks_vague_authored_sum_as_under_specified() {
         let mut spec = discount_policy_sum_spec();
@@ -653,7 +725,7 @@ mod tests {
 
     #[test]
     fn semantic_health_effect_only_demotes_supported_verdicts() {
-        let review = SemanticReview {
+        let supported_review = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             reason_codes: vec![],
             summary: String::new(),
@@ -662,8 +734,119 @@ mod tests {
             evaluator_scope: EvaluatorScope::SupportedSumSurface,
         };
         assert_eq!(
-            semantic_health_effect(Some(&review)),
+            semantic_health_effect(Some(&supported_review)),
             SemanticHealthEffect::DemoteIncomplete
         );
+
+        let unsupported_review =
+            evaluate_semantic_review(&discount_policy_function_spec()).unwrap();
+        assert_eq!(
+            semantic_health_effect(Some(&unsupported_review)),
+            SemanticHealthEffect::KeepBase
+        );
+    }
+
+    #[test]
+    fn semantic_review_emits_explicit_unsupported_surface_for_function_and_data() {
+        for spec in [discount_policy_function_spec(), discount_policy_data_spec()] {
+            let review = evaluate_semantic_review(&spec).unwrap();
+            assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+            assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+            assert_eq!(
+                review.reason_codes,
+                vec![SemanticReasonCode::UnsupportedSurface]
+            );
+            assert!(
+                review
+                    .summary
+                    .contains("is not evaluated by the M15 semantic reviewer"),
+                "{}",
+                review.summary
+            );
+            assert!(review.authored_surfaces.is_empty());
+            assert!(review.executable_surfaces.is_empty());
+        }
+    }
+
+    #[test]
+    fn project_semantic_review_preserve_keeps_supported_sum_review() {
+        let spec = discount_policy_sum_spec();
+        let review = evaluate_semantic_review(&spec).unwrap();
+
+        let preserved =
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
+                .unwrap();
+
+        assert_eq!(preserved, review);
+    }
+
+    #[test]
+    fn project_semantic_review_preserve_replaces_stale_supported_review_on_unsupported_kind() {
+        let sum_spec = discount_policy_sum_spec();
+        let supported_review = evaluate_semantic_review(&sum_spec).unwrap();
+
+        let preserved = project_semantic_review(
+            &discount_policy_function_spec(),
+            Some(&supported_review),
+            SemanticProjectionMode::Preserve,
+        )
+        .unwrap();
+
+        assert_eq!(preserved.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            preserved.evaluator_scope,
+            EvaluatorScope::UnsupportedSurface
+        );
+        assert_eq!(
+            preserved.reason_codes,
+            vec![SemanticReasonCode::UnsupportedSurface]
+        );
+    }
+
+    #[test]
+    fn project_semantic_review_preserve_drops_old_unsupported_review_when_kind_becomes_sum() {
+        let unsupported_review =
+            evaluate_semantic_review(&discount_policy_function_spec()).unwrap();
+
+        let preserved = project_semantic_review(
+            &discount_policy_sum_spec(),
+            Some(&unsupported_review),
+            SemanticProjectionMode::Preserve,
+        );
+
+        assert!(preserved.is_none());
+    }
+
+    #[test]
+    fn project_semantic_review_synthesizes_fresh_unsupported_metadata() {
+        let spec = discount_policy_function_spec();
+        let existing = SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
+            summary: "stale unsupported summary".to_string(),
+            authored_surfaces: vec![SemanticCitation {
+                path: "intent.why".to_string(),
+                summary: "stale".to_string(),
+            }],
+            executable_surfaces: vec![SemanticCitation {
+                path: "body.rust".to_string(),
+                summary: "stale".to_string(),
+            }],
+            evaluator_scope: EvaluatorScope::UnsupportedSurface,
+        };
+
+        let preserved =
+            project_semantic_review(&spec, Some(&existing), SemanticProjectionMode::Preserve)
+                .unwrap();
+        let refreshed =
+            project_semantic_review(&spec, Some(&existing), SemanticProjectionMode::Refresh)
+                .unwrap();
+
+        let expected_summary = "unit kind 'function' is not evaluated by the M15 semantic reviewer";
+        assert_eq!(preserved.summary, expected_summary);
+        assert_eq!(refreshed.summary, expected_summary);
+        assert!(preserved.authored_surfaces.is_empty());
+        assert!(preserved.executable_surfaces.is_empty());
+        assert_eq!(preserved, refreshed);
     }
 }

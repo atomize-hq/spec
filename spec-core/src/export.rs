@@ -392,6 +392,7 @@ mod tests {
         LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
         PlanComputedImpactStatus, PlanReport, PlanSource, PlanStruct,
     };
+    use crate::semantic_review::{EvaluatorScope, SemanticReasonCode, evaluate_semantic_review};
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
@@ -1063,6 +1064,62 @@ mod tests {
         assert_eq!(
             freshness.snapshot.authored_truth_digest,
             crate::passport::compute_authored_truth_digest(&changed_spec)
+        );
+    }
+
+    #[test]
+    fn load_passports_for_specs_replaces_stale_sum_review_on_unsupported_kind() {
+        let dir = TempDir::new().unwrap();
+        let original_spec = loaded_sum_seam(
+            &dir,
+            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_policy",
+        );
+        let mut changed_spec = loaded_spec(
+            &dir,
+            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_policy",
+            vec![],
+        );
+        changed_spec.spec.intent.why = "Apply a function-style discount".to_string();
+
+        let mut passport = build_passport_with_evidence(
+            &original_spec,
+            "2026-04-05T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "label_basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            None,
+        );
+        passport.semantic_review = evaluate_semantic_review(&original_spec);
+        write_passport(&passport, Path::new(&original_spec.source.file_path)).unwrap();
+
+        let (passports, warnings) = load_passports_for_specs(&[changed_spec]);
+
+        assert!(warnings.is_empty());
+        assert_eq!(passports.len(), 1);
+        let review = passports[0]
+            .semantic_review
+            .as_ref()
+            .expect("unsupported review expected");
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::UnsupportedSurface]
+        );
+        assert!(
+            review
+                .summary
+                .contains("unit kind 'function' is not evaluated"),
+            "{}",
+            review.summary
         );
     }
 
