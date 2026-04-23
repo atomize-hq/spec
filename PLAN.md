@@ -1,39 +1,42 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260421-144420.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m15-autoplan-restore-20260422-213555.md -->
 # M15 — Semantic Governance + Eval
 
-Status: **Draft, direction locked** (2026-04-22). M14 shipped at `v0.12.0` via
+Status: **Draft, plan-solidified** (2026-04-22). M14 shipped at `v0.12.0` via
 `feat: ship M14 proof freshness and truth surfaces` (`6519dbe`), so this section replaces M14 as
 the current implementation contract. Source inputs are the shipped M14 plan and code in
 `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs`,
 `spec-core/src/escape_hatch.rs`, `spec-core/src/validator.rs`, `spec-core/src/plan.rs`,
 `examples/ecommerce/units/pricing/discount_policy.unit.spec`, and
-`examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`.
+`examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`. The current M15 draft
+was solidified against `/plan-eng-review` on `feat/m15` at commit `5cc5a70`, with the test-plan
+artifact captured at
+`~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m15-eng-review-test-plan-20260422-203627.md`.
 
 This section is the M15 implementation contract. Historical roadmap material below it is record,
 not current scope. Two separate implementers should be able to read this section and converge on
-the same diff shape and the same proof obligations.
+the same diff shape, the same status semantics, and the same proof obligations.
 
 UI scope: **no**. This is a semantic-governance and review-surface milestone for evaluator
-contracts, passports, status, export, and the canonical ecommerce seams.
+contracts, passports, status, export, escape-hatch policy, and the canonical ecommerce seam.
 
 ## Milestone Summary
 
 ```text
-M15a  Semantic alignment contract + verdicts      required
-M15b  Evaluator inputs for function/data/sum      required
-M15c  Passport/status/export eval truth surfaces  required
-M15d  Canonical mismatch wedges + regression set  required
-M15e  Escape-hatch semantic leak classification   required
-M15f  Post-M15 decision gate                      required
+M15a  Semantic alignment contract + verdict vocabulary        required
+M15b  Evaluator packets for supported `kind: sum` seams       required
+M15c  Passport/status/export semantic truth projection        required
+M15d  Canonical aligned / drift / under-specified wedges      required
+M15e  Escape-hatch semantic leak classification               required
+M15f  Post-M15 widening gate                                  required
 ```
 
 **Lake to boil in M15**
 - Make `green` mean something tighter than "the authored seam is fresh and the last proof passed."
 - Teach the repo to ask the next real review question:
   - does `intent.why` still match what the executable lowering does?
-  - does the authored contract still describe the behavior that was implemented?
+  - does the authored contract still describe the implemented behavior?
   - did a backend-only edit preserve meaning or quietly change it?
-  - is the authored truth under-specified enough that the evaluator cannot judge honestly?
+  - is the authored truth too weak for the evaluator to judge honestly?
 - Keep the top-level seam node model from M14. Do not promote variants or methods into first-class
   graph/status nodes yet.
 - Reuse the canonical `pricing/discount_policy` wedge again. The right M15 proof is not a toy
@@ -46,7 +49,7 @@ M15f  Post-M15 decision gate                      required
   `spec validate -> spec build -> spec test -> spec status -> spec export`, and can trust the
   resulting artifacts to answer:
   - does the authored semantic story still match the executable behavior?
-  - is the evaluator saying "aligned", "under-specified", or "semantic drift"?
+  - is the evaluator saying `aligned`, `under_specified`, or `semantic_drift`?
   - did the backend-only edit preserve meaning or leak new semantics through an escape hatch?
   - which seams now require human review because meaning, not freshness, is in doubt?
 
@@ -66,36 +69,47 @@ the blast radius of semantic guesswork.
 
 ## Locked Boundary
 
-- M15 adds **no new seam kind** and **no new backend**.
+- M15 adds **no new seam kind**, **no new backend**, and **no new top-level CLI command**.
 - M15 keeps the M14 top-level seam-node model. One seam still produces one unit row, one passport,
   and one export unit entry.
-- M15 must make semantic review explicit and reusable across every truth surface:
-  - authored semantic intent
-  - executable lowering behavior
-  - evaluator verdict and confidence class
+- M15 introduces one shared semantic-review contract reused by passport, status, export, fixtures,
+  and escape-hatch policy. It must not be reimplemented per surface.
 - M15 may add additive metadata to passports, export, and status, but it must not promote nested
   variant or method behaviors into first-class graph nodes.
-- M15 must support `kind: function`, `kind: data`, and `kind: sum`. It is not allowed to act like
-  semantic review is only meaningful for the original function shape.
+- M15 ships semantic review for the supported `kind: sum` surface first. The canonical acceptance
+  proof is `pricing/discount_policy` plus dedicated aligned/drift/under-specified fixtures. Widening
+  to `kind: data` and then `kind: function` is explicit follow-on work, not hidden M15 scope.
 - Escape hatches remain allowed in M15, but their semantic effect must become classifiable:
-  preserved meaning, leaked meaning, or under-specified truth.
+  meaning preserved, semantics leaked, or authored truth under-specified.
+- Semantic evaluation happens in proof-producing flows only. `spec status` and `spec export` project
+  persisted semantic review plus cheap freshness checks. They do not mint fresh semantic verdicts
+  on every invocation.
+- Base health remains the M14 truth contract. Semantic review only demotes evaluator-enabled seams
+  after base health is computed:
+  - `aligned` and `backend_only_meaning_preserved` keep base health unchanged
+  - `under_specified` demotes an otherwise-`valid` seam to `incomplete`
+  - `semantic_drift` and `backend_only_semantics_leaked` demote an otherwise-`valid` seam to `failing`
+- Non-evaluator `kind: data` and `kind: function` units keep pre-M15 health semantics. They may
+  surface additive semantic metadata only; no demotion until widening milestones explicitly land.
 - Explicitly not in M15:
   - second-backend implementation
   - first-class variant or method graph nodes
   - full sandboxing or elimination of `lowering.rust.body`
   - autonomous merge decisions based on evaluator output alone
   - new seam kinds or wider Rust item coverage
+  - cross-unit semantic coherence or whole-graph meaning checks
 
 ## Premises
 
 1. M14 proved that the repo can separate authored freshness from backend freshness. It did **not**
    prove that the repo can judge whether executable behavior still matches authored meaning.
-2. The next bottleneck is semantic alignment and under-specification detection, not another backend
-   or another authored seam kind.
+2. The next bottleneck is semantic alignment and under-specification detection on one real seam,
+   not another backend or another authored seam kind.
 3. The genesis of this product was always the gap between `intent.why` and `body.rust`; M15 should
    finally turn that thesis into a first-class product surface instead of leaving it as a TODO.
-4. `methods[].lowering.rust.body` remains the main semantic escape hatch for seam kinds. That is
-   acceptable only if the repo can now say whether the escape hatch preserved or leaked meaning.
+4. `methods[].lowering.rust.body` remains the main semantic escape hatch for seam kinds. The first
+   honest proof target is the canonical `kind: sum` wedge, because that is where the current buyer
+   pressure already lives.
 5. The default M16 question after this milestone should become: "is semantic review honest enough
    that backend travel would be reviewable?" not "can we add another generator now?"
 
@@ -125,8 +139,8 @@ M15 TARGET
 | Approach | What it does | Pros | Cons | Verdict |
 |---|---|---|---|---|
 | A. Backend-readiness now | Start formal second-backend prep on top of the M14 truth model | Flashiest roadmap story | Widens execution surface before the repo can judge semantic drift honestly | reject |
-| B. Semantic governance + eval | Compare authored meaning to executable behavior and project the verdict through truth surfaces | Directly serves the product thesis and current buyer pain | Harder than a simple freshness extension because "under-specified" must be first-class | **chosen** |
-| C. Lightweight heuristic lint only | Add string/AST hints without durable verdicts in truth surfaces | Smallest diff | Creates a fake semantic-review story without dependable product semantics | reject |
+| B. Semantic governance + eval | Compare authored meaning to executable behavior and project the verdict through truth surfaces | Directly serves the product thesis and current buyer pain | Harder than a simple freshness extension because `under_specified` must be first-class | **chosen** |
+| C. Lightweight heuristic lint only | Add string or AST hints without durable verdicts in truth surfaces | Smallest diff | Creates a fake semantic-review story without dependable product semantics | reject |
 
 **Why B wins**
 - M14 made freshness honest, which exposed the next real gap: reviewers still cannot tell whether
@@ -136,15 +150,54 @@ M15 TARGET
 - The original product thesis was never "generate more code." It was "make intent, implementation,
   and evidence stay aligned under AI-assisted change."
 
-## What Already Exists
+## Step 0: Scope Challenge
+
+### What already exists
 
 | Sub-problem | Existing code surface | M15 reuse / correction |
 |---|---|---|
 | Authored-vs-backend truth partition | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | Reuse M14 freshness partitions so semantic review can say whether drift is authored, backend-only, or both. |
 | Escape-hatch gating | `spec-core/src/escape_hatch.rs`, passport/export/status markers | Reuse the marker and proof-surface contract, but add semantic leak classification instead of stopping at "escape hatch exists". |
-| Canonical seam wedge | `examples/ecommerce/units/pricing/discount_policy.unit.spec`, `pricing/discount_policy_checkout_flow.test.spec` | Reuse the exact M13/M14 wedge and add semantic-alignment pass/fail fixtures instead of inventing a demo seam. |
-| Plan and review truth surfaces | `spec-core/src/plan.rs`, export bundle, status JSON | Reuse the existing machine-readable review surfaces instead of inventing a side-channel evaluator output file first. |
-| Deferred semantic-eval thesis | `TODOS.md` semantic contract-vs-body item | Close the longstanding product TODO by turning it into the current milestone rather than another deferred note. |
+| Canonical seam wedge | `examples/ecommerce/units/pricing/discount_policy.unit.spec`, `pricing/discount_policy_checkout_flow.test.spec` | Reuse the exact M13/M14 wedge and add semantic-alignment pass/fail fixtures instead of inventing a demo seam. This is the acceptance surface for first-ship M15. |
+| Plan and review truth surfaces | `spec-core/src/plan.rs`, export bundle, status JSON | Reuse existing machine-readable review surfaces instead of inventing a side-channel evaluator file first. |
+| Deferred semantic-eval thesis | `TODOS.md` M5 review item for semantic contract-vs-body comparison | Close the longstanding product TODO by turning it into the current milestone rather than another deferred note. |
+
+### Minimum diff that still solves the problem
+
+- Introduce one semantic-review contract owner in `spec-core` rather than sprinkling ad hoc string
+  comparisons across passport, export, status, and fixtures.
+- Reuse existing proof-producing flows. M15 does **not** add a separate `spec eval` command.
+- Evolve `passport`, `status`, `export`, and `escape_hatch` around the shared semantic-review
+  object rather than adding a parallel artifact type.
+
+### Complexity check
+
+- Expected implementation blast radius is one new core helper module plus focused edits to
+  `passport.rs`, `export.rs`, `commands.rs`, `escape_hatch.rs`, fixtures, and tests.
+- That is still a medium-sized milestone, but it remains engineered enough if semantic review is
+  centralized and the first ship stays on the supported `kind: sum` surface.
+- The overbuilt version would be: new command surface, new artifact type, per-surface projection
+  logic, and early widening to `data` or `function`. Reject that.
+
+### TODO cross-reference
+
+- This milestone intentionally closes the long-running semantic contract-vs-body TODO from the M5
+  review cycle.
+- No existing TODO in `TODOS.md` should be bundled into M15 beyond that semantic-review thesis.
+- If M15 reveals unsupported evaluator surface beyond the canonical `sum` contract, capture that as
+  M16 or M17 widening work instead of quietly absorbing it.
+
+### Completeness check
+
+- The complete move is a persisted semantic-review object with stable verdicts, reason codes,
+  authored/executable citations, and status/export projection.
+- The shortcut is a heuristic lint or score. That saves almost no real implementation time with
+  agent help and leaves the user in the same trust gap. Reject it.
+
+### Distribution check
+
+- M15 introduces no new artifact type. Existing CLI binary and release pipeline stay sufficient.
+- No extra CI or packaging surface is required beyond expanding the current test suite and fixtures.
 
 ## Architecture Review
 
@@ -158,25 +211,50 @@ executable behavior.
 |---|---|---|
 | Authored semantic truth | `intent.why`, contracts, declared deps, seam-owned structure, shared semantics | raw backend-only implementation details masquerading as authored meaning |
 | Executable lowering truth | generated Rust shape, lowering bodies, derives, backend-only markers | pretending to define the semantic contract by itself |
-| Semantic review truth | evaluator inputs, verdicts, reasons, under-specification markers | silent guesses or one-way "AI says so" authority |
+| Semantic review truth | evaluator packets, verdicts, reason codes, evidence citations, under-specification markers | silent guesses or one-way "AI says so" authority |
+
+### One shared semantic-review object
+
+M15 needs one persisted semantic-review record with a closed vocabulary. Whether it lives in a new
+`spec-core/src/semantic_review.rs` helper or an equivalent shared module, it must project through
+every truth surface unchanged.
+
+```text
+semantic_review
+  ├── verdict
+  │     aligned
+  │     under_specified
+  │     semantic_drift
+  │     backend_only_meaning_preserved
+  │     backend_only_semantics_leaked
+  ├── reason_codes[]
+  ├── summary
+  ├── authored_surfaces[]
+  ├── executable_surfaces[]
+  └── evaluator_scope
+        supported_sum_surface | unsupported_surface
+```
+
+The object must be serializable into passports, projectable into status, and exportable without any
+surface inventing its own verdict names or reason taxonomy.
 
 ### Truth surfaces
 
 - **Passport** remains the co-located proof record, but it must now carry semantic review output in
-  a way that survives the normal trust loop.
+  a way that survives the normal trust loop and non-test rewrites.
 - **Status** remains the primary CLI trust loop, but it must project semantic review with a stable,
   human-readable verdict vocabulary instead of burying it in warnings.
 - **Export** remains the AI / review bundle, but it must never serialize semantic review as an
   opaque score with no explanation.
-- **Plan validation** stays out of the first M15 core unless it needs additive hooks later. The
-  evaluator contract should be correct on live units before plans start depending on it.
+- **Plan validation** stays out of the first M15 core. The evaluator contract should be correct on
+  one live seam family before plan surfaces start depending on it.
 
 ### System architecture
 
 ```text
 authored unit / seam
   │
-  ├── semantic packet
+  ├── authored packet
   │     ├── intent.why
   │     ├── contract / receiver / signatures
   │     ├── deps / imports
@@ -188,10 +266,10 @@ authored unit / seam
   │     ├── backends.rust markers
   │     └── proof / freshness context
   │
-  └── evaluator
-        ├── alignment verdict
+  └── semantic evaluator
+        ├── verdict
         ├── reason codes
-        ├── under-specification markers
+        ├── authored / executable citations
         └── escape-hatch semantic classification
                │
                ├── passport semantic review
@@ -199,55 +277,65 @@ authored unit / seam
                └── export semantic review
 ```
 
-### M15 thesis
+### Module dependency graph
 
-- A unit can be fresh and still semantically wrong.
-- A backend-only change can be legitimate, but only if the evaluator can say why meaning was
-  preserved.
-- "Under-specified" is a first-class truthful result, not a failure of the system.
-- Semantic review must produce a reason a maintainer can act on, not just a scalar score.
+```text
+validator / seam projection
+          │
+          v
+spec-core semantic review contract
+          │
+    ┌─────┼───────────────┬───────────────┐
+    v     v               v               v
+passport  export      status/commands  escape_hatch
+    \       |               |               /
+     \      |               |              /
+      \     └──── canonical fixtures ─────┘
+       \
+        -> regression tests
+```
+
+### Status projection contract
+
+Base health still comes from validation, evidence, freshness, and the existing escape-hatch gate.
+Semantic review is a second truth surface layered on top of that base result.
+
+```text
+compute base health (M14 contract)
+  │
+  ├── if base health != valid
+  │      project semantic metadata only
+  │      keep existing health
+  │
+  └── if base health == valid and evaluator enabled
+         ├── aligned / backend_only_meaning_preserved -> valid
+         ├── under_specified -> incomplete
+         └── semantic_drift / backend_only_semantics_leaked -> failing
+```
+
+This keeps M15 honest without rewriting the full health ladder for unsupported kinds.
 
 ### Error & Rescue Registry
 
 | Step | Failure | Detection | Rescue |
 |---|---|---|---|
-| Build semantic packet | authored truth is too sparse to judge behavior honestly | evaluator marks `under_specified` with missing fields/reason codes | preserve verdict as under-specified and require human review |
-| Evaluate function unit | implementation behavior contradicts `intent.why` or `contract` | semantic drift verdict with rationale | fail semantic review truth surface and surface exact mismatch |
-| Evaluate seam method | method lowering carries semantics not present in shared seam truth | escape-hatch semantic leak classification | mark drift or under-specification, not silent pass |
-| Project status | evaluator returns opaque score without durable reason | status projection contract rejects score-only result | require named verdict + reason set before projecting |
-| Export review bundle | export serializes verdict without rationale or context | export schema/assertion tests | attach verdict, reasons, and cited authored/executable surfaces |
+| Build semantic packets | authored truth is too sparse to judge behavior honestly | evaluator emits `under_specified` with missing-field or unsupported-surface reason codes | preserve verdict as under-specified and require human review |
+| Evaluate supported `sum` seam | implementation behavior contradicts `intent.why` or seam contract | `semantic_drift` verdict with rationale | fail semantic review truth surface and surface the exact mismatch |
+| Evaluate seam method | method lowering carries semantics not present in shared seam truth | `backend_only_semantics_leaked` classification | mark drift or under-specification, not silent pass |
+| Project status | projection code invents its own verdict mapping | fixture and JSON tests fail | keep one shared verdict-to-health mapping in the semantic-review contract |
+| Export review bundle | export serializes verdict without rationale or cited surfaces | export schema/assertion tests | attach verdict, reasons, and cited authored/executable surfaces |
 
-### Security & Threat Model
+### Security & threat model
 
 The biggest security-like risk in M15 is not prompt injection. It is false semantic confidence.
 
-- If the evaluator can say "aligned" without pointing at the authored and executable evidence it
+- If the evaluator can say `aligned` without pointing at the authored and executable evidence it
   compared, the product will recreate fake-green trust at a higher layer.
-- If "under-specified" is treated as pass, the repo will quietly reward vague authored truth.
+- If `under_specified` is treated as pass, the repo will quietly reward vague authored truth.
 - If escape-hatch-heavy seams can still be marked aligned without naming what semantics live only in
   lowering, backend travel will be built on a lie.
 - M15 should not attempt general semantic proof of arbitrary Rust. That is an ocean. The lake here
   is: classify alignment truthfully, emit actionable reasons, and make uncertainty explicit.
-
-### Data Flow & Interaction Edge Cases
-
-Critical review questions:
-
-- If `intent.why` is broad but the contract is narrow, should the evaluator say aligned,
-  under-specified, or drift?
-- If only wording changes in `intent.why`, when is that semantic drift versus harmless prose cleanup?
-- If only `methods[].lowering.rust.body` changes, when can the system call it meaning-preserving?
-- If a seam method depends on another unit whose behavior changed, what part of semantic review is
-  local and what part is outside the first M15 boundary?
-- If the evaluator cannot tell whether meaning changed, where does that surface and what should a
-  reviewer do next?
-
-Required M15 answers:
-
-- Status must distinguish aligned, under-specified, and semantic-drift review states.
-- Export must surface the authored fields and executable surfaces the evaluator relied on.
-- Escape-hatch seams must be classifiable as meaning-preserving vs meaning-leaking, not just marked.
-- Canonical wedges must include both pass and fail semantic-review fixtures.
 
 ## Code Quality Review
 
@@ -255,58 +343,35 @@ The quality risk in M15 is not "AI in the product." It is duplicated semantic ju
 
 M15 must avoid:
 - one verdict vocabulary in passports and another in status
-- one evaluator path for `kind: function` and a hand-wave for seam kinds
+- one evaluator path for supported `kind: sum` seams and a separate ad hoc projection path elsewhere
 - a single opaque score that cannot be mapped back to authored/executable evidence
 - treating "could not tell" as success
+- recomputing fresh semantic truth in `status` or `export`
 
-One implementation seam should own semantic-eval projection and be reused by:
+One implementation seam should own semantic-review projection and be reused by:
 - passport writing
 - status computation
 - export projection
 - canonical fixture expectations
+- escape-hatch policy mapping
+
+### Concrete code-quality rules
+
+- Prefer one explicit contract module over clever helper scattering.
+- Do not change `passport`, `status`, and `export` in separate semantic dialects.
+- Keep the canonical wedge teaching the same verdict vocabulary as the machine surfaces.
+- Preserve pre-M15 behavior for unsupported kinds instead of half-widening semantic demotion.
 
 ## Implementation Slices
 
-1. **Semantic alignment contract**
-   - Primary modules: new/evolved semantic review helpers in `spec-core`, plus passport/export/status
-   - Define one reusable verdict vocabulary:
-     - `aligned`
-     - `under_specified`
-     - `semantic_drift`
-     - `backend_only_meaning_preserved`
-     - `backend_only_semantics_leaked`
-   - Lock reason-code vocabulary once. Do not let passport, status, and export invent competing
-     semantics.
-
-2. **Evaluator input builder**
-   - Primary modules: `validator`, normalization/truth helpers, seam projection code
-   - Build stable semantic packets for `kind: function`, `kind: data`, and `kind: sum`.
-   - Make the evaluator consume authored and executable packets, not ad hoc strings assembled per
-     surface.
-
-3. **Evaluator result projection**
-   - Primary modules: `spec-core/src/passport.rs`, `spec-cli/src/commands.rs`,
-     `spec-core/src/export.rs`
-   - Persist semantic review into passports.
-   - Make `spec status` consume the same contract and project stable verdicts and reasons.
-   - Make export project verdict plus rationale, not just a score.
-
-4. **Canonical pass / fail / under-specified wedges**
-   - Primary modules: `examples/ecommerce`, evaluator fixtures, CLI/export fixtures
-   - Add at least one canonical aligned seam, one semantic-drift seam fixture, and one
-     under-specified authored-truth fixture.
-   - Reuse `pricing/discount_policy` where possible; add only the minimum extra fixture surface
-     needed to prove honest failure.
-
-5. **Escape-hatch semantic leak classification**
-   - Primary modules: `escape_hatch`, seam validation, passport/export/status projection
-   - Distinguish "backend detail preserved meaning" from "backend-only semantics leaked beyond the
-     authored model."
-   - Require explicit reasons when a marked seam can still be considered aligned.
-
-6. **Regression + verification pass**
-   - Primary modules: `spec-cli/tests/cli.rs`, `spec-core` unit tests, example trust-loop commands
-   - Re-run canonical trust loops and verify semantic-review truth surfaces for all three kinds.
+| Slice | Owns | Primary modules | Exit criteria |
+|---|---|---|---|
+| 1. Semantic alignment contract | verdict vocabulary, reason codes, shared semantic-review object | new/evolved semantic-review helpers in `spec-core`, plus `passport` surface types | one closed verdict vocabulary, one reason taxonomy, one reusable object shape |
+| 2. Evaluator packet builder | authored packet, executable packet, enablement rules for supported `sum` seams | `validator`, normalization/truth helpers, seam projection code | packets are deterministic, reusable, and supported-surface gating is explicit |
+| 3. Evaluator result projection | persistence and reuse of semantic review | `spec-core/src/passport.rs`, `spec-cli/src/commands.rs`, `spec-core/src/export.rs` | passports persist semantic review, status/export reproject it without recomputing |
+| 4. Canonical aligned / drift / under-specified wedges | honest first-ship proof on the ecommerce seam family | `examples/ecommerce`, fixtures, CLI/export assertions | at least one aligned seam, one drift fixture, one under-specified fixture |
+| 5. Escape-hatch semantic classification | meaning-preserved vs semantics-leaked rules for marked seams | `escape_hatch`, seam validation, semantic projection | marked seams can only stay green with explicit preserved-meaning reasons |
+| 6. Regression + trust-loop verification | final proof that M14 honesty survives M15 | `spec-cli/tests/cli.rs`, `spec-core` tests, example commands | full trust loop proves semantic review without regressing freshness or molecule status |
 
 ## Test Review
 
@@ -316,10 +381,11 @@ One implementation seam should own semantic-eval projection and be reused by:
 SEMANTIC ALIGNMENT
   - authored semantic packet
   - executable lowering packet
-  - alignment verdict + reason projection
+  - verdict + reason projection
 
 UNDER-SPECIFICATION
   - missing or weak authored truth
+  - unsupported supported-surface claims
   - evaluator cannot judge honestly
 
 ESCAPE-HATCH SEMANTIC CLASSIFICATION
@@ -335,22 +401,30 @@ TRUTH-SURFACE PROJECTION
 ### Coverage diagram
 
 ```text
-[+] spec-core semantic review helpers
-    ├── build semantic packet from authored truth
-    ├── build executable packet from lowering truth
-    └── emit stable verdict + reason codes
+CODE PATH COVERAGE
+===========================
+[+] spec-core semantic review contract
+    ├── authored packet builder
+    ├── executable packet builder
+    ├── verdict / reason mapping
+    └── supported-surface gating
 
 [+] spec-core/src/passport.rs
     ├── persist semantic review alongside freshness
-    └── preserve the last review surface truthfully across non-test writes
+    └── preserve the last semantic-review result across non-test writes
 
 [+] spec-cli/src/commands.rs
     ├── status projects semantic verdicts and reasons
-    └── non-aligned semantic states stay explicit enough for review
+    ├── evaluator-enabled seams demote only after base health is computed
+    └── non-evaluator `data` / `function` kinds keep pre-M15 health semantics
 
 [+] spec-core/src/export.rs
     ├── export emits semantic review with rationale
-    └── AI/reviewer consumers can see what evidence the evaluator relied on
+    └── AI/reviewer consumers can see cited authored/executable surfaces
+
+[+] spec-core/src/escape_hatch.rs
+    ├── preserved-meaning classification
+    └── semantics-leaked classification
 
 [+] examples/ecommerce
     ├── aligned seam fixture
@@ -361,14 +435,17 @@ TRUTH-SURFACE PROJECTION
 ### Required test matrix
 
 - Unit tests:
-  - semantic packet builders for `function`, `data`, and `sum`
+  - semantic packet builders for the supported `sum` seam path
   - verdict vocabulary and reason-code projection
+  - verdict-to-health demotion mapping
   - escape-hatch meaning-preserved vs meaning-leaked classification
 - CLI integration tests:
   - `status --format json` for aligned semantic review
   - `status --format json` for semantic drift
   - `status --format json` for under-specified authored truth
-  - `export` semantic review projection with rationale
+  - `status --format json` for non-evaluator `kind: data` and `kind: function` units keeping
+    existing health semantics while surfacing additive semantic metadata only
+  - `export` semantic review projection with verdict, reasons, and cited surfaces
 - Example-backed tests:
   - canonical `discount_policy` seam aligned verdict under the normal trust loop
   - canonical mismatch fixture fails semantic review for an understandable reason
@@ -376,13 +453,34 @@ TRUTH-SURFACE PROJECTION
 - Regression tests:
   - M14 freshness semantics remain intact and distinct from semantic review
   - molecule status plane remains separate from unit semantic verdicts
-  - all three unit kinds participate in one shared semantic-review contract
+  - passport writes preserve the last semantic-review result faithfully and never mint fresh
+    alignment on `spec build`, `spec export`, or other non-test writes
+  - non-evaluator kinds keep their pre-M15 health semantics until M16 and M17 widen the evaluator
+  - the M15 evaluator contract for `kind: sum` is architected so widening remains additive
+
+### Test plan artifact
+
+Primary QA handoff artifact:
+- `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m15-eng-review-test-plan-20260422-203627.md`
+
+That artifact is authoritative for route-less QA focus in this milestone:
+- canonical aligned trust loop on `pricing/discount_policy`
+- semantic-drift fixture
+- under-specified authored-truth fixture
+- passport/status/export consistency
+- additive-only behavior for non-evaluator kinds
 
 ## Performance Review
 
 No performance issue should drive M15 scope. The dominant risk is false semantic confidence, not
 runtime cost. Semantic review can be slower than freshness projection if it remains deterministic,
 explainable, and honest.
+
+Lock one performance boundary anyway:
+- semantic evaluation runs in proof-producing flows, then passports persist the result
+- `spec status` and `spec export` project persisted semantic-review output plus cheap freshness
+  checks; they do not mint a fresh semantic verdict on every invocation
+- any recomputation path beyond those cheap checks is explicitly out of M15 scope
 
 ## Parallelization / Lanes
 
@@ -393,10 +491,10 @@ locked.
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| 1. Semantic alignment contract | semantic review helpers, truth-surface schema | - |
-| 2. Evaluator input builder | validator/truth helpers, seam projection | 1 |
-| 3. Evaluator result projection | passport, status, export, fixtures | 1, 2 |
-| 4. Canonical pass/fail wedges | examples/ecommerce, regression fixtures | 1, 3 |
+| 1. Semantic alignment contract | semantic-review helpers, truth-surface schema | - |
+| 2. Sum-seam evaluator packet builder | validator, normalization/truth helpers, seam projection | 1 |
+| 3. Evaluator result projection | passport, status, export | 1, 2 |
+| 4. Canonical sum pass/fail wedges | examples/ecommerce, fixtures, regression assertions | 1, 3 |
 | 5. Escape-hatch semantic classification | escape_hatch, seam validation, truth surfaces | 1, 2, 3 |
 | 6. Final regression + trust-loop verification | `spec-cli/tests`, `spec-core` regressions, example commands | 4, 5 |
 
@@ -406,15 +504,23 @@ locked.
   reason vocabulary.
 - **Lane A, evaluator core:** Step 2 -> Step 3
   - Shared modules: semantic packet builders, passports, status, export
-  - Keep this lane sequential because the same evaluator contract is reused end to end.
+  - Keep this lane sequential because the same semantic-review contract is reused end to end.
 - **Lane B, canonical wedge lane:** Step 4
-  - Independent once Gate 0 and the first evaluator/result contract exist
-  - Focuses on pass/fail/under-specified example proof
+  - Starts after Lane A defines the final persisted semantic-review shape
+  - Focuses on aligned, drift, and under-specified example proof
 - **Lane C, escape-hatch policy lane:** Step 5
-  - Starts after Lane A has the verdict contract
-  - Focuses on meaning-preserved vs meaning-leaked policy
+  - Starts after Lane A defines the final verdict contract
+  - Focuses on meaning-preserved vs semantics-leaked policy for marked seams
 - **Lane D, final integration lane:** Step 6
   - Runs last against merged evaluator truth surfaces, canonical wedges, and escape-hatch policy
+
+### Execution order
+
+1. Land Gate 0.
+2. Run Lane A.
+3. After Lane A merges, launch Lane B and Lane C in parallel worktrees.
+4. Merge both.
+5. Run Lane D as the final trust-loop and regression pass.
 
 ### Conflict flags
 
@@ -423,32 +529,36 @@ locked.
 - Do not let canonical example work start from provisional verdict names. The example and docs must
   teach the final semantic-review contract, not an intermediate one.
 - Avoid a separate evaluator output shape that is not the one passport/status/export finally use.
+- Lane B and Lane C both depend on the same verdict vocabulary. If that vocabulary is still moving,
+  do not parallelize them yet.
 
 ## Failure Modes
 
 | Codepath | Failure mode | Test coverage required | Error handling | User outcome if missed | Critical gap? |
 |---|---|---|---|---|---|
-| semantic alignment | code is fresh but semantically wrong and still reports aligned | evaluator + CLI/export fixtures | semantic drift verdict with rationale | fake-green meaning review after real behavior drift | **yes** |
-| under-specification | vague authored truth is treated as pass | under-specified fixtures | explicit under-specified verdict | repo rewards ambiguous specs instead of tightening them | **yes** |
-| escape-hatch classification | backend-only semantics leak but are marked meaning-preserved | marker + policy fixtures | leaked-semantics verdict with rationale | backend travel starts from dishonest semantic boundaries | **yes** |
-| export projection | verdict serialized without rationale | export schema/assertion fixtures | require verdict + reasons + cited surfaces | AI/reviewer consumes opaque semantic score | **yes** |
-| kind coverage | evaluator works only for `function` and hand-waves seam kinds | kind-specific packet + status fixtures | shared evaluator contract | the core product thesis applies only to the easiest unit shape | **yes** |
+| semantic alignment | code is fresh but semantically wrong and still reports aligned | evaluator + CLI/export fixtures | `semantic_drift` verdict with rationale | fake-green meaning review after real behavior drift | **yes** |
+| under-specification | vague authored truth is treated as pass | under-specified fixtures | explicit `under_specified` verdict | repo rewards ambiguous specs instead of tightening them | **yes** |
+| escape-hatch classification | backend-only semantics leak but are marked meaning-preserved | marker + policy fixtures | `backend_only_semantics_leaked` verdict with rationale | backend travel starts from dishonest semantic boundaries | **yes** |
+| status demotion | semantic review overrides stale, invalid, or failing base health incorrectly | status JSON fixtures | apply semantic demotion only after base health is computed | users see contradictory status stories across commands | **yes** |
+| export projection | verdict serialized without rationale or cited surfaces | export schema/assertion fixtures | require verdict, reasons, and cited surfaces | AI/reviewer consumes opaque semantic score | **yes** |
+| widening readiness | M15 hardcodes `sum` so tightly that M16 requires a rewrite for `data` | packet-shape + projection reuse tests | additive packet contract | the next milestone pays refactor tax before it can widen honestly | **yes** |
 
-## What NOT in M15 Scope
+## NOT in scope
 
 - second-backend implementation, because the repo still needs one seam that can fail semantic review honestly first
 - first-class variant or method graph nodes, because that is a larger ontology change than M15 needs
 - full sandboxing or elimination of `lowering.rust.body`, because explicit classification is the lake and containment is the ocean
 - autonomous acceptance of a change based solely on evaluator output, because semantic review informs human judgment, it does not replace it
 - new seam kinds or wider Rust item coverage, because M15 is about reviewing shipped authored shapes honestly
+- cross-unit semantic coherence, because the first honest lake is local seam-vs-lowering alignment
 
 ## Implementation Order
 
 ```text
 1. Lock the semantic alignment contract and verdict vocabulary
-2. Build shared authored/executable packets for function/data/sum
+2. Build shared authored and executable packets for the supported `sum` seam surface
 3. Teach passports, status, and export to project semantic review consistently
-4. Add canonical aligned / semantic-drift / under-specified wedges
+4. Add canonical aligned, semantic-drift, and under-specified `sum` wedges
 5. Add escape-hatch semantic leak classification
 6. Re-run the trust loop and evaluate the post-M15 gate
 ```
@@ -458,24 +568,64 @@ locked.
 M15 is successful only if all of these are true:
 
 1. A maintainer can tell whether a unit is semantically aligned, under-specified, or semantically
-   drifting.
-2. `spec status` and `spec export` tell the same semantic-review story for the same unit.
-3. `kind: function`, `kind: data`, and `kind: sum` all participate in one shared evaluator
-   contract.
+   drifting for the supported `kind: sum` seam contract in M15.
+2. `spec status` and `spec export` tell the same semantic-review story for that same seam.
+3. The `kind: sum` evaluator contract is reusable enough that M16 can widen it without a rewrite.
 4. The canonical seam can fail semantic review for a reason a reviewer can understand without
    reverse-engineering all raw Rust first.
 5. Escape-hatch seams can be classified as meaning-preserving vs meaning-leaking.
 
 Kill the "second backend next" thesis for M16 if either of these happens:
-- semantic review still collapses into opaque scoring or unexplained pass/fail output
+- semantic review still collapses into opaque scoring or unexplained pass or fail output
 - the canonical seam still requires reviewers to read raw lowering bodies to localize meaning drift
+
+## Follow-On Widening Milestones
+
+### M16 — Widen Semantic Eval to `kind: data`
+
+**Purpose**
+- Prove that the M15 evaluator contract can widen from the supported `sum` seam surface to the
+  shipped record-like seam family without redesigning verdict vocabulary or truth-surface projection.
+
+**What widens**
+- evaluator packet builder for `kind: data`
+- data-seam semantic drift, under-specified, and aligned fixtures
+- escape-hatch semantic classification on `methods[].lowering.rust.body` for data seams
+
+**What does not widen yet**
+- `kind: function`
+- cross-unit semantic coherence
+- second-backend work
+
+**Success bar**
+- `kind: data` can pass and fail semantic review through the same passport, status, and export
+  contract introduced in M15.
+
+### M17 — Widen Semantic Eval to `kind: function`
+
+**Purpose**
+- Finish first-generation semantic review coverage across the original function model once both seam
+  families have already proven the evaluator contract.
+
+**What widens**
+- evaluator packet builder for `kind: function`
+- function-unit semantic drift, under-specified, and aligned fixtures
+- shared docs and agent workflow updates that teach semantic review across all shipped kinds
+
+**What stays out**
+- second-backend work unless M15 and M16 semantic review are both clean
+- cross-unit semantic coherence or whole-graph meaning checks
+
+**Success bar**
+- `kind: function`, `kind: data`, and `kind: sum` all participate in one shared semantic-review
+  product surface without widening the command model or verdict vocabulary.
 
 ## Post-M15 Decision Gate
 
 ### Choose backend-readiness next if:
 
-- semantic review is explicit, explainable, and honest across all three shipped unit kinds
-- status/export/passport agree on semantic-review state
+- semantic review is explicit, explainable, and honest on the supported `sum` seam path
+- status, export, and passport agree on semantic-review state
 - escape-hatch semantics are classifiable enough that backend travel is a bounded policy question
 - the canonical seam can pass and fail semantic review for understandable reasons
 
@@ -487,7 +637,10 @@ Kill the "second backend next" thesis for M16 if either of these happens:
 
 ### Do not choose second backend unless:
 
-- M12 + M13 seam families both pass the M15 semantic-review contract
+- M15 semantic review on `kind: sum` is clean enough that M16 widening to `kind: data` looks
+  additive rather than architectural
+- M15 and M16 semantic review on `sum` and `data` are both clean before `kind: function` widening
+  or backend travel is considered
 - the repo can name which meaning is authored, which meaning is executable, and which mismatches are still uncertain
 - escape-hatch usage is observable enough that backend travel is a bounded policy question instead of a semantic gamble
 
@@ -504,11 +657,67 @@ That is the real leverage. M15 should make meaning reviewable.
 - Choose semantic governance + eval for M15, not backend-readiness.
 - Keep one top-level unit node per seam in M15. Variants and methods remain nested.
 - Additive semantic-review metadata is allowed; first-class nested graph nodes are not.
-- Semantic review must be shared across passport/status/export, not reimplemented separately.
-- `kind: function`, `kind: data`, and `kind: sum` all stay in scope for one evaluator contract.
-- `pricing/discount_policy` remains the canonical wedge and gains semantic pass/fail/under-specified review fixtures.
+- Semantic review must be shared across passport, status, export, and escape-hatch policy, not
+  reimplemented separately.
+- M15 ships the evaluator on the supported `kind: sum` seam surface first; M16 and M17 widen that
+  contract explicitly to `data` and then `function`.
+- `pricing/discount_policy` remains the canonical wedge and gains semantic pass, fail, and
+  under-specified review fixtures.
 - Escape hatches remain allowed, but they become semantically classifiable, not just marked.
 - Design review is skipped because there is no UI scope.
+
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | Scope | Keep M15 focused on semantic governance, not backend-readiness | mechanical | P1 choose completeness | The current buyer problem is meaning review honesty, not backend breadth | backend-readiness now |
+| 2 | Scope | Keep one top-level seam node per unit in M15 | mechanical | P5 explicit over clever | Additive semantic metadata solves the review gap without redesigning graph ontology | first-class nested nodes |
+| 3 | Eng | Use one shared semantic-review contract across passport, status, export, and fixtures | mechanical | P5 explicit over clever | Divergent projection logic would recreate fake-green drift in multiple surfaces | per-surface semantic logic |
+| 4 | Eng | Persist semantic review in proof-producing flows only | mechanical | P3 pragmatic | `status` and `export` should project persisted truth, not recompute speculative meaning on the hot path | always recompute semantic review |
+| 5 | Eng | Demote supported seams only after base health is computed | mechanical | P5 explicit over clever | Semantic review is a second truth surface, not a replacement for invalid, stale, or failing base states | semantic review overriding the full health ladder |
+| 6 | Eng | Keep non-evaluator kinds additive-only in M15 | taste | P3 pragmatic | Honest narrowing is better than half-support that demotes units on a shaky contract | widening `data` and `function` inside M15 |
+| 7 | Eng | Reuse `pricing/discount_policy` as the canonical wedge | mechanical | P4 DRY | The shipped seam is the right place to prove review honesty | new demo wedge |
+
+## M15 Review Record (2026-04-22)
+
+### Scope challenge findings
+
+- Existing code already owns the hard parts of truth projection: `passport.rs` persists proof,
+  `export.rs` reprojects truth, `commands.rs` owns status semantics, and `escape_hatch.rs` already
+  models post-proof demotion. M15 should extend those seams, not build a parallel review pipeline.
+- The minimum diff is one shared semantic-review contract plus focused projection and fixture work.
+  A new command surface or artifact type would be product theater.
+- The blast radius is acceptable if semantic review is centralized and the first ship stays on the
+  supported `kind: sum` surface.
+
+### Engineering solidification
+
+- The plan now locks the verdict-to-health mapping instead of leaving status behavior implicit.
+- The plan now names the persisted semantic-review object and the exact projection rule for passport,
+  status, and export.
+- The plan now makes the canonical wedges, regression obligations, and worktree parallelization
+  explicit.
+- The plan now ties M15 back to the recorded `/plan-eng-review` artifact instead of leaving QA
+  inputs implied.
+
+### Completion summary
+
+| Item | Status |
+|---|---|
+| Scope challenge | written |
+| What already exists | written |
+| Architecture review | written |
+| Code quality review | written |
+| Test review | diagram + matrix + artifact linked |
+| Performance review | written |
+| Parallelization | written |
+| Failure modes | written |
+| NOT in scope | written |
+| Implementation slices | written |
+| Decision audit trail | written |
+| Design phase | skipped, no UI scope |
+| Current status | ready for implementation against this M15 section |
+| Verdict | choose semantic governance + eval |
 
 # M14 — Proof Freshness + Truth Surfaces
 
