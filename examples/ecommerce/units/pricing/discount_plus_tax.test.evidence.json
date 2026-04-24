@@ -8,7 +8,7 @@
     "money/round"
   ],
   "status": "pass",
-  "observed_at": "2026-04-21T20:05:59Z",
+  "observed_at": "2026-04-24T01:53:28Z",
   "test_body_hash": "sha256:ab1eb353dc1aba61a125fe7311500535bd643a7926f80d4285b458e02a369ace",
   "covered_unit_contract_hashes": {
     "money/round": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8",
@@ -27,6 +27,6 @@
     }
   },
   "provenance": {
-    "git_commit_sha": "ecbec463a79b9b626670f11d896a33b2a222c513"
+    "git_commit_sha": "99244f4530b5413fae86793cccdd0dd4d48fe7a5"
   }
 }

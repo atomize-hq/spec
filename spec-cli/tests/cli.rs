@@ -879,7 +879,7 @@ fn assert_unsupported_function_semantic_review(review: &Value) {
     );
     assert_eq!(
         review["summary"],
-        "unit kind 'function' is not evaluated by the M15 semantic reviewer"
+        "unit kind 'function' is not evaluated by the M16 semantic reviewer"
     );
 }
 
@@ -4838,21 +4838,36 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
 }
 
 #[test]
-fn spec_status_text_prints_semantic_review_story() {
+fn spec_status_text_lists_units_even_without_semantic_review_story() {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path();
     let units_dir = write_semantic_status_project(project_dir);
     seed_semantic_status_artifacts(&units_dir);
-    let seeded_passport =
-        read_passport_json(&units_dir.join("pricing/discount_mode.spec.passport.json"));
-    let seeded_summary = seeded_passport["semantic_review"]["summary"]
-        .as_str()
-        .expect("expected seeded semantic review summary");
 
     let output = run_in(project_dir, &["status", units_dir.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("pricing/discount_mode"), "{stdout}");
-    assert!(stdout.contains(seeded_summary), "{stdout}");
+}
+
+#[test]
+fn spec_status_text_stays_neutral_for_unsupported_surface_in_preserve_mode() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_unsupported_function_semantic_status_project(project_dir);
+    let passport_path = units_dir.join("pricing/apply_discount.spec.passport.json");
+    let review = unsupported_function_semantic_review("seeded unsupported function review");
+    seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
+    let seeded_summary = read_passport_json(&passport_path)["semantic_review"]["summary"]
+        .as_str()
+        .expect("expected seeded unsupported semantic review summary")
+        .to_owned();
+
+    let output = run_in(project_dir, &["status", units_dir.to_str().unwrap()]);
+    assert_output_success("unsupported function status should stay green", &output);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("pricing/apply_discount"), "{stdout}");
+    assert!(!stdout.contains(&seeded_summary), "{stdout}");
 }
 
 #[test]
@@ -4920,7 +4935,10 @@ fn spec_status_demotes_supported_data_review_to_incomplete() {
         "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
         "{status_json}"
     );
-    assert_eq!(unit["semantic_review"]["compatibility_key"], "data.checkout_quote.v1");
+    assert_eq!(
+        unit["semantic_review"]["compatibility_key"],
+        "data.checkout_quote.v1"
+    );
     assert_eq!(unit["semantic_review"]["verdict"], "under_specified");
 }
 
@@ -4947,11 +4965,13 @@ fn spec_status_demotes_supported_data_review_to_failing() {
         .unwrap();
     assert_eq!(unit["status"], "failing", "{status_json}");
     assert_eq!(
-        unit["reason"],
-        "semantic drift: executable lowering contradicts authored semantic claims",
+        unit["reason"], "semantic drift: executable lowering contradicts authored semantic claims",
         "{status_json}"
     );
-    assert_eq!(unit["semantic_review"]["compatibility_key"], "data.checkout_quote.v1");
+    assert_eq!(
+        unit["semantic_review"]["compatibility_key"],
+        "data.checkout_quote.v1"
+    );
     assert_eq!(unit["semantic_review"]["verdict"], "semantic_drift");
 }
 
@@ -5033,7 +5053,10 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
         .iter()
         .find(|passport| passport["id"] == "pricing/checkout_quote")
         .unwrap();
-    assert_eq!(exported_passport["semantic_review"], seeded_review, "{export_json}");
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
 
     let generate_output = run_in(
         &project_dir,
@@ -5076,8 +5099,14 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
     assert_output_success("supported data test should succeed", &test_output);
     let refreshed_review = read_passport_json(&passport_path)["semantic_review"].clone();
     assert_ne!(refreshed_review, seeded_review);
-    assert_eq!(refreshed_review["compatibility_key"], "data.checkout_quote.v1");
-    assert_eq!(refreshed_review["evaluator_scope"], "supported_data_surface");
+    assert_eq!(
+        refreshed_review["compatibility_key"],
+        "data.checkout_quote.v1"
+    );
+    assert_eq!(
+        refreshed_review["evaluator_scope"],
+        "supported_data_surface"
+    );
 }
 
 #[test]
@@ -5089,10 +5118,16 @@ fn unsupported_function_semantic_review_remains_additive_only_and_neutral() {
     let review = unsupported_function_semantic_review("seeded unsupported function review");
     seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
     let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
-    assert_eq!(seeded_review["compatibility_key"], "unsupported.function.v1");
+    assert_eq!(
+        seeded_review["compatibility_key"],
+        "unsupported.function.v1"
+    );
 
     let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
-    assert_output_success("unsupported function status should stay green", &status_output);
+    assert_output_success(
+        "unsupported function status should stay green",
+        &status_output,
+    );
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
@@ -5101,7 +5136,10 @@ fn unsupported_function_semantic_review_remains_additive_only_and_neutral() {
     assert_eq!(unit["status"], "valid", "{status_json}");
     assert!(unit["reason"].is_null(), "{status_json}");
     assert_semantic_review_absent(&unit["semantic_review"]);
-    assert_eq!(read_passport_json(&passport_path)["semantic_review"], seeded_review);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
 }
 
 #[test]
@@ -5122,7 +5160,10 @@ fn unsupported_surface_semantic_review_remains_drop_on_preserve_with_compatibili
     );
 
     let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
-    assert_output_success("unsupported function status should stay green", &status_output);
+    assert_output_success(
+        "unsupported function status should stay green",
+        &status_output,
+    );
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
@@ -5141,8 +5182,14 @@ fn unsupported_surface_semantic_review_remains_drop_on_preserve_with_compatibili
         .unwrap();
     assert_semantic_review_absent(&exported_passport["semantic_review"]);
 
-    let generate_output = run_in(project_dir, &["generate", "units", "--output", "src/generated"]);
-    assert_output_success("unsupported function generate should succeed", &generate_output);
+    let generate_output = run_in(
+        project_dir,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "unsupported function generate should succeed",
+        &generate_output,
+    );
     assert_semantic_review_absent(&read_passport_json(&passport_path)["semantic_review"]);
 
     let build_output = run_in(

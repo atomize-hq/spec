@@ -21,7 +21,7 @@
 ## Project docs
 
 - [`CHANGELOG.md`](CHANGELOG.md): shipped release history
-- [`PLAN.md`](PLAN.md): active implementation roadmap through M15, with shipped milestone context below the current contract
+- [`PLAN.md`](PLAN.md): active implementation roadmap, with shipped milestone context below the current contract
 - [`DECISIONS.md`](DECISIONS.md): project-level decisions that stay stable across releases
 - [`TODOS.md`](TODOS.md): backlog and follow-up inventory
 - [`AGENTS.md`](AGENTS.md): agent workflow and machine-readable `spec` authoring loop

@@ -5713,7 +5713,9 @@ body:
         let supported_incomplete_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::UnderSpecified,
             compatibility_key: "data.checkout_quote.v1".to_string(),
-            reason_codes: vec![spec_core::semantic_review::SemanticReasonCode::MissingSemanticMethods],
+            reason_codes: vec![
+                spec_core::semantic_review::SemanticReasonCode::MissingSemanticMethods,
+            ],
             summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
             authored_surfaces: vec![],
             executable_surfaces: vec![],
@@ -5747,10 +5749,13 @@ body:
         assert_eq!(incomplete.status, HealthState::Incomplete);
         assert_eq!(
             incomplete.reason.as_deref(),
-            Some("semantic under-specified: authored semantic surfaces are too weak for honest evaluation")
+            Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation"
+            )
         );
 
-        let failing = apply_semantic_review_to_health(valid_health, Some(&supported_failing_review));
+        let failing =
+            apply_semantic_review_to_health(valid_health, Some(&supported_failing_review));
         assert_eq!(failing.status, HealthState::Failing);
         assert_eq!(
             failing.reason.as_deref(),

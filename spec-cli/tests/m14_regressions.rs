@@ -233,7 +233,8 @@ fn contradictory_checkout_quote_molecule_body() -> &'static str {
 
 fn remove_discount_policy_noise(fixture_root: &Path) {
     let _ = fs::remove_file(fixture_root.join("units/pricing/discount_policy.unit.spec"));
-    let _ = fs::remove_file(fixture_root.join("units/pricing/discount_policy_checkout_flow.test.spec"));
+    let _ =
+        fs::remove_file(fixture_root.join("units/pricing/discount_policy_checkout_flow.test.spec"));
 }
 
 #[test]
@@ -1459,7 +1460,10 @@ fn under_specified_checkout_quote_wedge_projects_incomplete_state() {
     );
     fs::write(
         &unit_path,
-        source.replace("Return the final checkout total after discount and tax.", "todo"),
+        source.replace(
+            "Return the final checkout total after discount and tax.",
+            "todo",
+        ),
     )
     .unwrap();
 
@@ -1472,7 +1476,10 @@ fn under_specified_checkout_quote_wedge_projects_incomplete_state() {
             fixture_dst.to_str().unwrap(),
         ],
     );
-    assert_success(&unit_test_output, "checkout quote under-specified wedge unit test");
+    assert_success(
+        &unit_test_output,
+        "checkout quote under-specified wedge unit test",
+    );
 
     let molecule_test_output = run_spec(
         &fixture_dst,
@@ -1501,7 +1508,11 @@ fn under_specified_checkout_quote_wedge_projects_incomplete_state() {
         &fixture_dst,
         &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
     );
-    assert_exit_code(&status_output, 1, "checkout quote under-specified wedge status");
+    assert_exit_code(
+        &status_output,
+        1,
+        "checkout quote under-specified wedge status",
+    );
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
     let status_unit = status_unit(&status_json, "pricing/checkout_quote");
     assert_eq!(status_unit["status"], "incomplete");
@@ -1518,7 +1529,10 @@ fn under_specified_checkout_quote_wedge_projects_incomplete_state() {
     );
 
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
-    assert_success(&export_output, "checkout quote under-specified wedge export");
+    assert_success(
+        &export_output,
+        "checkout quote under-specified wedge export",
+    );
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
     let exported = exported_passport(&export_json, "pricing/checkout_quote");
     assert_eq!(exported["escape_hatch_gate"]["status"], "closed");

@@ -284,13 +284,24 @@ pub fn evaluate_semantic_review(spec: &LoadedSpec) -> Option<SemanticReview> {
 
 fn supported_surface_for_spec(spec: &LoadedSpec) -> Option<SupportedSurface> {
     let unit_kind = spec.spec.unit_kind().ok()?;
-    Some(match unit_kind {
-        UnitKind::Sum => SupportedSurface::SumDiscountPolicy,
-        UnitKind::Data if spec.spec.id == "pricing/checkout_quote" => {
+    Some(supported_surface_for_unit_context(
+        spec.spec.id.as_str(),
+        unit_kind,
+    ))
+}
+
+fn supported_surface_for_unit_context(unit_id: &str, unit_kind: UnitKind) -> SupportedSurface {
+    match unit_kind {
+        UnitKind::Sum if unit_id == "pricing/discount_policy" => {
+            SupportedSurface::SumDiscountPolicy
+        }
+        UnitKind::Data if unit_id == "pricing/checkout_quote" => {
             SupportedSurface::DataCheckoutQuote
         }
-        UnitKind::Function | UnitKind::Data => SupportedSurface::Unsupported(unit_kind),
-    })
+        UnitKind::Function | UnitKind::Data | UnitKind::Sum => {
+            SupportedSurface::Unsupported(unit_kind)
+        }
+    }
 }
 
 fn evaluate_supported_semantic_review(
@@ -310,7 +321,7 @@ fn unsupported_surface_review(unit_kind: UnitKind) -> SemanticReview {
         compatibility_key: unsupported_surface_compatibility_key(unit_kind),
         reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
         summary: format!(
-            "unit kind '{}' is not evaluated by the M15 semantic reviewer",
+            "unit kind '{}' is not evaluated by the M16 semantic reviewer",
             unit_kind.as_str()
         ),
         authored_surfaces: vec![],
@@ -539,6 +550,9 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
     }
 
     let mut drift_reasons = Vec::new();
+    if !checkout_quote_executable_shape_matches_authored(&authored, &executable) {
+        drift_reasons.push(SemanticReasonCode::VariantShapeMismatch);
+    }
     for authored_method in &authored.methods {
         match executable
             .methods
@@ -1060,6 +1074,13 @@ fn authored_matches_checkout_quote_constructors(
     constructors.len() == 1
         && constructors[0].id == "new"
         && authored_matches_checkout_quote_fields(&constructors[0].inputs)
+}
+
+fn checkout_quote_executable_shape_matches_authored(
+    authored: &SemanticAuthoredDataPacket,
+    executable: &SemanticExecutableDataPacket,
+) -> bool {
+    authored.fields == executable.fields && authored.constructors == executable.constructors
 }
 
 fn authored_has_exact_checkout_quote_roles(methods: &[SemanticMethodPacket]) -> bool {
@@ -2098,9 +2119,11 @@ mod tests {
         spec.spec.intent.why = "discount policy".to_string();
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
-        assert!(review
-            .reason_codes
-            .contains(&SemanticReasonCode::VagueUnitIntent));
+        assert!(
+            review
+                .reason_codes
+                .contains(&SemanticReasonCode::VagueUnitIntent)
+        );
     }
 
     #[test]
@@ -2135,9 +2158,11 @@ mod tests {
             .body = "{ match self { Self::None => Decimal::ZERO, Self::Percentage { rate } => subtotal * *rate, Self::FixedAmount { amount } => amount.clone() } }".to_string();
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
-        assert!(review
-            .reason_codes
-            .contains(&SemanticReasonCode::MethodBodyMissingCapBehavior));
+        assert!(
+            review
+                .reason_codes
+                .contains(&SemanticReasonCode::MethodBodyMissingCapBehavior)
+        );
     }
 
     #[test]
@@ -2285,9 +2310,11 @@ mod tests {
             review.compatibility_key,
             DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
         );
-        assert!(review
-            .reason_codes
-            .contains(&SemanticReasonCode::OutsideHonestSupportedSubset));
+        assert!(
+            review
+                .reason_codes
+                .contains(&SemanticReasonCode::OutsideHonestSupportedSubset)
+        );
     }
 
     #[test]
@@ -2301,9 +2328,39 @@ mod tests {
             review.compatibility_key,
             DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
         );
-        assert!(review
-            .reason_codes
-            .contains(&SemanticReasonCode::VagueUnitIntent));
+        assert!(
+            review
+                .reason_codes
+                .contains(&SemanticReasonCode::VagueUnitIntent)
+        );
+    }
+
+    #[test]
+    fn checkout_quote_executable_field_shape_mismatch_is_detected() {
+        let spec = checkout_quote_data_spec();
+        let authored = build_authored_data_packet(&spec).unwrap();
+        let mut executable = build_executable_data_packet(&spec, &HashSet::new()).unwrap();
+        executable.fields[0].name = "subtotal_cents".to_string();
+
+        assert!(!checkout_quote_executable_shape_matches_authored(
+            &authored,
+            &executable
+        ));
+    }
+
+    #[test]
+    fn checkout_quote_executable_constructor_shape_mismatch_is_detected() {
+        let spec = checkout_quote_data_spec();
+        let authored = build_authored_data_packet(&spec).unwrap();
+        let mut executable = build_executable_data_packet(&spec, &HashSet::new()).unwrap();
+        executable.constructors[0]
+            .inputs
+            .retain(|field| field.name != "tax_rate");
+
+        assert!(!checkout_quote_executable_shape_matches_authored(
+            &authored,
+            &executable
+        ));
     }
 
     #[test]
@@ -2414,7 +2471,7 @@ mod tests {
             assert!(
                 review
                     .summary
-                    .contains("is not evaluated by the M15 semantic reviewer"),
+                    .contains("is not evaluated by the M16 semantic reviewer"),
                 "{}",
                 review.summary
             );
@@ -2451,8 +2508,8 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_preserve_drops_unsupported_surface_review_even_with_compatibility_key(
-    ) {
+    fn project_semantic_review_preserve_drops_unsupported_surface_review_even_with_compatibility_key()
+     {
         let unsupported_review =
             evaluate_semantic_review(&discount_policy_function_spec()).unwrap();
 
@@ -2490,7 +2547,7 @@ mod tests {
             project_semantic_review(&spec, Some(&existing), SemanticProjectionMode::Refresh)
                 .unwrap();
 
-        let expected_summary = "unit kind 'function' is not evaluated by the M15 semantic reviewer";
+        let expected_summary = "unit kind 'function' is not evaluated by the M16 semantic reviewer";
         assert!(preserved.is_none());
         assert_eq!(refreshed.summary, expected_summary);
         assert!(refreshed.authored_surfaces.is_empty());
