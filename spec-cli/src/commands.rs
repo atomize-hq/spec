@@ -5709,6 +5709,79 @@ body:
     }
 
     #[test]
+    fn semantic_review_demotes_only_otherwise_valid_units() {
+        let supported_incomplete_review = SemanticReview {
+            verdict: spec_core::semantic_review::SemanticVerdict::UnderSpecified,
+            compatibility_key: "data.checkout_quote.v1".to_string(),
+            reason_codes: vec![spec_core::semantic_review::SemanticReasonCode::MissingSemanticMethods],
+            summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: spec_core::semantic_review::EvaluatorScope::SupportedDataSurface,
+        };
+        let supported_failing_review = SemanticReview {
+            verdict: spec_core::semantic_review::SemanticVerdict::SemanticDrift,
+            compatibility_key: "data.checkout_quote.v1".to_string(),
+            reason_codes: vec![
+                spec_core::semantic_review::SemanticReasonCode::MethodBodyMissingCapBehavior,
+            ],
+            summary: "executable lowering contradicts authored semantic claims".to_string(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: spec_core::semantic_review::EvaluatorScope::SupportedDataSurface,
+        };
+
+        let valid_health = HealthStatus {
+            status: HealthState::Valid,
+            reason: None,
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let incomplete = apply_semantic_review_to_health(
+            HealthStatus {
+                status: valid_health.status,
+                reason: valid_health.reason.clone(),
+                evidence_at: valid_health.evidence_at.clone(),
+            },
+            Some(&supported_incomplete_review),
+        );
+        assert_eq!(incomplete.status, HealthState::Incomplete);
+        assert_eq!(
+            incomplete.reason.as_deref(),
+            Some("semantic under-specified: authored semantic surfaces are too weak for honest evaluation")
+        );
+
+        let failing = apply_semantic_review_to_health(valid_health, Some(&supported_failing_review));
+        assert_eq!(failing.status, HealthState::Failing);
+        assert_eq!(
+            failing.reason.as_deref(),
+            Some("semantic drift: executable lowering contradicts authored semantic claims")
+        );
+
+        let stale_health = HealthStatus {
+            status: HealthState::Stale,
+            reason: Some("authored truth changed since last test".to_string()),
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let stale_preserved =
+            apply_semantic_review_to_health(stale_health, Some(&supported_failing_review));
+        assert_eq!(stale_preserved.status, HealthState::Stale);
+        assert_eq!(
+            stale_preserved.reason.as_deref(),
+            Some("authored truth changed since last test")
+        );
+
+        let base_failure = HealthStatus {
+            status: HealthState::Failing,
+            reason: Some("build failed".to_string()),
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let failure_preserved =
+            apply_semantic_review_to_health(base_failure, Some(&supported_incomplete_review));
+        assert_eq!(failure_preserved.status, HealthState::Failing);
+        assert_eq!(failure_preserved.reason.as_deref(), Some("build failed"));
+    }
+
+    #[test]
     fn plan_validate_has_failures_ignores_partial_impact_when_closure_is_closed() {
         let report = spec_core::plan::PlanReport {
             plan_id: "add-only".to_string(),
