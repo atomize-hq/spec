@@ -1,7 +1,7 @@
 use crate::escape_hatch::{is_helper_or_example_method, summarize_escape_hatch_semantic_markers};
-use crate::generator::lower_sum_seam;
+use crate::generator::{lower_data_seam, lower_sum_seam};
 use crate::normalizer::normalize_unit;
-use crate::types::{AuthoredSumShape, LoadedSpec, NormalizedUnit, UnitKind};
+use crate::types::{AuthoredDataShape, AuthoredSumShape, LoadedSpec, NormalizedUnit, UnitKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -36,6 +36,7 @@ pub enum SemanticReasonCode {
 #[serde(rename_all = "snake_case")]
 pub enum EvaluatorScope {
     SupportedSumSurface,
+    SupportedDataSurface,
     UnsupportedSurface,
 }
 
@@ -121,6 +122,32 @@ pub struct SemanticExecutableMethodPacket {
     pub body_rust: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SemanticAuthoredDataPacket {
+    pub id: String,
+    pub intent: String,
+    pub fields: Vec<SemanticFieldPacket>,
+    pub constructors: Vec<SemanticConstructorPacket>,
+    pub methods: Vec<SemanticMethodPacket>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SemanticExecutableDataPacket {
+    pub id: String,
+    pub struct_name: String,
+    pub fields: Vec<SemanticFieldPacket>,
+    pub constructors: Vec<SemanticConstructorPacket>,
+    pub methods: Vec<SemanticExecutableMethodPacket>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derives: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SemanticConstructorPacket {
+    pub id: String,
+    pub inputs: Vec<SemanticFieldPacket>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SemanticMarkerSummary {
     pub has_domain_lowering: bool,
@@ -135,6 +162,19 @@ enum SupportedSemanticRole {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SupportedDataSemanticRole {
+    DiscountedSubtotal,
+    Total,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SupportedSurface {
+    SumDiscountPolicy,
+    DataCheckoutQuote,
+    Unsupported(UnitKind),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SupportedBodyClassification {
     Aligned,
     Contradictory,
@@ -142,6 +182,25 @@ enum SupportedBodyClassification {
 }
 
 const SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY: &str = "sum.discount_policy.v1";
+const DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY: &str = "data.checkout_quote.v1";
+
+impl SupportedSurface {
+    fn compatibility_key(self) -> Option<&'static str> {
+        match self {
+            Self::SumDiscountPolicy => Some(SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY),
+            Self::DataCheckoutQuote => Some(DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY),
+            Self::Unsupported(_) => None,
+        }
+    }
+
+    fn evaluator_scope(self) -> EvaluatorScope {
+        match self {
+            Self::SumDiscountPolicy => EvaluatorScope::SupportedSumSurface,
+            Self::DataCheckoutQuote => EvaluatorScope::SupportedDataSurface,
+            Self::Unsupported(_) => EvaluatorScope::UnsupportedSurface,
+        }
+    }
+}
 
 fn unsupported_surface_compatibility_key(unit_kind: UnitKind) -> String {
     format!("unsupported.{}.v1", unit_kind.as_str())
@@ -152,18 +211,24 @@ pub fn project_semantic_review(
     existing: Option<&SemanticReview>,
     mode: SemanticProjectionMode,
 ) -> Option<SemanticReview> {
-    let unit_kind = spec.spec.unit_kind().ok()?;
-    match evaluator_scope_for_kind(unit_kind) {
-        EvaluatorScope::SupportedSumSurface => match mode {
-            SemanticProjectionMode::Preserve => existing
-                .filter(|review| {
-                    review.evaluator_scope == EvaluatorScope::SupportedSumSurface
-                        && review.compatibility_key == SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY
-                })
-                .cloned(),
-            SemanticProjectionMode::Refresh => evaluate_supported_sum_semantic_review(spec),
-        },
-        EvaluatorScope::UnsupportedSurface => match mode {
+    match supported_surface_for_spec(spec)? {
+        surface @ (SupportedSurface::SumDiscountPolicy | SupportedSurface::DataCheckoutQuote) => {
+            match mode {
+                SemanticProjectionMode::Preserve => existing
+                    .filter(|review| {
+                        review.evaluator_scope == surface.evaluator_scope()
+                            && review.compatibility_key
+                                == surface
+                                    .compatibility_key()
+                                    .expect("supported surface compatibility key")
+                    })
+                    .cloned(),
+                SemanticProjectionMode::Refresh => {
+                    evaluate_supported_semantic_review(spec, surface)
+                }
+            }
+        }
+        SupportedSurface::Unsupported(unit_kind) => match mode {
             SemanticProjectionMode::Preserve => None,
             SemanticProjectionMode::Refresh => Some(unsupported_surface_review(unit_kind)),
         },
@@ -174,7 +239,10 @@ pub fn semantic_health_effect(review: Option<&SemanticReview>) -> SemanticHealth
     let Some(review) = review else {
         return SemanticHealthEffect::KeepBase;
     };
-    if review.evaluator_scope != EvaluatorScope::SupportedSumSurface {
+    if !matches!(
+        review.evaluator_scope,
+        EvaluatorScope::SupportedSumSurface | EvaluatorScope::SupportedDataSurface
+    ) {
         return SemanticHealthEffect::KeepBase;
     }
 
@@ -206,17 +274,33 @@ pub fn semantic_review_summary(review: &SemanticReview) -> String {
 }
 
 pub fn evaluate_semantic_review(spec: &LoadedSpec) -> Option<SemanticReview> {
-    let unit_kind = spec.spec.unit_kind().ok()?;
-    match evaluator_scope_for_kind(unit_kind) {
-        EvaluatorScope::SupportedSumSurface => evaluate_supported_sum_semantic_review(spec),
-        EvaluatorScope::UnsupportedSurface => Some(unsupported_surface_review(unit_kind)),
+    match supported_surface_for_spec(spec)? {
+        surface @ (SupportedSurface::SumDiscountPolicy | SupportedSurface::DataCheckoutQuote) => {
+            evaluate_supported_semantic_review(spec, surface)
+        }
+        SupportedSurface::Unsupported(unit_kind) => Some(unsupported_surface_review(unit_kind)),
     }
 }
 
-fn evaluator_scope_for_kind(unit_kind: UnitKind) -> EvaluatorScope {
-    match unit_kind {
-        UnitKind::Sum => EvaluatorScope::SupportedSumSurface,
-        UnitKind::Function | UnitKind::Data => EvaluatorScope::UnsupportedSurface,
+fn supported_surface_for_spec(spec: &LoadedSpec) -> Option<SupportedSurface> {
+    let unit_kind = spec.spec.unit_kind().ok()?;
+    Some(match unit_kind {
+        UnitKind::Sum => SupportedSurface::SumDiscountPolicy,
+        UnitKind::Data if spec.spec.id == "pricing/checkout_quote" => {
+            SupportedSurface::DataCheckoutQuote
+        }
+        UnitKind::Function | UnitKind::Data => SupportedSurface::Unsupported(unit_kind),
+    })
+}
+
+fn evaluate_supported_semantic_review(
+    spec: &LoadedSpec,
+    surface: SupportedSurface,
+) -> Option<SemanticReview> {
+    match surface {
+        SupportedSurface::SumDiscountPolicy => evaluate_supported_sum_semantic_review(spec),
+        SupportedSurface::DataCheckoutQuote => evaluate_supported_checkout_quote_data_review(spec),
+        SupportedSurface::Unsupported(_) => None,
     }
 }
 
@@ -398,6 +482,154 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     })
 }
 
+fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<SemanticReview> {
+    debug_assert!(matches!(spec.spec.unit_kind(), Ok(UnitKind::Data)));
+    debug_assert_eq!(spec.spec.id, "pricing/checkout_quote");
+
+    let authored = build_authored_data_packet(spec)?;
+    let helper_method_ids = spec
+        .spec
+        .extensions
+        .methods
+        .iter()
+        .filter(|method| is_helper_or_example_method(method))
+        .map(|method| method.id.clone())
+        .collect::<HashSet<_>>();
+    let executable = build_executable_data_packet(spec, &helper_method_ids)?;
+    let markers = summarize_markers(spec);
+    let mut reasons = Vec::new();
+    let authored_surfaces = authored_data_citations(&authored);
+    let executable_surfaces = executable_data_citations(&executable, markers);
+
+    if semantic_text_is_vague(&authored.intent) {
+        reasons.push(SemanticReasonCode::VagueUnitIntent);
+    }
+    if !authored_matches_checkout_quote_fields(&authored.fields)
+        || !authored_matches_checkout_quote_constructors(&authored.constructors)
+    {
+        reasons.push(SemanticReasonCode::OutsideHonestSupportedSubset);
+    }
+    if authored.methods.len() != 2 || !authored_has_exact_checkout_quote_roles(&authored.methods) {
+        reasons.push(SemanticReasonCode::MissingSemanticMethods);
+    }
+    for method in &authored.methods {
+        if method.returns.is_none() {
+            reasons.push(SemanticReasonCode::MissingMethodContract);
+        }
+        if semantic_text_is_vague(&method.intent) {
+            reasons.push(SemanticReasonCode::VagueMethodIntent);
+        }
+        if supported_data_role_for_method(method).is_none() {
+            reasons.push(SemanticReasonCode::OutsideHonestSupportedSubset);
+        }
+    }
+    reasons.sort();
+    reasons.dedup();
+
+    if !reasons.is_empty() {
+        return Some(SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            reason_codes: reasons,
+            summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::SupportedDataSurface,
+        });
+    }
+
+    let mut drift_reasons = Vec::new();
+    for authored_method in &authored.methods {
+        match executable
+            .methods
+            .iter()
+            .find(|method| method.id == authored_method.id)
+        {
+            Some(executable_method) => {
+                if authored_method.receiver != executable_method.receiver
+                    || authored_method.inputs != executable_method.inputs
+                    || authored_method.returns != executable_method.returns
+                {
+                    drift_reasons.push(SemanticReasonCode::MethodSignatureMismatch);
+                    continue;
+                }
+
+                match classify_supported_data_role_body(
+                    supported_data_role_for_method(authored_method)
+                        .expect("non-helper data methods are pre-filtered to supported roles"),
+                    &executable_method.body_rust,
+                ) {
+                    SupportedBodyClassification::Aligned => {}
+                    SupportedBodyClassification::Contradictory => {
+                        drift_reasons.push(SemanticReasonCode::MethodBodyMissingCapBehavior);
+                    }
+                    SupportedBodyClassification::OutsideHonestSubset => {
+                        return Some(SemanticReview {
+                            verdict: SemanticVerdict::UnderSpecified,
+                            compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+                            reason_codes: vec![SemanticReasonCode::OutsideHonestSupportedSubset],
+                            summary:
+                                "supported semantic bodies fall outside the honest evaluator subset"
+                                    .to_string(),
+                            authored_surfaces,
+                            executable_surfaces,
+                            evaluator_scope: EvaluatorScope::SupportedDataSurface,
+                        });
+                    }
+                }
+            }
+            None => drift_reasons.push(SemanticReasonCode::MethodSignatureMismatch),
+        }
+    }
+    drift_reasons.sort();
+    drift_reasons.dedup();
+
+    if !drift_reasons.is_empty() {
+        let verdict = if markers.has_domain_lowering {
+            SemanticVerdict::BackendOnlySemanticsLeaked
+        } else {
+            SemanticVerdict::SemanticDrift
+        };
+        return Some(SemanticReview {
+            verdict,
+            compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            reason_codes: drift_reasons,
+            summary: "executable lowering contradicts authored semantic claims".to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::SupportedDataSurface,
+        });
+    }
+
+    if markers.has_backend_derives || markers.has_helper_lowering {
+        let mut reason_codes = vec![SemanticReasonCode::BackendOnlyExecutionMarker];
+        if markers.has_helper_lowering {
+            reason_codes.push(SemanticReasonCode::ProofHelperOnlyMarker);
+        }
+        return Some(SemanticReview {
+            verdict: SemanticVerdict::BackendOnlyMeaningPreserved,
+            compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            reason_codes,
+            summary: "backend-only execution markers are present without changing authored meaning"
+                .to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::SupportedDataSurface,
+        });
+    }
+
+    Some(SemanticReview {
+        verdict: SemanticVerdict::Aligned,
+        compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+        reason_codes: Vec::new(),
+        summary: "authored semantics and executable lowering agree on the supported data surface"
+            .to_string(),
+        authored_surfaces,
+        executable_surfaces,
+        evaluator_scope: EvaluatorScope::SupportedDataSurface,
+    })
+}
+
 fn build_authored_packet(spec: &LoadedSpec) -> Option<SemanticAuthoredPacket> {
     let sum = spec.spec.extensions.sum.as_ref()?;
     let mut variants = build_authored_variants(sum);
@@ -500,6 +732,150 @@ fn build_executable_packet(
     })
 }
 
+fn build_authored_data_packet(spec: &LoadedSpec) -> Option<SemanticAuthoredDataPacket> {
+    let data = spec.spec.extensions.data.as_ref()?;
+    let mut fields = build_authored_fields(data);
+    let mut constructors = spec
+        .spec
+        .extensions
+        .constructors
+        .iter()
+        .map(|constructor| SemanticConstructorPacket {
+            id: constructor.id.clone(),
+            inputs: constructor
+                .contract
+                .as_ref()
+                .and_then(|contract| contract.inputs.as_ref())
+                .map(|inputs| {
+                    inputs
+                        .iter()
+                        .map(|(name, type_)| SemanticFieldPacket {
+                            name: name.clone(),
+                            type_: type_.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+        })
+        .collect::<Vec<_>>();
+    let mut methods = spec
+        .spec
+        .extensions
+        .methods
+        .iter()
+        .filter(|method| !is_helper_or_example_method(method))
+        .map(|method| SemanticMethodPacket {
+            id: method.id.clone(),
+            intent: method.intent.why.clone(),
+            receiver: method.receiver.clone(),
+            inputs: method
+                .contract
+                .as_ref()
+                .and_then(|contract| contract.inputs.as_ref())
+                .map(|inputs| {
+                    inputs
+                        .iter()
+                        .map(|(name, type_)| SemanticFieldPacket {
+                            name: name.clone(),
+                            type_: type_.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            returns: method
+                .contract
+                .as_ref()
+                .and_then(|contract| contract.returns.clone()),
+        })
+        .collect::<Vec<_>>();
+    fields.sort();
+    constructors.sort_by(|left, right| left.id.cmp(&right.id));
+    for constructor in &mut constructors {
+        constructor.inputs.sort();
+    }
+    methods.sort_by(|left, right| left.id.cmp(&right.id));
+
+    Some(SemanticAuthoredDataPacket {
+        id: spec.spec.id.clone(),
+        intent: spec.spec.intent.why.clone(),
+        fields,
+        constructors,
+        methods,
+    })
+}
+
+fn build_executable_data_packet(
+    spec: &LoadedSpec,
+    helper_method_ids: &HashSet<String>,
+) -> Option<SemanticExecutableDataPacket> {
+    let normalized = normalize_unit(spec.spec.clone()).ok()?;
+    let NormalizedUnit::Data(unit) = normalized else {
+        return None;
+    };
+    let lowering = lower_data_seam(&unit).ok()?;
+    let mut fields = lowering
+        .fields
+        .iter()
+        .map(|field| SemanticFieldPacket {
+            name: field.name.clone(),
+            type_: field.type_.clone(),
+        })
+        .collect::<Vec<_>>();
+    let mut constructors = lowering
+        .constructors
+        .iter()
+        .filter(|constructor| constructor.is_constructor)
+        .map(|constructor| SemanticConstructorPacket {
+            id: constructor.id.clone(),
+            inputs: constructor
+                .inputs
+                .iter()
+                .map(|(name, type_)| SemanticFieldPacket {
+                    name: name.clone(),
+                    type_: type_.clone(),
+                })
+                .collect::<Vec<_>>(),
+        })
+        .collect::<Vec<_>>();
+    let mut methods = lowering
+        .methods
+        .iter()
+        .filter(|method| !helper_method_ids.contains(&method.id))
+        .map(|method| SemanticExecutableMethodPacket {
+            id: method.id.clone(),
+            receiver: method
+                .receiver
+                .map(|receiver| receiver.as_str().to_string())
+                .unwrap_or_else(|| "value".to_string()),
+            inputs: method
+                .inputs
+                .iter()
+                .map(|(name, type_)| SemanticFieldPacket {
+                    name: name.clone(),
+                    type_: type_.clone(),
+                })
+                .collect(),
+            returns: method.returns.clone(),
+            body_rust: method.body_rust.trim().to_string(),
+        })
+        .collect::<Vec<_>>();
+    fields.sort();
+    constructors.sort_by(|left, right| left.id.cmp(&right.id));
+    for constructor in &mut constructors {
+        constructor.inputs.sort();
+    }
+    methods.sort_by(|left, right| left.id.cmp(&right.id));
+
+    Some(SemanticExecutableDataPacket {
+        id: lowering.id,
+        struct_name: lowering.struct_name,
+        fields,
+        constructors,
+        methods,
+        derives: lowering.derives,
+    })
+}
+
 fn authored_citations(
     spec: &LoadedSpec,
     authored: &SemanticAuthoredPacket,
@@ -528,6 +904,38 @@ fn authored_citations(
     citations
 }
 
+fn authored_data_citations(authored: &SemanticAuthoredDataPacket) -> Vec<SemanticCitation> {
+    let mut citations = vec![SemanticCitation {
+        path: "intent.why".to_string(),
+        summary: authored.intent.clone(),
+    }];
+
+    if !authored.fields.is_empty() {
+        citations.push(SemanticCitation {
+            path: "data.fields".to_string(),
+            summary: format!("{} authored data field(s)", authored.fields.len()),
+        });
+    }
+    if !authored.constructors.is_empty() {
+        citations.push(SemanticCitation {
+            path: "constructors".to_string(),
+            summary: format!("{} authored constructor(s)", authored.constructors.len()),
+        });
+    }
+    if !authored.methods.is_empty() {
+        citations.push(SemanticCitation {
+            path: "methods".to_string(),
+            summary: format!(
+                "{} semantic method(s) on {}",
+                authored.methods.len(),
+                authored.id
+            ),
+        });
+    }
+
+    citations
+}
+
 fn executable_citations(
     _spec: &LoadedSpec,
     executable: &SemanticExecutablePacket,
@@ -550,6 +958,40 @@ fn executable_citations(
             summary: "Rust derives contribute backend-only execution metadata".to_string(),
         });
     }
+    citations
+}
+
+fn executable_data_citations(
+    executable: &SemanticExecutableDataPacket,
+    markers: SemanticMarkerSummary,
+) -> Vec<SemanticCitation> {
+    let mut citations = vec![SemanticCitation {
+        path: "data".to_string(),
+        summary: format!("projects to Rust struct {}", executable.struct_name),
+    }];
+
+    if !executable.constructors.is_empty() {
+        citations.push(SemanticCitation {
+            path: "constructors".to_string(),
+            summary: format!(
+                "{} executable constructor(s)",
+                executable.constructors.len()
+            ),
+        });
+    }
+    if !executable.methods.is_empty() {
+        citations.push(SemanticCitation {
+            path: "methods.*.lowering.rust.body".to_string(),
+            summary: format!("{} executable semantic method(s)", executable.methods.len()),
+        });
+    }
+    if markers.has_backend_derives {
+        citations.push(SemanticCitation {
+            path: "backends.rust.derives".to_string(),
+            summary: "Rust derives contribute backend-only execution metadata".to_string(),
+        });
+    }
+
     citations
 }
 
@@ -586,6 +1028,58 @@ fn build_authored_variants(sum: &AuthoredSumShape) -> Vec<SemanticVariantPacket>
     variants
 }
 
+fn build_authored_fields(data: &AuthoredDataShape) -> Vec<SemanticFieldPacket> {
+    let mut fields = data
+        .fields
+        .iter()
+        .map(|(name, field)| SemanticFieldPacket {
+            name: name.clone(),
+            type_: field.type_.clone(),
+        })
+        .collect::<Vec<_>>();
+    fields.sort();
+    fields
+}
+
+fn authored_matches_checkout_quote_fields(fields: &[SemanticFieldPacket]) -> bool {
+    fields.len() == 3
+        && fields
+            .iter()
+            .any(|field| field.name == "subtotal" && type_is_decimal(&field.type_))
+        && fields
+            .iter()
+            .any(|field| field.name == "discount_rate" && type_is_decimal(&field.type_))
+        && fields
+            .iter()
+            .any(|field| field.name == "tax_rate" && type_is_decimal(&field.type_))
+}
+
+fn authored_matches_checkout_quote_constructors(
+    constructors: &[SemanticConstructorPacket],
+) -> bool {
+    constructors.len() == 1
+        && constructors[0].id == "new"
+        && authored_matches_checkout_quote_fields(&constructors[0].inputs)
+}
+
+fn authored_has_exact_checkout_quote_roles(methods: &[SemanticMethodPacket]) -> bool {
+    methods
+        .iter()
+        .all(|method| supported_data_role_for_method(method).is_some())
+        && methods.iter().any(|method| {
+            matches!(
+                supported_data_role_for_method(method),
+                Some(SupportedDataSemanticRole::DiscountedSubtotal)
+            )
+        })
+        && methods.iter().any(|method| {
+            matches!(
+                supported_data_role_for_method(method),
+                Some(SupportedDataSemanticRole::Total)
+            )
+        })
+}
+
 fn semantic_text_is_vague(text: &str) -> bool {
     let normalized = text.trim().to_ascii_lowercase();
     let word_count = normalized
@@ -618,6 +1112,23 @@ fn supported_role_for_method(method: &SemanticMethodPacket) -> Option<SupportedS
     }
 }
 
+fn supported_data_role_for_method(
+    method: &SemanticMethodPacket,
+) -> Option<SupportedDataSemanticRole> {
+    if method.receiver != "shared_ref"
+        || !method.inputs.is_empty()
+        || !type_is_decimal(method.returns.as_deref()?)
+    {
+        return None;
+    }
+
+    match method.id.as_str() {
+        "discounted_subtotal" => Some(SupportedDataSemanticRole::DiscountedSubtotal),
+        "total" => Some(SupportedDataSemanticRole::Total),
+        _ => None,
+    }
+}
+
 fn type_is_decimal(type_name: &str) -> bool {
     type_name
         .rsplit("::")
@@ -636,6 +1147,22 @@ fn classify_supported_role_body(
     match role {
         SupportedSemanticRole::DiscountAmount => classify_discount_amount_body(&block),
         SupportedSemanticRole::DiscountedSubtotal => classify_discounted_subtotal_body(&block),
+    }
+}
+
+fn classify_supported_data_role_body(
+    role: SupportedDataSemanticRole,
+    body: &str,
+) -> SupportedBodyClassification {
+    let Ok(block) = syn::parse_str::<syn::Block>(body) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+
+    match role {
+        SupportedDataSemanticRole::DiscountedSubtotal => {
+            classify_checkout_quote_discounted_subtotal_body(&block)
+        }
+        SupportedDataSemanticRole::Total => classify_checkout_quote_total_body(&block),
     }
 }
 
@@ -718,6 +1245,127 @@ fn classify_discounted_subtotal_body(block: &syn::Block) -> SupportedBodyClassif
         SupportedBodyClassification::Aligned
     } else {
         SupportedBodyClassification::OutsideHonestSubset
+    }
+}
+
+fn classify_checkout_quote_discounted_subtotal_body(
+    block: &syn::Block,
+) -> SupportedBodyClassification {
+    let mut subtotal_aliases = HashSet::new();
+    let mut discount_rate_aliases = HashSet::new();
+    let mut aligned_result_aliases = HashSet::new();
+    let mut contradictory_result_aliases = HashSet::new();
+
+    for stmt in block_prefix_stmts(block) {
+        let syn::Stmt::Local(local) = stmt else {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        };
+        let Some(alias) = local_ident(local) else {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        };
+        let Some(init) = local
+            .init
+            .as_ref()
+            .map(|init| strip_expr_wrappers(&init.expr).unwrap_or(&init.expr))
+        else {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        };
+
+        if expr_is_checkout_quote_subtotal_ref(init, &subtotal_aliases) {
+            subtotal_aliases.insert(alias.to_string());
+        } else if expr_is_checkout_quote_discount_rate_ref(init, &discount_rate_aliases) {
+            discount_rate_aliases.insert(alias.to_string());
+        } else if expr_is_checkout_quote_apply_discount_call(
+            init,
+            &subtotal_aliases,
+            &discount_rate_aliases,
+        ) {
+            aligned_result_aliases.insert(alias.to_string());
+        } else if expr_is_known_checkout_quote_discounted_subtotal_contradiction(init) {
+            contradictory_result_aliases.insert(alias.to_string());
+        } else {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        }
+    }
+
+    let Some(tail_expr) = block_tail_expr(block) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    if expr_is_checkout_quote_apply_discount_call(
+        tail_expr,
+        &subtotal_aliases,
+        &discount_rate_aliases,
+    ) || expr_is_alias(tail_expr, &aligned_result_aliases)
+    {
+        SupportedBodyClassification::Aligned
+    } else if expr_is_known_checkout_quote_discounted_subtotal_contradiction(tail_expr)
+        || expr_is_alias(tail_expr, &contradictory_result_aliases)
+    {
+        SupportedBodyClassification::Contradictory
+    } else {
+        SupportedBodyClassification::OutsideHonestSubset
+    }
+}
+
+fn classify_checkout_quote_total_body(block: &syn::Block) -> SupportedBodyClassification {
+    let mut tax_rate_aliases = HashSet::new();
+    let mut discounted_aliases = HashSet::new();
+    let mut aligned_result_aliases = HashSet::new();
+    let mut contradictory_result_aliases = HashSet::new();
+
+    for stmt in block_prefix_stmts(block) {
+        let syn::Stmt::Local(local) = stmt else {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        };
+        let Some(alias) = local_ident(local) else {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        };
+        let Some(init) = local
+            .init
+            .as_ref()
+            .map(|init| strip_expr_wrappers(&init.expr).unwrap_or(&init.expr))
+        else {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        };
+
+        if expr_is_checkout_quote_tax_rate_ref(init, &tax_rate_aliases) {
+            tax_rate_aliases.insert(alias.to_string());
+        } else if expr_is_checkout_quote_discounted_subtotal_value_ref(init, &discounted_aliases) {
+            discounted_aliases.insert(alias.to_string());
+        } else if expr_is_checkout_quote_apply_tax_call(
+            init,
+            &discounted_aliases,
+            &tax_rate_aliases,
+        ) {
+            aligned_result_aliases.insert(alias.to_string());
+        } else if expr_is_known_checkout_quote_total_contradiction(init) {
+            contradictory_result_aliases.insert(alias.to_string());
+        } else {
+            return SupportedBodyClassification::OutsideHonestSubset;
+        }
+    }
+
+    let Some(tail_expr) = block_tail_expr(block) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    if expr_is_checkout_quote_apply_tax_call(tail_expr, &discounted_aliases, &tax_rate_aliases)
+        || expr_is_alias(tail_expr, &aligned_result_aliases)
+    {
+        SupportedBodyClassification::Aligned
+    } else if expr_is_known_checkout_quote_total_contradiction(tail_expr)
+        || expr_is_alias(tail_expr, &contradictory_result_aliases)
+    {
+        SupportedBodyClassification::Contradictory
+    } else {
+        SupportedBodyClassification::OutsideHonestSubset
+    }
+}
+
+fn block_prefix_stmts(block: &syn::Block) -> &[syn::Stmt] {
+    if block.stmts.is_empty() {
+        &[]
+    } else {
+        &block.stmts[..block.stmts.len() - 1]
     }
 }
 
@@ -903,6 +1551,126 @@ fn expr_is_discount_amount_alias(expr: &syn::Expr, discount_aliases: &HashSet<St
     path.path
         .get_ident()
         .is_some_and(|ident| discount_aliases.contains(&ident.to_string()))
+}
+
+fn expr_is_alias(expr: &syn::Expr, aliases: &HashSet<String>) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Path(path) = expr else {
+        return false;
+    };
+    path.path
+        .get_ident()
+        .is_some_and(|ident| aliases.contains(&ident.to_string()))
+}
+
+fn expr_is_self_field(expr: &syn::Expr, field_name: &str) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Field(field) = expr else {
+        return false;
+    };
+    matches!(&field.member, syn::Member::Named(member) if member == field_name)
+        && expr_is_ident(&field.base, "self")
+}
+
+fn expr_is_checkout_quote_subtotal_ref(expr: &syn::Expr, aliases: &HashSet<String>) -> bool {
+    expr_is_self_field(expr, "subtotal") || expr_is_alias(expr, aliases)
+}
+
+fn expr_is_checkout_quote_discount_rate_ref(expr: &syn::Expr, aliases: &HashSet<String>) -> bool {
+    expr_is_self_field(expr, "discount_rate") || expr_is_alias(expr, aliases)
+}
+
+fn expr_is_checkout_quote_tax_rate_ref(expr: &syn::Expr, aliases: &HashSet<String>) -> bool {
+    expr_is_self_field(expr, "tax_rate") || expr_is_alias(expr, aliases)
+}
+
+fn expr_is_checkout_quote_discounted_subtotal_value_ref(
+    expr: &syn::Expr,
+    aliases: &HashSet<String>,
+) -> bool {
+    expr_is_checkout_quote_discounted_subtotal_call(expr) || expr_is_alias(expr, aliases)
+}
+
+fn expr_is_checkout_quote_apply_discount_call(
+    expr: &syn::Expr,
+    subtotal_aliases: &HashSet<String>,
+    discount_rate_aliases: &HashSet<String>,
+) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Call(call) = expr else {
+        return false;
+    };
+    if !expr_is_ident(&call.func, "apply_discount") || call.args.len() != 2 {
+        return false;
+    }
+    expr_is_checkout_quote_subtotal_ref(&call.args[0], subtotal_aliases)
+        && expr_is_checkout_quote_discount_rate_ref(&call.args[1], discount_rate_aliases)
+}
+
+fn expr_is_checkout_quote_apply_tax_call(
+    expr: &syn::Expr,
+    discounted_aliases: &HashSet<String>,
+    tax_rate_aliases: &HashSet<String>,
+) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Call(call) = expr else {
+        return false;
+    };
+    if !expr_is_ident(&call.func, "apply_tax") || call.args.len() != 2 {
+        return false;
+    }
+    expr_is_checkout_quote_discounted_subtotal_value_ref(&call.args[0], discounted_aliases)
+        && expr_is_checkout_quote_tax_rate_ref(&call.args[1], tax_rate_aliases)
+}
+
+fn expr_is_checkout_quote_discounted_subtotal_call(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::MethodCall(call) = expr else {
+        return false;
+    };
+    call.method == "discounted_subtotal"
+        && call.args.is_empty()
+        && expr_is_ident(&call.receiver, "self")
+}
+
+fn expr_is_known_checkout_quote_discounted_subtotal_contradiction(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    if expr_is_checkout_quote_discounted_subtotal_call(expr) {
+        return true;
+    }
+    let syn::Expr::Call(call) = expr else {
+        return false;
+    };
+    expr_is_ident(&call.func, "apply_tax")
+        || (expr_is_ident(&call.func, "apply_discount")
+            && !expr_is_checkout_quote_apply_discount_call(expr, &HashSet::new(), &HashSet::new()))
+}
+
+fn expr_is_known_checkout_quote_total_contradiction(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    if expr_is_checkout_quote_discounted_subtotal_call(expr) {
+        return true;
+    }
+    let syn::Expr::Call(call) = expr else {
+        return false;
+    };
+    expr_is_ident(&call.func, "apply_discount")
+        || (expr_is_ident(&call.func, "apply_tax")
+            && !expr_is_checkout_quote_apply_tax_call(expr, &HashSet::new(), &HashSet::new()))
 }
 
 fn expr_is_ident(expr: &syn::Expr, ident: &str) -> bool {
@@ -1203,23 +1971,154 @@ mod tests {
         spec
     }
 
+    fn checkout_quote_data_spec() -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: "units/pricing/checkout_quote.unit.spec".to_string(),
+                id: "pricing/checkout_quote".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/checkout_quote".to_string(),
+                kind: "data".to_string(),
+                intent: Intent {
+                    why: "Quote a checkout total from subtotal plus discount and tax rates."
+                        .to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![
+                    "crate::pricing::apply_discount::apply_discount".to_string(),
+                    "crate::pricing::apply_tax::apply_tax".to_string(),
+                ],
+                body: Body::default(),
+                local_tests: vec![],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions {
+                    data: Some(AuthoredDataShape {
+                        fields: IndexMap::from([
+                            (
+                                "subtotal".to_string(),
+                                AuthoredField {
+                                    type_: "rust_decimal::Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "discount_rate".to_string(),
+                                AuthoredField {
+                                    type_: "rust_decimal::Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "tax_rate".to_string(),
+                                AuthoredField {
+                                    type_: "rust_decimal::Decimal".to_string(),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![crate::types::AuthoredConstructor {
+                        id: "new".to_string(),
+                        intent: Intent {
+                            why: "Create a quote from explicit subtotal and rates.".to_string(),
+                        },
+                        contract: Some(Contract {
+                            inputs: Some(IndexMap::from([
+                                ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                                (
+                                    "discount_rate".to_string(),
+                                    "rust_decimal::Decimal".to_string(),
+                                ),
+                                ("tax_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                            ])),
+                            returns: None,
+                            invariants: vec![],
+                        }),
+                        initializes: IndexMap::from([
+                            ("subtotal".to_string(), "subtotal".to_string()),
+                            ("discount_rate".to_string(), "discount_rate".to_string()),
+                            ("tax_rate".to_string(), "tax_rate".to_string()),
+                        ]),
+                    }],
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "discounted_subtotal".to_string(),
+                            intent: Intent {
+                                why: "Return the discounted subtotal before tax.".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("rust_decimal::Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_discount".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: r#"{
+            apply_discount(self.subtotal, self.discount_rate)
+        }"#
+                                    .to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "total".to_string(),
+                            intent: Intent {
+                                why: "Return the final checkout total after discount and tax."
+                                    .to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("rust_decimal::Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_tax".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: r#"{
+            apply_tax(self.discounted_subtotal(), self.tax_rate)
+        }"#
+                                    .to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: None,
+                    ..UnitExtensions::default()
+                },
+            },
+        }
+    }
+
     #[test]
     fn semantic_review_marks_vague_authored_sum_as_under_specified() {
         let mut spec = discount_policy_sum_spec();
         spec.spec.intent.why = "discount policy".to_string();
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
-        assert!(
-            review
-                .reason_codes
-                .contains(&SemanticReasonCode::VagueUnitIntent)
-        );
+        assert!(review
+            .reason_codes
+            .contains(&SemanticReasonCode::VagueUnitIntent));
     }
 
     #[test]
     fn semantic_review_marks_aligned_discount_amount_and_discounted_subtotal() {
         let review = evaluate_semantic_review(&discount_policy_sum_spec()).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(review.reason_codes, Vec::<SemanticReasonCode>::new());
+    }
+
+    #[test]
+    fn evaluate_semantic_review_supports_checkout_quote_aligned_data_surface() {
+        let review = evaluate_semantic_review(&checkout_quote_data_spec()).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
+        );
+        assert_eq!(review.evaluator_scope, EvaluatorScope::SupportedDataSurface);
         assert_eq!(review.reason_codes, Vec::<SemanticReasonCode>::new());
     }
 
@@ -1236,11 +2135,9 @@ mod tests {
             .body = "{ match self { Self::None => Decimal::ZERO, Self::Percentage { rate } => subtotal * *rate, Self::FixedAmount { amount } => amount.clone() } }".to_string();
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
-        assert!(
-            review
-                .reason_codes
-                .contains(&SemanticReasonCode::MethodBodyMissingCapBehavior)
-        );
+        assert!(review
+            .reason_codes
+            .contains(&SemanticReasonCode::MethodBodyMissingCapBehavior));
     }
 
     #[test]
@@ -1256,6 +2153,38 @@ mod tests {
             .body = "{ match self { Self::None => Decimal::ZERO, Self::Percentage { rate } => subtotal * *rate, Self::FixedAmount { amount } => amount.clone() } }".to_string();
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::MethodBodyMissingCapBehavior]
+        );
+    }
+
+    #[test]
+    fn evaluate_semantic_review_marks_checkout_quote_drift_as_backend_only_semantics_leaked() {
+        let mut spec = checkout_quote_data_spec();
+        spec.spec.extensions.backends = Some(crate::types::AuthoredBackends {
+            rust: Some(AuthoredRustBackend {
+                derives: vec!["Clone".to_string()],
+            }),
+        });
+        spec.spec.extensions.methods[1]
+            .lowering
+            .as_mut()
+            .unwrap()
+            .rust
+            .as_mut()
+            .unwrap()
+            .body = r#"{
+            apply_tax(self.subtotal, self.tax_rate)
+        }"#
+        .to_string();
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
+        assert_eq!(
+            review.compatibility_key,
+            DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
+        );
         assert_eq!(
             review.reason_codes,
             vec![SemanticReasonCode::MethodBodyMissingCapBehavior]
@@ -1326,6 +2255,55 @@ mod tests {
             review.reason_codes,
             vec![SemanticReasonCode::OutsideHonestSupportedSubset]
         );
+    }
+
+    #[test]
+    fn evaluate_semantic_review_marks_checkout_quote_under_specified_for_extra_non_helper_method() {
+        let mut spec = checkout_quote_data_spec();
+        spec.spec.extensions.methods.push(AuthoredMethod {
+            id: "preview_discount".to_string(),
+            intent: Intent {
+                why: "Return a preview amount for the current checkout quote.".to_string(),
+            },
+            receiver: "shared_ref".to_string(),
+            contract: Some(Contract {
+                inputs: None,
+                returns: Some("rust_decimal::Decimal".to_string()),
+                invariants: vec![],
+            }),
+            deps: vec![],
+            lowering: Some(AuthoredMethodLowering {
+                rust: Some(AuthoredRustMethodLowering {
+                    body: "{ self.subtotal }".to_string(),
+                }),
+            }),
+        });
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.compatibility_key,
+            DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
+        );
+        assert!(review
+            .reason_codes
+            .contains(&SemanticReasonCode::OutsideHonestSupportedSubset));
+    }
+
+    #[test]
+    fn evaluate_semantic_review_marks_checkout_quote_under_specified_for_vague_authored_truth() {
+        let mut spec = checkout_quote_data_spec();
+        spec.spec.intent.why = "checkout quote".to_string();
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.compatibility_key,
+            DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
+        );
+        assert!(review
+            .reason_codes
+            .contains(&SemanticReasonCode::VagueUnitIntent));
     }
 
     #[test]
