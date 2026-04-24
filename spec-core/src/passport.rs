@@ -1060,10 +1060,17 @@ mod tests {
                 deps: vec!["legacy/ignored".to_string()],
                 imports: vec![],
                 body: Body::default(),
-                local_tests: vec![LocalTest {
-                    id: "total_basic".to_string(),
-                    expect: "CheckoutQuote::new(...).total() == expected".to_string(),
-                }],
+                local_tests: vec![
+                    LocalTest {
+                        id: "discounted_subtotal_basic".to_string(),
+                        expect: "CheckoutQuote::new(...).discounted_subtotal() == expected"
+                            .to_string(),
+                    },
+                    LocalTest {
+                        id: "total_basic".to_string(),
+                        expect: "CheckoutQuote::new(...).total() == expected".to_string(),
+                    },
+                ],
                 links: None,
                 spec_version: Some("0.3.0".to_string()),
                 extensions: UnitExtensions {
@@ -1071,6 +1078,12 @@ mod tests {
                         fields: IndexMap::from([
                             (
                                 "subtotal".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "discount_rate".to_string(),
                                 AuthoredField {
                                     type_: "Decimal".to_string(),
                                 },
@@ -1091,6 +1104,7 @@ mod tests {
                         contract: Some(Contract {
                             inputs: Some(IndexMap::from([
                                 ("subtotal".to_string(), "Decimal".to_string()),
+                                ("discount_rate".to_string(), "Decimal".to_string()),
                                 ("tax_rate".to_string(), "Decimal".to_string()),
                             ])),
                             returns: None,
@@ -1098,6 +1112,7 @@ mod tests {
                         }),
                         initializes: IndexMap::from([
                             ("subtotal".to_string(), "subtotal".to_string()),
+                            ("discount_rate".to_string(), "discount_rate".to_string()),
                             ("tax_rate".to_string(), "tax_rate".to_string()),
                         ]),
                     }],
@@ -1116,7 +1131,7 @@ mod tests {
                             deps: vec!["pricing/apply_discount".to_string()],
                             lowering: Some(AuthoredMethodLowering {
                                 rust: Some(AuthoredRustMethodLowering {
-                                    body: "{ apply_discount(self.subtotal, Decimal::ZERO) }"
+                                    body: "{ apply_discount(self.subtotal, self.discount_rate) }"
                                         .to_string(),
                                 }),
                             }),
@@ -1132,20 +1147,23 @@ mod tests {
                                 returns: Some("Decimal".to_string()),
                                 invariants: vec![],
                             }),
-                            deps: vec![
-                                "pricing/apply_discount".to_string(),
-                                "pricing/apply_tax".to_string(),
-                            ],
+                            deps: vec!["pricing/apply_tax".to_string()],
                             lowering: Some(AuthoredMethodLowering {
                                 rust: Some(AuthoredRustMethodLowering {
-                                    body: "{ apply_tax(self.subtotal, self.tax_rate) }".to_string(),
+                                    body:
+                                        "{ apply_tax(self.discounted_subtotal(), self.tax_rate) }"
+                                            .to_string(),
                                 }),
                             }),
                         },
                     ],
                     backends: Some(AuthoredBackends {
                         rust: Some(AuthoredRustBackend {
-                            derives: vec!["Clone".to_string(), "Debug".to_string()],
+                            derives: vec![
+                                "Clone".to_string(),
+                                "Debug".to_string(),
+                                "PartialEq".to_string(),
+                            ],
                         }),
                     }),
                     sum: None,
@@ -1442,14 +1460,18 @@ mod tests {
                 "pricing/apply_tax".to_string(),
             ]
         );
-        assert_eq!(passport.data.unwrap().fields.len(), 2);
+        assert_eq!(passport.data.unwrap().fields.len(), 3);
         assert_eq!(passport.constructors.len(), 1);
         assert_eq!(passport.methods.len(), 2);
         assert_eq!(
             passport.backends.unwrap().rust.unwrap().derives,
-            vec!["Clone".to_string(), "Debug".to_string()]
+            vec![
+                "Clone".to_string(),
+                "Debug".to_string(),
+                "PartialEq".to_string(),
+            ]
         );
-        assert_eq!(passport.local_tests.len(), 1);
+        assert_eq!(passport.local_tests.len(), 2);
         assert_eq!(
             passport.freshness,
             Some(PassportFreshness {
@@ -2198,6 +2220,51 @@ mod tests {
         );
 
         assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_keeps_matching_data_compatibility_key() {
+        let spec = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+        let supported_review =
+            evaluate_semantic_review(&spec).expect("supported data review expected after Lane A");
+        assert_eq!(supported_review.compatibility_key, "data.checkout_quote.v1");
+        let mut existing = make_current_passport(&spec);
+        existing.semantic_review = Some(supported_review.clone());
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &spec,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
+        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_drops_mismatched_data_compatibility_key() {
+        let spec = make_loaded_data_seam(
+            "pricing/checkout_quote",
+            "units/pricing/checkout_quote.unit.spec",
+        );
+        let mut supported_review =
+            evaluate_semantic_review(&spec).expect("supported data review expected after Lane A");
+        assert_eq!(supported_review.compatibility_key, "data.checkout_quote.v1");
+        supported_review.compatibility_key = "data.checkout_quote.v0".to_string();
+        let mut existing = make_current_passport(&spec);
+        existing.semantic_review = Some(supported_review);
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &spec,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
+        assert!(rebuilt.semantic_review.is_none());
     }
 
     #[test]

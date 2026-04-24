@@ -324,6 +324,10 @@ mod tests {
         seam_with_markers(vec![proof_helper_method()], Vec::new(), with_local_tests)
     }
 
+    fn proof_helper_data_seam(with_local_tests: bool) -> LoadedSpec {
+        data_seam_with_markers(vec![proof_helper_method()], Vec::new(), with_local_tests)
+    }
+
     fn seam_with_markers(
         methods: Vec<AuthoredMethod>,
         derives: Vec<String>,
@@ -362,6 +366,70 @@ mod tests {
                 spec_version: Some("0.3.0".to_string()),
                 extensions: UnitExtensions {
                     sum: Some(AuthoredSumShape { variants }),
+                    methods,
+                    backends: Some(crate::types::AuthoredBackends {
+                        rust: Some(AuthoredRustBackend { derives }),
+                    }),
+                    ..UnitExtensions::default()
+                },
+            },
+        }
+    }
+
+    fn data_seam_with_markers(
+        methods: Vec<AuthoredMethod>,
+        derives: Vec<String>,
+        with_local_tests: bool,
+    ) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: "units/pricing/checkout_quote.unit.spec".to_string(),
+                id: "pricing/checkout_quote".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/checkout_quote".to_string(),
+                kind: "data".to_string(),
+                intent: Intent {
+                    why: "Quote a checkout total from subtotal plus discount and tax rates."
+                        .to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: if with_local_tests {
+                    vec![LocalTest {
+                        id: "total_basic".to_string(),
+                        expect: "true".to_string(),
+                    }]
+                } else {
+                    vec![]
+                },
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions {
+                    data: Some(crate::types::AuthoredDataShape {
+                        fields: IndexMap::from([
+                            (
+                                "subtotal".to_string(),
+                                crate::types::AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "discount_rate".to_string(),
+                                crate::types::AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "tax_rate".to_string(),
+                                crate::types::AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                        ]),
+                    }),
                     methods,
                     backends: Some(crate::types::AuthoredBackends {
                         rust: Some(AuthoredRustBackend { derives }),
@@ -651,6 +719,60 @@ mod tests {
         assert!(!is_helper_or_example_method(&bool_domain_predicate_method(
             "is_discountable"
         )));
+    }
+
+    #[test]
+    fn helper_or_example_method_uses_same_rule_for_data_and_sum_methods() {
+        let sum_helper_markers =
+            collect_escape_hatch_semantic_markers(&proof_helper_sum_seam(false));
+        let data_helper_markers =
+            collect_escape_hatch_semantic_markers(&proof_helper_data_seam(false));
+        assert_eq!(sum_helper_markers, data_helper_markers);
+        assert_eq!(
+            sum_helper_markers,
+            vec![EscapeHatchSemanticMarker {
+                kind: EscapeHatchSemanticMarkerKind::ProofHelperLowering,
+                path: "methods.discount_policy_holds.lowering.rust.body".to_string(),
+            }]
+        );
+
+        let sum_example_markers = collect_escape_hatch_semantic_markers(&seam_with_markers(
+            vec![accepted_example_helper_method("percentage_example")],
+            Vec::new(),
+            false,
+        ));
+        let data_example_markers = collect_escape_hatch_semantic_markers(&data_seam_with_markers(
+            vec![accepted_example_helper_method("percentage_example")],
+            Vec::new(),
+            false,
+        ));
+        assert_eq!(sum_example_markers, data_example_markers);
+        assert_eq!(
+            sum_example_markers,
+            vec![EscapeHatchSemanticMarker {
+                kind: EscapeHatchSemanticMarkerKind::ProofHelperLowering,
+                path: "methods.percentage_example.lowering.rust.body".to_string(),
+            }]
+        );
+
+        let sum_domain_markers = collect_escape_hatch_semantic_markers(&seam_with_markers(
+            vec![bool_domain_predicate_method("has_cap")],
+            Vec::new(),
+            false,
+        ));
+        let data_domain_markers = collect_escape_hatch_semantic_markers(&data_seam_with_markers(
+            vec![bool_domain_predicate_method("has_cap")],
+            Vec::new(),
+            false,
+        ));
+        assert_eq!(sum_domain_markers, data_domain_markers);
+        assert_eq!(
+            sum_domain_markers,
+            vec![EscapeHatchSemanticMarker {
+                kind: EscapeHatchSemanticMarkerKind::DomainLowering,
+                path: "methods.has_cap.lowering.rust.body".to_string(),
+            }]
+        );
     }
 
     #[test]
