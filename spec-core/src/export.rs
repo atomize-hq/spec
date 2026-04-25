@@ -575,6 +575,53 @@ mod tests {
         }
     }
 
+    fn loaded_supported_apply_discount_function(dir: &TempDir, rel_path: &str) -> LoadedSpec {
+        let source_path = dir.path().join(rel_path);
+        if let Some(parent) = source_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&source_path, "placeholder").unwrap();
+
+        LoadedSpec {
+            source: SpecSource {
+                file_path: source_path.display().to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount to a subtotal while keeping the result nonnegative."
+                        .to_string(),
+                },
+                contract: Some(Contract {
+                    inputs: Some(IndexMap::from([
+                        ("subtotal".to_string(), "Decimal".to_string()),
+                        ("rate".to_string(), "Decimal".to_string()),
+                    ])),
+                    returns: Some("Decimal".to_string()),
+                    invariants: vec!["output <= subtotal".to_string(), "output >= 0".to_string()],
+                }),
+                deps: vec![],
+                imports: vec!["rust_decimal::Decimal".to_string()],
+                body: Body {
+                    rust: r#"{
+    let discounted = subtotal - subtotal * rate;
+    discounted.max(Decimal::ZERO).round_dp(2)
+}"#
+                    .to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "happy_path".to_string(),
+                    expect: "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)".to_string(),
+                }],
+                links: None,
+                spec_version: Some("9.9.9".to_string()),
+                extensions: UnitExtensions::default(),
+            },
+        }
+    }
+
     fn loaded_sum_seam(dir: &TempDir, rel_path: &str, id: &str) -> LoadedSpec {
         let source_path = dir.path().join(rel_path);
         if let Some(parent) = source_path.parent() {
@@ -1169,12 +1216,106 @@ mod tests {
     }
 
     #[test]
+    fn load_passports_for_specs_preserves_matching_supported_function_compatibility_key() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_supported_apply_discount_function(
+            &dir,
+            "units/pricing/apply_discount.unit.spec",
+        );
+        let Some(supported_review) = evaluate_semantic_review(&spec)
+            .filter(|review| review.compatibility_key != "unsupported.function.v1")
+        else {
+            return;
+        };
+
+        let mut passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&spec),
+        );
+        passport.semantic_review = Some(supported_review.clone());
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let (passports, warnings) = load_passports_for_specs(std::slice::from_ref(&spec));
+
+        assert!(warnings.is_empty());
+        assert_eq!(passports.len(), 1);
+        assert_eq!(passports[0].semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn load_passports_for_specs_drops_supported_function_review_for_unsupported_function() {
+        let dir = TempDir::new().unwrap();
+        let supported_spec = loaded_supported_apply_discount_function(
+            &dir,
+            "units/pricing/apply_discount.unit.spec",
+        );
+        let Some(supported_review) = evaluate_semantic_review(&supported_spec)
+            .filter(|review| review.compatibility_key != "unsupported.function.v1")
+        else {
+            return;
+        };
+        let spec = loaded_spec(
+            &dir,
+            "units/pricing/calculate_total.unit.spec",
+            "pricing/calculate_total",
+            vec![],
+        );
+
+        let mut passport = build_passport_with_evidence(
+            &supported_spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: supported_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&supported_spec),
+        );
+        passport.id = spec.spec.id.clone();
+        passport.source_file = spec.source.file_path.clone();
+        passport.semantic_review = Some(supported_review);
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let (passports, warnings) = load_passports_for_specs(std::slice::from_ref(&spec));
+
+        assert!(warnings.is_empty());
+        assert_eq!(passports.len(), 1);
+        assert!(passports[0].semantic_review.is_none());
+    }
+
+    #[test]
     fn load_passports_for_specs_drops_unsupported_review_for_unsupported_kind() {
         let dir = TempDir::new().unwrap();
         let spec = loaded_spec(
             &dir,
-            "units/pricing/apply_discount.unit.spec",
-            "pricing/apply_discount",
+            "units/pricing/calculate_total.unit.spec",
+            "pricing/calculate_total",
             vec![],
         );
 
@@ -1208,8 +1349,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let spec = loaded_spec(
             &dir,
-            "units/pricing/apply_discount.unit.spec",
-            "pricing/apply_discount",
+            "units/pricing/calculate_total.unit.spec",
+            "pricing/calculate_total",
             vec![],
         );
 

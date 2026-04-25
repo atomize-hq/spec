@@ -1172,6 +1172,47 @@ mod tests {
         }
     }
 
+    fn make_supported_apply_discount_function(file_path: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: file_path.to_string(),
+                id: "pricing/apply_discount".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_discount".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply a discount to a subtotal while keeping the result nonnegative."
+                        .to_string(),
+                },
+                contract: Some(Contract {
+                    inputs: Some(IndexMap::from([
+                        ("subtotal".to_string(), "Decimal".to_string()),
+                        ("rate".to_string(), "Decimal".to_string()),
+                    ])),
+                    returns: Some("Decimal".to_string()),
+                    invariants: vec!["output <= subtotal".to_string(), "output >= 0".to_string()],
+                }),
+                deps: vec![],
+                imports: vec!["rust_decimal::Decimal".to_string()],
+                body: Body {
+                    rust: r#"{
+    let discounted = subtotal - subtotal * rate;
+    discounted.max(Decimal::ZERO).round_dp(2)
+}"#
+                    .to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "happy_path".to_string(),
+                    expect: "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)".to_string(),
+                }],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions::default(),
+            },
+        }
+    }
+
     fn make_loaded_sum_seam(id: &str, file_path: &str) -> LoadedSpec {
         LoadedSpec {
             source: SpecSource {
@@ -2245,6 +2286,67 @@ mod tests {
     }
 
     #[test]
+    fn build_passport_preserving_proof_state_keeps_matching_supported_function_key() {
+        let spec = make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let Some(supported_review) = evaluate_semantic_review(&spec)
+            .filter(|review| review.compatibility_key != "unsupported.function.v1")
+        else {
+            return;
+        };
+        let mut existing = make_current_passport(&spec);
+        existing.semantic_review = Some(supported_review.clone());
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &spec,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
+        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_drops_supported_function_key_for_unsupported_function()
+    {
+        let supported_spec =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let Some(supported_review) = evaluate_semantic_review(&supported_spec)
+            .filter(|review| review.compatibility_key != "unsupported.function.v1")
+        else {
+            return;
+        };
+        let mut existing = make_current_passport(&supported_spec);
+        existing.semantic_review = Some(supported_review);
+
+        let unsupported_spec = make_loaded_spec(
+            "pricing/calculate_total",
+            "units/pricing/calculate_total.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(IndexMap::from([
+                    ("subtotal".to_string(), "Decimal".to_string()),
+                    ("discount_rate".to_string(), "Decimal".to_string()),
+                    ("tax_rate".to_string(), "Decimal".to_string()),
+                ])),
+                returns: Some("Decimal".to_string()),
+                invariants: vec!["output >= 0".to_string()],
+            }),
+            vec![],
+            vec![("combined_flow", "true")],
+        );
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &unsupported_spec,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
+        assert!(rebuilt.semantic_review.is_none());
+    }
+
+    #[test]
     fn build_passport_preserving_proof_state_drops_mismatched_data_compatibility_key() {
         let spec = make_loaded_data_seam(
             "pricing/checkout_quote",
@@ -2270,19 +2372,20 @@ mod tests {
     #[test]
     fn build_passport_preserving_proof_state_drops_unsupported_review_for_unsupported_kind() {
         let spec = make_loaded_spec(
-            "pricing/apply_discount",
-            "units/pricing/apply_discount.unit.spec",
+            "pricing/calculate_total",
+            "units/pricing/calculate_total.unit.spec",
             Some("0.3.0"),
             Some(Contract {
-                inputs: Some(IndexMap::from([(
-                    "subtotal".to_string(),
-                    "i32".to_string(),
-                )])),
-                returns: Some("i32".to_string()),
-                invariants: vec![],
+                inputs: Some(IndexMap::from([
+                    ("subtotal".to_string(), "Decimal".to_string()),
+                    ("discount_rate".to_string(), "Decimal".to_string()),
+                    ("tax_rate".to_string(), "Decimal".to_string()),
+                ])),
+                returns: Some("Decimal".to_string()),
+                invariants: vec!["output >= 0".to_string()],
             }),
             vec![],
-            vec![("basic", "true")],
+            vec![("combined_flow", "true")],
         );
         let unsupported_review =
             evaluate_semantic_review(&spec).expect("unsupported review expected");

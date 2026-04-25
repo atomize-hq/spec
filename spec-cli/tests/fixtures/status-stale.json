@@ -5,7 +5,7 @@
       "root": ".",
       "units": [
         {
-          "id": "pricing/apply_discount",
+          "id": "pricing/quote_total",
           "status": "stale",
           "reason": "authored truth changed since last test",
           "errors": [],
@@ -14,14 +14,6 @@
             "authored_truth_digest": "sha256:6feb5def7c4ada9bfe851de461c9bbb3ec6e61466fecaa0031dd187c6e65793a",
             "authored_truth_status": "stale",
             "backend_execution_status": "unknown"
-          },
-          "semantic_review": {
-            "verdict": "under_specified",
-            "reason_codes": [
-              "unsupported_surface"
-            ],
-            "summary": "unit kind 'function' is not evaluated by the M15 semantic reviewer",
-            "evaluator_scope": "unsupported_surface"
           }
         }
       ],
@@ -30,7 +22,7 @@
   ],
   "units": [
     {
-      "id": "pricing/apply_discount",
+      "id": "pricing/quote_total",
       "status": "stale",
       "reason": "authored truth changed since last test",
       "errors": [],
@@ -39,14 +31,6 @@
         "authored_truth_digest": "sha256:6feb5def7c4ada9bfe851de461c9bbb3ec6e61466fecaa0031dd187c6e65793a",
         "authored_truth_status": "stale",
         "backend_execution_status": "unknown"
-      },
-      "semantic_review": {
-        "verdict": "under_specified",
-        "reason_codes": [
-          "unsupported_surface"
-        ],
-        "summary": "unit kind 'function' is not evaluated by the M15 semantic reviewer",
-        "evaluator_scope": "unsupported_surface"
       }
     }
   ]

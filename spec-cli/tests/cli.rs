@@ -7,7 +7,7 @@ use spec_core::molecule_evidence::{
 use spec_core::passport::{
     PassportEvidence, PassportProjectionContext, PassportTestResult,
     apply_projected_passport_truth, build_passport_with_evidence, compute_contract_hash,
-    project_passport_truth, write_passport,
+    project_passport_truth, read_passport as read_passport_record, write_passport,
 };
 use spec_core::semantic_review::{
     EvaluatorScope, SemanticProjectionMode, SemanticReasonCode, SemanticReview, SemanticVerdict,
@@ -512,12 +512,12 @@ fn write_status_project(project_dir: &Path) -> PathBuf {
     )
     .unwrap();
     fs::write(
-        pricing_dir.join("apply_discount.unit.spec"),
+        pricing_dir.join("quote_total.unit.spec"),
         r#"
-id: pricing/apply_discount
+id: pricing/quote_total
 kind: function
 intent:
-  why: Apply a discount.
+  why: Return a quoted total placeholder.
 spec_version: "0.3.0"
 contract:
   returns: bool
@@ -526,12 +526,12 @@ body:
     { true }
 local_tests:
   - id: happy_path
-    expect: apply_discount() == true
+    expect: quote_total() == true
 "#,
     )
     .unwrap();
 
-    pricing_dir.join("apply_discount.unit.spec")
+    pricing_dir.join("quote_total.unit.spec")
 }
 
 fn write_semantic_status_project(project_dir: &Path) -> PathBuf {
@@ -760,15 +760,18 @@ fn seed_supported_data_semantic_status_artifacts(
     write_molecule_evidence(&molecule_evidence, &molecule_path).unwrap();
 }
 
-fn write_unsupported_function_semantic_status_project(project_dir: &Path) -> PathBuf {
+fn write_supported_function_semantic_status_project(project_dir: &Path) -> PathBuf {
     let units_dir = project_dir.join("units");
     write_file(
         project_dir,
         "Cargo.toml",
         r#"[package]
-name = "unsupported-semantic-status-project"
+name = "supported-function-semantic-status-project"
 version = "0.1.0"
 edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
 
 [workspace]
 "#,
@@ -780,26 +783,167 @@ edition = "2024"
     );
     write_spec(
         &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round a decimal value to two fractional digits for pricing flows.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    value: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        value.round_dp(2)
+    }
+local_tests:
+  - id: basic
+    expect: "round(Decimal::new(1001, 2)) == Decimal::new(1001, 2)"
+"#,
+    );
+    write_spec(
+        &units_dir,
         "pricing/apply_discount.unit.spec",
         r#"
 id: pricing/apply_discount
 kind: function
 intent:
-  why: Apply a flat discount to a subtotal.
+  why: Apply a discount to a subtotal while keeping the result nonnegative.
 spec_version: "0.3.0"
 contract:
   inputs:
-    subtotal: i32
-    amount: i32
-  returns: i32
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output <= subtotal
+    - output >= 0
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
 body:
   rust: |
     {
-        subtotal - amount
+        let discounted = subtotal - subtotal * rate;
+        round(discounted.max(Decimal::ZERO))
     }
 local_tests:
   - id: basic
-    expect: "apply_discount(10, 3) == 7"
+    expect: "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
+"#,
+    );
+
+    units_dir
+}
+
+fn seed_supported_function_semantic_status_artifacts(
+    units_dir: &Path,
+    semantic_review: Option<SemanticReview>,
+) -> Option<SemanticReview> {
+    const GENERATED_AT: &str = "2026-04-21T00:00:00Z";
+
+    let unit_path = units_dir.join("pricing/apply_discount.unit.spec");
+    let spec = load_file(&unit_path).unwrap();
+    let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+    let passport_evidence = PassportEvidence {
+        build_status: "pass".to_string(),
+        test_results: spec
+            .spec
+            .local_tests
+            .iter()
+            .map(|test| PassportTestResult {
+                id: test.id.clone(),
+                status: "pass".to_string(),
+                reason: None,
+            })
+            .collect(),
+        observed_at: GENERATED_AT.to_string(),
+        provenance: None,
+    };
+
+    let mut passport = build_passport_with_evidence(
+        &spec,
+        GENERATED_AT,
+        Some(passport_evidence),
+        compute_contract_hash(&spec),
+    );
+    let molecule_evidence_by_id = HashMap::new();
+    let projection_context = PassportProjectionContext {
+        molecule_tests: &[],
+        molecule_evidence_by_id: &molecule_evidence_by_id,
+        specs_by_id: &specs_by_id,
+        semantic_projection_mode: SemanticProjectionMode::Refresh,
+    };
+    let projected_truth = project_passport_truth(&spec, Some(&passport), &projection_context);
+    apply_projected_passport_truth(&mut passport, projected_truth);
+    let projected_review = passport
+        .semantic_review
+        .clone()
+        .filter(|review| review.compatibility_key != "unsupported.function.v1");
+    if let Some(review) = semantic_review {
+        passport.semantic_review = Some(review);
+    }
+
+    write_passport(&passport, &unit_path).unwrap();
+    projected_review
+}
+
+fn write_unsupported_function_semantic_status_project(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "unsupported-function-semantic-status-project"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[workspace]
+"#,
+    );
+    write_file(
+        project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    write_spec(
+        &units_dir,
+        "pricing/calculate_total.unit.spec",
+        r#"
+id: pricing/calculate_total
+kind: function
+intent:
+  why: Combine discount and tax so a checkout flow can produce the final price.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= 0
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let discounted = subtotal - subtotal * discount_rate;
+        let taxed = discounted + discounted * tax_rate;
+        taxed.max(Decimal::ZERO).round_dp(2)
+    }
+local_tests:
+  - id: combined_flow
+    expect: "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(9652, 2)"
 "#,
     );
 
@@ -818,13 +962,29 @@ fn unsupported_function_semantic_review(summary: &str) -> SemanticReview {
     }
 }
 
+fn supported_function_semantic_review(
+    verdict: SemanticVerdict,
+    reason_codes: Vec<SemanticReasonCode>,
+    summary: &str,
+) -> SemanticReview {
+    SemanticReview {
+        verdict,
+        compatibility_key: "function.apply_discount.v1".to_string(),
+        reason_codes,
+        summary: summary.to_string(),
+        authored_surfaces: vec![],
+        executable_surfaces: vec![],
+        evaluator_scope: EvaluatorScope::SupportedFunctionSurface,
+    }
+}
+
 fn seed_unsupported_function_semantic_status_artifacts(
     units_dir: &Path,
     semantic_review: Option<SemanticReview>,
 ) {
     const GENERATED_AT: &str = "2026-04-21T00:00:00Z";
 
-    let unit_path = units_dir.join("pricing/apply_discount.unit.spec");
+    let unit_path = units_dir.join("pricing/calculate_total.unit.spec");
     let spec = load_file(&unit_path).unwrap();
     let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
     let passport_evidence = PassportEvidence {
@@ -878,8 +1038,8 @@ fn assert_unsupported_function_semantic_review(review: &Value) {
         serde_json::json!(["unsupported_surface"])
     );
     assert_eq!(
-        review["summary"],
-        "unit kind 'function' is not evaluated by the M16 semantic reviewer"
+        review["summary"].as_str().unwrap(),
+        "this 'function' surface is not evaluated by the semantic reviewer for this unit"
     );
 }
 
@@ -4145,12 +4305,12 @@ fn spec_status_stale_after_generate_and_contract_change() {
 
     // Step 2: change the contract (returns: bool → returns: i32).
     fs::write(
-        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        project_dir.join("units/pricing/quote_total.unit.spec"),
         r#"
-id: pricing/apply_discount
+id: pricing/quote_total
 kind: function
 intent:
-  why: Apply a discount.
+  why: Return a quoted total placeholder.
 spec_version: "0.3.0"
 contract:
   returns: i32
@@ -4159,7 +4319,7 @@ body:
     { 1 }
 local_tests:
   - id: happy_path
-    expect: apply_discount() == 1
+    expect: quote_total() == 1
 "#,
     )
     .unwrap();
@@ -4184,12 +4344,12 @@ fn spec_status_stale_when_contract_added_after_test() {
     write_status_project(project_dir);
 
     fs::write(
-        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        project_dir.join("units/pricing/quote_total.unit.spec"),
         r#"
-id: pricing/apply_discount
+id: pricing/quote_total
 kind: function
 intent:
-  why: Apply a discount.
+  why: Return a quoted total placeholder.
 spec_version: "0.3.0"
 body:
   rust: |
@@ -4200,15 +4360,15 @@ body:
 
     write_file(
         project_dir,
-        "units/pricing/apply_discount.spec.passport.json",
+        "units/pricing/quote_total.spec.passport.json",
         r#"{
   "spec_version": "0.3.0",
-  "id": "pricing/apply_discount",
-  "intent": "Apply a discount.",
+  "id": "pricing/quote_total",
+  "intent": "Return a quoted total placeholder.",
   "deps": [],
   "local_tests": [],
   "generated_at": "2024-01-02T03:04:05Z",
-  "source_file": "pricing/apply_discount.unit.spec",
+  "source_file": "pricing/quote_total.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [],
@@ -4227,12 +4387,12 @@ body:
     assert_eq!(before_change_units[0]["status"], "valid");
 
     fs::write(
-        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        project_dir.join("units/pricing/quote_total.unit.spec"),
         r#"
-id: pricing/apply_discount
+id: pricing/quote_total
 kind: function
 intent:
-  why: Apply a discount.
+  why: Return a quoted total placeholder.
 spec_version: "0.3.0"
 contract:
   returns: bool
@@ -4241,7 +4401,7 @@ body:
     { true }
 local_tests:
   - id: happy_path
-    expect: apply_discount() == true
+    expect: quote_total() == true
 "#,
     )
     .unwrap();
@@ -4854,7 +5014,7 @@ fn spec_status_text_stays_neutral_for_unsupported_surface_in_preserve_mode() {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path();
     let units_dir = write_unsupported_function_semantic_status_project(project_dir);
-    let passport_path = units_dir.join("pricing/apply_discount.spec.passport.json");
+    let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
     let review = unsupported_function_semantic_review("seeded unsupported function review");
     seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
     let seeded_summary = read_passport_json(&passport_path)["semantic_review"]["summary"]
@@ -4866,7 +5026,7 @@ fn spec_status_text_stays_neutral_for_unsupported_surface_in_preserve_mode() {
     assert_output_success("unsupported function status should stay green", &output);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("pricing/apply_discount"), "{stdout}");
+    assert!(stdout.contains("pricing/calculate_total"), "{stdout}");
     assert!(!stdout.contains(&seeded_summary), "{stdout}");
 }
 
@@ -5110,11 +5270,250 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
 }
 
 #[test]
+fn spec_status_demotes_supported_function_review_to_incomplete() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_supported_function_semantic_status_project(project_dir);
+    let review = supported_function_semantic_review(
+        SemanticVerdict::UnderSpecified,
+        vec![SemanticReasonCode::OutsideHonestSupportedSubset],
+        "supported semantic bodies fall outside the honest evaluator subset",
+    );
+    seed_supported_function_semantic_status_artifacts(&units_dir, Some(review));
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "supported function under-specification should make status non-green"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/apply_discount")
+        .unwrap();
+    assert_eq!(unit["status"], "incomplete", "{status_json}");
+    assert_eq!(
+        unit["reason"],
+        "semantic under-specified: supported semantic bodies fall outside the honest evaluator subset",
+        "{status_json}"
+    );
+    assert_eq!(
+        unit["semantic_review"]["compatibility_key"],
+        "function.apply_discount.v1"
+    );
+    assert_eq!(unit["semantic_review"]["verdict"], "under_specified");
+}
+
+#[test]
+fn spec_status_demotes_supported_function_review_to_failing() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_supported_function_semantic_status_project(project_dir);
+    let review = supported_function_semantic_review(
+        SemanticVerdict::SemanticDrift,
+        vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent],
+        "executable lowering contradicts authored semantic claims",
+    );
+    seed_supported_function_semantic_status_artifacts(&units_dir, Some(review));
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "supported function semantic drift should make status non-green"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/apply_discount")
+        .unwrap();
+    assert_eq!(unit["status"], "failing", "{status_json}");
+    assert_eq!(
+        unit["reason"], "semantic drift: executable lowering contradicts authored semantic claims",
+        "{status_json}"
+    );
+    assert_eq!(
+        unit["semantic_review"]["compatibility_key"],
+        "function.apply_discount.v1"
+    );
+    assert_eq!(unit["semantic_review"]["verdict"], "semantic_drift");
+}
+
+#[test]
+fn spec_status_keeps_stale_base_health_over_supported_function_semantic_review() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_supported_function_semantic_status_project(project_dir);
+    let passport_path = units_dir.join("pricing/apply_discount.spec.passport.json");
+    let review = supported_function_semantic_review(
+        SemanticVerdict::SemanticDrift,
+        vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent],
+        "executable lowering contradicts authored semantic claims",
+    );
+    seed_supported_function_semantic_status_artifacts(&units_dir, Some(review));
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+
+    let unit_path = units_dir.join("pricing/apply_discount.unit.spec");
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replace("- output >= 0", "- output >= Decimal::ZERO"),
+    )
+    .unwrap();
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(!status_output.status.success());
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/apply_discount")
+        .unwrap();
+    assert_eq!(unit["status"], "stale", "{status_json}");
+    assert!(!unit["reason"].is_null(), "{status_json}");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+}
+
+#[test]
+fn spec_status_keeps_failing_base_health_over_supported_function_semantic_review() {
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_supported_function_semantic_status_project(project_dir);
+    let review = supported_function_semantic_review(
+        SemanticVerdict::UnderSpecified,
+        vec![SemanticReasonCode::OutsideHonestSupportedSubset],
+        "supported semantic bodies fall outside the honest evaluator subset",
+    );
+    seed_supported_function_semantic_status_artifacts(&units_dir, Some(review));
+    let unit_path = units_dir.join("pricing/apply_discount.unit.spec");
+
+    let mut passport = read_passport_record(&unit_path).unwrap().unwrap();
+    passport
+        .evidence
+        .as_mut()
+        .expect("seeded passport evidence")
+        .build_status = "fail".to_string();
+    write_passport(&passport, &unit_path).unwrap();
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(!status_output.status.success());
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/apply_discount")
+        .unwrap();
+    assert_eq!(unit["status"], "failing", "{status_json}");
+    assert_eq!(unit["reason"], "build failed", "{status_json}");
+    assert_eq!(
+        unit["semantic_review"]["compatibility_key"],
+        "function.apply_discount.v1"
+    );
+    assert_eq!(unit["semantic_review"]["verdict"], "under_specified");
+}
+
+#[test]
+fn supported_function_semantic_review_command_matrix_preserves_or_refreshes_by_flow() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_supported_function_semantic_status_project(project_dir);
+    let passport_path = units_dir.join("pricing/apply_discount.spec.passport.json");
+    let review = supported_function_semantic_review(
+        SemanticVerdict::Aligned,
+        vec![],
+        "seeded supported function review",
+    );
+    seed_supported_function_semantic_status_artifacts(&units_dir, Some(review));
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status stays non-green because helper units remain untested"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/apply_discount")
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run_in(project_dir, &["export", "units"]);
+    assert_output_success("supported function export should succeed", &export_output);
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/apply_discount")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+
+    let generate_output = run_in(
+        project_dir,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "supported function generate should succeed",
+        &generate_output,
+    );
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let build_output = run_in(
+        project_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("supported function build should succeed", &build_output);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let test_output = run_in(
+        project_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("supported function test should succeed", &test_output);
+    let refreshed_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_ne!(refreshed_review, seeded_review);
+    assert_eq!(
+        refreshed_review["compatibility_key"],
+        "function.apply_discount.v1"
+    );
+    assert_eq!(
+        refreshed_review["evaluator_scope"],
+        "supported_function_surface"
+    );
+}
+
+#[test]
 fn unsupported_function_semantic_review_remains_additive_only_and_neutral() {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path();
     let units_dir = write_unsupported_function_semantic_status_project(project_dir);
-    let passport_path = units_dir.join("pricing/apply_discount.spec.passport.json");
+    let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
     let review = unsupported_function_semantic_review("seeded unsupported function review");
     seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
     let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
@@ -5131,7 +5530,7 @@ fn unsupported_function_semantic_review_remains_additive_only_and_neutral() {
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/apply_discount")
+        .find(|unit| unit["id"] == "pricing/calculate_total")
         .unwrap();
     assert_eq!(unit["status"], "valid", "{status_json}");
     assert!(unit["reason"].is_null(), "{status_json}");
@@ -5151,7 +5550,7 @@ fn unsupported_surface_semantic_review_remains_drop_on_preserve_with_compatibili
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path();
     let units_dir = write_unsupported_function_semantic_status_project(project_dir);
-    let passport_path = units_dir.join("pricing/apply_discount.spec.passport.json");
+    let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
     let review = unsupported_function_semantic_review("seeded unsupported function review");
     seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
     assert_eq!(
@@ -5167,7 +5566,7 @@ fn unsupported_surface_semantic_review_remains_drop_on_preserve_with_compatibili
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/apply_discount")
+        .find(|unit| unit["id"] == "pricing/calculate_total")
         .unwrap();
     assert_semantic_review_absent(&unit["semantic_review"]);
 
@@ -5178,7 +5577,7 @@ fn unsupported_surface_semantic_review_remains_drop_on_preserve_with_compatibili
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/apply_discount")
+        .find(|passport| passport["id"] == "pricing/calculate_total")
         .unwrap();
     assert_semantic_review_absent(&exported_passport["semantic_review"]);
 
@@ -5396,17 +5795,17 @@ fn spec_status_stale_unit() {
     assert_output_success("spec test should succeed before stale check", &test_output);
 
     rewrite_passport_generated_at(
-        &project_dir.join("units/pricing/apply_discount.spec.passport.json"),
+        &project_dir.join("units/pricing/quote_total.spec.passport.json"),
         "2024-01-02T03:04:05Z",
     );
 
     fs::write(
-        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        project_dir.join("units/pricing/quote_total.unit.spec"),
         r#"
-id: pricing/apply_discount
+id: pricing/quote_total
 kind: function
 intent:
-  why: Apply a discount.
+  why: Return a quoted total placeholder.
 spec_version: "0.3.0"
 contract:
   returns: i32
@@ -5415,7 +5814,7 @@ body:
     { 1 }
 local_tests:
   - id: happy_path
-    expect: apply_discount() == true
+    expect: quote_total() == 1
 "#,
     )
     .unwrap();
@@ -5424,7 +5823,7 @@ local_tests:
     assert!(!output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("~ pricing/apply_discount"), "{stdout}");
+    assert!(stdout.contains("~ pricing/quote_total"), "{stdout}");
     assert!(stdout.contains("stale"), "{stdout}");
 
     let json_output = run_in(project_dir, &["status", "units", "--format", "json"]);
@@ -5460,24 +5859,24 @@ fn spec_status_stale_when_contract_removed_after_test() {
     );
 
     rewrite_passport_generated_at(
-        &project_dir.join("units/pricing/apply_discount.spec.passport.json"),
+        &project_dir.join("units/pricing/quote_total.spec.passport.json"),
         "2024-01-02T03:04:05Z",
     );
 
     fs::write(
-        project_dir.join("units/pricing/apply_discount.unit.spec"),
+        project_dir.join("units/pricing/quote_total.unit.spec"),
         r#"
-id: pricing/apply_discount
+id: pricing/quote_total
 kind: function
 intent:
-  why: Apply a discount.
+  why: Return a quoted total placeholder.
 spec_version: "0.3.0"
 body:
   rust: |
     { true }
 local_tests:
   - id: happy_path
-    expect: apply_discount() == true
+    expect: quote_total() == true
 "#,
     )
     .unwrap();
@@ -5515,7 +5914,7 @@ fn spec_status_valid_unit() {
     assert_output_success("spec test should succeed before status check", &output);
 
     rewrite_passport_generated_at(
-        &project_dir.join("units/pricing/apply_discount.spec.passport.json"),
+        &project_dir.join("units/pricing/quote_total.spec.passport.json"),
         "2024-01-02T03:04:05Z",
     );
 
@@ -5533,17 +5932,75 @@ fn spec_status_reports_molecule_failure_without_poisoning_unit_health() {
 
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path();
-    write_pricing_project(project_dir, true);
+    let units_dir = project_dir.join("units");
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "molecule-status-neutral-project"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+"#,
+    );
+    write_file(
+        project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
     write_spec(
-        &project_dir.join("units"),
+        &units_dir,
+        "pricing/quote_total.unit.spec",
+        r#"
+id: pricing/quote_total
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return a quoted total placeholder for status tests.
+contract:
+  returns: bool
+body:
+  rust: |
+    {
+        true
+    }
+local_tests:
+  - id: happy_path
+    expect: quote_total() == true
+"#,
+    );
+    write_spec(
+        &units_dir,
+        "pricing/calculate_total.unit.spec",
+        r#"
+id: pricing/calculate_total
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return a calculated total placeholder for status tests.
+contract:
+  returns: bool
+body:
+  rust: |
+    {
+        true
+    }
+local_tests:
+  - id: happy_path
+    expect: calculate_total() == true
+"#,
+    );
+    write_spec(
+        &units_dir,
         "pricing/tax_and_discount.test.spec",
         r#"id: pricing/tax_and_discount
 spec_version: "0.3.0"
 intent:
   why: Verify tax and discount interact correctly.
 covers:
-  - pricing/apply_tax
-  - pricing/apply_discount
+  - pricing/calculate_total
+  - pricing/quote_total
 body:
   rust: |
     {

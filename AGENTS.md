@@ -26,6 +26,8 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 - A passport is the co-located `.spec.passport.json` record for a unit. It is "done" only when the unit validates, builds, tests, and has fresh passport evidence from `spec test`.
 - A stale unit is marked with `~` in `spec status` when the current freshness projection says authored truth or backend execution changed since the last proof anchor. Treat stale as work to redo, not as success.
 - For molecule tests, run `spec test path/to/file.test.spec` to execute only that interaction test and refresh only its co-located `.test.evidence.json` artifact.
+- Semantic review support for `kind:function` is limited to `pricing/apply_discount` and `pricing/apply_tax`. `pricing/calculate_total` remains unsupported, additive-only, and non-demoting.
+- Only `spec test` refreshes semantic review for `pricing/apply_discount` and `pricing/apply_tax`. `spec build`, `spec generate`, `spec status`, and `spec export` only project stored truth and do not mint new supported-function semantic review.
 - For seam kinds, keep shared semantics inside the seam container and nested behaviors: `kind: data` uses `data.fields`, `constructors`, and `methods`; `kind: sum` uses `sum.variants` and `methods`. Do not author top-level `contract`, `deps`, `imports`, or `body.rust` for seam kinds.
 - Canonical M14 wedge loop:
   `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json`

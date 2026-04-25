@@ -5784,6 +5784,39 @@ body:
             apply_semantic_review_to_health(base_failure, Some(&supported_incomplete_review));
         assert_eq!(failure_preserved.status, HealthState::Failing);
         assert_eq!(failure_preserved.reason.as_deref(), Some("build failed"));
+
+        let invalid_health = HealthStatus {
+            status: HealthState::Invalid,
+            reason: Some("2 errors".to_string()),
+            evidence_at: None,
+        };
+        let invalid_preserved =
+            apply_semantic_review_to_health(invalid_health, Some(&supported_failing_review));
+        assert_eq!(invalid_preserved.status, HealthState::Invalid);
+        assert_eq!(invalid_preserved.reason.as_deref(), Some("2 errors"));
+
+        let incomplete_health = HealthStatus {
+            status: HealthState::Incomplete,
+            reason: Some("1 test not observed in cargo output".to_string()),
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let incomplete_preserved =
+            apply_semantic_review_to_health(incomplete_health, Some(&supported_failing_review));
+        assert_eq!(incomplete_preserved.status, HealthState::Incomplete);
+        assert_eq!(
+            incomplete_preserved.reason.as_deref(),
+            Some("1 test not observed in cargo output")
+        );
+
+        let untested_health = HealthStatus {
+            status: HealthState::Untested,
+            reason: Some("no evidence".to_string()),
+            evidence_at: None,
+        };
+        let untested_preserved =
+            apply_semantic_review_to_health(untested_health, Some(&supported_incomplete_review));
+        assert_eq!(untested_preserved.status, HealthState::Untested);
+        assert_eq!(untested_preserved.reason.as_deref(), Some("no evidence"));
     }
 
     #[test]

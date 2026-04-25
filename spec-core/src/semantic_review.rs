@@ -25,6 +25,7 @@ pub enum SemanticReasonCode {
     VariantShapeMismatch,
     MethodSignatureMismatch,
     MethodBodyMissingCapBehavior,
+    FunctionBodyContradictsSemanticIntent,
     BackendOnlyExecutionMarker,
     ProofHelperOnlyMarker,
     DomainLoweringPresent,
@@ -35,6 +36,7 @@ pub enum SemanticReasonCode {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EvaluatorScope {
+    SupportedFunctionSurface,
     SupportedSumSurface,
     SupportedDataSurface,
     UnsupportedSurface,
@@ -123,6 +125,26 @@ pub struct SemanticExecutableMethodPacket {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SemanticAuthoredFunctionPacket {
+    pub id: String,
+    pub intent: String,
+    pub fn_name: String,
+    pub inputs: Vec<SemanticFieldPacket>,
+    pub returns: Option<String>,
+    pub invariants: Vec<String>,
+    pub deps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SemanticExecutableFunctionPacket {
+    pub id: String,
+    pub fn_name: String,
+    pub inputs: Vec<SemanticFieldPacket>,
+    pub returns: Option<String>,
+    pub body_rust: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SemanticAuthoredDataPacket {
     pub id: String,
     pub intent: String,
@@ -168,7 +190,15 @@ enum SupportedDataSemanticRole {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SupportedFunctionSemanticRole {
+    ApplyDiscount,
+    ApplyTax,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SupportedSurface {
+    FunctionApplyDiscount,
+    FunctionApplyTax,
     SumDiscountPolicy,
     DataCheckoutQuote,
     Unsupported(UnitKind),
@@ -183,10 +213,14 @@ enum SupportedBodyClassification {
 
 const SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY: &str = "sum.discount_policy.v1";
 const DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY: &str = "data.checkout_quote.v1";
+const FUNCTION_APPLY_DISCOUNT_COMPATIBILITY_KEY: &str = "function.apply_discount.v1";
+const FUNCTION_APPLY_TAX_COMPATIBILITY_KEY: &str = "function.apply_tax.v1";
 
 impl SupportedSurface {
     fn compatibility_key(self) -> Option<&'static str> {
         match self {
+            Self::FunctionApplyDiscount => Some(FUNCTION_APPLY_DISCOUNT_COMPATIBILITY_KEY),
+            Self::FunctionApplyTax => Some(FUNCTION_APPLY_TAX_COMPATIBILITY_KEY),
             Self::SumDiscountPolicy => Some(SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY),
             Self::DataCheckoutQuote => Some(DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY),
             Self::Unsupported(_) => None,
@@ -195,6 +229,9 @@ impl SupportedSurface {
 
     fn evaluator_scope(self) -> EvaluatorScope {
         match self {
+            Self::FunctionApplyDiscount | Self::FunctionApplyTax => {
+                EvaluatorScope::SupportedFunctionSurface
+            }
             Self::SumDiscountPolicy => EvaluatorScope::SupportedSumSurface,
             Self::DataCheckoutQuote => EvaluatorScope::SupportedDataSurface,
             Self::Unsupported(_) => EvaluatorScope::UnsupportedSurface,
@@ -212,22 +249,21 @@ pub fn project_semantic_review(
     mode: SemanticProjectionMode,
 ) -> Option<SemanticReview> {
     match supported_surface_for_spec(spec)? {
-        surface @ (SupportedSurface::SumDiscountPolicy | SupportedSurface::DataCheckoutQuote) => {
-            match mode {
-                SemanticProjectionMode::Preserve => existing
-                    .filter(|review| {
-                        review.evaluator_scope == surface.evaluator_scope()
-                            && review.compatibility_key
-                                == surface
-                                    .compatibility_key()
-                                    .expect("supported surface compatibility key")
-                    })
-                    .cloned(),
-                SemanticProjectionMode::Refresh => {
-                    evaluate_supported_semantic_review(spec, surface)
-                }
-            }
-        }
+        surface @ (SupportedSurface::FunctionApplyDiscount
+        | SupportedSurface::FunctionApplyTax
+        | SupportedSurface::SumDiscountPolicy
+        | SupportedSurface::DataCheckoutQuote) => match mode {
+            SemanticProjectionMode::Preserve => existing
+                .filter(|review| {
+                    review.evaluator_scope == surface.evaluator_scope()
+                        && review.compatibility_key
+                            == surface
+                                .compatibility_key()
+                                .expect("supported surface compatibility key")
+                })
+                .cloned(),
+            SemanticProjectionMode::Refresh => evaluate_supported_semantic_review(spec, surface),
+        },
         SupportedSurface::Unsupported(unit_kind) => match mode {
             SemanticProjectionMode::Preserve => None,
             SemanticProjectionMode::Refresh => Some(unsupported_surface_review(unit_kind)),
@@ -241,7 +277,9 @@ pub fn semantic_health_effect(review: Option<&SemanticReview>) -> SemanticHealth
     };
     if !matches!(
         review.evaluator_scope,
-        EvaluatorScope::SupportedSumSurface | EvaluatorScope::SupportedDataSurface
+        EvaluatorScope::SupportedFunctionSurface
+            | EvaluatorScope::SupportedSumSurface
+            | EvaluatorScope::SupportedDataSurface
     ) {
         return SemanticHealthEffect::KeepBase;
     }
@@ -275,9 +313,10 @@ pub fn semantic_review_summary(review: &SemanticReview) -> String {
 
 pub fn evaluate_semantic_review(spec: &LoadedSpec) -> Option<SemanticReview> {
     match supported_surface_for_spec(spec)? {
-        surface @ (SupportedSurface::SumDiscountPolicy | SupportedSurface::DataCheckoutQuote) => {
-            evaluate_supported_semantic_review(spec, surface)
-        }
+        surface @ (SupportedSurface::FunctionApplyDiscount
+        | SupportedSurface::FunctionApplyTax
+        | SupportedSurface::SumDiscountPolicy
+        | SupportedSurface::DataCheckoutQuote) => evaluate_supported_semantic_review(spec, surface),
         SupportedSurface::Unsupported(unit_kind) => Some(unsupported_surface_review(unit_kind)),
     }
 }
@@ -292,6 +331,10 @@ fn supported_surface_for_spec(spec: &LoadedSpec) -> Option<SupportedSurface> {
 
 fn supported_surface_for_unit_context(unit_id: &str, unit_kind: UnitKind) -> SupportedSurface {
     match unit_kind {
+        UnitKind::Function if unit_id == "pricing/apply_discount" => {
+            SupportedSurface::FunctionApplyDiscount
+        }
+        UnitKind::Function if unit_id == "pricing/apply_tax" => SupportedSurface::FunctionApplyTax,
         UnitKind::Sum if unit_id == "pricing/discount_policy" => {
             SupportedSurface::SumDiscountPolicy
         }
@@ -309,6 +352,16 @@ fn evaluate_supported_semantic_review(
     surface: SupportedSurface,
 ) -> Option<SemanticReview> {
     match surface {
+        SupportedSurface::FunctionApplyDiscount => evaluate_supported_function_semantic_review(
+            spec,
+            SupportedFunctionSemanticRole::ApplyDiscount,
+            FUNCTION_APPLY_DISCOUNT_COMPATIBILITY_KEY,
+        ),
+        SupportedSurface::FunctionApplyTax => evaluate_supported_function_semantic_review(
+            spec,
+            SupportedFunctionSemanticRole::ApplyTax,
+            FUNCTION_APPLY_TAX_COMPATIBILITY_KEY,
+        ),
         SupportedSurface::SumDiscountPolicy => evaluate_supported_sum_semantic_review(spec),
         SupportedSurface::DataCheckoutQuote => evaluate_supported_checkout_quote_data_review(spec),
         SupportedSurface::Unsupported(_) => None,
@@ -321,7 +374,7 @@ fn unsupported_surface_review(unit_kind: UnitKind) -> SemanticReview {
         compatibility_key: unsupported_surface_compatibility_key(unit_kind),
         reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
         summary: format!(
-            "unit kind '{}' is not evaluated by the M16 semantic reviewer",
+            "this '{}' surface is not evaluated by the semantic reviewer for this unit",
             unit_kind.as_str()
         ),
         authored_surfaces: vec![],
@@ -491,6 +544,77 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         executable_surfaces,
         evaluator_scope: EvaluatorScope::SupportedSumSurface,
     })
+}
+
+fn evaluate_supported_function_semantic_review(
+    spec: &LoadedSpec,
+    role: SupportedFunctionSemanticRole,
+    compatibility_key: &'static str,
+) -> Option<SemanticReview> {
+    debug_assert!(matches!(spec.spec.unit_kind(), Ok(UnitKind::Function)));
+
+    let authored = build_authored_function_packet(spec)?;
+    let executable = build_executable_function_packet(spec)?;
+    let mut reasons = Vec::new();
+    let authored_surfaces = authored_function_citations(&authored);
+    let executable_surfaces = executable_function_citations(&executable);
+
+    if semantic_text_is_vague(&authored.intent) {
+        reasons.push(SemanticReasonCode::VagueUnitIntent);
+    }
+    if authored.returns.is_none() {
+        reasons.push(SemanticReasonCode::MissingMethodContract);
+    }
+    if !authored_matches_supported_function_signature(&authored) {
+        reasons.push(SemanticReasonCode::OutsideHonestSupportedSubset);
+    }
+    reasons.sort();
+    reasons.dedup();
+
+    if !reasons.is_empty() {
+        return Some(SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: compatibility_key.to_string(),
+            reason_codes: reasons,
+            summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::SupportedFunctionSurface,
+        });
+    }
+
+    match classify_supported_function_body(role, &executable.body_rust) {
+        SupportedBodyClassification::Aligned => Some(SemanticReview {
+            verdict: SemanticVerdict::Aligned,
+            compatibility_key: compatibility_key.to_string(),
+            reason_codes: Vec::new(),
+            summary:
+                "authored semantics and executable lowering agree on the supported function surface"
+                    .to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::SupportedFunctionSurface,
+        }),
+        SupportedBodyClassification::Contradictory => Some(SemanticReview {
+            verdict: SemanticVerdict::SemanticDrift,
+            compatibility_key: compatibility_key.to_string(),
+            reason_codes: vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent],
+            summary: "executable lowering contradicts authored semantic claims".to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::SupportedFunctionSurface,
+        }),
+        SupportedBodyClassification::OutsideHonestSubset => Some(SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: compatibility_key.to_string(),
+            reason_codes: vec![SemanticReasonCode::OutsideHonestSupportedSubset],
+            summary: "supported semantic bodies fall outside the honest evaluator subset"
+                .to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::SupportedFunctionSurface,
+        }),
+    }
 }
 
 fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<SemanticReview> {
@@ -746,6 +870,74 @@ fn build_executable_packet(
     })
 }
 
+fn build_authored_function_packet(spec: &LoadedSpec) -> Option<SemanticAuthoredFunctionPacket> {
+    let normalized = normalize_unit(spec.spec.clone()).ok()?;
+    let NormalizedUnit::Function(function) = normalized else {
+        return None;
+    };
+
+    Some(SemanticAuthoredFunctionPacket {
+        id: function.id,
+        intent: function.intent_why,
+        fn_name: function.fn_name,
+        inputs: function
+            .contract
+            .as_ref()
+            .and_then(|contract| contract.inputs.as_ref())
+            .map(|inputs| {
+                inputs
+                    .iter()
+                    .map(|(name, type_)| SemanticFieldPacket {
+                        name: name.clone(),
+                        type_: type_.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        returns: function
+            .contract
+            .as_ref()
+            .and_then(|contract| contract.returns.clone()),
+        invariants: function
+            .contract
+            .as_ref()
+            .map(|contract| contract.invariants.clone())
+            .unwrap_or_default(),
+        deps: function.deps,
+    })
+}
+
+fn build_executable_function_packet(spec: &LoadedSpec) -> Option<SemanticExecutableFunctionPacket> {
+    let normalized = normalize_unit(spec.spec.clone()).ok()?;
+    let NormalizedUnit::Function(function) = normalized else {
+        return None;
+    };
+
+    Some(SemanticExecutableFunctionPacket {
+        id: function.id,
+        fn_name: function.fn_name,
+        inputs: function
+            .contract
+            .as_ref()
+            .and_then(|contract| contract.inputs.as_ref())
+            .map(|inputs| {
+                inputs
+                    .iter()
+                    .map(|(name, type_)| SemanticFieldPacket {
+                        name: name.clone(),
+                        type_: type_.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        returns: function
+            .contract
+            .as_ref()
+            .and_then(|contract| contract.returns.clone()),
+        body_rust: function.body_rust.trim().to_string(),
+    })
+}
+
 fn build_authored_data_packet(spec: &LoadedSpec) -> Option<SemanticAuthoredDataPacket> {
     let data = spec.spec.extensions.data.as_ref()?;
     let mut fields = build_authored_fields(data);
@@ -918,6 +1110,40 @@ fn authored_citations(
     citations
 }
 
+fn authored_function_citations(authored: &SemanticAuthoredFunctionPacket) -> Vec<SemanticCitation> {
+    let mut citations = vec![SemanticCitation {
+        path: "intent.why".to_string(),
+        summary: authored.intent.clone(),
+    }];
+
+    if !authored.inputs.is_empty() {
+        citations.push(SemanticCitation {
+            path: "contract.inputs".to_string(),
+            summary: format!("{} authored input(s)", authored.inputs.len()),
+        });
+    }
+    if let Some(returns) = &authored.returns {
+        citations.push(SemanticCitation {
+            path: "contract.returns".to_string(),
+            summary: format!("returns {returns}"),
+        });
+    }
+    if !authored.invariants.is_empty() {
+        citations.push(SemanticCitation {
+            path: "contract.invariants".to_string(),
+            summary: format!("{} authored invariant(s)", authored.invariants.len()),
+        });
+    }
+    if !authored.deps.is_empty() {
+        citations.push(SemanticCitation {
+            path: "deps".to_string(),
+            summary: format!("{} declared dep(s)", authored.deps.len()),
+        });
+    }
+
+    citations
+}
+
 fn authored_data_citations(authored: &SemanticAuthoredDataPacket) -> Vec<SemanticCitation> {
     let mut citations = vec![SemanticCitation {
         path: "intent.why".to_string(),
@@ -973,6 +1199,19 @@ fn executable_citations(
         });
     }
     citations
+}
+
+fn executable_function_citations(
+    executable: &SemanticExecutableFunctionPacket,
+) -> Vec<SemanticCitation> {
+    vec![SemanticCitation {
+        path: "body.rust".to_string(),
+        summary: format!(
+            "projects to Rust function {} with {} input(s)",
+            executable.fn_name,
+            executable.inputs.len()
+        ),
+    }]
 }
 
 fn executable_data_citations(
@@ -1150,11 +1389,38 @@ fn supported_data_role_for_method(
     }
 }
 
+fn authored_matches_supported_function_signature(
+    authored: &SemanticAuthoredFunctionPacket,
+) -> bool {
+    authored.inputs.len() == 2
+        && authored.inputs[0].name == "subtotal"
+        && type_is_decimal(&authored.inputs[0].type_)
+        && authored.inputs[1].name == "rate"
+        && type_is_decimal(&authored.inputs[1].type_)
+        && authored.returns.as_deref().is_some_and(type_is_decimal)
+}
+
 fn type_is_decimal(type_name: &str) -> bool {
     type_name
         .rsplit("::")
         .next()
         .is_some_and(|segment| segment == "Decimal")
+}
+
+fn classify_supported_function_body(
+    role: SupportedFunctionSemanticRole,
+    body: &str,
+) -> SupportedBodyClassification {
+    let Ok(block) = syn::parse_str::<syn::Block>(body) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+
+    match role {
+        SupportedFunctionSemanticRole::ApplyDiscount => {
+            classify_apply_discount_function_body(&block)
+        }
+        SupportedFunctionSemanticRole::ApplyTax => classify_apply_tax_function_body(&block),
+    }
 }
 
 fn classify_supported_role_body(
@@ -1184,6 +1450,94 @@ fn classify_supported_data_role_body(
             classify_checkout_quote_discounted_subtotal_body(&block)
         }
         SupportedDataSemanticRole::Total => classify_checkout_quote_total_body(&block),
+    }
+}
+
+fn classify_apply_discount_function_body(block: &syn::Block) -> SupportedBodyClassification {
+    if let Some(tail_expr) = block_tail_expr(block) {
+        if block_prefix_stmts(block).is_empty()
+            && expr_is_round_of_discounted_nonnegative(tail_expr)
+        {
+            return SupportedBodyClassification::Aligned;
+        }
+        if block_prefix_stmts(block).is_empty() && expr_is_round_of_taxed_subtotal(tail_expr) {
+            return SupportedBodyClassification::Contradictory;
+        }
+    }
+
+    let [syn::Stmt::Local(local)] = block_prefix_stmts(block) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(alias) = local_ident(local) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(init) = local
+        .init
+        .as_ref()
+        .map(|init| strip_expr_wrappers(&init.expr).unwrap_or(&init.expr))
+    else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(tail_expr) = block_tail_expr(block) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+
+    if alias == "discounted"
+        && expr_is_discounted_subtotal_expr(init)
+        && expr_is_round_of_alias_max_zero(tail_expr, "discounted")
+    {
+        SupportedBodyClassification::Aligned
+    } else if alias == "taxed"
+        && expr_is_taxed_subtotal_expr(init)
+        && expr_is_round_of_alias(tail_expr, "taxed")
+    {
+        SupportedBodyClassification::Contradictory
+    } else {
+        SupportedBodyClassification::OutsideHonestSubset
+    }
+}
+
+fn classify_apply_tax_function_body(block: &syn::Block) -> SupportedBodyClassification {
+    if let Some(tail_expr) = block_tail_expr(block) {
+        if block_prefix_stmts(block).is_empty() && expr_is_round_of_taxed_subtotal(tail_expr) {
+            return SupportedBodyClassification::Aligned;
+        }
+        if block_prefix_stmts(block).is_empty()
+            && expr_is_round_of_discounted_nonnegative(tail_expr)
+        {
+            return SupportedBodyClassification::Contradictory;
+        }
+    }
+
+    let [syn::Stmt::Local(local)] = block_prefix_stmts(block) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(alias) = local_ident(local) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(init) = local
+        .init
+        .as_ref()
+        .map(|init| strip_expr_wrappers(&init.expr).unwrap_or(&init.expr))
+    else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(tail_expr) = block_tail_expr(block) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+
+    if alias == "taxed"
+        && expr_is_taxed_subtotal_expr(init)
+        && expr_is_round_of_alias(tail_expr, "taxed")
+    {
+        SupportedBodyClassification::Aligned
+    } else if alias == "discounted"
+        && expr_is_discounted_subtotal_expr(init)
+        && expr_is_round_of_alias_max_zero(tail_expr, "discounted")
+    {
+        SupportedBodyClassification::Contradictory
+    } else {
+        SupportedBodyClassification::OutsideHonestSubset
     }
 }
 
@@ -1448,6 +1802,95 @@ fn expr_is_subtotal_times_rate(expr: &syn::Expr) -> bool {
     matches!(binary.op, syn::BinOp::Mul(_))
         && ((expr_is_ident(&binary.left, "subtotal") && expr_is_rate_expr(&binary.right))
             || (expr_is_ident(&binary.right, "subtotal") && expr_is_rate_expr(&binary.left)))
+}
+
+fn expr_is_round_call(expr: &syn::Expr) -> Option<&syn::Expr> {
+    let expr = strip_expr_wrappers(expr)?;
+    let syn::Expr::Call(call) = expr else {
+        return None;
+    };
+    if !expr_is_ident(&call.func, "round") || call.args.len() != 1 {
+        return None;
+    }
+    Some(&call.args[0])
+}
+
+fn expr_is_discounted_subtotal_expr(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Binary(binary) = expr else {
+        return false;
+    };
+    matches!(binary.op, syn::BinOp::Sub(_))
+        && expr_is_ident(&binary.left, "subtotal")
+        && expr_is_subtotal_times_rate_exact(&binary.right)
+}
+
+fn expr_is_taxed_subtotal_expr(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Binary(binary) = expr else {
+        return false;
+    };
+    matches!(binary.op, syn::BinOp::Add(_))
+        && expr_is_ident(&binary.left, "subtotal")
+        && expr_is_subtotal_times_rate_exact(&binary.right)
+}
+
+fn expr_is_subtotal_times_rate_exact(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::Binary(binary) = expr else {
+        return false;
+    };
+    matches!(binary.op, syn::BinOp::Mul(_))
+        && expr_is_ident(&binary.left, "subtotal")
+        && expr_is_ident(&binary.right, "rate")
+}
+
+fn expr_is_max_zero_on_alias(expr: &syn::Expr, alias: &str) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::MethodCall(call) = expr else {
+        return false;
+    };
+    call.method == "max"
+        && call.args.len() == 1
+        && expr_is_ident(&call.receiver, alias)
+        && expr_is_decimal_zero(&call.args[0])
+}
+
+fn expr_is_max_zero_on_discounted_expr(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::MethodCall(call) = expr else {
+        return false;
+    };
+    call.method == "max"
+        && call.args.len() == 1
+        && expr_is_discounted_subtotal_expr(&call.receiver)
+        && expr_is_decimal_zero(&call.args[0])
+}
+
+fn expr_is_round_of_discounted_nonnegative(expr: &syn::Expr) -> bool {
+    expr_is_round_call(expr).is_some_and(expr_is_max_zero_on_discounted_expr)
+}
+
+fn expr_is_round_of_taxed_subtotal(expr: &syn::Expr) -> bool {
+    expr_is_round_call(expr).is_some_and(expr_is_taxed_subtotal_expr)
+}
+
+fn expr_is_round_of_alias(expr: &syn::Expr, alias: &str) -> bool {
+    expr_is_round_call(expr).is_some_and(|arg| expr_is_ident(arg, alias))
+}
+
+fn expr_is_round_of_alias_max_zero(expr: &syn::Expr, alias: &str) -> bool {
+    expr_is_round_call(expr).is_some_and(|arg| expr_is_max_zero_on_alias(arg, alias))
 }
 
 fn expr_is_rate_expr(expr: &syn::Expr) -> bool {
@@ -1945,22 +2388,67 @@ mod tests {
         }
     }
 
-    fn discount_policy_function_spec() -> LoadedSpec {
-        let mut spec = discount_policy_sum_spec();
-        spec.spec.kind = "function".to_string();
-        spec.spec.contract = Some(Contract {
-            inputs: Some(IndexMap::from([(
-                "subtotal".to_string(),
-                "Decimal".to_string(),
-            )])),
-            returns: Some("Decimal".to_string()),
-            invariants: vec![],
-        });
-        spec.spec.body = Body {
-            rust: "{ subtotal }".to_string(),
-        };
-        spec.spec.extensions = UnitExtensions::default();
-        spec
+    fn pricing_function_spec(id: &str, intent: &str, body: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: format!("units/{id}.unit.spec"),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: intent.to_string(),
+                },
+                contract: Some(Contract {
+                    inputs: Some(IndexMap::from([
+                        ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                        ("rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    ])),
+                    returns: Some("rust_decimal::Decimal".to_string()),
+                    invariants: vec![],
+                }),
+                deps: vec!["money/round".to_string()],
+                imports: vec!["rust_decimal::Decimal".to_string()],
+                body: Body {
+                    rust: body.to_string(),
+                },
+                local_tests: vec![],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions::default(),
+            },
+        }
+    }
+
+    fn apply_discount_function_spec() -> LoadedSpec {
+        pricing_function_spec(
+            "pricing/apply_discount",
+            "Return the subtotal after applying the discount rate and clamping at zero.",
+            r#"{
+            round((subtotal - subtotal * rate).max(Decimal::ZERO))
+        }"#,
+        )
+    }
+
+    fn apply_tax_function_spec() -> LoadedSpec {
+        pricing_function_spec(
+            "pricing/apply_tax",
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            r#"{
+            round(subtotal + subtotal * rate)
+        }"#,
+        )
+    }
+
+    fn calculate_total_function_spec() -> LoadedSpec {
+        pricing_function_spec(
+            "pricing/calculate_total",
+            "Return a combined total from pricing inputs.",
+            r#"{
+            subtotal + subtotal * rate
+        }"#,
+        )
     }
 
     fn discount_policy_sum_spec_with_backend_markers() -> LoadedSpec {
@@ -2431,6 +2919,132 @@ mod tests {
     }
 
     #[test]
+    fn supported_surface_for_unit_context_only_supports_explicit_function_ids() {
+        assert_eq!(
+            supported_surface_for_unit_context("pricing/apply_discount", UnitKind::Function),
+            SupportedSurface::FunctionApplyDiscount
+        );
+        assert_eq!(
+            supported_surface_for_unit_context("pricing/apply_tax", UnitKind::Function),
+            SupportedSurface::FunctionApplyTax
+        );
+        assert_eq!(
+            supported_surface_for_unit_context("pricing/calculate_total", UnitKind::Function),
+            SupportedSurface::Unsupported(UnitKind::Function)
+        );
+    }
+
+    #[test]
+    fn evaluate_semantic_review_supports_apply_discount_function_surface() {
+        let review = evaluate_semantic_review(&apply_discount_function_spec()).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_APPLY_DISCOUNT_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.evaluator_scope,
+            EvaluatorScope::SupportedFunctionSurface
+        );
+        assert_eq!(review.reason_codes, Vec::<SemanticReasonCode>::new());
+    }
+
+    #[test]
+    fn evaluate_semantic_review_supports_apply_tax_function_surface() {
+        let review = evaluate_semantic_review(&apply_tax_function_spec()).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_APPLY_TAX_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.evaluator_scope,
+            EvaluatorScope::SupportedFunctionSurface
+        );
+        assert_eq!(review.reason_codes, Vec::<SemanticReasonCode>::new());
+    }
+
+    #[test]
+    fn semantic_review_marks_apply_discount_contradiction_as_semantic_drift() {
+        let mut spec = apply_discount_function_spec();
+        spec.spec.body.rust = r#"{
+            round(subtotal + subtotal * rate)
+        }"#
+        .to_string();
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_APPLY_DISCOUNT_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn semantic_review_marks_apply_discount_outside_subset_as_under_specified() {
+        let mut spec = apply_discount_function_spec();
+        spec.spec.body.rust = r#"{
+            round(subtotal - subtotal * rate)
+        }"#
+        .to_string();
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_APPLY_DISCOUNT_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::OutsideHonestSupportedSubset]
+        );
+    }
+
+    #[test]
+    fn semantic_review_marks_apply_tax_contradiction_as_semantic_drift() {
+        let mut spec = apply_tax_function_spec();
+        spec.spec.body.rust = r#"{
+            round((subtotal - subtotal * rate).max(Decimal::ZERO))
+        }"#
+        .to_string();
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_APPLY_TAX_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn semantic_review_marks_apply_tax_outside_subset_as_under_specified() {
+        let mut spec = apply_tax_function_spec();
+        spec.spec.body.rust = r#"{
+            round((subtotal + subtotal * rate).max(Decimal::ZERO))
+        }"#
+        .to_string();
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_APPLY_TAX_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::OutsideHonestSupportedSubset]
+        );
+    }
+
+    #[test]
     fn semantic_health_effect_only_demotes_supported_verdicts() {
         let supported_review = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
@@ -2446,8 +3060,22 @@ mod tests {
             SemanticHealthEffect::DemoteIncomplete
         );
 
+        let supported_function_review = SemanticReview {
+            verdict: SemanticVerdict::SemanticDrift,
+            compatibility_key: FUNCTION_APPLY_DISCOUNT_COMPATIBILITY_KEY.to_string(),
+            reason_codes: vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent],
+            summary: String::new(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: EvaluatorScope::SupportedFunctionSurface,
+        };
+        assert_eq!(
+            semantic_health_effect(Some(&supported_function_review)),
+            SemanticHealthEffect::DemoteFailing
+        );
+
         let unsupported_review =
-            evaluate_semantic_review(&discount_policy_function_spec()).unwrap();
+            evaluate_semantic_review(&calculate_total_function_spec()).unwrap();
         assert_eq!(
             semantic_health_effect(Some(&unsupported_review)),
             SemanticHealthEffect::KeepBase
@@ -2455,8 +3083,8 @@ mod tests {
     }
 
     #[test]
-    fn semantic_review_emits_explicit_unsupported_surface_for_function_and_data() {
-        for spec in [discount_policy_function_spec(), discount_policy_data_spec()] {
+    fn semantic_review_emits_explicit_unsupported_surface_for_calculate_total_and_data() {
+        for spec in [calculate_total_function_spec(), discount_policy_data_spec()] {
             let review = evaluate_semantic_review(&spec).unwrap();
             assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
             assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
@@ -2471,13 +3099,25 @@ mod tests {
             assert!(
                 review
                     .summary
-                    .contains("is not evaluated by the M16 semantic reviewer"),
+                    .contains("is not evaluated by the semantic reviewer for this unit"),
                 "{}",
                 review.summary
             );
             assert!(review.authored_surfaces.is_empty());
             assert!(review.executable_surfaces.is_empty());
         }
+    }
+
+    #[test]
+    fn project_semantic_review_preserve_keeps_matching_supported_function_key() {
+        let spec = apply_discount_function_spec();
+        let review = evaluate_semantic_review(&spec).unwrap();
+
+        let preserved =
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
+                .unwrap();
+
+        assert_eq!(preserved, review);
     }
 
     #[test]
@@ -2508,10 +3148,40 @@ mod tests {
     }
 
     #[test]
+    fn project_semantic_review_preserve_drops_mismatched_supported_function_key() {
+        let spec = apply_discount_function_spec();
+        let mut supported_review = evaluate_semantic_review(&spec).unwrap();
+        supported_review.compatibility_key = "function.apply_discount.v0".to_string();
+
+        let preserved = project_semantic_review(
+            &spec,
+            Some(&supported_review),
+            SemanticProjectionMode::Preserve,
+        );
+
+        assert!(preserved.is_none());
+    }
+
+    #[test]
+    fn project_semantic_review_preserve_drops_legacy_unsupported_review_for_supported_function() {
+        let spec = apply_discount_function_spec();
+        let unsupported_review =
+            evaluate_semantic_review(&calculate_total_function_spec()).unwrap();
+
+        let preserved = project_semantic_review(
+            &spec,
+            Some(&unsupported_review),
+            SemanticProjectionMode::Preserve,
+        );
+
+        assert!(preserved.is_none());
+    }
+
+    #[test]
     fn project_semantic_review_preserve_drops_unsupported_surface_review_even_with_compatibility_key()
      {
         let unsupported_review =
-            evaluate_semantic_review(&discount_policy_function_spec()).unwrap();
+            evaluate_semantic_review(&calculate_total_function_spec()).unwrap();
 
         let preserved = project_semantic_review(
             &discount_policy_sum_spec(),
@@ -2524,7 +3194,7 @@ mod tests {
 
     #[test]
     fn project_semantic_review_only_refresh_synthesizes_fresh_unsupported_metadata() {
-        let spec = discount_policy_function_spec();
+        let spec = calculate_total_function_spec();
         let existing = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: "unsupported.function.v0".to_string(),
@@ -2547,7 +3217,8 @@ mod tests {
             project_semantic_review(&spec, Some(&existing), SemanticProjectionMode::Refresh)
                 .unwrap();
 
-        let expected_summary = "unit kind 'function' is not evaluated by the M16 semantic reviewer";
+        let expected_summary =
+            "this 'function' surface is not evaluated by the semantic reviewer for this unit";
         assert!(preserved.is_none());
         assert_eq!(refreshed.summary, expected_summary);
         assert!(refreshed.authored_surfaces.is_empty());
