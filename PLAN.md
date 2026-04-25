@@ -1,4 +1,4 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m15-autoplan-restore-20260423-181057.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m16-autoplan-restore-20260425-002022.md -->
 # M15.5 — Semantic Review Trust Repair
 
 Status: **Landed, autoplan-reviewed** (2026-04-23). M15 landed on `feat/m15` at `d08df40`, and
@@ -602,18 +602,20 @@ ENG DUAL VOICES — CONSENSUS TABLE:
 - helper/example classification is still shared and does not hide domain semantics
 
 **What widens**
-- function authored/executable packets
-- function aligned, drift, and under-specified fixtures
+- one explicit supported function pair, `pricing/apply_discount` and `pricing/apply_tax`
+- function authored/executable packets for those supported surfaces
+- function aligned, drift, and under-specified fixtures for clamp, tax, and rounding behavior
 - final docs and agent-workflow updates so the semantic-review story matches what the repo
   actually supports
 
 **What stays out**
+- `pricing/calculate_total` generic function support in M17
 - second-backend work unless M15 plus M16 plus M17 are all clean
 - cross-unit or whole-graph semantic coherence
 
 **Success bar**
-- `sum`, `data`, and `function` all participate in one explicit semantic-review contract without
-  rewriting the trust loop or inventing a second review subsystem.
+- `sum`, `data`, and one explicit `function` support story participate in one semantic-review
+  contract without rewriting the trust loop or inventing a second review subsystem.
 
 ## Decision Audit Trail (M15.5 Review)
 
@@ -1670,28 +1672,539 @@ Kill the "M17 next" thesis if either of these happens:
 
 ## M17 — Follow-On Widening to `kind: function`
 
-**Purpose**
-- Finish first-generation semantic review across all three shipped authored kinds only after M16
-  proves the compatibility contract is reusable and explicit.
+Status: **Draft, review-solidified** (2026-04-25). M15.5 landed on `feat/m15` through `503d59b`,
+and this section assumes M16 lands with the exact compatibility-key contract described in the M16
+section below. If M16 changes that contract, stop and rewrite M17 before implementation. This pass
+replaces the earlier thin M17 review slice with one cohesive
+implementation contract for widening semantic review to the first explicit function surfaces.
+Source inputs for this pass are the landed M15.5 + M16 implementation in
+`spec-core/src/semantic_review.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`,
+`spec-cli/src/commands.rs`, the canonical ecommerce units at
+`examples/ecommerce/units/pricing/discount_policy.unit.spec`,
+`examples/ecommerce/units/pricing/checkout_quote.unit.spec`,
+`examples/ecommerce/units/pricing/apply_discount.unit.spec`,
+`examples/ecommerce/units/pricing/apply_tax.unit.spec`, and the landed regression slices in
+`spec-cli/tests/m14_regressions.rs` and `spec-cli/tests/cli.rs`.
 
-**Preconditions**
-- M15.5 sum trust repair remains clean
-- M16 data widening lands with explicit compatibility-key keep/drop semantics
-- unsupported `kind:function` metadata stayed neutral throughout M16
+UI scope: **no**. This is a backend-only semantic-review widening milestone for function truth,
+compatibility-key reuse, status/export projection, and explicit supported-surface boundaries.
 
-**What widens**
-- supported function compatibility key(s)
-- function aligned / drift / under-specified wedges
-- final docs and agent-workflow updates so the semantic-review story matches what the repo actually
-  supports
+## Milestone Summary
 
-**What stays out**
-- second-backend work unless M15.5 + M16 + M17 semantic review are all clean
-- cross-unit semantic coherence or whole-graph semantic meaning checks
+```text
+M17a  Extend the supported-surface resolver to explicit function surfaces           required
+M17b  Reuse the existing function normalization path for authored/executable truth  required
+M17c  Support one canonical function pair: `pricing/apply_discount` + `pricing/apply_tax` required
+M17d  Keep `pricing/calculate_total` additive-only in M17 and prove why            required
+M17e  Add aligned / drift / under-specified function wedges and preserve tests     required
+M17f  Refresh docs and agent workflow text so the supported function story is honest required
+```
 
-**Success bar**
-- `sum`, `data`, and `function` all participate in one explicit semantic-review contract without
-  rewriting the trust loop or inventing a second review subsystem.
+**Lake to boil in M17**
+- Close the semantic hole the landed data seam leaves open: `pricing/checkout_quote` currently
+  proves it calls `apply_discount` and `apply_tax`, not that those callees themselves preserve the
+  intended pricing meaning.
+- Make the supported function pair capable of projecting aligned, failing, and incomplete semantic
+  review through passport, status, and export without adding a second review subsystem.
+- Keep `kind:function` support explicit and local. M17 is not generic function understanding for
+  arbitrary Rust bodies.
+- Keep `pricing/calculate_total`, cross-unit semantic coherence, and second-backend work out.
+
+**User job**
+- An AI-heavy Rust maintainer edits `pricing/apply_discount` or `pricing/apply_tax`, runs the usual
+  trust loop, and can trust semantic review to catch dropped clamps, wrong tax math, or missing
+  rounding without reverse-engineering raw Rust diffs first.
+- The same maintainer can still trust `spec status` and `spec export` not to overclaim that all
+  functions are semantically understood just because two canonical functions are supported.
+
+## Locked Dependency On M16
+
+M17 depends on these M16 facts staying exactly true:
+
+- `SemanticReview` persists one explicit `compatibility_key`.
+- Preserve-mode keep/drop remains key-driven, not kind-inferred.
+- The supported keys already established by M16 stay:
+  - `sum.discount_policy.v1`
+  - `data.checkout_quote.v1`
+- Unsupported surfaces remain additive-only and non-demoting.
+
+If any of those move during M16 implementation, M17 is no longer zero-ambiguity and must be
+replanned before code starts.
+
+## Step 0: Scope Challenge
+
+### What the two landed seams actually proved
+
+| Landed seam | Validated | Did not validate | M17 implication |
+|---|---|---|---|
+| `pricing/discount_policy` (`kind: sum`) | The shared trust loop can compare authored seam meaning against executable lowering, classify helper/example proof glue honestly, and project one supported seam through passport/status/export with an explicit compatibility key. | Generic `sum` semantics for arbitrary seam ids or arbitrary extra domain methods. | Keep function support equally explicit and role-scoped instead of widening by kind name alone. |
+| `pricing/checkout_quote` (`kind: data`) | The compatibility-key preserve/drop contract is reusable beyond `sum`, and one record-like seam can stay honest through fields, constructors, methods, and health precedence. | Callee meaning. The evaluator only proves local delegation shape, not whether `apply_discount` or `apply_tax` are semantically right. | M17 should close the delegated-callee gap first, not jump to generic function review or graph-wide reasoning. |
+
+### What already exists
+
+| Sub-problem | Existing code surface | M17 reuse / correction |
+|---|---|---|
+| Supported-surface routing | `spec-core/src/semantic_review.rs::supported_surface_for_unit_context` | Reuse the existing explicit id-based routing. Extend it to the supported function pair instead of widening all `function` units at once. |
+| Preserve/drop compatibility | `spec-core/src/semantic_review.rs::project_semantic_review`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | Reuse the landed M16 compatibility-key contract untouched. M17 adds supported function keys, not a second persistence path. |
+| Function executable truth | `spec-core/src/normalizer.rs`, `spec-core/src/types.rs::NormalizedUnit::Function`, generated function code path | Reuse the existing normalized function path and top-level `body.rust`. Do not invent a special semantic-review parser disconnected from the normalizer. |
+| Canonical pricing functions | `examples/ecommerce/units/pricing/apply_discount.unit.spec`, `pricing/apply_tax.unit.spec`, `pricing/calculate_total.unit.spec` | Support the two leaf functions that the landed data seam delegates to. Keep `calculate_total` additive-only because it is orchestration, not the missing semantic hole. |
+| Existing molecule proof | `examples/ecommerce/units/pricing/discount_plus_tax.test.spec`, `pricing/checkout_flow.test.spec` | Reuse these as cross-check evidence that the supported function pair still composes with the landed data and sum seams. |
+| Unsupported-function neutrality | `spec-cli/tests/cli.rs` unsupported-surface semantic-review regressions | Preserve these tests and add one explicit proof that `pricing/calculate_total` remains neutral in M17. |
+
+### Minimum diff that still solves the problem
+
+- Add explicit supported function compatibility keys for:
+  - `function.apply_discount.v1`
+  - `function.apply_tax.v1`
+- Build one function authored/executable packet path from the existing normalized function truth:
+  - authored: `intent.why`, `contract`, `invariants`, `deps`
+  - executable: function signature plus trimmed `body.rust`
+- Add role-scoped classifiers for the supported pair only:
+  - `pricing/apply_discount`
+  - `pricing/apply_tax`
+- Keep `pricing/calculate_total` unsupported and additive-only in M17.
+- Reuse the existing truth loop. M17 adds **no** new CLI command and **no** new artifact type.
+
+### Complexity check
+
+- Expected blast radius remains bounded to `spec-core/src/semantic_review.rs`,
+  `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs`,
+  `spec-cli/tests/cli.rs`, `spec-cli/tests/m14_regressions.rs`, and docs that describe semantic
+  review support.
+- If M17 starts evaluating arbitrary function ids or tracing into transitive callees, stop and
+  split the work. That turns a bounded lake into an ocean fast.
+
+### Search check
+
+- **[Layer 1]** Reuse the landed compatibility-key preserve/drop contract exactly as-is.
+- **[Layer 1]** Reuse the normalized function path instead of hand-parsing YAML a second time.
+- **[Layer 3]** Keep function support on explicit named surfaces. The hard part the landed seams
+  exposed is not "understand all functions." It is "close the delegation hole without lying."
+
+### TODO cross-reference
+
+- M17 does **not** absorb the CLI harness cleanup follow-up in `TODOS.md`.
+- M17 does **not** reopen cross-unit semantic coherence or second-backend work.
+- If `pricing/calculate_total` becomes the real user-facing semantic hole after the supported
+  function pair lands, capture that as follow-on work instead of stretching M17 mid-flight.
+
+### Completeness check
+
+- The complete move is supported-function routing + body classifiers + truth-surface regressions +
+  docs together.
+- The shortcut is "treat all `kind:function` units as supported once two pass." Reject that. That is
+  the same fake-green mistake the previous milestones worked to avoid.
+
+## Architecture Review
+
+M17 is not a generic function milestone. It is the follow-on that makes the landed data seam's
+delegation claims more trustworthy by explicitly reviewing the two functions it delegates to.
+
+### Ownership split
+
+| Layer | Owns | Must not own |
+|---|---|---|
+| Supported function resolver | which exact function ids participate in M17 | generic `kind:function` support |
+| Function packet builder | function intent, contract, invariants, deps, and executable body | whole-graph or transitive dependency meaning |
+| Body classifier | whether `apply_discount` and `apply_tax` stay inside the honest local subset | theorem-proving arbitrary Rust or evaluating every pricing helper |
+| Truth-surface projection | when function semantic truth is refreshed vs kept vs dropped | inventing semantic truth on status/export/build |
+| Doc and workflow text | what the repo really supports after M17 | claims that all functions are semantically understood |
+
+### Supported `kind:function` boundary
+
+M17 supports one explicit function pair only:
+- `pricing/apply_discount`
+- `pricing/apply_tax`
+
+`pricing/calculate_total` stays unsupported in M17 even though it is a function and already part of
+the canonical checkout story. That is deliberate. The landed seams showed the missing hole is the
+meaning of the delegated leaf functions, not yet the orchestration wrapper.
+
+### Compatibility contract
+
+**Required additive supported keys**
+- `function.apply_discount.v1`
+- `function.apply_tax.v1`
+
+**Preserve rules**
+
+```text
+Preserve
+  current supported function surface + stored review with same compatibility_key -> keep
+  current supported function surface + stored review with different compatibility_key -> drop
+  current supported function surface + stored unsupported.function review -> drop
+  current unsupported function surface + stored supported function review -> drop
+  current unsupported function surface + stored unsupported.function review -> drop
+```
+
+**Refresh rules**
+
+```text
+Refresh
+  supported function surface -> recompute review with current function compatibility_key
+  unsupported function surface -> mint additive unsupported.function metadata only
+```
+
+### Function packet + classifier
+
+```text
+supported function surface
+  │
+  ├── explicit id matcher
+  │      ├── pricing/apply_discount -> function.apply_discount.v1
+  │      ├── pricing/apply_tax      -> function.apply_tax.v1
+  │      └── anything else          -> unsupported.function.v1
+  │
+  ├── authored packet
+  │      ├── intent.why
+  │      ├── contract.inputs / returns
+  │      ├── contract.invariants
+  │      └── deps
+  │
+  ├── executable packet
+  │      └── normalized function signature + body.rust
+  │
+  └── role-scoped body classifier
+         ├── apply_discount -> aligned / contradictory / outside_honest_subset
+         └── apply_tax      -> aligned / contradictory / outside_honest_subset
+```
+
+**Honest executable shapes in M17**
+- `pricing/apply_discount`
+  - accepted aligned shape A:
+    `round((subtotal - subtotal * rate).max(Decimal::ZERO))`
+  - accepted aligned shape B:
+    `let discounted = subtotal - subtotal * rate; round(discounted.max(Decimal::ZERO))`
+  - no other aligned form is accepted in M17
+- `pricing/apply_tax`
+  - accepted aligned shape A:
+    `round(subtotal + subtotal * rate)`
+  - accepted aligned shape B:
+    `let taxed = subtotal + subtotal * rate; round(taxed)`
+  - no other aligned form is accepted in M17
+
+**Explicitly not in the classifier**
+- arbitrary pricing arithmetic that "probably means the same thing"
+- alternate clamp shapes, alternate rounding order, or multi-step algebraic rewrites beyond the two
+  accepted forms above
+- tracing into `round` or other deps to prove deeper semantics
+- support for every function that happens to return `Decimal`
+
+### Verdict mapping
+
+This matters because function bodies are authored truth, not seam-lowering escape hatches.
+
+- **Aligned**: function contract, invariants, and body stay inside the supported local subset
+- **Under-specified**: vague authored truth, missing semantic contract, or body shape outside the
+  honest subset
+- **Semantic drift**: the body contradicts the authored function truth in a recognizable way
+- **Not expected in M17 for supported functions**:
+  - `backend_only_meaning_preserved`
+  - `backend_only_semantics_leaked`
+
+Those backend-only verdicts still belong to seam-lowering surfaces. They should not become the
+default function story unless M17 starts smuggling backend-only escape hatches into top-level
+function review, which it should not.
+
+## Code Quality Review
+
+The main code-quality risk in M17 is pretending the evaluator got generic just because it learned
+two functions.
+
+### Concrete code-quality rules
+
+- Keep one semantic-review pipeline in `spec-core/src/semantic_review.rs`. Do not create a
+  `semantic_review_function.rs` side path that duplicates preserve/drop logic.
+- Reuse the existing normalized function representation and top-level `body.rust`. Do not parse
+  function bodies through a second bespoke semantic AST layer disconnected from the normalizer.
+- Prefer explicit role matchers over generalized arithmetic abstractions. The function pair should
+  read like boring truth, not like a mini symbolic executor.
+- Keep unsupported-function metadata additive-only and neutral for everything outside the supported
+  pair, especially `pricing/calculate_total`.
+- Update exactly these files if wording changes are needed:
+  - `README.md`
+  - `AGENTS.md`
+- Do not broaden M17 doc scope beyond those two files.
+
+## Test Review
+
+### New codepaths
+
+```text
+FUNCTION SUPPORT
+  - supported function compatibility-key resolution
+  - Preserve keep vs drop for supported functions
+  - Refresh writes the current function compatibility key
+
+FUNCTION EVALUATION
+  - authored packet from function contract + invariants + deps
+  - executable packet from normalized function + body.rust
+  - apply_discount classifier
+  - apply_tax classifier
+  - outside-honest-subset fallback
+
+TRUTH SURFACES
+  - spec test refreshes supported function semantic review
+  - build/generate/status/export keep or drop only
+  - stale base health still wins over semantic demotion
+  - unsupported functions remain neutral
+
+CROSS-KIND EVIDENCE
+  - checkout_quote still composes with semantically reviewed apply_discount/apply_tax
+  - calculate_total remains evidence-only, not newly supported truth
+```
+
+### Coverage diagram
+
+```text
+CODE PATH COVERAGE
+===========================
+[+] Existing shared invariants
+    │
+    ├── [★★★ TESTED] Preserve/drop by compatibility key — landed M16 matrix
+    ├── [★★★ TESTED] Stale base health wins over semantic demotion — landed CLI tests
+    └── [★★★ TESTED] Unsupported functions stay additive-only and neutral — landed CLI tests
+
+[+] spec-core/src/semantic_review.rs
+    │
+    ├── [GAP] supported function resolver returns apply_discount/apply_tax keys only
+    ├── [GAP] Preserve keeps matching supported function review
+    ├── [GAP] Preserve drops supported function review on key mismatch
+    ├── [GAP] apply_discount aligned body
+    ├── [GAP] apply_discount contradictory body (missing clamp or wrong arithmetic)
+    ├── [GAP] apply_tax aligned body
+    ├── [GAP] apply_tax contradictory body (missing round or wrong arithmetic)
+    └── [GAP] vague authored truth or unsupported body shape -> under_specified
+
+[+] spec-core/src/passport.rs / spec-core/src/export.rs / spec-cli/src/commands.rs
+    │
+    ├── [GAP] spec test refreshes supported function semantic review
+    ├── [GAP] build/generate preserve compatible function review only
+    ├── [GAP] status/export demote supported function reviews only after base health is valid
+    └── [GAP] calculate_total remains unsupported and neutral through the full command matrix
+
+[+] Canonical pricing evidence
+    │
+    ├── [GAP] aligned apply_discount wedge
+    ├── [GAP] aligned apply_tax wedge
+    ├── [GAP] drift apply_discount wedge
+    ├── [GAP] drift apply_tax wedge
+    ├── [GAP] under_specified function wedge
+    └── [GAP] checkout_quote / discount_plus_tax molecules still compose on top of the supported pair
+
+─────────────────────────────────
+COVERAGE: shared trust-loop invariants already proven by M15.5 + M16
+NEW M17 GAPS: function-specific routing, classification, and honesty tests
+QUALITY TARGET: every new path lands at ★★★
+─────────────────────────────────
+```
+
+### Required test matrix
+
+- Unit tests in `spec-core/src/semantic_review.rs`:
+  - supported function compatibility-key resolution
+  - preserve keeps matching supported function review and drops mismatches
+  - aligned `apply_discount` body
+  - contradictory `apply_discount` body
+  - aligned `apply_tax` body
+  - contradictory `apply_tax` body
+  - vague intent or weak function contract yields `under_specified`
+  - unsupported `pricing/calculate_total` remains `unsupported.function.v1`
+- Projection tests in `spec-core/src/passport.rs` and `spec-core/src/export.rs`:
+  - preserve path keeps compatible supported function review
+  - preserve path drops stale or mismatched function review
+  - export/status continue projecting stored truth only
+- CLI regressions in `spec-cli/tests/cli.rs`:
+  - `spec test` refreshes supported function semantic review
+  - `spec build`, `spec generate`, `spec status`, and `spec export` do not invent replacement
+    truth for supported or unsupported functions
+  - stale base health still wins when a supported function also carries semantic review
+  - `pricing/calculate_total` stays neutral through the command matrix
+- Canonical wedge regressions in `spec-cli/tests/m14_regressions.rs`:
+  - aligned `apply_discount`
+  - drift `apply_discount`
+  - aligned `apply_tax`
+  - drift `apply_tax`
+  - under-specified function wedge
+  - molecule re-check that `checkout_quote` and `discount_plus_tax` still compose with the
+    supported pair
+
+### Regression rule
+
+These regressions are mandatory:
+- add a keep/drop regression for supported function compatibility-key mismatch
+- add a stale-base-health regression for a supported function carrying semantic review
+- add an explicit neutrality regression for `pricing/calculate_total`
+
+### Test plan artifact
+
+Primary artifact for this pass:
+`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m16-eng-review-test-plan-20260425-002039.md`
+
+## Performance Review
+
+M17 should stay boring on runtime and command-path cost.
+
+- The evaluator still runs only in proof-producing flows.
+- Function body classification is local AST matching over a tiny supported subset.
+- Do **not** add transitive semantic tracing into `round`, `apply_discount`, `apply_tax`, or
+  `calculate_total`. That is a separate problem.
+
+## Failure Modes
+
+| Codepath | Failure mode | Test coverage required | Error handling | User outcome if missed | Critical gap? |
+|---|---|---|---|---|---|
+| supported function routing | all `kind:function` units become supported by accident | resolver + CLI neutrality regressions | explicit unsupported fallback | fake-green function review across the repo | **yes** |
+| apply_discount classifier | missing clamp, missing round, or wrong arithmetic is accepted as aligned | unit + canonical wedge regressions | `semantic_drift` or `under_specified` | checkout math regresses without semantic warning | **yes** |
+| apply_tax classifier | wrong sign or skipped round is accepted as aligned | unit + canonical wedge regressions | `semantic_drift` or `under_specified` | tax behavior drifts while trust surfaces stay green | **yes** |
+| preserve/drop contract | stale supported function review survives a surface change | passport/export/CLI preserve tests | explicit drop on mismatch | stored proof lies about current function truth | **yes** |
+| health precedence | supported function semantic review overrides stale or failing base health | status/export regressions | demote only otherwise valid units | users see the wrong top-level status story | **yes** |
+| doc/story drift | README or AGENTS says "function kind supported" when only two functions are supported | doc updates + review | narrow wording | maintainers overtrust unsupported functions | **yes** |
+
+## What NOT in M17 Scope
+
+- generic support for arbitrary `kind:function` units
+- widening `pricing/calculate_total` into a supported surface
+- cross-unit or whole-graph semantic coherence
+- second-backend work
+- new CLI commands, schema artifacts, or a second semantic-review subsystem
+- tracing into transitive dependencies like `round`
+
+## Parallelization / Lanes
+
+M17 is parallelizable after the supported-function contract is locked.
+
+### Dependency table
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| 1. Lock supported-function routing + compatibility keys | `semantic_review`, `passport`, `export`, `commands` | - |
+| 2. Build function authored/executable packets + local classifiers | `semantic_review`, normalized function path, ecommerce pricing fixtures | 1 |
+| 3. Add preserve/drop, stale-health, and unsupported-function regressions | `commands`, `passport`, `export`, `spec-cli/tests` | 1 |
+| 4. Refresh docs and workflow text | `PLAN.md`, `README.md`, `AGENTS.md` | 1 |
+| 5. Re-prove canonical function wedges + composition molecules | `spec-cli/tests/m14_regressions.rs`, ecommerce fixtures, molecule evidence | 2, 3 |
+
+### Parallel lanes
+
+- **Gate 0, sequential:** Step 1 must land first. Every other slice depends on the same
+  supported-function routing and compatibility semantics.
+- **Lane A:** Step 2
+  - add the function packet builder and explicit local classifiers for `apply_discount` and
+    `apply_tax`
+- **Lane B:** Step 3
+  - add CLI preserve/drop, stale-health, and `calculate_total` neutrality regressions
+- **Lane C:** Step 4
+  - update plan, README, and workflow wording so the product story stays as narrow as the code
+- **Lane D:** Step 5
+  - re-prove aligned / drift / under-specified function wedges and the composition molecules after
+    A + B merge
+
+### Execution order
+
+1. Lock Step 1.
+2. Launch Lanes A, B, and C in parallel worktrees.
+3. Merge A + B + C.
+4. Run Lane D last for end-to-end wedge and composition verification.
+
+### Conflict flags
+
+- `spec-core/src/semantic_review.rs` is the main conflict magnet. Keep one owner on supported
+  function routing, compatibility keys, and classifier semantics.
+- `spec-cli/tests/cli.rs` is the second conflict magnet. Batch preserve/drop, stale-health, and
+  unsupported-function neutrality regressions together.
+- Docs can run in parallel, but they must not merge before the supported-function vocabulary is
+  locked or the wording will drift from the actual implementation.
+- No other doc file is part of Step 4 unless the user explicitly expands scope.
+
+## Implementation Order
+
+```text
+1. Extend supported-surface routing and compatibility keys for the function pair
+2. Reuse the normalized function path to build authored/executable packets
+3. Add explicit local classifiers for apply_discount and apply_tax
+4. Add preserve/drop, stale-health, and unsupported-calculate_total regressions
+5. Re-prove aligned, drift, and under-specified function wedges
+6. Update docs and workflow text to match the actual supported function story
+```
+
+## Success Criteria / Kill Metrics
+
+M17 is successful only if all of these are true:
+
+1. `pricing/apply_discount` and `pricing/apply_tax` can project aligned, failing, and incomplete
+   semantic review through passport, status, and export.
+2. Contradictory supported function bodies fail as `semantic_drift`, not as backend-only marker
+   noise.
+3. Preserve-mode keep/drop behavior stays compatibility-key-driven and explicit for supported
+   functions.
+4. `pricing/calculate_total` remains additive-only and neutral throughout the M17 command matrix.
+5. The landed data seam now delegates to semantically reviewed leaf functions without M17 claiming
+   graph-wide semantic coherence.
+
+Kill the "ship M17 now" thesis if either of these happens:
+- M17 still needs generic function heuristics to get the canonical pair green
+- docs or status output still imply repo-wide function semantic support instead of explicit
+  supported surfaces
+
+## Completion Summary
+
+| Item | Status |
+|---|---|
+| Scope challenge | written |
+| What already exists | written |
+| Architecture review | written |
+| Code quality review | written |
+| Test review | diagram + matrix + artifact linked |
+| Performance review | written |
+| Failure modes | written |
+| NOT in scope | written |
+| Parallelization | written |
+| Decision audit trail | written |
+| Current status | ready for implementation against this M17 section |
+
+## Dream State Delta
+
+- **Before M17**
+  - `checkout_quote` proves local delegation shape, not the semantic correctness of the delegated
+    leaf pricing functions
+  - supported semantic review exists for one sum seam and one data seam, but the canonical pricing
+    leaf functions remain additive-only
+  - docs can still overread the state of function support if the milestone is described loosely
+- **After M17**
+  - `apply_discount` and `apply_tax` project aligned, failing, and under-specified semantic review
+    through passport, status, and export
+  - the delegated-callee hole in the canonical pricing flow is closed without claiming graph-wide
+    semantic coherence
+  - `calculate_total` and every other unsupported function stay neutral and additive-only
+  - docs and workflow text describe explicit supported function surfaces instead of repo-wide
+    function understanding
+
+## M17 Review-Locked Decisions
+
+- Treat M17 as the milestone that closes the landed data seam's delegated-callee hole, not as a
+  generic `kind:function` rollout.
+- Support `pricing/apply_discount` and `pricing/apply_tax` together; keep
+  `pricing/calculate_total` additive-only and neutral.
+- Reuse the existing normalized function path and truth-surface plumbing; do not create a second
+  semantic-review subsystem for functions.
+- Keep function classifiers local and explicit. No transitive reasoning through `round` or other
+  callees in M17.
+- Use `semantic_drift` as the failing verdict for contradictory supported function bodies because
+  the function body is authored truth, not backend-only seam lowering.
+- Update docs to say "supported function surfaces" anywhere the broader phrase "function support"
+  would overclaim.
+- Limit doc edits to `README.md` and `AGENTS.md`; do not widen into unrelated docs cleanup.
+
+## Decision Audit Trail (M17 Review)
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | Scope | Support one canonical function pair, not all `kind:function` units | mechanical | P5 explicit over clever | The landed seams proved explicit supported surfaces, not generic kind-wide semantics | repo-wide function support in one jump |
+| 2 | Scope | Include both `pricing/apply_discount` and `pricing/apply_tax` in M17 | mechanical | P1 choose completeness | The landed data seam delegates to both, so supporting only one leaves half the semantic hole open | single-function M17 |
+| 3 | Scope | Keep `pricing/calculate_total` unsupported in M17 | taste | P3 pragmatic | It is orchestration on top of the missing leaf-function hole, not the hole itself | supporting all three pricing functions together |
+| 4 | Architecture | Reuse the normalized function path and compatibility-key projection as-is | mechanical | P4 DRY | The landed trust loop already solved preserve/drop and health precedence honestly | separate function-only persistence path |
+| 5 | Eng | Use `semantic_drift` for contradictory supported functions | mechanical | P5 explicit over clever | Top-level function bodies are authored truth, unlike seam-lowering escape hatches | backend-only verdicts for supported function contradictions |
+| 6 | Docs | Narrow the product story to "supported function surfaces" | mechanical | P5 explicit over clever | Broad wording would overclaim what M17 actually proves | "function kind supported" language |
 
 ## M16 Review-Locked Decisions
 
