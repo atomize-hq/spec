@@ -1,632 +1,236 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m17-autoplan-restore-20260425-210154.md -->
-# M18 - Semantic Review Generalization Gate
+# M19 - Semantic Review Falsification Pack
 
-Status: **Review-locked implementation contract** (April 25, 2026).
+Status: **Explicit M19 plan** (April 26, 2026).
 
-This plan replaces the prior stacked M15.5/M16/M17 planning artifacts with one current execution
-contract for the next milestone: prove that semantic review for `kind:function` has a reusable
-substrate across more than one bounded family, without slipping back into exact unit-id routing or
-pretend-generic function understanding.
+This plan supersedes the prior M18 plan. M18 landed meaningful semantic-review substrate progress,
+but the milestone remains red against its own gate. M19 is therefore not another M18 execution
+loop and not backend-readiness reopening. M19 is the falsification pack that
+decides whether the current `kind:function` semantic-review substrate travels beyond canonical
+pricing examples without preserving stale truth or false-greening nearby wrappers.
 
-UI scope: **no**. This is a backend-only semantic-review milestone for family routing,
-compatibility-key migration, truth-surface projection, regression evidence, and product-honest
-docs.
+UI scope: **no**. This is a backend semantic-review correctness milestone for unseen corpus proof,
+function semantic freshness, Family B argument-flow validation, and product-honest freezing of the
+current unsupported-surface contract.
 
 ## Source Inputs
 
-- Checkpoint:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/checkpoints/20260425-200501-m18-generalization-gate.md`
-- Design artifact:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m17-design-20260425-105241.md`
-- Current implementation seams:
-  - `spec-core/src/semantic_review.rs`
-  - `spec-core/src/passport.rs`
-  - `spec-core/src/export.rs`
-  - `spec-cli/src/commands.rs`
-  - `spec-cli/tests/cli.rs`
-  - `spec-cli/tests/m14_regressions.rs`
-- Current supported semantic-review surfaces already present in repo:
-  - `pricing/discount_policy` (`kind: sum`)
-  - `pricing/checkout_quote` (`kind: data`)
-  - `pricing/apply_discount` (`kind: function`)
-  - `pricing/apply_tax` (`kind: function`)
-  - `pricing/calculate_total` currently unsupported, additive-only, non-demoting
+- Current stale plan replaced by this file:
+  `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
+- M19 design direction:
+  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m18-design-20260426-095101.md`
+- M19 test plan:
+  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m18-test-plan-20260426-110032.md`
+
+## Prior State: What M18 Proved and Did Not Prove
+
+M18 moved the project in the right direction:
+
+- `kind:function` semantic review now has family routing instead of pure exact-unit-id routing.
+- Family A arithmetic leaves have an alternate-id proof.
+- Family B wrapper classification exists and the canonical `pricing/calculate_total` path is no
+  longer just unsupported by default.
+- Preserve vs refresh behavior still mostly follows the core product rule:
+  `spec test` refreshes semantic truth; read-side flows project stored truth and should not mint it.
+
+M18 still does not pass the bar it wrote for itself:
+
+- The gate required unseen `aligned`, `semantic_drift`, and `under_specified` examples for each
+  family. Family B does not yet have that adversarial unseen proof pack.
+- Function semantic freshness is currently wrong for semantic input changes. Edits to `intent`,
+  `deps`, or `body.rust` can leave preserved supported semantic reviews looking current when they
+  should become stale.
+- Family B can false-green on wrong argument flow because the current classifier proves wrapper
+  nesting shape more strongly than semantic parameter flow.
+- Unsupported-surface behavior is awkward: unsupported review metadata may exist after refresh, but
+  official read-side surfaces remain neutral. M19 freezes that contract instead of redesigning it.
 
 ## Milestone Summary
 
 ```text
-M18a  Replace exact-id function routing with bounded family routing                     required
-M18b  Introduce family-scoped compatibility keys and deterministic keep/drop migration required
-M18c  Generalize arithmetic leaf review to unseen examples                             required
-M18d  Add a second family: bounded pipeline wrapper functions                          required
-M18e  Lock honest fallback: under_specified vs additive-only neutrality                required
-M18f  Add unseen-example proof packs for both families                                required
-M18g  Refresh docs and agent workflow text to describe family support honestly         required
-M18h  Define the post-M18 green/red gate for backend-readiness                         required
+M19a  Add a dedicated unseen corpus for Family A and Family B                  required
+M19b  Correct function semantic freshness for intent/deps/body changes        required
+M19c  Tighten Family B argument-flow validation                               required
+M19d  Freeze unsupported-surface behavior for this milestone                  required
+M19e  Prove the command matrix against the frozen truth-surface contract      required
+M19f  Re-run the semantic-core green/red gate without reopening backend work  required
 ```
 
 ## User Outcome
 
-An AI-heavy Rust maintainer adds or edits a new pricing leaf or tiny wrapper function, runs the
-normal `spec` loop, and gets one honest answer:
+A maintainer edits a function spec, its dependencies, or its executable Rust body, runs the normal
+`spec` loop, and can trust the result:
 
-- supported and aligned
-- supported and drifted
-- supported but under-specified
-- unsupported and neutral
+- supported family examples stay current only when their authored and executable meaning has not
+  changed since proof;
+- unseen Family A and Family B examples classify as `aligned`, `semantic_drift`, or
+  `under_specified` for structural reasons, not canonical names;
+- Family B wrappers do not align unless the declared argument flow is actually preserved;
+- unsupported near misses stay neutral on official read-side health surfaces.
 
-That maintainer should not need to memorize a hidden whitelist of exact ids to know whether
-semantic review is real for the function they are touching.
+The outcome is not "more semantic families." The outcome is a falsifiable answer to whether the
+families already admitted by M18 are trustworthy enough to continue building on.
 
-## Entry Criteria
+## Approved Scope
 
-- M17-era sum and data support stays intact.
-- The current proof rule stays intact:
-  `spec test` refreshes semantic truth, `spec build` / `spec generate` / `spec status` /
-  `spec export` only project stored truth.
-- The implementation remains local to `kind:function`.
-- M18 adds no new CLI command and no new artifact type.
+M19 includes exactly these capability corrections and proof obligations:
 
-## Step 0: Scope Challenge
+- unseen Family A corpus
+- unseen Family B corpus
+- function semantic freshness correction
+- Family B argument-flow validation
+- frozen unsupported-surface contract for this milestone
 
-### What already exists
+M19 may adjust implementation details only insofar as they are necessary to make those obligations
+true and testable.
 
-| Sub-problem | Existing code surface | Reuse / correction in M18 |
+## NOT in Scope
+
+- unsupported-surface redesign or broader contract cleanup
+- new semantic families
+- backend-readiness reopening
+- arbitrary `kind:function` understanding
+- branching or looping wrapper semantics
+- graph-wide semantic coherence
+- new CLI commands or new artifact types
+- large docs refresh beyond explaining the M19 contract honestly
+
+## Code Seams
+
+| Seam | M19 pressure | Required outcome |
 |---|---|---|
-| Semantic routing and verdict projection | `spec-core/src/semantic_review.rs` | Reuse one semantic-review entrypoint. Replace exact-id function routing with family routing inside this file instead of adding a second path. |
-| Preserve vs refresh truth behavior | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | Reuse the current keep/drop contract. Family-based function support must flow through the same projector. |
-| Canonical arithmetic function examples | `examples/ecommerce/units/pricing/apply_discount.unit.spec`, `apply_tax.unit.spec` | Reuse as Family A seen anchors, but migrate from exact-id keys to family keys. |
-| Canonical wrapper candidate | `examples/ecommerce/units/pricing/calculate_total.unit.spec` | Reuse as the Family B seen anchor only if it honestly fits the bounded wrapper contract. |
-| Command-matrix regressions | `spec-cli/tests/cli.rs` | Reuse and extend preserve/refresh tests so family keys follow the same CLI truth rules. |
-| End-to-end semantic wedges | `spec-cli/tests/m14_regressions.rs` | Reuse as the canonical proof harness. Extend from exact-id function wedges to family-based wedges. |
-| Existing supported seam coverage | `pricing/discount_policy`, `pricing/checkout_quote` | Keep as regression cross-checks so M18 does not break already-landed supported surfaces. |
-| Product-honest docs | `README.md`, `AGENTS.md`, `examples/ecommerce/README.md` | Rewrite the support story from exact ids to bounded families. |
+| `spec-core/src/semantic_review.rs` | Family A/B classifiers, Family B argument flow, unsupported fallback | Classifiers reject false-green wrappers and keep unsupported near misses out of supported-family demotion. |
+| `spec-core/src/passport.rs` | Freshness projection and proof preservation | Supported function reviews become stale or drop when semantic inputs change instead of looking current. |
+| `spec-core/src/export.rs` | Read-side truth projection | Export projects only current, compatible supported truth and preserves frozen unsupported neutrality. |
+| `spec-cli/src/commands.rs` | Command matrix behavior | `spec test` remains the refresh path; build/status/export do not mint replacement semantic truth. |
+| `spec-cli/tests/cli.rs` | CLI regressions | Command-level tests prove freshness and frozen unsupported read-side behavior. |
+| `spec-cli/tests/m14_regressions.rs` | End-to-end semantic wedges | Canonical and unseen proof packs fail or pass through the same user-visible loop. |
+| `spec-cli/tests/fixtures/m19/` | New unseen corpus | Family A and Family B examples use non-canonical ids and adversarial variants. |
+
+If an implementation path requires new architecture outside these seams, stop and re-plan. That is
+evidence M19 has drifted into redesign.
+
+## Frozen Unsupported-Surface Contract
+
+M19 freezes the current unsupported contract:
+
+- `spec test` may record unsupported semantic-review metadata as additive proof detail.
+- Official read-side surfaces remain neutral for unsupported cases.
+- `spec status --format json` and `spec export` must not demote unsupported near misses because
+  they look similar to a supported family.
+- M19 does not decide whether unsupported metadata should become first-class everywhere or disappear
+  entirely. That is explicitly deferred.
+
+This contract is awkward but stable enough for M19. Redesigning it would hide the actual milestone
+risks behind product-surface cleanup.
+
+## Function Freshness Contract
+
+Supported function semantic truth is current only if the semantic inputs that produced it are still
+current. At minimum, the freshness anchor must account for:
+
+- `intent`
+- declared `deps`
+- executable `body.rust`
+- any authored contract or invariant fields used by the family router
+
+M19 is not green if a supported function review can survive one of those changes in preserve mode
+and still appear current on status or export. Stale base health must still outrank semantic
+demotion, but freshness must not fake a current semantic proof.
+
+## Family B Argument-Flow Contract
+
+Family B remains the bounded two-step wrapper family. M19 tightens the claim from "the wrapper has
+the right nesting shape" to "the wrapper preserves the declared semantic argument flow."
+
+The aligned subset must prove all of these:
+
+- the first declared dep is called before the second declared dep;
+- the result of the first dep is threaded into argument slot `0` of the second dep;
+- every non-threaded argument is the intended top-level wrapper parameter for that dep slot;
+- each required wrapper parameter has exactly the expected use in the dep chain;
+- no duplicated, swapped, dropped, or substituted parameter path can classify as `aligned`.
+
+Nearby wrappers that cannot satisfy this flow contract must become `semantic_drift`,
+`under_specified`, or unsupported according to the existing family boundary. They must not
+false-green as `aligned`.
+
+## Test Matrix
+
+### Family A Unseen Corpus
+
+| Case | Expected proof |
+|---|---|
+| alternate-id monotone-down aligned | `function.arithmetic_leaf.monotone_down_nonnegative.v1` + `aligned` |
+| alternate-id monotone-down drift | supported Family A + `semantic_drift` |
+| alternate-id monotone-down under-specified | supported Family A + `under_specified` |
+| alternate-id monotone-down unsupported near miss | unsupported and neutral on read-side surfaces |
+| alternate-id monotone-up aligned | `function.arithmetic_leaf.monotone_up.v1` + `aligned` |
+| alternate-id monotone-up drift | supported Family A + `semantic_drift` |
+| alternate-id monotone-up under-specified | supported Family A + `under_specified` |
+| alternate-id monotone-up unsupported near miss | unsupported and neutral on read-side surfaces |
+
+### Family B Unseen Corpus
+
+| Case | Expected proof |
+|---|---|
+| alternate-id wrapper aligned | `function.wrapper.pipeline.v1` + `aligned` |
+| alternate-id wrapper drift | supported Family B + `semantic_drift` |
+| alternate-id wrapper under-specified | supported Family B + `under_specified` |
+| alternate-id wrapper unsupported near miss | unsupported and neutral on read-side surfaces |
+| alternate-id wrapper with alternate-id leaf deps | aligned without canonical `pricing/*` dep scaffolding |
+| non-stacking wrapper around another wrapper | unsupported and neutral |
+
+### Family B Adversarial Flow
+
+| Case | Must not return |
+|---|---|
+| inner-call args swapped | `aligned` |
+| outer-call rate arg swapped | `aligned` |
+| wrong threaded alias returned | `aligned` |
+| duplicated param passed where distinct params are required | `aligned` |
+| dropped parameter or unused parameter path | `aligned` |
+| literal, arithmetic expression, or method chain substituted for a required arg | `aligned` |
+
+### Freshness Regressions
+
+| Change after passing proof | Required status |
+|---|---|
+| intent-only edit | stale or dropped proof; never current supported review |
+| dep-only edit | stale or dropped proof; never current supported review |
+| body-only edit | stale or dropped proof; never current supported review |
+| invariant/contract edit used by routing | stale or dropped proof; never current supported review |
+| preserve-mode status/export after any semantic edit | no fake-current supported semantic truth |
 
-### Minimum diff that still solves the problem
+### Unsupported Command Matrix
 
-- Introduce family routing for `kind:function` only.
-- Keep `sum` and `data` support behavior unchanged.
-- Replace exact supported-function compatibility keys with family-scoped keys.
-- Admit exactly two bounded families in M18:
-  - Family A: arithmetic leaf transforms
-  - Family B: two-step pipeline wrapper functions
-- Reuse the current proof surfaces and current artifact model.
-- Add unseen-example fixtures and canonical regressions for both families.
+| Flow | Required behavior |
+|---|---|
+| `spec test` on unsupported near miss | may record additive unsupported metadata |
+| `spec build` after unsupported refresh | does not promote unsupported truth into health demotion |
+| `spec status --format json` | unsupported near miss remains neutral/read-side non-demoting |
+| `spec export` | unsupported near miss remains neutral/read-side non-demoting |
 
-### Complexity check
+## Implementation Order
 
-The expected blast radius stays bounded to:
+1. Lock the M19 fixture shape and add unseen corpus cases for both families.
+2. Fix function semantic freshness so intent, deps, body, and routing-relevant contract changes
+   invalidate current supported proof.
+3. Tighten Family B argument-flow validation and add adversarial false-green regressions.
+4. Add command-matrix tests for the frozen unsupported-surface contract.
+5. Re-run canonical ecommerce cases to ensure M19 corrections do not regress M18 substrate wins.
+6. Re-run the M19 green/red gate and record the outcome before any backend-readiness planning.
 
-- `spec-core/src/semantic_review.rs`
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/cli.rs`
-- `spec-cli/tests/m14_regressions.rs`
-- support-story docs
+Freshness correction should land before broad fixture expansion is treated as evidence. Otherwise
+new tests can accidentally bless preserved stale truth.
 
-If M18 starts adding graph-wide reasoning, a second classifier subsystem, or new authored schema
-fields, stop and split the work. That is ocean behavior.
+## Verification Loop
 
-### Search check
-
-- **[Layer 1]** Reuse the current compatibility-key preserve/drop contract.
-- **[Layer 1]** Reuse the existing normalized function representation instead of inventing a
-  second parser path.
-- **[Layer 3]** Generalization should mean family-scoped support from authored plus executable
-  structure, not support one more blessed function forever.
-
-### TODO cross-reference
-
-- Keep the Cargo-heavy CLI harness cleanup in `TODOS.md` out of M18 scope.
-- Keep generic `kind:function` understanding, cross-unit semantic coherence, and second-backend
-  work out of M18 scope.
-- If Family B proves too narrow and the real next hole is branching wrappers or predicate families,
-  capture that as follow-on work after M18 rather than widening M18.
-
-### Completeness check
-
-The complete move is family routing, family keys, honest fallback, unseen-example proof packs, and
-doc refresh together.
-
-The shortcut is "add three more exact ids and call it generalized." Reject that. It saves almost
-nothing and leaves the product story fake-green.
-
-### Distribution check
-
-M18 introduces no new artifact type. Existing CLI packaging and release machinery remain
-sufficient. The deliverable is implementation, regression evidence, and doc honesty.
-
-## Architecture Review
-
-M18 widens `kind:function` support without changing the core trust model. The substrate stays
-shared. The family-local semantics vary. The fallback stays honest.
-
-### Ownership split
-
-| Layer | Owns | Must not own |
-|---|---|---|
-| Supported family router | which bounded family, if any, a function belongs to | generic `kind:function` support |
-| Authored packet builder | contract, invariants, deps, and stable authored cues used by family routing | free-text NLP or exact-id whitelists |
-| Executable packet builder | normalized signature plus trimmed body shape | whole-program reasoning |
-| Family classifier | `aligned` / `semantic_drift` / `under_specified` inside one admitted family subset | persistence, health precedence, or schema projection |
-| Truth-surface projection | when to refresh, keep, or drop stored review | inventing truth during non-proof flows |
-| Doc layer | what users are told is supported | language that implies broader support than the code actually has |
-
-### Module plan
-
-| Module | Current role | M18 change |
-|---|---|---|
-| `spec-core/src/semantic_review.rs` | exact-id function routing, supported-surface evaluation, keep/drop compatibility matching | Replace exact-id function support with family router plus family descriptors and bounded classifiers. Keep one entrypoint. |
-| `spec-core/src/passport.rs` | passport rebuild and proof-state projection | Preserve current projector shape. Update tests so old exact-id function reviews drop when the current family key differs. |
-| `spec-core/src/export.rs` | export bundle assembly and preserve-mode projection | Preserve behavior. Update tests so export never invents family-based truth and drops mismatched old keys. |
-| `spec-cli/src/commands.rs` | command matrix, status/export projection, test refresh | Preserve command semantics. Refresh canonical family reviews only during `spec test`. |
-| `spec-cli/tests/cli.rs` | command-matrix truth assertions | Update exact-id supported-function fixtures to family-keyed fixtures. Add migration and neutrality regressions. |
-| `spec-cli/tests/m14_regressions.rs` | canonical wedge proofs | Replace exact-id function wedge assumptions with family proofs, including unseen aligned, drift, and under-specified cases for both families. |
-
-### Dependency graph
-
-```text
-                    spec-core/src/semantic_review.rs
-                                   │
-                  ┌────────────────┼────────────────┐
-                  │                │                │
-                  │                │                │
-         family router      packet builders   family classifiers
-                  │                │                │
-                  └────────────────┴────────────────┘
-                                   │
-                         compatibility key + verdict
-                                   │
-                    spec-core/src/passport.rs (projector)
-                                   │
-                     ┌─────────────┴─────────────┐
-                     │                           │
-     spec-core/src/export.rs          spec-cli/src/commands.rs
-                     │                           │
-                     └─────────────┬─────────────┘
-                                   │
-                   spec-cli/tests/cli.rs and m14_regressions.rs
-```
-
-### Supported-family routing
-
-`kind:function` routing becomes deterministic and family-based:
-
-```text
-function unit
-  │
-  ├── Family A eligibility?
-  │      ├── arithmetic_leaf.monotone_down_nonnegative.v1
-  │      ├── arithmetic_leaf.monotone_up.v1
-  │      └── no
-  │
-  ├── Family B eligibility?
-  │      ├── wrapper.pipeline.v1
-  │      └── no
-  │
-  └── unsupported.function.v1
-```
-
-### Compatibility-key migration
-
-Current exact-id keys:
-
-- `function.apply_discount.v1`
-- `function.apply_tax.v1`
-
-M18 family keys:
-
-- `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-- `function.arithmetic_leaf.monotone_up.v1`
-- `function.wrapper.pipeline.v1`
-
-Migration rule:
-
-- `pricing/apply_discount` refreshes from its exact-id key to
-  `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-- `pricing/apply_tax` refreshes from its exact-id key to
-  `function.arithmetic_leaf.monotone_up.v1`
-- `pricing/calculate_total`, if admitted, refreshes to `function.wrapper.pipeline.v1`
-- Preserve-mode drops stored exact-id function reviews once the surface is now family-keyed and
-  the compatibility key no longer matches
-
-Old proof should not silently survive a meaningfully different support model.
-
-### Family A contract: arithmetic leaf transforms
-
-**Admitted roles**
-
-1. `monotone_down_nonnegative`
-2. `monotone_up`
-
-**Authored eligibility**
-
-- `kind: function`
-- returns `Decimal`
-- exactly two `Decimal` inputs
-- zero or one helper dep
-- role is derived from invariants, not id:
-  - `monotone_down_nonnegative` requires invariants equivalent to:
-    - `output <= input0`
-    - `output >= 0`
-  - `monotone_up` requires an invariant equivalent to:
-    - `output >= input0`
-
-**Exact authored invariant normalization**
-
-The authored-packet builder uses a closed, non-algebraic normalization rule before routing:
-
-1. trim whitespace
-2. strip one layer of redundant outer parentheses
-3. rewrite the declared first and second input identifiers to `input0` and `input1`
-4. rewrite the return slot to `output`
-5. canonicalize `Decimal::ZERO` to `0`
-
-After that normalization, M18 admits only these exact atomic invariant strings for Family A:
-
-- `output <= input0`
-- `output >= 0`
-- `output >= input0`
-
-Nothing else is treated as equivalent in M18. No algebraic simplification, no inequality flipping,
-no synonym table. If the authored invariant does not normalize to one of the strings above, the
-unit stays neutral.
-
-**Helper dep rule**
-
-For Family A, "zero or one helper dep" means exactly this:
-
-- zero deps, or
-- one declared dep used exactly once as the outermost call that wraps the final arithmetic result
-
-That helper dep is structural only in M18. The router does not infer helper semantics from dep
-name or `intent.why`. Any second dep, any repeated helper use, or any helper call that is not the
-outermost wrapper pushes the unit out of the admitted Family A subset.
-
-**Executable honest subset**
-
-- zero or one local binding, then return
-- no branching
-- no loops
-- no `match`
-- no dependency chain beyond the optional helper dep
-
-**Accepted aligned shapes**
-
-`monotone_down_nonnegative`
-
-- `round((base - base * rate).max(Decimal::ZERO))`
-- `let discounted = base - base * rate; round(discounted.max(Decimal::ZERO))`
-
-`monotone_up`
-
-- `round(base + base * rate)`
-- `let taxed = base + base * rate; round(taxed)`
-
-**Exact executable matcher**
-
-The executable matcher for Family A is also closed:
-
-- allowed statements:
-  - direct return expression, or
-  - exactly one `let` binding followed by the return expression
-- allowed arithmetic core:
-  - `input0 - input0 * input1` for `monotone_down_nonnegative`
-  - `input0 + input0 * input1` for `monotone_up`
-- allowed clamp:
-  - `.max(0)` only for `monotone_down_nonnegative`
-- allowed helper wrapping:
-  - zero helper call, or one outermost helper call around the final expression
-
-The matcher does not admit reordered arithmetic, extra locals, extra arithmetic operators, method
-chains other than the one clamp, or nested helper calls. Those cases are either
-`semantic_drift` when they contradict the admitted role directly, or `under_specified` when they
-leave the admitted Family A subset without proving contradiction.
-
-**Recognized drift**
-
-- sign inversion
-- missing clamp on `monotone_down_nonnegative`
-- missing round when round is part of the admitted authored or executable shape
-- additive body for a subtractive authored role, or vice versa
-
-**Under-specified inside Family A**
-
-- authored invariants admit the family role, but the body uses branching
-- body shape performs extra arithmetic steps outside the admitted subset
-- body shape introduces additional deps or helper calls
-
-**Still neutral**
-
-- function does not satisfy the authored eligibility packet at all
-- function returns `Decimal` but invariants are too weak to admit either role
-
-### Family B contract: bounded wrapper pipeline functions
-
-**Admitted role**
-
-- `wrapper.pipeline`
-
-**Authored eligibility**
-
-- `kind: function`
-- exactly two declared deps
-- deps are already supported semantic surfaces or explicitly admitted by the current proof run
-- contract is top-level function truth, not seam-local lowering
-- invariants stay local and boring, with no graph-wide claims
-
-**Exact dep-admission rule**
-
-"Explicitly admitted by the current proof run" means:
-
-- the dep id resolves in the currently loaded spec set for the same invocation
-- the router computes support from current in-memory authored plus executable data, not from stored
-  passports
-- the dep must currently classify as one of:
-  - Family A supported function
-  - supported `sum`
-  - supported `data`
-
-Family B does not stack on another Family B wrapper in M18. That keeps the milestone local and
-prevents hidden graph reasoning.
-
-**Executable honest subset**
-
-- either:
-  - one intermediate local from dep A, then return dep B using that local
-  - or a direct nested `dep_b(dep_a(...), ...)`
-- no branching
-- no loops
-- no extra arithmetic around the dep chain
-- each declared dep used once
-- dep order preserved
-- final call consumes the intermediate output of the first call
-
-**Exact executable matcher**
-
-M18 admits only these two wrapper skeletons:
-
-1. `let tmp = dep_a(...); dep_b(tmp, ...)`
-2. `dep_b(dep_a(...), ...)`
-
-Within those skeletons, all of these must hold:
-
-- `dep_a` is the first declared dep and `dep_b` is the second declared dep
-- each dep is called exactly once
-- the threaded result from `dep_a` must occupy argument slot `0` of `dep_b`
-- every non-threaded call argument must be a bare top-level wrapper parameter identifier
-- no literals, method chains, arithmetic expressions, closures, matches, or nested calls are
-  allowed in call arguments
-- in the `let tmp` form, `tmp` is used exactly once, only as the first argument to `dep_b`
-
-If the body reverses dep order or bypasses a dep, it is `semantic_drift`.
-If the body keeps the broad pipeline shape but adds extra locals, duplicate dep use, or
-non-identifier argument expressions, it is `under_specified`.
-
-**Canonical seen example**
-
-- `pricing/calculate_total`
-
-**Recognized drift**
-
-- dep order reversed
-- one declared dep omitted
-- first dep result not threaded into second dep
-- final return bypasses a declared dep
-- extra arithmetic wrapped around the pipeline
-
-**Under-specified inside Family B**
-
-- admitted authored packet, but body uses extra locals, branches, or duplicate dep usage beyond
-  the honest subset
-- body shape makes it impossible to say whether the wrapper preserves the declared dependency
-  pipeline
-
-**Still neutral**
-
-- function has multiple deps but does not satisfy the admitted two-step pipeline shape
-- function delegates into unsupported callees or generic orchestration outside the admitted subset
-
-### Truth-surface contract
-
-This boundary is the milestone.
-
-- **Unsupported and neutral**
-  - the unit never qualifies for any admitted family packet
-  - stored review, if any, stays additive-only and non-demoting
-- **Supported but under-specified**
-  - the unit qualifies for a family packet
-  - executable body or authored truth leaves that family's admitted honest subset
-
-Similar-looking code does not get demoted unless the router first admits it into a supported
-family.
-
-### Truth state machine
-
-```text
-None
-  │
-  ├── Refresh on supported family surface
-  │      └── Review{compatibility_key, verdict}
-  │
-  ├── Refresh on unsupported surface
-  │      └── AdditiveUnsupportedReview
-  │
-  └── Preserve
-         └── None
-
-Review{key=A}
-  │
-  ├── Preserve on same key
-  │      └── keep
-  │
-  ├── Preserve on different key
-  │      └── drop to None
-  │
-  ├── Refresh on supported new family key
-  │      └── recompute with new key
-  │
-  └── Refresh on unsupported surface
-         └── unsupported additive metadata only
-```
-
-## Code Quality Review
-
-The main quality risk is accidental duplication: one shared substrate on paper, but three subtly
-different logic paths in code.
-
-### Code-quality rules
-
-- Keep one semantic-review entrypoint in `spec-core/src/semantic_review.rs`.
-- Add one explicit family descriptor layer, not several disconnected classifier modules.
-- Reuse the normalized function representation. Do not parse authored YAML or raw Rust twice.
-- Keep routing deterministic and explicit. No keyword scanning in `intent.why`.
-- Keep `unsupported.function.v1` additive-only and non-demoting for out-of-family functions.
-- Limit doc changes to:
-  - `PLAN.md`
-  - `README.md`
-  - `AGENTS.md`
-  - `examples/ecommerce/README.md`
-- Add inline ASCII diagrams near:
-  - family routing in `spec-core/src/semantic_review.rs`
-  - keep/drop migration behavior in `spec-core/src/passport.rs`
-
-### Existing patterns to preserve
-
-- `project_semantic_review` already centralizes the dangerous keep/drop logic. M18 extends that
-  contract instead of bypassing it.
-- The repo already treats `spec test` as the only proof-writing flow. Keep that line sharp.
-
-### Anti-patterns to avoid
-
-- growing an ever-longer exact-id support list
-- family-specific persistence codepaths
-- string heuristics masquerading as semantic support detection
-
-## Test Review
-
-100% new-path coverage is the goal. M18 only earns the word "generalization" if unseen examples
-are the main proof, not a footnote.
-
-### New codepaths
-
-```text
-FAMILY ROUTING
-  - exact-id function support replaced by family routing
-  - exact-id function keys migrate to family keys
-  - unsupported near-miss functions remain neutral
-
-FAMILY A
-  - monotone_down_nonnegative routing
-  - monotone_up routing
-  - aligned / drift / under_specified classification
-
-FAMILY B
-  - wrapper.pipeline routing
-  - aligned / drift / under_specified classification
-
-TRUTH SURFACES
-  - spec test refreshes family-based keys
-  - build/generate/status/export keep or drop only
-  - stale base health still outranks semantic demotion
-
-DOC HONESTY
-  - support story says bounded families, not exact ids and not generic function support
-```
-
-### Coverage diagram
-
-```text
-CODE PATH COVERAGE
-===========================
-[+] Existing shared invariants
-    │
-    ├── [★★★ TESTED] preserve/drop truth loop already exists
-    ├── [★★★ TESTED] stale base health outranks semantic demotion
-    └── [★★★ TESTED] unsupported surfaces can stay additive-only
-
-[+] spec-core/src/semantic_review.rs
-    │
-    ├── [GAP] exact-id function keys migrate to family keys
-    ├── [GAP] Family A role routing from authored packet
-    ├── [GAP] Family B routing from deps + body packet
-    ├── [GAP] unsupported near-miss remains neutral
-    ├── [GAP] Family A aligned unseen example
-    ├── [GAP] Family A drift unseen example
-    ├── [GAP] Family A under_specified unseen example
-    ├── [GAP] Family B aligned unseen example
-    ├── [GAP] Family B drift unseen example
-    └── [GAP] Family B under_specified unseen example
-
-[+] spec-core/src/passport.rs / spec-core/src/export.rs / spec-cli/src/commands.rs
-    │
-    ├── [GAP] preserve drops old exact-id reviews on family-key mismatch
-    ├── [GAP] spec test refreshes apply_discount to Family A key
-    ├── [GAP] spec test refreshes apply_tax to Family A key
-    ├── [GAP] spec test refreshes calculate_total to Family B key
-    └── [GAP] status/export never invent family-based truth
-
-[+] User-facing truth loops
-    │
-    ├── [GAP] canonical ecommerce loop stays honest
-    ├── [GAP] unseen Family A proof pack stays honest
-    ├── [GAP] unseen Family B proof pack stays honest
-    └── [GAP] docs match the real support boundary
-
----------------------------------
-COVERAGE TARGET: every new M18 path lands at ★★★
-REQUIRED NEW EVIDENCE:
-  Family A -> unseen aligned + drift + under_specified
-  Family B -> unseen aligned + drift + under_specified
----------------------------------
-```
-
-### Required test matrix
-
-- Unit tests in `spec-core/src/semantic_review.rs`
-  - exact-id function key migration to family keys
-  - Family A authored-role routing
-  - Family B pipeline routing
-  - unsupported near-miss remains neutral
-  - Family A aligned / drift / under_specified fixtures
-  - Family B aligned / drift / under_specified fixtures
-- Projection tests in `spec-core/src/passport.rs` and `spec-core/src/export.rs`
-  - preserve drops old exact-id function review when current family key differs
-  - preserve keeps current family review when keys match
-  - export and status project stored truth only
-- CLI regressions in `spec-cli/tests/cli.rs`
-  - `spec test` refreshes family-based reviews for canonical functions
-  - `spec build`, `spec generate`, `spec status`, and `spec export` do not mint replacement truth
-  - unsupported near-miss functions remain neutral through the full command matrix
-  - stale base health still wins when a family-supported function also has semantic review
-- Canonical and unseen proof packs in `spec-cli/tests/m14_regressions.rs`
-  - Family A canonical seen examples stay aligned
-  - Family B canonical `calculate_total` aligns if it fits the admitted wrapper contract
-  - unseen aligned / drift / under_specified wedges for both families
-  - existing `discount_policy`, `checkout_quote`, and molecule coverage still compose
-
-### Fixture strategy
-
-- Keep the canonical seen examples in `examples/ecommerce/units/pricing/`.
-- Add unseen M18 fixture packs under `spec-cli/tests/fixtures/m18/`.
-- Do not hide the whole milestone in test-only fake units. The canonical ecommerce story must
-  still exercise both families.
-
-### Regression rule
-
-These regressions are mandatory:
-
-- exact-id function reviews must drop on preserve-mode mismatch after M18 family routing lands
-- unsupported near-miss functions must remain additive-only neutral
-- Family B must fail on reversed dependency order
-- Family A must fail when the admitted role and executable sign or clamp behavior disagree
-
-### Canonical M18 wedge loop
+Targeted commands should include, at minimum:
 
 ```text
 cargo test -p spec-core semantic_review -- --nocapture
 cargo test -p spec-core passport -- --nocapture
+cargo test -p spec-core export -- --nocapture
 cargo test -p spec-cli --test cli -- --nocapture
 cargo test -p spec-cli --test m14_regressions -- --nocapture
 cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_discount.unit.spec
@@ -635,196 +239,63 @@ cargo run -p spec-cli -- test examples/ecommerce/units/pricing/calculate_total.u
 cargo run -p spec-cli -- status examples/ecommerce --format json
 ```
 
-## Performance Review
+If M19 introduces a dedicated fixture root under `spec-cli/tests/fixtures/m19/`, add exact
+single-unit and root-level commands for that corpus before declaring the gate green.
 
-M18 should stay boring on runtime cost.
+## Green Gate
 
-- Family routing stays local to one function body and one authored packet.
-- No graph traversal.
-- No transitive semantic tracing through arbitrary dep trees.
-- Refresh remains proof-flow only.
-- Any body outside the admitted tiny subsets should fall out quickly as unsupported or
-  under-specified.
+M19 is green only if all of these are true:
 
-If the implementation needs AST walks large enough to warrant caching or graph analysis, the scope
-has already drifted too far.
+1. Family A unseen corpus proves `aligned`, `semantic_drift`, and `under_specified` with
+   non-canonical unit ids.
+2. Family B unseen corpus proves `aligned`, `semantic_drift`, and `under_specified` with
+   non-canonical unit ids.
+3. At least one aligned Family B case uses alternate-id leaf deps, not only canonical
+   `pricing/apply_discount` and `pricing/apply_tax`.
+4. Every Family B adversarial-flow case fails to classify as `aligned`.
+5. Supported function semantic truth becomes stale or drops after `intent`, `deps`, `body.rust`, or
+   routing-relevant contract changes.
+6. Unsupported near misses stay neutral in `spec status --format json` and `spec export`.
+7. Canonical ecommerce examples still project the intended Family A and Family B keys after fresh
+   `spec test` proof.
+8. The supported vs unsupported story can be stated in one crisp product paragraph without claiming
+   generic function support or promising unsupported-surface redesign.
 
-## Failure Modes
+## Red Gate
 
-| Codepath | Failure mode | Test? | Error handling? | User sees? | Logged? | Critical gap? |
-|---|---|---:|---:|---|---:|---:|
-| family router | hidden exact-id branch still decides support | yes | yes | fake-green "generalization" | yes | **yes** |
-| key migration | old exact-id review survives preserve-mode | yes | yes | stale semantic truth looks current | yes | **yes** |
-| Family A classifier | wrong sign, missing clamp, or wrong rounding still aligns | yes | yes | pricing drift not caught | yes | **yes** |
-| Family B classifier | wrapper skips or reorders deps and still aligns | yes | yes | orchestration drift not caught | yes | **yes** |
-| fallback boundary | near-miss function demotes because router is too broad | yes | yes | unsupported code suddenly looks broken | yes | **yes** |
-| docs | README or AGENTS still describe exact ids or generic function support | yes | n/a | maintainer overtrusts product claims | n/a | **yes** |
+M19 stays red if any of these are true:
 
-Any row with missing test coverage is a ship blocker. M18 is a trust milestone.
+- supported function semantic truth survives semantic input edits as current proof;
+- Family B still false-greens on swapped, duplicated, dropped, or mis-threaded arguments;
+- unseen Family B examples require canonical pricing names or canonical dep ids to pass;
+- unsupported near misses demote official read-side health surfaces;
+- the work expands into new semantic families or unsupported-surface redesign to hide gaps in the
+  current families;
+- backend-readiness is reopened before this gate is green.
 
-## What NOT in M18 Scope
+## Decision Audit Trail
 
-- generic support for arbitrary `kind:function` units
-- branching or looping wrapper semantics
-- cross-unit or whole-graph semantic coherence
-- predicate families, boolean families, or third-family experiments
-- second-backend work
-- new CLI commands or new artifact types
-- CLI harness cleanup from `TODOS.md`
-- changes to `sum` or `data` semantic families beyond compatibility regressions
-
-## Worktree Parallelization Strategy
-
-### Dependency table
-
-| Step | Modules touched | Depends on |
-|---|---|---|
-| 1. Lock family routing + family keys | `spec-core/src`, `spec-cli/src` | - |
-| 2. Implement Family A classifier + unseen fixtures | `spec-core/src`, `spec-cli/tests`, `examples/ecommerce/units/pricing` | 1 |
-| 3. Implement Family B classifier + unseen fixtures | `spec-core/src`, `spec-cli/tests`, `examples/ecommerce/units/pricing` | 1 |
-| 4. Add preserve/drop migration regressions | `spec-core/src`, `spec-cli/src`, `spec-cli/tests` | 1 |
-| 5. Refresh docs and workflow text | repo docs only | 1 |
-| 6. Re-prove canonical truth loop and unseen packs | `spec-cli/tests`, evidence artifacts, ecommerce example outputs | 2, 3, 4 |
-
-### Parallel lanes
-
-- **Gate 0, sequential:** Step 1 must land first. Family routing and key vocabulary are the
-  shared contract.
-- **Lane A:** Step 2
-  - Family A role routing, classifier, and unseen proof pack
-- **Lane B:** Step 3
-  - Family B pipeline routing, classifier, and unseen proof pack
-- **Lane C:** Step 4
-  - preserve/drop migration, unsupported neutrality, and status/export regressions
-- **Lane D:** Step 5
-  - docs and workflow honesty updates
-- **Lane E:** Step 6
-  - final canonical and unseen proof run after A, B, and C merge
-
-### Execution order
-
-1. Lock Step 1.
-2. Launch Lanes A, B, C, and D in parallel worktrees.
-3. Merge A, B, C, and D.
-4. Run Lane E last for full trust-loop verification.
-
-### Conflict flags
-
-- `spec-core/src/semantic_review.rs` is the main conflict magnet. One owner should coordinate the
-  family router and shared classifier composition.
-- `spec-cli/tests/cli.rs` and `spec-cli/tests/m14_regressions.rs` are the second conflict magnets.
-  Keep migration regressions and unseen proof packs batched by lane.
-- `examples/ecommerce/units/pricing/` is shared between Family A and Family B proof work. If both
-  lanes need to touch canonical examples, agree on ownership before parallel execution.
-- Docs can run in parallel, but should not merge before the family vocabulary is locked.
-
-## Implementation Order
-
-```text
-1. Replace exact-id function routing with family routing and new family keys
-2. Define Family A authored/executable packets and classifier
-3. Define Family B authored/executable packets and classifier
-4. Add preserve/drop migration behavior for old exact-id function reviews
-5. Add unseen aligned / drift / under_specified proof packs for both families
-6. Re-run canonical ecommerce truth loops and projection regressions
-7. Rewrite support-story docs to match the new family boundary
-8. Evaluate the post-M18 green/red gate
-```
-
-## Success Criteria / Post-M18 Gate
-
-M18 is green only if all of these are true:
-
-1. `pricing/apply_discount` and `pricing/apply_tax` refresh under Family A keys, not exact-id
-   keys.
-2. `pricing/calculate_total` either:
-   - honestly fits `function.wrapper.pipeline.v1` and projects `aligned`, `semantic_drift`, and
-     `under_specified`, or
-   - stays unsupported and forces the milestone red. No silent fallback.
-3. Family A and Family B each pass the unseen-example bar:
-   `aligned` + `semantic_drift` + `under_specified` on unseen examples.
-4. Unsupported near-miss functions remain additive-only neutral and non-demoting.
-5. `spec build`, `spec generate`, `spec status`, and `spec export` never mint replacement family
-   truth.
-6. `README.md`, `AGENTS.md`, and example docs describe bounded family support honestly.
-
-**Green gate**
-
-- If all six conditions hold, backend-readiness can reopen as the next planning question.
-
-**Red gate**
-
-- Stay on semantic-core correction if any of these are true:
-  - unseen examples still require bespoke exact-id exceptions
-  - Family B needs graph reasoning or branching semantics to make the canonical case green
-  - router broadening causes unsupported near-miss functions to demote
-  - docs cannot describe the supported surface in one crisp paragraph without caveats
-
-## Dream State Delta
-
-- **Before M18**
-  - function semantic review is still effectively a bounded exact-id story
-  - `calculate_total` remains neutral, so the support story does not yet travel into bounded
-    composition
-  - docs are forced to describe support as a narrow named set
-
-- **After M18**
-  - function semantic review is routed by explicit bounded families, not exact ids
-  - arithmetic leaves and tiny pipeline wrappers can be evaluated on unseen examples
-  - unsupported functions still stay honest and neutral
-  - the product story becomes:
-    "semantic review supports bounded function families with explicit fallback"
-
-## M18 Review-Locked Decisions
-
-- M18 is a generalization gate, not a "support one more pricing function" milestone.
-- Family A is arithmetic leaf transforms. Family B is bounded two-step pipeline wrappers.
-- `kind:function` support routes by family eligibility and compatibility keys, not exact ids.
-- Exact-id M17 function keys are intentionally replaced and dropped on preserve mismatch.
-- Unsupported but similar functions stay additive-only neutral unless the router first admits them
-  into a supported family packet.
-- `pricing/calculate_total` is allowed into M18 only if it fits the Family B contract honestly.
-  It does not define the family by itself.
-- Backend-readiness stays closed until M18 passes the unseen-example bar across both families.
+| # | Decision | Classification | Rationale | Rejected |
+|---|---|---|---|---|
+| 1 | Treat M18 as substrate progress but gate-red | mechanical | The written M18 gate required unseen proof that is still incomplete. | declare M18 green ceremonially |
+| 2 | Make M19 a falsification pack | taste | The next risk is proof quality, not more surface area. | add Family C |
+| 3 | Correct semantic freshness before trusting preserve-mode proof | mechanical | Current supported reviews can look current after semantic edits. | rely on existing passport preservation |
+| 4 | Tighten Family B argument flow | mechanical | Nesting shape alone can miss wrong parameter flow. | call wrapper shape sufficient |
+| 5 | Freeze unsupported behavior | taste | The contract is awkward but redesign is out of scope. | broaden unsupported-surface cleanup |
+| 6 | Keep backend-readiness closed | taste | Backend work would multiply false confidence if semantic proof is stale or weak. | reopen backend-readiness after M18 |
 
 ## Completion Summary
 
 | Item | Status |
 |---|---|
-| Scope challenge | written |
-| What already exists | written |
-| Architecture review | written |
-| Code quality review | written |
-| Test review | diagram + matrix + wedge loop written |
-| Performance review | written |
-| Failure modes | written |
-| NOT in scope | written |
-| Parallelization | written |
-| Post-M18 gate | written |
-| Current status | ready for implementation planning against M18 |
-
-## Decision Audit Trail (M18)
-
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-|---|---|---|---|---|---|---|
-| 1 | Scope | Replace exact-id function routing with family routing | mechanical | explicit over clever | Generalization must travel to unseen examples, not more ids | add more named supported functions |
-| 2 | Scope | Keep exactly two admitted families in M18 | taste | boil the lake, not the ocean | Enough to prove travel without drifting into generic semantics | one family only, or three families at once |
-| 3 | Architecture | Use family-scoped compatibility keys | mechanical | DRY + reversibility | Keeps preserve/drop deterministic during migration | retain exact-id function keys forever |
-| 4 | Family B | Admit only two-step pipeline wrappers | mechanical | engineered enough | Smallest composed-function contract that pressures the thesis | branching wrappers, arbitrary orchestration |
-| 5 | Fallback | Neutral if not admitted, under_specified if admitted-but-ambiguous | mechanical | honesty over coverage theater | Prevents fake-green and fake-red alike | demote all similar functions |
-| 6 | Proof bar | Require unseen aligned / drift / under_specified examples per family | mechanical | completeness | M18 is not credible without unseen travel | canonical examples only |
-| 7 | Gate | Keep backend-readiness closed until both families pass | taste | focus as subtraction | Avoids calling the semantic core done too early | backend-readiness immediately after Family A |
-
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | COMPLETE | M18 reframed as shared substrate plus two-family proof; one-family generalization rejected |
-| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | COMPLETE | Family contracts, migration keys, fallback boundary, unseen-example bar, test matrix, dependency graph, and parallel lanes locked |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | SKIPPED | No UI scope |
-
-**UNRESOLVED:** 0
-
-**VERDICT:** CEO + ENG WRITTEN. `feat/m17` is ready for implementation against M18, with
-backend-readiness explicitly blocked until the M18 gate passes.
+| M18 prior-state audit | written |
+| M19 milestone summary | written |
+| User outcome | written |
+| Approved scope and NOT in scope | written |
+| Code seams | written |
+| Freshness contract | written |
+| Family B argument-flow contract | written |
+| Test matrix | written |
+| Implementation order | written |
+| Green/red gate | written |
+| Current status | ready for M19 execution only; backend-readiness remains closed |
