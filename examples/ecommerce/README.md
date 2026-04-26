@@ -16,9 +16,9 @@ The new `units/pricing/discount_policy_checkout_flow.test.spec` molecule test co
 
 The original M12 `pricing/checkout_quote` seam remains in place as a sibling example.
 
-## M18 semantic review boundary
+## M19 semantic review boundary
 
-The pricing trio now demonstrates the bounded `kind:function` semantic-review families shipped in M18:
+The pricing trio demonstrates the bounded `kind:function` semantic-review families that M19 now proves with unseen examples and stricter wrapper-flow checks:
 
 - `pricing/apply_discount` proves `function.arithmetic_leaf.monotone_down_nonnegative.v1`
 - `pricing/apply_tax` proves `function.arithmetic_leaf.monotone_up.v1`
