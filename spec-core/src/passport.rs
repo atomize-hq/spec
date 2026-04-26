@@ -408,6 +408,14 @@ struct AuthoredMethodTruthSurface<'a> {
 }
 
 #[derive(Serialize)]
+struct FunctionAuthoredTruthSurface<'a> {
+    intent: &'a str,
+    contract: &'a Contract,
+    deps: &'a [String],
+    body_rust: &'a str,
+}
+
+#[derive(Serialize)]
 struct SeamBackendExecutionSurface<'a> {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     method_lowering_rust_bodies: Vec<&'a str>,
@@ -421,7 +429,29 @@ struct SeamBackendExecutionSurface<'a> {
 /// Data/sum seams hash the shared authored seam surface without backend-only
 /// lowering or derive details.
 pub fn compute_contract_hash(spec: &LoadedSpec) -> Option<String> {
-    compute_authored_truth_digest(spec)
+    let json = match spec.spec.unit_kind() {
+        Ok(UnitKind::Data) => serde_json::to_string(&DataSeamAuthoredTruthSurface {
+            intent: &spec.spec.intent.why,
+            data: spec.spec.extensions.data.as_ref(),
+            constructors: &spec.spec.extensions.constructors,
+            methods: authored_method_truth_surfaces(&spec.spec.extensions.methods),
+        })
+        .expect("data seam authored-truth serialization cannot fail for well-formed spec"),
+        Ok(UnitKind::Sum) => serde_json::to_string(&SumSeamAuthoredTruthSurface {
+            intent: &spec.spec.intent.why,
+            sum: spec.spec.extensions.sum.as_ref(),
+            constructors: &spec.spec.extensions.constructors,
+            methods: authored_method_truth_surfaces(&spec.spec.extensions.methods),
+        })
+        .expect("sum seam authored-truth serialization cannot fail for well-formed spec"),
+        _ => {
+            let contract = spec.spec.contract.as_ref()?;
+            serde_json::to_string(contract)
+                .expect("contract serialization cannot fail for well-formed spec")
+        }
+    };
+
+    Some(sha256_digest(&json))
 }
 
 /// Compute the M14 digest snapshot for one unit.
@@ -451,8 +481,13 @@ pub fn compute_authored_truth_digest(spec: &LoadedSpec) -> Option<String> {
         .expect("sum seam authored-truth serialization cannot fail for well-formed spec"),
         _ => {
             let contract = spec.spec.contract.as_ref()?;
-            serde_json::to_string(contract)
-                .expect("contract serialization cannot fail for well-formed spec")
+            serde_json::to_string(&FunctionAuthoredTruthSurface {
+                intent: &spec.spec.intent.why,
+                contract,
+                deps: spec.spec.deps.as_slice(),
+                body_rust: spec.spec.body.rust.as_str(),
+            })
+            .expect("function authored-truth serialization cannot fail for well-formed spec")
         }
     };
 
@@ -1511,6 +1546,25 @@ mod tests {
         )
     }
 
+    fn assert_function_freshness_stale_after_edit(
+        original: &LoadedSpec,
+        changed: &LoadedSpec,
+    ) -> PassportFreshness {
+        let passport = make_current_passport(original);
+        let freshness =
+            resolve_passport_freshness(changed, Some(&passport)).expect("freshness should resolve");
+
+        assert_eq!(freshness.authored_truth_status, FreshnessStatus::Stale);
+        assert_eq!(freshness.backend_execution_status, FreshnessStatus::Unknown);
+        assert_eq!(
+            freshness.snapshot.authored_truth_digest,
+            compute_authored_truth_digest(changed)
+        );
+        assert_eq!(freshness.snapshot.backend_execution_digest, None);
+
+        freshness
+    }
+
     fn proof_coverage_surfaces_for(
         proof_coverage: &[PassportProofCoverage],
         coverage_id: &str,
@@ -1855,6 +1909,24 @@ mod tests {
     }
 
     #[test]
+    fn test_contract_hash_ignores_function_intent_dep_and_body_changes() {
+        let spec_original = make_supported_apply_tax_function("units/pricing/apply_tax.unit.spec");
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.intent.why = "Reword the purpose without changing the contract.".into();
+        spec_changed.spec.deps = vec!["money/ceil".to_string()];
+        spec_changed.spec.body.rust = "{ ceil(subtotal + subtotal * rate) }".to_string();
+
+        assert_eq!(
+            compute_contract_hash(&spec_original),
+            compute_contract_hash(&spec_changed)
+        );
+        assert_ne!(
+            compute_authored_truth_digest(&spec_original),
+            compute_authored_truth_digest(&spec_changed)
+        );
+    }
+
+    #[test]
     fn test_contract_hash_present_for_data_seam() {
         let spec = make_loaded_data_seam(
             "pricing/checkout_quote",
@@ -1969,6 +2041,63 @@ mod tests {
         assert_ne!(
             compute_contract_hash(&spec_original),
             compute_contract_hash(&spec_changed)
+        );
+    }
+
+    #[test]
+    fn test_authored_truth_digest_changes_on_function_intent_change() {
+        let spec_original =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.intent.why =
+            "Return the discounted subtotal while keeping it nonnegative.".to_string();
+
+        assert_ne!(
+            compute_authored_truth_digest(&spec_original),
+            compute_authored_truth_digest(&spec_changed)
+        );
+    }
+
+    #[test]
+    fn test_authored_truth_digest_changes_on_function_dep_change() {
+        let spec_original =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.deps = vec!["money/floor".to_string()];
+
+        assert_ne!(
+            compute_authored_truth_digest(&spec_original),
+            compute_authored_truth_digest(&spec_changed)
+        );
+    }
+
+    #[test]
+    fn test_authored_truth_digest_changes_on_function_body_change() {
+        let spec_original =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.body.rust = r#"{
+    round(subtotal + subtotal * rate)
+}"#
+        .to_string();
+
+        assert_ne!(
+            compute_authored_truth_digest(&spec_original),
+            compute_authored_truth_digest(&spec_changed)
+        );
+    }
+
+    #[test]
+    fn test_authored_truth_digest_changes_on_function_routing_contract_change() {
+        let spec_original =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let mut spec_changed = spec_original.clone();
+        spec_changed.spec.contract.as_mut().unwrap().invariants =
+            vec!["output >= subtotal".to_string()];
+
+        assert_ne!(
+            compute_authored_truth_digest(&spec_original),
+            compute_authored_truth_digest(&spec_changed)
         );
     }
 
@@ -2340,6 +2469,40 @@ mod tests {
         assert_eq!(rebuilt.contract_hash, existing.contract_hash);
         assert_eq!(rebuilt.generated_at, "2026-04-05T00:00:00Z");
         assert_eq!(rebuilt.contract.unwrap().returns.as_deref(), Some("i64"));
+    }
+
+    #[test]
+    fn resolve_passport_freshness_marks_function_intent_change_stale_with_anchor() {
+        let original =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let mut changed = original.clone();
+        changed.spec.intent.why =
+            "Return the subtotal after discounting it without going below zero.".to_string();
+
+        assert_function_freshness_stale_after_edit(&original, &changed);
+    }
+
+    #[test]
+    fn resolve_passport_freshness_marks_function_dep_change_stale_with_anchor() {
+        let original =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let mut changed = original.clone();
+        changed.spec.deps = vec!["money/floor".to_string()];
+
+        assert_function_freshness_stale_after_edit(&original, &changed);
+    }
+
+    #[test]
+    fn resolve_passport_freshness_marks_function_body_change_stale_with_anchor() {
+        let original =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let mut changed = original.clone();
+        changed.spec.body.rust = r#"{
+    round(subtotal - subtotal * rate)
+}"#
+        .to_string();
+
+        assert_function_freshness_stale_after_edit(&original, &changed);
     }
 
     #[test]

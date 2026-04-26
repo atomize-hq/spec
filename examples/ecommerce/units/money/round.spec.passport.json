@@ -13,21 +13,21 @@
   },
   "deps": [],
   "local_tests": [],
-  "generated_at": "2026-04-26T03:35:17Z",
+  "generated_at": "2026-04-26T19:12:11Z",
   "source_file": "examples/ecommerce/units/money/round.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [],
-    "observed_at": "2026-04-24T01:53:28Z",
+    "observed_at": "2026-04-26T18:41:14Z",
     "provenance": {
-      "git_commit_sha": "99244f4530b5413fae86793cccdd0dd4d48fe7a5"
+      "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
     }
   },
   "freshness_anchor": {
-    "authored_truth_digest": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8"
+    "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7"
   },
   "freshness": {
-    "authored_truth_digest": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8",
+    "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7",
     "authored_truth_status": "fresh",
     "backend_execution_status": "unknown"
   },

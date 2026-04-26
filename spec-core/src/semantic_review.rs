@@ -219,6 +219,21 @@ enum SupportedBodyClassification {
     OutsideHonestSubset,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FamilyBBodyClassification {
+    Aligned,
+    SemanticDrift,
+    UnderSpecified,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FamilyBArgClassification {
+    Expected,
+    WrongParam,
+    UnsupportedExpr,
+}
+
 const SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY: &str = "sum.discount_policy.v1";
 const DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY: &str = "data.checkout_quote.v1";
 const FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY: &str =
@@ -697,7 +712,7 @@ fn supported_function_surface(
     if family_b_authored_contract_is_supported(&authored, context, stack)
         && !matches!(
             classify_family_b_function_body(&authored, &executable),
-            SupportedBodyClassification::OutsideHonestSubset
+            FamilyBBodyClassification::Unsupported
         )
     {
         return Some(SupportedFunctionFamily::FamilyB);
@@ -889,7 +904,16 @@ fn classify_supported_function_body(
             if !family_b_deps_are_supported(authored, context, stack) {
                 return SupportedBodyClassification::OutsideHonestSubset;
             }
-            classify_family_b_function_body(authored, executable)
+            match classify_family_b_function_body(authored, executable) {
+                FamilyBBodyClassification::Aligned => SupportedBodyClassification::Aligned,
+                FamilyBBodyClassification::SemanticDrift => {
+                    SupportedBodyClassification::Contradictory
+                }
+                FamilyBBodyClassification::UnderSpecified
+                | FamilyBBodyClassification::Unsupported => {
+                    SupportedBodyClassification::OutsideHonestSubset
+                }
+            }
         }
     }
 }
@@ -1927,128 +1951,202 @@ fn expr_is_zero_expr(expr: &syn::Expr) -> bool {
 fn classify_family_b_function_body(
     authored: &SemanticAuthoredFunctionPacket,
     executable: &SemanticExecutableFunctionPacket,
-) -> SupportedBodyClassification {
+) -> FamilyBBodyClassification {
     if authored.deps.len() != 2 || executable.inputs.is_empty() {
-        return SupportedBodyClassification::OutsideHonestSubset;
+        return FamilyBBodyClassification::Unsupported;
     }
 
     let Ok(block) = syn::parse_str::<syn::Block>(&executable.body_rust) else {
-        return SupportedBodyClassification::OutsideHonestSubset;
+        return FamilyBBodyClassification::Unsupported;
     };
     let params = executable
         .inputs
         .iter()
         .map(|input| input.name.as_str())
-        .collect::<HashSet<_>>();
+        .collect::<Vec<_>>();
     let dep_a = callable_name(&authored.deps[0]);
     let dep_b = callable_name(&authored.deps[1]);
 
     let prefix = block_prefix_stmts(&block);
     let Some(tail) = block_tail_expr(&block) else {
-        return SupportedBodyClassification::OutsideHonestSubset;
+        return FamilyBBodyClassification::Unsupported;
     };
     match prefix {
         [] => classify_family_b_nested_call(tail, &params, dep_a, dep_b),
         [syn::Stmt::Local(local)] => {
             classify_family_b_let_then_return(local, tail, &params, dep_a, dep_b)
         }
-        _ => SupportedBodyClassification::OutsideHonestSubset,
+        _ => FamilyBBodyClassification::Unsupported,
     }
 }
 
 fn classify_family_b_nested_call(
     expr: &syn::Expr,
-    params: &HashSet<&str>,
+    params: &[&str],
     dep_a: &str,
     dep_b: &str,
-) -> SupportedBodyClassification {
+) -> FamilyBBodyClassification {
     let Some(outer) = expr_as_call(expr) else {
-        return SupportedBodyClassification::OutsideHonestSubset;
+        return FamilyBBodyClassification::Unsupported;
     };
-    if outer.args.is_empty() {
-        return SupportedBodyClassification::Contradictory;
+    if expr_path_is_callable_name(&outer.func, dep_a) {
+        return FamilyBBodyClassification::SemanticDrift;
     }
-    if expr_path_is_callable_name(&outer.func, dep_b) {
-        let Some(inner) = expr_as_call(&outer.args[0]) else {
-            return SupportedBodyClassification::Contradictory;
-        };
-        if !expr_path_is_callable_name(&inner.func, dep_a) {
-            return SupportedBodyClassification::Contradictory;
-        }
-        if !outer
-            .args
-            .iter()
-            .skip(1)
-            .all(|arg| expr_is_top_level_param(arg, params))
-            || !inner
-                .args
-                .iter()
-                .all(|arg| expr_is_top_level_param(arg, params))
-        {
-            return SupportedBodyClassification::OutsideHonestSubset;
-        }
-        SupportedBodyClassification::Aligned
-    } else if expr_path_is_callable_name(&outer.func, dep_a) {
-        SupportedBodyClassification::Contradictory
-    } else {
-        SupportedBodyClassification::OutsideHonestSubset
+    if !expr_path_is_callable_name(&outer.func, dep_b) {
+        return FamilyBBodyClassification::Unsupported;
     }
+    if params.len() < 3 {
+        return FamilyBBodyClassification::UnderSpecified;
+    }
+    if outer.args.len() != 2 {
+        return FamilyBBodyClassification::UnderSpecified;
+    }
+
+    let Some(inner) = expr_as_call(&outer.args[0]) else {
+        return classify_family_b_non_call_threaded_arg(&outer.args[0], params);
+    };
+    if expr_path_is_callable_name(&inner.func, dep_b) {
+        return FamilyBBodyClassification::SemanticDrift;
+    }
+    if !expr_path_is_callable_name(&inner.func, dep_a) {
+        return FamilyBBodyClassification::Unsupported;
+    }
+    if inner.args.len() != 2 {
+        return FamilyBBodyClassification::UnderSpecified;
+    }
+
+    summarize_family_b_arg_flow(
+        &[
+            classify_family_b_param_arg(&inner.args[0], params[0], params),
+            classify_family_b_param_arg(&inner.args[1], params[1], params),
+            classify_family_b_param_arg(&outer.args[1], params[2], params),
+        ],
+        params,
+    )
 }
 
 fn classify_family_b_let_then_return(
     local: &syn::Local,
     tail: &syn::Expr,
-    params: &HashSet<&str>,
+    params: &[&str],
     dep_a: &str,
     dep_b: &str,
-) -> SupportedBodyClassification {
+) -> FamilyBBodyClassification {
     let Some(alias) = local_ident(local).map(|ident| ident.to_string()) else {
-        return SupportedBodyClassification::OutsideHonestSubset;
+        return FamilyBBodyClassification::Unsupported;
     };
+    if params.len() < 3 {
+        return FamilyBBodyClassification::UnderSpecified;
+    }
     let Some(inner) = local
         .init
         .as_ref()
         .and_then(|init| expr_as_call(init.expr.as_ref()))
     else {
-        return SupportedBodyClassification::OutsideHonestSubset;
+        return FamilyBBodyClassification::Unsupported;
     };
-    if !inner
-        .args
-        .iter()
-        .all(|arg| expr_is_top_level_param(arg, params))
-    {
-        return SupportedBodyClassification::OutsideHonestSubset;
-    }
     let Some(outer) = expr_as_call(tail) else {
-        return SupportedBodyClassification::OutsideHonestSubset;
+        return FamilyBBodyClassification::Unsupported;
     };
-    if outer.args.is_empty() {
-        return SupportedBodyClassification::OutsideHonestSubset;
-    }
-    if !outer
-        .args
-        .iter()
-        .skip(1)
-        .all(|arg| expr_is_top_level_param(arg, params))
-    {
-        return SupportedBodyClassification::OutsideHonestSubset;
-    }
-
-    let threaded_arg_is_alias = expr_is_ident(&outer.args[0], &alias);
-    if expr_path_is_callable_name(&outer.func, dep_b)
-        && expr_path_is_callable_name(&inner.func, dep_a)
-    {
-        if threaded_arg_is_alias {
-            SupportedBodyClassification::Aligned
-        } else {
-            SupportedBodyClassification::Contradictory
-        }
-    } else if expr_path_is_callable_name(&outer.func, dep_a)
+    if expr_path_is_callable_name(&outer.func, dep_a)
         && expr_path_is_callable_name(&inner.func, dep_b)
     {
-        SupportedBodyClassification::Contradictory
+        return FamilyBBodyClassification::SemanticDrift;
+    }
+    if !expr_path_is_callable_name(&outer.func, dep_b) {
+        return FamilyBBodyClassification::Unsupported;
+    }
+    if !expr_path_is_callable_name(&inner.func, dep_a) {
+        return FamilyBBodyClassification::Unsupported;
+    }
+    if inner.args.len() != 2 || outer.args.len() != 2 {
+        return FamilyBBodyClassification::UnderSpecified;
+    }
+
+    summarize_family_b_arg_flow(
+        &[
+            classify_family_b_param_arg(&inner.args[0], params[0], params),
+            classify_family_b_param_arg(&inner.args[1], params[1], params),
+            classify_family_b_threaded_alias_arg(&outer.args[0], &alias, params),
+            classify_family_b_param_arg(&outer.args[1], params[2], params),
+        ],
+        params,
+    )
+}
+
+fn summarize_family_b_arg_flow(
+    args: &[FamilyBArgClassification],
+    params: &[&str],
+) -> FamilyBBodyClassification {
+    if args.contains(&FamilyBArgClassification::UnsupportedExpr) {
+        return FamilyBBodyClassification::Unsupported;
+    }
+    if args.contains(&FamilyBArgClassification::WrongParam) {
+        return FamilyBBodyClassification::SemanticDrift;
+    }
+    if params.len() > 3 {
+        return FamilyBBodyClassification::UnderSpecified;
+    }
+    FamilyBBodyClassification::Aligned
+}
+
+fn classify_family_b_param_arg(
+    expr: &syn::Expr,
+    expected_param: &str,
+    params: &[&str],
+) -> FamilyBArgClassification {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let syn::Expr::Path(path) = expr else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let Some(ident) = path.path.get_ident() else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let ident = ident.to_string();
+    if ident == expected_param {
+        FamilyBArgClassification::Expected
+    } else if params.contains(&ident.as_str()) {
+        FamilyBArgClassification::WrongParam
     } else {
-        SupportedBodyClassification::OutsideHonestSubset
+        FamilyBArgClassification::UnsupportedExpr
+    }
+}
+
+fn classify_family_b_threaded_alias_arg(
+    expr: &syn::Expr,
+    expected_alias: &str,
+    params: &[&str],
+) -> FamilyBArgClassification {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let syn::Expr::Path(path) = expr else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let Some(ident) = path.path.get_ident() else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let ident = ident.to_string();
+    if ident == expected_alias {
+        FamilyBArgClassification::Expected
+    } else if params.contains(&ident.as_str()) {
+        FamilyBArgClassification::WrongParam
+    } else {
+        FamilyBArgClassification::UnsupportedExpr
+    }
+}
+
+fn classify_family_b_non_call_threaded_arg(
+    expr: &syn::Expr,
+    params: &[&str],
+) -> FamilyBBodyClassification {
+    match classify_family_b_param_arg(expr, "", params) {
+        FamilyBArgClassification::WrongParam => FamilyBBodyClassification::SemanticDrift,
+        FamilyBArgClassification::Expected | FamilyBArgClassification::UnsupportedExpr => {
+            FamilyBBodyClassification::Unsupported
+        }
     }
 }
 
@@ -2067,19 +2165,6 @@ fn expr_path_is_callable_name(expr: &syn::Expr, callable_name: &str) -> bool {
         return false;
     };
     path_ends_with(&path.path, &[callable_name])
-}
-
-fn expr_is_top_level_param(expr: &syn::Expr, params: &HashSet<&str>) -> bool {
-    let Some(expr) = strip_expr_wrappers(expr) else {
-        return false;
-    };
-    let syn::Expr::Path(path) = expr else {
-        return false;
-    };
-    path.path.get_ident().is_some_and(|ident| {
-        let ident = ident.to_string();
-        params.contains(ident.as_str())
-    })
 }
 
 fn classify_supported_role_body(
@@ -3616,7 +3701,217 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_near_miss_function_stays_neutral() {
+    fn family_b_drift_marks_swapped_inner_args() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(apply_discount(discount_rate, subtotal), tax_rate)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn family_b_drift_marks_swapped_outer_rate_arg() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(apply_discount(subtotal, discount_rate), discount_rate)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn family_b_drift_marks_wrong_threaded_alias_return() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            let discounted = apply_discount(subtotal, discount_rate);
+            apply_tax(subtotal, tax_rate)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn family_b_drift_marks_duplicated_param_flow() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(apply_discount(subtotal, subtotal), tax_rate)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn family_b_under_specified_marks_dropped_required_arg() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(apply_discount(subtotal, discount_rate))
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::OutsideHonestSupportedSubset]
+        );
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY
+        );
+    }
+
+    #[test]
+    fn family_b_under_specified_marks_unused_extra_param() {
+        let wrapper = function_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            &[
+                ("subtotal", "rust_decimal::Decimal"),
+                ("discount_rate", "rust_decimal::Decimal"),
+                ("tax_rate", "rust_decimal::Decimal"),
+                ("unused_rate", "rust_decimal::Decimal"),
+            ],
+            Some("rust_decimal::Decimal"),
+            &[],
+            &["pricing/apply_discount", "pricing/apply_tax"],
+            r#"{
+            apply_tax(apply_discount(subtotal, discount_rate), tax_rate)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::OutsideHonestSupportedSubset]
+        );
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY
+        );
+    }
+
+    #[test]
+    fn family_b_literal_required_arg_stays_unsupported() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(apply_discount(subtotal, Decimal::ZERO), tax_rate)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::UnsupportedSurface]
+        );
+    }
+
+    #[test]
+    fn family_b_arithmetic_required_arg_stays_unsupported() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(apply_discount(subtotal, discount_rate + tax_rate), tax_rate)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::UnsupportedSurface]
+        );
+    }
+
+    #[test]
+    fn family_b_method_chain_required_arg_stays_unsupported() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",

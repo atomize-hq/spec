@@ -67,6 +67,16 @@ fn copied_ecommerce_fixture() -> (TempDir, PathBuf) {
     (temp_dir, fixture_dst)
 }
 
+fn copied_m19_semantic_falsification_pack() -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture_dst = temp_dir.path().join("semantic_falsification_pack");
+    copy_dir_all(
+        &repo_root().join("spec-cli/tests/fixtures/m19/semantic_falsification_pack"),
+        &fixture_dst,
+    );
+    (temp_dir, fixture_dst)
+}
+
 fn status_unit<'a>(status_json: &'a Value, id: &str) -> &'a Value {
     status_json["units"]
         .as_array()
@@ -2145,8 +2155,9 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
         &fixture_dst,
         &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
     );
-    assert_success(
+    assert_exit_code(
         &status_output,
+        1,
         "unsupported near-miss calculate_total wedge status",
     );
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
@@ -2163,6 +2174,235 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
     let exported = exported_passport(&export_json, "pricing/calculate_total");
     assert!(exported["semantic_review"].is_null());
+}
+
+#[test]
+fn m19_drift_apply_membership_discount_fixture_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/apply_membership_discount_drift.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/apply_membership_discount_drift.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 drift apply_membership_discount fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/apply_membership_discount_drift",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_under_specified_apply_membership_discount_fixture_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path =
+        fixture_dst.join("units/billing/apply_membership_discount_under_specified.unit.spec");
+    let passport_path = fixture_dst
+        .join("units/billing/apply_membership_discount_under_specified.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 under-specified apply_membership_discount fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/apply_membership_discount_under_specified",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_drift_apply_regional_fee_fixture_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/apply_regional_fee_drift.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/apply_regional_fee_drift.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 drift apply_regional_fee fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/apply_regional_fee_drift",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_under_specified_apply_regional_fee_fixture_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/apply_regional_fee_under_specified.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/apply_regional_fee_under_specified.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 under-specified apply_regional_fee fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/apply_regional_fee_under_specified",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_drift_checkout_net_total_fixture_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/checkout_net_total_drift.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/checkout_net_total_drift.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 drift checkout_net_total fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/checkout_net_total_drift",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_under_specified_checkout_net_total_fixture_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/checkout_net_total_under_specified.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/checkout_net_total_under_specified.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 under-specified checkout_net_total fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/checkout_net_total_under_specified",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["outside_honest_supported_subset"],
+            summary: "supported semantic bodies fall outside the honest evaluator subset",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: supported semantic bodies fall outside the honest evaluator subset",
+            ),
+        },
+    );
 }
 
 #[test]

@@ -11,7 +11,7 @@
           "errors": [],
           "evidence_at": "2024-01-02T03:04:05Z",
           "freshness": {
-            "authored_truth_digest": "sha256:6feb5def7c4ada9bfe851de461c9bbb3ec6e61466fecaa0031dd187c6e65793a",
+            "authored_truth_digest": "sha256:2cca2e8d07cfb02da2d810942cecf57c14e5e204e03b1660f1de8d0b76425f9a",
             "authored_truth_status": "stale",
             "backend_execution_status": "unknown"
           }
@@ -28,7 +28,7 @@
       "errors": [],
       "evidence_at": "2024-01-02T03:04:05Z",
       "freshness": {
-        "authored_truth_digest": "sha256:6feb5def7c4ada9bfe851de461c9bbb3ec6e61466fecaa0031dd187c6e65793a",
+        "authored_truth_digest": "sha256:2cca2e8d07cfb02da2d810942cecf57c14e5e204e03b1660f1de8d0b76425f9a",
         "authored_truth_status": "stale",
         "backend_execution_status": "unknown"
       }

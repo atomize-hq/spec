@@ -1155,6 +1155,17 @@ fn assert_unsupported_function_semantic_review(review: &Value) {
     );
 }
 
+fn copy_m19_semantic_falsification_pack() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let fixture_dir = temp_dir.path().join("semantic_falsification_pack");
+    copy_dir_recursive(
+        &repo_root().join("spec-cli/tests/fixtures/m19/semantic_falsification_pack"),
+        &fixture_dir,
+    )
+    .expect("failed to copy M19 semantic falsification fixture");
+    (temp_dir, fixture_dir)
+}
+
 fn setup_m12_data_seam_project() -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path().join("m12-data-seam");
@@ -5933,6 +5944,192 @@ fn unsupported_near_miss_function_review_drops_on_preserve_and_refreshes_on_test
     assert_output_success("unsupported function test should succeed", &test_output);
     assert_unsupported_function_semantic_review(
         &read_passport_json(&passport_path)["semantic_review"],
+    );
+}
+
+#[test]
+fn supported_function_m19_stale_proof_after_semantic_edit_surfaces_on_read_side_commands() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m19_semantic_falsification_pack();
+    let unit_path = fixture_dir.join("units/billing/apply_membership_discount.unit.spec");
+    let passport_path =
+        fixture_dir.join("units/billing/apply_membership_discount.spec.passport.json");
+
+    let test_output = run(&[
+        "test",
+        unit_path.to_str().unwrap(),
+        "--crate-root",
+        fixture_dir.to_str().unwrap(),
+    ]);
+    assert_output_success("M19 supported function test should succeed", &test_output);
+
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_eq!(
+        seeded_review["compatibility_key"],
+        FUNCTION_FAMILY_A_COMPATIBILITY_KEY
+    );
+    assert_eq!(seeded_review["verdict"], "aligned");
+    assert_eq!(
+        seeded_review["summary"],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+    assert_eq!(
+        seeded_review["evaluator_scope"],
+        "supported_function_surface"
+    );
+
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replacen("output >= 0", "output >= Decimal::ZERO", 1),
+    )
+    .unwrap();
+
+    let status_output = run(&["status", fixture_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status should surface stale proof after a semantic edit"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "billing/apply_membership_discount")
+        .unwrap();
+    assert_eq!(unit["status"], "stale", "{status_json}");
+    assert_eq!(unit["reason"], "authored truth changed since last test");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run(&["export", fixture_dir.to_str().unwrap()]);
+    assert_output_success(
+        "M19 supported function export after semantic edit should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "billing/apply_membership_discount")
+        .unwrap();
+    assert_eq!(
+        exported_passport["freshness"]["authored_truth_status"],
+        "stale"
+    );
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+}
+
+fn assert_m19_unsupported_near_miss_command_matrix(unit_relative_path: &str, unit_id: &str) {
+    let (_temp_dir, fixture_dir) = copy_m19_semantic_falsification_pack();
+    let unit_path = fixture_dir.join(unit_relative_path);
+    let passport_path =
+        fixture_dir.join(unit_relative_path.replace(".unit.spec", ".spec.passport.json"));
+
+    let test_output = run(&[
+        "test",
+        unit_path.to_str().unwrap(),
+        "--crate-root",
+        fixture_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "M19 unsupported near-miss test should succeed",
+        &test_output,
+    );
+    assert_unsupported_function_semantic_review(
+        &read_passport_json(&passport_path)["semantic_review"],
+    );
+
+    let build_output = run(&[
+        "build",
+        fixture_dir.join("units").to_str().unwrap(),
+        "--crate-root",
+        fixture_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "M19 unsupported near-miss build should succeed",
+        &build_output,
+    );
+    assert_semantic_review_absent(&read_passport_json(&passport_path)["semantic_review"]);
+
+    let status_output = run(&["status", fixture_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status stays non-green because sibling M19 fixtures remain untested"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == unit_id)
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert!(unit["reason"].is_null(), "{status_json}");
+    assert_semantic_review_absent(&unit["semantic_review"]);
+
+    let export_output = run(&["export", fixture_dir.to_str().unwrap()]);
+    assert_output_success(
+        "M19 unsupported near-miss export should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == unit_id)
+        .unwrap();
+    assert_semantic_review_absent(&exported_passport["semantic_review"]);
+
+    let generate_output = run(&[
+        "generate",
+        fixture_dir.join("units").to_str().unwrap(),
+        "--output",
+        fixture_dir.join("src/generated").to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "M19 unsupported near-miss generate should succeed",
+        &generate_output,
+    );
+    assert_semantic_review_absent(&read_passport_json(&passport_path)["semantic_review"]);
+}
+
+#[test]
+fn unsupported_near_miss_m19_family_a_down_command_matrix_stays_neutral() {
+    if !cargo_available() {
+        return;
+    }
+
+    assert_m19_unsupported_near_miss_command_matrix(
+        "units/billing/apply_membership_discount_unsupported_near_miss.unit.spec",
+        "billing/apply_membership_discount_unsupported_near_miss",
+    );
+}
+
+#[test]
+fn unsupported_near_miss_m19_family_a_up_command_matrix_stays_neutral() {
+    if !cargo_available() {
+        return;
+    }
+
+    assert_m19_unsupported_near_miss_command_matrix(
+        "units/billing/apply_regional_fee_unsupported_near_miss.unit.spec",
+        "billing/apply_regional_fee_unsupported_near_miss",
+    );
+}
+
+#[test]
+fn unsupported_near_miss_m19_family_b_command_matrix_stays_neutral() {
+    if !cargo_available() {
+        return;
+    }
+
+    assert_m19_unsupported_near_miss_command_matrix(
+        "units/billing/checkout_net_total_unsupported_near_miss.unit.spec",
+        "billing/checkout_net_total_unsupported_near_miss",
     );
 }
 
