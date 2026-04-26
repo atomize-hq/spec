@@ -4,6 +4,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
+const FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY: &str =
+    "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
+const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -209,6 +214,14 @@ fn rewrite_apply_discount_as_drift(unit_path: &Path) {
 fn rewrite_apply_discount_as_under_specified(unit_path: &Path) {
     replace_in_file(
         unit_path,
+        "Apply a discount to a subtotal while keeping the result nonnegative.",
+        "todo",
+    );
+}
+
+fn rewrite_apply_discount_as_clamp_drift(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
         "round(discounted.max(Decimal::ZERO))",
         "round(discounted)",
     );
@@ -224,7 +237,39 @@ fn rewrite_apply_tax_as_drift(unit_path: &Path) {
 }
 
 fn rewrite_apply_tax_as_under_specified(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "Add sales tax to a subtotal using a rate expressed as a decimal fraction.",
+        "todo",
+    );
+}
+
+fn rewrite_apply_tax_as_clamp_drift(unit_path: &Path) {
     replace_in_file(unit_path, "round(taxed)", "round(taxed.max(Decimal::ZERO))");
+}
+
+fn rewrite_calculate_total_as_reversed_pipeline(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
+        "    {\n        let taxed_first = apply_tax(subtotal, tax_rate);\n        apply_discount(taxed_first, discount_rate)\n    }\n",
+    );
+}
+
+fn rewrite_calculate_total_as_under_specified(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "Combine discount and tax so a checkout flow can produce the final price.",
+        "todo",
+    );
+}
+
+fn rewrite_calculate_total_as_unsupported_near_miss(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
+        "    {\n        apply_tax(apply_discount(subtotal, discount_rate), tax_rate.max(Decimal::ZERO))\n    }\n",
+    );
 }
 
 struct SupportedFunctionWedgeExpectation<'a> {
@@ -1687,7 +1732,7 @@ fn canonical_apply_discount_semantic_review_wedge_projects_aligned_state() {
         &passport_path,
         SupportedFunctionWedgeExpectation {
             unit_id: "pricing/apply_discount",
-            compatibility_key: "function.apply_discount.v1",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
             verdict: "aligned",
             reason_codes: &[],
             summary: "authored semantics and executable lowering agree on the supported function surface",
@@ -1720,7 +1765,7 @@ fn drift_apply_discount_wedge_projects_failing_state() {
         &passport_path,
         SupportedFunctionWedgeExpectation {
             unit_id: "pricing/apply_discount",
-            compatibility_key: "function.apply_discount.v1",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
             verdict: "semantic_drift",
             reason_codes: &["function_body_contradicts_semantic_intent"],
             summary: "executable lowering contradicts authored semantic claims",
@@ -1758,13 +1803,51 @@ fn under_specified_apply_discount_wedge_projects_incomplete_state() {
         &passport_path,
         SupportedFunctionWedgeExpectation {
             unit_id: "pricing/apply_discount",
-            compatibility_key: "function.apply_discount.v1",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
             verdict: "under_specified",
-            reason_codes: &["outside_honest_supported_subset"],
-            summary: "supported semantic bodies fall outside the honest evaluator subset",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
             expected_status: "incomplete",
             expected_reason: Some(
-                "semantic under-specified: supported semantic bodies fall outside the honest evaluator subset",
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn clamp_drift_apply_discount_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
+    rewrite_apply_discount_as_clamp_drift(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "clamp drift apply_discount wedge unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_discount",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
             ),
         },
     );
@@ -1792,7 +1875,7 @@ fn canonical_apply_tax_semantic_review_wedge_projects_aligned_state() {
         &passport_path,
         SupportedFunctionWedgeExpectation {
             unit_id: "pricing/apply_tax",
-            compatibility_key: "function.apply_tax.v1",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
             verdict: "aligned",
             reason_codes: &[],
             summary: "authored semantics and executable lowering agree on the supported function surface",
@@ -1825,7 +1908,7 @@ fn drift_apply_tax_wedge_projects_failing_state() {
         &passport_path,
         SupportedFunctionWedgeExpectation {
             unit_id: "pricing/apply_tax",
-            compatibility_key: "function.apply_tax.v1",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
             verdict: "semantic_drift",
             reason_codes: &["function_body_contradicts_semantic_intent"],
             summary: "executable lowering contradicts authored semantic claims",
@@ -1863,16 +1946,223 @@ fn under_specified_apply_tax_wedge_projects_incomplete_state() {
         &passport_path,
         SupportedFunctionWedgeExpectation {
             unit_id: "pricing/apply_tax",
-            compatibility_key: "function.apply_tax.v1",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
             verdict: "under_specified",
-            reason_codes: &["outside_honest_supported_subset"],
-            summary: "supported semantic bodies fall outside the honest evaluator subset",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
             expected_status: "incomplete",
             expected_reason: Some(
-                "semantic under-specified: supported semantic bodies fall outside the honest evaluator subset",
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
             ),
         },
     );
+}
+
+#[test]
+fn clamp_drift_apply_tax_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_tax.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_tax.spec.passport.json");
+    rewrite_apply_tax_as_clamp_drift(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "clamp drift apply_tax wedge unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_tax",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn canonical_calculate_total_semantic_review_wedge_projects_aligned_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "aligned calculate_total wedge unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/calculate_total",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "aligned",
+            reason_codes: &[],
+            summary: "authored semantics and executable lowering agree on the supported function surface",
+            expected_status: "valid",
+            expected_reason: None,
+        },
+    );
+}
+
+#[test]
+fn reversed_pipeline_calculate_total_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
+    rewrite_calculate_total_as_reversed_pipeline(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "reversed pipeline calculate_total wedge unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/calculate_total",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn under_specified_calculate_total_wedge_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
+    rewrite_calculate_total_as_under_specified(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "under-specified calculate_total wedge unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/calculate_total",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
+    rewrite_calculate_total_as_unsupported_near_miss(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "unsupported near-miss calculate_total wedge unit test",
+    );
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["semantic_review"]["verdict"], "under_specified");
+    assert_eq!(
+        passport["semantic_review"]["compatibility_key"],
+        "unsupported.function.v1"
+    );
+    assert_eq!(
+        passport["semantic_review"]["reason_codes"],
+        serde_json::json!(["unsupported_surface"])
+    );
+    assert_eq!(
+        passport["semantic_review"]["summary"],
+        "this 'function' surface is not evaluated by the semantic reviewer for this unit"
+    );
+    assert_eq!(
+        passport["semantic_review"]["evaluator_scope"],
+        "unsupported_surface"
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_success(
+        &status_output,
+        "unsupported near-miss calculate_total wedge status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/calculate_total");
+    assert_eq!(status_unit["status"], "valid");
+    assert!(status_unit["reason"].is_null());
+    assert!(status_unit["semantic_review"].is_null());
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(
+        &export_output,
+        "unsupported near-miss calculate_total wedge export",
+    );
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/calculate_total");
+    assert!(exported["semantic_review"].is_null());
 }
 
 #[test]

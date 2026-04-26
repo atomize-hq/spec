@@ -28,8 +28,9 @@ use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
     ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
     PassportProjectionContext, PassportTestResult, apply_projected_passport_truth,
-    build_passport_preserving_proof_state, build_passport_with_evidence, compute_contract_hash,
-    ensure_gitignore_entry, project_passport_truth, read_passport, rfc3339_now, write_passport,
+    build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
+    compute_contract_hash, ensure_gitignore_entry, project_passport_truth_with_context,
+    read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
@@ -39,8 +40,8 @@ use spec_core::plan::{
     PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
 };
 use spec_core::semantic_review::{
-    SemanticHealthEffect, SemanticProjectionMode, SemanticReview, semantic_health_effect,
-    semantic_review_summary,
+    SemanticHealthEffect, SemanticProjectionMode, SemanticReview, SemanticReviewContext,
+    semantic_health_effect, semantic_review_summary,
 };
 #[cfg(test)]
 use spec_core::types::ResolvedSpec;
@@ -1253,10 +1254,11 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         );
 
         let specs_by_id: HashMap<String, LoadedSpec> = validation_specs
-            .root_specs
-            .iter()
-            .map(|spec| (spec.spec.id.clone(), spec.clone()))
+            .local_specs()
+            .into_iter()
+            .map(|spec| (spec.spec.id.clone(), (*spec).clone()))
             .collect();
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
         let molecule_evidence_by_id: HashMap<String, MoleculeEvidence> = molecule_report
             .tests
             .iter()
@@ -1289,8 +1291,12 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                     None
                 }
             };
-            let projected_truth =
-                project_passport_truth(spec, passport.as_ref(), &projection_context);
+            let projected_truth = project_passport_truth_with_context(
+                spec,
+                passport.as_ref(),
+                &projection_context,
+                &semantic_review_context,
+            );
             let freshness = projected_truth.freshness.clone();
             let markers = projected_truth.markers.clone();
             let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
@@ -2197,6 +2203,7 @@ fn write_passports(
             SemanticProjectionMode::Preserve
         },
     };
+    let semantic_review_context = SemanticReviewContext::new(&gate_context.specs_by_id);
     for spec in specs {
         let source_path = Path::new(&spec.source.file_path);
 
@@ -2212,11 +2219,12 @@ fn write_passports(
                 .as_ref()
                 .and_then(|passport| passport.contract_hash.clone())
                 .or_else(|| compute_contract_hash(spec));
-            build_passport_preserving_proof_state(
+            build_passport_preserving_proof_state_with_context(
                 spec,
                 generated_at,
                 existing.as_ref(),
                 contract_hash,
+                &semantic_review_context,
             )
         } else {
             // Test caller: always use freshly-computed values (None is correct for
@@ -2229,7 +2237,12 @@ fn write_passports(
                 .cloned();
             build_passport_with_evidence(spec, generated_at, evidence, contract_hash)
         };
-        let projected_truth = project_passport_truth(spec, Some(&passport), &projection_context);
+        let projected_truth = project_passport_truth_with_context(
+            spec,
+            Some(&passport),
+            &projection_context,
+            &semantic_review_context,
+        );
         apply_projected_passport_truth(&mut passport, projected_truth);
         write_passport(&passport, source_path)
             .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;

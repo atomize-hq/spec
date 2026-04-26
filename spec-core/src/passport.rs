@@ -10,7 +10,9 @@ use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
 use crate::molecule_evidence::MoleculeEvidence;
 use crate::semantic_review::SemanticProjectionMode;
-use crate::semantic_review::{SemanticReview, project_semantic_review};
+use crate::semantic_review::{
+    SemanticReview, SemanticReviewContext, project_semantic_review_with_context,
+};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
@@ -265,6 +267,24 @@ pub fn build_passport_preserving_proof_state(
     existing: Option<&Passport>,
     contract_hash: Option<String>,
 ) -> Passport {
+    let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+    let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+    build_passport_preserving_proof_state_with_context(
+        spec,
+        generated_at,
+        existing,
+        contract_hash,
+        &semantic_review_context,
+    )
+}
+
+pub fn build_passport_preserving_proof_state_with_context(
+    spec: &LoadedSpec,
+    generated_at: &str,
+    existing: Option<&Passport>,
+    contract_hash: Option<String>,
+    semantic_review_context: &SemanticReviewContext<'_>,
+) -> Passport {
     let freshness_anchor = preserved_freshness_anchor(existing);
     let freshness = resolve_passport_freshness_with_anchor(
         spec,
@@ -282,10 +302,11 @@ pub fn build_passport_preserving_proof_state(
             freshness,
             markers: compute_passport_markers(spec),
             proof_coverage: default_passport_proof_coverage(spec),
-            semantic_review: project_semantic_review(
+            semantic_review: project_semantic_review_with_context(
                 spec,
                 existing.and_then(|passport| passport.semantic_review.as_ref()),
                 SemanticProjectionMode::Preserve,
+                semantic_review_context,
             ),
         },
     )
@@ -600,6 +621,16 @@ pub fn project_passport_truth(
     passport: Option<&Passport>,
     context: &PassportProjectionContext<'_>,
 ) -> ProjectedPassportTruth {
+    let semantic_review_context = SemanticReviewContext::new(context.specs_by_id);
+    project_passport_truth_with_context(spec, passport, context, &semantic_review_context)
+}
+
+pub fn project_passport_truth_with_context(
+    spec: &LoadedSpec,
+    passport: Option<&Passport>,
+    context: &PassportProjectionContext<'_>,
+    semantic_review_context: &SemanticReviewContext<'_>,
+) -> ProjectedPassportTruth {
     ProjectedPassportTruth {
         freshness: resolve_passport_freshness(spec, passport),
         markers: compute_passport_markers(spec),
@@ -611,10 +642,11 @@ pub fn project_passport_truth(
             context.molecule_evidence_by_id,
             context.specs_by_id,
         ),
-        semantic_review: project_semantic_review(
+        semantic_review: project_semantic_review_with_context(
             spec,
             passport.and_then(|passport| passport.semantic_review.as_ref()),
             context.semantic_projection_mode,
+            semantic_review_context,
         ),
     }
 }
@@ -995,7 +1027,9 @@ fn secs_to_gregorian(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
 mod tests {
     use super::*;
     use crate::molecule_evidence::{MoleculeEvidenceStatus, build_molecule_evidence};
-    use crate::semantic_review::evaluate_semantic_review;
+    use crate::semantic_review::{
+        SemanticReviewContext, evaluate_semantic_review, evaluate_semantic_review_with_context,
+    };
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, AuthoredSumShape,
@@ -1187,18 +1221,17 @@ mod tests {
                 },
                 contract: Some(Contract {
                     inputs: Some(IndexMap::from([
-                        ("subtotal".to_string(), "Decimal".to_string()),
-                        ("rate".to_string(), "Decimal".to_string()),
+                        ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                        ("rate".to_string(), "rust_decimal::Decimal".to_string()),
                     ])),
-                    returns: Some("Decimal".to_string()),
+                    returns: Some("rust_decimal::Decimal".to_string()),
                     invariants: vec!["output <= subtotal".to_string(), "output >= 0".to_string()],
                 }),
-                deps: vec![],
+                deps: vec!["money/round".to_string()],
                 imports: vec!["rust_decimal::Decimal".to_string()],
                 body: Body {
                     rust: r#"{
-    let discounted = subtotal - subtotal * rate;
-    discounted.max(Decimal::ZERO).round_dp(2)
+    round((subtotal - subtotal * rate).max(Decimal::ZERO))
 }"#
                     .to_string(),
                 },
@@ -1211,6 +1244,101 @@ mod tests {
                 extensions: UnitExtensions::default(),
             },
         }
+    }
+
+    fn make_supported_apply_tax_function(file_path: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: file_path.to_string(),
+                id: "pricing/apply_tax".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_tax".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Apply tax to a subtotal and round the resulting total.".to_string(),
+                },
+                contract: Some(Contract {
+                    inputs: Some(IndexMap::from([
+                        ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                        ("rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    ])),
+                    returns: Some("rust_decimal::Decimal".to_string()),
+                    invariants: vec!["output >= subtotal".to_string()],
+                }),
+                deps: vec!["money/round".to_string()],
+                imports: vec!["rust_decimal::Decimal".to_string()],
+                body: Body {
+                    rust: r#"{
+    round(subtotal + subtotal * rate)
+}"#
+                    .to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "happy_path".to_string(),
+                    expect: "apply_tax(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(11000, 2)".to_string(),
+                }],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions::default(),
+            },
+        }
+    }
+
+    fn make_supported_wrapper_pipeline_function(id: &str, file_path: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: file_path.to_string(),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Return the total after discounting the subtotal and then applying tax."
+                        .to_string(),
+                },
+                contract: Some(Contract {
+                    inputs: Some(IndexMap::from([
+                        ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                        (
+                            "discount_rate".to_string(),
+                            "rust_decimal::Decimal".to_string(),
+                        ),
+                        ("tax_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    ])),
+                    returns: Some("rust_decimal::Decimal".to_string()),
+                    invariants: vec![],
+                }),
+                deps: vec![
+                    "pricing/apply_discount".to_string(),
+                    "pricing/apply_tax".to_string(),
+                ],
+                imports: vec!["rust_decimal::Decimal".to_string()],
+                body: Body {
+                    rust: r#"{
+    let discounted = apply_discount(subtotal, discount_rate);
+    apply_tax(discounted, tax_rate)
+}"#
+                    .to_string(),
+                },
+                local_tests: vec![LocalTest {
+                    id: "happy_path".to_string(),
+                    expect: "true".to_string(),
+                }],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions::default(),
+            },
+        }
+    }
+
+    fn family_b_specs_by_id(specs: &[LoadedSpec]) -> HashMap<String, LoadedSpec> {
+        specs
+            .iter()
+            .cloned()
+            .map(|spec| (spec.spec.id.clone(), spec))
+            .collect()
     }
 
     fn make_loaded_sum_seam(id: &str, file_path: &str) -> LoadedSpec {
@@ -2304,6 +2432,102 @@ mod tests {
         );
 
         assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_with_context_keeps_matching_supported_family_key() {
+        let apply_discount =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let apply_tax = make_supported_apply_tax_function("units/pricing/apply_tax.unit.spec");
+        let wrapper = make_supported_wrapper_pipeline_function(
+            "pricing/calculate_total",
+            "units/pricing/calculate_total.unit.spec",
+        );
+        let specs_by_id =
+            family_b_specs_by_id(&[apply_discount.clone(), apply_tax.clone(), wrapper.clone()]);
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+        let supported_review =
+            evaluate_semantic_review_with_context(&wrapper, &semantic_review_context)
+                .expect("supported wrapper family review expected");
+        assert_eq!(
+            supported_review.compatibility_key,
+            "function.wrapper.pipeline.v1"
+        );
+        let mut existing = make_current_passport(&wrapper);
+        existing.semantic_review = Some(supported_review.clone());
+
+        let rebuilt = build_passport_preserving_proof_state_with_context(
+            &wrapper,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+            &semantic_review_context,
+        );
+
+        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_with_context_drops_mismatched_old_exact_id_review() {
+        let apply_discount =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let apply_tax = make_supported_apply_tax_function("units/pricing/apply_tax.unit.spec");
+        let wrapper = make_supported_wrapper_pipeline_function(
+            "pricing/calculate_total",
+            "units/pricing/calculate_total.unit.spec",
+        );
+        let specs_by_id =
+            family_b_specs_by_id(&[apply_discount.clone(), apply_tax.clone(), wrapper.clone()]);
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+        let mut supported_review =
+            evaluate_semantic_review_with_context(&wrapper, &semantic_review_context)
+                .expect("supported wrapper family review expected");
+        supported_review.compatibility_key = wrapper.spec.id.clone();
+        let mut existing = make_current_passport(&wrapper);
+        existing.semantic_review = Some(supported_review);
+
+        let rebuilt = build_passport_preserving_proof_state_with_context(
+            &wrapper,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+            &semantic_review_context,
+        );
+
+        assert!(rebuilt.semantic_review.is_none());
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_with_context_does_not_promote_unsupported_additive_review_into_supported_family_truth()
+     {
+        let apply_discount =
+            make_supported_apply_discount_function("units/pricing/apply_discount.unit.spec");
+        let apply_tax = make_supported_apply_tax_function("units/pricing/apply_tax.unit.spec");
+        let wrapper = make_supported_wrapper_pipeline_function(
+            "pricing/calculate_total",
+            "units/pricing/calculate_total.unit.spec",
+        );
+        let specs_by_id =
+            family_b_specs_by_id(&[apply_discount.clone(), apply_tax.clone(), wrapper.clone()]);
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+        let unsupported_review =
+            evaluate_semantic_review(&wrapper).expect("single-spec wrapper review expected");
+        assert_eq!(
+            unsupported_review.compatibility_key,
+            "unsupported.function.v1"
+        );
+        let mut existing = make_current_passport(&wrapper);
+        existing.semantic_review = Some(unsupported_review);
+
+        let rebuilt = build_passport_preserving_proof_state_with_context(
+            &wrapper,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+            &semantic_review_context,
+        );
+
+        assert!(rebuilt.semantic_review.is_none());
     }
 
     #[test]

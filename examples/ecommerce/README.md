@@ -16,6 +16,16 @@ The new `units/pricing/discount_policy_checkout_flow.test.spec` molecule test co
 
 The original M12 `pricing/checkout_quote` seam remains in place as a sibling example.
 
+## M18 semantic review boundary
+
+The pricing trio now demonstrates the bounded `kind:function` semantic-review families shipped in M18:
+
+- `pricing/apply_discount` proves `function.arithmetic_leaf.monotone_down_nonnegative.v1`
+- `pricing/apply_tax` proves `function.arithmetic_leaf.monotone_up.v1`
+- `pricing/calculate_total` proves `function.wrapper.pipeline.v1`
+
+This is still a bounded support story, not generic function understanding. Unsupported near-miss wrappers stay additive-only and non-demoting, and only `spec test` refreshes semantic-review truth. `spec build`, `spec generate`, `spec status`, and `spec export` project stored truth only.
+
 ## Locked adversarial score table
 
 Recorded calibration scores for the migration wedge candidates:
