@@ -100,7 +100,7 @@
       "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-04-22T14:29:41Z",
+  "generated_at": "2026-04-26T19:12:11Z",
   "source_file": "examples/ecommerce/units/pricing/checkout_quote.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -114,9 +114,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-21T20:05:59Z",
+    "observed_at": "2026-04-26T18:41:14Z",
     "provenance": {
-      "git_commit_sha": "ecbec463a79b9b626670f11d896a33b2a222c513"
+      "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
     }
   },
   "freshness_anchor": {
@@ -154,6 +154,51 @@
       "molecule"
     ],
     "missing_surfaces": []
+  },
+  "semantic_review": {
+    "verdict": "backend_only_meaning_preserved",
+    "compatibility_key": "data.checkout_quote.v1",
+    "reason_codes": [
+      "backend_only_execution_marker"
+    ],
+    "summary": "backend-only execution markers are present without changing authored meaning",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Quote a checkout total from subtotal plus discount and tax rates."
+      },
+      {
+        "path": "data.fields",
+        "summary": "3 authored data field(s)"
+      },
+      {
+        "path": "constructors",
+        "summary": "1 authored constructor(s)"
+      },
+      {
+        "path": "methods",
+        "summary": "2 semantic method(s) on pricing/checkout_quote"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "data",
+        "summary": "projects to Rust struct CheckoutQuote"
+      },
+      {
+        "path": "constructors",
+        "summary": "1 executable constructor(s)"
+      },
+      {
+        "path": "methods.*.lowering.rust.body",
+        "summary": "2 executable semantic method(s)"
+      },
+      {
+        "path": "backends.rust.derives",
+        "summary": "Rust derives contribute backend-only execution metadata"
+      }
+    ],
+    "evaluator_scope": "supported_data_surface"
   },
   "contract_hash": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87"
 }

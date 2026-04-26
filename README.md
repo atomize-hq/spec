@@ -21,7 +21,7 @@
 ## Project docs
 
 - [`CHANGELOG.md`](CHANGELOG.md): shipped release history
-- [`PLAN.md`](PLAN.md): active implementation roadmap through M14, with shipped milestone context below the current contract
+- [`PLAN.md`](PLAN.md): active implementation roadmap, with shipped milestone context below the current contract
 - [`DECISIONS.md`](DECISIONS.md): project-level decisions that stay stable across releases
 - [`TODOS.md`](TODOS.md): backlog and follow-up inventory
 - [`AGENTS.md`](AGENTS.md): agent workflow and machine-readable `spec` authoring loop
@@ -258,6 +258,8 @@ cargo run -p spec-cli -- status examples/ecommerce --format json
 `validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict, is directory-scoped only, and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
 
 `spec build` and directory-scoped `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec build` is directory-scoped only. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests. Passports persist a `freshness_anchor` snapshot as the proof anchor from the last unit test run, while `freshness` is a live projection against the current spec. Marked seam passports may also carry additive `escape_hatch_gate` metadata. In M14 that gate requires both `atom` and `molecule` proof; `atom` is present only when the authored local tests pass and the seam's projected freshness is still current, and an open gate uses a stable reason like `missing required escape-hatch proof: molecule`.
+
+Semantic review for `kind:function` is bounded to a small shipped family vocabulary, not arbitrary function understanding. The current supported family keys are `function.arithmetic_leaf.monotone_down_nonnegative.v1`, `function.arithmetic_leaf.monotone_up.v1`, and `function.wrapper.pipeline.v1`. In the canonical ecommerce example, `pricing/apply_discount`, `pricing/apply_tax`, and `pricing/calculate_total` refresh to those family keys when their authored and executable shapes fit honestly. Unsupported near-miss function shapes remain additive-only and non-demoting under `unsupported.function.v1`. Only `spec test` refreshes semantic review truth; `spec build`, `spec generate`, `spec status`, and `spec export` only project stored truth and do not mint new supported-function semantic review.
 
 When you pass a single `.unit.spec` file to `spec validate`, `spec test`, or `spec export`, the CLI stays scoped to that exact unit. When you pass a single `.test.spec` file to `spec test`, the CLI runs only that molecule test and writes only that test's evidence artifact. Sibling `.test.spec` files are otherwise loaded for directory invocations.
 

@@ -4,6 +4,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
+const FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY: &str =
+    "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
+const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -62,6 +67,16 @@ fn copied_ecommerce_fixture() -> (TempDir, PathBuf) {
     (temp_dir, fixture_dst)
 }
 
+fn copied_m19_semantic_falsification_pack() -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture_dst = temp_dir.path().join("semantic_falsification_pack");
+    copy_dir_all(
+        &repo_root().join("spec-cli/tests/fixtures/m19/semantic_falsification_pack"),
+        &fixture_dst,
+    );
+    (temp_dir, fixture_dst)
+}
+
 fn status_unit<'a>(status_json: &'a Value, id: &str) -> &'a Value {
     status_json["units"]
         .as_array()
@@ -92,6 +107,310 @@ fn proof_coverage_surfaces<'a>(passport: &'a Value, coverage_id: &str) -> &'a Va
         .find(|coverage| coverage["id"] == coverage_id)
         .map(|coverage| &coverage["surfaces"])
         .unwrap()
+}
+
+fn semantic_review_fixture_root(fixture_dst: &Path, name: &str) -> PathBuf {
+    fixture_dst.join(".m15").join(name)
+}
+
+fn write_semantic_review_molecule(
+    wedge_root: &Path,
+    id: &str,
+    intent: &str,
+    body: &str,
+) -> PathBuf {
+    let path = wedge_root.join("units/pricing/discount_policy_semantic_review.test.spec");
+    fs::write(
+        &path,
+        format!(
+            "id: {id}\nspec_version: \"0.3.0\"\nintent:\n  why: {intent}\ncovers:\n  - pricing/discount_policy\nimports:\n  - rust_decimal::Decimal\nbody:\n  rust: |\n{body}\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+fn write_checkout_quote_semantic_review_molecule(
+    fixture_root: &Path,
+    id: &str,
+    intent: &str,
+    body: &str,
+) -> PathBuf {
+    let path = fixture_root.join("units/pricing/checkout_quote_semantic_review.test.spec");
+    fs::write(
+        &path,
+        format!(
+            "id: {id}\nspec_version: \"0.3.0\"\nintent:\n  why: {intent}\ncovers:\n  - pricing/checkout_quote\nimports:\n  - rust_decimal::Decimal\n  - crate::pricing::apply_discount::apply_discount\n  - crate::pricing::apply_tax::apply_tax\n  - crate::pricing::calculate_total::calculate_total\n  - crate::pricing::checkout_quote::CheckoutQuote\nbody:\n  rust: |\n{body}\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+fn assert_semantic_review(review: &Value, verdict: &str, reason_codes: &[&str], summary: &str) {
+    assert_eq!(review["verdict"], verdict);
+    if reason_codes.is_empty() {
+        assert!(review.get("reason_codes").is_none() || review["reason_codes"].is_null());
+    } else {
+        assert_eq!(
+            review["reason_codes"],
+            serde_json::json!(reason_codes.to_vec())
+        );
+    }
+    assert_eq!(review["summary"], summary);
+    assert_eq!(review["evaluator_scope"], "supported_sum_surface");
+}
+
+fn assert_checkout_quote_semantic_review(
+    review: &Value,
+    verdict: &str,
+    reason_codes: &[&str],
+    summary: &str,
+) {
+    assert_eq!(review["verdict"], verdict);
+    if reason_codes.is_empty() {
+        assert!(review.get("reason_codes").is_none() || review["reason_codes"].is_null());
+    } else {
+        assert_eq!(
+            review["reason_codes"],
+            serde_json::json!(reason_codes.to_vec())
+        );
+    }
+    assert_eq!(review["summary"], summary);
+    assert_eq!(review["evaluator_scope"], "supported_data_surface");
+    assert_eq!(review["compatibility_key"], "data.checkout_quote.v1");
+}
+
+fn assert_function_semantic_review(
+    review: &Value,
+    compatibility_key: &str,
+    verdict: &str,
+    reason_codes: &[&str],
+    summary: &str,
+) {
+    assert_eq!(review["verdict"], verdict);
+    if reason_codes.is_empty() {
+        assert!(review.get("reason_codes").is_none() || review["reason_codes"].is_null());
+    } else {
+        assert_eq!(
+            review["reason_codes"],
+            serde_json::json!(reason_codes.to_vec())
+        );
+    }
+    assert_eq!(review["summary"], summary);
+    assert_eq!(review["evaluator_scope"], "supported_function_surface");
+    assert_eq!(review["compatibility_key"], compatibility_key);
+}
+
+fn replace_in_file(path: &Path, from: &str, to: &str) {
+    let source = fs::read_to_string(path).unwrap();
+    assert!(
+        source.contains(from),
+        "expected {from:?} in {}",
+        path.display()
+    );
+    fs::write(path, source.replacen(from, to, 1)).unwrap();
+}
+
+fn rewrite_apply_discount_as_drift(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "    {\n        let discounted = subtotal - subtotal * rate;\n        round(discounted.max(Decimal::ZERO))\n    }\n",
+        "    {\n        round(subtotal + subtotal * rate)\n    }\n",
+    );
+    replace_in_file(unit_path, "Decimal::new(9000, 2)", "Decimal::new(11000, 2)");
+}
+
+fn rewrite_apply_discount_as_under_specified(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "Apply a discount to a subtotal while keeping the result nonnegative.",
+        "todo",
+    );
+}
+
+fn rewrite_apply_discount_as_clamp_drift(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "round(discounted.max(Decimal::ZERO))",
+        "round(discounted)",
+    );
+}
+
+fn rewrite_apply_tax_as_drift(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "    {\n        let taxed = subtotal + subtotal * rate;\n        round(taxed)\n    }\n",
+        "    {\n        round((subtotal - subtotal * rate).max(Decimal::ZERO))\n    }\n",
+    );
+    replace_in_file(unit_path, "Decimal::new(10725, 2)", "Decimal::new(9275, 2)");
+}
+
+fn rewrite_apply_tax_as_under_specified(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "Add sales tax to a subtotal using a rate expressed as a decimal fraction.",
+        "todo",
+    );
+}
+
+fn rewrite_apply_tax_as_clamp_drift(unit_path: &Path) {
+    replace_in_file(unit_path, "round(taxed)", "round(taxed.max(Decimal::ZERO))");
+}
+
+fn rewrite_calculate_total_as_reversed_pipeline(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
+        "    {\n        let taxed_first = apply_tax(subtotal, tax_rate);\n        apply_discount(taxed_first, discount_rate)\n    }\n",
+    );
+}
+
+fn rewrite_calculate_total_as_under_specified(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "Combine discount and tax so a checkout flow can produce the final price.",
+        "todo",
+    );
+}
+
+fn rewrite_calculate_total_as_unsupported_near_miss(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
+        "    {\n        apply_tax(apply_discount(subtotal, discount_rate), tax_rate.max(Decimal::ZERO))\n    }\n",
+    );
+}
+
+struct SupportedFunctionWedgeExpectation<'a> {
+    unit_id: &'a str,
+    compatibility_key: &'a str,
+    verdict: &'a str,
+    reason_codes: &'a [&'a str],
+    summary: &'a str,
+    expected_status: &'a str,
+    expected_reason: Option<&'a str>,
+}
+
+fn run_supported_function_wedge_assertions(
+    fixture_dst: &Path,
+    passport_path: &Path,
+    expectation: SupportedFunctionWedgeExpectation<'_>,
+) {
+    let passport = read_json(passport_path);
+    assert_function_semantic_review(
+        &passport["semantic_review"],
+        expectation.compatibility_key,
+        expectation.verdict,
+        expectation.reason_codes,
+        expectation.summary,
+    );
+
+    let status_output = run_spec(
+        fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    match expectation.expected_status {
+        "valid" => assert_success(&status_output, "supported function wedge status"),
+        _ => assert_exit_code(&status_output, 1, "supported function wedge status"),
+    }
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, expectation.unit_id);
+    assert_eq!(status_unit["status"], expectation.expected_status);
+    match expectation.expected_reason {
+        Some(reason) => assert_eq!(status_unit["reason"], reason),
+        None => assert!(status_unit["reason"].is_null()),
+    }
+    assert_function_semantic_review(
+        &status_unit["semantic_review"],
+        expectation.compatibility_key,
+        expectation.verdict,
+        expectation.reason_codes,
+        expectation.summary,
+    );
+
+    let export_output = run_spec(fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(&export_output, "supported function wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, expectation.unit_id);
+    assert_function_semantic_review(
+        &exported["semantic_review"],
+        expectation.compatibility_key,
+        expectation.verdict,
+        expectation.reason_codes,
+        expectation.summary,
+    );
+}
+
+fn aligned_checkout_quote_molecule_body() -> &'static str {
+    r#"    {
+        let quote = CheckoutQuote::new(
+            Decimal::new(10000, 2),
+            Decimal::new(10, 2),
+            Decimal::new(725, 4),
+        );
+        let total =
+            calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4));
+        let rounding_sensitive_quote = CheckoutQuote::new(
+            Decimal::new(1001, 2),
+            Decimal::new(3333, 4),
+            Decimal::new(725, 4),
+        );
+        let rounding_sensitive_total = calculate_total(
+            Decimal::new(1001, 2),
+            Decimal::new(3333, 4),
+            Decimal::new(725, 4),
+        );
+
+        assert_eq!(
+            quote.discounted_subtotal(),
+            apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2))
+        );
+        assert_eq!(quote.total(), total);
+        assert_eq!(
+            rounding_sensitive_quote.discounted_subtotal(),
+            apply_discount(Decimal::new(1001, 2), Decimal::new(3333, 4))
+        );
+        assert_eq!(rounding_sensitive_quote.total(), rounding_sensitive_total);
+    }"#
+}
+
+fn contradictory_checkout_quote_molecule_body() -> &'static str {
+    r#"    {
+        let quote = CheckoutQuote::new(
+            Decimal::new(10000, 2),
+            Decimal::new(10, 2),
+            Decimal::new(725, 4),
+        );
+        let rounding_sensitive_quote = CheckoutQuote::new(
+            Decimal::new(1001, 2),
+            Decimal::new(3333, 4),
+            Decimal::new(725, 4),
+        );
+
+        assert_eq!(
+            quote.discounted_subtotal(),
+            apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2))
+        );
+        assert_eq!(
+            quote.total(),
+            apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4))
+        );
+        assert_eq!(
+            rounding_sensitive_quote.discounted_subtotal(),
+            apply_discount(Decimal::new(1001, 2), Decimal::new(3333, 4))
+        );
+        assert_eq!(
+            rounding_sensitive_quote.total(),
+            apply_tax(Decimal::new(1001, 2), Decimal::new(725, 4))
+        );
+    }"#
+}
+
+fn remove_discount_policy_noise(fixture_root: &Path) {
+    let _ = fs::remove_file(fixture_root.join("units/pricing/discount_policy.unit.spec"));
+    let _ =
+        fs::remove_file(fixture_root.join("units/pricing/discount_policy_checkout_flow.test.spec"));
 }
 
 #[test]
@@ -764,5 +1083,1404 @@ fn export_omits_molecule_proof_coverage_when_molecule_evidence_failed() {
     assert_eq!(
         exported["escape_hatch_gate"]["missing_surfaces"],
         serde_json::json!(["molecule"])
+    );
+}
+
+#[test]
+fn canonical_semantic_review_wedge_projects_aligned_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let wedge_root = semantic_review_fixture_root(&fixture_dst, "aligned");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
+    let molecule_path = write_semantic_review_molecule(
+        &wedge_root,
+        "pricing/discount_policy_semantic_review_aligned",
+        "Close the canonical aligned wedge by proving the authored discount semantics through a molecule test.",
+        r#"    {
+        let subtotal = Decimal::new(1500, 2);
+        let none = crate::pricing::discount_policy::DiscountPolicy::None;
+        assert_eq!(none.discount_amount(subtotal), Decimal::ZERO);
+        assert_eq!(none.discounted_subtotal(subtotal), subtotal);
+
+        let percentage = crate::pricing::discount_policy::DiscountPolicy::Percentage {
+            rate: Decimal::new(10, 2),
+        };
+        assert_eq!(
+            percentage.discount_amount(Decimal::new(10000, 2)),
+            Decimal::new(1000, 2)
+        );
+        assert_eq!(
+            percentage.discounted_subtotal(Decimal::new(10000, 2)),
+            Decimal::new(9000, 2)
+        );
+
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+            amount: Decimal::new(2000, 2),
+        };
+        assert_eq!(capped.discount_amount(subtotal), subtotal);
+        assert_eq!(capped.discounted_subtotal(subtotal), Decimal::ZERO);
+    }"#,
+    );
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "aligned wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&molecule_test_output, "aligned wedge molecule test");
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &passport["semantic_review"],
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker", "proof_helper_only_marker"],
+        "backend-only execution markers are present without changing authored meaning",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", wedge_root.to_str().unwrap(), "--format", "json"],
+    );
+    assert_success(&status_output, "aligned wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(status_unit["status"], "valid");
+    assert!(status_unit["reason"].is_null());
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &status_unit["semantic_review"],
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker", "proof_helper_only_marker"],
+        "backend-only execution markers are present without changing authored meaning",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
+    assert_success(&export_output, "aligned wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &exported["semantic_review"],
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker", "proof_helper_only_marker"],
+        "backend-only execution markers are present without changing authored meaning",
+    );
+}
+
+#[test]
+fn contradictory_lowering_wedge_projects_backend_only_semantics_leaked() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let wedge_root = semantic_review_fixture_root(&fixture_dst, "semantic_drift");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
+    let molecule_path = write_semantic_review_molecule(
+        &wedge_root,
+        "pricing/discount_policy_semantic_review_semantic_drift",
+        "Close the contradictory-lowering wedge so semantic review is the only failing signal.",
+        r#"    {
+        let subtotal = Decimal::new(1500, 2);
+        let uncapped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+            amount: Decimal::new(2000, 2),
+        };
+
+        assert_eq!(uncapped.discount_amount(subtotal), Decimal::new(2000, 2));
+        assert_eq!(
+            uncapped.discounted_subtotal(subtotal),
+            Decimal::new(-500, 2)
+        );
+    }"#,
+    );
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "semantic drift wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&molecule_test_output, "semantic drift wedge molecule test");
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &passport["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", wedge_root.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(&status_output, 1, "semantic drift wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(status_unit["status"], "failing");
+    assert_eq!(
+        status_unit["reason"],
+        "backend-only semantics leaked: executable lowering contradicts authored semantic claims"
+    );
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &status_unit["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
+    assert_success(&export_output, "semantic drift wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &exported["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+}
+
+#[test]
+fn under_specified_wedge_projects_incomplete_health_consistently() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let wedge_root = semantic_review_fixture_root(&fixture_dst, "under_specified");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
+    let molecule_path = write_semantic_review_molecule(
+        &wedge_root,
+        "pricing/discount_policy_semantic_review_under_specified",
+        "Close the vague-authorship wedge so status reflects semantic under-specification rather than missing proof.",
+        r#"    {
+        let subtotal = Decimal::new(1500, 2);
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+            amount: Decimal::new(2000, 2),
+        };
+
+        assert_eq!(capped.discount_amount(subtotal), subtotal);
+        assert_eq!(capped.discounted_subtotal(subtotal), Decimal::ZERO);
+    }"#,
+    );
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "under-specified wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&molecule_test_output, "under-specified wedge molecule test");
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &passport["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", wedge_root.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(&status_output, 1, "under-specified wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(status_unit["status"], "incomplete");
+    assert_eq!(
+        status_unit["reason"],
+        "semantic under-specified: authored semantic surfaces are too weak for honest evaluation"
+    );
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &status_unit["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
+    assert_success(&export_output, "under-specified wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &exported["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+}
+
+#[test]
+fn bool_domain_predicate_wedge_projects_under_specified_instead_of_false_green() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let wedge_root =
+        semantic_review_fixture_root(&fixture_dst, "false_green_bool_domain_predicate");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
+    let molecule_path = write_semantic_review_molecule(
+        &wedge_root,
+        "pricing/discount_policy_semantic_review_false_green_bool_domain_predicate",
+        "Close the bool-domain-predicate wedge so semantic review surfaces the extra authored method instead of treating it like proof glue.",
+        r#"    {
+        let subtotal = Decimal::new(1500, 2);
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+            amount: Decimal::new(2000, 2),
+        };
+
+        assert_eq!(capped.discount_amount(subtotal), subtotal);
+        assert_eq!(capped.discounted_subtotal(subtotal), Decimal::ZERO);
+        assert!(capped.has_cap());
+    }"#,
+    );
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "bool-domain-predicate wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &molecule_test_output,
+        "bool-domain-predicate wedge molecule test",
+    );
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &passport["semantic_review"],
+        "under_specified",
+        &["outside_honest_supported_subset"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", wedge_root.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(&status_output, 1, "bool-domain-predicate wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(status_unit["status"], "incomplete");
+    assert_eq!(
+        status_unit["reason"],
+        "semantic under-specified: authored semantic surfaces are too weak for honest evaluation"
+    );
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &status_unit["semantic_review"],
+        "under_specified",
+        &["outside_honest_supported_subset"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
+    assert_success(&export_output, "bool-domain-predicate wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_semantic_review(
+        &exported["semantic_review"],
+        "under_specified",
+        &["outside_honest_supported_subset"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+}
+
+#[test]
+fn canonical_checkout_quote_semantic_review_wedge_projects_aligned_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    remove_discount_policy_noise(&fixture_dst);
+    let unit_path = fixture_dst.join("units/pricing/checkout_quote.unit.spec");
+    let molecule_path = write_checkout_quote_semantic_review_molecule(
+        &fixture_dst,
+        "pricing/checkout_quote_semantic_review_aligned",
+        "Close the canonical aligned checkout-quote wedge by proving the authored data semantics through a molecule test.",
+        aligned_checkout_quote_molecule_body(),
+    );
+    let passport_path = fixture_dst.join("units/pricing/checkout_quote.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "aligned checkout quote wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &molecule_test_output,
+        "aligned checkout quote wedge molecule test",
+    );
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &passport["semantic_review"],
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker"],
+        "backend-only execution markers are present without changing authored meaning",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_success(&status_output, "aligned checkout quote wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/checkout_quote");
+    assert_eq!(status_unit["status"], "valid");
+    assert!(status_unit["reason"].is_null());
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &status_unit["semantic_review"],
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker"],
+        "backend-only execution markers are present without changing authored meaning",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(&export_output, "aligned checkout quote wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/checkout_quote");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &exported["semantic_review"],
+        "backend_only_meaning_preserved",
+        &["backend_only_execution_marker"],
+        "backend-only execution markers are present without changing authored meaning",
+    );
+}
+
+#[test]
+fn contradictory_checkout_quote_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    remove_discount_policy_noise(&fixture_dst);
+    let unit_path = fixture_dst.join("units/pricing/checkout_quote.unit.spec");
+    let molecule_path = write_checkout_quote_semantic_review_molecule(
+        &fixture_dst,
+        "pricing/checkout_quote_semantic_review_semantic_drift",
+        "Close the contradictory checkout-quote wedge so semantic review is the only failing signal.",
+        contradictory_checkout_quote_molecule_body(),
+    );
+    let passport_path = fixture_dst.join("units/pricing/checkout_quote.spec.passport.json");
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source
+            .replace(
+                "apply_tax(self.discounted_subtotal(), self.tax_rate)",
+                "apply_tax(self.subtotal, self.tax_rate)",
+            )
+            .replace(
+                "rust_decimal::Decimal::new(96525, 3)",
+                "rust_decimal::Decimal::new(107250, 3)",
+            ),
+    )
+    .unwrap();
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "checkout quote drift wedge unit test");
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &molecule_test_output,
+        "checkout quote drift wedge molecule test",
+    );
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &passport["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(&status_output, 1, "checkout quote drift wedge status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/checkout_quote");
+    assert_eq!(status_unit["status"], "failing");
+    assert_eq!(
+        status_unit["reason"],
+        "backend-only semantics leaked: executable lowering contradicts authored semantic claims"
+    );
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &status_unit["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(&export_output, "checkout quote drift wedge export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/checkout_quote");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &exported["semantic_review"],
+        "backend_only_semantics_leaked",
+        &["method_body_missing_cap_behavior"],
+        "executable lowering contradicts authored semantic claims",
+    );
+}
+
+#[test]
+fn under_specified_checkout_quote_wedge_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    remove_discount_policy_noise(&fixture_dst);
+    let unit_path = fixture_dst.join("units/pricing/checkout_quote.unit.spec");
+    let molecule_path = write_checkout_quote_semantic_review_molecule(
+        &fixture_dst,
+        "pricing/checkout_quote_semantic_review_under_specified",
+        "Close the vague checkout-quote wedge so semantic review is the only incomplete signal.",
+        aligned_checkout_quote_molecule_body(),
+    );
+    let passport_path = fixture_dst.join("units/pricing/checkout_quote.spec.passport.json");
+    let source = fs::read_to_string(&unit_path).unwrap();
+    let source = source.replace(
+        "Quote a checkout total from subtotal plus discount and tax rates.",
+        "todo",
+    );
+    fs::write(
+        &unit_path,
+        source.replace(
+            "Return the final checkout total after discount and tax.",
+            "todo",
+        ),
+    )
+    .unwrap();
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "checkout quote under-specified wedge unit test",
+    );
+
+    let molecule_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            molecule_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &molecule_test_output,
+        "checkout quote under-specified wedge molecule test",
+    );
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &passport["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(
+        &status_output,
+        1,
+        "checkout quote under-specified wedge status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/checkout_quote");
+    assert_eq!(status_unit["status"], "incomplete");
+    assert_eq!(
+        status_unit["reason"],
+        "semantic under-specified: authored semantic surfaces are too weak for honest evaluation"
+    );
+    assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &status_unit["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(
+        &export_output,
+        "checkout quote under-specified wedge export",
+    );
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/checkout_quote");
+    assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
+    assert_checkout_quote_semantic_review(
+        &exported["semantic_review"],
+        "under_specified",
+        &["vague_unit_intent", "vague_method_intent"],
+        "authored semantic surfaces are too weak for honest evaluation",
+    );
+}
+
+#[test]
+fn canonical_apply_discount_semantic_review_wedge_projects_aligned_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "aligned apply_discount wedge unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_discount",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "aligned",
+            reason_codes: &[],
+            summary: "authored semantics and executable lowering agree on the supported function surface",
+            expected_status: "valid",
+            expected_reason: None,
+        },
+    );
+}
+
+#[test]
+fn drift_apply_discount_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
+    rewrite_apply_discount_as_drift(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "drift apply_discount wedge unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_discount",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn under_specified_apply_discount_wedge_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
+    rewrite_apply_discount_as_under_specified(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "under-specified apply_discount wedge unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_discount",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn clamp_drift_apply_discount_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
+    rewrite_apply_discount_as_clamp_drift(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "clamp drift apply_discount wedge unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_discount",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn canonical_apply_tax_semantic_review_wedge_projects_aligned_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_tax.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_tax.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "aligned apply_tax wedge unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_tax",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "aligned",
+            reason_codes: &[],
+            summary: "authored semantics and executable lowering agree on the supported function surface",
+            expected_status: "valid",
+            expected_reason: None,
+        },
+    );
+}
+
+#[test]
+fn drift_apply_tax_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_tax.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_tax.spec.passport.json");
+    rewrite_apply_tax_as_drift(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "drift apply_tax wedge unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_tax",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn under_specified_apply_tax_wedge_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_tax.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_tax.spec.passport.json");
+    rewrite_apply_tax_as_under_specified(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "under-specified apply_tax wedge unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_tax",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn clamp_drift_apply_tax_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_tax.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_tax.spec.passport.json");
+    rewrite_apply_tax_as_clamp_drift(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "clamp drift apply_tax wedge unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/apply_tax",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn canonical_calculate_total_semantic_review_wedge_projects_aligned_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "aligned calculate_total wedge unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/calculate_total",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "aligned",
+            reason_codes: &[],
+            summary: "authored semantics and executable lowering agree on the supported function surface",
+            expected_status: "valid",
+            expected_reason: None,
+        },
+    );
+}
+
+#[test]
+fn reversed_pipeline_calculate_total_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
+    rewrite_calculate_total_as_reversed_pipeline(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "reversed pipeline calculate_total wedge unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/calculate_total",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn under_specified_calculate_total_wedge_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
+    rewrite_calculate_total_as_under_specified(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "under-specified calculate_total wedge unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/calculate_total",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
+    rewrite_calculate_total_as_unsupported_near_miss(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "unsupported near-miss calculate_total wedge unit test",
+    );
+
+    let passport = read_json(&passport_path);
+    assert_eq!(passport["semantic_review"]["verdict"], "under_specified");
+    assert_eq!(
+        passport["semantic_review"]["compatibility_key"],
+        "unsupported.function.v1"
+    );
+    assert_eq!(
+        passport["semantic_review"]["reason_codes"],
+        serde_json::json!(["unsupported_surface"])
+    );
+    assert_eq!(
+        passport["semantic_review"]["summary"],
+        "this 'function' surface is not evaluated by the semantic reviewer for this unit"
+    );
+    assert_eq!(
+        passport["semantic_review"]["evaluator_scope"],
+        "unsupported_surface"
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(
+        &status_output,
+        1,
+        "unsupported near-miss calculate_total wedge status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/calculate_total");
+    assert_eq!(status_unit["status"], "valid");
+    assert!(status_unit["reason"].is_null());
+    assert!(status_unit["semantic_review"].is_null());
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(
+        &export_output,
+        "unsupported near-miss calculate_total wedge export",
+    );
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/calculate_total");
+    assert!(exported["semantic_review"].is_null());
+}
+
+#[test]
+fn m19_drift_apply_membership_discount_fixture_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/apply_membership_discount_drift.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/apply_membership_discount_drift.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 drift apply_membership_discount fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/apply_membership_discount_drift",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_under_specified_apply_membership_discount_fixture_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path =
+        fixture_dst.join("units/billing/apply_membership_discount_under_specified.unit.spec");
+    let passport_path = fixture_dst
+        .join("units/billing/apply_membership_discount_under_specified.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 under-specified apply_membership_discount fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/apply_membership_discount_under_specified",
+            compatibility_key: FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_drift_apply_regional_fee_fixture_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/apply_regional_fee_drift.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/apply_regional_fee_drift.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 drift apply_regional_fee fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/apply_regional_fee_drift",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_under_specified_apply_regional_fee_fixture_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/apply_regional_fee_under_specified.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/apply_regional_fee_under_specified.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 under-specified apply_regional_fee fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/apply_regional_fee_under_specified",
+            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_drift_checkout_net_total_fixture_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/checkout_net_total_drift.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/checkout_net_total_drift.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 drift checkout_net_total fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/checkout_net_total_drift",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m19_under_specified_checkout_net_total_fixture_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_m19_semantic_falsification_pack();
+    let unit_path = fixture_dst.join("units/billing/checkout_net_total_under_specified.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/billing/checkout_net_total_under_specified.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M19 under-specified checkout_net_total fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "billing/checkout_net_total_under_specified",
+            compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["outside_honest_supported_subset"],
+            summary: "supported semantic bodies fall outside the honest evaluator subset",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: supported semantic bodies fall outside the honest evaluator subset",
+            ),
+        },
+    );
+}
+
+#[test]
+fn checkout_quote_and_discount_plus_tax_still_compose_with_supported_function_pair() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let apply_discount_unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let apply_tax_unit_path = fixture_dst.join("units/pricing/apply_tax.unit.spec");
+    let checkout_quote_unit_path = fixture_dst.join("units/pricing/checkout_quote.unit.spec");
+    let discount_plus_tax_path = fixture_dst.join("units/pricing/discount_plus_tax.test.spec");
+    let checkout_flow_path = fixture_dst.join("units/pricing/checkout_flow.test.spec");
+
+    let apply_discount_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            apply_discount_unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &apply_discount_output,
+        "supported pair apply_discount composition unit test",
+    );
+
+    let apply_tax_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            apply_tax_unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &apply_tax_output,
+        "supported pair apply_tax composition unit test",
+    );
+
+    let checkout_quote_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            checkout_quote_unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &checkout_quote_output,
+        "supported pair checkout_quote composition unit test",
+    );
+
+    let discount_plus_tax_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            discount_plus_tax_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &discount_plus_tax_output,
+        "supported pair discount_plus_tax composition molecule test",
+    );
+
+    let checkout_flow_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            checkout_flow_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &checkout_flow_output,
+        "supported pair checkout_flow composition molecule test",
     );
 }

@@ -32,7 +32,7 @@
       "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-04-22T14:29:41Z",
+  "generated_at": "2026-04-26T19:54:31Z",
   "source_file": "examples/ecommerce/units/pricing/calculate_total.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -42,18 +42,52 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-21T20:05:59Z",
+    "observed_at": "2026-04-26T19:54:34Z",
     "provenance": {
-      "git_commit_sha": "ecbec463a79b9b626670f11d896a33b2a222c513"
+      "git_commit_sha": "6fc914cedc34a341ca8fbb9f0ea051812682ac56"
     }
   },
   "freshness_anchor": {
-    "authored_truth_digest": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92"
+    "authored_truth_digest": "sha256:d5f36faa2c6c498fa5ddd78719759ea1434d8e025b06c592b3296562e3bc5e60"
   },
   "freshness": {
-    "authored_truth_digest": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92",
+    "authored_truth_digest": "sha256:d5f36faa2c6c498fa5ddd78719759ea1434d8e025b06c592b3296562e3bc5e60",
     "authored_truth_status": "fresh",
     "backend_execution_status": "unknown"
+  },
+  "semantic_review": {
+    "verdict": "aligned",
+    "compatibility_key": "function.wrapper.pipeline.v1",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Combine discount and tax so a checkout flow can produce the final price."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "3 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "contract.invariants",
+        "summary": "1 authored invariant(s)"
+      },
+      {
+        "path": "deps",
+        "summary": "2 declared dep(s)"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function calculate_total with 3 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
   },
   "contract_hash": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92"
 }

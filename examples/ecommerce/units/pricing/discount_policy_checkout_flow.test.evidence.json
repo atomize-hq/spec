@@ -8,7 +8,7 @@
     "pricing/apply_tax"
   ],
   "status": "pass",
-  "observed_at": "2026-04-21T20:12:12Z",
+  "observed_at": "2026-04-26T18:41:14Z",
   "test_body_hash": "sha256:98b1a7bc35a658227b147d9f6898bb54764ace9d2676abeb3dcbf3425874afe6",
   "covered_unit_contract_hashes": {
     "pricing/apply_tax": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df",
@@ -17,7 +17,7 @@
   },
   "covered_unit_freshness": {
     "pricing/apply_tax": {
-      "authored_truth_digest": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df"
+      "authored_truth_digest": "sha256:19a30b6b1ee73d55eecf7f437a11751901157ccc41cb98a3512d5080d504dce8"
     },
     "pricing/checkout_quote": {
       "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
@@ -29,6 +29,6 @@
     }
   },
   "provenance": {
-    "git_commit_sha": "ecbec463a79b9b626670f11d896a33b2a222c513"
+    "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
   }
 }

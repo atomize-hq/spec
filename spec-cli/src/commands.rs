@@ -28,8 +28,9 @@ use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
     ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
     PassportProjectionContext, PassportTestResult, apply_projected_passport_truth,
-    build_passport_preserving_proof_state, build_passport_with_evidence, compute_contract_hash,
-    ensure_gitignore_entry, project_passport_truth, read_passport, rfc3339_now, write_passport,
+    build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
+    compute_contract_hash, ensure_gitignore_entry, project_passport_truth_with_context,
+    read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
@@ -37,6 +38,10 @@ use spec_core::pipeline::{
 };
 use spec_core::plan::{
     PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
+};
+use spec_core::semantic_review::{
+    SemanticHealthEffect, SemanticProjectionMode, SemanticReview, SemanticReviewContext,
+    semantic_health_effect, semantic_review_summary,
 };
 #[cfg(test)]
 use spec_core::types::ResolvedSpec;
@@ -170,6 +175,8 @@ struct JsonStatusEntry {
     markers: Option<Vec<PassportMarker>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     escape_hatch_gate: Option<EscapeHatchGate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    semantic_review: Option<SemanticReview>,
 }
 
 #[derive(Clone, Serialize)]
@@ -831,6 +838,29 @@ fn apply_escape_hatch_gate_to_health(
     health
 }
 
+fn apply_semantic_review_to_health(
+    mut health: HealthStatus,
+    semantic_review: Option<&SemanticReview>,
+) -> HealthStatus {
+    if health.status != HealthState::Valid {
+        return health;
+    }
+
+    match semantic_health_effect(semantic_review) {
+        SemanticHealthEffect::KeepBase => health,
+        SemanticHealthEffect::DemoteIncomplete => {
+            health.status = HealthState::Incomplete;
+            health.reason = semantic_review.map(semantic_review_summary);
+            health
+        }
+        SemanticHealthEffect::DemoteFailing => {
+            health.status = HealthState::Failing;
+            health.reason = semantic_review.map(semantic_review_summary);
+            health
+        }
+    }
+}
+
 fn freshness_stale_reason(freshness: Option<&PassportFreshness>) -> Option<String> {
     let freshness = freshness?;
     match (
@@ -1224,10 +1254,11 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
         );
 
         let specs_by_id: HashMap<String, LoadedSpec> = validation_specs
-            .root_specs
-            .iter()
-            .map(|spec| (spec.spec.id.clone(), spec.clone()))
+            .local_specs()
+            .into_iter()
+            .map(|spec| (spec.spec.id.clone(), (*spec).clone()))
             .collect();
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
         let molecule_evidence_by_id: HashMap<String, MoleculeEvidence> = molecule_report
             .tests
             .iter()
@@ -1242,6 +1273,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             molecule_tests: &molecule_report.tests,
             molecule_evidence_by_id: &molecule_evidence_by_id,
             specs_by_id: &specs_by_id,
+            semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
 
         let mut units = Vec::with_capacity(validation_specs.root_specs.len());
@@ -1259,17 +1291,25 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                     None
                 }
             };
-            let projected_truth =
-                project_passport_truth(spec, passport.as_ref(), &projection_context);
+            let projected_truth = project_passport_truth_with_context(
+                spec,
+                passport.as_ref(),
+                &projection_context,
+                &semantic_review_context,
+            );
             let freshness = projected_truth.freshness.clone();
             let markers = projected_truth.markers.clone();
             let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
+            let semantic_review = projected_truth.semantic_review.clone();
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
-            let health = apply_escape_hatch_gate_to_health(
-                compute_health_status(&errors, passport.as_ref(), freshness.as_ref()),
-                escape_hatch_gate.as_ref(),
+            let health = apply_semantic_review_to_health(
+                apply_escape_hatch_gate_to_health(
+                    compute_health_status(&errors, passport.as_ref(), freshness.as_ref()),
+                    escape_hatch_gate.as_ref(),
+                ),
+                semantic_review.as_ref(),
             );
             if !health.status.is_valid() {
                 needs_nonzero_exit = true;
@@ -1284,6 +1324,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 freshness,
                 markers,
                 escape_hatch_gate,
+                semantic_review,
             });
         }
 
@@ -1308,6 +1349,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                         freshness: None,
                         markers: None,
                         escape_hatch_gate: None,
+                        semantic_review: None,
                     });
                     continue;
                 }
@@ -1326,6 +1368,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 freshness: None,
                 markers: None,
                 escape_hatch_gate: None,
+                semantic_review: None,
             });
         }
 
@@ -1859,6 +1902,7 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
             None,
             None,
             None,
+            false,
         )?;
     }
     Ok(())
@@ -2101,6 +2145,7 @@ fn finalize_passports(
     evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
     contract_hash_by_spec: Option<&BTreeMap<String, String>>,
     molecule_evidence_overrides: Option<&BTreeMap<String, MoleculeEvidence>>,
+    refresh_semantic_review: bool,
 ) -> Result<()> {
     if plan.specs.is_empty() {
         return Ok(());
@@ -2118,6 +2163,7 @@ fn finalize_passports(
         evidence_by_spec,
         contract_hash_by_spec,
         &gate_context,
+        refresh_semantic_review,
     )?;
     ensure_gitignore_entry(plan.passport_root)
         .with_context(|| "Failed to update .gitignore for passport files")?;
@@ -2145,12 +2191,19 @@ fn write_passports(
     evidence_by_spec: Option<&BTreeMap<String, PassportEvidence>>,
     contract_hash_by_spec: Option<&BTreeMap<String, String>>,
     gate_context: &LiveEscapeHatchContext,
+    refresh_semantic_review: bool,
 ) -> Result<()> {
     let projection_context = PassportProjectionContext {
         molecule_tests: &gate_context.molecule_tests,
         molecule_evidence_by_id: &gate_context.molecule_evidence_by_id,
         specs_by_id: &gate_context.specs_by_id,
+        semantic_projection_mode: if refresh_semantic_review {
+            SemanticProjectionMode::Refresh
+        } else {
+            SemanticProjectionMode::Preserve
+        },
     };
+    let semantic_review_context = SemanticReviewContext::new(&gate_context.specs_by_id);
     for spec in specs {
         let source_path = Path::new(&spec.source.file_path);
 
@@ -2166,11 +2219,12 @@ fn write_passports(
                 .as_ref()
                 .and_then(|passport| passport.contract_hash.clone())
                 .or_else(|| compute_contract_hash(spec));
-            build_passport_preserving_proof_state(
+            build_passport_preserving_proof_state_with_context(
                 spec,
                 generated_at,
                 existing.as_ref(),
                 contract_hash,
+                &semantic_review_context,
             )
         } else {
             // Test caller: always use freshly-computed values (None is correct for
@@ -2183,7 +2237,12 @@ fn write_passports(
                 .cloned();
             build_passport_with_evidence(spec, generated_at, evidence, contract_hash)
         };
-        let projected_truth = project_passport_truth(spec, Some(&passport), &projection_context);
+        let projected_truth = project_passport_truth_with_context(
+            spec,
+            Some(&passport),
+            &projection_context,
+            &semantic_review_context,
+        );
         apply_projected_passport_truth(&mut passport, projected_truth);
         write_passport(&passport, source_path)
             .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
@@ -2452,6 +2511,7 @@ fn build_command(
             None,
             None,
             None,
+            false,
         )?;
     }
 
@@ -2636,6 +2696,7 @@ fn test_command(
             None,
             None,
             None,
+            false,
         )?;
     }
 
@@ -3053,6 +3114,7 @@ fn finalize_test_passports(
         Some(evidence_by_spec),
         contract_hash_by_spec,
         molecule_evidence_overrides,
+        true,
     )
 }
 
@@ -3085,6 +3147,7 @@ fn refresh_covered_seam_passports(
         None,
         None,
         Some(molecule_evidence_by_id),
+        true,
     )
 }
 
@@ -4736,6 +4799,9 @@ fn print_status_unit(unit: &JsonStatusUnit) {
         unit.id,
         unit.status.as_str()
     );
+    if let Some(review) = &unit.semantic_review {
+        println!("  · {}", semantic_review_summary(review));
+    }
     if unit.status == HealthState::Invalid {
         for entry in &unit.errors {
             println!("  · {}", json_error_entry_to_human(entry));
@@ -5653,6 +5719,117 @@ body:
             preserved.reason.as_deref(),
             Some("authored truth changed since last test")
         );
+    }
+
+    #[test]
+    fn semantic_review_demotes_only_otherwise_valid_units() {
+        let supported_incomplete_review = SemanticReview {
+            verdict: spec_core::semantic_review::SemanticVerdict::UnderSpecified,
+            compatibility_key: "data.checkout_quote.v1".to_string(),
+            reason_codes: vec![
+                spec_core::semantic_review::SemanticReasonCode::MissingSemanticMethods,
+            ],
+            summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: spec_core::semantic_review::EvaluatorScope::SupportedDataSurface,
+        };
+        let supported_failing_review = SemanticReview {
+            verdict: spec_core::semantic_review::SemanticVerdict::SemanticDrift,
+            compatibility_key: "data.checkout_quote.v1".to_string(),
+            reason_codes: vec![
+                spec_core::semantic_review::SemanticReasonCode::MethodBodyMissingCapBehavior,
+            ],
+            summary: "executable lowering contradicts authored semantic claims".to_string(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: spec_core::semantic_review::EvaluatorScope::SupportedDataSurface,
+        };
+
+        let valid_health = HealthStatus {
+            status: HealthState::Valid,
+            reason: None,
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let incomplete = apply_semantic_review_to_health(
+            HealthStatus {
+                status: valid_health.status,
+                reason: valid_health.reason.clone(),
+                evidence_at: valid_health.evidence_at.clone(),
+            },
+            Some(&supported_incomplete_review),
+        );
+        assert_eq!(incomplete.status, HealthState::Incomplete);
+        assert_eq!(
+            incomplete.reason.as_deref(),
+            Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation"
+            )
+        );
+
+        let failing =
+            apply_semantic_review_to_health(valid_health, Some(&supported_failing_review));
+        assert_eq!(failing.status, HealthState::Failing);
+        assert_eq!(
+            failing.reason.as_deref(),
+            Some("semantic drift: executable lowering contradicts authored semantic claims")
+        );
+
+        let stale_health = HealthStatus {
+            status: HealthState::Stale,
+            reason: Some("authored truth changed since last test".to_string()),
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let stale_preserved =
+            apply_semantic_review_to_health(stale_health, Some(&supported_failing_review));
+        assert_eq!(stale_preserved.status, HealthState::Stale);
+        assert_eq!(
+            stale_preserved.reason.as_deref(),
+            Some("authored truth changed since last test")
+        );
+
+        let base_failure = HealthStatus {
+            status: HealthState::Failing,
+            reason: Some("build failed".to_string()),
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let failure_preserved =
+            apply_semantic_review_to_health(base_failure, Some(&supported_incomplete_review));
+        assert_eq!(failure_preserved.status, HealthState::Failing);
+        assert_eq!(failure_preserved.reason.as_deref(), Some("build failed"));
+
+        let invalid_health = HealthStatus {
+            status: HealthState::Invalid,
+            reason: Some("2 errors".to_string()),
+            evidence_at: None,
+        };
+        let invalid_preserved =
+            apply_semantic_review_to_health(invalid_health, Some(&supported_failing_review));
+        assert_eq!(invalid_preserved.status, HealthState::Invalid);
+        assert_eq!(invalid_preserved.reason.as_deref(), Some("2 errors"));
+
+        let incomplete_health = HealthStatus {
+            status: HealthState::Incomplete,
+            reason: Some("1 test not observed in cargo output".to_string()),
+            evidence_at: Some("2026-04-21T00:00:00Z".to_string()),
+        };
+        let incomplete_preserved =
+            apply_semantic_review_to_health(incomplete_health, Some(&supported_failing_review));
+        assert_eq!(incomplete_preserved.status, HealthState::Incomplete);
+        assert_eq!(
+            incomplete_preserved.reason.as_deref(),
+            Some("1 test not observed in cargo output")
+        );
+
+        let untested_health = HealthStatus {
+            status: HealthState::Untested,
+            reason: Some("no evidence".to_string()),
+            evidence_at: None,
+        };
+        let untested_preserved =
+            apply_semantic_review_to_health(untested_health, Some(&supported_incomplete_review));
+        assert_eq!(untested_preserved.status, HealthState::Untested);
+        assert_eq!(untested_preserved.reason.as_deref(), Some("no evidence"));
     }
 
     #[test]

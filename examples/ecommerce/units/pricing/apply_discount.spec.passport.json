@@ -28,7 +28,7 @@
       "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
     }
   ],
-  "generated_at": "2026-04-22T14:29:41Z",
+  "generated_at": "2026-04-26T19:54:25Z",
   "source_file": "examples/ecommerce/units/pricing/apply_discount.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -38,18 +38,52 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-21T20:05:59Z",
+    "observed_at": "2026-04-26T19:54:28Z",
     "provenance": {
-      "git_commit_sha": "ecbec463a79b9b626670f11d896a33b2a222c513"
+      "git_commit_sha": "6fc914cedc34a341ca8fbb9f0ea051812682ac56"
     }
   },
   "freshness_anchor": {
-    "authored_truth_digest": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb"
+    "authored_truth_digest": "sha256:bbc4ed3407164fcb25f710e577c914f0adeff75689da95850dbe7eaab5cd422b"
   },
   "freshness": {
-    "authored_truth_digest": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb",
+    "authored_truth_digest": "sha256:bbc4ed3407164fcb25f710e577c914f0adeff75689da95850dbe7eaab5cd422b",
     "authored_truth_status": "fresh",
     "backend_execution_status": "unknown"
+  },
+  "semantic_review": {
+    "verdict": "aligned",
+    "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Apply a discount to a subtotal while keeping the result nonnegative."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "2 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "contract.invariants",
+        "summary": "2 authored invariant(s)"
+      },
+      {
+        "path": "deps",
+        "summary": "1 declared dep(s)"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function apply_discount with 2 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
   },
   "contract_hash": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb"
 }

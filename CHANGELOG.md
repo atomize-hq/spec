@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.13.0 - 2026-04-26
+
+### Added
+
+- **M19 semantic-review falsification pack** — `spec` now proves supported function review against unseen Family A and Family B examples instead of relying on canonical pricing names.
+- **Family B argument-flow proof** — wrapper pipeline review now rejects swapped, duplicated, dropped, and mis-threaded argument paths instead of false-greening shape-compatible wrappers.
+- **Function semantic freshness coverage** — supported function proof now goes stale when intent, deps, body Rust, or routing-relevant authored contract cues change.
+
+### Changed
+
+- **Unsupported function near misses stay read-side neutral** — `spec test` may record additive unsupported metadata, while `spec build`, `spec status`, and `spec export` keep official health surfaces neutral for unsupported cases.
+- **Semantic review projection now uses family compatibility keys** — preserve-mode keeps only matching supported-family truth and drops stale exact-id or unsupported review metadata on read-side surfaces.
+- **The M19 plan and docs now state the supported-vs-unsupported function contract directly** — maintainers can see what the evaluator proves today and what remains intentionally out of scope.
+
+### Fixed
+
+- **Preserve-mode proof no longer survives semantic edits as current truth** — status and export reproject freshness before surfacing stored semantic review.
+- **Canonical ecommerce semantic-review artifacts are fresh again** — checked-in passports and molecule evidence now match the current Family A and Family B proof model.
+
 ## 0.12.0 - 2026-04-22
 
 ### Added

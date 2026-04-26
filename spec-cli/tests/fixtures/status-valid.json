@@ -5,12 +5,12 @@
       "root": ".",
       "units": [
         {
-          "id": "pricing/apply_discount",
+          "id": "pricing/quote_total",
           "status": "valid",
           "errors": [],
           "evidence_at": "2024-01-02T03:04:05Z",
           "freshness": {
-            "authored_truth_digest": "sha256:4533bae8bd714eaf6c665bac95eb5694dc7812c5c6c579732a7197d97cc17fc0",
+            "authored_truth_digest": "sha256:1be0b983b09ee5f64d824e0aa193f64c5f5521371f1df926a5443bb8f62ac893",
             "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
@@ -21,12 +21,12 @@
   ],
   "units": [
     {
-      "id": "pricing/apply_discount",
+      "id": "pricing/quote_total",
       "status": "valid",
       "errors": [],
       "evidence_at": "2024-01-02T03:04:05Z",
       "freshness": {
-        "authored_truth_digest": "sha256:4533bae8bd714eaf6c665bac95eb5694dc7812c5c6c579732a7197d97cc17fc0",
+        "authored_truth_digest": "sha256:1be0b983b09ee5f64d824e0aa193f64c5f5521371f1df926a5443bb8f62ac893",
         "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }

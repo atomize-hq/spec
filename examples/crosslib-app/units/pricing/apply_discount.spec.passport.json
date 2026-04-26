@@ -24,7 +24,7 @@
       "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
     }
   ],
-  "generated_at": "2026-04-16T16:43:55Z",
+  "generated_at": "2026-04-26T18:42:43Z",
   "source_file": "examples/crosslib-app/units/pricing/apply_discount.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -34,10 +34,27 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-16T16:43:58Z",
+    "observed_at": "2026-04-26T18:42:45Z",
     "provenance": {
-      "git_commit_sha": "0b00975c84d31e75d75008b38bc1d7ca1c3bcbc9"
+      "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
     }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "unknown"
+  },
+  "semantic_review": {
+    "verdict": "under_specified",
+    "compatibility_key": "unsupported.function.v1",
+    "reason_codes": [
+      "unsupported_surface"
+    ],
+    "summary": "this 'function' surface is not evaluated by the semantic reviewer for this unit",
+    "evaluator_scope": "unsupported_surface"
   },
   "contract_hash": "sha256:a40bb5809eb8af8ebe7f3e247aff4691f1c22a13fd72baf3ed6ca67e269d6b67"
 }

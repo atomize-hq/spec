@@ -18,6 +18,7 @@ pub mod normalizer;
 pub mod passport;
 pub mod pipeline;
 pub mod plan;
+pub mod semantic_review;
 mod syntax;
 pub mod types;
 pub mod validator;
