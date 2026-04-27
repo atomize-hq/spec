@@ -22,7 +22,7 @@
               "unsupported_function_surface"
             ],
             "rewrite_hints": [
-              "Express the function as a supported arithmetic leaf or a two-step wrapper pipeline."
+              "Express the function as a supported arithmetic leaf, a two-step wrapper pipeline, or a three-step chain3 wrapper pipeline."
             ],
             "reason_codes": [
               "unsupported_surface"
@@ -70,7 +70,7 @@
           "unsupported_function_surface"
         ],
         "rewrite_hints": [
-          "Express the function as a supported arithmetic leaf or a two-step wrapper pipeline."
+          "Express the function as a supported arithmetic leaf, a two-step wrapper pipeline, or a three-step chain3 wrapper pipeline."
         ],
         "reason_codes": [
           "unsupported_surface"

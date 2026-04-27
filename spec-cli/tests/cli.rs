@@ -826,6 +826,7 @@ const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.m
 const FUNCTION_FAMILY_A_LEGACY_COMPATIBILITY_KEY: &str = "function.apply_discount.v1";
 const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
 const FUNCTION_FAMILY_B_LEGACY_COMPATIBILITY_KEY: &str = "function.calculate_total.v1";
+const FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.chain3.v1";
 
 fn load_unit_specs_by_id(units_dir: &Path) -> HashMap<String, spec_core::types::LoadedSpec> {
     WalkDir::new(units_dir)
@@ -1202,6 +1203,19 @@ fn copy_m20_unsupported_truth_pack() -> (tempfile::TempDir, PathBuf) {
         &fixture_dir,
     )
     .expect("failed to copy M20 unsupported truth fixture");
+    (temp_dir, fixture_dir)
+}
+
+fn copy_m21_chain3_fixture(bucket: &str) -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let fixture_dir = temp_dir.path().join(format!("m21_chain3_{bucket}"));
+    copy_dir_recursive(
+        &repo_root()
+            .join("semantic-families/function.wrapper.pipeline.chain3.v1/fixtures")
+            .join(bucket),
+        &fixture_dir,
+    )
+    .expect("failed to copy M21 chain3 fixture");
     (temp_dir, fixture_dir)
 }
 
@@ -5813,6 +5827,186 @@ fn supported_wrapper_function_semantic_review_command_matrix_preserves_or_refres
         &passport_path,
         &seeded_review,
         FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+    );
+}
+
+#[test]
+fn m21_chain3_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    let unit_path = fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec");
+    let passport_path =
+        fixture_dir.join("units/pricing/checkout_chain3_aligned.spec.passport.json");
+
+    let test_output = run(&[
+        "test",
+        unit_path.to_str().unwrap(),
+        "--crate-root",
+        fixture_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "M21 chain3 aligned fixture test should succeed",
+        &test_output,
+    );
+
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_supported_function_semantic_review(
+        &seeded_review,
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+    );
+
+    let status_output = run_in(&fixture_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status stays non-green because helper units remain untested"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/checkout_chain3_aligned")
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run_in(&fixture_dir, &["export", "units"]);
+    assert_output_success("M21 chain3 export should succeed", &export_output);
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/checkout_chain3_aligned")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+
+    let generate_output = run_in(
+        &fixture_dir,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success("M21 chain3 generate should succeed", &generate_output);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let build_output = run_in(
+        &fixture_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("M21 chain3 build should succeed", &build_output);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let refresh_output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("M21 chain3 refresh test should succeed", &refresh_output);
+    let refreshed_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_eq!(refreshed_review, seeded_review);
+    assert_eq!(
+        refreshed_review["compatibility_key"],
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY
+    );
+    assert_eq!(
+        refreshed_review["evaluator_scope"],
+        "supported_function_surface"
+    );
+}
+
+#[test]
+fn m21_chain3_truth_surface_stale_status_and_export_preserve_last_proven_review() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    let unit_path = fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec");
+    let passport_path =
+        fixture_dir.join("units/pricing/checkout_chain3_aligned.spec.passport.json");
+
+    let test_output = run(&[
+        "test",
+        unit_path.to_str().unwrap(),
+        "--crate-root",
+        fixture_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "M21 chain3 aligned fixture test should succeed",
+        &test_output,
+    );
+
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_supported_function_semantic_review(
+        &seeded_review,
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+    );
+
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replace(
+            "Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount.",
+            "Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount with revised authored truth.",
+        ),
+    )
+    .unwrap();
+
+    let status_output = run(&["status", fixture_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "chain3 stale status should exit non-zero"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/checkout_chain3_aligned")
+        .unwrap();
+    assert_eq!(unit["status"], "stale", "{status_json}");
+    assert_eq!(unit["reason"], "authored truth changed since last test");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run(&["export", fixture_dir.to_str().unwrap()]);
+    assert_output_success(
+        "M21 chain3 stale export should preserve prior review",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/checkout_chain3_aligned")
+        .unwrap();
+    assert_eq!(
+        exported_passport["freshness"]["authored_truth_status"],
+        "stale"
+    );
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
     );
 }
 

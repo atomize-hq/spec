@@ -8,6 +8,7 @@ const FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_down_nonnegative.v1";
 const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
 const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
+const FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.chain3.v1";
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -72,6 +73,18 @@ fn copied_m19_semantic_falsification_pack() -> (TempDir, PathBuf) {
     let fixture_dst = temp_dir.path().join("semantic_falsification_pack");
     copy_dir_all(
         &repo_root().join("spec-cli/tests/fixtures/m19/semantic_falsification_pack"),
+        &fixture_dst,
+    );
+    (temp_dir, fixture_dst)
+}
+
+fn copied_m21_chain3_fixture(bucket: &str) -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture_dst = temp_dir.path().join(format!("m21_chain3_{bucket}"));
+    copy_dir_all(
+        &repo_root()
+            .join("semantic-families/function.wrapper.pipeline.chain3.v1/fixtures")
+            .join(bucket),
         &fixture_dst,
     );
     (temp_dir, fixture_dst)
@@ -229,6 +242,11 @@ fn assert_unsupported_function_semantic_review(review: &Value) {
             .is_some_and(|hints| !hints.is_empty()),
         "expected rewrite_hints for {review}"
     );
+}
+
+fn assert_unsupported_function_reason(review: &Value, reason: &str) {
+    assert_unsupported_function_semantic_review(review);
+    assert_eq!(review["unsupported_reason_codes"][0], reason, "{review}");
 }
 
 fn replace_in_file(path: &Path, from: &str, to: &str) {
@@ -2033,7 +2051,7 @@ fn clamp_drift_apply_tax_wedge_projects_failing_state() {
 }
 
 #[test]
-fn canonical_calculate_total_semantic_review_wedge_projects_aligned_state() {
+fn m21_chain3_regression_family_b_read_side_surfaces_are_not_shadowed() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
     let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
@@ -2188,6 +2206,197 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
     let exported = exported_passport(&export_json, "pricing/calculate_total");
     assert_eq!(exported["semantic_review"], seeded_review);
+}
+
+#[test]
+fn m21_chain3_corpus_aligned_fixture_projects_valid_state() {
+    let (_temp_dir, fixture_dst) = copied_m21_chain3_fixture("aligned");
+    let unit_path = fixture_dst.join("units/pricing/checkout_chain3_aligned.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/pricing/checkout_chain3_aligned.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "M21 chain3 aligned fixture unit test");
+
+    let passport = read_json(&passport_path);
+    assert_function_semantic_review(
+        &passport["semantic_review"],
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(&status_output, 1, "M21 chain3 aligned fixture status");
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/checkout_chain3_aligned");
+    assert_eq!(status_unit["status"], "valid");
+    assert!(status_unit["reason"].is_null());
+    assert_function_semantic_review(
+        &status_unit["semantic_review"],
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(&export_output, "M21 chain3 aligned fixture export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/checkout_chain3_aligned");
+    assert_function_semantic_review(
+        &exported["semantic_review"],
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+}
+
+#[test]
+fn m21_chain3_corpus_drift_fixture_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_m21_chain3_fixture("drift");
+    let unit_path = fixture_dst.join("units/pricing/checkout_chain3_drift.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/checkout_chain3_drift.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(&unit_test_output, "M21 chain3 drift fixture unit test");
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/checkout_chain3_drift",
+            compatibility_key: FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+            verdict: "semantic_drift",
+            reason_codes: &["function_body_contradicts_semantic_intent"],
+            summary: "executable lowering contradicts authored semantic claims",
+            expected_status: "failing",
+            expected_reason: Some(
+                "semantic drift: executable lowering contradicts authored semantic claims",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m21_chain3_corpus_under_specified_fixture_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_m21_chain3_fixture("under_specified");
+    let unit_path = fixture_dst.join("units/pricing/checkout_chain3_under_specified.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/pricing/checkout_chain3_under_specified.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M21 chain3 under-specified fixture unit test",
+    );
+
+    run_supported_function_wedge_assertions(
+        &fixture_dst,
+        &passport_path,
+        SupportedFunctionWedgeExpectation {
+            unit_id: "pricing/checkout_chain3_under_specified",
+            compatibility_key: FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+            verdict: "under_specified",
+            reason_codes: &["vague_unit_intent"],
+            summary: "authored semantic surfaces are too weak for honest evaluation",
+            expected_status: "incomplete",
+            expected_reason: Some(
+                "semantic under-specified: authored semantic surfaces are too weak for honest evaluation",
+            ),
+        },
+    );
+}
+
+#[test]
+fn m21_chain3_corpus_unsupported_near_miss_stays_additive_only_and_neutral() {
+    let (_temp_dir, fixture_dst) = copied_m21_chain3_fixture("unsupported_near_miss");
+    let unit_path =
+        fixture_dst.join("units/pricing/checkout_chain3_unsupported_near_miss.unit.spec");
+    let passport_path =
+        fixture_dst.join("units/pricing/checkout_chain3_unsupported_near_miss.spec.passport.json");
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "M21 chain3 unsupported near-miss fixture unit test",
+    );
+
+    let passport = read_json(&passport_path);
+    let seeded_review = passport["semantic_review"].clone();
+    assert_unsupported_function_reason(&seeded_review, "unsupported_wrapper_body_shape");
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(
+        &status_output,
+        1,
+        "M21 chain3 unsupported near-miss fixture status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(
+        &status_json,
+        "pricing/checkout_chain3_unsupported_near_miss",
+    );
+    assert_eq!(status_unit["status"], "valid");
+    assert!(status_unit["reason"].is_null());
+    assert_eq!(status_unit["semantic_review"], seeded_review);
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(
+        &export_output,
+        "M21 chain3 unsupported near-miss fixture export",
+    );
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(
+        &export_json,
+        "pricing/checkout_chain3_unsupported_near_miss",
+    );
+    assert_eq!(exported["semantic_review"], seeded_review);
+}
+
+#[test]
+fn m21_chain3_regression_unsupported_near_miss_stays_additive_only_and_neutral() {
+    m21_chain3_corpus_unsupported_near_miss_stays_additive_only_and_neutral();
 }
 
 #[test]

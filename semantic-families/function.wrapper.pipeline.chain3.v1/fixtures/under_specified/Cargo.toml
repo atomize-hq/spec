@@ -1,0 +1,9 @@
+[package]
+name = "function-wrapper-pipeline-chain3-under-specified"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[workspace]

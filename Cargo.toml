@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["spec-core", "spec-cli"]
+members = ["spec-core", "spec-cli", "xtask"]
 
 [workspace.package]
 version = "0.13.0"
