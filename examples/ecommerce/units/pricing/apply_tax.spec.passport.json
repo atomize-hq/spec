@@ -27,7 +27,7 @@
       "expect": "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
     }
   ],
-  "generated_at": "2026-04-26T21:45:01Z",
+  "generated_at": "2026-04-27T12:15:57Z",
   "source_file": "examples/ecommerce/units/pricing/apply_tax.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -37,9 +37,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-26T19:54:31Z",
+    "observed_at": "2026-04-27T11:49:48Z",
     "provenance": {
-      "git_commit_sha": "6fc914cedc34a341ca8fbb9f0ea051812682ac56"
+      "git_commit_sha": "40267ec7e35053973e8e6961c5f066b2a0ad5bb1"
     }
   },
   "freshness_anchor": {
@@ -53,6 +53,7 @@
   "semantic_review": {
     "verdict": "aligned",
     "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+    "support_status": "supported",
     "summary": "authored semantics and executable lowering agree on the supported function surface",
     "authored_surfaces": [
       {

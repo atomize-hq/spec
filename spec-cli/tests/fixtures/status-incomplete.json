@@ -13,15 +13,7 @@
             "backend_execution_status": "unknown"
           },
           "errors": [],
-          "evidence_at": "2024-01-02T03:04:05Z",
-          "semantic_review": {
-            "verdict": "under_specified",
-            "reason_codes": [
-              "unsupported_surface"
-            ],
-            "summary": "unit kind 'function' is not evaluated by the M15 semantic reviewer",
-            "evaluator_scope": "unsupported_surface"
-          }
+          "evidence_at": "2024-01-02T03:04:05Z"
         }
       ],
       "molecule_tests": []
@@ -37,15 +29,7 @@
         "backend_execution_status": "unknown"
       },
       "errors": [],
-      "evidence_at": "2024-01-02T03:04:05Z",
-      "semantic_review": {
-        "verdict": "under_specified",
-        "reason_codes": [
-          "unsupported_surface"
-        ],
-        "summary": "unit kind 'function' is not evaluated by the M15 semantic reviewer",
-        "evaluator_scope": "unsupported_surface"
-      }
+      "evidence_at": "2024-01-02T03:04:05Z"
     }
   ]
 }

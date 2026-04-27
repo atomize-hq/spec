@@ -292,6 +292,13 @@ pub fn build_passport_preserving_proof_state_with_context(
         contract_hash.as_deref(),
         None,
     );
+    let semantic_review = project_passport_semantic_review_with_context(
+        spec,
+        existing.and_then(|passport| passport.semantic_review.as_ref()),
+        SemanticProjectionMode::Preserve,
+        semantic_review_context,
+        freshness.as_ref(),
+    );
     build_passport_with_metadata(
         spec,
         generated_at,
@@ -302,12 +309,7 @@ pub fn build_passport_preserving_proof_state_with_context(
             freshness,
             markers: compute_passport_markers(spec),
             proof_coverage: default_passport_proof_coverage(spec),
-            semantic_review: project_semantic_review_with_context(
-                spec,
-                existing.and_then(|passport| passport.semantic_review.as_ref()),
-                SemanticProjectionMode::Preserve,
-                semantic_review_context,
-            ),
+            semantic_review,
         },
     )
 }
@@ -666,8 +668,9 @@ pub fn project_passport_truth_with_context(
     context: &PassportProjectionContext<'_>,
     semantic_review_context: &SemanticReviewContext<'_>,
 ) -> ProjectedPassportTruth {
+    let freshness = resolve_passport_freshness(spec, passport);
     ProjectedPassportTruth {
-        freshness: resolve_passport_freshness(spec, passport),
+        freshness: freshness.clone(),
         markers: compute_passport_markers(spec),
         proof_coverage: project_passport_proof_coverage(spec, passport, context),
         escape_hatch_gate: evaluate_escape_hatch_gate(
@@ -677,11 +680,12 @@ pub fn project_passport_truth_with_context(
             context.molecule_evidence_by_id,
             context.specs_by_id,
         ),
-        semantic_review: project_semantic_review_with_context(
+        semantic_review: project_passport_semantic_review_with_context(
             spec,
             passport.and_then(|passport| passport.semantic_review.as_ref()),
             context.semantic_projection_mode,
             semantic_review_context,
+            freshness.as_ref(),
         ),
     }
 }
@@ -695,6 +699,50 @@ pub fn apply_projected_passport_truth(
     passport.proof_coverage = projected_truth.proof_coverage;
     passport.escape_hatch_gate = projected_truth.escape_hatch_gate;
     passport.semantic_review = projected_truth.semantic_review;
+}
+
+fn project_passport_semantic_review_with_context(
+    spec: &LoadedSpec,
+    existing: Option<&SemanticReview>,
+    mode: SemanticProjectionMode,
+    semantic_review_context: &SemanticReviewContext<'_>,
+    freshness: Option<&PassportFreshness>,
+) -> Option<SemanticReview> {
+    let projected =
+        project_semantic_review_with_context(spec, existing, mode, semantic_review_context);
+    if projected.is_some() || mode != SemanticProjectionMode::Preserve {
+        return projected;
+    }
+
+    let existing = existing?;
+    if !should_preserve_unsupported_function_review(spec, existing, freshness) {
+        return None;
+    }
+
+    let refreshed = project_semantic_review_with_context(
+        spec,
+        None,
+        SemanticProjectionMode::Refresh,
+        semantic_review_context,
+    )?;
+    (refreshed.effective_support_status() == existing.effective_support_status()
+        && refreshed.compatibility_key == existing.compatibility_key)
+        .then(|| existing.clone())
+}
+
+fn should_preserve_unsupported_function_review(
+    spec: &LoadedSpec,
+    review: &SemanticReview,
+    freshness: Option<&PassportFreshness>,
+) -> bool {
+    matches!(spec.spec.unit_kind(), Ok(UnitKind::Function))
+        && review.compatibility_key == "unsupported.function.v1"
+        && review.effective_support_status()
+            == crate::semantic_review::SemanticSupportStatus::Unsupported
+        && matches!(
+            freshness.map(|freshness| freshness.authored_truth_status),
+            Some(FreshnessStatus::Fresh)
+        )
 }
 
 fn resolve_passport_freshness_with_anchor(
@@ -2757,7 +2805,7 @@ mod tests {
     }
 
     #[test]
-    fn build_passport_preserving_proof_state_drops_unsupported_review_for_unsupported_kind() {
+    fn build_passport_preserving_proof_state_preserves_fresh_unsupported_function_review() {
         let spec = make_loaded_spec(
             "pricing/calculate_total",
             "units/pricing/calculate_total.unit.spec",
@@ -2777,7 +2825,7 @@ mod tests {
         let unsupported_review =
             evaluate_semantic_review(&spec).expect("unsupported review expected");
         let mut existing = make_current_passport(&spec);
-        existing.semantic_review = Some(unsupported_review);
+        existing.semantic_review = Some(unsupported_review.clone());
 
         let rebuilt = build_passport_preserving_proof_state(
             &spec,
@@ -2786,7 +2834,48 @@ mod tests {
             existing.contract_hash.clone(),
         );
 
+        assert_eq!(rebuilt.semantic_review, Some(unsupported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_drops_stale_unsupported_function_review() {
+        let original_spec = make_loaded_spec(
+            "pricing/calculate_total",
+            "units/pricing/calculate_total.unit.spec",
+            Some("0.3.0"),
+            Some(Contract {
+                inputs: Some(IndexMap::from([
+                    ("subtotal".to_string(), "Decimal".to_string()),
+                    ("discount_rate".to_string(), "Decimal".to_string()),
+                    ("tax_rate".to_string(), "Decimal".to_string()),
+                ])),
+                returns: Some("Decimal".to_string()),
+                invariants: vec!["output >= 0".to_string()],
+            }),
+            vec![],
+            vec![("combined_flow", "true")],
+        );
+        let mut existing = make_current_passport(&original_spec);
+        existing.semantic_review = evaluate_semantic_review(&original_spec);
+
+        let mut changed_spec = original_spec.clone();
+        changed_spec.spec.intent.why = "Apply a revised checkout pricing flow".to_string();
+
+        let rebuilt = build_passport_preserving_proof_state(
+            &changed_spec,
+            "2026-04-22T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+        );
+
         assert!(rebuilt.semantic_review.is_none());
+        assert_eq!(
+            rebuilt
+                .freshness
+                .as_ref()
+                .map(|freshness| freshness.authored_truth_status),
+            Some(FreshnessStatus::Stale)
+        );
     }
 
     #[test]

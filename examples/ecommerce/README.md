@@ -16,17 +16,19 @@ The new `units/pricing/discount_policy_checkout_flow.test.spec` molecule test co
 
 The original M12 `pricing/checkout_quote` seam remains in place as a sibling example.
 
-## M19 semantic review boundary
+## M20 semantic review boundary
 
-The pricing trio demonstrates the bounded `kind:function` semantic-review families that M19 now proves with unseen examples and stricter wrapper-flow checks:
+The pricing trio demonstrates the bounded `kind:function` semantic-review families currently proved with unseen examples and stricter wrapper-flow checks:
 
 - `pricing/apply_discount` proves `function.arithmetic_leaf.monotone_down_nonnegative.v1`
 - `pricing/apply_tax` proves `function.arithmetic_leaf.monotone_up.v1`
 - `pricing/calculate_total` proves `function.wrapper.pipeline.v1`
 
-This is still a bounded support story, not generic function understanding. Unsupported near-miss wrappers stay additive-only and non-demoting, and only `spec test` refreshes semantic-review truth. `spec build`, `spec generate`, `spec status`, and `spec export` project stored truth only.
+This is still a bounded support story, not generic function understanding, and M20 adds no new supported family. Unsupported near-miss wrappers stay keyed as `unsupported.function.v1`, additive-only, and health-neutral.
 
-That also means preserve/read-side commands do not mint new supported-function truth. If `spec test` records an `unsupported.function.v1` near miss in a unit passport, `spec build`, `spec generate`, `spec status`, and `spec export` still keep that result neutral instead of surfacing it as supported semantic proof.
+M20 also makes unsupported-function truth explicit. The public fields are exactly `semantic_review.support_status`, `semantic_review.unsupported_reason_codes`, and `semantic_review.rewrite_hints`. New supported reviews write `support_status: supported`; unsupported function reviews write `support_status: unsupported`. Consumers should branch on `semantic_review.support_status == "unsupported"` rather than infer unsupported state from `verdict` or `evaluator_scope`, though legacy reviews without `support_status` still fall back to `evaluator_scope` plus `unsupported.*.v1` inference.
+
+Only `spec test` refreshes semantic-review truth. `spec build`, `spec generate`, `spec status`, and `spec export` project stored truth only. Fresh unsupported function proof is preserved on read-side surfaces such as `spec status` and `spec export`; stale unsupported function proof is dropped there while the unit's freshness/stale health still reports normally.
 
 ## Locked adversarial score table
 

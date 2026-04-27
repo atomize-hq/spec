@@ -45,6 +45,31 @@ pub enum EvaluatorScope {
     UnsupportedSurface,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticSupportStatus {
+    Supported,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum UnsupportedFunctionReasonCode {
+    UnsupportedControlFlow,
+    UnsupportedDepTopology,
+    UnsupportedRequiredArgumentExpression,
+    UnsupportedWrapperBodyShape,
+    UnsupportedArithmeticShape,
+    UnsupportedFunctionSurface,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UnsupportedFunctionDiagnostic {
+    reason_code: UnsupportedFunctionReasonCode,
+    summary: &'static str,
+    rewrite_hints: &'static [&'static str],
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SemanticCitation {
     pub path: String,
@@ -55,6 +80,12 @@ pub struct SemanticCitation {
 pub struct SemanticReview {
     pub verdict: SemanticVerdict,
     pub compatibility_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub support_status: Option<SemanticSupportStatus>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported_reason_codes: Vec<UnsupportedFunctionReasonCode>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rewrite_hints: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reason_codes: Vec<SemanticReasonCode>,
     pub summary: String,
@@ -63,6 +94,29 @@ pub struct SemanticReview {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub executable_surfaces: Vec<SemanticCitation>,
     pub evaluator_scope: EvaluatorScope,
+}
+
+impl SemanticReview {
+    pub fn effective_support_status(&self) -> SemanticSupportStatus {
+        if let Some(status) = self.support_status {
+            return status;
+        }
+
+        match self.evaluator_scope {
+            EvaluatorScope::UnsupportedSurface => SemanticSupportStatus::Unsupported,
+            EvaluatorScope::SupportedFunctionSurface
+            | EvaluatorScope::SupportedSumSurface
+            | EvaluatorScope::SupportedDataSurface => {
+                if self.compatibility_key.starts_with("unsupported.")
+                    && self.compatibility_key.ends_with(".v1")
+                {
+                    SemanticSupportStatus::Unsupported
+                } else {
+                    SemanticSupportStatus::Supported
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,6 +295,7 @@ const FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY: &str
 const FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_up.v1";
 const FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
+const UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY: &str = "unsupported.function.v1";
 const FAMILY_A_INVARIANT_OUTPUT_LE_INPUT0: &str = "output <= input0";
 const FAMILY_A_INVARIANT_OUTPUT_GE_ZERO: &str = "output >= 0";
 const FAMILY_A_INVARIANT_OUTPUT_GE_INPUT0: &str = "output >= input0";
@@ -332,7 +387,10 @@ pub fn project_semantic_review_with_context(
         },
         SupportedSurface::Unsupported(unit_kind) => match mode {
             SemanticProjectionMode::Preserve => None,
-            SemanticProjectionMode::Refresh => Some(unsupported_surface_review(unit_kind)),
+            SemanticProjectionMode::Refresh => Some(match unit_kind {
+                UnitKind::Function => unsupported_function_review(spec, context, &mut stack),
+                UnitKind::Data | UnitKind::Sum => unsupported_surface_review(unit_kind),
+            }),
         },
     }
 }
@@ -394,7 +452,10 @@ pub fn evaluate_semantic_review_with_context(
         | SupportedSurface::DataCheckoutQuote) => {
             evaluate_supported_semantic_review(spec, surface, context, &mut stack)
         }
-        SupportedSurface::Unsupported(unit_kind) => Some(unsupported_surface_review(unit_kind)),
+        SupportedSurface::Unsupported(unit_kind) => Some(match unit_kind {
+            UnitKind::Function => unsupported_function_review(spec, context, &mut stack),
+            UnitKind::Data | UnitKind::Sum => unsupported_surface_review(unit_kind),
+        }),
     }
 }
 
@@ -443,6 +504,10 @@ fn unsupported_surface_review(unit_kind: UnitKind) -> SemanticReview {
     SemanticReview {
         verdict: SemanticVerdict::UnderSpecified,
         compatibility_key: unsupported_surface_compatibility_key(unit_kind),
+        support_status: (unit_kind == UnitKind::Function)
+            .then_some(SemanticSupportStatus::Unsupported),
+        unsupported_reason_codes: Vec::new(),
+        rewrite_hints: Vec::new(),
         reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
         summary: format!(
             "this '{}' surface is not evaluated by the semantic reviewer for this unit",
@@ -451,6 +516,204 @@ fn unsupported_surface_review(unit_kind: UnitKind) -> SemanticReview {
         authored_surfaces: vec![],
         executable_surfaces: vec![],
         evaluator_scope: EvaluatorScope::UnsupportedSurface,
+    }
+}
+
+impl UnsupportedFunctionDiagnostic {
+    fn review(
+        &self,
+        authored_surfaces: Vec<SemanticCitation>,
+        executable_surfaces: Vec<SemanticCitation>,
+    ) -> SemanticReview {
+        SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY.to_string(),
+            support_status: Some(SemanticSupportStatus::Unsupported),
+            unsupported_reason_codes: vec![self.reason_code],
+            rewrite_hints: self
+                .rewrite_hints
+                .iter()
+                .map(|hint| (*hint).to_string())
+                .collect(),
+            reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
+            summary: self.summary.to_string(),
+            authored_surfaces,
+            executable_surfaces,
+            evaluator_scope: EvaluatorScope::UnsupportedSurface,
+        }
+    }
+}
+
+fn unsupported_function_review(
+    spec: &LoadedSpec,
+    context: &SemanticReviewContext<'_>,
+    stack: &mut HashSet<String>,
+) -> SemanticReview {
+    let authored = build_authored_function_packet(spec);
+    let executable = build_executable_function_packet(spec);
+    let authored_surfaces = authored
+        .as_ref()
+        .map(authored_function_citations)
+        .unwrap_or_default();
+    let executable_surfaces = executable
+        .as_ref()
+        .map(executable_function_citations)
+        .unwrap_or_default();
+
+    let diagnostic = authored
+        .as_ref()
+        .zip(executable.as_ref())
+        .and_then(|(authored, executable)| {
+            unsupported_function_control_flow_diagnostic(executable)
+                .or_else(|| unsupported_function_dep_topology_diagnostic(authored, context, stack))
+                .or_else(|| {
+                    unsupported_function_required_argument_expression_diagnostic(
+                        authored, executable,
+                    )
+                })
+                .or_else(|| {
+                    unsupported_function_wrapper_body_shape_diagnostic(
+                        authored, executable, context, stack,
+                    )
+                })
+                .or_else(|| unsupported_function_arithmetic_shape_diagnostic(authored, executable))
+        })
+        .unwrap_or_else(unsupported_function_surface_diagnostic);
+
+    diagnostic.review(authored_surfaces, executable_surfaces)
+}
+
+fn unsupported_function_control_flow_diagnostic(
+    executable: &SemanticExecutableFunctionPacket,
+) -> Option<UnsupportedFunctionDiagnostic> {
+    let block = syn::parse_str::<syn::Block>(&executable.body_rust).ok()?;
+    block_contains_unsupported_control_flow(&block).then_some(UnsupportedFunctionDiagnostic {
+        reason_code: UnsupportedFunctionReasonCode::UnsupportedControlFlow,
+        summary: "function control flow falls outside the supported semantic reviewer subset",
+        rewrite_hints: &[
+            "Rewrite the body as a straight-line expression or a single let-then-return pipeline without branching.",
+        ],
+    })
+}
+
+fn unsupported_function_dep_topology_diagnostic(
+    authored: &SemanticAuthoredFunctionPacket,
+    context: &SemanticReviewContext<'_>,
+    stack: &mut HashSet<String>,
+) -> Option<UnsupportedFunctionDiagnostic> {
+    if authored.deps.len() > 2 {
+        return Some(UnsupportedFunctionDiagnostic {
+            reason_code: UnsupportedFunctionReasonCode::UnsupportedDepTopology,
+            summary: "declared function deps fall outside the supported reviewer topology",
+            rewrite_hints: &[
+                "Use zero or one helper dep for arithmetic leaves, or exactly two supported dep callables for wrapper pipelines.",
+            ],
+        });
+    }
+
+    if authored.deps.len() == 2 && !family_b_deps_are_supported(authored, context, stack) {
+        return Some(UnsupportedFunctionDiagnostic {
+            reason_code: UnsupportedFunctionReasonCode::UnsupportedDepTopology,
+            summary: "declared function deps fall outside the supported reviewer topology",
+            rewrite_hints: &[
+                "Use zero or one helper dep for arithmetic leaves, or exactly two supported dep callables for wrapper pipelines.",
+            ],
+        });
+    }
+
+    None
+}
+
+fn unsupported_function_required_argument_expression_diagnostic(
+    authored: &SemanticAuthoredFunctionPacket,
+    executable: &SemanticExecutableFunctionPacket,
+) -> Option<UnsupportedFunctionDiagnostic> {
+    if !authored_function_looks_like_wrapper_contract(authored) {
+        return None;
+    }
+
+    let block = syn::parse_str::<syn::Block>(&executable.body_rust).ok()?;
+    let params = executable
+        .inputs
+        .iter()
+        .map(|input| input.name.as_str())
+        .collect::<Vec<_>>();
+    let dep_a = callable_name(&authored.deps[0]);
+    let dep_b = callable_name(&authored.deps[1]);
+    let tail = block_tail_expr(&block)?;
+
+    let has_unsupported_expr = match block_prefix_stmts(&block) {
+        [] => unsupported_family_b_nested_arg_expression(tail, &params, dep_a, dep_b),
+        [syn::Stmt::Local(local)] => {
+            unsupported_family_b_let_then_return_arg_expression(local, tail, &params, dep_a, dep_b)
+        }
+        _ => false,
+    };
+
+    has_unsupported_expr.then_some(UnsupportedFunctionDiagnostic {
+        reason_code: UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression,
+        summary: "required wrapper arguments use expressions outside the supported reviewer subset",
+        rewrite_hints: &[
+            "Pass declared input params or the threaded alias directly into dep calls; avoid literals, arithmetic, and method chains in required argument positions.",
+        ],
+    })
+}
+
+fn unsupported_function_wrapper_body_shape_diagnostic(
+    authored: &SemanticAuthoredFunctionPacket,
+    executable: &SemanticExecutableFunctionPacket,
+    context: &SemanticReviewContext<'_>,
+    stack: &mut HashSet<String>,
+) -> Option<UnsupportedFunctionDiagnostic> {
+    if !authored_function_looks_like_wrapper_contract(authored)
+        || !family_b_deps_are_supported(authored, context, stack)
+    {
+        return None;
+    }
+
+    matches!(
+        classify_family_b_function_body(authored, executable),
+        FamilyBBodyClassification::Unsupported
+    )
+    .then_some(UnsupportedFunctionDiagnostic {
+        reason_code: UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+        summary: "wrapper body shape falls outside the supported semantic reviewer subset",
+        rewrite_hints: &[
+            "Use `dep_b(dep_a(param0, param1), param2)` or `let alias = dep_a(param0, param1); dep_b(alias, param2)`.",
+        ],
+    })
+}
+
+fn unsupported_function_arithmetic_shape_diagnostic(
+    authored: &SemanticAuthoredFunctionPacket,
+    executable: &SemanticExecutableFunctionPacket,
+) -> Option<UnsupportedFunctionDiagnostic> {
+    if !authored_function_looks_like_arithmetic_contract(authored) {
+        return None;
+    }
+
+    let block = syn::parse_str::<syn::Block>(&executable.body_rust).ok()?;
+    block_contains_family_a_arithmetic_shape(
+        &block,
+        executable.inputs[0].name.as_str(),
+        executable.inputs[1].name.as_str(),
+    )
+    .then_some(UnsupportedFunctionDiagnostic {
+        reason_code: UnsupportedFunctionReasonCode::UnsupportedArithmeticShape,
+        summary: "arithmetic body shape falls outside the supported semantic reviewer subset",
+        rewrite_hints: &[
+            "Use a supported arithmetic leaf over the declared inputs, with only an optional outer helper call and zero clamp for monotone-down behavior.",
+        ],
+    })
+}
+
+fn unsupported_function_surface_diagnostic() -> UnsupportedFunctionDiagnostic {
+    UnsupportedFunctionDiagnostic {
+        reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+        summary: "function surface is not evaluated by the semantic reviewer for this unit",
+        rewrite_hints: &[
+            "Express the function as a supported arithmetic leaf or a two-step wrapper pipeline.",
+        ],
     }
 }
 
@@ -496,6 +759,9 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: reasons,
             summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
             authored_surfaces,
@@ -549,6 +815,9 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: under_specified_reasons,
             summary: "supported semantic bodies fall outside the honest evaluator subset"
                 .to_string(),
@@ -569,6 +838,9 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         return Some(SemanticReview {
             verdict,
             compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: drift_reasons,
             summary: "executable lowering contradicts authored semantic claims".to_string(),
             authored_surfaces,
@@ -585,6 +857,9 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         return Some(SemanticReview {
             verdict: SemanticVerdict::BackendOnlyMeaningPreserved,
             compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes,
             summary: "backend-only execution markers are present without changing authored meaning"
                 .to_string(),
@@ -608,6 +883,9 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     Some(SemanticReview {
         verdict: SemanticVerdict::Aligned,
         compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+        support_status: None,
+        unsupported_reason_codes: Vec::new(),
+        rewrite_hints: Vec::new(),
         reason_codes: Vec::new(),
         summary: "authored semantics and executable lowering agree on the supported sum surface"
             .to_string(),
@@ -650,6 +928,9 @@ fn evaluate_supported_function_semantic_review(
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: compatibility_key.to_string(),
+            support_status: Some(SemanticSupportStatus::Supported),
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: reasons,
             summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
             authored_surfaces,
@@ -662,6 +943,9 @@ fn evaluate_supported_function_semantic_review(
         SupportedBodyClassification::Aligned => Some(SemanticReview {
             verdict: SemanticVerdict::Aligned,
             compatibility_key: compatibility_key.to_string(),
+            support_status: Some(SemanticSupportStatus::Supported),
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: Vec::new(),
             summary:
                 "authored semantics and executable lowering agree on the supported function surface"
@@ -673,6 +957,9 @@ fn evaluate_supported_function_semantic_review(
         SupportedBodyClassification::Contradictory => Some(SemanticReview {
             verdict: SemanticVerdict::SemanticDrift,
             compatibility_key: compatibility_key.to_string(),
+            support_status: Some(SemanticSupportStatus::Supported),
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent],
             summary: "executable lowering contradicts authored semantic claims".to_string(),
             authored_surfaces,
@@ -682,6 +969,9 @@ fn evaluate_supported_function_semantic_review(
         SupportedBodyClassification::OutsideHonestSubset => Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: compatibility_key.to_string(),
+            support_status: Some(SemanticSupportStatus::Supported),
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: vec![SemanticReasonCode::OutsideHonestSupportedSubset],
             summary: "supported semantic bodies fall outside the honest evaluator subset"
                 .to_string(),
@@ -741,6 +1031,26 @@ fn authored_function_contract_is_supported(
                 && authored.deps.len() == 2
         }
     }
+}
+
+fn authored_function_looks_like_wrapper_contract(
+    authored: &SemanticAuthoredFunctionPacket,
+) -> bool {
+    authored.deps.len() == 2
+        && !authored.inputs.is_empty()
+        && authored
+            .inputs
+            .iter()
+            .all(|input| type_is_decimal(&input.type_))
+        && authored.returns.as_deref().is_some_and(type_is_decimal)
+}
+
+fn authored_function_looks_like_arithmetic_contract(
+    authored: &SemanticAuthoredFunctionPacket,
+) -> bool {
+    authored.deps.len() <= 1
+        && function_inputs_are_decimal(&authored.inputs, 2)
+        && authored.returns.as_deref().is_some_and(type_is_decimal)
 }
 
 fn function_inputs_are_decimal(inputs: &[SemanticFieldPacket], len: usize) -> bool {
@@ -966,6 +1276,9 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: reasons,
             summary: "authored semantic surfaces are too weak for honest evaluation".to_string(),
             authored_surfaces,
@@ -1006,6 +1319,9 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
                         return Some(SemanticReview {
                             verdict: SemanticVerdict::UnderSpecified,
                             compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+                            support_status: None,
+                            unsupported_reason_codes: Vec::new(),
+                            rewrite_hints: Vec::new(),
                             reason_codes: vec![SemanticReasonCode::OutsideHonestSupportedSubset],
                             summary:
                                 "supported semantic bodies fall outside the honest evaluator subset"
@@ -1032,6 +1348,9 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         return Some(SemanticReview {
             verdict,
             compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes: drift_reasons,
             summary: "executable lowering contradicts authored semantic claims".to_string(),
             authored_surfaces,
@@ -1048,6 +1367,9 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         return Some(SemanticReview {
             verdict: SemanticVerdict::BackendOnlyMeaningPreserved,
             compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: Vec::new(),
+            rewrite_hints: Vec::new(),
             reason_codes,
             summary: "backend-only execution markers are present without changing authored meaning"
                 .to_string(),
@@ -1060,6 +1382,9 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
     Some(SemanticReview {
         verdict: SemanticVerdict::Aligned,
         compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+        support_status: None,
+        unsupported_reason_codes: Vec::new(),
+        rewrite_hints: Vec::new(),
         reason_codes: Vec::new(),
         summary: "authored semantics and executable lowering agree on the supported data surface"
             .to_string(),
@@ -2090,6 +2415,10 @@ fn summarize_family_b_arg_flow(
     FamilyBBodyClassification::Aligned
 }
 
+fn family_b_arg_flow_contains_unsupported_expr(args: &[FamilyBArgClassification]) -> bool {
+    args.contains(&FamilyBArgClassification::UnsupportedExpr)
+}
+
 fn classify_family_b_param_arg(
     expr: &syn::Expr,
     expected_param: &str,
@@ -2148,6 +2477,77 @@ fn classify_family_b_non_call_threaded_arg(
             FamilyBBodyClassification::Unsupported
         }
     }
+}
+
+fn unsupported_family_b_nested_arg_expression(
+    expr: &syn::Expr,
+    params: &[&str],
+    dep_a: &str,
+    dep_b: &str,
+) -> bool {
+    let Some(outer) = expr_as_call(expr) else {
+        return false;
+    };
+    if !expr_path_is_callable_name(&outer.func, dep_b) || outer.args.len() != 2 {
+        return false;
+    }
+
+    let Some(inner) = expr_as_call(&outer.args[0]) else {
+        return false;
+    };
+    if !expr_path_is_callable_name(&inner.func, dep_a) || inner.args.len() != 2 {
+        return false;
+    }
+
+    family_b_arg_flow_contains_unsupported_expr(&[
+        classify_family_b_param_arg(
+            &inner.args[0],
+            params.first().copied().unwrap_or(""),
+            params,
+        ),
+        classify_family_b_param_arg(&inner.args[1], params.get(1).copied().unwrap_or(""), params),
+        classify_family_b_param_arg(&outer.args[1], params.get(2).copied().unwrap_or(""), params),
+    ])
+}
+
+fn unsupported_family_b_let_then_return_arg_expression(
+    local: &syn::Local,
+    tail: &syn::Expr,
+    params: &[&str],
+    dep_a: &str,
+    dep_b: &str,
+) -> bool {
+    let Some(alias) = local_ident(local).map(|ident| ident.to_string()) else {
+        return false;
+    };
+    let Some(inner) = local
+        .init
+        .as_ref()
+        .and_then(|init| expr_as_call(init.expr.as_ref()))
+    else {
+        return false;
+    };
+    let Some(outer) = expr_as_call(tail) else {
+        return false;
+    };
+    if !expr_path_is_callable_name(&inner.func, dep_a)
+        || !expr_path_is_callable_name(&outer.func, dep_b)
+        || inner.args.len() != 2
+        || outer.args.len() != 2
+    {
+        return false;
+    }
+
+    family_b_arg_flow_contains_unsupported_expr(&[
+        classify_family_b_param_arg(
+            &inner.args[0],
+            params.first().copied().unwrap_or(""),
+            params,
+        ),
+        classify_family_b_param_arg(&inner.args[1], params.get(1).copied().unwrap_or(""), params),
+        classify_family_b_threaded_alias_arg(&outer.args[0], &alias, params),
+        classify_family_b_param_arg(&outer.args[1], params.get(2).copied().unwrap_or(""), params),
+    ])
 }
 
 fn expr_as_call(expr: &syn::Expr) -> Option<&syn::ExprCall> {
@@ -2737,6 +3137,143 @@ fn local_ident(local: &syn::Local) -> Option<&syn::Ident> {
         return None;
     };
     Some(&pat_ident.ident)
+}
+
+fn block_contains_unsupported_control_flow(block: &syn::Block) -> bool {
+    block
+        .stmts
+        .iter()
+        .any(stmt_contains_unsupported_control_flow)
+}
+
+fn stmt_contains_unsupported_control_flow(stmt: &syn::Stmt) -> bool {
+    match stmt {
+        syn::Stmt::Local(local) => local
+            .init
+            .as_ref()
+            .is_some_and(|init| expr_contains_unsupported_control_flow(&init.expr)),
+        syn::Stmt::Expr(expr, _) => expr_contains_unsupported_control_flow(expr),
+        _ => false,
+    }
+}
+
+fn expr_contains_unsupported_control_flow(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    match expr {
+        syn::Expr::If(_)
+        | syn::Expr::Match(_)
+        | syn::Expr::ForLoop(_)
+        | syn::Expr::While(_)
+        | syn::Expr::Loop(_) => true,
+        syn::Expr::Call(call) => {
+            expr_contains_unsupported_control_flow(&call.func)
+                || call.args.iter().any(expr_contains_unsupported_control_flow)
+        }
+        syn::Expr::MethodCall(call) => {
+            expr_contains_unsupported_control_flow(&call.receiver)
+                || call.args.iter().any(expr_contains_unsupported_control_flow)
+        }
+        syn::Expr::Binary(binary) => {
+            expr_contains_unsupported_control_flow(&binary.left)
+                || expr_contains_unsupported_control_flow(&binary.right)
+        }
+        syn::Expr::Unary(unary) => expr_contains_unsupported_control_flow(&unary.expr),
+        syn::Expr::Reference(reference) => expr_contains_unsupported_control_flow(&reference.expr),
+        syn::Expr::Block(block) => block_contains_unsupported_control_flow(&block.block),
+        syn::Expr::Tuple(tuple) => tuple
+            .elems
+            .iter()
+            .any(expr_contains_unsupported_control_flow),
+        syn::Expr::Array(array) => array
+            .elems
+            .iter()
+            .any(expr_contains_unsupported_control_flow),
+        _ => false,
+    }
+}
+
+fn block_contains_family_a_arithmetic_shape(
+    block: &syn::Block,
+    input0_name: &str,
+    input1_name: &str,
+) -> bool {
+    block
+        .stmts
+        .iter()
+        .any(|stmt| stmt_contains_family_a_arithmetic_shape(stmt, input0_name, input1_name))
+}
+
+fn stmt_contains_family_a_arithmetic_shape(
+    stmt: &syn::Stmt,
+    input0_name: &str,
+    input1_name: &str,
+) -> bool {
+    match stmt {
+        syn::Stmt::Local(local) => local.init.as_ref().is_some_and(|init| {
+            expr_contains_family_a_arithmetic_shape(&init.expr, input0_name, input1_name)
+        }),
+        syn::Stmt::Expr(expr, _) => {
+            expr_contains_family_a_arithmetic_shape(expr, input0_name, input1_name)
+        }
+        _ => false,
+    }
+}
+
+fn expr_contains_family_a_arithmetic_shape(
+    expr: &syn::Expr,
+    input0_name: &str,
+    input1_name: &str,
+) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    if classify_family_a_core_role(expr, input0_name, input1_name).is_some() {
+        return true;
+    }
+    if expr_as_max_zero(expr).is_some_and(|(receiver, _)| {
+        classify_family_a_core_role(receiver, input0_name, input1_name).is_some()
+    }) {
+        return true;
+    }
+
+    match expr {
+        syn::Expr::Call(call) => {
+            expr_contains_family_a_arithmetic_shape(&call.func, input0_name, input1_name)
+                || call.args.iter().any(|arg| {
+                    expr_contains_family_a_arithmetic_shape(arg, input0_name, input1_name)
+                })
+        }
+        syn::Expr::MethodCall(call) => {
+            expr_contains_family_a_arithmetic_shape(&call.receiver, input0_name, input1_name)
+                || call.args.iter().any(|arg| {
+                    expr_contains_family_a_arithmetic_shape(arg, input0_name, input1_name)
+                })
+        }
+        syn::Expr::Binary(binary) => {
+            expr_contains_family_a_arithmetic_shape(&binary.left, input0_name, input1_name)
+                || expr_contains_family_a_arithmetic_shape(&binary.right, input0_name, input1_name)
+        }
+        syn::Expr::Unary(unary) => {
+            expr_contains_family_a_arithmetic_shape(&unary.expr, input0_name, input1_name)
+        }
+        syn::Expr::Reference(reference) => {
+            expr_contains_family_a_arithmetic_shape(&reference.expr, input0_name, input1_name)
+        }
+        syn::Expr::Block(block) => {
+            block_contains_family_a_arithmetic_shape(&block.block, input0_name, input1_name)
+        }
+        syn::Expr::Tuple(tuple) => tuple
+            .elems
+            .iter()
+            .any(|elem| expr_contains_family_a_arithmetic_shape(elem, input0_name, input1_name)),
+        syn::Expr::Array(array) => array
+            .elems
+            .iter()
+            .any(|elem| expr_contains_family_a_arithmetic_shape(elem, input0_name, input1_name)),
+        _ => false,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3645,6 +4182,10 @@ mod tests {
             without_context.evaluator_scope,
             EvaluatorScope::UnsupportedSurface
         );
+        assert_eq!(
+            without_context.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedDepTopology]
+        );
         assert_eq!(with_context.verdict, SemanticVerdict::Aligned);
         assert_eq!(
             with_context.compatibility_key,
@@ -3881,8 +4422,8 @@ mod tests {
         let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
         assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
         assert_eq!(
-            review.reason_codes,
-            vec![SemanticReasonCode::UnsupportedSurface]
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression]
         );
     }
 
@@ -3905,8 +4446,8 @@ mod tests {
         let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
         assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
         assert_eq!(
-            review.reason_codes,
-            vec![SemanticReasonCode::UnsupportedSurface]
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression]
         );
     }
 
@@ -3929,8 +4470,34 @@ mod tests {
         let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
         assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
         assert_eq!(
-            review.reason_codes,
-            vec![SemanticReasonCode::UnsupportedSurface]
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression]
+        );
+    }
+
+    #[test]
+    fn family_b_extra_let_marks_unsupported_wrapper_body_shape() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            let discounted = apply_discount(subtotal, discount_rate);
+            let total = apply_tax(discounted, tax_rate);
+            total
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape]
         );
     }
 
@@ -3970,6 +4537,68 @@ mod tests {
 
         let review = evaluate_semantic_review_with_context(&outer, &context).unwrap();
         assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedDepTopology]
+        );
+    }
+
+    #[test]
+    fn unsupported_function_priority_prefers_control_flow_over_dep_topology() {
+        let spec = arithmetic_leaf_spec(
+            "billing/apply_discount",
+            "Return the subtotal after applying the discount rate and clamping at zero.",
+            &["output <= subtotal", "output >= 0"],
+            &["money/round", "money/abs"],
+            r#"{
+            if rate > Decimal::ZERO {
+                round((subtotal - subtotal * rate).max(Decimal::ZERO))
+            } else {
+                subtotal
+            }
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedControlFlow]
+        );
+    }
+
+    #[test]
+    fn unsupported_function_priority_prefers_dep_topology_over_required_argument_expression() {
+        let outer = function_spec(
+            "pricing/calculate_grand_total",
+            "Return the total after reusing the existing wrapper and then applying tax again.",
+            &[
+                ("subtotal", "rust_decimal::Decimal"),
+                ("discount_rate", "rust_decimal::Decimal"),
+                ("tax_rate", "rust_decimal::Decimal"),
+                ("tax_rate_2", "rust_decimal::Decimal"),
+            ],
+            Some("rust_decimal::Decimal"),
+            &[],
+            &["pricing/calculate_total", "pricing/apply_tax"],
+            r#"{
+            apply_tax(calculate_total(subtotal, discount_rate, Decimal::ZERO), tax_rate_2)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            calculate_total_function_spec(),
+            outer.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&outer, &context).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedDepTopology]
+        );
     }
 
     #[test]
@@ -3986,6 +4615,10 @@ mod tests {
 
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedDepTopology]
+        );
     }
 
     #[test]
@@ -4002,6 +4635,10 @@ mod tests {
 
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
     }
 
     #[test]
@@ -4018,6 +4655,10 @@ mod tests {
 
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
     }
 
     #[test]
@@ -4025,6 +4666,9 @@ mod tests {
         let supported_review = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
             reason_codes: vec![],
             summary: String::new(),
             authored_surfaces: vec![],
@@ -4040,6 +4684,9 @@ mod tests {
             verdict: SemanticVerdict::SemanticDrift,
             compatibility_key: FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY
                 .to_string(),
+            support_status: Some(SemanticSupportStatus::Supported),
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
             reason_codes: vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent],
             summary: String::new(),
             authored_surfaces: vec![],
@@ -4060,29 +4707,72 @@ mod tests {
     }
 
     #[test]
-    fn semantic_review_emits_explicit_unsupported_surface_for_calculate_total_and_data() {
-        for spec in [calculate_total_function_spec(), discount_policy_data_spec()] {
-            let review = evaluate_semantic_review(&spec).unwrap();
-            assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
-            assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
-            assert_eq!(
-                review.compatibility_key,
-                unsupported_surface_compatibility_key(spec.spec.unit_kind().unwrap())
-            );
-            assert_eq!(
-                review.reason_codes,
-                vec![SemanticReasonCode::UnsupportedSurface]
-            );
-            assert!(
-                review
-                    .summary
-                    .contains("is not evaluated by the semantic reviewer for this unit"),
-                "{}",
-                review.summary
-            );
-            assert!(review.authored_surfaces.is_empty());
-            assert!(review.executable_surfaces.is_empty());
-        }
+    fn semantic_review_emits_unsupported_function_diagnostics_for_calculate_total() {
+        let review = evaluate_semantic_review(&calculate_total_function_spec()).unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.compatibility_key,
+            UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Unsupported)
+        );
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
+        assert_eq!(
+            review.rewrite_hints,
+            vec![
+                "Use a supported arithmetic leaf over the declared inputs, with only an optional outer helper call and zero clamp for monotone-down behavior."
+                    .to_string()
+            ]
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::UnsupportedSurface]
+        );
+        assert!(
+            review
+                .summary
+                .contains("arithmetic body shape falls outside"),
+            "{}",
+            review.summary
+        );
+        assert!(!review.authored_surfaces.is_empty());
+        assert!(!review.executable_surfaces.is_empty());
+    }
+
+    #[test]
+    fn semantic_review_keeps_generic_unsupported_surface_for_data() {
+        let spec = discount_policy_data_spec();
+        let review = evaluate_semantic_review(&spec).unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.compatibility_key,
+            unsupported_surface_compatibility_key(spec.spec.unit_kind().unwrap())
+        );
+        assert_eq!(review.support_status, None);
+        assert!(review.unsupported_reason_codes.is_empty());
+        assert!(review.rewrite_hints.is_empty());
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::UnsupportedSurface]
+        );
+        assert!(
+            review
+                .summary
+                .contains("is not evaluated by the semantic reviewer for this unit"),
+            "{}",
+            review.summary
+        );
+        assert!(review.authored_surfaces.is_empty());
+        assert!(review.executable_surfaces.is_empty());
     }
 
     #[test]
@@ -4176,6 +4866,9 @@ mod tests {
         let existing = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: "unsupported.function.v0".to_string(),
+            support_status: Some(SemanticSupportStatus::Unsupported),
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
             reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
             summary: "stale unsupported summary".to_string(),
             authored_surfaces: vec![SemanticCitation {
@@ -4195,11 +4888,165 @@ mod tests {
             project_semantic_review(&spec, Some(&existing), SemanticProjectionMode::Refresh)
                 .unwrap();
 
-        let expected_summary =
-            "this 'function' surface is not evaluated by the semantic reviewer for this unit";
         assert!(preserved.is_none());
-        assert_eq!(refreshed.summary, expected_summary);
-        assert!(refreshed.authored_surfaces.is_empty());
-        assert!(refreshed.executable_surfaces.is_empty());
+        assert_eq!(
+            refreshed.compatibility_key,
+            UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            refreshed.support_status,
+            Some(SemanticSupportStatus::Unsupported)
+        );
+        assert_eq!(
+            refreshed.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
+        assert_eq!(
+            refreshed.rewrite_hints,
+            vec![
+                "Use a supported arithmetic leaf over the declared inputs, with only an optional outer helper call and zero clamp for monotone-down behavior."
+                    .to_string()
+            ]
+        );
+        assert!(
+            refreshed
+                .summary
+                .contains("arithmetic body shape falls outside"),
+            "{}",
+            refreshed.summary
+        );
+        assert!(!refreshed.authored_surfaces.is_empty());
+        assert!(!refreshed.executable_surfaces.is_empty());
+    }
+
+    #[test]
+    fn semantic_review_legacy_json_without_support_status_deserializes_to_none() {
+        let review: SemanticReview = serde_json::from_str(
+            r#"{
+                "verdict": "aligned",
+                "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+                "reason_codes": [],
+                "summary": "",
+                "authored_surfaces": [],
+                "executable_surfaces": [],
+                "evaluator_scope": "supported_function_surface"
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(review.support_status, None);
+        assert!(review.unsupported_reason_codes.is_empty());
+        assert!(review.rewrite_hints.is_empty());
+    }
+
+    #[test]
+    fn unsupported_function_reason_code_priority_matches_public_order() {
+        let mut codes = vec![
+            UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            UnsupportedFunctionReasonCode::UnsupportedArithmeticShape,
+            UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression,
+            UnsupportedFunctionReasonCode::UnsupportedDepTopology,
+            UnsupportedFunctionReasonCode::UnsupportedControlFlow,
+        ];
+
+        codes.sort();
+
+        assert_eq!(
+            codes,
+            vec![
+                UnsupportedFunctionReasonCode::UnsupportedControlFlow,
+                UnsupportedFunctionReasonCode::UnsupportedDepTopology,
+                UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression,
+                UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+                UnsupportedFunctionReasonCode::UnsupportedArithmeticShape,
+                UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            ]
+        );
+    }
+
+    #[test]
+    fn semantic_review_explicit_support_status_wins_over_legacy_inference() {
+        let review = SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: "unsupported.function.v1".to_string(),
+            support_status: Some(SemanticSupportStatus::Supported),
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
+            reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
+            summary: String::new(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: EvaluatorScope::UnsupportedSurface,
+        };
+
+        assert_eq!(
+            review.effective_support_status(),
+            SemanticSupportStatus::Supported
+        );
+    }
+
+    #[test]
+    fn semantic_review_legacy_unsupported_scope_and_key_infer_unsupported() {
+        let unsupported_scope = SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY.to_string(),
+            support_status: None,
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
+            reason_codes: vec![],
+            summary: String::new(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: EvaluatorScope::UnsupportedSurface,
+        };
+        let unsupported_key = SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: "unsupported.function.v1".to_string(),
+            support_status: None,
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
+            reason_codes: vec![],
+            summary: String::new(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: EvaluatorScope::SupportedFunctionSurface,
+        };
+
+        assert_eq!(
+            unsupported_scope.effective_support_status(),
+            SemanticSupportStatus::Unsupported
+        );
+        assert_eq!(
+            unsupported_key.effective_support_status(),
+            SemanticSupportStatus::Unsupported
+        );
+    }
+
+    #[test]
+    fn semantic_review_legacy_supported_scopes_infer_supported() {
+        for evaluator_scope in [
+            EvaluatorScope::SupportedFunctionSurface,
+            EvaluatorScope::SupportedSumSurface,
+            EvaluatorScope::SupportedDataSurface,
+        ] {
+            let review = SemanticReview {
+                verdict: SemanticVerdict::Aligned,
+                compatibility_key: "data.checkout_quote.v1".to_string(),
+                support_status: None,
+                unsupported_reason_codes: vec![],
+                rewrite_hints: vec![],
+                reason_codes: vec![],
+                summary: String::new(),
+                authored_surfaces: vec![],
+                executable_surfaces: vec![],
+                evaluator_scope,
+            };
+
+            assert_eq!(
+                review.effective_support_status(),
+                SemanticSupportStatus::Supported
+            );
+        }
     }
 }

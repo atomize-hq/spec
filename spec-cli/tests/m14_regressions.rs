@@ -202,6 +202,35 @@ fn assert_function_semantic_review(
     assert_eq!(review["compatibility_key"], compatibility_key);
 }
 
+fn assert_unsupported_function_semantic_review(review: &Value) {
+    assert_eq!(review["verdict"], "under_specified");
+    assert_eq!(review["evaluator_scope"], "unsupported_surface");
+    assert_eq!(review["support_status"], "unsupported");
+    assert_eq!(review["compatibility_key"], "unsupported.function.v1");
+    assert_eq!(
+        review["reason_codes"],
+        serde_json::json!(["unsupported_surface"])
+    );
+    assert!(
+        review["summary"]
+            .as_str()
+            .is_some_and(|summary| !summary.trim().is_empty()),
+        "expected non-empty unsupported summary for {review}"
+    );
+    assert!(
+        review["unsupported_reason_codes"]
+            .as_array()
+            .is_some_and(|codes| !codes.is_empty()),
+        "expected unsupported_reason_codes for {review}"
+    );
+    assert!(
+        review["rewrite_hints"]
+            .as_array()
+            .is_some_and(|hints| !hints.is_empty()),
+        "expected rewrite_hints for {review}"
+    );
+}
+
 fn replace_in_file(path: &Path, from: &str, to: &str) {
     let source = fs::read_to_string(path).unwrap();
     assert!(
@@ -2133,23 +2162,8 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
     );
 
     let passport = read_json(&passport_path);
-    assert_eq!(passport["semantic_review"]["verdict"], "under_specified");
-    assert_eq!(
-        passport["semantic_review"]["compatibility_key"],
-        "unsupported.function.v1"
-    );
-    assert_eq!(
-        passport["semantic_review"]["reason_codes"],
-        serde_json::json!(["unsupported_surface"])
-    );
-    assert_eq!(
-        passport["semantic_review"]["summary"],
-        "this 'function' surface is not evaluated by the semantic reviewer for this unit"
-    );
-    assert_eq!(
-        passport["semantic_review"]["evaluator_scope"],
-        "unsupported_surface"
-    );
+    let seeded_review = passport["semantic_review"].clone();
+    assert_unsupported_function_semantic_review(&seeded_review);
 
     let status_output = run_spec(
         &fixture_dst,
@@ -2164,7 +2178,7 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
     let status_unit = status_unit(&status_json, "pricing/calculate_total");
     assert_eq!(status_unit["status"], "valid");
     assert!(status_unit["reason"].is_null());
-    assert!(status_unit["semantic_review"].is_null());
+    assert_eq!(status_unit["semantic_review"], seeded_review);
 
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(
@@ -2173,7 +2187,7 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
     );
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
     let exported = exported_passport(&export_json, "pricing/calculate_total");
-    assert!(exported["semantic_review"].is_null());
+    assert_eq!(exported["semantic_review"], seeded_review);
 }
 
 #[test]
