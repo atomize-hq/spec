@@ -28,7 +28,7 @@
       "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
     }
   ],
-  "generated_at": "2026-04-26T19:54:25Z",
+  "generated_at": "2026-04-26T21:45:01Z",
   "source_file": "examples/ecommerce/units/pricing/apply_discount.unit.spec",
   "evidence": {
     "build_status": "pass",
