@@ -475,22 +475,20 @@ Create:
 Minimum fixture units:
 
 ```text
-units/billing/apply_membership_discount.unit.spec                  supported Family A down
-units/billing/apply_membership_discount_control_flow.unit.spec     unsupported control flow
-units/billing/apply_regional_fee.unit.spec                         supported Family A up
-units/billing/apply_regional_fee_arithmetic_shape.unit.spec        unsupported arithmetic shape
-units/billing/checkout_net_total.unit.spec                         supported Family B wrapper
-units/billing/checkout_net_total_computed_arg.unit.spec            unsupported required arg expression
-units/billing/checkout_net_total_bad_dep_topology.unit.spec        unsupported dep topology
-units/billing/checkout_net_total_bad_body_shape.unit.spec          unsupported wrapper body shape
+units/pricing/apply_discount.unit.spec                             supported Family A down
+units/pricing/apply_discount_control_flow.unit.spec                unsupported control flow
+units/pricing/apply_tax.unit.spec                                  supported Family A up
+units/pricing/apply_tax_arithmetic_shape.unit.spec                 unsupported arithmetic shape
+units/pricing/checkout_total.unit.spec                             supported Family B wrapper
+units/pricing/calculate_total.unit.spec                            unsupported required arg expression
+units/pricing/checkout_total_bad_dep_topology.unit.spec            unsupported dep topology
+units/pricing/checkout_total_bad_body_shape.unit.spec              unsupported wrapper body shape
 ```
 
 Required command matrix:
 
 ```bash
-cargo run -p spec-cli -- test spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/billing/apply_membership_discount_control_flow.unit.spec --crate-root spec-cli/tests/fixtures/m20/unsupported_truth_pack
-cargo run -p spec-cli -- test spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/billing/checkout_net_total_computed_arg.unit.spec --crate-root spec-cli/tests/fixtures/m20/unsupported_truth_pack
-cargo run -p spec-cli -- build spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --crate-root spec-cli/tests/fixtures/m20/unsupported_truth_pack
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --output spec-cli/tests/fixtures/m20/unsupported_truth_pack/src/generated --crate-root spec-cli/tests/fixtures/m20/unsupported_truth_pack
 cargo run -p spec-cli -- status spec-cli/tests/fixtures/m20/unsupported_truth_pack --format json
 cargo run -p spec-cli -- export spec-cli/tests/fixtures/m20/unsupported_truth_pack
 ```

@@ -400,10 +400,8 @@ pub fn semantic_health_effect(review: Option<&SemanticReview>) -> SemanticHealth
         return SemanticHealthEffect::KeepBase;
     };
     if !matches!(
-        review.evaluator_scope,
-        EvaluatorScope::SupportedFunctionSurface
-            | EvaluatorScope::SupportedSumSurface
-            | EvaluatorScope::SupportedDataSurface
+        review.effective_support_status(),
+        SemanticSupportStatus::Supported
     ) {
         return SemanticHealthEffect::KeepBase;
     }
@@ -4983,6 +4981,50 @@ mod tests {
         assert_eq!(
             review.effective_support_status(),
             SemanticSupportStatus::Supported
+        );
+    }
+
+    #[test]
+    fn semantic_health_effect_keeps_base_for_explicitly_unsupported_review_even_when_legacy_scope_looks_supported()
+     {
+        let review = SemanticReview {
+            verdict: SemanticVerdict::UnderSpecified,
+            compatibility_key: FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY.to_string(),
+            support_status: Some(SemanticSupportStatus::Unsupported),
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
+            reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
+            summary: String::new(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: EvaluatorScope::SupportedFunctionSurface,
+        };
+
+        assert_eq!(
+            semantic_health_effect(Some(&review)),
+            SemanticHealthEffect::KeepBase
+        );
+    }
+
+    #[test]
+    fn semantic_health_effect_demotes_for_explicitly_supported_review_even_when_legacy_scope_looks_unsupported()
+     {
+        let review = SemanticReview {
+            verdict: SemanticVerdict::SemanticDrift,
+            compatibility_key: "unsupported.function.v1".to_string(),
+            support_status: Some(SemanticSupportStatus::Supported),
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
+            reason_codes: vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent],
+            summary: String::new(),
+            authored_surfaces: vec![],
+            executable_surfaces: vec![],
+            evaluator_scope: EvaluatorScope::UnsupportedSurface,
+        };
+
+        assert_eq!(
+            semantic_health_effect(Some(&review)),
+            SemanticHealthEffect::DemoteFailing
         );
     }
 

@@ -822,6 +822,7 @@ local_tests:
 
 const FUNCTION_FAMILY_A_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
 const FUNCTION_FAMILY_A_LEGACY_COMPATIBILITY_KEY: &str = "function.apply_discount.v1";
 const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
 const FUNCTION_FAMILY_B_LEGACY_COMPATIBILITY_KEY: &str = "function.calculate_total.v1";
@@ -1157,6 +1158,29 @@ fn assert_unsupported_function_semantic_review(review: &Value) {
             .is_some_and(|hints| !hints.is_empty()),
         "expected rewrite_hints for {review}"
     );
+}
+
+fn assert_supported_function_semantic_review(review: &Value, compatibility_key: &str) {
+    assert_eq!(review["evaluator_scope"], "supported_function_surface");
+    assert_eq!(review["support_status"], "supported");
+    assert_eq!(review["compatibility_key"], compatibility_key);
+    assert!(
+        review["unsupported_reason_codes"]
+            .as_array()
+            .is_none_or(|codes| codes.is_empty()),
+        "expected empty unsupported_reason_codes for {review}"
+    );
+    assert!(
+        review["rewrite_hints"]
+            .as_array()
+            .is_none_or(|hints| hints.is_empty()),
+        "expected empty rewrite_hints for {review}"
+    );
+}
+
+fn assert_unsupported_function_reason(review: &Value, reason: &str) {
+    assert_unsupported_function_semantic_review(review);
+    assert_eq!(review["unsupported_reason_codes"][0], reason, "{review}");
 }
 
 fn copy_m19_semantic_falsification_pack() -> (tempfile::TempDir, PathBuf) {
@@ -6045,6 +6069,123 @@ fn unsupported_function_review_preserves_when_fresh_drops_when_stale_and_refresh
     assert_unsupported_function_semantic_review(
         &read_passport_json(&passport_path)["semantic_review"],
     );
+}
+
+#[test]
+fn m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m20_unsupported_truth_pack();
+
+    let test_output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "whole-pack unsupported truth test should succeed",
+        &test_output,
+    );
+
+    let supported_cases = [
+        (
+            "pricing/apply_discount",
+            FUNCTION_FAMILY_A_COMPATIBILITY_KEY,
+        ),
+        ("pricing/apply_tax", FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY),
+        (
+            "pricing/checkout_total",
+            FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+        ),
+    ];
+    let unsupported_cases = [
+        (
+            "pricing/apply_discount_control_flow",
+            "unsupported_control_flow",
+        ),
+        (
+            "pricing/calculate_total",
+            "unsupported_required_argument_expression",
+        ),
+        (
+            "pricing/checkout_total_bad_dep_topology",
+            "unsupported_dep_topology",
+        ),
+        (
+            "pricing/checkout_total_bad_body_shape",
+            "unsupported_wrapper_body_shape",
+        ),
+        (
+            "pricing/apply_tax_arithmetic_shape",
+            "unsupported_arithmetic_shape",
+        ),
+    ];
+
+    let mut expected_reviews = HashMap::new();
+
+    for (unit_id, compatibility_key) in supported_cases {
+        let passport_path = fixture_dir
+            .join("units")
+            .join(format!("{unit_id}.spec.passport.json"));
+        let review = read_passport_json(&passport_path)["semantic_review"].clone();
+        assert_supported_function_semantic_review(&review, compatibility_key);
+        expected_reviews.insert(unit_id, review);
+    }
+
+    for (unit_id, reason) in unsupported_cases {
+        let passport_path = fixture_dir
+            .join("units")
+            .join(format!("{unit_id}.spec.passport.json"));
+        let review = read_passport_json(&passport_path)["semantic_review"].clone();
+        assert_unsupported_function_reason(&review, reason);
+        expected_reviews.insert(unit_id, review);
+    }
+
+    let status_output = run_in(&fixture_dir, &["status", ".", "--format", "json"]);
+    assert_output_success(
+        "whole-pack unsupported truth status should stay green",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+
+    let export_output = run_in(&fixture_dir, &["export", "."]);
+    assert_output_success(
+        "whole-pack unsupported truth export should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+
+    for (unit_id, expected_review) in expected_reviews {
+        let status_unit = status_units(&status_json)
+            .iter()
+            .find(|unit| unit["id"] == unit_id)
+            .unwrap();
+        assert_eq!(status_unit["status"], "valid", "{status_json}");
+        assert!(status_unit["reason"].is_null(), "{status_json}");
+        assert_eq!(
+            status_unit["semantic_review"], expected_review,
+            "{status_json}"
+        );
+
+        let exported_passport = export_json["passports"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|passport| passport["id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            exported_passport["semantic_review"], expected_review,
+            "{export_json}"
+        );
+    }
 }
 
 #[test]
