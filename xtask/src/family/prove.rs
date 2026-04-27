@@ -1,6 +1,6 @@
 use crate::XtaskError;
 use crate::family::layout::validate_packet_layout;
-use crate::family::manifest::parse_manifest_file;
+use crate::family::manifest::{FamilyManifest, parse_manifest_file};
 use crate::family::paths::{FamilyId, PacketPaths, ensure_packet_path_safe};
 use crate::family::report::{
     CertificationReport, CommandRunner, PROVE_SUITES, SystemRunner, collect_fixture_digests,
@@ -21,6 +21,8 @@ pub(crate) enum ProveOutcome {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ProveExecution {
+    pub family: FamilyId,
+    pub manifest: Option<FamilyManifest>,
     pub paths: PacketPaths,
     pub report: CertificationReport,
     pub outcome: ProveOutcome,
@@ -59,6 +61,8 @@ pub(crate) fn execute<R: CommandRunner>(
         set_gates(&mut report, false, false, false, false);
         set_overall(&mut report, false);
         return Ok(ProveExecution {
+            family,
+            manifest: None,
             paths,
             report,
             outcome: ProveOutcome::InvalidInput(error.to_string()),
@@ -76,6 +80,8 @@ pub(crate) fn execute<R: CommandRunner>(
             set_gates(&mut report, false, false, false, false);
             set_overall(&mut report, false);
             return Ok(ProveExecution {
+                family,
+                manifest: None,
                 paths,
                 report,
                 outcome: ProveOutcome::InvalidInput(error.to_string()),
@@ -89,6 +95,8 @@ pub(crate) fn execute<R: CommandRunner>(
             set_gates(&mut report, false, false, false, false);
             set_overall(&mut report, false);
             return Ok(ProveExecution {
+                family,
+                manifest: None,
                 paths,
                 report,
                 outcome: ProveOutcome::InvalidInput(error.to_string()),
@@ -121,6 +129,8 @@ pub(crate) fn execute<R: CommandRunner>(
     };
 
     Ok(ProveExecution {
+        family,
+        manifest: Some(manifest),
         paths,
         report,
         outcome,

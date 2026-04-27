@@ -4,4 +4,5 @@ pub mod manifest;
 pub mod paths;
 pub mod prove;
 pub mod report;
+pub mod routing;
 pub mod scaffold;

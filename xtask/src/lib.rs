@@ -122,11 +122,16 @@ mod tests {
             CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME,
             certification_report_path,
         },
+        routing::{CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, locked_routing_order_with_terminal},
+        scaffold,
     };
+    use spec_core::loader::load_file;
+    use spec_core::semantic_review::{SemanticSupportStatus, evaluate_semantic_review};
+    use spec_core::validator::validate_full;
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
     #[test]
@@ -154,6 +159,10 @@ mod tests {
         let manifest = fs::read_to_string(&paths.manifest).unwrap();
         assert!(manifest.contains("schema_version = 1"));
         assert!(manifest.contains("kind = \"function\""));
+        assert!(manifest.contains(&format!("precedence = {CHAIN3_PRECEDENCE}")));
+        for family_id in CHAIN3_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
         assert!(manifest.contains(
             "required_buckets = [\"aligned\", \"drift\", \"under_specified\", \"unsupported_near_miss\"]"
         ));
@@ -163,13 +172,39 @@ mod tests {
         assert!(candidate.contains("## Drift"));
         assert!(candidate.contains("## Under Specified"));
         assert!(candidate.contains("## Unsupported Near Miss"));
+        assert!(!candidate.contains("units/namespace/"));
+        assert!(!candidate.contains("TODO: list each"));
 
         for bucket in REQUIRED_BUCKETS {
             let bucket_root = paths.fixtures.join(bucket);
             assert!(bucket_root.join("Cargo.toml").is_file());
             assert!(bucket_root.join("src/main.rs").is_file());
-            assert!(bucket_root.join("units/namespace").is_dir());
+            assert!(bucket_root.join("units/pricing").is_dir());
+            for relative_path in expected_scaffold_unit_paths(bucket) {
+                let unit_path = paths.root.join(&relative_path);
+                assert!(
+                    unit_path.is_file(),
+                    "missing scaffolded unit `{}`",
+                    unit_path.display()
+                );
+                assert_candidate_lists_path_once(&candidate, &relative_path);
+                assert_starter_spec_is_valid_and_non_proving(&unit_path);
+            }
         }
+    }
+
+    #[test]
+    fn locked_routing_helper_covers_full_appendix_c_order() {
+        assert_eq!(
+            locked_routing_order_with_terminal(),
+            [
+                "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+                "unsupported.function.v1",
+            ]
+        );
     }
 
     #[test]
@@ -399,7 +434,7 @@ gate_d = true
         let manifest = parse_manifest_file(&paths.manifest, &family).unwrap();
         let layout = validate_packet_layout(&paths.root, &manifest).unwrap();
 
-        assert_eq!(layout.case_filenames.len(), 4);
+        assert_eq!(layout.case_filenames.len(), 16);
     }
 
     #[test]
@@ -411,9 +446,7 @@ gate_d = true
         seed_valid_manifest(&paths.manifest, family.as_str());
         seed_valid_cases(&paths);
         write_string(
-            &paths
-                .fixtures
-                .join("aligned/units/namespace/not-allowed.txt"),
+            &paths.fixtures.join("aligned/units/pricing/not-allowed.txt"),
             "bad",
         );
 
@@ -451,10 +484,10 @@ gate_d = true
         seed_valid_cases(&paths);
         let original = paths
             .fixtures
-            .join("aligned/units/namespace/checkout_chain3_aligned.unit.spec");
+            .join("aligned/units/pricing/checkout_chain3_aligned.unit.spec");
         let duplicate = paths
             .fixtures
-            .join("drift/units/namespace/checkout_chain3_aligned.unit.spec");
+            .join("drift/units/pricing/checkout_chain3_aligned.unit.spec");
         write_string(&duplicate, &fs::read_to_string(&original).unwrap());
 
         let manifest = parse_manifest_file(&paths.manifest, &family).unwrap();
@@ -645,7 +678,83 @@ gate_d = true
     }
 
     #[test]
-    fn family_certify_keeps_previous_success_report_on_failed_gate_d() {
+    fn family_certify_routing_precedence_mismatch_fails_gate_d_without_failing_suites() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        rewrite_manifest(&paths.manifest, "precedence = 1", "precedence = 2");
+        seed_suite_sources(temp_dir.path(), true);
+
+        let cert_report_path = certification_report_path(&paths);
+        write_string(&cert_report_path, "{\"previous\":true}\n");
+
+        let runner = success_certify_runner();
+        let error =
+            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+
+        assert!(
+            matches!(error, XtaskError::CertifySuiteFailure(message) if message.contains("certify gate failure: gate_d"))
+        );
+        assert_eq!(
+            fs::read_to_string(&cert_report_path).unwrap(),
+            "{\"previous\":true}\n"
+        );
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&attempts[0]).unwrap()).unwrap();
+        assert_eq!(attempt["overall_status"], "fail");
+        assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
+        let suites = attempt["suites"].as_array().unwrap();
+        assert_eq!(suites.len(), 5);
+        assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+    }
+
+    #[test]
+    fn family_certify_missing_shadow_entry_fails_gate_d_without_failing_suites() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        rewrite_manifest(
+            &paths.manifest,
+            "  \"function.arithmetic_leaf.monotone_up.v1\",\n",
+            "",
+        );
+        seed_suite_sources(temp_dir.path(), true);
+
+        let cert_report_path = certification_report_path(&paths);
+        write_string(&cert_report_path, "{\"previous\":true}\n");
+
+        let runner = success_certify_runner();
+        let error =
+            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+
+        assert!(
+            matches!(error, XtaskError::CertifySuiteFailure(message) if message.contains("certify gate failure: gate_d"))
+        );
+        assert_eq!(
+            fs::read_to_string(&cert_report_path).unwrap(),
+            "{\"previous\":true}\n"
+        );
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&attempts[0]).unwrap()).unwrap();
+        assert_eq!(attempt["overall_status"], "fail");
+        assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
+        let suites = attempt["suites"].as_array().unwrap();
+        assert_eq!(suites.len(), 5);
+        assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+    }
+
+    #[test]
+    fn family_certify_keeps_previous_success_report_on_failed_regression_suite() {
         let temp_dir = workspace_root();
         let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
         let paths = PacketPaths::new(temp_dir.path(), family.clone());
@@ -824,28 +933,10 @@ gate_d = true
     }
 
     fn seed_valid_cases(paths: &PacketPaths) {
-        let fixtures = [
-            ("aligned", "checkout_chain3_aligned.unit.spec"),
-            ("drift", "checkout_chain3_drift.unit.spec"),
-            (
-                "under_specified",
-                "checkout_chain3_under_specified.unit.spec",
-            ),
-            (
-                "unsupported_near_miss",
-                "checkout_chain3_unsupported_near_miss.unit.spec",
-            ),
-        ];
-
-        for (bucket, filename) in fixtures {
-            write_string(
-                &paths
-                    .fixtures
-                    .join(bucket)
-                    .join("units/namespace")
-                    .join(filename),
-                "kind: function\n",
-            );
+        for bucket in REQUIRED_BUCKETS {
+            for relative_path in expected_scaffold_unit_paths(bucket) {
+                write_string(&paths.root.join(relative_path), "kind: function\n");
+            }
         }
     }
 
@@ -869,6 +960,94 @@ gate_d = true
         );
     }
 
+    fn success_certify_runner() -> FakeRunner {
+        FakeRunner::new(&[
+            command_output(&["git", "rev-parse", "HEAD"], 0, "abc123\n"),
+            command_output(&["rustc", "--version"], 0, "rustc 1.89.0\n"),
+            command_output(
+                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
+                0,
+                "2026-04-27T18:00:00Z\n",
+            ),
+            command_output(
+                &[
+                    "cargo",
+                    "test",
+                    "-p",
+                    "spec-core",
+                    "m21_chain3_classifier_",
+                    "--",
+                    "--nocapture",
+                ],
+                0,
+                "",
+            ),
+            command_output(
+                &[
+                    "cargo",
+                    "test",
+                    "-p",
+                    "spec-cli",
+                    "--test",
+                    "cli",
+                    "m21_chain3_truth_surface_",
+                    "--",
+                    "--nocapture",
+                ],
+                0,
+                "",
+            ),
+            command_output(
+                &[
+                    "cargo",
+                    "test",
+                    "-p",
+                    "spec-cli",
+                    "--test",
+                    "m14_regressions",
+                    "m21_chain3_corpus_",
+                    "--",
+                    "--nocapture",
+                ],
+                0,
+                "",
+            ),
+            command_output(
+                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
+                0,
+                "2026-04-27T18:10:00Z\n",
+            ),
+            command_output(
+                &[
+                    "cargo",
+                    "test",
+                    "-p",
+                    "spec-core",
+                    "m21_chain3_regression_",
+                    "--",
+                    "--nocapture",
+                ],
+                0,
+                "",
+            ),
+            command_output(
+                &[
+                    "cargo",
+                    "test",
+                    "-p",
+                    "spec-cli",
+                    "--test",
+                    "m14_regressions",
+                    "m21_chain3_regression_",
+                    "--",
+                    "--nocapture",
+                ],
+                0,
+                "",
+            ),
+        ])
+    }
+
     fn command_output(command: &[&str], exit_code: i32, stdout: &str) -> (String, CommandOutput) {
         (
             command.join("\u{1f}"),
@@ -878,6 +1057,54 @@ gate_d = true
                 stderr: String::new(),
             },
         )
+    }
+
+    fn expected_scaffold_unit_paths(bucket: &str) -> [String; 4] {
+        [
+            format!("fixtures/{bucket}/units/pricing/pricing_discount_leaf_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/pricing_tax_leaf_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/pricing_total_wrapper_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/checkout_chain3_{bucket}.unit.spec"),
+        ]
+    }
+
+    fn assert_candidate_lists_path_once(candidate: &str, relative_path: &str) {
+        assert_eq!(candidate.matches(relative_path).count(), 1);
+    }
+
+    fn assert_starter_spec_is_valid_and_non_proving(path: &Path) {
+        let loaded = load_file(path).unwrap();
+        validate_full(&loaded).unwrap();
+        let review = evaluate_semantic_review(&loaded)
+            .expect("starter spec should produce a semantic review");
+        assert_eq!(
+            review.effective_support_status(),
+            SemanticSupportStatus::Unsupported,
+            "starter spec `{}` should remain outside the supported subset",
+            path.display()
+        );
+    }
+
+    fn rewrite_manifest(path: &Path, from: &str, to: &str) {
+        let contents = fs::read_to_string(path).unwrap();
+        assert!(
+            contents.contains(from),
+            "manifest rewrite anchor missing: {from}"
+        );
+        write_string(path, &contents.replacen(from, to, 1));
+    }
+
+    fn attempt_reports(paths: &PacketPaths) -> Vec<PathBuf> {
+        let mut attempts = fs::read_dir(&paths.artifacts)
+            .unwrap()
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                let file_name = path.file_name()?.to_str()?;
+                file_name.starts_with("attempt-").then_some(path)
+            })
+            .collect::<Vec<_>>();
+        attempts.sort();
+        attempts
     }
 
     struct FakeRunner {
