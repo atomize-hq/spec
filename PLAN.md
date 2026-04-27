@@ -1,25 +1,27 @@
-<!-- M20 solidify restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-m20-plan-solidify-restore-20260426-231434.md -->
-# M20 - Unsupported Function Truth Surface
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m20-autoplan-restore-20260427-122129.md -->
+# M21 - Semantic Family Promotion Harness
 
-Status: **approved for implementation on `main` after M19 landed**.
+Status: **rough draft for `/autoplan` review on `feat/m20`**.
 
-UI scope: **no**. This is a backend semantic-review milestone for passports, status JSON, export
-JSON, docs, and regression fixtures.
+UI scope: **no**. This is a backend semantic-review milestone for plan artifacts, repo-owned
+orchestration, fixture generation, promotion gates, and one newly promoted semantic function
+family.
 
-M19 proved the positive path: bounded function families can be recognized honestly when freshness,
-argument flow, and unsupported neutrality are enforced. M20 closes the other half of the contract.
-Unsupported `kind:function` shapes should no longer look like vague under-specified supported
-families. They should be explicit, reasoned, actionable, machine-readable, freshness-aware, and
-health-neutral.
+M19 proved a narrow but real positive slice. M20 made the negative path honest. M21 should turn
+that into a repeatable promotion system so future semantic-family expansion is deliberate instead
+of ad hoc.
 
-M20 does **not** add a new supported function family.
+M21 is **not** "auto-generate new semantic understanding." It is a promotion harness that helps
+humans define, implement, falsify, and certify one bounded **function** family at a time.
 
 ## Source Inputs
 
-- Current plan file: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
-- Prior M20 autoplan restore: `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260426-220932.md`
-- Current M20 solidify restore: `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/main-m20-plan-solidify-restore-20260426-231434.md`
-- Shipped M19 commit on `main`: `0b4fb20 feat: add M19 semantic review falsification pack (#21)`
+- Current branch: `feat/m20`
+- Base branch: `main`
+- Restore point: `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m20-autoplan-restore-20260427-122129.md`
+- Relevant landed proof:
+  - M19 unseen falsification pack
+  - M20 unsupported-function truth surface
 - Relevant current code:
   - `spec-core/src/semantic_review.rs`
   - `spec-core/src/passport.rs`
@@ -27,788 +29,737 @@ M20 does **not** add a new supported function family.
   - `spec-cli/src/commands.rs`
   - `spec-cli/tests/cli.rs`
   - `spec-cli/tests/m14_regressions.rs`
-  - `spec-cli/tests/fixtures/m19/semantic_falsification_pack/`
-
-## Review Mode
-
-- `/autoplan` mode: `SELECTIVE_EXPANSION`
-- `/plan-eng-review` structure: applied
-- Design phase: skipped, no UI scope
-- Outside voices from the first M20 pass: Codex only, incorporated below
-- Primary correction from this pass: unify the plan around `support_status`, not a breaking
-  `SemanticVerdict::Unsupported`
 
 ## Milestone Summary
 
 ```text
-M20a  Add a first-class function semantic support status                      required
-M20b  Add a function-only unsupported diagnostic carrier                      required
-M20c  Preserve fresh unsupported function proof on read-side surfaces         required
-M20d  Drop stale unsupported function proof under preserve-mode projection    required
-M20e  Keep unsupported health-neutral and preserve M19 supported families     required
-M20f  Refresh fixture, docs, status, export, and consumer contract coverage   required
+M21a  Introduce a repo-owned semantic family packet layout                    required
+M21b  Add an xtask crate to orchestrate family promotion workflows           required
+M21c  Encode the reusable proof gate for candidate → prove → certify         required
+M21d  Make the gate check M19/M20 truth-surface rules, not just classifiers  required
+M21e  Promote `function.wrapper.pipeline.chain3.v1` through the harness       required
+M21f  Leave public CLI product surface unchanged in M21                      required
 ```
+
+## Problem Statement
+
+Right now the repo has real semantic-review machinery, but the process for adding the next family
+still lives mostly in human memory plus a successful prior milestone.
+
+That does not scale.
+
+If the project wants to keep expanding semantic-review coverage toward a meaningful subset of Rust,
+and later prove the shared model is broad enough to support another language, it needs a repeatable
+promotion system with the same honesty constraints that made M19 and M20 credible.
+
+The real M21 question:
+
+How do we make future semantic-family expansion repeatable, reviewable, and semi-automatable
+without turning the repo into a fake generic-Rust-classifier factory, while still proving one
+more externally meaningful slice of supported Rust behavior?
 
 ## User Outcome
 
-An AI-heavy Rust maintainer authors a function outside the admitted Family A / Family B subset and
-gets a useful "no":
+An engineer working on the repo can propose a new semantic **function** family and run one
+consistent workflow:
 
-- `spec test` refreshes passport semantic truth and records that the function is unsupported;
-- the review says `support_status: "unsupported"` instead of requiring consumers to infer
-  unsupported from `verdict == "under_specified"` plus `evaluator_scope == "unsupported_surface"`;
-- reason codes explain why the function missed the admitted subset;
-- rewrite hints tell the author what shape to try next;
-- `spec build`, `spec generate`, `spec status`, and `spec export` preserve fresh unsupported proof
-  without minting new proof;
-- stale unsupported proof disappears from projected semantic review instead of pretending to be
-  current;
-- status health remains `valid` unless a separate validation, build, test, freshness, or gate issue
-  says otherwise.
+1. define the family packet in `semantic-families/<family>/`
+2. run `cargo xtask family new|prove|certify ...`
+3. generate the right fixture skeletons and proof checklist
+4. implement the family classifier in `spec-core`
+5. prove the family matches the current semantic-core contract
+6. prove the family survives a true unseen example corpus
+7. certify that the new family refreshes and projects truth the same way M19/M20 families do
 
-This gives maintainers and agents an honest negative path before the project widens the positive
-path with more supported families.
+The output is not just "tests passed." It is a certification result that says whether the family
+earned promotion or should be rejected, plus evidence that the promoted family unlocked a real
+change-loop shape the current surface could not support cleanly.
 
-## Step 0: Scope Challenge
+## Current Thesis
 
-### Current System State
+- M19 and M20 together prove the current semantic-review substrate is honest enough to expand.
+- Expansion must stay bounded and family-based, not drift into generic language understanding.
+- Unsupported-function reporting does not need another milestone right now; that landed cleanly.
+- The next bottleneck is repeatable function-family promotion, not more unsupported-path polish.
+- Second-language work remains downstream of more proven positive-path breadth.
 
-| Surface | Current behavior after M19 | M20 problem | M20 decision |
-|---|---|---|---|
-| Supported function families | Family A down, Family A up, and Family B wrapper/pipeline are bounded and tested | Vocabulary is intentionally tiny | Keep it frozen |
-| Unsupported function refresh | `spec test` can write `unsupported.function.v1` with `verdict: under_specified` and `evaluator_scope: unsupported_surface` | Unsupported is still overloaded onto the supported-family verdict model | Add `support_status: unsupported` and function-only diagnostics |
-| Preserve-mode projection | Unsupported reviews are dropped in preserve-mode today | Read-side commands lose useful current unsupported explanations | Preserve fresh function-unsupported reviews |
-| Freshness | M19 tightened semantic freshness for supported function proof | Unsupported proof needs the same stale/drop discipline | Drop stale unsupported review when authored truth changes |
-| CLI health | `semantic_health_effect()` already keeps unsupported surfaces neutral because `unsupported_surface` is not a supported evaluator scope | New fields must not accidentally demote health | Keep unsupported mapped to `KeepBase` |
-| Consumer contract | Docs still teach unsupported as "not evaluated" or implicit | Agents need a stable branch key | Document `support_status` as the branch key |
+## What Already Exists
 
-### What Already Exists
-
-| Sub-problem | Existing code surface | M20 reuse |
+| Sub-problem | Existing code | Reuse in M21 |
 |---|---|---|
-| Semantic review model | `SemanticVerdict`, `SemanticReasonCode`, `EvaluatorScope`, `SemanticReview` in `spec-core/src/semantic_review.rs` | Add compatible fields to `SemanticReview`; do not replace the whole model |
-| Unsupported review builder | `unsupported_surface_review(unit_kind)` | Split function unsupported into a richer function-only builder; keep data/sum generic |
-| Family router | `supported_surface_for_spec()` and `supported_function_surface()` | Reuse the "unsupported" branch as the entrypoint for diagnostics |
-| Preserve/refresh loop | `project_semantic_review_with_context()`, `project_passport_truth_with_context()`, `write_passports()` | Keep one projection loop; make it freshness-aware for unsupported functions |
-| Health mapping | `semantic_health_effect()` and `apply_semantic_review_to_health()` | Preserve `KeepBase` for unsupported reviews |
-| Export/status projection | `build_export_bundle()`, `enrich_passports_for_export()`, status rows in `spec-cli/src/commands.rs` | Surface the same semantic review shape everywhere |
-| Regression harness | `spec-cli/tests/cli.rs`, `spec-cli/tests/m14_regressions.rs`, M19 fixture pack | Reuse current CLI fixtures and add M20 unsupported assertions |
+| Function family routing | `spec-core/src/semantic_review.rs` | New families still plug into explicit routing, not ad hoc file ids |
+| Preserve vs refresh truth loop | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | Family certification must validate that refresh/preserve behavior stays honest |
+| CLI fixture harness | `spec-cli/tests/cli.rs`, `spec-cli/tests/m14_regressions.rs` | Reuse for command-matrix and stale/read-side proof |
+| Unseen corpus pattern | `spec-cli/tests/fixtures/m19/semantic_falsification_pack/` | Template for future family-specific falsification packs |
+| Public contract wording | `README.md`, `AGENTS.md`, `CLAUDE.md` | M21 should add process docs, not new end-user commands |
 
-### Minimum Diff
+## Proposed Deliverable Shape
 
-- Add a small semantic support-status enum and function-only unsupported diagnostics.
-- Preserve the existing `SemanticVerdict` enum in M20.
-- Keep `unsupported.function.v1` as the compatibility key unless implementation proves a version
-  bump is unavoidable.
-- Rework preserve-mode projection in the existing passport/export/status path.
-- Add targeted fixture and golden JSON coverage.
-- Do not add a new command, service, artifact type, schema family, LLM eval, or supported function
-  family.
+### 1. Repo-owned family packet directory
 
-### Complexity Check
-
-Expected module blast radius:
+Add:
 
 ```text
-spec-core/src/semantic_review.rs      model + unsupported diagnostic builder
-spec-core/src/passport.rs             freshness-aware semantic projection
-spec-core/src/export.rs               exported passport projection tests
-spec-cli/src/commands.rs              status health + JSON/text visibility tests
-spec-cli/tests/cli.rs                 command matrix + golden fixture updates
-spec-cli/tests/m14_regressions.rs     M19 supported-family non-regression
-spec-cli/tests/fixtures/m20/          unsupported truth pack
-README.md / AGENTS.md / CLAUDE.md     consumer contract wording
+semantic-families/<family>/
+  candidate.md
+  family.toml
+  fixtures/
+    aligned/
+    drift/
+    under_specified/
+    unsupported_near_miss/
 ```
 
-This is more than eight files, but it is one subsystem. That is acceptable because the milestone is
-a contract change across all read surfaces. Scope drift starts when implementation touches new
-semantic families, graph architecture, new CLI commands, or cross-kind unsupported ontology.
+`candidate.md` is human-readable review context only.
 
-### TODOS Cross-Reference
+`family.toml` is the machine-readable manifest consumed by `xtask`:
 
-- The open CLI-harness TODO about Cargo-heavy `spec test` coverage matters here. Keep most M20
-  classifier proof in `spec-core` unit tests. Use CLI tests only for read-side projection and
-  command-matrix proof.
-- The M19 unused-variable fixture TODO is fixture hygiene, not an M20 blocker.
-- No new TODO is required before implementation. Deferred items are listed in `## Not In Scope`.
+- family name
+- one-sentence semantic claim
+- authored truth requirements
+- executable body-shape grammar
+- required invariants
+- allowed dep/helper topology
+- drift taxonomy
+- under-specified taxonomy
+- unsupported-near-miss taxonomy
+- unseen-example requirements
+- compatibility key
+- routing precedence expectations
+- family scope (`kind:function` only in M21)
+- second-language litmus note
 
-### Completeness Check
+`xtask` validates `family.toml` before `prove` or `certify`. Markdown is not the executable truth
+surface.
 
-Complete version:
+### 2. `xtask` orchestration crate
 
-- explicit branch key for unsupported function review;
-- stable unsupported reason taxonomy;
-- deterministic rewrite hints;
-- fresh preserve-mode visibility;
-- stale preserve-mode dropping;
-- passport, status, export, docs, fixtures, and non-regression tests all updated together.
+Add an `xtask` crate for repo-owned workflow orchestration, not product semantics.
 
-Shortcut to reject:
+Expected commands:
 
-- better summary text only;
-- more `UnsupportedSurface` assertions only;
-- a breaking `SemanticVerdict::Unsupported` enum change without a migration path.
+```text
+cargo xtask family new <family>
+cargo xtask family prove <family>
+cargo xtask family certify <family>
+```
 
-### Distribution Check
+Responsibilities:
 
-M20 introduces no binary, package, container, hosted service, or release channel. The deliverable is
-the existing CLI's machine-readable contract. Existing Cargo and GitHub release machinery remains
-enough.
+- scaffold `semantic-families/<family>/`
+- generate checklist/templates for fixtures and certification
+- run the expected unit and CLI proof suites
+- aggregate results into `.semantic-family-artifacts/semantic-families/<family>/certification.report.json`
+- fail loudly when a family skips any required gate
 
-## Approved Scope
+Non-responsibilities:
 
-M20 includes:
+- do not contain classifier truth itself
+- do not become a shadow semantic engine
+- do not create public CLI surface in M21
 
-1. Function-only `support_status` in semantic review output.
-2. Function-only unsupported diagnostic carrier with stable reason taxonomy and rewrite hints.
-3. Preserve-mode projection that keeps fresh unsupported function review.
-4. Preserve-mode projection that drops stale unsupported function review.
-5. Health neutrality for unsupported function review.
-6. M19 supported-family non-regression.
-7. Fixture, golden JSON, README, AGENTS, and CLAUDE contract updates.
+Trust boundary:
+
+- family packets are trusted repo source, not untrusted user input
+- `xtask` must reject path traversal, symlinks, and invalid family ids
+- writes stay inside repo-relative packet paths or `.semantic-family-artifacts/`
+- `prove` / `certify` are safe on trusted branches and CI, not a general-purpose runner for
+  arbitrary external artifacts
+
+### 3. Reusable proof gate
+
+Every family must pass three gates:
+
+#### Gate A: Core-shape integrity
+
+Does the new family follow the same core contract as M19/M20?
+
+- bounded family
+- explicit authored-side claim
+- explicit executable-side matcher
+- explicit drift reasons
+- explicit under-specified reasons
+- explicit unsupported-near-miss exclusion
+- explicit routing precedence and non-shadowing expectations
+
+#### Gate B: True unseen-example survival
+
+Does the family survive a non-canonical corpus?
+
+- alternate ids
+- non-canonical naming
+- aligned examples
+- drift examples
+- under-specified examples
+- unsupported near-miss examples
+
+#### Gate C: Truth-surface honesty
+
+Does the family behave honestly across product surfaces?
+
+- `spec test` refreshes family proof
+- `spec build`, `spec generate`, `spec status`, and `spec export` preserve but do not mint proof
+- stale proof degrades correctly
+- read-side health remains coherent
+
+#### Gate D: Cross-family non-regression
+
+Does the promoted family avoid stealing or breaking existing classifications?
+
+- Family A current examples still classify as Family A
+- Family B current examples still classify as Family B
+- unsupported near-miss examples do not accidentally promote into the new family
+- packet precedence matches runtime routing order
+
+## Approaches Considered
+
+### Approach A: Promotion Harness + One Real Function Family
+
+Summary: build the reusable promotion system, then immediately run one new family all the way
+through it.
+
+Effort: M
+Risk: Low
+
+Pros:
+- makes expansion repeatable without ceremony-only process
+- forces the harness to prove itself immediately
+- gives the repo both infrastructure and new semantic breadth
+
+Cons:
+- more moving parts than a one-off manual family addition
+- requires discipline about what lives in xtask versus product code
+
+### Approach B: Framework First, No New Family
+
+Summary: ship only templates, orchestration, and certification structure.
+
+Effort: M
+Risk: Med
+
+Pros:
+- clean process skeleton
+- lower immediate classifier risk
+
+Cons:
+- easy to ship process theater
+- does not prove the harness is useful on real semantic work
+
+### Approach C: New Family First, Standardize Later
+
+Summary: add the next family manually, then extract the process afterward.
+
+Effort: S-M
+Risk: Med
+
+Pros:
+- fastest visible semantic expansion
+- simplest first implementation path
+
+Cons:
+- bakes in another ad hoc milestone
+- makes future standardization fuzzier
+
+## Recommended Approach
+
+Choose **Approach A: Promotion Harness + One Real Function Family**.
+
+Reason: M21 should improve the rate and honesty of future family promotion, not just ship another
+one-off family. But the harness must be forced to prove itself on one real family or it becomes
+process garnish.
+
+## Scope
+
+M21 includes:
+
+1. `semantic-families/` repo layout.
+2. `xtask` crate with `family new`, `family prove`, and `family certify`.
+3. `family.toml` machine manifest plus `candidate.md` human review context.
+4. Reusable unseen-fixture and certification-report conventions.
+5. Required truth-surface and cross-family non-regression gates that reuse the M19/M20
+   command-matrix discipline.
+6. One newly promoted function family, `function.wrapper.pipeline.chain3.v1`, run through the full
+   harness.
+7. Docs explaining repo-owned family promotion workflow.
+8. Kill criteria and outcome metrics that can fail the milestone honestly.
 
 ## Not In Scope
 
-- New supported function family, including "Family C".
-- Branching or looping wrappers becoming supported.
-- LLM-based semantic review.
-- Cross-kind unsupported redesign for `kind:data` or `kind:sum`.
-- New CLI commands.
-- New artifact family.
-- Broad status/export UX polish outside this unsupported function truth contract.
-- Removal of old compatibility keys in M20.
+- generic automatic family discovery
+- LLM-generated family design without human review
+- public `spec family ...` commands
+- second-language implementation work
+- `kind:data` or `kind:sum` family promotion in M21
+- broad semantic ontology redesign
+- another unsupported-path-specific milestone
+- multiple new families in the same milestone unless one proves trivially incremental
+
+## Chosen Promoted Family
+
+M21 explicitly promotes:
+
+`function.wrapper.pipeline.chain3.v1`
+
+Shape:
+
+- straight-line three-step wrapper pipeline
+- three supported dep callables
+- decimal-in / decimal-out contract
+- no branching
+- no loops
+- explicit arg threading from authored inputs through exactly three supported calls
+
+Why this family:
+
+- it stays inside `kind:function`, which matches the current evaluator architecture
+- it meaningfully expands real pricing/checkout change loops beyond the current two-step wrapper
+- it creates a stronger falsification surface than another arithmetic-leaf variant
+- it pressures routing precedence and unseen-corpus proof without forcing a seam refactor
+
+Family-selection rubric used:
+
+- real change-loop leverage
+- boundedness
+- strong falsification surface
+- minimal evaluator-architecture expansion
+- future portability signal
 
 ## Architecture Review
 
-M20 changes the semantic contract, not the product architecture. The implementation stays inside the
-existing refresh/preserve truth loop.
-
-### Dependency Graph
+### Dependency graph
 
 ```text
-authored .unit.spec
-  │
-  ├── spec-core/src/semantic_review.rs
-  │     ├── supported_function_surface()
-  │     ├── evaluate_supported_function_semantic_review()
-  │     ├── UnsupportedFunctionDiagnostic              [new internal carrier]
-  │     ├── unsupported_function_review()              [new function-only builder]
-  │     └── unsupported_surface_review()               [keep generic data/sum path]
-  │
-  ├── spec-core/src/passport.rs
-  │     ├── resolve_passport_freshness()
-  │     ├── project_passport_truth_with_context()
-  │     └── project semantic review with freshness     [changed]
-  │
-  ├── read-side surfaces
-  │     ├── spec-cli/src/commands.rs                   [status JSON/text + health]
-  │     └── spec-core/src/export.rs                    [export bundle]
-  │
-  └── tests / docs
-        ├── spec-core unit tests
-        ├── spec-cli command matrix
-        ├── m14/M19 non-regression
-        └── README / AGENTS / CLAUDE contract text
+semantic-families/<family>/candidate.md
+        │
+        ├── semantic-families/<family>/family.toml
+        │      └── machine-readable manifest for xtask validation
+        │
+        ├── cargo xtask family new
+        │      └── scaffold family packet + fixture skeletons
+        │
+        ├── cargo xtask family prove
+        │      ├── run spec-core family tests
+        │      ├── run spec-cli command-matrix tests
+        │      └── check unseen fixture completeness
+        │
+        ├── cargo xtask family certify
+        │      ├── evaluate Gate A / Gate B / Gate C / Gate D
+        │      └── write .semantic-family-artifacts/.../certification.report.json
+        │
+        └── product code touched by the promoted family
+               ├── spec-core/src/semantic_review.rs
+               ├── spec-core/src/passport.rs        [if projection rules need extension]
+               ├── spec-core/src/export.rs          [if export projection needs extension]
+               ├── spec-cli/src/commands.rs         [if status/read-side behavior needs tests]
+               └── spec-cli/tests/...               [fixture + command-matrix proof]
 ```
 
-### Data Model Contract
+### Boundary rule
 
-Add a compatibility-preserving support-status field:
+`xtask` owns orchestration only.
 
-```rust
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SemanticSupportStatus {
-    Supported,
-    Unsupported,
-}
+Product truth remains in:
 
-pub struct SemanticReview {
-    pub verdict: SemanticVerdict,
-    pub compatibility_key: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub support_status: Option<SemanticSupportStatus>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub unsupported_reason_codes: Vec<UnsupportedFunctionReasonCode>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub rewrite_hints: Vec<String>,
-    ...
-}
-```
+- `spec-core`
+- `spec-cli`
+- checked-in manifests and fixtures
 
-Contract rules:
+If a rule matters to the shipped product, it cannot live only in `xtask`.
 
-- new supported Family A / Family B reviews emit `support_status: supported`;
-- new unsupported function reviews emit `support_status: unsupported`;
-- `support_status` is the public serialized field name. Do not rename it during implementation.
-- behavior branches must call `SemanticReview::effective_support_status()`;
-- explicit `support_status` wins when present;
-- legacy reviews without `support_status` are interpreted by
-  `SemanticReview::effective_support_status()`: old `evaluator_scope: unsupported_surface` or
-  `unsupported.*.v1` keys are unsupported, old supported evaluator scopes are supported;
-- generic unsupported data/sum reviews do not receive the richer function-only diagnostics in M20;
-- existing `verdict` values remain unchanged in M20, so unsupported functions can keep
-  `verdict: under_specified` while consumers branch on `support_status`;
-- `unsupported.function.v1` remains the compatibility key unless the implementation uncovers a
-  concrete semantic break that requires `v2`.
+Packet authority rule:
 
-The plan intentionally chooses `support_status` over `SemanticVerdict::Unsupported`. That avoids an
-immediate strict-deserializer break while still making unsupported first-class. The compatibility
-helper is a method, not a loose call-site convention, so status/export/passport code cannot drift.
+- `family.toml` drives orchestration inputs
+- runtime semantic truth still lives in `spec-core`
+- `candidate.md` exists for human review, rationale, and certification commentary only
 
-### Unsupported Reason Taxonomy
+Artifact ownership rule:
 
-M20 should keep this small. More buckets are not more truth.
-
-| Reason | Meaning | Rewrite hint |
-|---|---|---|
-| `unsupported_control_flow` | Function body uses branching, looping, match, early return, or other control flow outside the admitted subset | Rewrite as a straight-line arithmetic leaf or wrapper pipeline, or wait for a future family |
-| `unsupported_required_argument_expression` | Wrapper required dep argument is computed with a literal, method call, nested expression, or non-admitted expression | Thread required arguments directly through the wrapper in declared order |
-| `unsupported_dep_topology` | Function deps do not match one of the admitted leaf/wrapper topologies | Declare the exact leaf deps or split the behavior into admitted units |
-| `unsupported_wrapper_body_shape` | Wrapper body is not a let-then-return or direct pipeline shape admitted by Family B | Use explicit `let` bindings followed by the final dep call |
-| `unsupported_arithmetic_shape` | Leaf arithmetic is outside monotone up/down nonnegative forms | Rewrite into the current arithmetic family or defer until a future family exists |
-| `unsupported_function_surface` | Fallback when no more specific function reason can be determined | Treat as unsupported by this engine version and inspect body/deps manually |
-
-Implementation may merge a reason only if two buckets cannot be distinguished deterministically from
-the AST without guesswork. It must not add open-ended prose-only reasons.
-
-Classifier priority is fixed for deterministic output:
-
-1. `unsupported_control_flow`
-2. `unsupported_dep_topology`
-3. `unsupported_required_argument_expression`
-4. `unsupported_wrapper_body_shape`
-5. `unsupported_arithmetic_shape`
-6. `unsupported_function_surface`
-
-When multiple buckets apply, emit the first matching primary reason as the lead reason and include
-only additional reasons that are deterministic from the same AST walk. Tests should assert the lead
-reason order so future classifier edits do not reshuffle public output accidentally.
-
-### Projection Rules
-
-```text
-spec test
-  │
-  ├── supported function surface
-  │     └── refresh supported review as M19 does today
-  │
-  └── unsupported function surface
-        └── refresh unsupported function review
-              support_status: unsupported
-              verdict: under_specified
-              evaluator_scope: unsupported_surface
-              compatibility_key: unsupported.function.v1
-              unsupported_reason_codes: [...]
-              rewrite_hints: [...]
-
-spec build / generate / status / export
-  │
-  ├── authored truth fresh
-  │     └── preserve stored unsupported function review
-  │
-  └── authored truth stale / unknown
-        └── drop projected semantic_review for unsupported function proof
-            base health still carries stale/unknown reason independently
-```
-
-Projection must be freshness-aware at the passport/export/status layer. Do not hide freshness logic
-inside the family classifier.
-
-### Code Seams Under Pressure
-
-| Seam | Current behavior | M20 change |
-|---|---|---|
-| `unsupported_surface_review(unit_kind)` | Generic unsupported review for any unit kind | Keep generic path, add `unsupported_function_review(diagnostic)` for functions |
-| `project_semantic_review_with_context()` | Preserve drops unsupported review | Preserve fresh unsupported function review; continue dropping unsupported non-function review |
-| `project_passport_truth_with_context()` | Computes freshness and semantic projection independently | Use freshness to decide whether unsupported function proof can be projected |
-| `semantic_health_effect()` | Unsupported evaluator scopes keep base health | Keep this invariant and add tests for `support_status: unsupported` |
-| Status/export JSON | Can only expose what projection leaves on the passport | Mirror the same `SemanticReview` shape from passports |
-| JSON fixtures | Still encode old implicit unsupported shape | Refresh to include `support_status`, reasons, and hints where current |
-
-### Security and Trust Model
-
-No new auth, network, filesystem, or secret surface exists. The threat is trust corruption:
-
-- agent mistakes unsupported for supported under-specification;
-- stale unsupported proof is presented as current;
-- status/export silently erase a current unsupported explanation;
-- consumers branch on legacy overloaded fields forever.
-
-The mitigation is an explicit branch key plus freshness-aware projection.
-
-## Code Quality Review
-
-### Engineering Rules
-
-- **DRY**: one refresh/preserve projection path. No unsupported-only command branch.
-- **Explicit over clever**: `support_status` is the branch key. Do not keep teaching consumers to
-  infer from `verdict` plus `evaluator_scope`.
-- **Minimal diff**: no new semantic family and no new command.
-- **Boring by default**: use serde-default additive fields, existing enums, existing fixtures, and
-  existing Cargo test harness.
-- **Engineered enough**: reason taxonomy is small and stable, but not a single generic catch-all.
-
-### Over-Engineering Guardrail
-
-Do not build a broad unsupported ontology. M20 needs function-specific diagnostic truth for the
-current admitted families, not a theory of all future unsupported code.
-
-### Under-Engineering Guardrail
-
-Do not ship only better strings. The plan is not complete unless machine consumers can branch on
-`support_status` and tests prove fresh-vs-stale unsupported projection.
+- checked in: `candidate.md`, `family.toml`, fixture sources
+- not checked in: full `certification.report.json`
+- CI may publish full certification reports as artifacts
+- `.semantic-family-artifacts/` is gitignored repo-local state, not Cargo build output
+- a stable checked-in summary is allowed only if it is tiny and schema-versioned
 
 ## Test Review
 
-### Framework Detection
-
-Runtime: Rust workspace with Cargo.
-
-Primary commands:
-
-- `cargo test -p spec-core ...`
-- `cargo test -p spec-cli --test cli ...`
-- `cargo test -p spec-cli --test m14_regressions ...`
-- `cargo run -p spec-cli -- ...`
-
-### Code Path Coverage Diagram
-
-```text
-CODE PATH COVERAGE
-==================
-[+] spec-core/src/semantic_review.rs
-    │
-    ├── SemanticReview additive fields
-    │   ├── [GAP] new supported reviews serialize support_status=supported
-    │   ├── [GAP] legacy supported JSON without support_status has effective supported status
-    │   ├── [GAP] legacy unsupported JSON without support_status has effective unsupported status
-    │   └── [GAP] unsupported function reviews serialize support_status=unsupported
-    │
-    ├── unsupported_function_review()
-    │   ├── [GAP] control flow -> unsupported_control_flow + rewrite hint
-    │   ├── [GAP] computed required arg -> unsupported_required_argument_expression + hint
-    │   ├── [GAP] dep topology miss -> unsupported_dep_topology + hint
-    │   ├── [GAP] wrapper body miss -> unsupported_wrapper_body_shape + hint
-    │   ├── [GAP] arithmetic shape miss -> unsupported_arithmetic_shape + hint
-    │   └── [GAP] fallback -> unsupported_function_surface + hint
-    │
-    └── semantic_health_effect()
-        └── [GAP] support_status=unsupported remains KeepBase
-
-[+] spec-core/src/passport.rs
-    │
-    ├── project_passport_truth_with_context()
-    │   ├── [GAP] fresh unsupported function review preserved
-    │   ├── [GAP] stale unsupported function review dropped
-    │   ├── [GAP] supported -> unsupported transition after spec test refresh
-    │   └── [GAP] unsupported -> supported transition after spec test refresh
-    │
-    └── build_passport_preserving_proof_state_with_context()
-        └── [GAP] build/generate preserve fresh unsupported proof without refreshing it
-
-[+] spec-core/src/export.rs
-    │
-    ├── [GAP] export includes fresh unsupported function details
-    ├── [GAP] export drops stale unsupported function details
-    └── [GAP] export does not invent unsupported data/sum diagnostics
-
-[+] spec-cli/src/commands.rs + spec-cli/tests/cli.rs
-    │
-    ├── [GAP] status JSON includes fresh unsupported function details
-    ├── [GAP] status text includes readable rewrite hint
-    ├── [GAP] unsupported function status remains valid when base health is valid
-    └── [GAP] unsupported function does not hide stale base health
-
-[+] spec-cli/tests/m14_regressions.rs
-    │
-    ├── [GAP] Family A down M19 behavior unchanged
-    ├── [GAP] Family A up M19 behavior unchanged
-    └── [GAP] Family B wrapper/pipeline M19 behavior unchanged
-```
-
-### User and Agent Flow Coverage Diagram
-
-```text
-USER / AGENT FLOW COVERAGE
-==========================
-[+] Maintainer runs spec test on unsupported function
-    ├── [GAP] passport records support_status=unsupported
-    ├── [GAP] reason code is specific, not only unsupported_surface
-    └── [GAP] summary/rewrite hint tells author what to try next
-
-[+] Maintainer runs spec status --format json after fresh proof
-    ├── [GAP] unit remains valid if no other issue exists
-    └── [GAP] semantic_review is visible and machine-readable
-
-[+] Maintainer edits unsupported function body after proof
-    ├── [GAP] status reports stale authored truth
-    └── [GAP] stale unsupported semantic_review is not projected as current
-
-[+] Downstream consumer reads export bundle
-    ├── [GAP] branches on support_status instead of overloaded legacy shape
-    └── [GAP] sees the same reason/hint taxonomy as status JSON
-```
-
-Coverage target: **0 remaining gaps** before implementation is considered green.
-
-### Required Tests
-
-| Area | Required tests |
-|---|---|
-| Model compatibility | serde round-trip for old review JSON without `support_status`; explicit field wins over legacy inference; effective status for old supported and old unsupported shapes; new unsupported review explicit |
-| Reason taxonomy | one unit test per unsupported reason bucket and fallback, with lead-reason priority asserted |
-| Rewrite hints | deterministic hint per reason bucket, serialized as public `rewrite_hints` |
-| Health neutrality | unsupported review keeps base health in `semantic_health_effect()` and status health |
-| Fresh preserve | passport, status, and export preserve current unsupported function review |
-| Stale drop | passport, status, and export drop stale unsupported function review |
-| Transition rules | supported -> unsupported and unsupported -> supported refresh after `spec test` |
-| Cross-kind boundary | data/sum unsupported behavior unchanged in M20 |
-| M19 non-regression | Family A down/up and Family B wrapper/pipeline behavior unchanged |
-
-### Fixture Gate
-
-Create:
-
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/`
-
-Minimum fixture units:
-
-```text
-units/pricing/apply_discount.unit.spec                             supported Family A down
-units/pricing/apply_discount_control_flow.unit.spec                unsupported control flow
-units/pricing/apply_tax.unit.spec                                  supported Family A up
-units/pricing/apply_tax_arithmetic_shape.unit.spec                 unsupported arithmetic shape
-units/pricing/checkout_total.unit.spec                             supported Family B wrapper
-units/pricing/calculate_total.unit.spec                            unsupported required arg expression
-units/pricing/checkout_total_bad_dep_topology.unit.spec            unsupported dep topology
-units/pricing/checkout_total_bad_body_shape.unit.spec              unsupported wrapper body shape
-```
-
-Required command matrix:
-
-```bash
-cargo run -p spec-cli -- test spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --output spec-cli/tests/fixtures/m20/unsupported_truth_pack/src/generated --crate-root spec-cli/tests/fixtures/m20/unsupported_truth_pack
-cargo run -p spec-cli -- status spec-cli/tests/fixtures/m20/unsupported_truth_pack --format json
-cargo run -p spec-cli -- export spec-cli/tests/fixtures/m20/unsupported_truth_pack
-```
-
-Assertions:
-
-- unsupported function review has `support_status: "unsupported"`;
-- `verdict` remains compatibility-safe in M20;
-- public serialized fields are exactly `support_status`, `unsupported_reason_codes`, and
-  `rewrite_hints`;
-- `unsupported_reason_codes` and `rewrite_hints` are present for unsupported functions;
-- lead unsupported reason follows the classifier priority order;
-- health remains neutral;
-- stale unsupported proof is not projected as current;
-- supported Family A / B fixtures retain M19 behavior.
-
-### Full Final Gate
-
-```bash
-cargo test -p spec-core semantic_review -- --nocapture
-cargo test -p spec-core passport -- --nocapture
-cargo test -p spec-core export -- --nocapture
-cargo test -p spec-cli --test cli -- --nocapture
-cargo test -p spec-cli --test m14_regressions -- --nocapture
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_discount.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/calculate_total.unit.spec
-cargo run -p spec-cli -- status examples/ecommerce --format json
-```
-
-### Test Plan Artifact
-
-Primary QA artifact:
-
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-main-eng-review-test-plan-20260426-m20.md`
-
-If this file is missing at implementation time, create it from the `Test Review`, `Fixture Gate`,
-and `Full Final Gate` sections above before running `/qa`.
-
-## Error & Rescue Registry
-
-| Codepath | What can go wrong | Rescue action | User sees |
-|---|---|---|---|
-| Unsupported refresh | Review remains only `under_specified` + generic unsupported key | Add `support_status`, reason taxonomy, and rewrite hints | Explicit unsupported explanation |
-| Preserve projection | Fresh unsupported proof is dropped by build/status/export | Preserve current function-unsupported review | Same explanation on read-side commands |
-| Freshness projection | Stale unsupported proof survives semantic edit | Drop semantic review when authored truth is stale or unknown | Stale health reason, no fake-current unsupported review |
-| Health mapping | Unsupported starts demoting valid units | Keep unsupported reviews mapped to `KeepBase` | Unit remains valid unless another issue exists |
-| Consumer compatibility | Strict consumers break on enum change | Preserve `SemanticVerdict`; add fields additively | Stable JSON with explicit branch key |
-| Reason taxonomy | Reasons become vague or unstable | Freeze small enum and golden fixtures | Deterministic machine contract |
-
-## Failure Modes Registry
-
-| Codepath | Failure mode | Test required | Error handling | User impact if missed |
-|---|---|---|---|---|
-| `unsupported_function_review()` | Emits only generic fallback for all misses | Unit tests per reason bucket | Deterministic fallback | Author gets useless guidance |
-| `SemanticReview` serde | Old passports without `support_status` fail to deserialize or misclassify old unsupported review | Legacy JSON round-trip | Optional field plus `effective_support_status()` | Existing projects break or old unsupported proof is misread |
-| `project_passport_truth_with_context()` | Fresh unsupported review dropped | Passport preserve test | Preserve when authored truth fresh | Status/export lose explanation |
-| `project_passport_truth_with_context()` | Stale unsupported review preserved | Passport stale test | Drop when authored truth stale/unknown | Agent trusts old proof |
-| `semantic_health_effect()` | Unsupported demotes valid health | Unit + status tests | `KeepBase` for unsupported | False non-green status |
-| `export.rs` | Export and status disagree on shape | Export/status fixture tests | Shared projected passport path | Consumers see inconsistent contract |
-| M19 supported families | New unsupported logic widens or narrows Family A/B | m14/M19 regression tests | No family-router expansion | False positives or false negatives |
-| Docs | README/AGENTS still teach old inference | Docs review in final gate | Update consumer guidance | Agents keep branching wrong |
-
-Critical gap definition: any row with no test and no deterministic rescue is a blocker.
-
-## Performance Review
-
-There is no database, network, cache, or memory concern. The performance risk is test-suite drag.
-
-Rules:
-
-- reason taxonomy and serde behavior belong in `spec-core` unit tests;
-- CLI command matrix proves projection and health only;
-- do not add one Cargo-backed CLI test per reason bucket if a unit test proves the classifier;
-- reuse M19 fixtures where possible, but create a dedicated M20 fixture root for the public command
-  contract.
-
-## Observability and Debuggability Review
-
-M20 needs machine output, not a dashboard.
-
-Status/export/passport output must make these obvious:
-
-- `support_status` is the consumer branch key;
-- unsupported reason codes are stable;
-- rewrite hints are deterministic;
-- base health neutrality is intentional;
-- stale unsupported proof is absent because it is stale, not because the CLI forgot it.
-
-Human-readable status text may include a concise hint, but JSON is the source of truth.
-
-## Deployment and Rollout Review
-
-No feature flag or migration tool is required.
-
-Safe rollout order:
-
-1. Add additive model fields and serde defaults.
-2. Add unsupported diagnostic builder and unit tests.
-3. Make passport projection freshness-aware for unsupported functions.
-4. Update status/export projection tests.
-5. Add M20 fixture root and command matrix.
-6. Update README, AGENTS, CLAUDE, and checked-in JSON fixtures.
-7. Run the full final gate.
-
-Rollback is a normal git revert. Because M20 avoids a new serialized verdict enum variant, rollback
-risk is mostly fixture/docs churn rather than downstream parser failure.
-
-## Consumer Migration Contract
-
-Consumers should move from:
-
-```text
-verdict == "under_specified" && evaluator_scope == "unsupported_surface"
-```
-
-to:
-
-```text
-semantic_review.support_status == "unsupported"
-```
-
-Compatibility rules:
-
-- old passports without `support_status` deserialize safely and compute effective status from the
-  legacy evaluator scope / compatibility key;
-- M20 writes `support_status` in new output;
-- strict consumers should ignore unknown additive fields if possible;
-- docs must state that `verdict` is still about semantic result inside the current compatibility
-  model, while `support_status` answers whether semantic governance is available for this function.
-
-## Implementation Slices
-
-### Slice 1: Additive Semantic Model
-
-- Add `SemanticSupportStatus`.
-- Add function-only unsupported reason enum or equivalent stable serialized taxonomy.
-- Add public serialized fields named exactly `support_status`, `unsupported_reason_codes`, and
-  `rewrite_hints` to `SemanticReview`.
-- Add `SemanticReview::effective_support_status()`, with explicit field precedence over legacy
-  inference, and round-trip tests.
-
-Exit criteria:
-
-- legacy semantic review JSON deserializes;
-- explicit `support_status` wins when present;
-- legacy supported and unsupported reviews compute the correct effective support status;
-- unsupported review JSON serializes the new branch key.
-
-### Slice 2: Unsupported Function Diagnostic Builder
-
-- Add `UnsupportedFunctionDiagnostic`.
-- Classify deterministic unsupported reason buckets.
-- Generate rewrite hints from reason buckets.
-- Keep generic `unsupported_surface_review(unit_kind)` behavior for data/sum.
-- Implement the fixed lead-reason priority order from `Unsupported Reason Taxonomy`.
-
-Exit criteria:
-
-- unit tests prove every M20 reason bucket;
-- tests prove deterministic lead-reason ordering when multiple reasons apply;
-- no supported Family A / B classifier expansion.
-
-### Slice 3: Freshness-Aware Projection
-
-- Change passport projection so unsupported function review is preserved only when authored truth is
-  fresh.
-- Keep `spec test` as the only refresh path.
-- Ensure status/export consume the same projected truth.
-
-Exit criteria:
-
-- fresh unsupported review appears on passport/status/export;
-- stale unsupported review is dropped;
-- base stale health still appears.
-
-### Slice 4: CLI, Fixtures, Docs
-
-- Add M20 fixture pack.
-- Add command-matrix tests.
-- Refresh golden JSON fixtures.
-- Update README, AGENTS, CLAUDE, and example docs.
-
-Exit criteria:
-
-- full final gate passes;
-- consumer contract is documented in every agent-facing instruction surface.
-
-## Worktree Parallelization Strategy
-
-M20 has parallelization opportunity, but only after the additive model contract is merged. The model
-fields are a shared dependency for every other lane.
-
-### Dependency Table
-
-| Step | Modules touched | Depends on |
-|---|---|---|
-| Additive semantic model | `spec-core/src/` | - |
-| Unsupported diagnostic builder | `spec-core/src/` | Additive semantic model |
-| Freshness-aware projection | `spec-core/src/`, `spec-cli/src/` | Additive semantic model |
-| CLI fixture and command matrix | `spec-cli/tests/`, `spec-cli/tests/fixtures/` | Additive semantic model, diagnostic builder, projection |
-| Docs and consumer contract | repo root docs, examples docs | Additive semantic model |
-| M19 non-regression verification | `spec-cli/tests/`, examples | Diagnostic builder, projection |
-
-### Parallel Lanes
-
-```text
-Lane A: Additive semantic model
-        then Unsupported diagnostic builder
-        (sequential, shared spec-core/src/semantic_review.rs)
-
-Lane B: Freshness-aware projection
-        (can start after Lane A model fields, touches passport/export/commands)
-
-Lane C: Docs and consumer contract
-        (can start after Lane A model names are stable)
-
-Lane D: CLI fixture and command matrix
-        then M19 non-regression verification
-        (waits for A + B because assertions need final JSON shape)
-```
-
-### Execution Order
-
-1. Launch Lane A first. Merge the additive model fields before parallel work starts.
-2. Launch Lane B and Lane C in parallel worktrees after Lane A model names are stable.
-3. Merge Lane B before Lane D.
-4. Launch Lane D after projection behavior is final.
-5. Run the full final gate in one integration worktree after all lanes merge.
-
-### Conflict Flags
-
-- Lane A and Lane B both touch `spec-core/src/`, so do not run them concurrently before the model
-  fields are merged.
-- Lane B and Lane D both touch behavior visible in CLI tests. Lane D should wait or it will churn
-  expected JSON.
-- Lane C can run in parallel with Lane B if docs reference stable field names only.
+M21 needs two test layers.
+
+### Harness tests
+
+- scaffold generation tests for `cargo xtask family new`
+- prove/certify happy-path tests
+- missing-artifact and partial-packet failure tests
+- malformed manifest tests
+- path traversal / symlink rejection tests
+- duplicate fixture id tests
+- do-not-overwrite-last-known-good-report-on-failure tests
+- dirty-worktree and concurrent-run behavior tests
+
+### Promoted-family tests
+
+- `spec-core` classifier tests
+- unseen aligned/drift/under-specified/unsupported fixture tests
+- `spec-cli` command-matrix tests for refresh/preserve/stale behavior
+- export/status assertions for read-side honesty
+- cross-family precedence regression tests
+- stale-proof invalidation tests when classifier shape or manifest version changes
 
 ## Success Criteria
 
-- `semantic_review.support_status` exists and is the documented unsupported branch key.
-- Unsupported function reviews carry stable reason codes and rewrite hints.
-- `SemanticVerdict` remains compatibility-safe in M20.
-- `spec test` refreshes unsupported function truth.
-- `spec build`, `spec generate`, `spec status`, and `spec export` preserve fresh unsupported
-  function truth without minting it.
-- Stale unsupported function truth is not projected as current.
-- Unsupported function review remains health-neutral.
-- Data/sum unsupported behavior is unchanged.
-- M19 supported-family behavior stays green.
-- README, AGENTS, CLAUDE, fixtures, status JSON, and export JSON all teach the same contract.
+- `semantic-families/<family>/` exists with a documented packet schema.
+- `family.toml` exists and is versioned; `candidate.md` is review-only context.
+- `xtask` crate exists and can scaffold, prove, and certify a family packet.
+- M21 defines one reusable certification gate covering core shape, unseen examples,
+  truth-surface honesty, and cross-family non-regression.
+- `function.wrapper.pipeline.chain3.v1` is promoted through the harness end to end.
+- The new family proves real unseen-example survival.
+- The new family obeys M19/M20 refresh/preserve honesty rules.
+- The new family does not shadow or break Family A / Family B.
+- Public CLI surface remains unchanged in M21.
+- Documentation explains how future families are proposed and certified.
+- External-value proxy: the promoted family unlocks at least one realistic three-step pricing /
+  checkout flow currently outside the shipped supported subset.
+- Kill criteria: if the harness requires family-specific schema escape hatches, or if the promoted
+  family cannot be certified without duplicating product semantics in xtask, M21 is red.
 
-## Cross-Phase Themes
+## Failure Modes to Guard Against
 
-- **Truth before breadth**: M20 should improve the negative path before adding Family C.
-- **One projection path**: refresh/preserve semantics must stay centralized.
-- **Explicit beats overloaded**: `support_status` removes inference from `verdict` and
-  `evaluator_scope`.
-- **Compatibility matters**: additive fields beat enum churn for this milestone.
-- **Tests are the contract**: fixture and golden JSON coverage are not garnish here.
+| Failure mode | Why it matters | M21 guard |
+|---|---|---|
+| xtask becomes a shadow semantic engine | Product truth drifts into private orchestration | Keep semantic rules in `spec-core` or checked-in family packets |
+| Harness certifies incomplete packets | Teams can mint fake families | Gate fails on missing aligned/drift/under-specified/unsupported corpora |
+| New family passes classifier tests but breaks read-side truth | Product surface lies | Gate C required for certification |
+| New family steals Family A/B matches | Existing truth silently changes | Gate D precedence regression suite |
+| Family packet schema becomes bureaucracy | Slows real work | Keep packet minimal and centered on proof |
+| Packet docs drift from runtime truth | Engineers trust the wrong source | Machine manifest plus runtime-owned truth boundary |
+| Certification is not reproducible | Two engineers certify different things | Report provenance with SHA, toolchain, schema version, and fixture digests |
 
-## Outside Voice Integration
+## Distribution
 
-First M20 pass used Codex outside voice only.
+No new end-user distribution channel is needed.
 
-Findings incorporated:
+This is repo-owned promotion machinery plus product-internal semantic expansion. Existing Cargo,
+CI, and release workflows remain enough.
 
-- M20 must change operator behavior, not just labels.
-- A direct serialized `SemanticVerdict::Unsupported` change is too risky for M20.
-- The unsupported path is generic across unit kinds today, so M20 must be function-only.
-- Rewrite guidance needs a diagnostic carrier, not just new summary strings.
-- Consumer migration must be explicit.
+## Outcome Metrics and Kill Criteria
 
-No unresolved user challenge remains. The resulting plan keeps the user's M20 direction and narrows
-the implementation to a compatibility-preserving truth-surface change.
+### Outcome Metrics
+
+- M21 certifies one real new family using one repeatable command path.
+- The promoted family unlocks at least one realistic three-step pricing or checkout flow not
+  representable by current Family B.
+- The next function family packet after M21 should require materially less custom test scaffolding
+  than M19 did.
+
+### Kill Criteria
+
+- if `family.toml` needs family-specific one-off fields to support the chosen exemplar, M21 is red
+- if `xtask` must infer semantic truth by reimplementing classifier rules, M21 is red
+- if the promoted family breaks Family A or Family B precedence and no bounded routing fix exists,
+  M21 is red
+- if the external-value proxy is still hand-wavy by the end of the milestone, M21 is red
+
+## Initial Next Steps
+
+1. Lock the family packet schema under `semantic-families/`.
+2. Add `family.toml` as the required machine-readable manifest and keep `candidate.md` review-only.
+3. Define the exact outputs of `family new`, `family prove`, and `family certify`.
+4. Scaffold `function.wrapper.pipeline.chain3.v1` as the promoted exemplar.
+5. Write the M21 certification gate before implementation starts.
+
+## CEO Review
+
+### 0A. Premise Challenge
+
+1. **Premise:** the next repo bottleneck is repeatable semantic-family promotion.
+   Status: challenged.
+   Why: current evidence proves a narrow semantic substrate, but does not yet prove that promotion
+   process is the next user-visible bottleneck.
+
+2. **Premise:** one new family plus a harness is the best next milestone shape.
+   Status: plausible, but not yet proven.
+   Why: this is the most complete internal move, but it risks process-first work unless M21 also
+   yields a clearer adoption wedge or measurable external progress.
+
+3. **Premise:** `xtask` plus `semantic-families/` is the right boundary.
+   Status: supported.
+   Why: existing product semantics are centralized in `spec-core` / `spec-cli`, and there is no
+   current orchestration crate to misuse or unwind.
+
+4. **Premise:** the next family should be chosen for semantic distinctness alone.
+   Status: rejected.
+   Why: distinctness matters, but M21 should also optimize for external leverage and real change
+   frequency.
+
+### 0B. Existing Code Leverage Map
+
+| Sub-problem | Existing code | Reuse decision |
+|---|---|---|
+| Family evaluation entrypoint | `spec-core/src/semantic_review.rs` | Reuse directly, do not mirror logic in xtask |
+| Refresh/preserve truth projection | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | Reuse as Gate C certification target |
+| Fixture and command-matrix proof | `spec-cli/tests/cli.rs`, `spec-cli/tests/m14_regressions.rs` | Reuse as the core proof harness |
+| Prior unseen corpus shape | `spec-cli/tests/fixtures/m19/semantic_falsification_pack/` | Reuse as the template for future family packets |
+| Workspace packaging | root `Cargo.toml` | Add `xtask` as a workspace member, no new infra needed |
+
+### 0C. Dream State Diagram
+
+```text
+CURRENT
+  Narrow but real semantic families.
+  Honest refresh/preserve behavior.
+  Next family addition still lives in maintainer memory.
+
+THIS PLAN
+  Formal family packet layout.
+  xtask orchestration for scaffold → prove → certify.
+  One new family promoted through the same honest gate.
+
+12-MONTH IDEAL
+  Family promotion is fast and boring.
+  New families are chosen for real repo leverage, not neatness.
+  `spec` proves trustworthy change loops on real codebases, not just internal classifier rigor.
+```
+
+### 0C-bis. Alternatives Table
+
+| Approach | Summary | Effort | Risk | Why choose it | Why reject it |
+|---|---|---:|---:|---|---|
+| A. Promotion Harness + One Real Family | Standardize future family promotion and prove it immediately | M | Low | Best internal rigor and repeatability | Can become process-first unless tied to external value |
+| B. Framework First, No New Family | Build only process scaffolding | M | Med | Cleanest orchestration skeleton | High risk of shipping process theater |
+| C. New Family First, Standardize Later | Manually add one more family before automation | S-M | Med | Fastest visible semantic expansion | Repeats ad hoc milestone shape |
+| D. Adoption Wedge First | Pick one real external change loop and only build the minimum harness needed to support it | M-L | High | Best external proof if it lands | Higher milestone ambiguity and broader blast radius |
+
+### 0D. Mode Selection
+
+Mode: `SELECTIVE_EXPANSION`
+
+Reason: keep the user’s M21 direction intact, but expand it enough to include outcome metrics,
+kill criteria, and family-selection rules tied to leverage, not just elegance.
+
+### 0E. Temporal Interrogation
+
+- **Hour 1:** scaffold `xtask`, define packet schema, choose the promoted family.
+- **Hour 6:** one family packet exists, but if certification rules are still vague, the milestone is
+  already drifting into paperwork.
+- **End of milestone:** success only matters if the harness both certifies one family and shortens
+  the path for the next one in a measurable way.
+- **6 months later:** this looks good if it became the shortest path to more real semantic
+  coverage. It looks bad if it became a careful internal bureaucracy with no adoption wedge.
+
+### 0F. CEO Review Findings
+
+- The milestone needs explicit **kill criteria** so it can fail strategically instead of only
+  succeeding procedurally.
+- The promoted family should be chosen by **real leverage**, not by semantic neatness alone.
+- Success criteria need at least one **external-value proxy**, not just artifact completion.
+- The harness must stay **repo-owned orchestration**, not a second semantic engine.
+
+### CEO Dual Voices
+
+#### CODEX SAYS (CEO - strategy challenge)
+
+- The plan may be optimizing the family factory before proving the outputs matter enough.
+- Leaving the family choice open while standardizing the harness is backwards.
+- Zero public surface change makes the milestone strategically invisible unless it also improves an
+  external adoption story.
+- The plan needs kill criteria and at least one benchmark for real user-value movement.
+
+#### CLAUDE SUBAGENT (CEO - strategic independence)
+
+- The stronger framing may be adoption wedge first: make `spec` the fastest trustworthy way to
+  change real codebases with AI, then automate family promotion only as needed.
+- The current success criteria measure internal artifact completion, not product progress.
+- The plan needs premise evidence and falsifiers, not just confident assertions.
+- Competitive pressure is real enough that slow internal bureaucracy would be a strategic mistake.
+
+#### CEO DUAL VOICES - CONSENSUS TABLE
+
+| Dimension | Claude | Codex | Consensus |
+|---|---|---|---|
+| Premises valid? | challenged | challenged | DISAGREE with current draft |
+| Right problem to solve? | maybe too internal | maybe too internal | DISAGREE with current draft |
+| Scope calibration correct? | too governance-first | too governance-first | DISAGREE with current draft |
+| Alternatives sufficiently explored? | no | no | DISAGREE with current draft |
+| Competitive / market risks covered? | weak | weak | DISAGREE with current draft |
+| 6-month trajectory sound? | only with kill criteria | only with kill criteria | DISAGREE with current draft |
+
+### Error & Rescue Registry
+
+| Risk | Failure shape | Rescue |
+|---|---|---|
+| Harness-first drift | We ship scaffolding before proving the next family matters | Require one promoted family plus outcome metrics in the same milestone |
+| Wrong next family | We choose the neat family instead of the useful one | Add family-selection rubric weighted by real leverage and frequency |
+| Strategic invisibility | M21 ships with no externally legible value movement | Add at least one adoption or capability proxy metric |
+| Bureaucratic packet design | The packet schema grows faster than families do | Keep packet minimal and fail any non-essential metadata expansion |
+
+### Cross-Phase Themes
+
+- **Truth before theater:** the repo should not confuse process completion with product progress.
+- **Leverage over neatness:** the promoted family should unlock something meaningful, not just look
+  clean in the taxonomy.
+
+## Design Review
+
+Skipped, no UI scope.
+
+## Eng Review
+
+### 0. Scope Challenge
+
+The codebase supports a **function-family-only** M21 cleanly. It does **not** support a general
+"any future family kind" harness at the same risk level.
+
+Why:
+
+- function-family routing is centralized in `spec-core/src/semantic_review.rs`
+- preserve / refresh truth projection is centralized in `spec-core/src/passport.rs`,
+  `spec-core/src/export.rs`, and `spec-cli/src/commands.rs`
+- `kind:data` and `kind:sum` support are still unit-specific and would require a broader evaluator
+  refactor than this milestone should absorb
+
+Engineering decision:
+
+- M21 stays on `kind:function`
+- promoted exemplar is `function.wrapper.pipeline.chain3.v1`
+- `xtask` is orchestration-only
+
+### 0.5. Eng Dual Voices
+
+#### CODEX SAYS (eng - architecture challenge)
+
+- choose the promoted family now, not after designing the harness
+- do not let packets pretend to be runtime truth unless there is a real ingestion model
+- add explicit precedence / shadowing checks because runtime routing is ordered
+- current risk was understated given `semantic_review.rs` and `spec-cli/tests/cli.rs` are already
+  large monoliths
+
+#### CLAUDE SUBAGENT (eng - independent review)
+
+- move machine meaning out of Markdown and into a versioned manifest
+- make certification reproducible with provenance
+- define a clear trust boundary for packet inputs and `xtask` writes
+- keep full certification output out of checked-in source to avoid stale truth and merge churn
+
+#### ENG DUAL VOICES - CONSENSUS TABLE
+
+| Dimension | Claude | Codex | Consensus |
+|---|---|---|---|
+| Architecture sound? | conditional | conditional | CONFIRMED with narrowing |
+| Test coverage sufficient? | not yet | not yet | DISAGREE with current draft |
+| Performance risks addressed? | partially | partially | DISAGREE with current draft |
+| Security threats covered? | weak | weak | DISAGREE with current draft |
+| Error paths handled? | weak | weak | DISAGREE with current draft |
+| Deployment risk manageable? | yes with provenance | yes with provenance | CONFIRMED with fixes |
+
+### 1. Architecture Review
+
+The architecture is acceptable **only** with these decisions locked:
+
+- `family.toml` is the machine-readable input
+- `candidate.md` is human-readable context only
+- runtime semantic truth remains in `spec-core`
+- `xtask` consumes structured outputs; it does not infer semantic truth by scraping broad test text
+- M21 is function-family-only
+
+This keeps the blast radius bounded to:
+
+- workspace root `Cargo.toml`
+- new `xtask` crate
+- new `semantic-families/function.wrapper.pipeline.chain3.v1/`
+- `spec-core/src/semantic_review.rs`
+- targeted `spec-cli` tests and fixtures
+
+### 2. Code Quality Review
+
+What already exists is reusable, but the repo has two large pressure points:
+
+- `spec-core/src/semantic_review.rs` is already a large, ordered classifier file
+- `spec-cli/tests/cli.rs` is already a large integration-matrix file
+
+That means M21 should avoid:
+
+- new ad hoc branching that widens monolith complexity without abstraction discipline
+- duplicating gate semantics inside `xtask`
+- adding packet-schema exceptions for the exemplar family
+
+### 3. Test Review
+
+Test plan artifact:
+
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m20-test-plan-20260427-123346.md`
+
+Key required coverage:
+
+- `family new` scaffold success and failure paths
+- manifest validation failures
+- promoted-family aligned / drift / under-specified / unsupported unseen corpus
+- refresh / preserve / stale command matrix
+- precedence non-regression versus Family A / Family B
+- report provenance and no-overwrite-on-failure behavior
+
+This section is now a real gate, not a suggestion. Missing any of those means the harness can
+greenlight the wrong family or record stale proof as current.
+
+### 4. Performance Review
+
+Main risk is not runtime user latency. It is developer-loop and CI drag.
+
+If `family prove` reruns the entire `spec-core` and CLI matrix every time, people will bypass it.
+So M21 needs:
+
+- impacted-suite selection for `prove`
+- broader matrix for `certify`
+- full cross-family regression in CI / nightly, not every local prove run
+
+### 5. Security and Trust Boundary Review
+
+This is repo tooling, but it still executes and writes files. So the trust boundary has to be
+explicit:
+
+- reject invalid family ids
+- reject path traversal
+- reject symlink packet roots
+- keep writes inside repo packet paths or `.semantic-family-artifacts/`
+- treat packet inputs as trusted repo-owned source, not arbitrary external uploads
+
+### 6. Failure Modes Registry
+
+| Failure mode | Severity | Fix |
+|---|---|---|
+| Packet schema grows hidden DSL behavior | High | machine manifest only; Markdown review-only |
+| Certification is non-reproducible | High | report provenance with SHA, toolchain, digests, exit codes |
+| New family shadows Family A / B | High | Gate D required |
+| xtask becomes semantic engine #2 | High | consume structured outputs only |
+| Full certification output creates stale checked-in artifacts | Medium | keep full report in `.semantic-family-artifacts/` or CI artifacts |
+| `prove` becomes too slow and gets bypassed | Medium | impacted-suite selection and caching |
+
+### 7. Eng Completion Summary
+
+```text
++====================================================================+
+|                      M21 ENG REVIEW SUMMARY                        |
++====================================================================+
+| Scope                 | function-family-only                        |
+| Exemplar family       | function.wrapper.pipeline.chain3.v1         |
+| Packet authority      | family.toml machine / candidate.md human    |
+| Report ownership      | .semantic-family-artifacts + CI artifacts    |
+| Core risk             | precedence, provenance, xtask drift          |
+| Required new gate     | Gate D cross-family non-regression           |
+| Test artifact         | written                                      |
+| UI review             | skipped, no UI scope                         |
++====================================================================+
+```
 
 ## Decision Audit Trail
 
 | # | Phase | Decision | Classification | Principle | Rationale | Rejected |
 |---|---|---|---|---|---|---|
-| 1 | CEO | M20 targets unsupported-function truth, not a new family | Mechanical | Completeness | Positive-path trust is proven; negative-path trust is the next gap | Add Family C |
-| 2 | CEO | Use selective expansion | Mechanical | Boil lake | Fix the exact trust surface under pressure | Reopen semantic roadmap |
-| 3 | Eng | Add `support_status` instead of `SemanticVerdict::Unsupported` | Mechanical | Compatibility | Additive field avoids strict enum parser break | Breaking enum variant in M20 |
-| 4 | Eng | Keep `unsupported.function.v1` unless implementation proves a version bump | Taste | Pragmatic | New branch key can carry the contract without key churn | Immediate compatibility-key bump |
-| 5 | Eng | Preserve fresh unsupported function review on read-side surfaces | Mechanical | Completeness | Current read-side drop hides useful current truth | Keep dropping all unsupported review |
-| 6 | Eng | Drop stale unsupported function review | Mechanical | Truthfulness | Unsupported proof must not survive semantic edits as current | Preserve stale explanation |
-| 7 | Eng | Keep taxonomy small and function-only | Mechanical | Explicit over clever | Stable buckets beat an ontology nobody can maintain | Cross-kind unsupported redesign |
-| 8 | Eng | Unit-heavy tests, CLI only for projection | Mechanical | Minimal diff | Prevent Cargo-backed fixture explosion | One CLI fixture per classifier detail |
-
-## Completion Summary
-
-```text
-+====================================================================+
-|              M20 PLAN SOLIDIFICATION SUMMARY                       |
-+====================================================================+
-| Scope                 | unsupported function truth surface          |
-| UI scope              | no                                          |
-| Primary architecture  | additive support_status + diagnostics       |
-| Breaking enum change  | rejected for M20                            |
-| Projection rule       | preserve fresh, drop stale                   |
-| Health rule           | unsupported remains neutral                  |
-| Test posture          | spec-core unit-heavy, CLI projection gate    |
-| Not in scope          | written                                     |
-| What already exists   | written                                     |
-| Error/rescue registry | written                                     |
-| Failure modes         | written                                     |
-| Test diagram          | written                                     |
-| Parallelization       | 4 lanes, gated by additive model             |
-| Final gate            | written                                     |
-+====================================================================+
-```
-
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-|---|---|---|---:|---|---|
-| CEO Review | `/autoplan` | Scope and strategy | 1 | clear | Truth-before-breadth, no Family C in M20 |
-| Codex Review | `/autoplan` | Independent plan challenge | 1 | incorporated | Avoid breaking verdict enum; add consumer migration |
-| Eng Review | `/plan-eng-review` | Architecture and tests | 1 | clear | support_status, freshness-aware projection, full test gate |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | No UI scope |
-
-**VERDICT:** CEO + ENG CLEARED. M20 is ready to implement after the additive model contract is
-accepted.
+| 1 | Intake | Replace stale M20 plan with rough M21 draft before review | Mechanical | Pragmatic | Reviewing the wrong milestone would waste the whole session | Reviewing M20 again |
+| 2 | CEO | Keep `xtask` as orchestration-only boundary | Mechanical | Explicit over clever | Central semantic logic already has clear product homes | Hiding semantic truth in xtask |
+| 3 | CEO | Add adoption-pressure concerns instead of silently auto-approving current framing | User Challenge | User sovereignty | Both outside voices challenged the milestone framing itself | Treating it as a taste-only disagreement |
+| 4 | CEO | Accept user option A and keep the harness milestone with stronger constraints | Mechanical | Bias toward action | Preserves the user's direction while absorbing the strategic critique | Reframing the whole milestone around adoption first |
+| 5 | Eng | Narrow M21 to `kind:function` only | Mechanical | Explicit over clever | Current evaluator architecture supports function-family promotion cleanly, seam-family promotion does not | One general harness for function, data, and sum in M21 |
+| 6 | Eng | Choose `function.wrapper.pipeline.chain3.v1` as the exemplar family | Taste | Completeness | Stronger leverage and falsification surface than another arithmetic leaf, without forcing seam refactors | Seam-local family, trivial arithmetic variant |
+| 7 | Eng | Add `family.toml` and demote `candidate.md` to review-only context | Mechanical | Explicit over clever | Avoids hidden Markdown DSL and gives xtask a stable manifest | Markdown-only packet |
+| 8 | Eng | Keep full certification output out of checked-in source | Mechanical | Pragmatic | Avoids stale truth and merge churn while preserving reproducible CI artifacts | Checked-in full reports |
+| 9 | Eng | Add Gate D for precedence and non-regression | Mechanical | Completeness | Ordered routing makes shadowing a real correctness risk | Per-family proof only |
