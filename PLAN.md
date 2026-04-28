@@ -1,915 +1,429 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m20-autoplan-restore-20260427-122129.md -->
-# M21 - Semantic Family Promotion Harness
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m21-autoplan-restore-20260427-213147.md -->
+# M22 - Integrity-First Semantic Family Promotion Hardening
 
-Status: **Implementation ready on `feat/m20`** (reviewed via `/autoplan` on 2026-04-27).
+Status: **Fresh plan on `feat/m21`** (rewritten via `/autoplan` + `/plan-eng-review` on 2026-04-27).
 
-M19 proved that a bounded positive semantic slice can survive unseen examples. M20 made the
-unsupported-function path honest on read-side truth surfaces. M21 turns those wins into one
-repeatable promotion loop: propose one bounded function family, prove it against unseen examples
-and truth-surface rules, then certify it without teaching repo tooling to become semantic engine
-number two.
+M21 was a real milestone. `function.wrapper.pipeline.chain3.v1` now proves and certifies through
+`cargo xtask family prove|certify`. The missing piece is narrower and more important: the repo
+still does **not** have an honest, boring, repeatable maintainer workflow for family number two.
 
-UI scope: **no**. This is a backend-only semantic-review milestone for repo-owned family packets,
-`xtask` orchestration, one promoted function family, and explicit certification gates.
+M22 fixes that exact gap. It does **not** expand semantic ambition. It hardens bootstrap truth,
+orchestration truth, and docs truth so the next family can be added through one explicit contract
+instead of maintainer memory and scattered chain3-only constants.
+
+UI scope: **no**. This is backend-only harness and process work.
 
 ## Source Inputs
 
-- Current branch: `feat/m20`
+- Current branch: `feat/m21`
 - Base branch: `main`
 - Restore point:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m20-autoplan-restore-20260427-122129.md`
-- Review artifact:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m20-reviews.jsonl`
+  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m21-autoplan-restore-20260427-213147.md`
+- Checkpoint:
+  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/checkpoints/20260427-210258-m21-harness-review.md`
+- Design doc:
+  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m21-design-20260427-202732.md`
 - Test plan artifact:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m20-test-plan-20260427-123346.md`
-- Relevant landed proof:
-  - M19 unseen falsification pack
-  - M20 unsupported-function truth surface
-- Relevant code seams:
-  - `spec-core/src/semantic_review.rs`
-  - `spec-core/src/passport.rs`
-  - `spec-core/src/export.rs`
-  - `spec-cli/src/commands.rs`
-  - `spec-cli/tests/cli.rs`
-  - `spec-cli/tests/m14_regressions.rs`
+  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m21-eng-review-test-plan-20260427-213147.md`
+- Verified repo behavior on 2026-04-27:
+  - `cargo xtask family prove function.wrapper.pipeline.chain3.v1` passes.
+  - `cargo xtask family certify function.wrapper.pipeline.chain3.v1` passes.
+  - `cargo xtask family new function.wrapper.pipeline.chain4.v1` fails with the expected
+    "family is not registered" error.
+- Primary code seams:
+  - `xtask/src/family/harness.rs`
+  - `xtask/src/family/routing.rs`
+  - `xtask/src/family/scaffold.rs`
+  - `xtask/src/family/prove.rs`
+  - `xtask/src/family/certify.rs`
+  - `xtask/src/family/manifest.rs`
+  - `xtask/src/lib.rs`
+  - `semantic-families/README.md`
 
 ## Milestone Summary
 
 ```text
-M21a  Lock a repo-owned semantic family packet contract                    required
-M21b  Add an xtask crate for scaffold / prove / certify orchestration      required
-M21c  Encode a reusable certification gate for candidate → prove → certify required
-M21d  Make the gate enforce M19 / M20 truth-surface honesty                required
-M21e  Promote `function.wrapper.pipeline.chain3.v1` through the harness    required
-M21f  Leave the public CLI surface unchanged                               required
+M22a  Make the bootstrap contract honest                                 required
+M22b  Make orchestration truth explicit and reviewable                    required
+M22c  Remove one-family assumptions from xtask helpers                    required
+M22d  Keep chain3 green as the frozen regression backstop                 required
+M22e  Prove generalization with synthetic multi-family tests              required
+M22f  Update docs to say exactly what is and is not automated             required
 ```
 
-**Lake to boil in M21**
+**Lake to boil in M22**
 
-- Promotion must become repeatable without becoming generic-Rust theater.
-- The harness must prove itself immediately on one real family.
-- The promoted family must unlock a real three-step pricing / checkout change loop.
-- Truth-surface honesty stays part of the gate, not a later cleanup.
-- The repo gains process leverage, not just a new directory tree.
+- A maintainer should know exactly where to add the next family and exactly what stays manual.
+- Adding a second family should require **one registry entry**, not edits in multiple hidden spots.
+- `family.toml` should remain a packet contract, not an untrusted command script.
+- Chain3 must stay the live proof while the workflow gets cleaned up.
+- The repo must stop implying that the next-family path is already self-bootstrapping if it is not.
 
 ## User Outcome
 
-An engineer working on the repo can propose a new semantic `kind:function` family and run one
-consistent workflow:
+After M22, a maintainer adding the next function family should have one boring workflow:
 
-1. define the family packet under `semantic-families/<family>/`
-2. run `cargo xtask family new|prove|certify <family>`
-3. fill aligned, drift, under-specified, and unsupported-near-miss fixtures
-4. implement the runtime classifier in `spec-core`
-5. prove the family survives a true unseen corpus
-6. prove the family obeys the M19 / M20 refresh, preserve, and stale truth-surface rules
-7. certify the family with a reproducible report instead of "tests passed, trust me"
+1. add one explicit family definition to the xtask registry
+2. run `cargo xtask family new <family>`
+3. fill the packet fixtures and manifest
+4. wire the runtime classifier in `spec-core`
+5. run `cargo xtask family prove <family>`
+6. run `cargo xtask family certify <family>`
 
-The output is a certification result with provenance. Either the family earned promotion, or the
-milestone fails honestly and says why.
+That is still registry-first. It is **not** manifest-magical. The point of M22 is that the repo
+says that plainly and the code matches the claim.
 
 ## Step 0: Scope Challenge
 
 ### Current system state
 
-| Surface | Already proved | Still missing | M21 implication |
+| Surface | Already true | Still wrong | M22 response |
 |---|---|---|---|
-| `spec-core/src/semantic_review.rs` routing | Current function families have a real, ordered evaluator | Adding the next family is still maintainer-memory work | Reuse the router. Do not add a parallel xtask classifier path. |
-| `spec-core/src/passport.rs` / `spec-core/src/export.rs` / `spec-cli/src/commands.rs` truth loop | `spec test` refreshes proof and read-side flows preserve projected truth | New families could still greenlight stale or shadowed proof unless the promotion loop checks it | Gate C must certify refresh / preserve / stale behavior, not just classifier alignment. |
-| `spec-cli/tests/cli.rs` and `spec-cli/tests/m14_regressions.rs` | The repo already has a command-matrix and wedge harness for truth surfaces | Family promotion still lacks a reusable certify path | Reuse the existing matrix. Add M21 family-specific coverage, not another end-to-end harness. |
-| M19 unseen falsification pack | Non-canonical aligned / drift / under-specified proof is real | There is no reusable packet contract for future families | Reuse the pack shape as the starting template for M21 packets. |
-| Workspace tooling | Existing Cargo workspace and CI are enough for repo-internal tooling | There is no repo-owned orchestration crate | Add `xtask`, but keep it as orchestration only. |
+| `xtask/src/family/harness.rs` | Real chain3 harness exists | The next-family workflow hard-stops here and the error is truthful but repo claims are ahead of it | Keep this file as the explicit orchestration registry and document it honestly |
+| `xtask/src/family/routing.rs` | Routing mismatch checks exist | Helpers still assume one registered family and one fixed `must_not_shadow` width | Generalize helpers to iterate over the registry, not chain3-only shapes |
+| `xtask/src/family/scaffold.rs` | Scaffold path safety and bucket layout are real | `family new` is only reusable for already hard-coded families | Make reuse explicit: one registry entry unlocks scaffold, no extra hidden edits |
+| `xtask/src/family/prove.rs` / `certify.rs` | Prove/certify reports and gate flow are real | Suite selection truth still lives in one chain3 carveout | Keep suite selection registry-owned, but centralize and test the contract |
+| `semantic-families/README.md` / prior `PLAN.md` | Packet layout is documented | The docs can still be read as "add any family and run new/prove/certify" | Narrow wording to registry-first, reviewable bootstrap truth |
 
 ### What already exists
 
-| Sub-problem | Existing code / flow | M21 reuse decision |
+| Sub-problem | Existing code / flow | M22 reuse decision |
 |---|---|---|
-| Runtime family routing | `spec-core/src/semantic_review.rs` | Reuse directly. New families must still plug into explicit ordered routing. |
-| Refresh / preserve truth projection | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | Reuse as Gate C target. Do not mint a second truth surface in xtask. |
-| Command-matrix proof | `spec-cli/tests/cli.rs`, `spec-cli/tests/m14_regressions.rs` | Reuse as the core read-side honesty harness. |
-| Unseen corpus structure | `spec-cli/tests/fixtures/m19/semantic_falsification_pack/` | Reuse as the fixture-template shape for future family packets. |
-| Public contract wording | `README.md`, `AGENTS.md`, `CLAUDE.md` | Add repo-process docs only. No new end-user command docs in M21. |
+| Explicit family definition | `xtask/src/family/harness.rs` already contains `FamilyHarness` and `FAMILY_REGISTRY` | Reuse. Do not invent a second registry format. |
+| Path safety and packet layout | `paths.rs`, `layout.rs`, scaffold bucket creation | Reuse directly. |
+| Prove/certify report pipeline | `report.rs`, `prove.rs`, `certify.rs` | Reuse directly. Keep report schema stable unless a real gap appears. |
+| Live semantic proof | chain3 packet, `spec-core` chain3 tests, `spec-cli` truth-surface and corpus tests | Reuse as the regression backstop. |
+| Honest failure on unknown family | `require_family_harness()` | Reuse the behavior, but make the surrounding docs match it. |
 
 ### Minimum diff that still solves the problem
 
-- Add one repo-owned packet contract under `semantic-families/`.
-- Add one `xtask` crate to scaffold, prove, and certify family packets.
-- Add one promoted function family, `function.wrapper.pipeline.chain3.v1`.
-- Extend existing proof surfaces for Gate C and Gate D coverage.
-- Add repo-process docs and certification-report conventions.
+- Keep runtime semantic classification in `spec-core` unchanged.
+- Keep public `spec` CLI unchanged.
+- Keep `family.toml` as packet-local validation data, not executable orchestration.
+- Refactor xtask family helpers so the registry is the obvious, sole orchestration truth.
+- Add synthetic multi-family tests in `xtask` so the code no longer assumes "chain3 is the world".
+- Update docs to describe the registry-first workflow honestly.
 
-Anything beyond that is scope drift for this milestone.
+Anything beyond that is scope creep for M22.
 
 ### Complexity check
 
-M21 will touch more than eight files, but the blast radius stays inside one subsystem:
+This is still a medium-sized change, roughly 7-9 files in one subsystem:
 
-- workspace root `Cargo.toml`
-- new `xtask/`
-- new `semantic-families/`
-- `spec-core/src/semantic_review.rs`
-- targeted `spec-core` tests
-- targeted `spec-cli` tests and fixtures
-- docs
+- `xtask/src/family/harness.rs`
+- `xtask/src/family/routing.rs`
+- `xtask/src/family/scaffold.rs`
+- `xtask/src/family/prove.rs`
+- `xtask/src/family/certify.rs`
+- `xtask/src/lib.rs`
+- `semantic-families/README.md`
+- possibly `README.md` or `AGENTS.md` if workflow wording also lives there
 
-That is still a boilable lake because it is one feature slice with one new internal crate and no
-new infrastructure. What is **not** allowed is widening from `kind:function` into a general
-function/data/sum promotion framework in the same milestone.
+Auto-decision: **scope reduced**. M22 does **not** ship a second real semantic family. It ships
+the honest and generalizable harness contract first.
+
+### Search check
+
+- **[Layer 1]** Reuse the current Rust registry pattern. It is already in the repo and proven.
+- **[Layer 3]** Do **not** let `family.toml` choose commands to execute. User-authored packet data
+  controlling subprocesses would be a bad trust boundary.
+- No new framework, background worker, or concurrency model is needed here.
 
 ### TODOS cross-reference
 
-- The existing TODO about the Cargo-heavy CLI harness still matters. M21 should keep most new
-  semantic proof in `spec-core` tests and use CLI wedges only where read-side truth must be proven.
-- No new TODO is required to land this plan. The current backlog already holds larger follow-ups
-  like harness cleanup, broader semantic breadth, and future eval work.
+- Existing CLI harness cleanup TODOs remain orthogonal. M22 should not widen into general CLI test
+  infrastructure cleanup.
+- If, after M22, the Rust registry still feels too manual, that becomes an explicit future TODO:
+  "make packet metadata drive more of the registry safely." It is not a reason to overbuild M22.
 
 ### Completeness check
 
-The complete version is: packet contract + orchestration crate + one real promoted family + Gate C
-truth-surface checks + Gate D non-regression + provenance + docs.
+The complete version is:
+
+- honest registry-first docs
+- single-source orchestration contract
+- no one-family assumptions in helper code
+- synthetic tests proving the registry shape scales beyond one entry
+- chain3 prove/certify still green
 
 Rejected shortcuts:
 
-- harness-only with no promoted family
-- family-only with no reusable certify path
-- classifier-only proof with no stale / preserve / export / status validation
-- checked-in full certification artifacts that create stale source-of-truth churn
+- docs-only honesty fix with no code hardening
+- adding another real family before the harness contract is cleaned up
+- moving command orchestration into `family.toml`
+- generic multi-kind abstraction for function/data/sum in one pass
 
 ### Distribution check
 
-M21 does not introduce a new user-facing binary, package, or artifact type. Existing Cargo and CI
-distribution remain enough.
+No new binary or publish surface is introduced. Existing Cargo and CI remain enough.
 
-The only distribution requirement is that CI can publish certification reports as build artifacts.
-Those reports are repo outputs, not release assets.
+`.semantic-family-artifacts/` stays the local and CI output surface for proof artifacts.
 
 ## Approved Scope
 
-- Family promotion remains **function-family-only** in M21.
-- The promoted exemplar is `function.wrapper.pipeline.chain3.v1`.
-- `family.toml` is the machine-readable packet manifest.
-- `candidate.md` is human-readable review context only.
-- `xtask` owns orchestration only.
-- Runtime semantic truth remains in `spec-core`.
-- Full certification output lives under `.semantic-family-artifacts/` locally and as CI artifacts.
-- Public `spec` CLI surface stays unchanged.
+- Orchestration truth remains in Rust, in the xtask registry.
+- `family.toml` remains packet validation data, not command-selection truth.
+- `chain3` remains the only real promoted family in M22.
+- Synthetic test families are allowed **inside xtask tests only** to prove helper generalization.
+- Public `spec` CLI stays unchanged.
+- No new report format, no new packet root layout, no new semantic kinds.
 
 ## Architecture Review
 
-### Ownership split
+### Opinionated recommendation
 
-| Concern | Owner | Why |
-|---|---|---|
-| Runtime family truth | `spec-core` | The shipped classifier must stay in product code. |
-| Refresh / preserve / stale projection | `spec-core` + `spec-cli` | Read-side truth already lives here. |
-| Family packet manifest parsing | `xtask` | Repo orchestration belongs outside product semantics. |
-| Family review rationale | `candidate.md` | Human-readable context is useful, but cannot be executable truth. |
-| Certification output | `.semantic-family-artifacts/` + CI artifacts | Reproducible, non-authoritative build output. |
+Use the existing Rust registry as the durable source of orchestration truth. That is the smallest,
+clearest, least clever fix. The repo already has this shape. The problem is not "no registry". The
+problem is that the registry contract is implicit, chain3-scattered, and partially contradicted by
+the docs.
 
-### Trust-loop diagram
+### Dependency graph
 
 ```text
-semantic-families/<family>/candidate.md
+cargo xtask family <cmd> <family>
         │
-        ├── semantic-families/<family>/family.toml
-        │      └── machine manifest consumed by xtask
+        ├── FamilyId::parse()
         │
-        ├── semantic-families/<family>/fixtures/
-        │      ├── aligned/
-        │      ├── drift/
-        │      ├── under_specified/
-        │      └── unsupported_near_miss/
+        ├── family_harness() / require_family_harness()
+        │       │
+        │       └── explicit Rust registry in harness.rs
+        │              ├── scaffold defaults
+        │              ├── routing contract
+        │              ├── prove suite definitions
+        │              └── certify suite definitions
         │
-        ├── cargo xtask family new <family>
-        │      └── scaffold packet + fixture skeletons
+        ├── scaffold.rs
+        │       └── candidate.md + family.toml + fixture buckets
         │
-        ├── cargo xtask family prove <family>
-        │      ├── run targeted spec-core family tests
-        │      ├── run targeted spec-cli truth-surface tests
-        │      └── validate packet completeness before certification
+        ├── prove.rs
+        │       ├── manifest.rs validation
+        │       ├── layout.rs validation
+        │       ├── registry-selected suites
+        │       └── prove.latest.json
         │
-        ├── cargo xtask family certify <family>
-        │      ├── Gate A: packet + core-shape integrity
-        │      ├── Gate B: unseen corpus survival
-        │      ├── Gate C: refresh / preserve / stale honesty
-        │      ├── Gate D: cross-family non-regression
-        │      └── write certification.report.json with provenance
+        ├── certify.rs
+        │       ├── prove execution reuse
+        │       ├── routing.rs mismatch checks
+        │       └── certification.report.json
         │
-        └── product code under pressure
-               ├── spec-core/src/semantic_review.rs
-               ├── spec-core/src/passport.rs
-               ├── spec-core/src/export.rs
-               ├── spec-cli/src/commands.rs
-               └── spec-cli/tests/{cli,m14_regressions}.rs
+        └── semantic-families/README.md
+                └── says the same thing the code actually does
 ```
 
-### Family packet contract
-
-Packet layout:
-
-```text
-semantic-families/<family>/
-  candidate.md
-  family.toml
-  fixtures/
-    aligned/
-      Cargo.toml
-      src/main.rs
-      units/**/*.unit.spec
-    drift/
-      Cargo.toml
-      src/main.rs
-      units/**/*.unit.spec
-    under_specified/
-      Cargo.toml
-      src/main.rs
-      units/**/*.unit.spec
-    unsupported_near_miss/
-      Cargo.toml
-      src/main.rs
-      units/**/*.unit.spec
-```
-
-`family.toml` must be versioned and machine-readable. It carries:
-
-- family id
-- one-sentence semantic claim
-- supported scope (`kind:function` only in M21)
-- authored invariants
-- executable body-shape grammar
-- helper / dependency topology rules
-- drift taxonomy
-- under-specified taxonomy
-- unsupported-near-miss taxonomy
-- routing precedence expectations
-- unseen-example requirements
-- compatibility key
-
-`candidate.md` is not executable truth. If a rule matters to certification, it must exist in
-`family.toml`, runtime code, or both.
-
-### Appendix A. Locked `family.toml` schema for M21
-
-M21 does **not** leave the manifest shape open. `family.toml` schema version `1` is:
-
-```toml
-schema_version = 1
-family = "function.wrapper.pipeline.chain3.v1"
-kind = "function"
-compatibility_key = "function.wrapper.pipeline.chain3.v1"
-summary = "Straight-line three-call wrapper pipeline over supported function deps."
-
-[routing]
-precedence = 1
-must_not_shadow = [
-  "function.wrapper.pipeline.v1",
-  "function.arithmetic_leaf.monotone_down_nonnegative.v1",
-  "function.arithmetic_leaf.monotone_up.v1",
-]
-
-[shape]
-dep_count = 3
-control_flow = "straight_line_only"
-return_style = "let_then_return_or_direct_return"
-loops = false
-branching = false
-requires_supported_function_deps = true
-
-[args]
-threading = "ordered_passthrough"
-allow_nested_argument_expressions = false
-allow_literal_only_extra_args = false
-
-[corpus]
-required_buckets = ["aligned", "drift", "under_specified", "unsupported_near_miss"]
-min_cases_per_bucket = 1
-
-[truth_surface]
-requires_refresh_via = ["spec test"]
-preserve_only_via = ["spec build", "spec generate", "spec status", "spec export"]
-requires_stale_demote = true
-
-[gates]
-gate_a = true
-gate_b = true
-gate_c = true
-gate_d = true
-```
-
-Field rules:
-
-- `schema_version`
-  - required
-  - integer
-  - M21 accepts only `1`
-- `family`
-  - required
-  - must equal the packet directory name exactly
-  - regex: `^[a-z0-9]+(\\.[a-z0-9_]+)+\\.v[0-9]+$`
-- `kind`
-  - required
-  - must equal `"function"` in M21
-- `compatibility_key`
-  - required
-  - must equal `family`
-- `summary`
-  - required
-  - one line only
-- `routing.precedence`
-  - required
-  - positive integer
-  - unique across supported function families
-- `routing.must_not_shadow`
-  - required
-  - non-empty array for every M21 family
-- `shape.dep_count`
-  - required
-  - exact integer
-  - exemplar family requires `3`
-- `shape.control_flow`
-  - required enum
-  - M21 accepts only `"straight_line_only"`
-- `shape.return_style`
-  - required enum
-  - M21 accepts `"direct_return"` or `"let_then_return_or_direct_return"`
-- `shape.loops`, `shape.branching`, `shape.requires_supported_function_deps`
-  - required booleans
-- `args.threading`
-  - required enum
-  - M21 accepts only `"ordered_passthrough"`
-- `args.allow_nested_argument_expressions`, `args.allow_literal_only_extra_args`
-  - required booleans
-- `corpus.required_buckets`
-  - required
-  - must be exactly `["aligned", "drift", "under_specified", "unsupported_near_miss"]`
-- `corpus.min_cases_per_bucket`
-  - required
-  - integer `>= 1`
-- `truth_surface.*`
-  - all required
-- `gates.*`
-  - all required
-  - all must be `true` for M21
-
-Rejected in M21:
-
-- arbitrary extra top-level keys
-- family-specific escape-hatch manifest fields
-- Markdown-only metadata that is not repeated in `family.toml`
-- packet-local routing rules that disagree with runtime routing order
-
-### Appendix B. Locked fixture contract for M21
-
-Each bucket is a self-contained crate-root fixture, not a partial fragment. This is deliberate. It
-duplicates small `Cargo.toml` and `src/main.rs` files, but it makes the implementation boring and
-removes hidden assembly logic from xtask.
-
-Required bucket shape:
-
-```text
-fixtures/<bucket>/
-  Cargo.toml
-  src/main.rs
-  units/<namespace>/<case_name>.unit.spec
-```
-
-Allowed bucket names:
-
-- `aligned`
-- `drift`
-- `under_specified`
-- `unsupported_near_miss`
-
-Rules:
-
-- each bucket must exist
-- each bucket must contain at least one `.unit.spec`
-- each `.unit.spec` filename must be unique within the packet
-- `Cargo.toml` and `src/main.rs` are checked in for every bucket
-- xtask must reject symlinks anywhere under `fixtures/`
-- xtask must reject any non-`.unit.spec` file under `units/`
-
-Case naming rule:
-
-- aligned cases end with `_aligned.unit.spec`
-- drift cases end with `_drift.unit.spec`
-- under-specified cases end with `_under_specified.unit.spec`
-- unsupported near misses end with `_unsupported_near_miss.unit.spec`
-
-The exemplar family must use namespace `pricing/` and case ids prefixed with `checkout_` or
-`pricing_`. No generic `example_1` names.
-
-Exact bucket expectations for the exemplar family:
-
-- `aligned`
-  - valid three-step wrapper pipeline
-  - uses exactly three supported function deps
-- `drift`
-  - shape is wrapper-like but semantic argument flow is wrong
-- `under_specified`
-  - authored truth is too weak to prove ordered passthrough
-- `unsupported_near_miss`
-  - body is close, but falls outside the admitted family by control flow or dep topology
-
-`candidate.md` must list every fixture file once under these four headings, but xtask must treat
-the file system as the source of truth.
-
-### Certification gate contract
-
-**Gate A: Core-shape integrity**
-
-- bounded family scope
-- explicit runtime matcher
-- explicit drift and under-specified reasons
-- explicit unsupported-near-miss exclusions
-- explicit precedence expectations
-
-**Gate B: True unseen-example survival**
-
-- aligned examples
-- drift examples
-- under-specified examples
-- unsupported-near-miss examples
-- non-canonical names and alternate ids
-
-**Gate C: Truth-surface honesty**
-
-- `spec test` is the only proof refresh path
-- `spec build`, `spec generate`, `spec status`, and `spec export` preserve but do not mint proof
-- stale proof demotes correctly after semantic changes
-- read-side surfaces agree on projected truth
-
-**Gate D: Cross-family non-regression**
-
-- existing Family A examples stay Family A
-- existing Family B examples stay Family B
-- unsupported near misses do not accidentally promote
-- runtime routing order matches packet precedence expectations
-
-### Appendix C. Locked routing precedence for M21
-
-Function-family routing order is locked for this milestone:
-
-1. `function.wrapper.pipeline.chain3.v1`
-2. `function.wrapper.pipeline.v1`
-3. `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-4. `function.arithmetic_leaf.monotone_up.v1`
-5. `unsupported.function.v1`
-
-Why this order:
-
-- `chain3` is the most specific wrapper family added by M21
-- `pipeline.v1` remains the existing two-dep wrapper family
-- arithmetic leaves are structurally separate but still ordered explicitly
-- unsupported remains the final catch-all
-
-Required runtime behavior:
-
-- routing code must encode this order explicitly in `spec-core/src/semantic_review.rs`
-- the packet manifest `routing.precedence` value for `chain3` must be `1`
-- Gate D must fail if runtime order and manifest order diverge
-- no family may rely on hash-map or iteration-order behavior
-
-### Appendix D. Locked command matrix and report contract
-
-`cargo xtask family new <family>`
-
-- inputs
-  - one family id matching the manifest regex
-- writes
-  - packet directory only if it does not already exist
-- exit codes
-  - `0` success
-  - `2` invalid family id or unsafe path
-  - `3` packet already exists
-  - `4` write failure
-
-`cargo xtask family prove <family>`
-
-- must run these steps in order
-  1. validate family id and packet path safety
-  2. parse `family.toml`
-  3. validate packet layout and bucket completeness
-  4. run `cargo test -p spec-core m21_chain3_classifier_ -- --nocapture`
-  5. run `cargo test -p spec-cli --test cli m21_chain3_truth_surface_ -- --nocapture`
-  6. run `cargo test -p spec-cli --test m14_regressions m21_chain3_corpus_ -- --nocapture`
-- required naming convention
-  - every new M21 prove-level test must begin with one of:
-    - `m21_chain3_classifier_`
-    - `m21_chain3_truth_surface_`
-    - `m21_chain3_corpus_`
-- outputs
-  - always write `.semantic-family-artifacts/semantic-families/<family>/prove.latest.json`
-- exit codes
-  - `0` all prove steps passed
-  - `2` invalid packet or manifest
-  - `3` suite failure
-  - `4` artifact write failure
-
-`cargo xtask family certify <family>`
-
-- must run `family prove <family>` first
-- then must run these extra suites in order
-  7. run `cargo test -p spec-core m21_chain3_regression_ -- --nocapture`
-  8. run `cargo test -p spec-cli --test m14_regressions m21_chain3_regression_ -- --nocapture`
-- required naming convention
-  - every new M21 certify-only regression test must begin with one of:
-    - `m21_chain3_regression_`
-- outputs
-  - always write `.semantic-family-artifacts/semantic-families/<family>/attempt-<timestamp>.json`
-  - write or replace `.semantic-family-artifacts/semantic-families/<family>/certification.report.json`
-    **only when all gates pass**
-- exit codes
-  - `0` all gates passed
-  - `2` invalid packet or manifest
-  - `3` prove-level suite failure
-  - `4` certify-level suite failure or gate failure
-  - `5` artifact write failure
-
-Locked gate-to-suite mapping:
-
-| Gate | Source of truth | Pass condition |
-|---|---|---|
-| Gate A | manifest validation + `m21_chain3_classifier_` | manifest valid and classifier suite green |
-| Gate B | `m21_chain3_corpus_` | all four buckets classified as expected |
-| Gate C | `m21_chain3_truth_surface_` | refresh / preserve / stale assertions all green |
-| Gate D | `m21_chain3_regression_` | Family A / B stability and no shadowing proven |
-
-Locked report schema:
-
-```json
-{
-  "schema_version": 1,
-  "family": "function.wrapper.pipeline.chain3.v1",
-  "manifest_schema_version": 1,
-  "git_commit_sha": "abc1234",
-  "rust_toolchain": "rustc 1.89.0",
-  "generated_at": "2026-04-27T00:00:00Z",
-  "overall_status": "pass",
-  "gates": {
-    "gate_a": { "status": "pass" },
-    "gate_b": { "status": "pass" },
-    "gate_c": { "status": "pass" },
-    "gate_d": { "status": "pass" }
-  },
-  "suites": [
-    {
-      "name": "spec-core:m21_chain3_classifier_",
-      "command": ["cargo", "test", "-p", "spec-core", "m21_chain3_classifier_", "--", "--nocapture"],
-      "exit_code": 0,
-      "status": "pass"
-    }
-  ],
-  "fixture_digests": [
-    {
-      "bucket": "aligned",
-      "path": "fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec",
-      "sha256": "..."
-    }
-  ]
-}
-```
-
-Required report enums:
-
-- `overall_status`: `pass | fail`
-- `gate_*.status`: `pass | fail`
-- `suite.status`: `pass | fail`
-
-No optional gate objects. No free-form verdict strings. No parsing plain cargo stdout to infer gate
-names after the fact.
-
-### Code seams under pressure
-
-- `spec-core/src/semantic_review.rs`
-  Add the new family matcher, routing precedence, and family-local test coverage.
-- `spec-core/src/passport.rs` / `spec-core/src/export.rs`
-  Touch only if Gate C reveals a missing projection or provenance surface. Do not widen these
-  files preemptively.
-- `spec-cli/src/commands.rs`
-  Touch only if the existing proof / preserve flow needs a new structured hook for M21 tests.
-- `xtask/src/...`
-  Keep the orchestration pipeline explicit and comment it with an inline ASCII pipeline diagram if
-  the command wiring grows beyond a straight line.
+### Concrete architecture changes
+
+1. `xtask/src/family/harness.rs`
+   - Keep `FamilyHarness` as the core registry shape.
+   - Add helper APIs that return routing order, suite names, and scaffold defaults from the
+     registry generically.
+   - Remove any assumptions that the registry length is one.
+
+2. `xtask/src/family/routing.rs`
+   - Replace `debug_assert_eq!(harnesses.len(), 1)` and fixed-array helpers with dynamic helpers
+     driven by registry order.
+   - Keep the terminal `unsupported.function.v1` catch-all explicit.
+
+3. `xtask/src/family/scaffold.rs`, `prove.rs`, `certify.rs`
+   - Continue to require registration first.
+   - Ensure the error text consistently points maintainers to the registry as the single edit site.
+   - Do not duplicate per-family contract knowledge anywhere else.
+
+4. `semantic-families/README.md`
+   - Say plainly: "In M22, packet creation is registry-first. Add a Rust registry entry, then run
+     xtask. The manifest does not bootstrap a family on its own."
 
 ### Error & Rescue Registry
 
-| Risk | Failure shape | Rescue |
+| Failure | Why it happens | Rescue |
 |---|---|---|
-| Harness-first drift | M21 ships packet ceremony without proving one useful family | Require one promoted family in the same milestone and fail if it cannot certify. |
-| Hidden manifest DSL | `candidate.md` or one-off TOML fields become de facto runtime truth | Keep `family.toml` minimal and versioned, and reject family-specific escape-hatch fields. |
-| xtask becomes semantic engine #2 | Certification logic reimplements classifier semantics | Consume structured runtime outputs only. Keep semantic truth in `spec-core`. |
-| Precedence regression | New family steals Family A / B matches | Gate D is required, not optional. |
-| Non-reproducible certification | Two engineers get different green answers | Report SHA, toolchain, manifest version, fixture digests, and exit codes. |
+| Unknown family still requires hidden edits | Registry knowledge still leaks into other files | Add a test that a synthetic second family can be registered in one place and all helpers see it |
+| Routing helper still encodes one-family width | Future family order bugs hide until runtime | Drive routing-order formatting from registry iteration, not fixed arrays |
+| Docs overclaim automation again | A future maintainer copies the wrong narrative | Lock wording in `semantic-families/README.md` and test the error message path |
+| `family.toml` starts controlling commands | Packet data becomes a code-execution surface | Keep suite commands compile-time Rust constants only |
 
 ## Code Quality Review
 
-M21 should bias toward explicit and boring:
-
-- one manifest format, not layered Markdown parsing
-- one routing authority, not a shadow xtask classifier
-- one certification report format, not test-text scraping
-- one promoted family, not a framework that guesses future kinds
-
-The main complexity hotspots already exist:
-
-- `spec-core/src/semantic_review.rs` is a large ordered classifier
-- `spec-cli/tests/cli.rs` is a large integration-matrix file
-
-That means M21 should avoid:
-
-- new per-family exceptions in packet schema
-- clever generic abstractions that hide routing order
-- duplicated truth-surface rules in both product code and xtask
-- widening `spec-cli` command behavior when tests alone would do
-
-Inline ASCII comments are worth adding in these implementation files if the final diff becomes
-non-trivial:
-
-- `xtask/src/family/certify.rs` or equivalent certification pipeline file
-- `spec-core/src/semantic_review.rs` near the routing order for the promoted family
-- any new xtask manifest-validation module if it accumulates multiple gate phases
+- **DRY**: the registry contract should live in one place. If routing order, scaffold defaults, and
+  suite selection each re-derive chain3 knowledge differently, that is the exact bug M22 is
+  supposed to remove.
+- **Explicit over clever**: prefer a boring `Vec<&FamilyHarness>` or iterator-based helper over
+  macro tricks or data-driven command templates.
+- **Minimal diff**: do not introduce a second manifest format, codegen step, or custom DSL.
+- **Diagram maintenance**: update nearby ASCII docs if code comments or README snippets imply the
+  old self-bootstrapping story.
 
 ## Test Review
 
-### Code path coverage to add
+### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] cargo xtask family new <family>
-    ├── valid scaffold
-    ├── invalid family id
-    ├── path traversal attempt
-    └── packet root symlink rejection
+[+] xtask/src/family/harness.rs
+    │
+    ├── family_harness()
+    │   ├── [GAP] registered family lookup with 2+ entries
+    │   └── [GAP] missing family still returns the honest registry-first error
+    │
+    └── registered_harnesses_in_routing_order()
+        ├── [GAP] stable sort across 2+ families
+        └── [GAP] duplicate/adjacent precedence expectations stay deterministic
 
-[+] family.toml manifest validation
-    ├── valid manifest
-    ├── missing required field
-    ├── bad schema version
-    └── contradictory precedence / scope metadata
+[+] xtask/src/family/routing.rs
+    │
+    ├── locked_routing_order_with_terminal()
+    │   └── [GAP] no one-family fixed-width assumption
+    │
+    ├── manifest_matches_locked_routing()
+    │   ├── [GAP] second-family positive case
+    │   └── [GAP] mismatch report contains correct family-specific expectation
+    │
+    └── manifest_routing_mismatch_message()
+        └── [GAP] mismatch text stays useful for non-chain3 families
 
-[+] cargo xtask family prove <family>
-    ├── targeted suite selection
-    ├── missing packet assets
-    ├── empty fixture bucket
-    ├── duplicate fixture ids
-    └── interrupted or failing proof run
+[+] xtask/src/family/scaffold.rs
+    │
+    ├── run()
+    │   ├── [★★ TESTED] chain3 scaffold happy path already exists indirectly
+    │   ├── [GAP] synthetic second registered family scaffold succeeds
+    │   └── [★★ TESTED] unregistered family failure already exists and should be kept
+    │
+    └── manifest_template()
+        └── [GAP] synthetic family uses its own routing values, not chain3 spillover
 
-[+] cargo xtask family certify <family>
-    ├── all gates pass
-    ├── Gate A fails
-    ├── Gate B fails
-    ├── Gate C fails
-    ├── Gate D fails
-    └── failed run preserves last known good success artifact
-
-[+] function.wrapper.pipeline.chain3.v1 runtime routing
-    ├── aligned examples
-    ├── drift examples
-    ├── under-specified examples
-    ├── unsupported near misses
-    └── precedence against Family A / Family B
-
-[+] read-side truth surfaces
-    ├── spec test refreshes proof
-    ├── spec build preserves but does not mint proof
-    ├── spec generate preserves but does not mint proof
-    ├── spec status projects fresh vs stale honestly
-    └── spec export projects fresh vs stale honestly
+[+] xtask/src/family/prove.rs + certify.rs
+    │
+    ├── registry-selected suite execution
+    │   ├── [★★★ TESTED] chain3 prove/certify still pass end-to-end
+    │   └── [GAP] synthetic second family report/gate helpers do not assume chain3-only widths
+    │
+    └── routing gate messages
+        └── [GAP] mismatch report remains correct for another registered family
 ```
 
 ### Operator-flow coverage
 
 ```text
-MAINTAINER FLOW
-===============
-Author chooses family
+OPERATOR FLOW COVERAGE
+===========================
+[+] Maintainer adds next family
     │
-    ├── cargo xtask family new <family>
-    │       └── scaffold is correct, safe, and repeatable
+    ├── update Rust registry entry
+    ├── run `cargo xtask family new <family>`
+    ├── inspect generated packet
+    └── [GAP] test the registry-first path with a synthetic family
+
+[+] Maintainer forgets registration
     │
-    ├── author fills family.toml + fixtures
-    │       └── manifest and fixture completeness are validated
+    └── [★★★ TESTED] gets explicit "family is not registered" error
+
+[+] Maintainer changes routing metadata wrong
     │
-    ├── runtime classifier added in spec-core
-    │       └── aligned / drift / under-specified / unsupported behavior proven
+    └── [GAP] certify mismatch output for a non-chain3 family remains actionable
+
+[+] Maintainer reads docs first
     │
-    ├── cargo xtask family prove <family>
-    │       └── targeted suites fail loudly on missing or stale proof
-    │
-    └── cargo xtask family certify <family>
-            └── emits reproducible report or fails with gate-local reason
+    └── [GAP] docs must say registry-first, not implied auto-bootstrap
 ```
 
 ### Required test split
 
-- `xtask`
-  - scaffold generation
-  - manifest parsing and validation
-  - artifact-path safety
-  - no-overwrite-on-failure behavior
-  - provenance fields
-- `spec-core`
-  - promoted family classifier tests
-  - precedence and shadowing tests against Family A / Family B
-  - stale invalidation when semantic inputs change
-- `spec-cli`
-  - refresh / preserve / stale command matrix
-  - export / status projection assertions
-  - unseen corpus integration coverage
-- fixtures
-  - aligned
-  - drift
-  - under-specified
-  - unsupported near miss
-
-Locked test naming contract:
-
-- prove-level `spec-core` tests: `m21_chain3_classifier_*`
-- prove-level `spec-cli` truth-surface tests: `m21_chain3_truth_surface_*`
-- prove-level `m14_regressions` corpus tests: `m21_chain3_corpus_*`
-- certify-level regression tests in `spec-core` or `m14_regressions`: `m21_chain3_regression_*`
-
-If a new M21 test does not follow this prefix scheme, it is outside the xtask command matrix and
-therefore outside the boring implementation path for this milestone.
+- `xtask/src/lib.rs`
+  - add synthetic second-family registry fixtures and unit tests
+  - assert routing-order helpers no longer assume one family
+  - assert scaffold/manifest templates use the selected family definition
+- existing chain3 tests
+  - keep the current chain3 harness contract tests
+  - re-run `cargo xtask family prove function.wrapper.pipeline.chain3.v1`
+  - re-run `cargo xtask family certify function.wrapper.pipeline.chain3.v1`
+- docs smoke
+  - at minimum, assert the unknown-family error message still points to the single registry edit
 
 ### Test plan artifact
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m20-test-plan-20260427-123346.md`
+Write the artifact at:
+`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m21-eng-review-test-plan-20260427-213147.md`
 
 ### Verification loop
 
-Use this as the implementation-time proof loop:
-
-```bash
-cargo test -p xtask
-cargo test -p spec-core semantic_review -- --nocapture
-cargo test -p spec-cli --test cli -- --nocapture
-cargo test -p spec-cli --test m14_regressions -- --nocapture
-cargo xtask family prove function.wrapper.pipeline.chain3.v1
-cargo xtask family certify function.wrapper.pipeline.chain3.v1
+```text
+1. cargo test -p xtask
+2. cargo xtask family new function.wrapper.pipeline.chain4.v1
+   expected: still fails before implementation, then succeeds once the M22 registry entry exists
+3. cargo xtask family prove function.wrapper.pipeline.chain3.v1
+4. cargo xtask family certify function.wrapper.pipeline.chain3.v1
+5. rg -n "self-bootstrapping|repeatable|registry-first" semantic-families/README.md PLAN.md README.md
 ```
-
-If `family prove` or `family certify` require the entire repo test matrix every local run, the plan
-is wrong and needs to narrow the suite split before landing.
 
 ## Performance Review
 
-The real performance risk is developer-loop drag, not runtime latency.
-
-If `cargo xtask family prove` reruns the entire semantic and CLI matrix on every small fixture
-change, engineers will bypass it. M21 therefore needs a deliberate split:
-
-- `family prove`
-  - impacted, family-local suites
-  - fast enough for local iteration
-- `family certify`
-  - full family-local proof
-  - full Gate C truth-surface matrix
-  - full Gate D cross-family non-regression
-- CI / nightly
-  - broader regression confirmation if needed
-
-The goal is explicit: local proof should stay targeted; certification should stay complete.
+- Do not add more Cargo subprocesses than M21 already runs. M22 is about selection truth, not more
+  suites.
+- Registry iteration cost is trivial. The only real performance footgun is accidentally widening
+  prove/certify into workspace-scale discovery or duplicated suite execution. Do not do that.
+- Keep report generation file-local and deterministic. No new caches are needed.
 
 ## Security and Trust Boundary Review
 
-This is repo tooling, but it still reads manifests and writes files. Treat it like real code:
-
-- reject invalid family ids
-- reject path traversal
-- reject symlink packet roots
-- keep writes inside `semantic-families/` or `.semantic-family-artifacts/`
-- treat packet inputs as trusted repo-owned source, not arbitrary external uploads
-- avoid shelling out with interpolated unvalidated paths
-
-No security theater. One bad path join here is enough to make local proof tooling sketchy.
+- `family.toml` stays validated input, not executable orchestration.
+- Suite commands remain compile-time Rust constants, which keeps packet authors from steering what
+  subprocesses run.
+- Existing packet path safety and symlink rejection remain mandatory and unchanged.
 
 ## NOT in Scope
 
-- generic automatic family discovery
-- LLM-generated family design without human review
-- public `spec family ...` commands
-- second-language implementation work
-- `kind:data` or `kind:sum` promotion
-- semantic ontology redesign
-- multiple new families in the same milestone
-- unsupported-path redesign beyond the already-landed M20 truth surface
-- checked-in full certification reports
+- Promoting a second real semantic family in `spec-core`
+- Changing the public `spec` CLI
+- Making `family.toml` self-bootstrapping or command-bearing
+- Multi-kind family promotion (`data`, `sum`, or generic family abstraction)
+- CI workflow redesign or artifact schema redesign
 
 ## Implementation Order
 
-### M21a. Lock the packet contract and scaffold the exemplar packet
+### M22a. Narrow the repo claim
 
-Deliver:
+- Rewrite `semantic-families/README.md` so the documented workflow is explicitly registry-first.
+- Remove or update any phrasing in repo docs that implies packet creation works for arbitrary new
+  families without registry work.
 
-- `semantic-families/README.md` or equivalent packet-contract doc
-- `semantic-families/function.wrapper.pipeline.chain3.v1/`
-- `family.toml`
-- `candidate.md`
-- fully scaffolded aligned / drift / under-specified / unsupported-near-miss crate buckets
+### M22b. Lock the registry contract
 
-Acceptance:
+- Keep `FamilyHarness` as the one family-definition shape.
+- Add helper functions in `harness.rs` for routing order and family-specific contract access.
+- Make the registry the single edit site for family-specific xtask knowledge.
 
-- packet layout is versioned and documented
-- exemplar family packet exists before runtime code changes begin
-- no family-specific manifest escape-hatch fields are required
-- all four fixture buckets are self-contained crate roots with checked-in `Cargo.toml` and `src/main.rs`
+### M22c. Remove one-family assumptions
 
-### M21b. Add the `xtask` crate and scaffold / validate flow
+- Rewrite `routing.rs` helpers to iterate over registered families dynamically.
+- Ensure scaffold/prove/certify consumers rely on the same registry access path.
+- Remove fixed-width assumptions about `must_not_shadow` ordering where possible. Where not
+  possible, make them explicit per family definition, not global chain3 assumptions.
 
-Deliver:
+### M22d. Add synthetic generalization tests
 
-- workspace member in root `Cargo.toml`
-- `cargo xtask family new <family>`
-- manifest parsing and validation
-- safe packet-path creation
-- exact exit-code behavior from Appendix D
+- In `xtask/src/lib.rs`, add test-only synthetic family definitions.
+- Prove that lookup, ordering, scaffold templating, and routing mismatch reporting all behave
+  correctly with 2+ registered families.
+- Keep the live chain3 contract tests intact.
 
-Acceptance:
+### M22e. Re-run the live proof
 
-- `family new` creates the right tree
-- invalid ids and unsafe paths fail with no writes
-- xtask remains orchestration-only
-
-### M21c. Encode the reusable certification gate
-
-Deliver:
-
-- `cargo xtask family prove <family>`
-- `cargo xtask family certify <family>`
-- certification report schema
-- provenance
-- no-overwrite-on-failure semantics
-- Gate A / B / C / D evaluation driven by structured suite outputs
-- exact command matrix and stable test-prefix selection from Appendix D
-
-Acceptance:
-
-- a failed gate cannot emit a false success artifact
-- certification output is reproducible
-- xtask consumes structured runtime proof and does not reimplement semantic truth
-
-### M21d. Make the gate enforce M19 / M20 truth-surface honesty
-
-Deliver:
-
-- Gate C CLI and projection coverage
-- stale invalidation coverage
-- export / status read-side assertions
-- refresh / preserve semantics wired into `prove` / `certify`
-
-Acceptance:
-
-- `spec test` is the only refresh path
-- `spec build`, `spec generate`, `spec status`, and `spec export` do not mint proof
-- stale proof drops or demotes exactly where M19 / M20 rules require
-
-### M21e. Promote the exemplar family through the harness
-
-Deliver:
-
-- runtime matcher for `function.wrapper.pipeline.chain3.v1`
-- explicit routing precedence relative to Family A / Family B, using Appendix C order
-- aligned / drift / under-specified / unsupported evaluator tests
-- complete exemplar fixture pack
-- Family A / Family B non-regression coverage
-
-Acceptance:
-
-- the family classifies the exemplar corpus correctly
-- precedence is explicit and test-backed
-- the new family does not steal existing matches
-- the exemplar certifies end to end through `family prove` and `family certify`
-
-### M21f. Final docs and repo-process polish
-
-Deliver:
-
-- README / AGENTS process docs for future family promotion
-- stable report-location convention
-- final milestone gate wording in the plan and docs
-
-Acceptance:
-
-- a maintainer can propose the next family without reverse-engineering M21 history
-- docs describe repo workflow, not new public CLI product surface
+- `cargo test -p xtask`
+- `cargo xtask family prove function.wrapper.pipeline.chain3.v1`
+- `cargo xtask family certify function.wrapper.pipeline.chain3.v1`
 
 ## Failure Modes Registry
 
-| Codepath | Real failure | Test coverage required | Error handling required | User signal | Critical gap if omitted |
-|---|---|---|---|---|---|
-| `family new` | writes outside packet root or follows symlink | yes | yes | explicit CLI failure | yes |
-| manifest validation | contradictory or incomplete family contract passes | yes | yes | explicit CLI failure | yes |
-| runtime routing | new family shadows Family A / B | yes | yes | failing proof / certify gate | yes |
-| Gate C | stale proof still looks fresh on `status` / `export` | yes | yes | failing CLI tests and certify gate | yes |
-| Gate D | unsupported near miss promotes into new family | yes | yes | failing certify gate | yes |
-| certification report write | failed run overwrites last known good artifact | yes | yes | explicit certify failure | yes |
-| local prove loop | prove is so slow people stop using it | yes | partial | developer friction, not silent | no, but milestone quality drops |
+| Codepath | Realistic failure | Test covers it? | Error handling? | Operator outcome |
+|---|---|---:|---:|---|
+| `family_harness()` | next family missing from registry | yes, required | yes | clear, actionable failure |
+| routing-order helper | second family renders wrong order or mismatch message | yes, required | partial until added | misleading certify failure if untested |
+| scaffold template | synthetic family inherits chain3 routing values | yes, required | no | silently wrong generated packet |
+| certify gate D | chain3 still passes but future family mismatch message is wrong | yes, required | partial | hard to debug certification failure |
+| docs workflow | maintainer skips registry edit because docs overclaim | no automation, doc review only | no | wasted time and false confidence |
 
-Any row in the table above that ships without test coverage **and** without explicit failure
-signaling is a red milestone, not a paper cut.
+Critical gap rule: the scaffold-template spillover case is the one to fear. If a second family can
+generate a packet with chain3 routing values silently, that is a correctness bug, not a docs bug.
 
 ## Worktree Parallelization Strategy
 
@@ -917,118 +431,80 @@ signaling is a red milestone, not a paper cut.
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Packet contract + exemplar scaffold | `semantic-families/`, docs | — |
-| xtask scaffold / validate flow | `xtask/`, workspace root | Packet contract + exemplar scaffold |
-| Runtime family implementation | `spec-core/`, `semantic-families/fixtures/` | Packet contract + exemplar scaffold |
-| CLI truth-surface matrix | `spec-cli/`, `spec-cli/tests/`, `spec-cli/tests/fixtures/` | Runtime family implementation |
-| Certification aggregation | `xtask/`, `.semantic-family-artifacts/` convention | xtask scaffold / validate flow, CLI truth-surface matrix |
-| Final docs and report polish | docs, `PLAN.md` | Certification aggregation |
+| Narrow claim and registry contract | `semantic-families/`, `xtask/src/family/` | — |
+| Remove one-family assumptions | `xtask/src/family/` | registry contract |
+| Add synthetic generalization tests | `xtask/src/` | one-family assumption cleanup |
+| Re-run live chain3 proof | `xtask/`, `spec-core/`, `spec-cli/` via commands | tests |
 
 ### Parallel lanes
 
-Lane 0: packet contract + exemplar scaffold  
-Sequential because every other lane depends on the manifest shape.
-
-Lane A: xtask scaffold / validate flow  
-Independent after Lane 0. Touches `xtask/` and workspace root only.
-
-Lane B: runtime family implementation  
-Independent after Lane 0. Touches `spec-core/` and the exemplar family fixtures.
-
-Lane C: CLI truth-surface matrix  
-Sequential after Lane B because it depends on the promoted family existing in runtime routing.
-
-Lane D: certification aggregation  
-Sequential after Lane A + Lane C because it consumes both xtask command plumbing and proven suite
-outputs.
-
-Lane E: final docs and report polish  
-Sequential after Lane D.
+- Lane A: narrow claim docs
+- Lane B: registry contract + helper cleanup -> synthetic tests -> live proof
 
 ### Execution order
 
-1. Launch Lane 0 first.
-2. After Lane 0 lands, launch Lane A and Lane B in parallel worktrees.
-3. After Lane B lands, run Lane C.
-4. After Lane A and Lane C both land, run Lane D.
-5. Finish with Lane E.
+Launch Lane A after the registry contract is chosen. Lane B stays sequential because the same xtask
+module owns the whole blast radius.
 
 ### Conflict flags
 
-- Lane A and Lane D both touch `xtask/`. Keep them sequential.
-- Lane B and Lane C both depend on the promoted family fixtures and runtime behavior. Keep them
-  sequential.
-- Lane 0 must stay single-owner. Packet schema churn during parallel work would create fake
-  conflicts everywhere.
+Lane A and Lane B both conceptually touch workflow wording. Keep docs edits small and rebase after
+the xtask contract is settled.
 
 ## Green Gate
 
-M21 is green only if all of these are true:
+M22 is green only if all of these are true:
 
-- `semantic-families/function.wrapper.pipeline.chain3.v1/` exists with the locked packet layout
-- `family.toml` is the machine-readable contract
-- `candidate.md` is review-only context
-- all four fixture buckets are self-contained crate roots with at least one `.unit.spec` each
-- `cargo xtask family new|prove|certify` all exist and fail safely
-- the promoted family classifies aligned / drift / under-specified / unsupported unseen examples
-- Gate C proves refresh / preserve / stale honesty
-- Gate D proves no Family A / Family B shadowing
-- certification output includes provenance
-- public `spec` CLI surface did not expand
+- docs say registry-first, not self-bootstrapping
+- one-family assumptions are removed from helper code
+- synthetic 2+ family xtask tests pass
+- `cargo xtask family prove function.wrapper.pipeline.chain3.v1` passes
+- `cargo xtask family certify function.wrapper.pipeline.chain3.v1` passes
 
 ## Red Gate
 
-M21 is red if any of these happen:
+M22 is red if any of these are still true:
 
-- `family.toml` requires family-specific one-off fields to support the exemplar
-- xtask reimplements semantic truth instead of consuming runtime proof
-- the promoted family cannot certify without special-case packet behavior
-- runtime routing order differs from Appendix C
-- stale proof still reads as current on `status` or `export`
-- the new family steals existing Family A or Family B matches and no bounded precedence fix exists
-- local `family prove` is so broad that the intended developer loop is unusable
+- a future family still requires edits outside one explicit registry contract
+- routing helpers still assume registry length `== 1`
+- docs still imply arbitrary new-family bootstrap is already automated
+- chain3 proof regresses during hardening
 
 ## Decision Audit Trail
 
-| # | Phase | Decision | Classification | Rationale |
-|---|---|---|---|---|
-| 1 | Intake | Replace the stale M20 draft with an M21 implementation contract | Mechanical | Reviewing the wrong milestone would have invalidated the whole pass. |
-| 2 | CEO | Keep `xtask` as orchestration-only | Mechanical | Semantic truth already has clear product homes. |
-| 3 | CEO | Keep the harness milestone, but add external-value pressure and kill criteria | User challenge absorbed into plan | The milestone needed stronger outcomes, not a total reframing. |
-| 4 | Eng | Narrow M21 to `kind:function` only | Mechanical | Current evaluator architecture supports function families cleanly; seam-family generalization does not belong here. |
-| 5 | Eng | Choose `function.wrapper.pipeline.chain3.v1` as the exemplar | Taste resolved | It adds real pricing / checkout leverage without forcing seam refactors. |
-| 6 | Eng | Make `family.toml` authoritative and `candidate.md` review-only | Mechanical | Avoids hidden Markdown DSL drift. |
-| 7 | Eng | Keep full certification output out of checked-in source | Mechanical | Avoids stale truth and merge churn while preserving reproducible artifacts. |
-| 8 | Eng | Add Gate D as a required certification gate | Mechanical | Ordered routing makes shadowing a correctness risk, not a nice-to-have. |
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | CEO | Do not ship a second real family in M22 | auto-decided | completeness + minimal diff | Hardening truth first keeps the blast radius small and the milestone honest | "prove generalization" by mixing in new semantic breadth |
+| 2 | CEO | Keep orchestration truth in Rust registry | auto-decided | explicit over clever | The repo already has this pattern and it keeps command execution out of packet data | manifest-driven command orchestration |
+| 3 | CEO | Keep `family.toml` as validation data only | auto-decided | boring by default | Safer trust boundary and smaller diff | packet-owned suite selection |
+| 4 | Eng | Remove one-family helper assumptions | auto-decided | completeness | This is the concrete code smell behind the M22 premise | docs-only honesty fix |
+| 5 | Eng | Prove generalization with synthetic xtask tests | auto-decided | pragmatic | Gives real evidence without shipping fake family breadth | shipping an incomplete second family |
+| 6 | Eng | Keep chain3 as frozen live regression backstop | auto-decided | reversibility | Existing proof stays the canary while harness code changes | refactoring without end-to-end proof reruns |
 
 ## Completion Summary
 
-- Step 0: Scope Challenge — accepted with one narrowing: function-family-only
-- Architecture Review — integrated into the plan with locked ownership and gate boundaries
-- Code Quality Review — integrated, with explicit anti-duplication and anti-DSL constraints
-- Test Review — coverage diagram written, required suites and verification loop locked
-- Performance Review — `prove` vs `certify` split locked
-- NOT in scope — written
-- What already exists — written
-- TODOS.md updates — none required for this milestone pass
-- Failure modes — critical gaps identified up front and turned into required gates
-- Outside voice — ran via `/autoplan` (`codex+subagent`)
-- Parallelization — 6 steps, 2 parallel lanes, 4 sequential lanes
-- Lake Score — complete version chosen over shortcut in every material scope decision
+- Step 0: Scope Challenge — scope reduced to harness hardening, docs honesty, and synthetic generalization proof
+- Architecture Review: 4 issues found, all resolved in-plan
+- Code Quality Review: 3 issues found, all resolved in-plan
+- Test Review: coverage diagram written, 9 required gaps identified
+- Performance Review: 2 issues found, both resolved in-plan
+- NOT in scope: written
+- What already exists: written
+- TODOS.md updates: 0 required for M22 plan approval
+- Failure modes: 1 critical gap flagged
+- Outside voice: skipped
+- Parallelization: 2 lanes, 1 parallel / 3 sequential stages
+- Lake Score: 6/6 recommendations chose the complete option inside the bounded blast radius
 
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR via `/autoplan` | mode: `SELECTIVE_EXPANSION`, 0 critical gaps |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | clear (manual) | integrity-first scope chosen, second real family deferred, docs claim narrowed |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR via `/autoplan` | 0 issues, 0 critical gaps |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | skipped, no UI scope |
-
-**CROSS-MODEL:** CEO voices converged on stronger kill criteria and leverage pressure. Eng voices
-converged on function-only scope, machine-manifest authority, provenance, and required
-non-regression coverage.
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clear (manual) | registry-first contract, 9 test obligations, 1 critical gap, chain3 proof preserved |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | no UI scope |
 
 **UNRESOLVED:** 0
 
-**VERDICT:** CEO + ENG CLEARED — ready to implement.
+**VERDICT:** CEO + ENG CLEARED (manual) — ready to implement M22 on `feat/m21`.
