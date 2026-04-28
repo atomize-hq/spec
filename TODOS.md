@@ -167,3 +167,11 @@
 ## Post-M19 follow-ups
 
 - [ ] **Clean M19 falsification fixture unused-variable warnings** — Release QA for v0.13.0 found that `spec build` / `spec test` on `spec-cli/tests/fixtures/m19/semantic_falsification_pack` succeeds but emits Rust unused-variable warnings for intentionally adversarial fixture inputs (`regional_rate` in `checkout_net_total_drift`, `manual_adjustment` in `checkout_net_total_under_specified`). This is not a release blocker and does not invalidate M19. Fix only as fixture hygiene, preferably by underscore-prefixing intentionally unused fixture parameters if that preserves classification. Do not add dummy body statements that widen the Family B syntax envelope, and do not suppress unused warnings generator-wide. **Priority:** Low. **Context:** QA report `.gstack/qa-reports/qa-report-spec-cli-m19-2026-04-26-212920.md`.
+
+## Post-M23 follow-ups
+
+- [ ] **M24: promote `function.arithmetic_leaf.monotone_up.v1` as the second real leaf-family packet** — After M23 lands, use the same harness-shaped workflow on the monotone-up family to prove the leaf promotion path is not specific to nonnegative clamp semantics. Do not start until M23's maintainer smoke loop is green.
+
+- [ ] **Run a true non-author maintainer promotion dry run** — M23 planning now treats maintainer legibility as a first-class outcome, but the claim is only fully retired once someone other than the original author follows `family new` → packet authoring → prove/certify without hidden context.
+
+- [ ] **Reduce packet authoring ceremony only after two real leaf promotions exist** — If M23 and M24 both land cleanly, evaluate whether `candidate.md` scaffolding, starter fixtures, or packet metadata can be made lighter without weakening truthfulness. Do not pre-optimize packet ergonomics before the second leaf-family proof exists.
