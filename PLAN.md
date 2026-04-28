@@ -1,258 +1,348 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m21-autoplan-restore-20260427-213147.md -->
+<!-- restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m21-m22-plan-solidify-restore-20260427-214444.md -->
 # M22 - Integrity-First Semantic Family Promotion Hardening
 
-Status: **Fresh plan on `feat/m21`** (rewritten via `/autoplan` + `/plan-eng-review` on 2026-04-27).
+Status: **solidified implementation plan on `feat/m21`**  
+Last rewritten: **2026-04-27**
 
-M21 was a real milestone. `function.wrapper.pipeline.chain3.v1` now proves and certifies through
-`cargo xtask family prove|certify`. The missing piece is narrower and more important: the repo
-still does **not** have an honest, boring, repeatable maintainer workflow for family number two.
+M21 proved one real family promotion path. `function.wrapper.pipeline.chain3.v1` can be scaffolded,
+proved, and certified through the current xtask flow. What M21 did not prove is the stronger repo
+claim that maintainers now have a clean, boring, repeatable path for family number two.
 
-M22 fixes that exact gap. It does **not** expand semantic ambition. It hardens bootstrap truth,
-orchestration truth, and docs truth so the next family can be added through one explicit contract
-instead of maintainer memory and scattered chain3-only constants.
+M22 fixes that narrower but more important gap.
 
-UI scope: **no**. This is backend-only harness and process work.
+The milestone is not "add more semantics." The milestone is "make the repo tell the truth about
+how family promotion works, and make the xtask harness general enough that the next family only
+needs one explicit registry entry instead of scattered chain3 assumptions."
 
-## Source Inputs
+## Milestone Outcome
 
-- Current branch: `feat/m21`
-- Base branch: `main`
-- Restore point:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m21-autoplan-restore-20260427-213147.md`
-- Checkpoint:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/checkpoints/20260427-210258-m21-harness-review.md`
-- Design doc:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m21-design-20260427-202732.md`
-- Test plan artifact:
-  `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m21-eng-review-test-plan-20260427-213147.md`
-- Verified repo behavior on 2026-04-27:
-  - `cargo xtask family prove function.wrapper.pipeline.chain3.v1` passes.
-  - `cargo xtask family certify function.wrapper.pipeline.chain3.v1` passes.
-  - `cargo xtask family new function.wrapper.pipeline.chain4.v1` fails with the expected
-    "family is not registered" error.
-- Primary code seams:
-  - `xtask/src/family/harness.rs`
-  - `xtask/src/family/routing.rs`
-  - `xtask/src/family/scaffold.rs`
-  - `xtask/src/family/prove.rs`
-  - `xtask/src/family/certify.rs`
-  - `xtask/src/family/manifest.rs`
-  - `xtask/src/lib.rs`
-  - `semantic-families/README.md`
+After M22, the intended maintainer workflow is:
 
-## Milestone Summary
-
-```text
-M22a  Make the bootstrap contract honest                                 required
-M22b  Make orchestration truth explicit and reviewable                    required
-M22c  Remove one-family assumptions from xtask helpers                    required
-M22d  Keep chain3 green as the frozen regression backstop                 required
-M22e  Prove generalization with synthetic multi-family tests              required
-M22f  Update docs to say exactly what is and is not automated             required
-```
-
-**Lake to boil in M22**
-
-- A maintainer should know exactly where to add the next family and exactly what stays manual.
-- Adding a second family should require **one registry entry**, not edits in multiple hidden spots.
-- `family.toml` should remain a packet contract, not an untrusted command script.
-- Chain3 must stay the live proof while the workflow gets cleaned up.
-- The repo must stop implying that the next-family path is already self-bootstrapping if it is not.
-
-## User Outcome
-
-After M22, a maintainer adding the next function family should have one boring workflow:
-
-1. add one explicit family definition to the xtask registry
+1. add one explicit family definition to the xtask family registry
 2. run `cargo xtask family new <family>`
-3. fill the packet fixtures and manifest
-4. wire the runtime classifier in `spec-core`
+3. fill packet fixtures and packet metadata
+4. wire runtime classification in `spec-core`
 5. run `cargo xtask family prove <family>`
 6. run `cargo xtask family certify <family>`
 
-That is still registry-first. It is **not** manifest-magical. The point of M22 is that the repo
-says that plainly and the code matches the claim.
+That is still registry-first. It is not manifest-magical. M22 succeeds only if the code and docs
+both say that plainly.
 
-## Step 0: Scope Challenge
+## Core Decision
 
-### Current system state
+Keep orchestration truth in Rust.
 
-| Surface | Already true | Still wrong | M22 response |
-|---|---|---|---|
-| `xtask/src/family/harness.rs` | Real chain3 harness exists | The next-family workflow hard-stops here and the error is truthful but repo claims are ahead of it | Keep this file as the explicit orchestration registry and document it honestly |
-| `xtask/src/family/routing.rs` | Routing mismatch checks exist | Helpers still assume one registered family and one fixed `must_not_shadow` width | Generalize helpers to iterate over the registry, not chain3-only shapes |
-| `xtask/src/family/scaffold.rs` | Scaffold path safety and bucket layout are real | `family new` is only reusable for already hard-coded families | Make reuse explicit: one registry entry unlocks scaffold, no extra hidden edits |
-| `xtask/src/family/prove.rs` / `certify.rs` | Prove/certify reports and gate flow are real | Suite selection truth still lives in one chain3 carveout | Keep suite selection registry-owned, but centralize and test the contract |
-| `semantic-families/README.md` / prior `PLAN.md` | Packet layout is documented | The docs can still be read as "add any family and run new/prove/certify" | Narrow wording to registry-first, reviewable bootstrap truth |
+- `xtask/src/family/harness.rs` remains the sole source of family-specific xtask orchestration
+  data.
+- `family.toml` remains packet-local validation and truth-surface metadata, not command-selection
+  truth.
+- `chain3` remains the only real promoted family shipped in M22.
+- Generalization is proven with synthetic multi-family xtask tests, not by sneaking in a second
+  real semantic family.
 
-### What already exists
+This is the smallest complete fix. It keeps the trust boundary boring and the blast radius
+contained.
 
-| Sub-problem | Existing code / flow | M22 reuse decision |
+## Verified Starting Point
+
+The following facts were verified on 2026-04-27 on `feat/m21`:
+
+- `cargo xtask family prove function.wrapper.pipeline.chain3.v1` passes.
+- `cargo xtask family certify function.wrapper.pipeline.chain3.v1` passes.
+- `cargo xtask family new function.wrapper.pipeline.chain4.v1` fails with the expected
+  "family is not registered" error.
+- `xtask/src/family/harness.rs` contains `const FAMILY_REGISTRY: [FamilyHarness; 1]`.
+- `xtask/src/family/routing.rs` still hard-codes one-family assumptions:
+  - `debug_assert_eq!(harnesses.len(), 1, "locked routing helper assumes one family")`
+  - `debug_assert_eq!(harnesses[0].routing.must_not_shadow.len(), 3, ...)`
+  - `locked_routing_order_with_terminal()` returns a fixed `[&'static str; 5]`
+
+Those facts define the plan boundary. M22 is about removing those hidden "chain3 is the world"
+assumptions without changing the public `spec` CLI or pretending a second real family already
+exists.
+
+## Problem Statement
+
+M21 shipped a real harness, but the repo still has three truth mismatches:
+
+1. **Bootstrap truth mismatch**  
+   The docs can still be read as if `family new/prove/certify` are generic next-family workflows.
+   They are not. They require Rust-side registration first.
+
+2. **Orchestration truth mismatch**  
+   The registry exists, but helper logic in `routing.rs` and nearby consumers still assumes one
+   registered family and one fixed `must_not_shadow` width.
+
+3. **Reviewability mismatch**  
+   Future maintainers can still trip over "works for chain3, breaks for family two" behavior
+   because the generalization boundary is not proven in tests.
+
+M22 closes those three mismatches and nothing more.
+
+## What Already Exists
+
+| Sub-problem | Existing code | Reuse decision |
 |---|---|---|
-| Explicit family definition | `xtask/src/family/harness.rs` already contains `FamilyHarness` and `FAMILY_REGISTRY` | Reuse. Do not invent a second registry format. |
-| Path safety and packet layout | `paths.rs`, `layout.rs`, scaffold bucket creation | Reuse directly. |
-| Prove/certify report pipeline | `report.rs`, `prove.rs`, `certify.rs` | Reuse directly. Keep report schema stable unless a real gap appears. |
-| Live semantic proof | chain3 packet, `spec-core` chain3 tests, `spec-cli` truth-surface and corpus tests | Reuse as the regression backstop. |
-| Honest failure on unknown family | `require_family_harness()` | Reuse the behavior, but make the surrounding docs match it. |
+| Explicit family definition | `xtask/src/family/harness.rs` with `FamilyHarness` and `FAMILY_REGISTRY` | Reuse directly. Do not invent a second registry format. |
+| Packet path safety and layout | `xtask/src/family/paths.rs`, `layout.rs`, scaffold bucket creation | Reuse directly. |
+| Prove/certify reporting | `xtask/src/family/prove.rs`, `certify.rs`, `report.rs` | Reuse directly. Keep report format stable unless a real defect forces change. |
+| Live promoted family | `function.wrapper.pipeline.chain3.v1` packet plus current chain3 prove/certify path | Preserve as the frozen regression backstop. |
+| Honest failure for unknown families | `require_family_harness()` | Preserve behavior and make surrounding docs match it. |
 
-### Minimum diff that still solves the problem
+## Non-Negotiable Invariants
 
-- Keep runtime semantic classification in `spec-core` unchanged.
-- Keep public `spec` CLI unchanged.
-- Keep `family.toml` as packet-local validation data, not executable orchestration.
-- Refactor xtask family helpers so the registry is the obvious, sole orchestration truth.
-- Add synthetic multi-family tests in `xtask` so the code no longer assumes "chain3 is the world".
-- Update docs to describe the registry-first workflow honestly.
+These are hard constraints, not suggestions:
 
-Anything beyond that is scope creep for M22.
+1. `family.toml` does not select commands to run.
+2. Suite definitions stay compile-time Rust constants.
+3. Public `spec` CLI behavior stays unchanged.
+4. M22 does not add a second real semantic family in `spec-core`.
+5. M22 does not add a new registry file format, codegen step, or generic multi-kind abstraction.
+6. `chain3` prove/certify stays green through the entire milestone.
 
-### Complexity check
+## Affected Modules
 
-This is still a medium-sized change, roughly 7-9 files in one subsystem:
+| Module | Role in M22 | Required change |
+|---|---|---|
+| `xtask/src/family/harness.rs` | Registry source of truth | Expose the full family contract through one obvious API surface and make registry-driven helpers testable with synthetic registries. |
+| `xtask/src/family/routing.rs` | Locked routing checks and mismatch messages | Remove fixed-width and one-family assumptions. |
+| `xtask/src/family/scaffold.rs` | Packet bootstrap and manifest template generation | Ensure all family-specific values come from the selected harness, never chain3 spillover. |
+| `xtask/src/family/prove.rs` | Family prove workflow | Keep suite selection registry-owned and free of hidden chain3 carveouts outside the harness. |
+| `xtask/src/family/certify.rs` | Family certify workflow | Keep routing mismatch checks accurate for any registered family. |
+| `xtask/src/lib.rs` | xtask test coverage | Add synthetic multi-family tests that prove generalization without adding a second production family. |
+| `semantic-families/README.md` | Maintainer-facing workflow contract | Rewrite to say exactly what is manual and what is automated. |
+| `README.md` and `AGENTS.md` if needed | Secondary workflow wording | Update only if they repeat the old implication. |
 
-- `xtask/src/family/harness.rs`
-- `xtask/src/family/routing.rs`
-- `xtask/src/family/scaffold.rs`
-- `xtask/src/family/prove.rs`
-- `xtask/src/family/certify.rs`
-- `xtask/src/lib.rs`
-- `semantic-families/README.md`
-- possibly `README.md` or `AGENTS.md` if workflow wording also lives there
+## Architecture Contract
 
-Auto-decision: **scope reduced**. M22 does **not** ship a second real semantic family. It ships
-the honest and generalizable harness contract first.
+### Durable source of truth
 
-### Search check
+`FamilyHarness` remains the single family-definition shape for xtask orchestration:
 
-- **[Layer 1]** Reuse the current Rust registry pattern. It is already in the repo and proven.
-- **[Layer 3]** Do **not** let `family.toml` choose commands to execute. User-authored packet data
-  controlling subprocesses would be a bad trust boundary.
-- No new framework, background worker, or concurrency model is needed here.
+- scaffold defaults
+- locked manifest routing
+- prove suite membership
+- certify suite membership
 
-### TODOS cross-reference
+No other module may reconstruct family-specific behavior from chain3-specific constants once M22
+is done.
 
-- Existing CLI harness cleanup TODOs remain orthogonal. M22 should not widen into general CLI test
-  infrastructure cleanup.
-- If, after M22, the Rust registry still feels too manual, that becomes an explicit future TODO:
-  "make packet metadata drive more of the registry safely." It is not a reason to overbuild M22.
+### Required internal shape
 
-### Completeness check
+The helper logic must become testable against synthetic registries without forcing a second real
+production family into `FAMILY_REGISTRY`.
 
-The complete version is:
+That means:
 
-- honest registry-first docs
-- single-source orchestration contract
-- no one-family assumptions in helper code
-- synthetic tests proving the registry shape scales beyond one entry
-- chain3 prove/certify still green
+- production wrappers may still read `FAMILY_REGISTRY`
+- pure helper logic used for ordering, mismatch rendering, and template population must be callable
+  against synthetic two-family inputs in xtask tests
+- test coverage must prove behavior scales past one family even while production registry size
+  remains one
 
-Rejected shortcuts:
-
-- docs-only honesty fix with no code hardening
-- adding another real family before the harness contract is cleaned up
-- moving command orchestration into `family.toml`
-- generic multi-kind abstraction for function/data/sum in one pass
-
-### Distribution check
-
-No new binary or publish surface is introduced. Existing Cargo and CI remain enough.
-
-`.semantic-family-artifacts/` stays the local and CI output surface for proof artifacts.
-
-## Approved Scope
-
-- Orchestration truth remains in Rust, in the xtask registry.
-- `family.toml` remains packet validation data, not command-selection truth.
-- `chain3` remains the only real promoted family in M22.
-- Synthetic test families are allowed **inside xtask tests only** to prove helper generalization.
-- Public `spec` CLI stays unchanged.
-- No new report format, no new packet root layout, no new semantic kinds.
-
-## Architecture Review
-
-### Opinionated recommendation
-
-Use the existing Rust registry as the durable source of orchestration truth. That is the smallest,
-clearest, least clever fix. The repo already has this shape. The problem is not "no registry". The
-problem is that the registry contract is implicit, chain3-scattered, and partially contradicted by
-the docs.
-
-### Dependency graph
+### Data-flow diagram
 
 ```text
 cargo xtask family <cmd> <family>
         │
-        ├── FamilyId::parse()
+        ├── parse FamilyId
         │
-        ├── family_harness() / require_family_harness()
+        ├── resolve harness from xtask registry
         │       │
-        │       └── explicit Rust registry in harness.rs
-        │              ├── scaffold defaults
-        │              ├── routing contract
-        │              ├── prove suite definitions
-        │              └── certify suite definitions
+        │       ├── scaffold contract
+        │       ├── locked routing contract
+        │       ├── prove suite contract
+        │       └── certify suite contract
         │
         ├── scaffold.rs
-        │       └── candidate.md + family.toml + fixture buckets
+        │       └── generates candidate.md + family.toml + starter fixtures
         │
         ├── prove.rs
-        │       ├── manifest.rs validation
-        │       ├── layout.rs validation
-        │       ├── registry-selected suites
-        │       └── prove.latest.json
+        │       ├── validates packet
+        │       ├── runs registry-selected suites
+        │       └── writes prove.latest.json
         │
         ├── certify.rs
-        │       ├── prove execution reuse
-        │       ├── routing.rs mismatch checks
-        │       └── certification.report.json
+        │       ├── reuses prove execution
+        │       ├── checks manifest routing against locked registry routing
+        │       └── writes certification.report.json
         │
         └── semantic-families/README.md
-                └── says the same thing the code actually does
+                └── describes the same registry-first workflow the code enforces
 ```
 
-### Concrete architecture changes
+## Scope Challenge
 
-1. `xtask/src/family/harness.rs`
-   - Keep `FamilyHarness` as the core registry shape.
-   - Add helper APIs that return routing order, suite names, and scaffold defaults from the
-     registry generically.
-   - Remove any assumptions that the registry length is one.
+### Minimum diff that still solves the problem
 
-2. `xtask/src/family/routing.rs`
-   - Replace `debug_assert_eq!(harnesses.len(), 1)` and fixed-array helpers with dynamic helpers
-     driven by registry order.
-   - Keep the terminal `unsupported.function.v1` catch-all explicit.
+The minimum complete M22 is:
 
-3. `xtask/src/family/scaffold.rs`, `prove.rs`, `certify.rs`
-   - Continue to require registration first.
-   - Ensure the error text consistently points maintainers to the registry as the single edit site.
-   - Do not duplicate per-family contract knowledge anywhere else.
+- honest registry-first docs
+- one obvious harness API surface
+- no one-family assumptions in routing and related helpers
+- synthetic multi-family xtask tests
+- live chain3 prove/certify regression reruns
 
-4. `semantic-families/README.md`
-   - Say plainly: "In M22, packet creation is registry-first. Add a Rust registry entry, then run
-     xtask. The manifest does not bootstrap a family on its own."
+Anything beyond that is scope creep.
 
-### Error & Rescue Registry
+### Explicitly rejected shortcuts
 
-| Failure | Why it happens | Rescue |
-|---|---|---|
-| Unknown family still requires hidden edits | Registry knowledge still leaks into other files | Add a test that a synthetic second family can be registered in one place and all helpers see it |
-| Routing helper still encodes one-family width | Future family order bugs hide until runtime | Drive routing-order formatting from registry iteration, not fixed arrays |
-| Docs overclaim automation again | A future maintainer copies the wrong narrative | Lock wording in `semantic-families/README.md` and test the error message path |
-| `family.toml` starts controlling commands | Packet data becomes a code-execution surface | Keep suite commands compile-time Rust constants only |
+- docs-only fix with no harness hardening
+- shipping a second real family to "prove" generalization
+- moving orchestration into `family.toml`
+- adding a generic family framework for `function`, `data`, and `sum` in one pass
 
-## Code Quality Review
+### Complexity call
 
-- **DRY**: the registry contract should live in one place. If routing order, scaffold defaults, and
-  suite selection each re-derive chain3 knowledge differently, that is the exact bug M22 is
-  supposed to remove.
-- **Explicit over clever**: prefer a boring `Vec<&FamilyHarness>` or iterator-based helper over
-  macro tricks or data-driven command templates.
-- **Minimal diff**: do not introduce a second manifest format, codegen step, or custom DSL.
-- **Diagram maintenance**: update nearby ASCII docs if code comments or README snippets imply the
-  old self-bootstrapping story.
+This touches roughly 7-9 files in one subsystem. That is acceptable because the blast radius is
+contained to xtask family promotion and docs. Do not widen it into `spec-core` semantic expansion.
 
-## Test Review
+## Implementation Plan
+
+### Workstream 1. Narrow the repo claim
+
+**Files**
+
+- `semantic-families/README.md`
+- `README.md` only if it repeats the same implication
+- `AGENTS.md` only if it repeats the same implication
+
+**Changes**
+
+- Rewrite family-promotion workflow text to say:
+  - registration happens first in `xtask/src/family/harness.rs`
+  - `family new` bootstraps packets only for registered families
+  - `family.toml` is packet metadata and validation truth, not orchestration truth
+- Remove any wording that suggests arbitrary new-family bootstrap already works end-to-end.
+
+**Acceptance**
+
+- A maintainer reading docs first would not expect `cargo xtask family new <new-family>` to work
+  before registry entry creation.
+- No doc path contradicts the runtime error from `require_family_harness()`.
+
+### Workstream 2. Lock the harness contract
+
+**Files**
+
+- `xtask/src/family/harness.rs`
+
+**Changes**
+
+- Keep `FamilyHarness` as the only family-definition struct.
+- Add or refactor helper accessors so scaffold, routing, prove, and certify all obtain
+  family-specific data from the same harness path.
+- Extract internal pure helper logic as needed so xtask tests can exercise synthetic registries
+  without mutating the production registry.
+- Preserve the unknown-family error message and keep it explicitly pointed at
+  `xtask/src/family/harness.rs`.
+
+**Acceptance**
+
+- There is one obvious place to add the next family for xtask orchestration.
+- No command consumer duplicates per-family contract knowledge outside the harness contract.
+- The production registry may still have one entry, but the helper logic is no longer structurally
+  tied to one entry.
+
+### Workstream 3. Remove one-family routing assumptions
+
+**Files**
+
+- `xtask/src/family/routing.rs`
+- `xtask/src/family/harness.rs` if helper extraction lives there
+
+**Changes**
+
+- Remove `debug_assert_eq!(harnesses.len(), 1, ...)`.
+- Remove `debug_assert_eq!(harnesses[0].routing.must_not_shadow.len(), 3, ...)`.
+- Replace fixed-width array logic with registry-driven iteration.
+- Keep the terminal `unsupported.function.v1` catch-all explicit in the rendered locked order.
+- Ensure mismatch messages remain family-specific and actionable.
+
+**Acceptance**
+
+- Routing helpers behave correctly with a synthetic registry of at least two families.
+- No helper assumes chain3's `must_not_shadow` width globally.
+- Mismatch text identifies the target family and the expected locked routing contract clearly.
+
+### Workstream 4. Align scaffold, prove, and certify to the same registry contract
+
+**Files**
+
+- `xtask/src/family/scaffold.rs`
+- `xtask/src/family/prove.rs`
+- `xtask/src/family/certify.rs`
+
+**Changes**
+
+- Ensure scaffold templates derive precedence and `must_not_shadow` from the selected harness only.
+- Ensure prove and certify suite selection stays registry-owned and does not rely on out-of-band
+  chain3 assumptions.
+- Keep certify routing mismatch checks driven by the same locked routing contract as scaffold and
+  helper ordering.
+
+**Acceptance**
+
+- A synthetic non-chain3 harness used in tests produces its own routing values in
+  `manifest_template()`.
+- Prove/certify consumers do not contain hidden duplicate family contract data outside the harness.
+
+### Workstream 5. Add synthetic multi-family xtask tests
+
+**Files**
+
+- `xtask/src/lib.rs`
+
+**Changes**
+
+- Add test-only synthetic harness definitions or synthetic registry inputs.
+- Cover the following cases:
+  - family lookup works for 2+ families
+  - routing order is stable across 2+ families plus the terminal catch-all
+  - manifest mismatch messages stay accurate for a non-chain3 family
+  - scaffold manifest generation uses the selected family's routing values
+  - unknown-family error still points to `xtask/src/family/harness.rs`
+- Keep existing live chain3 contract tests intact.
+
+**Acceptance**
+
+- xtask test coverage proves generalization without adding a second production family.
+- The plan no longer relies on "trust me, family two will work."
+
+### Workstream 6. Re-run the live chain3 proof
+
+**Files**
+
+- no new source files required
+
+**Commands**
+
+```bash
+cargo test -p xtask
+cargo xtask family prove function.wrapper.pipeline.chain3.v1
+cargo xtask family certify function.wrapper.pipeline.chain3.v1
+rg -n "registered for|registry-first|self-bootstrapping" semantic-families/README.md README.md AGENTS.md PLAN.md
+```
+
+**Acceptance**
+
+- xtask tests pass
+- chain3 prove passes
+- chain3 certify passes
+- docs and plan wording are aligned with the implemented registry-first behavior
+
+## Code Quality Constraints
+
+These are implementation rules for M22:
+
+- Prefer explicit iterator- or slice-based helpers over macros or generic registry DSLs.
+- Keep the diff minimal. No new abstraction is justified unless it removes actual duplicated
+  family-contract knowledge.
+- Any nearby ASCII comment or workflow diagram touched by this change must be updated in the same
+  commit.
+- If a helper only exists to paper over chain3-only assumptions, delete or flatten it.
+
+## Test Plan
 
 ### Code path coverage
 
@@ -262,43 +352,39 @@ CODE PATH COVERAGE
 [+] xtask/src/family/harness.rs
     │
     ├── family_harness()
-    │   ├── [GAP] registered family lookup with 2+ entries
-    │   └── [GAP] missing family still returns the honest registry-first error
+    │   ├── [REQUIRED] lookup works with 2+ synthetic family definitions
+    │   └── [REQUIRED] unknown family error still points to harness.rs
     │
-    └── registered_harnesses_in_routing_order()
-        ├── [GAP] stable sort across 2+ families
-        └── [GAP] duplicate/adjacent precedence expectations stay deterministic
+    └── registry-driven helper accessors
+        ├── [REQUIRED] no production-only singleton assumption
+        └── [REQUIRED] helpers accept synthetic multi-family inputs in tests
 
 [+] xtask/src/family/routing.rs
     │
     ├── locked_routing_order_with_terminal()
-    │   └── [GAP] no one-family fixed-width assumption
+    │   └── [REQUIRED] dynamic ordering across 2+ families plus terminal catch-all
     │
     ├── manifest_matches_locked_routing()
-    │   ├── [GAP] second-family positive case
-    │   └── [GAP] mismatch report contains correct family-specific expectation
+    │   ├── [REQUIRED] positive case for non-chain3 synthetic family
+    │   └── [REQUIRED] mismatch when precedence or must_not_shadow differ
     │
     └── manifest_routing_mismatch_message()
-        └── [GAP] mismatch text stays useful for non-chain3 families
+        └── [REQUIRED] family-specific actionable mismatch text
 
 [+] xtask/src/family/scaffold.rs
     │
-    ├── run()
-    │   ├── [★★ TESTED] chain3 scaffold happy path already exists indirectly
-    │   ├── [GAP] synthetic second registered family scaffold succeeds
-    │   └── [★★ TESTED] unregistered family failure already exists and should be kept
-    │
     └── manifest_template()
-        └── [GAP] synthetic family uses its own routing values, not chain3 spillover
+        ├── [REQUIRED] synthetic family gets its own precedence
+        └── [REQUIRED] synthetic family gets its own must_not_shadow values
 
 [+] xtask/src/family/prove.rs + certify.rs
     │
     ├── registry-selected suite execution
-    │   ├── [★★★ TESTED] chain3 prove/certify still pass end-to-end
-    │   └── [GAP] synthetic second family report/gate helpers do not assume chain3-only widths
+    │   └── [REQUIRED] no duplicate chain3-only contract logic outside harness
     │
-    └── routing gate messages
-        └── [GAP] mismatch report remains correct for another registered family
+    └── chain3 live regression
+        ├── [REQUIRED] prove still passes end-to-end
+        └── [REQUIRED] certify still passes end-to-end
 ```
 
 ### Operator-flow coverage
@@ -306,195 +392,124 @@ CODE PATH COVERAGE
 ```text
 OPERATOR FLOW COVERAGE
 ===========================
-[+] Maintainer adds next family
-    │
-    ├── update Rust registry entry
-    ├── run `cargo xtask family new <family>`
-    ├── inspect generated packet
-    └── [GAP] test the registry-first path with a synthetic family
+[+] Maintainer reads docs first
+    └── [REQUIRED] docs say registration comes before family new/prove/certify
 
 [+] Maintainer forgets registration
-    │
-    └── [★★★ TESTED] gets explicit "family is not registered" error
+    └── [REQUIRED] gets explicit registry-first error
 
-[+] Maintainer changes routing metadata wrong
-    │
-    └── [GAP] certify mismatch output for a non-chain3 family remains actionable
+[+] Maintainer adds a new family later
+    └── [REQUIRED] xtask helper logic is already proven against synthetic 2+ family registries
 
-[+] Maintainer reads docs first
-    │
-    └── [GAP] docs must say registry-first, not implied auto-bootstrap
+[+] Maintainer breaks routing metadata
+    └── [REQUIRED] certify mismatch output stays actionable for a non-chain3 family
 ```
 
-### Required test split
+### Test artifact
 
-- `xtask/src/lib.rs`
-  - add synthetic second-family registry fixtures and unit tests
-  - assert routing-order helpers no longer assume one family
-  - assert scaffold/manifest templates use the selected family definition
-- existing chain3 tests
-  - keep the current chain3 harness contract tests
-  - re-run `cargo xtask family prove function.wrapper.pipeline.chain3.v1`
-  - re-run `cargo xtask family certify function.wrapper.pipeline.chain3.v1`
-- docs smoke
-  - at minimum, assert the unknown-family error message still points to the single registry edit
+The existing eng-review test-plan artifact remains the QA handoff anchor for this branch:
 
-### Test plan artifact
-
-Write the artifact at:
 `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m21-eng-review-test-plan-20260427-213147.md`
 
-### Verification loop
+No new test artifact is required unless the implementation plan meaningfully changes.
 
-```text
-1. cargo test -p xtask
-2. cargo xtask family new function.wrapper.pipeline.chain4.v1
-   expected: still fails before implementation, then succeeds once the M22 registry entry exists
-3. cargo xtask family prove function.wrapper.pipeline.chain3.v1
-4. cargo xtask family certify function.wrapper.pipeline.chain3.v1
-5. rg -n "self-bootstrapping|repeatable|registry-first" semantic-families/README.md PLAN.md README.md
-```
+## Failure Modes Registry
+
+| Codepath | Realistic failure | Test required? | Error handling required? | Operator outcome if broken |
+|---|---|---:|---:|---|
+| `family_harness()` | future family missing from registry | yes | yes | clear, actionable failure |
+| registry helper extraction | helper remains implicitly singleton-scoped | yes | no | family two breaks despite "generalized" code |
+| `locked_routing_order_with_terminal()` | order or width still encodes chain3-only assumptions | yes | partial | misleading certify mismatch output |
+| `manifest_template()` | synthetic family inherits chain3 routing values | yes | no | silently wrong packet bootstrap |
+| `manifest_routing_mismatch_message()` | reports wrong expected routing for non-chain3 family | yes | partial | hard-to-debug certification failure |
+| docs workflow | docs still imply self-bootstrap | doc review only | no | wasted maintainer time and false confidence |
+
+**Critical gap to prevent:** scaffold spillover. If a future family can generate a packet with
+chain3 routing values silently, that is a correctness failure, not a documentation defect.
 
 ## Performance Review
 
-- Do not add more Cargo subprocesses than M21 already runs. M22 is about selection truth, not more
-  suites.
-- Registry iteration cost is trivial. The only real performance footgun is accidentally widening
-  prove/certify into workspace-scale discovery or duplicated suite execution. Do not do that.
-- Keep report generation file-local and deterministic. No new caches are needed.
+- Registry iteration is trivial. Do not optimize it.
+- Do not widen prove/certify into workspace-scale discovery or duplicate suite execution.
+- Do not add caches. M22 is about correctness and explicitness, not speed.
 
 ## Security and Trust Boundary Review
 
-- `family.toml` stays validated input, not executable orchestration.
-- Suite commands remain compile-time Rust constants, which keeps packet authors from steering what
-  subprocesses run.
-- Existing packet path safety and symlink rejection remain mandatory and unchanged.
+- `family.toml` remains validated input, not executable orchestration.
+- Suite commands remain compile-time Rust constants.
+- Existing packet path safety and symlink rejection remain unchanged.
+- No user-authored packet data may decide which subprocesses xtask executes.
+
+## Worktree Parallelization Strategy
+
+M22 has one real code lane and one small docs lane. The code lane remains the critical path.
+
+### Dependency table
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| Docs honesty pass | `semantic-families/`, `README.md`, `AGENTS.md` | harness contract wording frozen |
+| Harness contract cleanup | `xtask/src/family/` | — |
+| Routing generalization | `xtask/src/family/` | harness contract cleanup |
+| Consumer alignment | `xtask/src/family/` | routing generalization |
+| Synthetic multi-family tests | `xtask/src/` | consumer alignment |
+| Live chain3 proof reruns | `xtask/` via commands | synthetic multi-family tests |
+
+### Parallel lanes
+
+- Lane A: harness contract cleanup -> routing generalization -> consumer alignment -> synthetic
+  multi-family tests -> live chain3 proof reruns
+- Lane B: docs honesty pass
+
+### Execution order
+
+1. Start Lane A first. It determines the final contract wording.
+2. Start Lane B after the harness contract is settled enough that docs language will not thrash.
+3. Merge Lane B back before final verification so the grep-based wording checks run against final
+   docs.
+
+### Conflict flags
+
+- Lane A and Lane B both touch workflow language. Keep Lane B small and rebase it after Lane A if
+  necessary.
+- There is no safe multi-code-lane split inside `xtask/src/family/`; the same module cluster owns
+  the entire blast radius.
 
 ## NOT in Scope
 
 - Promoting a second real semantic family in `spec-core`
 - Changing the public `spec` CLI
 - Making `family.toml` self-bootstrapping or command-bearing
-- Multi-kind family promotion (`data`, `sum`, or generic family abstraction)
-- CI workflow redesign or artifact schema redesign
-
-## Implementation Order
-
-### M22a. Narrow the repo claim
-
-- Rewrite `semantic-families/README.md` so the documented workflow is explicitly registry-first.
-- Remove or update any phrasing in repo docs that implies packet creation works for arbitrary new
-  families without registry work.
-
-### M22b. Lock the registry contract
-
-- Keep `FamilyHarness` as the one family-definition shape.
-- Add helper functions in `harness.rs` for routing order and family-specific contract access.
-- Make the registry the single edit site for family-specific xtask knowledge.
-
-### M22c. Remove one-family assumptions
-
-- Rewrite `routing.rs` helpers to iterate over registered families dynamically.
-- Ensure scaffold/prove/certify consumers rely on the same registry access path.
-- Remove fixed-width assumptions about `must_not_shadow` ordering where possible. Where not
-  possible, make them explicit per family definition, not global chain3 assumptions.
-
-### M22d. Add synthetic generalization tests
-
-- In `xtask/src/lib.rs`, add test-only synthetic family definitions.
-- Prove that lookup, ordering, scaffold templating, and routing mismatch reporting all behave
-  correctly with 2+ registered families.
-- Keep the live chain3 contract tests intact.
-
-### M22e. Re-run the live proof
-
-- `cargo test -p xtask`
-- `cargo xtask family prove function.wrapper.pipeline.chain3.v1`
-- `cargo xtask family certify function.wrapper.pipeline.chain3.v1`
-
-## Failure Modes Registry
-
-| Codepath | Realistic failure | Test covers it? | Error handling? | Operator outcome |
-|---|---|---:|---:|---|
-| `family_harness()` | next family missing from registry | yes, required | yes | clear, actionable failure |
-| routing-order helper | second family renders wrong order or mismatch message | yes, required | partial until added | misleading certify failure if untested |
-| scaffold template | synthetic family inherits chain3 routing values | yes, required | no | silently wrong generated packet |
-| certify gate D | chain3 still passes but future family mismatch message is wrong | yes, required | partial | hard to debug certification failure |
-| docs workflow | maintainer skips registry edit because docs overclaim | no automation, doc review only | no | wasted time and false confidence |
-
-Critical gap rule: the scaffold-template spillover case is the one to fear. If a second family can
-generate a packet with chain3 routing values silently, that is a correctness bug, not a docs bug.
-
-## Worktree Parallelization Strategy
-
-### Dependency table
-
-| Step | Modules touched | Depends on |
-|---|---|---|
-| Narrow claim and registry contract | `semantic-families/`, `xtask/src/family/` | — |
-| Remove one-family assumptions | `xtask/src/family/` | registry contract |
-| Add synthetic generalization tests | `xtask/src/` | one-family assumption cleanup |
-| Re-run live chain3 proof | `xtask/`, `spec-core/`, `spec-cli/` via commands | tests |
-
-### Parallel lanes
-
-- Lane A: narrow claim docs
-- Lane B: registry contract + helper cleanup -> synthetic tests -> live proof
-
-### Execution order
-
-Launch Lane A after the registry contract is chosen. Lane B stays sequential because the same xtask
-module owns the whole blast radius.
-
-### Conflict flags
-
-Lane A and Lane B both conceptually touch workflow wording. Keep docs edits small and rebase after
-the xtask contract is settled.
+- Multi-kind family promotion for `data` or `sum`
+- CI workflow redesign
+- certification artifact schema redesign
+- generic registry abstraction beyond what this xtask family harness needs
 
 ## Green Gate
 
-M22 is green only if all of these are true:
+M22 is green only if all of the following are true:
 
 - docs say registry-first, not self-bootstrapping
-- one-family assumptions are removed from helper code
-- synthetic 2+ family xtask tests pass
+- `xtask/src/family/routing.rs` no longer assumes one family or one fixed width
+- scaffold/prove/certify all derive family-specific values from the harness contract
+- synthetic multi-family xtask tests pass
 - `cargo xtask family prove function.wrapper.pipeline.chain3.v1` passes
 - `cargo xtask family certify function.wrapper.pipeline.chain3.v1` passes
 
 ## Red Gate
 
-M22 is red if any of these are still true:
+M22 is red if any of the following remain true:
 
-- a future family still requires edits outside one explicit registry contract
-- routing helpers still assume registry length `== 1`
+- a future family still requires hidden edits outside one explicit xtask registry contract
+- routing helpers still encode registry length `== 1`
+- scaffold templates can spill chain3 routing data into another family shape
 - docs still imply arbitrary new-family bootstrap is already automated
-- chain3 proof regresses during hardening
+- chain3 prove/certify regresses during hardening
 
-## Decision Audit Trail
+## Review Status
 
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-|---|---|---|---|---|---|---|
-| 1 | CEO | Do not ship a second real family in M22 | auto-decided | completeness + minimal diff | Hardening truth first keeps the blast radius small and the milestone honest | "prove generalization" by mixing in new semantic breadth |
-| 2 | CEO | Keep orchestration truth in Rust registry | auto-decided | explicit over clever | The repo already has this pattern and it keeps command execution out of packet data | manifest-driven command orchestration |
-| 3 | CEO | Keep `family.toml` as validation data only | auto-decided | boring by default | Safer trust boundary and smaller diff | packet-owned suite selection |
-| 4 | Eng | Remove one-family helper assumptions | auto-decided | completeness | This is the concrete code smell behind the M22 premise | docs-only honesty fix |
-| 5 | Eng | Prove generalization with synthetic xtask tests | auto-decided | pragmatic | Gives real evidence without shipping fake family breadth | shipping an incomplete second family |
-| 6 | Eng | Keep chain3 as frozen live regression backstop | auto-decided | reversibility | Existing proof stays the canary while harness code changes | refactoring without end-to-end proof reruns |
-
-## Completion Summary
-
-- Step 0: Scope Challenge — scope reduced to harness hardening, docs honesty, and synthetic generalization proof
-- Architecture Review: 4 issues found, all resolved in-plan
-- Code Quality Review: 3 issues found, all resolved in-plan
-- Test Review: coverage diagram written, 9 required gaps identified
-- Performance Review: 2 issues found, both resolved in-plan
-- NOT in scope: written
-- What already exists: written
-- TODOS.md updates: 0 required for M22 plan approval
-- Failure modes: 1 critical gap flagged
-- Outside voice: skipped
-- Parallelization: 2 lanes, 1 parallel / 3 sequential stages
-- Lake Score: 6/6 recommendations chose the complete option inside the bounded blast radius
+This plan has already been pressure-tested for strategy and engineering shape. The purpose of this
+rewrite is to convert that review output into one implementation contract.
 
 ## GSTACK REVIEW REPORT
 
@@ -502,7 +517,7 @@ M22 is red if any of these are still true:
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | clear (manual) | integrity-first scope chosen, second real family deferred, docs claim narrowed |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clear (manual) | registry-first contract, 9 test obligations, 1 critical gap, chain3 proof preserved |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clear (manual) | registry-first contract, multi-family proof requirements, chain3 regression preserved |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | no UI scope |
 
 **UNRESOLVED:** 0
