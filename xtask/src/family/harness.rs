@@ -235,8 +235,20 @@ impl GateResults {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn family_harness(family: &FamilyId) -> Option<&'static FamilyHarness> {
-    FAMILY_REGISTRY
+    family_harness_in(registered_family_harnesses(), family)
+}
+
+pub(crate) fn registered_family_harnesses() -> &'static [FamilyHarness] {
+    &FAMILY_REGISTRY
+}
+
+pub(crate) fn family_harness_in<'registry>(
+    registry: &'registry [FamilyHarness],
+    family: &FamilyId,
+) -> Option<&'registry FamilyHarness> {
+    registry
         .iter()
         .find(|definition| definition.family == family.as_str())
 }
@@ -245,7 +257,15 @@ pub(crate) fn require_family_harness(
     family: &FamilyId,
     workflow: &'static str,
 ) -> Result<&'static FamilyHarness, XtaskError> {
-    family_harness(family).ok_or_else(|| {
+    require_family_harness_in(registered_family_harnesses(), family, workflow)
+}
+
+pub(crate) fn require_family_harness_in<'registry>(
+    registry: &'registry [FamilyHarness],
+    family: &FamilyId,
+    workflow: &'static str,
+) -> Result<&'registry FamilyHarness, XtaskError> {
+    family_harness_in(registry, family).ok_or_else(|| {
         XtaskError::NotImplemented(format!(
             "family `{}` is not registered for `{workflow}`; add an entry to `xtask/src/family/harness.rs` before running family new/prove/certify",
             family.as_str()
@@ -253,8 +273,15 @@ pub(crate) fn require_family_harness(
     })
 }
 
+#[allow(dead_code)]
 pub(crate) fn registered_harnesses_in_routing_order() -> Vec<&'static FamilyHarness> {
-    let mut harnesses = FAMILY_REGISTRY.iter().collect::<Vec<_>>();
+    registered_harnesses_in_routing_order_from(registered_family_harnesses())
+}
+
+pub(crate) fn registered_harnesses_in_routing_order_from(
+    registry: &[FamilyHarness],
+) -> Vec<&FamilyHarness> {
+    let mut harnesses = registry.iter().collect::<Vec<_>>();
     harnesses.sort_by_key(|definition| definition.routing.precedence);
     harnesses
 }

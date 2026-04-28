@@ -5,8 +5,9 @@ use std::fs;
 use std::path::Path;
 
 pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
-    let family = FamilyId::parse(raw_family)?;
-    let harness = require_family_harness(&family, "family new")?;
+    let requested_family = FamilyId::parse(raw_family)?;
+    let harness = require_family_harness(&requested_family, "family new")?;
+    let family = harness_family_id(harness);
     let paths = PacketPaths::new(workspace_root, family.clone());
     ensure_packet_path_safe(workspace_root, &paths.root)?;
 
@@ -122,6 +123,10 @@ fn write_file(path: &Path, contents: &str) -> Result<(), XtaskError> {
     })
 }
 
+fn harness_family_id(harness: &FamilyHarness) -> FamilyId {
+    FamilyId::parse(harness.family).expect("registered family harness ids must be valid")
+}
+
 fn candidate_template(family: &FamilyId, harness: &FamilyHarness) -> String {
     let aligned = starter_paths_for_bucket(harness, "aligned");
     let drift = starter_paths_for_bucket(harness, "drift");
@@ -130,37 +135,15 @@ fn candidate_template(family: &FamilyId, harness: &FamilyHarness) -> String {
     format!(
         "# {}\n\nSummary: TODO: replace with a one-line family summary.\n\n## Aligned\n\n{}\n\n## Drift\n\n{}\n\n## Under Specified\n\n{}\n\n## Unsupported Near Miss\n\n{}\n",
         family.as_str(),
-        aligned
-            .iter()
-            .map(|path| format!("- `{path}`"))
-            .collect::<Vec<_>>()
-            .join("\n"),
-        drift
-            .iter()
-            .map(|path| format!("- `{path}`"))
-            .collect::<Vec<_>>()
-            .join("\n"),
-        under_specified
-            .iter()
-            .map(|path| format!("- `{path}`"))
-            .collect::<Vec<_>>()
-            .join("\n"),
-        unsupported_near_miss
-            .iter()
-            .map(|path| format!("- `{path}`"))
-            .collect::<Vec<_>>()
-            .join("\n"),
+        render_markdown_path_list(&aligned),
+        render_markdown_path_list(&drift),
+        render_markdown_path_list(&under_specified),
+        render_markdown_path_list(&unsupported_near_miss),
     )
 }
 
 fn manifest_template(family: &FamilyId, harness: &FamilyHarness) -> String {
-    let must_not_shadow = harness
-        .routing
-        .must_not_shadow
-        .iter()
-        .map(|value| format!("  \"{value}\","))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let must_not_shadow = render_toml_string_array(harness.routing.must_not_shadow);
     format!(
         r#"schema_version = 1
 family = "{family_id}"
@@ -206,6 +189,22 @@ gate_d = true
         precedence = harness.routing.precedence,
         must_not_shadow = must_not_shadow,
     )
+}
+
+fn render_markdown_path_list(paths: &[String]) -> String {
+    paths
+        .iter()
+        .map(|path| format!("- `{path}`"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_toml_string_array(values: &[&str]) -> String {
+    values
+        .iter()
+        .map(|value| format!("  \"{value}\","))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn bucket_cargo_toml(family: &FamilyId, bucket: &str) -> String {

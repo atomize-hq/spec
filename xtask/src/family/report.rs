@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
 
-pub(crate) const REPORT_SCHEMA_VERSION: u64 = 2;
+pub(crate) const REPORT_SCHEMA_VERSION: u64 = 3;
 pub(crate) const MANIFEST_SCHEMA_VERSION: u64 = 1;
 pub(crate) const PROVE_ARTIFACT_NAME: &str = "prove.latest.json";
 pub(crate) const CERTIFY_ARTIFACT_NAME: &str = "certification.report.json";
@@ -145,11 +145,7 @@ impl CertificationReport {
                 .iter()
                 .all(|gate| self.gates.status(*gate).is_pass()),
         );
-        self.overall_status = PassFail::from_passed(
-            [GateId::GateA, GateId::GateB, GateId::GateC, GateId::GateD]
-                .into_iter()
-                .all(|gate| self.gates.status(gate).is_pass()),
-        );
+        self.overall_status = self.phase_status.clone();
     }
 }
 
@@ -451,11 +447,7 @@ fn normalize_report_for_write(
             .iter()
             .all(|gate| normalized.gates.status(*gate).is_pass()),
     );
-    normalized.overall_status = PassFail::from_passed(
-        [GateId::GateA, GateId::GateB, GateId::GateC, GateId::GateD]
-            .into_iter()
-            .all(|gate| normalized.gates.status(gate).is_pass()),
-    );
+    normalized.overall_status = normalized.phase_status.clone();
     normalized.schema_version = REPORT_SCHEMA_VERSION;
     for suite in &mut normalized.suites {
         suite.attested_tests.sort();
@@ -707,7 +699,7 @@ mod tests {
             vec![GateId::GateA, GateId::GateB, GateId::GateC]
         );
         assert_eq!(prove_report.phase_status, PassFail::Pass);
-        assert_eq!(prove_report.overall_status, PassFail::Fail);
+        assert_eq!(prove_report.overall_status, PassFail::Pass);
 
         let certify_report =
             normalize_report_for_write(Path::new("attempt-20260427.json"), &report).unwrap();

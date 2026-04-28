@@ -114,8 +114,14 @@ mod tests {
     use super::*;
     use crate::family::{
         certify,
-        harness::{CHAIN3_CERTIFY_SUITES, CHAIN3_PROVE_SUITES, family_harness},
+        harness::{
+            CHAIN3_CERTIFY_SUITES, CHAIN3_PROVE_SUITES, FamilyHarness, LockedManifestRouting,
+            ProveSuiteDefinition, ScaffoldDefinition, TERMINAL_UNSUPPORTED_CATCH_ALL,
+            family_harness, family_harness_in, registered_harnesses_in_routing_order_from,
+            require_family_harness_in,
+        },
         layout::validate_packet_layout,
+        manifest::Routing,
         manifest::parse_manifest_file,
         paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS},
         prove,
@@ -123,7 +129,11 @@ mod tests {
             CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME, PassFail,
             SuiteDefinition, certification_report_path, run_suite,
         },
-        routing::{CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, locked_routing_order_with_terminal},
+        routing::{
+            CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, ManifestRoutingIssue, RegistryRoutingIssue,
+            locked_manifest_routing_in, locked_routing_order_with_terminal,
+            locked_routing_order_with_terminal_from, routing_diagnostics_in,
+        },
         scaffold,
     };
     use spec_core::loader::load_file;
@@ -134,6 +144,89 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
+
+    const EMPTY_PROVE_SUITES: [ProveSuiteDefinition; 0] = [];
+    const EMPTY_CERTIFY_SUITES: [SuiteDefinition; 0] = [];
+    const SYNTHETIC_ALPHA_CASE_STEMS: [&str; 1] = ["alpha_wrapper"];
+    const SYNTHETIC_BETA_CASE_STEMS: [&str; 1] = ["beta_wrapper"];
+    const SYNTHETIC_GAMMA_CASE_STEMS: [&str; 1] = ["gamma_wrapper"];
+    const SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW: [&str; 3] = [
+        "legacy.alpha.v1",
+        "function.wrapper.pipeline.gamma.v1",
+        "legacy.beta.v1",
+    ];
+    const SYNTHETIC_ALPHA_MUST_NOT_SHADOW: [&str; 1] = ["function.wrapper.pipeline.gamma.v1"];
+    const SYNTHETIC_BETA_MUST_NOT_SHADOW: [&str; 2] = [
+        "function.wrapper.pipeline.alpha.v1",
+        "function.wrapper.pipeline.gamma.v1",
+    ];
+    const SYNTHETIC_BETA_MISSING_GAMMA_MUST_NOT_SHADOW: [&str; 1] =
+        ["function.wrapper.pipeline.alpha.v1"];
+    const SYNTHETIC_BETA_DUPLICATE_GAMMA_MUST_NOT_SHADOW: [&str; 3] = [
+        "function.wrapper.pipeline.alpha.v1",
+        "function.wrapper.pipeline.gamma.v1",
+        "function.wrapper.pipeline.gamma.v1",
+    ];
+    const SYNTHETIC_BETA_OUT_OF_ORDER_MUST_NOT_SHADOW: [&str; 2] = [
+        "function.wrapper.pipeline.gamma.v1",
+        "function.wrapper.pipeline.alpha.v1",
+    ];
+    const SYNTHETIC_BETA_UNSUPPORTED_BEFORE_GAMMA_MUST_NOT_SHADOW: [&str; 3] = [
+        "function.wrapper.pipeline.alpha.v1",
+        TERMINAL_UNSUPPORTED_CATCH_ALL,
+        "function.wrapper.pipeline.gamma.v1",
+    ];
+    const SYNTHETIC_BETA_DUPLICATE_UNSUPPORTED_MUST_NOT_SHADOW: [&str; 4] = [
+        "function.wrapper.pipeline.alpha.v1",
+        TERMINAL_UNSUPPORTED_CATCH_ALL,
+        "function.wrapper.pipeline.gamma.v1",
+        TERMINAL_UNSUPPORTED_CATCH_ALL,
+    ];
+    const SYNTHETIC_GAMMA_MUST_NOT_SHADOW: [&str; 1] = [TERMINAL_UNSUPPORTED_CATCH_ALL];
+    const SYNTHETIC_ALPHA_HARNESS: FamilyHarness = FamilyHarness {
+        family: "function.wrapper.pipeline.alpha.v1",
+        scaffold: ScaffoldDefinition {
+            unit_namespace: "alpha",
+            starter_case_stems: &SYNTHETIC_ALPHA_CASE_STEMS,
+        },
+        routing: LockedManifestRouting {
+            precedence: 20,
+            must_not_shadow: &SYNTHETIC_ALPHA_MUST_NOT_SHADOW,
+        },
+        prove_suites: &EMPTY_PROVE_SUITES,
+        certify_suites: &EMPTY_CERTIFY_SUITES,
+    };
+    const SYNTHETIC_BETA_HARNESS: FamilyHarness = FamilyHarness {
+        family: "function.wrapper.pipeline.beta.v1",
+        scaffold: ScaffoldDefinition {
+            unit_namespace: "beta",
+            starter_case_stems: &SYNTHETIC_BETA_CASE_STEMS,
+        },
+        routing: LockedManifestRouting {
+            precedence: 10,
+            must_not_shadow: &SYNTHETIC_BETA_MUST_NOT_SHADOW,
+        },
+        prove_suites: &EMPTY_PROVE_SUITES,
+        certify_suites: &EMPTY_CERTIFY_SUITES,
+    };
+    const SYNTHETIC_GAMMA_HARNESS: FamilyHarness = FamilyHarness {
+        family: "function.wrapper.pipeline.gamma.v1",
+        scaffold: ScaffoldDefinition {
+            unit_namespace: "gamma",
+            starter_case_stems: &SYNTHETIC_GAMMA_CASE_STEMS,
+        },
+        routing: LockedManifestRouting {
+            precedence: 30,
+            must_not_shadow: &SYNTHETIC_GAMMA_MUST_NOT_SHADOW,
+        },
+        prove_suites: &EMPTY_PROVE_SUITES,
+        certify_suites: &EMPTY_CERTIFY_SUITES,
+    };
+    const SYNTHETIC_MULTI_FAMILY_REGISTRY: [FamilyHarness; 3] = [
+        SYNTHETIC_ALPHA_HARNESS,
+        SYNTHETIC_GAMMA_HARNESS,
+        SYNTHETIC_BETA_HARNESS,
+    ];
 
     #[test]
     fn family_new_creates_locked_scaffold() {
@@ -195,14 +288,11 @@ mod tests {
     }
 
     #[test]
-    fn locked_routing_helper_covers_full_appendix_c_order() {
+    fn locked_routing_helper_uses_registered_families_plus_terminal() {
         assert_eq!(
             locked_routing_order_with_terminal(),
             [
                 "function.wrapper.pipeline.chain3.v1",
-                "function.wrapper.pipeline.v1",
-                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
-                "function.arithmetic_leaf.monotone_up.v1",
                 "unsupported.function.v1",
             ]
         );
@@ -268,10 +358,366 @@ mod tests {
         ] {
             let error = dispatch(temp_dir.path(), args).unwrap_err();
             assert!(
-                matches!(error, XtaskError::NotImplemented(ref message) if message.contains(family)),
+                matches!(error, XtaskError::NotImplemented(ref message)
+                    if message.contains(family)
+                        && message.contains("xtask/src/family/harness.rs")),
                 "unexpected error for `{family}`: {error:?}"
             );
         }
+    }
+
+    #[test]
+    fn synthetic_family_registry_supports_lookup_and_locked_manifest_routing() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let gamma = FamilyId::parse("function.wrapper.pipeline.gamma.v1").unwrap();
+        let delta = FamilyId::parse("function.wrapper.pipeline.delta.v1").unwrap();
+
+        assert_eq!(
+            family_harness_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &alpha)
+                .map(|harness| harness.family),
+            Some("function.wrapper.pipeline.alpha.v1")
+        );
+        assert_eq!(
+            family_harness_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &gamma)
+                .map(|harness| harness.family),
+            Some("function.wrapper.pipeline.gamma.v1")
+        );
+
+        let alpha_harness = require_family_harness_in(
+            &SYNTHETIC_MULTI_FAMILY_REGISTRY,
+            &alpha,
+            "synthetic coverage",
+        )
+        .unwrap();
+        assert_eq!(alpha_harness.routing.precedence, 20);
+        assert_eq!(
+            locked_manifest_routing_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &gamma)
+                .map(|routing| (routing.precedence, routing.must_not_shadow)),
+            Some((30, &SYNTHETIC_GAMMA_MUST_NOT_SHADOW[..]))
+        );
+        assert!(matches!(
+            require_family_harness_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &delta, "synthetic coverage"),
+            Err(XtaskError::NotImplemented(message))
+                if message.contains("xtask/src/family/harness.rs")
+                    && message.contains("family `function.wrapper.pipeline.delta.v1`")
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_order_uses_registered_families_plus_terminal() {
+        let routing_order =
+            registered_harnesses_in_routing_order_from(&SYNTHETIC_MULTI_FAMILY_REGISTRY)
+                .into_iter()
+                .map(|harness| harness.family)
+                .collect::<Vec<_>>();
+        assert_eq!(
+            routing_order,
+            [
+                "function.wrapper.pipeline.beta.v1",
+                "function.wrapper.pipeline.alpha.v1",
+                "function.wrapper.pipeline.gamma.v1",
+            ]
+        );
+        assert_ne!(
+            locked_routing_order_with_terminal_from(&SYNTHETIC_MULTI_FAMILY_REGISTRY),
+            locked_routing_order_with_terminal()
+        );
+        assert_eq!(
+            locked_routing_order_with_terminal_from(&SYNTHETIC_MULTI_FAMILY_REGISTRY),
+            [
+                "function.wrapper.pipeline.beta.v1",
+                "function.wrapper.pipeline.alpha.v1",
+                "function.wrapper.pipeline.gamma.v1",
+                TERMINAL_UNSUPPORTED_CATCH_ALL,
+            ]
+        );
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_ignore_unregistered_legacy_entries() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                    must_not_shadow: &SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW,
+                },
+                ..SYNTHETIC_ALPHA_HARNESS
+            },
+            SYNTHETIC_GAMMA_HARNESS,
+            SYNTHETIC_BETA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
+
+        assert!(diagnostics.manifest.passed);
+        assert!(diagnostics.registry.passed);
+    }
+
+    #[test]
+    fn synthetic_manifest_routing_diagnostics_reject_selected_family_unregistered_entry_mismatch() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let mismatched = Routing {
+            precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics =
+            routing_diagnostics_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &alpha, &mismatched);
+
+        assert!(!diagnostics.manifest.passed);
+        assert_eq!(
+            diagnostics.manifest.issue,
+            Some(ManifestRoutingIssue::MustNotShadowMismatch {
+                expected: SYNTHETIC_ALPHA_MUST_NOT_SHADOW
+                    .iter()
+                    .map(|family_id| (*family_id).to_string())
+                    .collect(),
+                found: SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW
+                    .iter()
+                    .map(|family_id| (*family_id).to_string())
+                    .collect(),
+            })
+        );
+        assert!(diagnostics.registry.passed);
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_duplicate_registered_family_ids() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let registry = [
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_ALPHA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::DuplicateRegisteredFamilyId {
+                family: "function.wrapper.pipeline.alpha.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_duplicate_precedence() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_ALPHA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
+
+        assert!(
+            diagnostics
+                .registry
+                .issues
+                .contains(&RegistryRoutingIssue::DuplicatePrecedence {
+                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                    families: vec![
+                        "function.wrapper.pipeline.beta.v1".to_string(),
+                        "function.wrapper.pipeline.alpha.v1".to_string(),
+                    ],
+                })
+        );
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_missing_registered_successor() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_MISSING_GAMMA_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_MISSING_GAMMA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::MissingRegisteredSuccessor {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+                successor: "function.wrapper.pipeline.gamma.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_duplicate_registered_successor() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_DUPLICATE_GAMMA_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_DUPLICATE_GAMMA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::DuplicateRegisteredSuccessor {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+                successor: "function.wrapper.pipeline.gamma.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_registered_successors_out_of_order() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_OUT_OF_ORDER_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_OUT_OF_ORDER_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::RegisteredSuccessorsOutOfOrder {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+                expected: vec![
+                    "function.wrapper.pipeline.alpha.v1".to_string(),
+                    "function.wrapper.pipeline.gamma.v1".to_string(),
+                ],
+                found: vec![
+                    "function.wrapper.pipeline.gamma.v1".to_string(),
+                    "function.wrapper.pipeline.alpha.v1".to_string(),
+                ],
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_unsupported_before_registered_successor() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_UNSUPPORTED_BEFORE_GAMMA_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_UNSUPPORTED_BEFORE_GAMMA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::UnsupportedBeforeRegisteredSuccessor {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_duplicate_unsupported_terminal() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_DUPLICATE_UNSUPPORTED_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_DUPLICATE_UNSUPPORTED_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::DuplicateUnsupportedTerminal {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+            }
+        ));
     }
 
     #[test]
@@ -582,9 +1028,15 @@ gate_d = true
 
         let report_path = paths.artifacts.join(PROVE_ARTIFACT_NAME);
         let report = read_report(&report_path);
+        assert_artifact_surface_matches_captured_chain3_baseline(
+            &report_path,
+            &report,
+            PROVE_ARTIFACT_NAME,
+        );
+        assert_eq!(report["schema_version"], 3);
         assert_required_gates(&report, &["A", "B", "C"]);
         assert_eq!(report["phase_status"], "pass");
-        assert_eq!(report["overall_status"], "fail");
+        assert_eq!(report["overall_status"], "pass");
         assert_eq!(report["gates"]["gate_a"]["status"], "pass");
         assert_eq!(report["gates"]["gate_b"]["status"], "pass");
         assert_eq!(report["gates"]["gate_c"]["status"], "pass");
@@ -617,6 +1069,7 @@ gate_d = true
             assert!(matches!(error, XtaskError::ProveSuiteFailure(_)));
 
             let report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
+            assert_eq!(report["schema_version"], 3);
             assert_eq!(report["phase_status"], "fail");
             assert_eq!(report["overall_status"], "fail");
             assert_eq!(report["gates"][failing_gate]["status"], "fail");
@@ -646,6 +1099,12 @@ gate_d = true
 
         let certification_report = certification_report_path(&paths);
         let report = read_report(&certification_report);
+        assert_artifact_surface_matches_captured_chain3_baseline(
+            &certification_report,
+            &report,
+            CERTIFY_ARTIFACT_NAME,
+        );
+        assert_eq!(report["schema_version"], 3);
         assert_required_gates(&report, &["A", "B", "C", "D"]);
         assert_eq!(report["phase_status"], "pass");
         assert_eq!(report["overall_status"], "pass");
@@ -654,13 +1113,78 @@ gate_d = true
         assert_report_status_invariants(&report);
         let attempts = attempt_reports(&paths);
         assert_eq!(attempts.len(), 1);
+        assert_attempt_artifact_name_matches_captured_baseline(&attempts[0]);
         let attempt = read_report(&attempts[0]);
+        assert_artifact_surface_matches_captured_chain3_baseline(
+            &attempts[0],
+            &attempt,
+            attempts[0]
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap(),
+        );
+        assert_eq!(attempt["schema_version"], 3);
         assert_required_gates(&attempt, &["A", "B", "C", "D"]);
         assert_report_status_invariants(&attempt);
     }
 
     #[test]
-    fn family_certify_routing_precedence_mismatch_fails_gate_d_without_failing_suites() {
+    fn family_certify_success_rewrites_prove_latest_with_truthful_v3_surface() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        seed_suite_sources(temp_dir.path(), true);
+
+        let runner = success_certify_runner();
+
+        certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+
+        let prove_report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
+        assert_eq!(prove_report["schema_version"], 3);
+        assert_required_gates(&prove_report, &["A", "B", "C"]);
+        assert_eq!(prove_report["phase_status"], "pass");
+        assert_eq!(prove_report["overall_status"], "pass");
+        assert_eq!(prove_report["gates"]["gate_d"]["status"], "fail");
+
+        let attempt = read_report(&attempt_reports(&paths)[0]);
+        assert_eq!(attempt["schema_version"], 3);
+        let certification = read_report(&certification_report_path(&paths));
+        assert_eq!(certification["schema_version"], 3);
+    }
+
+    #[test]
+    fn scaffold_manifest_routing_matches_selected_registered_family_values() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let expected = locked_manifest_routing_in(
+            &[*family_harness(&family).expect("chain3 harness should be registered")],
+            &family,
+        )
+        .expect("chain3 locked routing should exist");
+
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+
+        let manifest = parse_manifest_file(
+            &PacketPaths::new(temp_dir.path(), family.clone()).manifest,
+            &family,
+        )
+        .unwrap();
+        assert_eq!(manifest.routing.precedence, expected.precedence);
+        assert_eq!(
+            manifest.routing.must_not_shadow,
+            expected
+                .must_not_shadow
+                .iter()
+                .map(|family| family.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn family_certify_manifest_local_routing_mismatch_fails_gate_d_without_registry_failure() {
         let temp_dir = workspace_root();
         let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
         let paths = PacketPaths::new(temp_dir.path(), family.clone());
@@ -677,9 +1201,9 @@ gate_d = true
         let error =
             certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
 
-        assert!(
-            matches!(error, XtaskError::CertifySuiteFailure(message) if message.contains("certify gate failure: gate_d"))
-        );
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
+                if message.contains("manifest-local routing mismatch")
+                    && !message.contains("registry-global routing incoherence")));
         assert_eq!(
             fs::read_to_string(&cert_report_path).unwrap(),
             "{\"previous\":true}\n"
@@ -687,6 +1211,7 @@ gate_d = true
         let attempts = attempt_reports(&paths);
         assert_eq!(attempts.len(), 1);
         let attempt = read_report(&attempts[0]);
+        assert_eq!(attempt["schema_version"], 3);
         assert_required_gates(&attempt, &["A", "B", "C", "D"]);
         assert_eq!(attempt["overall_status"], "fail");
         assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
@@ -718,9 +1243,9 @@ gate_d = true
         let error =
             certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
 
-        assert!(
-            matches!(error, XtaskError::CertifySuiteFailure(message) if message.contains("certify gate failure: gate_d"))
-        );
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
+                if message.contains("manifest-local routing mismatch")
+                    && !message.contains("registry-global routing incoherence")));
         assert_eq!(
             fs::read_to_string(&cert_report_path).unwrap(),
             "{\"previous\":true}\n"
@@ -728,6 +1253,7 @@ gate_d = true
         let attempts = attempt_reports(&paths);
         assert_eq!(attempts.len(), 1);
         let attempt = read_report(&attempts[0]);
+        assert_eq!(attempt["schema_version"], 3);
         assert_required_gates(&attempt, &["A", "B", "C", "D"]);
         assert_eq!(attempt["overall_status"], "fail");
         assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
@@ -735,6 +1261,93 @@ gate_d = true
         assert_eq!(suites.len(), 5);
         assert!(suites.iter().all(|suite| suite["status"] == "pass"));
         assert_report_status_invariants(&attempt);
+    }
+
+    #[test]
+    fn family_certify_registry_global_routing_incoherence_fails_gate_d_without_manifest_mismatch() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        let chain3 = *family_harness(&family).unwrap();
+        let registry = [
+            chain3,
+            SYNTHETIC_BETA_HARNESS,
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        seed_suite_sources(temp_dir.path(), true);
+
+        let cert_report_path = certification_report_path(&paths);
+        write_string(&cert_report_path, "{\"previous\":true}\n");
+
+        let runner = success_certify_runner();
+        let error =
+            certify::run_with_runner_in(&registry, temp_dir.path(), family.as_str(), &runner)
+                .unwrap_err();
+
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
+                if message.contains("registry-global routing incoherence")
+                    && !message.contains("manifest-local routing mismatch")));
+        assert_eq!(
+            fs::read_to_string(&cert_report_path).unwrap(),
+            "{\"previous\":true}\n"
+        );
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt = read_report(&attempts[0]);
+        assert_eq!(attempt["schema_version"], 3);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
+        assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
+        let suites = attempt["suites"].as_array().unwrap();
+        assert_eq!(suites.len(), 5);
+        assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+    }
+
+    #[test]
+    fn family_certify_combined_manifest_and_registry_routing_failures_report_both_scopes() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        let chain3 = *family_harness(&family).unwrap();
+        let registry = [
+            chain3,
+            SYNTHETIC_BETA_HARNESS,
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        rewrite_manifest(&paths.manifest, "precedence = 1", "precedence = 2");
+        seed_suite_sources(temp_dir.path(), true);
+
+        let cert_report_path = certification_report_path(&paths);
+        write_string(&cert_report_path, "{\"previous\":true}\n");
+
+        let runner = success_certify_runner();
+        let error =
+            certify::run_with_runner_in(&registry, temp_dir.path(), family.as_str(), &runner)
+                .unwrap_err();
+
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
+                if message.contains("manifest-local routing mismatch")
+                    && message.contains("registry-global routing incoherence")));
+        assert_eq!(
+            fs::read_to_string(&cert_report_path).unwrap(),
+            "{\"previous\":true}\n"
+        );
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt = read_report(&attempts[0]);
+        assert_eq!(attempt["schema_version"], 3);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
+        assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
+        let suites = attempt["suites"].as_array().unwrap();
+        assert_eq!(suites.len(), 5);
+        assert!(suites.iter().all(|suite| suite["status"] == "pass"));
     }
 
     #[test]
@@ -1180,13 +1793,60 @@ gate_d = true
             }
         }
         if report["overall_status"] == "pass" {
-            for gate in ["gate_a", "gate_b", "gate_c", "gate_d"] {
+            for gate in &required_gates {
                 assert_eq!(
                     report["gates"][gate]["status"], "pass",
                     "overall_status=pass requires `{gate}` to pass"
                 );
             }
         }
+    }
+
+    fn assert_artifact_surface_matches_captured_chain3_baseline(
+        path: &Path,
+        report: &serde_json::Value,
+        expected_file_name: &str,
+    ) {
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some(expected_file_name)
+        );
+        let mut actual_keys = report
+            .as_object()
+            .expect("report should be a JSON object")
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        actual_keys.sort_unstable();
+
+        let mut expected_keys = vec![
+            "artifact_kind",
+            "family",
+            "fixture_digests",
+            "gates",
+            "generated_at",
+            "git_commit_sha",
+            "manifest_schema_version",
+            "overall_status",
+            "phase_status",
+            "required_gates",
+            "rust_toolchain",
+            "schema_version",
+            "suites",
+        ];
+        expected_keys.sort_unstable();
+
+        assert_eq!(actual_keys, expected_keys);
+    }
+
+    fn assert_attempt_artifact_name_matches_captured_baseline(path: &Path) {
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("attempt artifact should have a file name");
+        assert!(file_name.starts_with("attempt-"));
+        assert!(file_name.ends_with(".json"));
+        assert_ne!(file_name, "attempt-.json");
     }
 
     fn expected_suite_test_names(suite: SuiteDefinition) -> Vec<String> {

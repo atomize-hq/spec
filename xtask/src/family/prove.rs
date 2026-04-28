@@ -1,5 +1,7 @@
 use crate::XtaskError;
-use crate::family::harness::{FamilyHarness, GateResults, require_family_harness};
+use crate::family::harness::{
+    FamilyHarness, GateResults, registered_family_harnesses, require_family_harness_in,
+};
 use crate::family::layout::validate_packet_layout;
 use crate::family::manifest::{FamilyManifest, parse_manifest_file};
 use crate::family::paths::{FamilyId, PacketPaths, ensure_packet_path_safe};
@@ -23,7 +25,7 @@ pub(crate) enum ProveOutcome {
 #[derive(Debug, Clone)]
 pub(crate) struct ProveExecution {
     pub family: FamilyId,
-    pub harness: &'static FamilyHarness,
+    pub harness: FamilyHarness,
     pub manifest: Option<FamilyManifest>,
     pub paths: PacketPaths,
     pub report: CertificationReport,
@@ -55,8 +57,22 @@ pub(crate) fn execute<R: CommandRunner>(
     raw_family: &str,
     runner: &R,
 ) -> Result<ProveExecution, XtaskError> {
+    execute_in(
+        registered_family_harnesses(),
+        workspace_root,
+        raw_family,
+        runner,
+    )
+}
+
+pub(crate) fn execute_in<R: CommandRunner>(
+    registry: &[FamilyHarness],
+    workspace_root: &Path,
+    raw_family: &str,
+    runner: &R,
+) -> Result<ProveExecution, XtaskError> {
     let family = FamilyId::parse(raw_family)?;
-    let harness = require_family_harness(&family, "family prove")?;
+    let harness = *require_family_harness_in(registry, &family, "family prove")?;
     let paths = PacketPaths::new(workspace_root, family.clone());
     let mut report = crate::family::report::build_report(workspace_root, &family, runner);
 

@@ -1,11 +1,13 @@
 use crate::XtaskError;
-use crate::family::harness::GateResults;
+use crate::family::harness::{FamilyHarness, GateResults, registered_family_harnesses};
 use crate::family::prove;
 use crate::family::report::{
     ArtifactKind, GateId, SystemRunner, certification_report_path, certify_attempt_path,
     failed_suite_names, refresh_generated_at, run_suite, set_gates, set_overall, write_report,
 };
-use crate::family::routing::manifest_routing_mismatch_message;
+use crate::family::routing::{
+    ManifestRoutingIssue, RegistryRoutingIssue, RoutingDiagnostics, routing_diagnostics_in,
+};
 use std::path::Path;
 
 pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
@@ -17,7 +19,21 @@ pub(crate) fn run_with_runner<R: crate::family::report::CommandRunner>(
     raw_family: &str,
     runner: &R,
 ) -> Result<(), XtaskError> {
-    let prove_execution = match prove::execute(workspace_root, raw_family, runner) {
+    run_with_runner_in(
+        registered_family_harnesses(),
+        workspace_root,
+        raw_family,
+        runner,
+    )
+}
+
+pub(crate) fn run_with_runner_in<R: crate::family::report::CommandRunner>(
+    registry: &[FamilyHarness],
+    workspace_root: &Path,
+    raw_family: &str,
+    runner: &R,
+) -> Result<(), XtaskError> {
+    let prove_execution = match prove::execute_in(registry, workspace_root, raw_family, runner) {
         Ok(execution) => execution,
         Err(error @ XtaskError::InvalidInput(_)) => return Err(error),
         Err(error @ XtaskError::WriteFailure(_)) => {
@@ -55,11 +71,13 @@ pub(crate) fn run_with_runner<R: crate::family::report::CommandRunner>(
             .copied()
             .map(|suite| run_suite(workspace_root, runner, suite))
             .collect::<Vec<_>>();
-        let routing_mismatch = manifest_routing_mismatch_message(&family, &manifest.routing);
+        let diagnostics = routing_diagnostics_in(registry, &family, &manifest.routing);
         let mut gates = GateResults::from_report(&report);
         gates.set(
             GateId::GateD,
-            extra_suites.iter().all(|suite| suite.status.is_pass()) && routing_mismatch.is_none(),
+            extra_suites.iter().all(|suite| suite.status.is_pass())
+                && diagnostics.manifest.passed
+                && diagnostics.registry.passed,
         );
         report.suites.extend(extra_suites);
         set_gates(
@@ -82,10 +100,8 @@ pub(crate) fn run_with_runner<R: crate::family::report::CommandRunner>(
                 )
             } else {
                 format!(
-                    "certify gate failure: gate_d{}",
-                    routing_mismatch
-                        .map(|message| format!(" ({message})"))
-                        .unwrap_or_default()
+                    "certify gate failure: gate_d ({})",
+                    format_routing_diagnostics(&diagnostics)
                 )
             }));
         }
@@ -114,4 +130,74 @@ pub(crate) fn run_with_runner<R: crate::family::report::CommandRunner>(
     write_report(&certification_report_path(&paths), &report)
         .map_err(|error| XtaskError::CertifyArtifactWriteFailure(error.to_string()))?;
     Ok(())
+}
+
+fn format_routing_diagnostics(diagnostics: &RoutingDiagnostics) -> String {
+    match (diagnostics.manifest.passed, diagnostics.registry.passed) {
+        (false, true) => format!(
+            "manifest-local routing mismatch: {}",
+            format_manifest_issue(diagnostics.manifest.issue.as_ref())
+        ),
+        (true, false) => format!(
+            "registry-global routing incoherence: {}",
+            format_registry_issues(&diagnostics.registry.issues)
+        ),
+        (false, false) => format!(
+            "manifest-local routing mismatch: {}; registry-global routing incoherence: {}",
+            format_manifest_issue(diagnostics.manifest.issue.as_ref()),
+            format_registry_issues(&diagnostics.registry.issues)
+        ),
+        (true, true) => "unexpected routing diagnostic success".to_string(),
+    }
+}
+
+fn format_manifest_issue(issue: Option<&ManifestRoutingIssue>) -> String {
+    match issue {
+        Some(ManifestRoutingIssue::UnknownFamily) => "family is not registered".to_string(),
+        Some(ManifestRoutingIssue::PrecedenceMismatch { expected, found }) => {
+            format!("expected precedence {expected}, found {found}")
+        }
+        Some(ManifestRoutingIssue::MustNotShadowMismatch { expected, found }) => {
+            format!("expected must_not_shadow {:?}, found {:?}", expected, found)
+        }
+        None => "unknown manifest routing mismatch".to_string(),
+    }
+}
+
+fn format_registry_issues(issues: &[RegistryRoutingIssue]) -> String {
+    issues
+        .iter()
+        .map(|issue| match issue {
+            RegistryRoutingIssue::DuplicateRegisteredFamilyId { family } => {
+                format!("duplicate registered family id `{family}`")
+            }
+            RegistryRoutingIssue::DuplicatePrecedence {
+                precedence,
+                families,
+            } => format!("duplicate precedence {precedence} shared by {:?}", families),
+            RegistryRoutingIssue::MissingRegisteredSuccessor { family, successor } => {
+                format!("`{family}` is missing registered successor `{successor}`")
+            }
+            RegistryRoutingIssue::DuplicateRegisteredSuccessor { family, successor } => {
+                format!("`{family}` lists registered successor `{successor}` more than once")
+            }
+            RegistryRoutingIssue::RegisteredSuccessorsOutOfOrder {
+                family,
+                expected,
+                found,
+            } => format!(
+                "`{family}` expected registered successors {:?}, found {:?}",
+                expected, found
+            ),
+            RegistryRoutingIssue::UnsupportedBeforeRegisteredSuccessor { family } => format!(
+                "`{family}` places `{}` before a registered successor",
+                crate::family::harness::TERMINAL_UNSUPPORTED_CATCH_ALL
+            ),
+            RegistryRoutingIssue::DuplicateUnsupportedTerminal { family } => format!(
+                "`{family}` lists `{}` more than once",
+                crate::family::harness::TERMINAL_UNSUPPORTED_CATCH_ALL
+            ),
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- **Semantic-family artifact schema is now v3** — `prove.latest.json`, certify attempts, and `certification.report.json` now write `schema_version = 3`, and prove `overall_status` reflects only that artifact's `required_gates` instead of implicitly failing on `gate_d`.
+- **xtask routing diagnostics now distinguish packet-local and registry-global truth** — selected-family manifest routing still requires exact equality with its locked harness entry, while registry-global coherence checks only registered families plus terminal `unsupported.function.v1`.
+
+### Fixed
+
+- **`prove.latest.json` no longer overstates failure on successful prove runs** — a passing prove artifact can now honestly serialize `overall_status = "pass"` even when `gate_d` remains informationally `fail`.
+
 ## 0.13.0 - 2026-04-26
 
 ### Added

@@ -100,7 +100,7 @@
       "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-04-28T00:09:25Z",
+  "generated_at": "2026-04-28T11:13:31Z",
   "source_file": "examples/ecommerce/units/pricing/checkout_quote.unit.spec",
   "evidence": {
     "build_status": "pass",
