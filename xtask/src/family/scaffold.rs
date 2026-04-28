@@ -1,11 +1,12 @@
 use crate::XtaskError;
+use crate::family::harness::{FamilyHarness, require_family_harness};
 use crate::family::paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS, ensure_packet_path_safe};
-use crate::family::routing::{CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE};
 use std::fs;
 use std::path::Path;
 
 pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
     let family = FamilyId::parse(raw_family)?;
+    let harness = require_family_harness(&family, "family new")?;
     let paths = PacketPaths::new(workspace_root, family.clone());
     ensure_packet_path_safe(workspace_root, &paths.root)?;
 
@@ -47,8 +48,8 @@ pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
         ))
     })?;
 
-    write_file(&paths.candidate, &candidate_template(&family))?;
-    write_file(&paths.manifest, &manifest_template(&family))?;
+    write_file(&paths.candidate, &candidate_template(&family, harness))?;
+    write_file(&paths.manifest, &manifest_template(&family, harness))?;
     fs::create_dir(&paths.fixtures).map_err(|error| {
         XtaskError::WriteFailure(format!(
             "failed to create fixtures directory `{}`: {error}",
@@ -57,13 +58,18 @@ pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
     })?;
 
     for bucket in REQUIRED_BUCKETS {
-        create_bucket(&paths, &family, bucket)?;
+        create_bucket(&paths, &family, harness, bucket)?;
     }
 
     Ok(())
 }
 
-fn create_bucket(paths: &PacketPaths, family: &FamilyId, bucket: &str) -> Result<(), XtaskError> {
+fn create_bucket(
+    paths: &PacketPaths,
+    family: &FamilyId,
+    harness: &FamilyHarness,
+    bucket: &str,
+) -> Result<(), XtaskError> {
     let bucket_root = paths.fixtures.join(bucket);
     fs::create_dir(&bucket_root).map_err(|error| {
         XtaskError::WriteFailure(format!(
@@ -77,10 +83,18 @@ fn create_bucket(paths: &PacketPaths, family: &FamilyId, bucket: &str) -> Result
             bucket_root.join("src").display()
         ))
     })?;
-    fs::create_dir_all(bucket_root.join("units/pricing")).map_err(|error| {
+    fs::create_dir_all(
+        bucket_root
+            .join("units")
+            .join(harness.scaffold.unit_namespace),
+    )
+    .map_err(|error| {
         XtaskError::WriteFailure(format!(
             "failed to create bucket units directory `{}`: {error}",
-            bucket_root.join("units/pricing").display()
+            bucket_root
+                .join("units")
+                .join(harness.scaffold.unit_namespace)
+                .display()
         ))
     })?;
 
@@ -89,8 +103,14 @@ fn create_bucket(paths: &PacketPaths, family: &FamilyId, bucket: &str) -> Result
         &bucket_cargo_toml(family, bucket),
     )?;
     write_file(&bucket_root.join("src/main.rs"), bucket_main_rs())?;
-    for (filename, contents) in starter_unit_specs(bucket) {
-        write_file(&bucket_root.join("units/pricing").join(filename), &contents)?;
+    for (filename, contents) in starter_unit_specs(harness, bucket) {
+        write_file(
+            &bucket_root
+                .join("units")
+                .join(harness.scaffold.unit_namespace)
+                .join(filename),
+            &contents,
+        )?;
     }
 
     Ok(())
@@ -102,11 +122,11 @@ fn write_file(path: &Path, contents: &str) -> Result<(), XtaskError> {
     })
 }
 
-fn candidate_template(family: &FamilyId) -> String {
-    let aligned = starter_paths_for_bucket("aligned");
-    let drift = starter_paths_for_bucket("drift");
-    let under_specified = starter_paths_for_bucket("under_specified");
-    let unsupported_near_miss = starter_paths_for_bucket("unsupported_near_miss");
+fn candidate_template(family: &FamilyId, harness: &FamilyHarness) -> String {
+    let aligned = starter_paths_for_bucket(harness, "aligned");
+    let drift = starter_paths_for_bucket(harness, "drift");
+    let under_specified = starter_paths_for_bucket(harness, "under_specified");
+    let unsupported_near_miss = starter_paths_for_bucket(harness, "unsupported_near_miss");
     format!(
         "# {}\n\nSummary: TODO: replace with a one-line family summary.\n\n## Aligned\n\n{}\n\n## Drift\n\n{}\n\n## Under Specified\n\n{}\n\n## Unsupported Near Miss\n\n{}\n",
         family.as_str(),
@@ -133,8 +153,10 @@ fn candidate_template(family: &FamilyId) -> String {
     )
 }
 
-fn manifest_template(family: &FamilyId) -> String {
-    let must_not_shadow = CHAIN3_MUST_NOT_SHADOW
+fn manifest_template(family: &FamilyId, harness: &FamilyHarness) -> String {
+    let must_not_shadow = harness
+        .routing
+        .must_not_shadow
         .iter()
         .map(|value| format!("  \"{value}\","))
         .collect::<Vec<_>>()
@@ -181,7 +203,7 @@ gate_c = true
 gate_d = true
 "#,
         family_id = family.as_str(),
-        precedence = CHAIN3_PRECEDENCE,
+        precedence = harness.routing.precedence,
         must_not_shadow = must_not_shadow,
     )
 }
@@ -198,17 +220,22 @@ fn bucket_main_rs() -> &'static str {
     "mod generated;\npub use generated::*;\n\nfn main() {}\n"
 }
 
-fn starter_paths_for_bucket(bucket: &str) -> [String; 4] {
-    [
-        format!("fixtures/{bucket}/units/pricing/pricing_discount_leaf_{bucket}.unit.spec"),
-        format!("fixtures/{bucket}/units/pricing/pricing_tax_leaf_{bucket}.unit.spec"),
-        format!("fixtures/{bucket}/units/pricing/pricing_total_wrapper_{bucket}.unit.spec"),
-        format!("fixtures/{bucket}/units/pricing/checkout_chain3_{bucket}.unit.spec"),
-    ]
+fn starter_paths_for_bucket(harness: &FamilyHarness, bucket: &str) -> Vec<String> {
+    harness
+        .scaffold
+        .starter_case_stems
+        .iter()
+        .map(|stem| {
+            format!(
+                "fixtures/{bucket}/units/{namespace}/{stem}_{bucket}.unit.spec",
+                namespace = harness.scaffold.unit_namespace
+            )
+        })
+        .collect()
 }
 
-fn starter_unit_specs(bucket: &str) -> Vec<(String, String)> {
-    starter_paths_for_bucket(bucket)
+fn starter_unit_specs(harness: &FamilyHarness, bucket: &str) -> Vec<(String, String)> {
+    starter_paths_for_bucket(harness, bucket)
         .into_iter()
         .map(|path| {
             let filename = path
@@ -216,7 +243,11 @@ fn starter_unit_specs(bucket: &str) -> Vec<(String, String)> {
                 .next()
                 .expect("starter path must end in a filename")
                 .to_string();
-            let unit_id = format!("pricing/{}", filename.trim_end_matches(".unit.spec"));
+            let unit_id = format!(
+                "{}/{}",
+                harness.scaffold.unit_namespace,
+                filename.trim_end_matches(".unit.spec")
+            );
             let callable_name = unit_id
                 .split_once('/')
                 .map(|(_, name)| name)

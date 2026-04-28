@@ -1,4 +1,5 @@
 pub mod certify;
+pub mod harness;
 pub mod layout;
 pub mod manifest;
 pub mod paths;

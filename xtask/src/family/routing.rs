@@ -1,46 +1,38 @@
+use crate::family::harness::{
+    LockedManifestRouting, TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness,
+    registered_harnesses_in_routing_order,
+};
 use crate::family::manifest::Routing;
 use crate::family::paths::FamilyId;
 
-pub const ORDERED_SUPPORTED_ROUTING: [&str; 4] = [
-    "function.wrapper.pipeline.chain3.v1",
-    "function.wrapper.pipeline.v1",
-    "function.arithmetic_leaf.monotone_down_nonnegative.v1",
-    "function.arithmetic_leaf.monotone_up.v1",
-];
-
-pub const TERMINAL_UNSUPPORTED_CATCH_ALL: &str = "unsupported.function.v1";
-
-pub const CHAIN3_PRECEDENCE: u64 = 1;
-pub const CHAIN3_MUST_NOT_SHADOW: [&str; 3] = [
-    "function.wrapper.pipeline.v1",
-    "function.arithmetic_leaf.monotone_down_nonnegative.v1",
-    "function.arithmetic_leaf.monotone_up.v1",
-];
-
-#[derive(Debug, Clone, Copy)]
-pub struct LockedManifestRouting {
-    pub precedence: u64,
-    pub must_not_shadow: &'static [&'static str],
-}
+#[allow(dead_code)]
+pub const CHAIN3_PRECEDENCE: u64 = crate::family::harness::CHAIN3_PRECEDENCE;
+#[allow(dead_code)]
+pub const CHAIN3_MUST_NOT_SHADOW: [&str; 3] = crate::family::harness::CHAIN3_MUST_NOT_SHADOW;
 
 pub fn locked_routing_order_with_terminal() -> [&'static str; 5] {
+    let harnesses = registered_harnesses_in_routing_order();
+    debug_assert_eq!(
+        harnesses.len(),
+        1,
+        "locked routing helper assumes one family"
+    );
+    debug_assert_eq!(
+        harnesses[0].routing.must_not_shadow.len(),
+        3,
+        "locked routing helper assumes three must_not_shadow entries",
+    );
     [
-        ORDERED_SUPPORTED_ROUTING[0],
-        ORDERED_SUPPORTED_ROUTING[1],
-        ORDERED_SUPPORTED_ROUTING[2],
-        ORDERED_SUPPORTED_ROUTING[3],
+        harnesses[0].family,
+        harnesses[0].routing.must_not_shadow[0],
+        harnesses[0].routing.must_not_shadow[1],
+        harnesses[0].routing.must_not_shadow[2],
         TERMINAL_UNSUPPORTED_CATCH_ALL,
     ]
 }
 
 pub fn locked_manifest_routing(family: &FamilyId) -> Option<LockedManifestRouting> {
-    match family.as_str() {
-        "function.wrapper.pipeline.chain3.v1" => Some(LockedManifestRouting {
-            precedence: CHAIN3_PRECEDENCE,
-            must_not_shadow: &CHAIN3_MUST_NOT_SHADOW,
-        }),
-        _ => None,
-    }
+    family_harness(family).map(|harness| harness.routing)
 }
 
 pub fn manifest_matches_locked_routing(family: &FamilyId, routing: &Routing) -> bool {

@@ -114,13 +114,14 @@ mod tests {
     use super::*;
     use crate::family::{
         certify,
+        harness::{CHAIN3_CERTIFY_SUITES, CHAIN3_PROVE_SUITES, family_harness},
         layout::validate_packet_layout,
         manifest::parse_manifest_file,
         paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS},
         prove,
         report::{
-            CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME,
-            certification_report_path,
+            CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME, PassFail,
+            SuiteDefinition, certification_report_path, run_suite,
         },
         routing::{CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, locked_routing_order_with_terminal},
         scaffold,
@@ -205,6 +206,72 @@ mod tests {
                 "unsupported.function.v1",
             ]
         );
+    }
+
+    #[test]
+    fn chain3_harness_contract_is_locked() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.chain3.v1";
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).expect("chain3 harness should be registered");
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+        assert_eq!(CHAIN3_PROVE_SUITES.len(), 3);
+        assert_eq!(CHAIN3_CERTIFY_SUITES.len(), 2);
+        assert_eq!(
+            harness
+                .prove_suites
+                .iter()
+                .map(|definition| definition.gate)
+                .collect::<Vec<_>>(),
+            vec![
+                crate::family::report::GateId::GateA,
+                crate::family::report::GateId::GateC,
+                crate::family::report::GateId::GateB,
+            ]
+        );
+        assert_eq!(
+            CHAIN3_PROVE_SUITES
+                .iter()
+                .map(|suite| suite.name)
+                .collect::<Vec<_>>(),
+            vec![
+                "spec-core:m21_chain3_classifier_",
+                "spec-cli:m21_chain3_truth_surface_",
+                "spec-cli:m21_chain3_corpus_",
+            ]
+        );
+        assert_eq!(
+            CHAIN3_CERTIFY_SUITES
+                .iter()
+                .map(|suite| suite.name)
+                .collect::<Vec<_>>(),
+            vec![
+                "spec-core:m21_chain3_regression_",
+                "spec-cli:m21_chain3_regression_",
+            ]
+        );
+    }
+
+    #[test]
+    fn family_commands_reject_unregistered_families_as_not_implemented() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.chain4.v1";
+
+        for args in [
+            vec!["xtask", "family", "new", family],
+            vec!["xtask", "family", "prove", family],
+            vec!["xtask", "family", "certify", family],
+        ] {
+            let error = dispatch(temp_dir.path(), args).unwrap_err();
+            assert!(
+                matches!(error, XtaskError::NotImplemented(ref message) if message.contains(family)),
+                "unexpected error for `{family}`: {error:?}"
+            );
+        }
     }
 
     #[test]
@@ -505,70 +572,62 @@ gate_d = true
         seed_valid_cases(&paths);
         seed_suite_sources(temp_dir.path(), false);
 
-        let runner = FakeRunner::new(&[
-            command_output(&["git", "rev-parse", "HEAD"], 0, "abc123\n"),
-            command_output(&["rustc", "--version"], 0, "rustc 1.89.0\n"),
-            command_output(
-                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
-                0,
-                "2026-04-27T18:00:00Z\n",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-core",
-                    "m21_chain3_classifier_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "cli",
-                    "m21_chain3_truth_surface_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "m14_regressions",
-                    "m21_chain3_corpus_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
+        let runner = prove_runner_with_suite_outputs(&[
+            normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[0])),
+            normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[1])),
+            normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
         ]);
 
         prove::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
 
         let report_path = paths.artifacts.join(PROVE_ARTIFACT_NAME);
-        let report: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(report_path).unwrap()).unwrap();
-        assert_eq!(report["overall_status"], "pass");
+        let report = read_report(&report_path);
+        assert_required_gates(&report, &["A", "B", "C"]);
+        assert_eq!(report["phase_status"], "pass");
+        assert_eq!(report["overall_status"], "fail");
         assert_eq!(report["gates"]["gate_a"]["status"], "pass");
         assert_eq!(report["gates"]["gate_b"]["status"], "pass");
         assert_eq!(report["gates"]["gate_c"]["status"], "pass");
         assert_eq!(report["gates"]["gate_d"]["status"], "fail");
         assert_eq!(report["suites"].as_array().unwrap().len(), 3);
+        assert_report_status_invariants(&report);
+    }
+
+    #[test]
+    fn family_prove_requires_attested_stdout_and_keeps_gate_mapping_explicit() {
+        for (failing_index, failing_gate) in [(0, "gate_a"), (1, "gate_c"), (2, "gate_b")] {
+            let temp_dir = workspace_root();
+            let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+            let paths = PacketPaths::new(temp_dir.path(), family.clone());
+            scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+            seed_valid_manifest(&paths.manifest, family.as_str());
+            seed_valid_cases(&paths);
+            seed_suite_sources(temp_dir.path(), false);
+
+            let mut suite_outputs = vec![
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[0])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[1])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
+            ];
+            suite_outputs[failing_index] = String::new();
+
+            let runner = prove_runner_with_suite_outputs(&suite_outputs);
+            let error =
+                prove::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+            assert!(matches!(error, XtaskError::ProveSuiteFailure(_)));
+
+            let report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
+            assert_eq!(report["phase_status"], "fail");
+            assert_eq!(report["overall_status"], "fail");
+            assert_eq!(report["gates"][failing_gate]["status"], "fail");
+            for gate in ["gate_a", "gate_b", "gate_c"] {
+                if gate != failing_gate {
+                    assert_eq!(report["gates"][gate]["status"], "pass");
+                }
+            }
+            assert_eq!(report["gates"]["gate_d"]["status"], "fail");
+            assert_report_status_invariants(&report);
+        }
     }
 
     #[test]
@@ -581,100 +640,23 @@ gate_d = true
         seed_valid_cases(&paths);
         seed_suite_sources(temp_dir.path(), true);
 
-        let runner = FakeRunner::new(&[
-            command_output(&["git", "rev-parse", "HEAD"], 0, "abc123\n"),
-            command_output(&["rustc", "--version"], 0, "rustc 1.89.0\n"),
-            command_output(
-                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
-                0,
-                "2026-04-27T18:00:00Z\n",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-core",
-                    "m21_chain3_classifier_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "cli",
-                    "m21_chain3_truth_surface_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "m14_regressions",
-                    "m21_chain3_corpus_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
-                0,
-                "2026-04-27T18:10:00Z\n",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-core",
-                    "m21_chain3_regression_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "m14_regressions",
-                    "m21_chain3_regression_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-        ]);
+        let runner = success_certify_runner();
 
         certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
 
         let certification_report = certification_report_path(&paths);
-        let report: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(certification_report).unwrap()).unwrap();
+        let report = read_report(&certification_report);
+        assert_required_gates(&report, &["A", "B", "C", "D"]);
+        assert_eq!(report["phase_status"], "pass");
         assert_eq!(report["overall_status"], "pass");
         assert_eq!(report["gates"]["gate_d"]["status"], "pass");
         assert_eq!(report["suites"].as_array().unwrap().len(), 5);
+        assert_report_status_invariants(&report);
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt = read_report(&attempts[0]);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
+        assert_report_status_invariants(&attempt);
     }
 
     #[test]
@@ -704,13 +686,14 @@ gate_d = true
         );
         let attempts = attempt_reports(&paths);
         assert_eq!(attempts.len(), 1);
-        let attempt: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&attempts[0]).unwrap()).unwrap();
+        let attempt = read_report(&attempts[0]);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
         assert_eq!(attempt["overall_status"], "fail");
         assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
         let suites = attempt["suites"].as_array().unwrap();
         assert_eq!(suites.len(), 5);
         assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+        assert_report_status_invariants(&attempt);
     }
 
     #[test]
@@ -744,13 +727,14 @@ gate_d = true
         );
         let attempts = attempt_reports(&paths);
         assert_eq!(attempts.len(), 1);
-        let attempt: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&attempts[0]).unwrap()).unwrap();
+        let attempt = read_report(&attempts[0]);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
         assert_eq!(attempt["overall_status"], "fail");
         assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
         let suites = attempt["suites"].as_array().unwrap();
         assert_eq!(suites.len(), 5);
         assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+        assert_report_status_invariants(&attempt);
     }
 
     #[test]
@@ -761,105 +745,44 @@ gate_d = true
         scaffold::run(temp_dir.path(), family.as_str()).unwrap();
         seed_valid_manifest(&paths.manifest, family.as_str());
         seed_valid_cases(&paths);
-        seed_suite_sources(temp_dir.path(), false);
+        seed_suite_sources(temp_dir.path(), true);
+
+        let success_runner = success_certify_runner();
+        certify::run_with_runner(temp_dir.path(), family.as_str(), &success_runner).unwrap();
 
         let cert_report_path = certification_report_path(&paths);
-        write_string(&cert_report_path, "{\"previous\":true}\n");
+        let previous_bytes = fs::read(&cert_report_path).unwrap();
+        let attempts_before = attempt_reports(&paths);
+        assert_eq!(attempts_before.len(), 1);
 
-        let runner = FakeRunner::new(&[
-            command_output(&["git", "rev-parse", "HEAD"], 0, "abc123\n"),
-            command_output(&["rustc", "--version"], 0, "rustc 1.89.0\n"),
-            command_output(
-                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
-                0,
-                "2026-04-27T18:00:00Z\n",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-core",
-                    "m21_chain3_classifier_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "cli",
-                    "m21_chain3_truth_surface_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "m14_regressions",
-                    "m21_chain3_corpus_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
-                0,
-                "2026-04-27T18:20:00Z\n",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-core",
-                    "m21_chain3_regression_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "m14_regressions",
-                    "m21_chain3_regression_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-        ]);
-
-        let error =
-            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
-        assert!(matches!(error, XtaskError::CertifySuiteFailure(_)));
-        assert_eq!(
-            fs::read_to_string(cert_report_path).unwrap(),
-            "{\"previous\":true}\n"
+        let failing_runner = certify_runner_with_outputs(
+            &[
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[0])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[1])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_CERTIFY_SUITES[0])),
+                String::new(),
+            ],
+            "2026-04-27T18:20:00Z\n",
         );
-        assert_eq!(fs::read_dir(&paths.artifacts).unwrap().count(), 3);
+
+        let error = certify::run_with_runner(temp_dir.path(), family.as_str(), &failing_runner)
+            .unwrap_err();
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(_)));
+        assert_eq!(fs::read(&cert_report_path).unwrap(), previous_bytes);
+        let attempts_after = attempt_reports(&paths);
+        assert_eq!(attempts_after.len(), 2);
+        let new_attempts = attempts_after
+            .iter()
+            .filter(|path| !attempts_before.contains(path))
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(new_attempts.len(), 1);
+        let failed_attempt = read_report(&new_attempts[0]);
+        assert_required_gates(&failed_attempt, &["A", "B", "C", "D"]);
+        assert_eq!(failed_attempt["phase_status"], "fail");
+        assert_eq!(failed_attempt["overall_status"], "fail");
+        assert_report_status_invariants(&failed_attempt);
         assert!(
             !paths
                 .artifacts
@@ -867,6 +790,130 @@ gate_d = true
                 .with_extension("tmp")
                 .exists()
         );
+    }
+
+    #[test]
+    fn suite_attestation_accepts_only_normalized_non_colored_libtest_output() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+
+        let success_runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &normalized_libtest_stdout(&names),
+        )]);
+        let success = run_suite(temp_dir.path(), &success_runner, suite);
+        assert_eq!(success.status, PassFail::Pass);
+
+        let colorized_runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &colorized_libtest_stdout(&names),
+        )]);
+        let colorized = run_suite(temp_dir.path(), &colorized_runner, suite);
+        assert_eq!(colorized.status, PassFail::Fail);
+
+        let variant_runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &format_variant_libtest_stdout(&names),
+        )]);
+        let variant = run_suite(temp_dir.path(), &variant_runner, suite);
+        assert_eq!(variant.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_empty_stdout_even_with_zero_exit() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let runner = FakeRunner::new(&[suite_command_output(suite, 0, "")]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_zero_match_output() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &normalized_libtest_stdout(&Vec::<String>::new()),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_missing_expected_tests() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &normalized_libtest_stdout(&names[..names.len() - 1]),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_extra_matched_tests() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let mut names = expected_suite_test_names(suite);
+        names.push("semantic_review::tests::m21_chain3_classifier_fake_extra".to_string());
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &normalized_libtest_stdout(&names),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_ignored_tests() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &ignored_libtest_stdout(&names[0]),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_non_zero_exit() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            101,
+            &normalized_libtest_stdout(&names),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_fake_printed_test_line_without_libtest_surface() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &format!("test {} ... ok\n", names[0]),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
     }
 
     fn workspace_root() -> TempDir {
@@ -961,7 +1008,21 @@ gate_d = true
     }
 
     fn success_certify_runner() -> FakeRunner {
-        FakeRunner::new(&[
+        certify_runner_with_outputs(
+            &[
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[0])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[1])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_CERTIFY_SUITES[0])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_CERTIFY_SUITES[1])),
+            ],
+            "2026-04-27T18:10:00Z\n",
+        )
+    }
+
+    fn prove_runner_with_suite_outputs(stdout_by_suite: &[String]) -> FakeRunner {
+        assert_eq!(stdout_by_suite.len(), CHAIN3_PROVE_SUITES.len());
+        let mut outputs = vec![
             command_output(&["git", "rev-parse", "HEAD"], 0, "abc123\n"),
             command_output(&["rustc", "--version"], 0, "rustc 1.89.0\n"),
             command_output(
@@ -969,83 +1030,45 @@ gate_d = true
                 0,
                 "2026-04-27T18:00:00Z\n",
             ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-core",
-                    "m21_chain3_classifier_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "cli",
-                    "m21_chain3_truth_surface_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "m14_regressions",
-                    "m21_chain3_corpus_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
+        ];
+        for (suite, stdout) in CHAIN3_PROVE_SUITES.iter().zip(stdout_by_suite.iter()) {
+            outputs.push(suite_command_output(*suite, 0, stdout));
+        }
+        FakeRunner::new(&outputs)
+    }
+
+    fn certify_runner_with_outputs(
+        stdout_by_suite: &[String],
+        certify_generated_at: &str,
+    ) -> FakeRunner {
+        assert_eq!(
+            stdout_by_suite.len(),
+            CHAIN3_PROVE_SUITES.len() + CHAIN3_CERTIFY_SUITES.len()
+        );
+        let mut outputs = vec![
+            command_output(&["git", "rev-parse", "HEAD"], 0, "abc123\n"),
+            command_output(&["rustc", "--version"], 0, "rustc 1.89.0\n"),
             command_output(
                 &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
                 0,
-                "2026-04-27T18:10:00Z\n",
+                "2026-04-27T18:00:00Z\n",
             ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-core",
-                    "m21_chain3_regression_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-            command_output(
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "spec-cli",
-                    "--test",
-                    "m14_regressions",
-                    "m21_chain3_regression_",
-                    "--",
-                    "--nocapture",
-                ],
-                0,
-                "",
-            ),
-        ])
+        ];
+        for (suite, stdout) in CHAIN3_PROVE_SUITES.iter().zip(stdout_by_suite.iter()) {
+            outputs.push(suite_command_output(*suite, 0, stdout));
+        }
+        outputs.push(command_output(
+            &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
+            0,
+            certify_generated_at,
+        ));
+        for (suite, stdout) in CHAIN3_CERTIFY_SUITES
+            .iter()
+            .zip(stdout_by_suite[CHAIN3_PROVE_SUITES.len()..].iter())
+        {
+            outputs.push(suite_command_output(*suite, 0, stdout));
+        }
+        FakeRunner::new(&outputs)
     }
 
     fn command_output(command: &[&str], exit_code: i32, stdout: &str) -> (String, CommandOutput) {
@@ -1057,6 +1080,14 @@ gate_d = true
                 stderr: String::new(),
             },
         )
+    }
+
+    fn suite_command_output(
+        suite: SuiteDefinition,
+        exit_code: i32,
+        stdout: &str,
+    ) -> (String, CommandOutput) {
+        command_output(suite.command, exit_code, stdout)
     }
 
     fn expected_scaffold_unit_paths(bucket: &str) -> [String; 4] {
@@ -1105,6 +1136,103 @@ gate_d = true
             .collect::<Vec<_>>();
         attempts.sort();
         attempts
+    }
+
+    fn read_report(path: &Path) -> serde_json::Value {
+        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    fn assert_required_gates(report: &serde_json::Value, expected: &[&str]) {
+        let gates = report["required_gates"]
+            .as_array()
+            .expect("report required_gates should be an array")
+            .iter()
+            .map(|gate| {
+                gate.as_str()
+                    .expect("gate name should be a string")
+                    .trim_start_matches("gate_")
+                    .to_ascii_uppercase()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(gates, expected);
+    }
+
+    fn assert_report_status_invariants(report: &serde_json::Value) {
+        let required_gates = report["required_gates"]
+            .as_array()
+            .expect("report required_gates should be an array")
+            .iter()
+            .map(|gate| {
+                let raw = gate.as_str().expect("gate name should be a string");
+                if raw.starts_with("gate_") {
+                    raw.to_string()
+                } else {
+                    format!("gate_{}", raw.to_ascii_lowercase())
+                }
+            })
+            .collect::<Vec<_>>();
+        if report["phase_status"] == "pass" {
+            for gate in &required_gates {
+                assert_eq!(
+                    report["gates"][gate]["status"], "pass",
+                    "phase_status=pass requires `{gate}` to pass"
+                );
+            }
+        }
+        if report["overall_status"] == "pass" {
+            for gate in ["gate_a", "gate_b", "gate_c", "gate_d"] {
+                assert_eq!(
+                    report["gates"][gate]["status"], "pass",
+                    "overall_status=pass requires `{gate}` to pass"
+                );
+            }
+        }
+    }
+
+    fn expected_suite_test_names(suite: SuiteDefinition) -> Vec<String> {
+        suite
+            .expected_tests
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect()
+    }
+
+    fn normalized_libtest_stdout(names: &[String]) -> String {
+        let count = names.len();
+        let noun = if count == 1 { "test" } else { "tests" };
+        let mut stdout = format!("running {count} {noun}\n");
+        for name in names {
+            stdout.push_str(&format!("test {name} ... ok\n"));
+        }
+        stdout.push('\n');
+        stdout.push_str(&format!(
+            "test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n"
+        ));
+        stdout
+    }
+
+    fn ignored_libtest_stdout(name: &str) -> String {
+        format!(
+            "running 1 test\ntest {name} ... ignored\n\ntest result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s\n"
+        )
+    }
+
+    fn colorized_libtest_stdout(names: &[String]) -> String {
+        normalized_libtest_stdout(names).replace("test ", "\u{1b}[32mtest \u{1b}[0m")
+    }
+
+    fn format_variant_libtest_stdout(names: &[String]) -> String {
+        let count = names.len();
+        let noun = if count == 1 { "test" } else { "tests" };
+        let mut stdout = format!("running {count} {noun}\n");
+        for name in names {
+            stdout.push_str(&format!("test {name} ... ok (0.00s)\n"));
+        }
+        stdout.push('\n');
+        stdout.push_str(&format!(
+            "test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n"
+        ));
+        stdout
     }
 
     struct FakeRunner {

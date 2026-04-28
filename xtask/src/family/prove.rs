@@ -1,9 +1,10 @@
 use crate::XtaskError;
+use crate::family::harness::{FamilyHarness, GateResults, require_family_harness};
 use crate::family::layout::validate_packet_layout;
 use crate::family::manifest::{FamilyManifest, parse_manifest_file};
 use crate::family::paths::{FamilyId, PacketPaths, ensure_packet_path_safe};
 use crate::family::report::{
-    CertificationReport, CommandRunner, PROVE_SUITES, SystemRunner, collect_fixture_digests,
+    ArtifactKind, CertificationReport, CommandRunner, SystemRunner, collect_fixture_digests,
     failed_suite_names, prove_artifact_path, run_suite, set_gates, set_overall, write_report,
 };
 use std::path::Path;
@@ -22,6 +23,7 @@ pub(crate) enum ProveOutcome {
 #[derive(Debug, Clone)]
 pub(crate) struct ProveExecution {
     pub family: FamilyId,
+    pub harness: &'static FamilyHarness,
     pub manifest: Option<FamilyManifest>,
     pub paths: PacketPaths,
     pub report: CertificationReport,
@@ -54,6 +56,7 @@ pub(crate) fn execute<R: CommandRunner>(
     runner: &R,
 ) -> Result<ProveExecution, XtaskError> {
     let family = FamilyId::parse(raw_family)?;
+    let harness = require_family_harness(&family, "family prove")?;
     let paths = PacketPaths::new(workspace_root, family.clone());
     let mut report = crate::family::report::build_report(workspace_root, &family, runner);
 
@@ -62,6 +65,7 @@ pub(crate) fn execute<R: CommandRunner>(
         set_overall(&mut report, false);
         return Ok(ProveExecution {
             family,
+            harness,
             manifest: None,
             paths,
             report,
@@ -81,6 +85,7 @@ pub(crate) fn execute<R: CommandRunner>(
             set_overall(&mut report, false);
             return Ok(ProveExecution {
                 family,
+                harness,
                 manifest: None,
                 paths,
                 report,
@@ -96,6 +101,7 @@ pub(crate) fn execute<R: CommandRunner>(
             set_overall(&mut report, false);
             return Ok(ProveExecution {
                 family,
+                harness,
                 manifest: None,
                 paths,
                 report,
@@ -106,17 +112,25 @@ pub(crate) fn execute<R: CommandRunner>(
     let _bucket_count = layout.bucket_cases.len();
     let _case_count = layout.case_filenames.len();
 
-    report.suites = PROVE_SUITES
-        .into_iter()
-        .map(|suite| run_suite(workspace_root, runner, suite))
+    let mut gates = GateResults::default();
+    report.suites = harness
+        .prove_suites
+        .iter()
+        .map(|definition| {
+            let suite = run_suite(workspace_root, runner, definition.suite);
+            gates.set(definition.gate, suite.status.is_pass());
+            suite
+        })
         .collect();
+    set_gates(
+        &mut report,
+        gates.gate_a,
+        gates.gate_b,
+        gates.gate_c,
+        gates.gate_d,
+    );
 
-    let gate_a = report.suites[0].status.is_pass();
-    let gate_c = report.suites[1].status.is_pass();
-    let gate_b = report.suites[2].status.is_pass();
-    set_gates(&mut report, gate_a, gate_b, gate_c, false);
-
-    let prove_passed = gate_a && gate_b && gate_c;
+    let prove_passed = gates.satisfies(ArtifactKind::ProveLatest);
     set_overall(&mut report, prove_passed);
 
     let outcome = if prove_passed {
@@ -130,6 +144,7 @@ pub(crate) fn execute<R: CommandRunner>(
 
     Ok(ProveExecution {
         family,
+        harness,
         manifest: Some(manifest),
         paths,
         report,

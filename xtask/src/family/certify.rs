@@ -1,7 +1,8 @@
 use crate::XtaskError;
+use crate::family::harness::GateResults;
 use crate::family::prove;
 use crate::family::report::{
-    CERTIFY_SUITES, SystemRunner, certification_report_path, certify_attempt_path,
+    ArtifactKind, GateId, SystemRunner, certification_report_path, certify_attempt_path,
     failed_suite_names, refresh_generated_at, run_suite, set_gates, set_overall, write_report,
 };
 use crate::family::routing::manifest_routing_mismatch_message;
@@ -33,8 +34,10 @@ pub(crate) fn run_with_runner<R: crate::family::report::CommandRunner>(
 
     let mut report = prove_execution.report.clone();
     let family = prove_execution.family.clone();
+    let harness = prove_execution.harness;
     let manifest = prove_execution.manifest.clone();
     let paths = prove_execution.paths.clone();
+    report.artifact_kind = ArtifactKind::CertifyAttempt;
     refresh_generated_at(workspace_root, &mut report, runner);
 
     let prove_result = prove_execution.outcome.clone();
@@ -45,28 +48,37 @@ pub(crate) fn run_with_runner<R: crate::family::report::CommandRunner>(
         let manifest = manifest.ok_or_else(|| {
             XtaskError::Internal("prove passed without a parsed family manifest".to_string())
         })?;
-        let extra_suites = CERTIFY_SUITES
-            .into_iter()
+        let prove_suite_count = harness.prove_suites.len();
+        let extra_suites = harness
+            .certify_suites
+            .iter()
+            .copied()
             .map(|suite| run_suite(workspace_root, runner, suite))
             .collect::<Vec<_>>();
         let routing_mismatch = manifest_routing_mismatch_message(&family, &manifest.routing);
-        let gate_d =
-            extra_suites.iter().all(|suite| suite.status.is_pass()) && routing_mismatch.is_none();
+        let mut gates = GateResults::from_report(&report);
+        gates.set(
+            GateId::GateD,
+            extra_suites.iter().all(|suite| suite.status.is_pass()) && routing_mismatch.is_none(),
+        );
         report.suites.extend(extra_suites);
-        let gate_a = report.gates.gate_a.status.is_pass();
-        let gate_b = report.gates.gate_b.status.is_pass();
-        let gate_c = report.gates.gate_c.status.is_pass();
-        set_gates(&mut report, gate_a, gate_b, gate_c, gate_d);
-        let certify_passed = gate_a && gate_b && gate_c && gate_d;
+        set_gates(
+            &mut report,
+            gates.gate_a,
+            gates.gate_b,
+            gates.gate_c,
+            gates.gate_d,
+        );
+        let certify_passed = gates.satisfies(ArtifactKind::CertifyAttempt);
         set_overall(&mut report, certify_passed);
         if !certify_passed {
-            let failure = report.suites[PROVE_SUITES_LEN..]
+            let failure = report.suites[prove_suite_count..]
                 .iter()
                 .any(|suite| !suite.status.is_pass());
             certify_error = Some(XtaskError::CertifySuiteFailure(if failure {
                 format!(
                     "certify suite failure: {}",
-                    failed_suite_names(&report.suites[PROVE_SUITES_LEN..])
+                    failed_suite_names(&report.suites[prove_suite_count..])
                 )
             } else {
                 format!(
@@ -103,5 +115,3 @@ pub(crate) fn run_with_runner<R: crate::family::report::CommandRunner>(
         .map_err(|error| XtaskError::CertifyArtifactWriteFailure(error.to_string()))?;
     Ok(())
 }
-
-const PROVE_SUITES_LEN: usize = 3;
