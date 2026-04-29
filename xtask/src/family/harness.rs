@@ -6,6 +6,7 @@ pub(crate) const TERMINAL_UNSUPPORTED_CATCH_ALL: &str = "unsupported.function.v1
 
 pub const CHAIN3_PRECEDENCE: u64 = 1;
 pub const MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE: u64 = 3;
+pub const MONOTONE_UP_PRECEDENCE: u64 = 4;
 
 pub const CHAIN3_MUST_NOT_SHADOW: [&str; 3] = [
     "function.wrapper.pipeline.v1",
@@ -14,14 +15,18 @@ pub const CHAIN3_MUST_NOT_SHADOW: [&str; 3] = [
 ];
 pub const MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW: [&str; 1] =
     ["function.arithmetic_leaf.monotone_up.v1"];
+pub const MONOTONE_UP_MUST_NOT_SHADOW: [&str; 1] = [TERMINAL_UNSUPPORTED_CATCH_ALL];
 
 pub const CHAIN3_SUITE_SLUG: &str = "m21_chain3_";
 pub const MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG: &str = "monotone_down_nonnegative_";
+pub const MONOTONE_UP_SUITE_SLUG: &str = "monotone_up_";
 
 const CHAIN3_SUMMARY: &str =
     "Straight-line three-call wrapper pipeline over supported function deps.";
 const MONOTONE_DOWN_NONNEGATIVE_SUMMARY: &str =
     "Straight-line arithmetic leaf with zero-or-one helper dep and nonnegative clamp semantics.";
+const MONOTONE_UP_SUMMARY: &str =
+    "Straight-line arithmetic leaf with zero-or-one helper dep and monotone-up semantics.";
 
 const CHAIN3_STARTER_CASES: [StarterCaseDefinition; 16] = [
     StarterCaseDefinition {
@@ -109,6 +114,25 @@ const MONOTONE_DOWN_NONNEGATIVE_STARTER_CASES: [StarterCaseDefinition; 4] = [
     },
 ];
 
+const MONOTONE_UP_STARTER_CASES: [StarterCaseDefinition; 4] = [
+    StarterCaseDefinition {
+        bucket: "aligned",
+        path: "fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec",
+    },
+    StarterCaseDefinition {
+        bucket: "drift",
+        path: "fixtures/drift/units/pricing/apply_tax_drift.unit.spec",
+    },
+    StarterCaseDefinition {
+        bucket: "under_specified",
+        path: "fixtures/under_specified/units/pricing/apply_tax_under_specified.unit.spec",
+    },
+    StarterCaseDefinition {
+        bucket: "unsupported_near_miss",
+        path: "fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec",
+    },
+];
+
 const DEFAULT_SCAFFOLD_EXACT_MATCH_PATHS: [&str; 1] = ["family.toml"];
 const EMPTY_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 0] = [];
 const MONOTONE_DOWN_NONNEGATIVE_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 1] =
@@ -124,6 +148,18 @@ const MONOTONE_DOWN_NONNEGATIVE_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 1] =
         ],
         forbidden_contents: &[],
     }];
+const MONOTONE_UP_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 1] = [SmokeFileContract {
+    path: "fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec",
+    required_contents: &[
+        "subtotal: Decimal",
+        "rate: Decimal",
+        "- output >= subtotal",
+        "deps:\n  - money/round",
+        "let taxed = subtotal + subtotal * rate;",
+        "round(taxed)",
+    ],
+    forbidden_contents: &[],
+}];
 
 pub(crate) const CHAIN3_PROVE_SUITES: [SuiteDefinition; 3] = [
     SuiteDefinition {
@@ -333,6 +369,110 @@ pub(crate) const MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES: [SuiteDefinition; 2] 
     },
 ];
 
+pub(crate) const MONOTONE_UP_PROVE_SUITES: [SuiteDefinition; 3] = [
+    SuiteDefinition {
+        name: "spec-core:monotone_up_classifier_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-core",
+            "--lib",
+            "monotone_up_classifier_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "semantic_review::tests::monotone_up_classifier_aligned_fixture_routes_to_promoted_leaf",
+            "semantic_review::tests::monotone_up_classifier_drift_fixture_reports_semantic_drift",
+            "semantic_review::tests::monotone_up_classifier_under_specified_fixture_reports_vague_truth",
+            "semantic_review::tests::monotone_up_classifier_unsupported_near_miss_stays_unsupported",
+        ],
+    },
+    SuiteDefinition {
+        name: "spec-cli:monotone_up_truth_surface_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-cli",
+            "--test",
+            "m14_regressions",
+            "monotone_up_truth_surface_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "monotone_up_truth_surface_command_matrix_preserves_until_spec_test_refresh",
+            "monotone_up_truth_surface_stale_status_and_export_preserve_last_proven_review",
+        ],
+    },
+    SuiteDefinition {
+        name: "spec-cli:monotone_up_corpus_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-cli",
+            "--test",
+            "m14_regressions",
+            "monotone_up_corpus_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "monotone_up_corpus_aligned_fixture_projects_valid_state",
+            "monotone_up_corpus_drift_fixture_projects_failing_state",
+            "monotone_up_corpus_under_specified_fixture_projects_incomplete_state",
+            "monotone_up_corpus_unsupported_near_miss_stays_additive_only_and_neutral",
+        ],
+    },
+];
+
+pub(crate) const MONOTONE_UP_CERTIFY_SUITES: [SuiteDefinition; 2] = [
+    SuiteDefinition {
+        name: "spec-core:monotone_up_regression_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-core",
+            "--lib",
+            "monotone_up_regression_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "semantic_review::tests::monotone_up_regression_chain3_is_not_shadowed",
+            "semantic_review::tests::monotone_up_regression_monotone_down_nonnegative_is_not_shadowed",
+            "semantic_review::tests::monotone_up_regression_runtime_order_matches_locked_precedence",
+        ],
+    },
+    SuiteDefinition {
+        name: "spec-cli:monotone_up_regression_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-cli",
+            "--test",
+            "m14_regressions",
+            "monotone_up_regression_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "monotone_up_regression_read_side_surfaces_are_not_shadowed",
+            "monotone_up_regression_unsupported_near_miss_stays_additive_only_and_neutral",
+        ],
+    },
+];
+
 const CHAIN3_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 3] = [
     ProveSuiteDefinition {
         suite: CHAIN3_PROVE_SUITES[0],
@@ -359,6 +499,21 @@ const MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 
     },
     ProveSuiteDefinition {
         suite: MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES[2],
+        gate: GateId::GateB,
+    },
+];
+
+const MONOTONE_UP_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 3] = [
+    ProveSuiteDefinition {
+        suite: MONOTONE_UP_PROVE_SUITES[0],
+        gate: GateId::GateA,
+    },
+    ProveSuiteDefinition {
+        suite: MONOTONE_UP_PROVE_SUITES[1],
+        gate: GateId::GateC,
+    },
+    ProveSuiteDefinition {
+        suite: MONOTONE_UP_PROVE_SUITES[2],
         gate: GateId::GateB,
     },
 ];
@@ -433,7 +588,46 @@ const MONOTONE_DOWN_NONNEGATIVE_HARNESS: FamilyHarness = FamilyHarness {
     certify_suites: &MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
 };
 
-const FAMILY_REGISTRY: [FamilyHarness; 2] = [CHAIN3_HARNESS, MONOTONE_DOWN_NONNEGATIVE_HARNESS];
+const MONOTONE_UP_HARNESS: FamilyHarness = FamilyHarness {
+    family: "function.arithmetic_leaf.monotone_up.v1",
+    summary: MONOTONE_UP_SUMMARY,
+    suite_slug: MONOTONE_UP_SUITE_SLUG,
+    scaffold: ScaffoldDefinition {
+        unit_namespace: "pricing",
+        template: StarterTemplate::ArithmeticLeafMonotoneUp,
+        starter_cases: &MONOTONE_UP_STARTER_CASES,
+        smoke: SmokeContract {
+            scaffold_exact_match_paths: &DEFAULT_SCAFFOLD_EXACT_MATCH_PATHS,
+            scaffold_file_contracts: &MONOTONE_UP_SMOKE_FILE_CONTRACTS,
+        },
+    },
+    routing: LockedManifestRouting {
+        precedence: MONOTONE_UP_PRECEDENCE,
+        must_not_shadow: &MONOTONE_UP_MUST_NOT_SHADOW,
+    },
+    shape: LockedManifestShape {
+        dep_min: 0,
+        dep_max: 1,
+        control_flow: "straight_line_only",
+        return_style: "let_then_return_or_direct_return",
+        loops: false,
+        branching: false,
+        requires_supported_function_deps: false,
+    },
+    args: LockedManifestArgs {
+        threading: "ordered_passthrough",
+        allow_nested_argument_expressions: false,
+        allow_literal_only_extra_args: false,
+    },
+    prove_suites: &MONOTONE_UP_PROVE_SUITE_DEFINITIONS,
+    certify_suites: &MONOTONE_UP_CERTIFY_SUITES,
+};
+
+const FAMILY_REGISTRY: [FamilyHarness; 3] = [
+    CHAIN3_HARNESS,
+    MONOTONE_DOWN_NONNEGATIVE_HARNESS,
+    MONOTONE_UP_HARNESS,
+];
 
 const PROVE_LATEST_REQUIRED_GATES: [GateId; 3] = [GateId::GateA, GateId::GateB, GateId::GateC];
 const CERTIFY_REQUIRED_GATES: [GateId; 4] =
@@ -470,6 +664,7 @@ pub(crate) struct StarterCaseDefinition {
 pub(crate) enum StarterTemplate {
     GenericPlaceholder,
     ArithmeticLeafMonotoneDownNonnegative,
+    ArithmeticLeafMonotoneUp,
 }
 
 #[derive(Debug, Clone, Copy)]

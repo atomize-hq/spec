@@ -5406,6 +5406,102 @@ mod tests {
     }
 
     #[test]
+    fn monotone_up_classifier_aligned_fixture_routes_to_promoted_leaf() {
+        let review = evaluate_semantic_review(&apply_tax_function_spec()).unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+        assert_eq!(
+            review.evaluator_scope,
+            EvaluatorScope::SupportedFunctionSurface
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_drift_fixture_reports_semantic_drift() {
+        let drift = arithmetic_leaf_spec(
+            "pricing/apply_tax_drift",
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            &["output >= subtotal"],
+            &["money/round"],
+            r#"{
+            round(subtotal - subtotal * rate)
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&drift).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_under_specified_fixture_reports_vague_truth() {
+        let under_specified = arithmetic_leaf_spec(
+            "pricing/apply_tax_under_specified",
+            "todo",
+            &["output >= subtotal"],
+            &["money/round"],
+            r#"{
+            round(subtotal + subtotal * rate)
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&under_specified).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::VagueUnitIntent]
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_unsupported_near_miss_stays_unsupported() {
+        let near_miss = arithmetic_leaf_spec(
+            "pricing/apply_tax_control_flow_unsupported_near_miss",
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            &["output >= subtotal"],
+            &["money/round"],
+            r#"{
+            let taxed = subtotal + subtotal * rate;
+            if rate > Decimal::ZERO {
+                round(taxed)
+            } else {
+                subtotal
+            }
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&near_miss).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.compatibility_key,
+            UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedControlFlow]
+        );
+    }
+
+    #[test]
     fn monotone_down_nonnegative_regression_chain3_is_not_shadowed() {
         let (discount_leaf, tax_leaf, total_wrapper, checkout) = m21_chain3_fixture_specs(
             "pricing/pricing_total_wrapper_aligned",
@@ -5438,6 +5534,58 @@ mod tests {
         assert_eq!(
             review.compatibility_key,
             FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+        );
+    }
+
+    #[test]
+    fn monotone_up_regression_chain3_is_not_shadowed() {
+        let (discount_leaf, tax_leaf, total_wrapper, checkout) = m21_chain3_fixture_specs(
+            "pricing/pricing_total_wrapper_aligned",
+            "pricing/pricing_tax_leaf_aligned",
+            "pricing/pricing_discount_leaf_aligned",
+            "pricing/checkout_chain3_aligned",
+            "Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount.",
+            r#"{
+            let base_total = pricing_total_wrapper_aligned(subtotal, discount_rate, tax_rate);
+            let surcharged_total = pricing_tax_leaf_aligned(base_total, surcharge_rate);
+            pricing_discount_leaf_aligned(surcharged_total, loyalty_rate)
+        }"#,
+        );
+        let specs = family_b_context(&[discount_leaf, tax_leaf, total_wrapper, checkout.clone()]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&checkout, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY
+        );
+    }
+
+    #[test]
+    fn monotone_up_regression_monotone_down_nonnegative_is_not_shadowed() {
+        let review = evaluate_semantic_review(&apply_discount_function_spec()).unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY
+        );
+    }
+
+    #[test]
+    fn monotone_up_regression_runtime_order_matches_locked_precedence() {
+        let routed_keys =
+            SUPPORTED_FUNCTION_ROUTING_ORDER.map(SupportedFunctionRoute::compatibility_key);
+
+        assert_eq!(
+            routed_keys,
+            [
+                FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY,
+                FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY,
+                FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY,
+                FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY,
+            ]
         );
     }
 

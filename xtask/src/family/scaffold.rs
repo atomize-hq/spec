@@ -258,7 +258,10 @@ fn starter_unit_spec(harness: &FamilyHarness, case: StarterCaseDefinition) -> St
     match harness.scaffold.template {
         StarterTemplate::GenericPlaceholder => generic_placeholder_starter(&unit_id, callable_name),
         StarterTemplate::ArithmeticLeafMonotoneDownNonnegative => {
-            arithmetic_leaf_starter(case.bucket, &unit_id, callable_name)
+            arithmetic_leaf_monotone_down_nonnegative_starter(case.bucket, &unit_id, callable_name)
+        }
+        StarterTemplate::ArithmeticLeafMonotoneUp => {
+            arithmetic_leaf_monotone_up_starter(case.bucket, &unit_id, callable_name)
         }
     }
 }
@@ -292,7 +295,11 @@ local_tests:
     )
 }
 
-fn arithmetic_leaf_starter(bucket: &str, unit_id: &str, callable_name: &str) -> String {
+fn arithmetic_leaf_monotone_down_nonnegative_starter(
+    bucket: &str,
+    unit_id: &str,
+    callable_name: &str,
+) -> String {
     match bucket {
         "aligned" => format!(
             r#"id: {unit_id}
@@ -409,6 +416,128 @@ body:
 local_tests:
   - id: {callable_name}_unsupported_near_miss
     expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
+"#
+        ),
+        other => panic!("unexpected arithmetic leaf bucket `{other}`"),
+    }
+}
+
+fn arithmetic_leaf_monotone_up_starter(bucket: &str, unit_id: &str, callable_name: &str) -> String {
+    match bucket {
+        "aligned" => format!(
+            r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        let taxed = subtotal + subtotal * rate;
+        round(taxed)
+    }}
+local_tests:
+  - id: {callable_name}_happy_path
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)
+"#
+        ),
+        "drift" => format!(
+            r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        let taxed = subtotal - subtotal * rate;
+        round(taxed.max(Decimal::ZERO))
+    }}
+local_tests:
+  - id: {callable_name}_drift
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(9275, 2)
+"#
+        ),
+        "under_specified" => format!(
+            r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: todo
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        let taxed = subtotal + subtotal * rate;
+        round(taxed)
+    }}
+local_tests:
+  - id: {callable_name}_under_specified
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)
+"#
+        ),
+        "unsupported_near_miss" => format!(
+            r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        let taxed = subtotal + subtotal * rate;
+        if rate == Decimal::ZERO {{
+            subtotal
+        }} else {{
+            round(taxed)
+        }}
+    }}
+local_tests:
+  - id: {callable_name}_unsupported_near_miss
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)
 "#
         ),
         other => panic!("unexpected arithmetic leaf bucket `{other}`"),
