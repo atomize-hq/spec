@@ -1,4 +1,5 @@
 use crate::XtaskError;
+use crate::family::harness::FamilyHarness;
 use crate::family::manifest::FamilyManifest;
 use crate::family::paths::{FAMILY_ROOT_DIR, REQUIRED_BUCKETS};
 use std::collections::{BTreeMap, BTreeSet};
@@ -15,9 +16,11 @@ pub struct PacketLayout {
 pub fn validate_packet_layout(
     packet_root: &Path,
     manifest: &FamilyManifest,
+    harness: &FamilyHarness,
 ) -> Result<PacketLayout, XtaskError> {
     ensure_required_file(packet_root.join("candidate.md"), "candidate.md")?;
     ensure_required_file(packet_root.join("family.toml"), "family.toml")?;
+    validate_candidate_mentions_locked_cases(packet_root, harness)?;
 
     let fixtures_root = packet_root.join("fixtures");
     ensure_required_dir(&fixtures_root, "fixtures")?;
@@ -36,6 +39,8 @@ pub fn validate_packet_layout(
         )?;
         bucket_cases.insert(bucket.clone(), cases);
     }
+
+    ensure_locked_starter_cases_exist(packet_root, harness)?;
 
     Ok(PacketLayout {
         bucket_cases,
@@ -148,19 +153,15 @@ fn validate_bucket(
                 path.display()
             )));
         }
-        if !filename.ends_with(expected_suffix) {
-            return Err(XtaskError::InvalidInput(format!(
-                "units entry `{}` must end with `{expected_suffix}` for bucket `{bucket}`",
-                path.display()
-            )));
+        if filename.ends_with(expected_suffix) {
+            if !all_case_filenames.insert(filename.to_string()) {
+                return Err(XtaskError::InvalidInput(format!(
+                    "duplicate fixture filename `{filename}` found across packet `{}`",
+                    packet_name(bucket_root)
+                )));
+            }
+            cases.push(path);
         }
-        if !all_case_filenames.insert(filename.to_string()) {
-            return Err(XtaskError::InvalidInput(format!(
-                "duplicate fixture filename `{filename}` found across packet `{}`",
-                packet_name(bucket_root)
-            )));
-        }
-        cases.push(path);
     }
 
     if cases.len() < min_cases_per_bucket as usize {
@@ -198,6 +199,56 @@ fn ensure_bucket_root_entries(bucket_root: &Path) -> Result<(), XtaskError> {
             "bucket `{}` must contain exactly Cargo.toml, src/, and units/",
             bucket_root.display()
         )));
+    }
+
+    Ok(())
+}
+
+fn validate_candidate_mentions_locked_cases(
+    packet_root: &Path,
+    harness: &FamilyHarness,
+) -> Result<(), XtaskError> {
+    let candidate = fs::read_to_string(packet_root.join("candidate.md")).map_err(|error| {
+        XtaskError::InvalidInput(format!(
+            "failed to read candidate.md under `{}`: {error}",
+            packet_root.display()
+        ))
+    })?;
+
+    for case in harness.scaffold.starter_cases {
+        let mentions = candidate.matches(case.path).count();
+        if mentions != 1 {
+            return Err(XtaskError::InvalidInput(format!(
+                "candidate.md for `{}` must mention locked starter case `{}` exactly once, found {mentions}",
+                packet_name(packet_root),
+                case.path
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_locked_starter_cases_exist(
+    packet_root: &Path,
+    harness: &FamilyHarness,
+) -> Result<(), XtaskError> {
+    for case in harness.scaffold.starter_cases {
+        let path = packet_root.join(case.path);
+        let metadata = fs::metadata(&path).map_err(|error| {
+            XtaskError::InvalidInput(format!(
+                "packet `{}` is missing locked starter case `{}`: {error}",
+                packet_name(packet_root),
+                case.path
+            ))
+        })?;
+        if !metadata.is_file() {
+            return Err(XtaskError::InvalidInput(format!(
+                "packet `{}` locked starter case `{}` is not a regular file",
+                packet_name(packet_root),
+                case.path
+            )));
+        }
     }
 
     Ok(())

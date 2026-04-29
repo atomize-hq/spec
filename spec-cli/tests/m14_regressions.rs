@@ -284,6 +284,14 @@ fn rewrite_apply_discount_as_clamp_drift(unit_path: &Path) {
     );
 }
 
+fn rewrite_apply_discount_as_unsupported_near_miss(unit_path: &Path) {
+    replace_in_file(
+        unit_path,
+        "    {\n        let discounted = subtotal - subtotal * rate;\n        round(discounted.max(Decimal::ZERO))\n    }\n",
+        "    {\n        let discounted = subtotal - subtotal * rate;\n        if discounted < Decimal::ZERO {\n            Decimal::ZERO\n        } else {\n            round(discounted)\n        }\n    }\n",
+    );
+}
+
 fn rewrite_apply_tax_as_drift(unit_path: &Path) {
     replace_in_file(
         unit_path,
@@ -1768,7 +1776,179 @@ fn under_specified_checkout_quote_wedge_projects_incomplete_state() {
 }
 
 #[test]
-fn canonical_apply_discount_semantic_review_wedge_projects_aligned_state() {
+fn monotone_down_nonnegative_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
+
+    let test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &test_output,
+        "monotone-down-nonnegative aligned fixture test",
+    );
+
+    let seeded_review = read_json(&passport_path)["semantic_review"].clone();
+    assert_function_semantic_review(
+        &seeded_review,
+        FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_success(
+        &status_output,
+        "monotone-down-nonnegative aligned fixture status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/apply_discount");
+    assert_eq!(status_unit["status"], "valid", "{status_json}");
+    assert_eq!(
+        status_unit["semantic_review"], seeded_review,
+        "{status_json}"
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(
+        &export_output,
+        "monotone-down-nonnegative aligned fixture export",
+    );
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/apply_discount");
+    assert_eq!(exported["semantic_review"], seeded_review, "{export_json}");
+
+    let generate_output = run_spec(
+        &fixture_dst,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_success(
+        &generate_output,
+        "monotone-down-nonnegative generate should preserve review",
+    );
+    assert_eq!(read_json(&passport_path)["semantic_review"], seeded_review);
+
+    let build_output = run_spec(
+        &fixture_dst,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_success(
+        &build_output,
+        "monotone-down-nonnegative build should preserve review",
+    );
+    assert_eq!(read_json(&passport_path)["semantic_review"], seeded_review);
+
+    let refresh_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_success(&refresh_output, "monotone-down-nonnegative refresh test");
+    let refreshed_review = read_json(&passport_path)["semantic_review"].clone();
+    assert_eq!(refreshed_review, seeded_review);
+    assert_eq!(
+        refreshed_review["compatibility_key"],
+        FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY
+    );
+    assert_eq!(
+        refreshed_review["evaluator_scope"],
+        "supported_function_surface"
+    );
+}
+
+#[test]
+fn monotone_down_nonnegative_truth_surface_stale_status_and_export_preserve_last_proven_review() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
+
+    let test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &test_output,
+        "monotone-down-nonnegative aligned fixture test",
+    );
+
+    let seeded_review = read_json(&passport_path)["semantic_review"].clone();
+    assert_function_semantic_review(
+        &seeded_review,
+        FUNCTION_FAMILY_A_DOWN_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+
+    replace_in_file(
+        &unit_path,
+        "Apply a discount to a subtotal while keeping the result nonnegative.",
+        "Apply a discount to a subtotal while keeping the result nonnegative with revised authored truth.",
+    );
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(
+        &status_output,
+        1,
+        "monotone-down-nonnegative stale status should exit non-zero",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/apply_discount");
+    assert_eq!(status_unit["status"], "stale", "{status_json}");
+    assert_eq!(
+        status_unit["reason"],
+        "authored truth changed since last test"
+    );
+    assert_eq!(
+        status_unit["semantic_review"], seeded_review,
+        "{status_json}"
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(
+        &export_output,
+        "monotone-down-nonnegative stale export should preserve prior review",
+    );
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/apply_discount");
+    assert_eq!(exported["freshness"]["authored_truth_status"], "stale");
+    assert_eq!(exported["semantic_review"], seeded_review, "{export_json}");
+}
+
+#[test]
+fn monotone_down_nonnegative_corpus_aligned_fixture_projects_valid_state() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
     let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
@@ -1800,7 +1980,7 @@ fn canonical_apply_discount_semantic_review_wedge_projects_aligned_state() {
 }
 
 #[test]
-fn drift_apply_discount_wedge_projects_failing_state() {
+fn monotone_down_nonnegative_corpus_drift_fixture_projects_failing_state() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
     let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
@@ -1835,7 +2015,7 @@ fn drift_apply_discount_wedge_projects_failing_state() {
 }
 
 #[test]
-fn under_specified_apply_discount_wedge_projects_incomplete_state() {
+fn monotone_down_nonnegative_corpus_under_specified_fixture_projects_incomplete_state() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
     let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
@@ -1908,6 +2088,66 @@ fn clamp_drift_apply_discount_wedge_projects_failing_state() {
             ),
         },
     );
+}
+
+#[test]
+fn monotone_down_nonnegative_corpus_unsupported_near_miss_stays_additive_only_and_neutral() {
+    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
+    let unit_path = fixture_dst.join("units/pricing/apply_discount.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/apply_discount.spec.passport.json");
+    rewrite_apply_discount_as_unsupported_near_miss(&unit_path);
+
+    let unit_test_output = run_spec(
+        &fixture_dst,
+        &[
+            "test",
+            unit_path.to_str().unwrap(),
+            "--crate-root",
+            fixture_dst.to_str().unwrap(),
+        ],
+    );
+    assert_success(
+        &unit_test_output,
+        "unsupported near-miss monotone-down-nonnegative fixture unit test",
+    );
+
+    let passport = read_json(&passport_path);
+    let seeded_review = passport["semantic_review"].clone();
+    assert_unsupported_function_reason(&seeded_review, "unsupported_control_flow");
+
+    let status_output = run_spec(
+        &fixture_dst,
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(
+        &status_output,
+        1,
+        "unsupported near-miss monotone-down-nonnegative fixture status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let status_unit = status_unit(&status_json, "pricing/apply_discount");
+    assert_eq!(status_unit["status"], "valid");
+    assert!(status_unit["reason"].is_null());
+    assert_eq!(status_unit["semantic_review"], seeded_review);
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(
+        &export_output,
+        "unsupported near-miss monotone-down-nonnegative fixture export",
+    );
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/apply_discount");
+    assert_eq!(exported["semantic_review"], seeded_review);
+}
+
+#[test]
+fn monotone_down_nonnegative_regression_read_side_surfaces_are_not_shadowed() {
+    monotone_down_nonnegative_corpus_aligned_fixture_projects_valid_state();
+}
+
+#[test]
+fn monotone_down_nonnegative_regression_unsupported_near_miss_stays_additive_only_and_neutral() {
+    monotone_down_nonnegative_corpus_unsupported_near_miss_stays_additive_only_and_neutral();
 }
 
 #[test]

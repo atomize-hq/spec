@@ -1,5 +1,7 @@
 use crate::XtaskError;
-use crate::family::harness::{FamilyHarness, require_family_harness};
+use crate::family::harness::{
+    FamilyHarness, StarterCaseDefinition, StarterTemplate, require_family_harness,
+};
 use crate::family::paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS, ensure_packet_path_safe};
 use std::fs;
 use std::path::Path;
@@ -59,7 +61,7 @@ pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
     })?;
 
     for bucket in REQUIRED_BUCKETS {
-        create_bucket(&paths, &family, harness, bucket)?;
+        create_bucket(&paths, harness, bucket)?;
     }
 
     Ok(())
@@ -67,7 +69,6 @@ pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
 
 fn create_bucket(
     paths: &PacketPaths,
-    family: &FamilyId,
     harness: &FamilyHarness,
     bucket: &str,
 ) -> Result<(), XtaskError> {
@@ -101,23 +102,26 @@ fn create_bucket(
 
     write_file(
         &bucket_root.join("Cargo.toml"),
-        &bucket_cargo_toml(family, bucket),
+        &bucket_cargo_toml(&harness_family_id(harness), bucket),
     )?;
     write_file(&bucket_root.join("src/main.rs"), bucket_main_rs())?;
-    for (filename, contents) in starter_unit_specs(harness, bucket) {
-        write_file(
-            &bucket_root
-                .join("units")
-                .join(harness.scaffold.unit_namespace)
-                .join(filename),
-            &contents,
-        )?;
+    for case in harness.starter_cases_for_bucket(bucket) {
+        let destination = paths.root.join(case.path);
+        write_file(&destination, &starter_unit_spec(harness, case))?;
     }
 
     Ok(())
 }
 
 fn write_file(path: &Path, contents: &str) -> Result<(), XtaskError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            XtaskError::WriteFailure(format!(
+                "failed to create parent directory `{}`: {error}",
+                parent.display()
+            ))
+        })?;
+    }
     fs::write(path, contents).map_err(|error| {
         XtaskError::WriteFailure(format!("failed to write `{}`: {error}", path.display()))
     })
@@ -128,28 +132,25 @@ fn harness_family_id(harness: &FamilyHarness) -> FamilyId {
 }
 
 fn candidate_template(family: &FamilyId, harness: &FamilyHarness) -> String {
-    let aligned = starter_paths_for_bucket(harness, "aligned");
-    let drift = starter_paths_for_bucket(harness, "drift");
-    let under_specified = starter_paths_for_bucket(harness, "under_specified");
-    let unsupported_near_miss = starter_paths_for_bucket(harness, "unsupported_near_miss");
     format!(
-        "# {}\n\nSummary: TODO: replace with a one-line family summary.\n\n## Aligned\n\n{}\n\n## Drift\n\n{}\n\n## Under Specified\n\n{}\n\n## Unsupported Near Miss\n\n{}\n",
+        "# {}\n\nSummary: {}\n\n## Aligned\n\n{}\n\n## Drift\n\n{}\n\n## Under Specified\n\n{}\n\n## Unsupported Near Miss\n\n{}\n",
         family.as_str(),
-        render_markdown_path_list(&aligned),
-        render_markdown_path_list(&drift),
-        render_markdown_path_list(&under_specified),
-        render_markdown_path_list(&unsupported_near_miss),
+        harness.summary,
+        render_markdown_path_list(&starter_paths_for_bucket(harness, "aligned")),
+        render_markdown_path_list(&starter_paths_for_bucket(harness, "drift")),
+        render_markdown_path_list(&starter_paths_for_bucket(harness, "under_specified")),
+        render_markdown_path_list(&starter_paths_for_bucket(harness, "unsupported_near_miss")),
     )
 }
 
 fn manifest_template(family: &FamilyId, harness: &FamilyHarness) -> String {
     let must_not_shadow = render_toml_string_array(harness.routing.must_not_shadow);
     format!(
-        r#"schema_version = 1
+        r#"schema_version = 2
 family = "{family_id}"
 kind = "function"
 compatibility_key = "{family_id}"
-summary = "TODO: replace with a one-line family summary."
+summary = "{summary}"
 
 [routing]
 precedence = {precedence}
@@ -158,17 +159,18 @@ must_not_shadow = [
 ]
 
 [shape]
-dep_count = 3
-control_flow = "straight_line_only"
-return_style = "let_then_return_or_direct_return"
-loops = false
-branching = false
-requires_supported_function_deps = true
+dep_min = {dep_min}
+dep_max = {dep_max}
+control_flow = "{control_flow}"
+return_style = "{return_style}"
+loops = {loops}
+branching = {branching}
+requires_supported_function_deps = {requires_supported_function_deps}
 
 [args]
-threading = "ordered_passthrough"
-allow_nested_argument_expressions = false
-allow_literal_only_extra_args = false
+threading = "{threading}"
+allow_nested_argument_expressions = {allow_nested_argument_expressions}
+allow_literal_only_extra_args = {allow_literal_only_extra_args}
 
 [corpus]
 required_buckets = ["aligned", "drift", "under_specified", "unsupported_near_miss"]
@@ -186,12 +188,23 @@ gate_c = true
 gate_d = true
 "#,
         family_id = family.as_str(),
+        summary = harness.summary,
         precedence = harness.routing.precedence,
         must_not_shadow = must_not_shadow,
+        dep_min = harness.shape.dep_min,
+        dep_max = harness.shape.dep_max,
+        control_flow = harness.shape.control_flow,
+        return_style = harness.shape.return_style,
+        loops = harness.shape.loops,
+        branching = harness.shape.branching,
+        requires_supported_function_deps = harness.shape.requires_supported_function_deps,
+        threading = harness.args.threading,
+        allow_nested_argument_expressions = harness.args.allow_nested_argument_expressions,
+        allow_literal_only_extra_args = harness.args.allow_literal_only_extra_args,
     )
 }
 
-fn render_markdown_path_list(paths: &[String]) -> String {
+fn render_markdown_path_list(paths: &[&str]) -> String {
     paths
         .iter()
         .map(|path| format!("- `{path}`"))
@@ -219,44 +232,38 @@ fn bucket_main_rs() -> &'static str {
     "mod generated;\npub use generated::*;\n\nfn main() {}\n"
 }
 
-fn starter_paths_for_bucket(harness: &FamilyHarness, bucket: &str) -> Vec<String> {
+fn starter_paths_for_bucket<'a>(harness: &'a FamilyHarness, bucket: &str) -> Vec<&'a str> {
     harness
-        .scaffold
-        .starter_case_stems
-        .iter()
-        .map(|stem| {
-            format!(
-                "fixtures/{bucket}/units/{namespace}/{stem}_{bucket}.unit.spec",
-                namespace = harness.scaffold.unit_namespace
-            )
-        })
+        .starter_cases_for_bucket(bucket)
+        .map(|definition| definition.path)
         .collect()
 }
 
-fn starter_unit_specs(harness: &FamilyHarness, bucket: &str) -> Vec<(String, String)> {
-    starter_paths_for_bucket(harness, bucket)
-        .into_iter()
-        .map(|path| {
-            let filename = path
-                .rsplit('/')
-                .next()
-                .expect("starter path must end in a filename")
-                .to_string();
-            let unit_id = format!(
-                "{}/{}",
-                harness.scaffold.unit_namespace,
-                filename.trim_end_matches(".unit.spec")
-            );
-            let callable_name = unit_id
-                .split_once('/')
-                .map(|(_, name)| name)
-                .unwrap_or(unit_id.as_str());
-            (filename, starter_unit_spec(&unit_id, callable_name))
-        })
-        .collect()
+fn starter_unit_spec(harness: &FamilyHarness, case: StarterCaseDefinition) -> String {
+    let filename = case
+        .path
+        .rsplit('/')
+        .next()
+        .expect("starter path must end in a filename");
+    let unit_id = format!(
+        "{}/{}",
+        harness.scaffold.unit_namespace,
+        filename.trim_end_matches(".unit.spec")
+    );
+    let callable_name = unit_id
+        .split_once('/')
+        .map(|(_, name)| name)
+        .unwrap_or(unit_id.as_str());
+
+    match harness.scaffold.template {
+        StarterTemplate::GenericPlaceholder => generic_placeholder_starter(&unit_id, callable_name),
+        StarterTemplate::ArithmeticLeafMonotoneDownNonnegative => {
+            arithmetic_leaf_starter(case.bucket, &unit_id, callable_name)
+        }
+    }
 }
 
-fn starter_unit_spec(unit_id: &str, callable_name: &str) -> String {
+fn generic_placeholder_starter(unit_id: &str, callable_name: &str) -> String {
     format!(
         r#"id: {unit_id}
 kind: function
@@ -283,4 +290,127 @@ local_tests:
     expect: {callable_name}(Decimal::new(10000, 2)) == Decimal::new(10000, 2)
 "#
     )
+}
+
+fn arithmetic_leaf_starter(bucket: &str, unit_id: &str, callable_name: &str) -> String {
+    match bucket {
+        "aligned" => format!(
+            r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount to a subtotal while keeping the result nonnegative.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output <= subtotal
+    - output >= 0
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        let discounted = subtotal - subtotal * rate;
+        round(discounted.max(Decimal::ZERO))
+    }}
+local_tests:
+  - id: {callable_name}_happy_path
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
+"#
+        ),
+        "drift" => format!(
+            r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount to a subtotal while keeping the result nonnegative.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output <= subtotal
+    - output >= 0
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        let discounted = subtotal + subtotal * rate;
+        round(discounted.max(Decimal::ZERO))
+    }}
+local_tests:
+  - id: {callable_name}_drift
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(11000, 2)
+"#
+        ),
+        "under_specified" => format!(
+            r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Adjust a subtotal.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        let discounted = subtotal - subtotal * rate;
+        round(discounted.max(Decimal::ZERO))
+    }}
+local_tests:
+  - id: {callable_name}_under_specified
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
+"#
+        ),
+        "unsupported_near_miss" => format!(
+            r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount to a subtotal while keeping the result nonnegative.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output <= subtotal
+    - output >= 0
+deps:
+  - money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        let discounted = subtotal - subtotal * rate;
+        if discounted < Decimal::ZERO {{
+            Decimal::ZERO
+        }} else {{
+            round(discounted)
+        }}
+    }}
+local_tests:
+  - id: {callable_name}_unsupported_near_miss
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
+"#
+        ),
+        other => panic!("unexpected arithmetic leaf bucket `{other}`"),
+    }
 }

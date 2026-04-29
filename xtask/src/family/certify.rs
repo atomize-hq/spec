@@ -1,5 +1,9 @@
 use crate::XtaskError;
-use crate::family::harness::{FamilyHarness, GateResults, registered_family_harnesses};
+use crate::family::harness::{
+    FamilyHarness, GateResults, registered_family_harnesses, require_family_harness_in,
+    validate_suite_ownership,
+};
+use crate::family::paths::FamilyId;
 use crate::family::prove;
 use crate::family::report::{
     ArtifactKind, GateId, SystemRunner, certification_report_path, certify_attempt_path,
@@ -33,6 +37,10 @@ pub(crate) fn run_with_runner_in<R: crate::family::report::CommandRunner>(
     raw_family: &str,
     runner: &R,
 ) -> Result<(), XtaskError> {
+    let family = FamilyId::parse(raw_family)?;
+    let harness = require_family_harness_in(registry, &family, "family certify")?;
+    validate_suite_ownership(harness, harness.certify_suites, "family certify")?;
+
     let prove_execution = match prove::execute_in(registry, workspace_root, raw_family, runner) {
         Ok(execution) => execution,
         Err(error @ XtaskError::InvalidInput(_)) => return Err(error),

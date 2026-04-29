@@ -1,25 +1,23 @@
 schema_version = 2
-family = "function.wrapper.pipeline.chain3.v1"
+family = "function.arithmetic_leaf.monotone_down_nonnegative.v1"
 kind = "function"
-compatibility_key = "function.wrapper.pipeline.chain3.v1"
-summary = "Straight-line three-call wrapper pipeline over supported function deps."
+compatibility_key = "function.arithmetic_leaf.monotone_down_nonnegative.v1"
+summary = "Straight-line arithmetic leaf with zero-or-one helper dep and nonnegative clamp semantics."
 
 [routing]
-precedence = 1
+precedence = 3
 must_not_shadow = [
-  "function.wrapper.pipeline.v1",
-  "function.arithmetic_leaf.monotone_down_nonnegative.v1",
   "function.arithmetic_leaf.monotone_up.v1",
 ]
 
 [shape]
-dep_min = 3
-dep_max = 3
+dep_min = 0
+dep_max = 1
 control_flow = "straight_line_only"
 return_style = "let_then_return_or_direct_return"
 loops = false
 branching = false
-requires_supported_function_deps = true
+requires_supported_function_deps = false
 
 [args]
 threading = "ordered_passthrough"

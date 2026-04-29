@@ -1,6 +1,7 @@
 use crate::XtaskError;
 use crate::family::harness::{
     FamilyHarness, GateResults, registered_family_harnesses, require_family_harness_in,
+    validate_suite_ownership,
 };
 use crate::family::layout::validate_packet_layout;
 use crate::family::manifest::{FamilyManifest, parse_manifest_file};
@@ -91,7 +92,28 @@ pub(crate) fn execute_in<R: CommandRunner>(
 
     report.fixture_digests = collect_fixture_digests(&paths)?;
 
-    let manifest = match parse_manifest_file(&paths.manifest, &family) {
+    if let Err(error) = validate_suite_ownership(
+        &harness,
+        &harness
+            .prove_suites
+            .iter()
+            .map(|definition| definition.suite)
+            .collect::<Vec<_>>(),
+        "family prove",
+    ) {
+        set_gates(&mut report, false, false, false, false);
+        set_overall(&mut report, false);
+        return Ok(ProveExecution {
+            family,
+            harness,
+            manifest: None,
+            paths,
+            report,
+            outcome: ProveOutcome::InvalidInput(error.to_string()),
+        });
+    }
+
+    let manifest = match parse_manifest_file(&paths.manifest, &family, &harness) {
         Ok(manifest) => {
             report.manifest_schema_version = manifest.schema_version;
             manifest
@@ -110,7 +132,7 @@ pub(crate) fn execute_in<R: CommandRunner>(
         }
     };
 
-    let layout = match validate_packet_layout(&paths.root, &manifest) {
+    let layout = match validate_packet_layout(&paths.root, &manifest, &harness) {
         Ok(layout) => layout,
         Err(error) => {
             set_gates(&mut report, false, false, false, false);

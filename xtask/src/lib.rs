@@ -115,10 +115,15 @@ mod tests {
     use crate::family::{
         certify,
         harness::{
-            CHAIN3_CERTIFY_SUITES, CHAIN3_PROVE_SUITES, FamilyHarness, LockedManifestRouting,
-            ProveSuiteDefinition, ScaffoldDefinition, TERMINAL_UNSUPPORTED_CATCH_ALL,
-            family_harness, family_harness_in, registered_harnesses_in_routing_order_from,
-            require_family_harness_in,
+            CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
+            CHAIN3_SUITE_SLUG, FamilyHarness, LockedManifestArgs, LockedManifestRouting,
+            LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
+            MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
+            MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
+            ProveSuiteDefinition, ScaffoldDefinition, StarterCaseDefinition, StarterTemplate,
+            TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness, family_harness_in,
+            registered_harnesses_in_routing_order_from, require_family_harness_in,
+            validate_suite_ownership,
         },
         layout::validate_packet_layout,
         manifest::Routing,
@@ -130,9 +135,9 @@ mod tests {
             SuiteDefinition, certification_report_path, run_suite,
         },
         routing::{
-            CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, ManifestRoutingIssue, RegistryRoutingIssue,
-            locked_manifest_routing_in, locked_routing_order_with_terminal,
-            locked_routing_order_with_terminal_from, routing_diagnostics_in,
+            ManifestRoutingIssue, RegistryRoutingIssue, locked_manifest_routing_in,
+            locked_routing_order_with_terminal, locked_routing_order_with_terminal_from,
+            routing_diagnostics_in,
         },
         scaffold,
     };
@@ -147,9 +152,18 @@ mod tests {
 
     const EMPTY_PROVE_SUITES: [ProveSuiteDefinition; 0] = [];
     const EMPTY_CERTIFY_SUITES: [SuiteDefinition; 0] = [];
-    const SYNTHETIC_ALPHA_CASE_STEMS: [&str; 1] = ["alpha_wrapper"];
-    const SYNTHETIC_BETA_CASE_STEMS: [&str; 1] = ["beta_wrapper"];
-    const SYNTHETIC_GAMMA_CASE_STEMS: [&str; 1] = ["gamma_wrapper"];
+    const SYNTHETIC_ALPHA_CASES: [StarterCaseDefinition; 1] = [StarterCaseDefinition {
+        bucket: "aligned",
+        path: "fixtures/aligned/units/alpha/alpha_wrapper_aligned.unit.spec",
+    }];
+    const SYNTHETIC_BETA_CASES: [StarterCaseDefinition; 1] = [StarterCaseDefinition {
+        bucket: "aligned",
+        path: "fixtures/aligned/units/beta/beta_wrapper_aligned.unit.spec",
+    }];
+    const SYNTHETIC_GAMMA_CASES: [StarterCaseDefinition; 1] = [StarterCaseDefinition {
+        bucket: "aligned",
+        path: "fixtures/aligned/units/gamma/gamma_wrapper_aligned.unit.spec",
+    }];
     const SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW: [&str; 3] = [
         "legacy.alpha.v1",
         "function.wrapper.pipeline.gamma.v1",
@@ -185,39 +199,90 @@ mod tests {
     const SYNTHETIC_GAMMA_MUST_NOT_SHADOW: [&str; 1] = [TERMINAL_UNSUPPORTED_CATCH_ALL];
     const SYNTHETIC_ALPHA_HARNESS: FamilyHarness = FamilyHarness {
         family: "function.wrapper.pipeline.alpha.v1",
+        summary: "alpha summary",
+        suite_slug: "alpha_",
         scaffold: ScaffoldDefinition {
             unit_namespace: "alpha",
-            starter_case_stems: &SYNTHETIC_ALPHA_CASE_STEMS,
+            template: StarterTemplate::GenericPlaceholder,
+            starter_cases: &SYNTHETIC_ALPHA_CASES,
         },
         routing: LockedManifestRouting {
             precedence: 20,
             must_not_shadow: &SYNTHETIC_ALPHA_MUST_NOT_SHADOW,
+        },
+        shape: LockedManifestShape {
+            dep_min: 1,
+            dep_max: 1,
+            control_flow: "straight_line_only",
+            return_style: "let_then_return_or_direct_return",
+            loops: false,
+            branching: false,
+            requires_supported_function_deps: true,
+        },
+        args: LockedManifestArgs {
+            threading: "ordered_passthrough",
+            allow_nested_argument_expressions: false,
+            allow_literal_only_extra_args: false,
         },
         prove_suites: &EMPTY_PROVE_SUITES,
         certify_suites: &EMPTY_CERTIFY_SUITES,
     };
     const SYNTHETIC_BETA_HARNESS: FamilyHarness = FamilyHarness {
         family: "function.wrapper.pipeline.beta.v1",
+        summary: "beta summary",
+        suite_slug: "beta_",
         scaffold: ScaffoldDefinition {
             unit_namespace: "beta",
-            starter_case_stems: &SYNTHETIC_BETA_CASE_STEMS,
+            template: StarterTemplate::GenericPlaceholder,
+            starter_cases: &SYNTHETIC_BETA_CASES,
         },
         routing: LockedManifestRouting {
             precedence: 10,
             must_not_shadow: &SYNTHETIC_BETA_MUST_NOT_SHADOW,
+        },
+        shape: LockedManifestShape {
+            dep_min: 1,
+            dep_max: 1,
+            control_flow: "straight_line_only",
+            return_style: "let_then_return_or_direct_return",
+            loops: false,
+            branching: false,
+            requires_supported_function_deps: true,
+        },
+        args: LockedManifestArgs {
+            threading: "ordered_passthrough",
+            allow_nested_argument_expressions: false,
+            allow_literal_only_extra_args: false,
         },
         prove_suites: &EMPTY_PROVE_SUITES,
         certify_suites: &EMPTY_CERTIFY_SUITES,
     };
     const SYNTHETIC_GAMMA_HARNESS: FamilyHarness = FamilyHarness {
         family: "function.wrapper.pipeline.gamma.v1",
+        summary: "gamma summary",
+        suite_slug: "gamma_",
         scaffold: ScaffoldDefinition {
             unit_namespace: "gamma",
-            starter_case_stems: &SYNTHETIC_GAMMA_CASE_STEMS,
+            template: StarterTemplate::GenericPlaceholder,
+            starter_cases: &SYNTHETIC_GAMMA_CASES,
         },
         routing: LockedManifestRouting {
             precedence: 30,
             must_not_shadow: &SYNTHETIC_GAMMA_MUST_NOT_SHADOW,
+        },
+        shape: LockedManifestShape {
+            dep_min: 1,
+            dep_max: 1,
+            control_flow: "straight_line_only",
+            return_style: "let_then_return_or_direct_return",
+            loops: false,
+            branching: false,
+            requires_supported_function_deps: true,
+        },
+        args: LockedManifestArgs {
+            threading: "ordered_passthrough",
+            allow_nested_argument_expressions: false,
+            allow_literal_only_extra_args: false,
         },
         prove_suites: &EMPTY_PROVE_SUITES,
         certify_suites: &EMPTY_CERTIFY_SUITES,
@@ -251,9 +316,11 @@ mod tests {
         assert!(paths.manifest.is_file());
 
         let manifest = fs::read_to_string(&paths.manifest).unwrap();
-        assert!(manifest.contains("schema_version = 1"));
+        assert!(manifest.contains("schema_version = 2"));
         assert!(manifest.contains("kind = \"function\""));
         assert!(manifest.contains(&format!("precedence = {CHAIN3_PRECEDENCE}")));
+        assert!(manifest.contains("dep_min = 3"));
+        assert!(manifest.contains("dep_max = 3"));
         for family_id in CHAIN3_MUST_NOT_SHADOW {
             assert_eq!(manifest.matches(family_id).count(), 1);
         }
@@ -274,7 +341,7 @@ mod tests {
             assert!(bucket_root.join("Cargo.toml").is_file());
             assert!(bucket_root.join("src/main.rs").is_file());
             assert!(bucket_root.join("units/pricing").is_dir());
-            for relative_path in expected_scaffold_unit_paths(bucket) {
+            for relative_path in expected_chain3_scaffold_unit_paths(bucket) {
                 let unit_path = paths.root.join(&relative_path);
                 assert!(
                     unit_path.is_file(),
@@ -288,11 +355,65 @@ mod tests {
     }
 
     #[test]
+    fn family_new_creates_locked_monotone_down_nonnegative_scaffold() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family_id);
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains(&format!(
+            "precedence = {MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE}"
+        )));
+        assert!(manifest.contains("dep_min = 0"));
+        assert!(manifest.contains("dep_max = 1"));
+        assert!(manifest.contains("requires_supported_function_deps = false"));
+        for family_id in MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        for case in harness.scaffold.starter_cases {
+            let unit_path = paths.root.join(case.path);
+            assert!(
+                unit_path.is_file(),
+                "missing monotone scaffold `{}`",
+                unit_path.display()
+            );
+            assert_candidate_lists_path_once(&candidate, case.path);
+        }
+
+        let aligned = fs::read_to_string(
+            paths
+                .root
+                .join("fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec"),
+        )
+        .unwrap();
+        assert!(aligned.contains("subtotal: Decimal"));
+        assert!(aligned.contains("rate: Decimal"));
+        assert!(aligned.contains("deps:\n  - money/round"));
+        assert!(aligned.contains("round(discounted.max(Decimal::ZERO))"));
+
+        let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/apply_discount_control_flow_unsupported_near_miss.unit.spec")).unwrap();
+        assert!(unsupported.contains("if discounted < Decimal::ZERO"));
+        assert!(!candidate.contains("TODO: replace"));
+    }
+
+    #[test]
     fn locked_routing_helper_uses_registered_families_plus_terminal() {
         assert_eq!(
             locked_routing_order_with_terminal(),
             [
                 "function.wrapper.pipeline.chain3.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "unsupported.function.v1",
             ]
         );
@@ -344,6 +465,74 @@ mod tests {
                 "spec-cli:m21_chain3_regression_",
             ]
         );
+        assert_eq!(harness.suite_slug, CHAIN3_SUITE_SLUG);
+    }
+
+    #[test]
+    fn monotone_down_nonnegative_harness_contract_is_locked() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).expect("leaf harness should be registered");
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+        assert_eq!(MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES.len(), 3);
+        assert_eq!(MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES.len(), 2);
+        assert_eq!(
+            harness
+                .prove_suites
+                .iter()
+                .map(|definition| definition.gate)
+                .collect::<Vec<_>>(),
+            vec![
+                crate::family::report::GateId::GateA,
+                crate::family::report::GateId::GateC,
+                crate::family::report::GateId::GateB,
+            ]
+        );
+        assert_eq!(harness.shape.dep_min, 0);
+        assert_eq!(harness.shape.dep_max, 1);
+        assert!(!harness.shape.requires_supported_function_deps);
+        assert_eq!(harness.suite_slug, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG);
+    }
+
+    #[test]
+    fn suite_ownership_rejects_suite_names_without_locked_slug() {
+        let harness = family_harness(
+            &FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap(),
+        )
+        .unwrap();
+        let suites = [SuiteDefinition {
+            name: "spec-core:leaf_classifier_",
+            command: &["cargo", "test"],
+            expected_tests: &[
+                "semantic_review::tests::monotone_down_nonnegative_classifier_aligned_fixture_routes_to_promoted_leaf",
+            ],
+        }];
+
+        let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("suite names must include `monotone_down_nonnegative_`")));
+    }
+
+    #[test]
+    fn suite_ownership_rejects_expected_tests_without_locked_slug() {
+        let harness = family_harness(
+            &FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap(),
+        )
+        .unwrap();
+        let suites = [SuiteDefinition {
+            name: "spec-core:monotone_down_nonnegative_classifier_",
+            command: &["cargo", "test"],
+            expected_tests: &["semantic_review::tests::leaf_classifier_aligned_fixture"],
+        }];
+
+        let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("expected test names must include `monotone_down_nonnegative_`")));
     }
 
     #[test]
@@ -785,7 +974,7 @@ mod tests {
         let paths = PacketPaths::new(temp_dir.path(), family.clone());
         write_string(
             &paths.root.join("family.toml"),
-            r#"schema_version = 1
+            r#"schema_version = 2
 family = "function.wrapper.pipeline.chain3.v1"
 kind = "function"
 compatibility_key = "function.wrapper.pipeline.chain3.v1"
@@ -800,7 +989,8 @@ must_not_shadow = [
 ]
 
 [shape]
-dep_count = 3
+dep_min = 3
+dep_max = 3
 control_flow = "straight_line_only"
 return_style = "let_then_return_or_direct_return"
 loops = false
@@ -829,7 +1019,7 @@ gate_d = true
 "#,
         );
 
-        parse_manifest_file(&paths.manifest, &family).unwrap();
+        parse_manifest_file(&paths.manifest, &family, family_harness(&family).unwrap()).unwrap();
     }
 
     #[test]
@@ -839,7 +1029,7 @@ gate_d = true
         let paths = PacketPaths::new(temp_dir.path(), family.clone());
         write_string(
             &paths.root.join("family.toml"),
-            r#"schema_version = 1
+            r#"schema_version = 2
 family = "function.wrapper.pipeline.chain3.v1"
 kind = "function"
 compatibility_key = "function.wrapper.pipeline.chain3.v1"
@@ -851,7 +1041,8 @@ precedence = 1
 must_not_shadow = ["function.wrapper.pipeline.v1"]
 
 [shape]
-dep_count = 3
+dep_min = 3
+dep_max = 3
 control_flow = "straight_line_only"
 return_style = "direct_return"
 loops = false
@@ -880,7 +1071,8 @@ gate_d = true
 "#,
         );
 
-        let error = parse_manifest_file(&paths.manifest, &family).unwrap_err();
+        let error = parse_manifest_file(&paths.manifest, &family, family_harness(&family).unwrap())
+            .unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(_)));
     }
 
@@ -891,7 +1083,7 @@ gate_d = true
         let paths = PacketPaths::new(temp_dir.path(), family.clone());
         write_string(
             &paths.root.join("family.toml"),
-            r#"schema_version = 1
+            r#"schema_version = 2
 family = "function.wrapper.pipeline.chain3.v1"
 kind = "function"
 compatibility_key = "function.wrapper.pipeline.chain3.v1"
@@ -902,7 +1094,8 @@ precedence = 1
 must_not_shadow = ["function.wrapper.pipeline.v1"]
 
 [shape]
-dep_count = 3
+dep_min = 3
+dep_max = 3
 control_flow = "straight_line_only"
 return_style = "direct_return"
 loops = false
@@ -931,7 +1124,8 @@ gate_d = true
 "#,
         );
 
-        let error = parse_manifest_file(&paths.manifest, &family).unwrap_err();
+        let error = parse_manifest_file(&paths.manifest, &family, family_harness(&family).unwrap())
+            .unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(_)));
     }
 
@@ -944,8 +1138,9 @@ gate_d = true
         seed_valid_manifest(&paths.manifest, family.as_str());
         seed_valid_cases(&paths);
 
-        let manifest = parse_manifest_file(&paths.manifest, &family).unwrap();
-        let layout = validate_packet_layout(&paths.root, &manifest).unwrap();
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let layout = validate_packet_layout(&paths.root, &manifest, harness).unwrap();
 
         assert_eq!(layout.case_filenames.len(), 16);
     }
@@ -963,8 +1158,9 @@ gate_d = true
             "bad",
         );
 
-        let manifest = parse_manifest_file(&paths.manifest, &family).unwrap();
-        let error = validate_packet_layout(&paths.root, &manifest).unwrap_err();
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(_)));
     }
 
@@ -982,8 +1178,9 @@ gate_d = true
         let outside = TempDir::new().unwrap();
         symlink(outside.path(), paths.fixtures.join("drift/src/linked")).unwrap();
 
-        let manifest = parse_manifest_file(&paths.manifest, &family).unwrap();
-        let error = validate_packet_layout(&paths.root, &manifest).unwrap_err();
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(_)));
     }
 
@@ -1000,12 +1197,65 @@ gate_d = true
             .join("aligned/units/pricing/checkout_chain3_aligned.unit.spec");
         let duplicate = paths
             .fixtures
-            .join("drift/units/pricing/checkout_chain3_aligned.unit.spec");
+            .join("aligned/units/bonus/checkout_chain3_aligned.unit.spec");
         write_string(&duplicate, &fs::read_to_string(&original).unwrap());
 
-        let manifest = parse_manifest_file(&paths.manifest, &family).unwrap();
-        let error = validate_packet_layout(&paths.root, &manifest).unwrap_err();
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn packet_layout_validation_allows_helper_units_without_bucket_suffix() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        for bucket in REQUIRED_BUCKETS {
+            write_string(
+                &paths
+                    .fixtures
+                    .join(bucket)
+                    .join("units/money/round.unit.spec"),
+                "kind: function\n",
+            );
+        }
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let layout = validate_packet_layout(&paths.root, &manifest, harness).unwrap();
+        assert_eq!(layout.case_filenames.len(), 16);
+    }
+
+    #[test]
+    fn packet_layout_validation_rejects_hollow_packet_missing_locked_starter_case() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        fs::remove_file(
+            paths
+                .fixtures
+                .join("aligned/units/pricing/checkout_chain3_aligned.unit.spec"),
+        )
+        .unwrap();
+        write_string(
+            &paths
+                .fixtures
+                .join("aligned/units/pricing/hollow_aligned.unit.spec"),
+            "kind: function\n",
+        );
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("locked starter case")));
     }
 
     #[test]
@@ -1170,6 +1420,7 @@ gate_d = true
         let manifest = parse_manifest_file(
             &PacketPaths::new(temp_dir.path(), family.clone()).manifest,
             &family,
+            family_harness(&family).unwrap(),
         )
         .unwrap();
         assert_eq!(manifest.routing.precedence, expected.precedence);
@@ -1546,7 +1797,7 @@ gate_d = true
         write_string(
             manifest_path,
             &format!(
-                r#"schema_version = 1
+                r#"schema_version = 2
 family = "{family}"
 kind = "function"
 compatibility_key = "{family}"
@@ -1561,7 +1812,8 @@ must_not_shadow = [
 ]
 
 [shape]
-dep_count = 3
+dep_min = 3
+dep_max = 3
 control_flow = "straight_line_only"
 return_style = "let_then_return_or_direct_return"
 loops = false
@@ -1594,7 +1846,7 @@ gate_d = true
 
     fn seed_valid_cases(paths: &PacketPaths) {
         for bucket in REQUIRED_BUCKETS {
-            for relative_path in expected_scaffold_unit_paths(bucket) {
+            for relative_path in expected_chain3_scaffold_unit_paths(bucket) {
                 write_string(&paths.root.join(relative_path), "kind: function\n");
             }
         }
@@ -1703,7 +1955,7 @@ gate_d = true
         command_output(suite.command, exit_code, stdout)
     }
 
-    fn expected_scaffold_unit_paths(bucket: &str) -> [String; 4] {
+    fn expected_chain3_scaffold_unit_paths(bucket: &str) -> [String; 4] {
         [
             format!("fixtures/{bucket}/units/pricing/pricing_discount_leaf_{bucket}.unit.spec"),
             format!("fixtures/{bucket}/units/pricing/pricing_tax_leaf_{bucket}.unit.spec"),

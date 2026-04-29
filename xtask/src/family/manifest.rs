@@ -1,4 +1,5 @@
 use crate::XtaskError;
+use crate::family::harness::{FamilyHarness, LockedManifestArgs, LockedManifestShape};
 use crate::family::paths::FamilyId;
 use crate::family::paths::REQUIRED_BUCKETS;
 use serde::Deserialize;
@@ -34,7 +35,8 @@ pub struct Routing {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Shape {
-    pub dep_count: u64,
+    pub dep_min: u64,
+    pub dep_max: u64,
     pub control_flow: String,
     pub return_style: String,
     pub loops: bool,
@@ -75,10 +77,14 @@ pub struct Gates {
 }
 
 impl FamilyManifest {
-    pub fn validate(&self, expected_family: &FamilyId) -> Result<(), XtaskError> {
-        if self.schema_version != 1 {
+    pub fn validate(
+        &self,
+        expected_family: &FamilyId,
+        harness: &FamilyHarness,
+    ) -> Result<(), XtaskError> {
+        if self.schema_version != 2 {
             return Err(XtaskError::InvalidInput(format!(
-                "family.toml schema_version must be 1, found {}",
+                "family.toml schema_version must be 2, found {}",
                 self.schema_version
             )));
         }
@@ -105,78 +111,10 @@ impl FamilyManifest {
                 "family.toml summary must be a single non-empty line".to_string(),
             ));
         }
-        if self.routing.precedence == 0 {
-            return Err(XtaskError::InvalidInput(
-                "family.toml routing.precedence must be a positive integer".to_string(),
-            ));
-        }
-        if self.routing.must_not_shadow.is_empty() {
-            return Err(XtaskError::InvalidInput(
-                "family.toml routing.must_not_shadow must be non-empty".to_string(),
-            ));
-        }
-        if self
-            .routing
-            .must_not_shadow
-            .iter()
-            .any(|value| value.trim().is_empty())
-        {
-            return Err(XtaskError::InvalidInput(
-                "family.toml routing.must_not_shadow entries must be non-empty".to_string(),
-            ));
-        }
-        if self.shape.dep_count == 0 {
-            return Err(XtaskError::InvalidInput(
-                "family.toml shape.dep_count must be a positive integer".to_string(),
-            ));
-        }
-        if self.shape.control_flow != "straight_line_only" {
-            return Err(XtaskError::InvalidInput(format!(
-                "family.toml shape.control_flow must be `straight_line_only`, found `{}`",
-                self.shape.control_flow
-            )));
-        }
-        match self.shape.return_style.as_str() {
-            "direct_return" | "let_then_return_or_direct_return" => {}
-            other => {
-                return Err(XtaskError::InvalidInput(format!(
-                    "family.toml shape.return_style must be `direct_return` or `let_then_return_or_direct_return`, found `{other}`"
-                )));
-            }
-        }
-        if self.shape.loops {
-            return Err(XtaskError::InvalidInput(
-                "family.toml shape.loops must be false in M21".to_string(),
-            ));
-        }
-        if self.shape.branching {
-            return Err(XtaskError::InvalidInput(
-                "family.toml shape.branching must be false in M21".to_string(),
-            ));
-        }
-        if !self.shape.requires_supported_function_deps {
-            return Err(XtaskError::InvalidInput(
-                "family.toml shape.requires_supported_function_deps must be true in M21"
-                    .to_string(),
-            ));
-        }
-        if self.args.threading != "ordered_passthrough" {
-            return Err(XtaskError::InvalidInput(format!(
-                "family.toml args.threading must be `ordered_passthrough`, found `{}`",
-                self.args.threading
-            )));
-        }
-        if self.args.allow_nested_argument_expressions {
-            return Err(XtaskError::InvalidInput(
-                "family.toml args.allow_nested_argument_expressions must be false in M21"
-                    .to_string(),
-            ));
-        }
-        if self.args.allow_literal_only_extra_args {
-            return Err(XtaskError::InvalidInput(
-                "family.toml args.allow_literal_only_extra_args must be false in M21".to_string(),
-            ));
-        }
+
+        validate_routing(&self.routing)?;
+        validate_shape(&self.shape, harness.shape)?;
+        validate_args(&self.args, harness.args)?;
 
         let required_buckets: Vec<String> = REQUIRED_BUCKETS
             .iter()
@@ -223,7 +161,7 @@ impl FamilyManifest {
         }
         if !(self.gates.gate_a && self.gates.gate_b && self.gates.gate_c && self.gates.gate_d) {
             return Err(XtaskError::InvalidInput(
-                "family.toml gates.gate_a through gate_d must all be true in M21".to_string(),
+                "family.toml gates.gate_a through gate_d must all be true".to_string(),
             ));
         }
 
@@ -231,9 +169,104 @@ impl FamilyManifest {
     }
 }
 
+fn validate_routing(routing: &Routing) -> Result<(), XtaskError> {
+    if routing.precedence == 0 {
+        return Err(XtaskError::InvalidInput(
+            "family.toml routing.precedence must be a positive integer".to_string(),
+        ));
+    }
+    if routing.must_not_shadow.is_empty() {
+        return Err(XtaskError::InvalidInput(
+            "family.toml routing.must_not_shadow must be non-empty".to_string(),
+        ));
+    }
+    if routing
+        .must_not_shadow
+        .iter()
+        .any(|value| value.trim().is_empty())
+    {
+        return Err(XtaskError::InvalidInput(
+            "family.toml routing.must_not_shadow entries must be non-empty".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_shape(shape: &Shape, expected: LockedManifestShape) -> Result<(), XtaskError> {
+    if shape.dep_min > shape.dep_max {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml shape.dep_min must be less than or equal to shape.dep_max, found {} > {}",
+            shape.dep_min, shape.dep_max
+        )));
+    }
+    if shape.dep_min != expected.dep_min || shape.dep_max != expected.dep_max {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml shape dep range must be {}..={}, found {}..={}",
+            expected.dep_min, expected.dep_max, shape.dep_min, shape.dep_max
+        )));
+    }
+    if shape.control_flow != expected.control_flow {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml shape.control_flow must be `{}`, found `{}`",
+            expected.control_flow, shape.control_flow
+        )));
+    }
+    if shape.return_style != expected.return_style {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml shape.return_style must be `{}`, found `{}`",
+            expected.return_style, shape.return_style
+        )));
+    }
+    if shape.loops != expected.loops {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml shape.loops must be {}, found {}",
+            expected.loops, shape.loops
+        )));
+    }
+    if shape.branching != expected.branching {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml shape.branching must be {}, found {}",
+            expected.branching, shape.branching
+        )));
+    }
+    if shape.requires_supported_function_deps != expected.requires_supported_function_deps {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml shape.requires_supported_function_deps must be {}, found {}",
+            expected.requires_supported_function_deps, shape.requires_supported_function_deps
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_args(args: &Args, expected: LockedManifestArgs) -> Result<(), XtaskError> {
+    if args.threading != expected.threading {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml args.threading must be `{}`, found `{}`",
+            expected.threading, args.threading
+        )));
+    }
+    if args.allow_nested_argument_expressions != expected.allow_nested_argument_expressions {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml args.allow_nested_argument_expressions must be {}, found {}",
+            expected.allow_nested_argument_expressions, args.allow_nested_argument_expressions
+        )));
+    }
+    if args.allow_literal_only_extra_args != expected.allow_literal_only_extra_args {
+        return Err(XtaskError::InvalidInput(format!(
+            "family.toml args.allow_literal_only_extra_args must be {}, found {}",
+            expected.allow_literal_only_extra_args, args.allow_literal_only_extra_args
+        )));
+    }
+
+    Ok(())
+}
+
 pub fn parse_manifest_file(
     manifest_path: &Path,
     expected_family: &FamilyId,
+    harness: &FamilyHarness,
 ) -> Result<FamilyManifest, XtaskError> {
     let contents = fs::read_to_string(manifest_path).map_err(|error| {
         XtaskError::InvalidInput(format!(
@@ -249,6 +282,6 @@ pub fn parse_manifest_file(
         ))
     })?;
 
-    manifest.validate(expected_family)?;
+    manifest.validate(expected_family, harness)?;
     Ok(manifest)
 }

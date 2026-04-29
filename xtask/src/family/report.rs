@@ -9,7 +9,7 @@ use std::process::Command;
 use walkdir::WalkDir;
 
 pub(crate) const REPORT_SCHEMA_VERSION: u64 = 3;
-pub(crate) const MANIFEST_SCHEMA_VERSION: u64 = 1;
+pub(crate) const MANIFEST_SCHEMA_VERSION: u64 = 2;
 pub(crate) const PROVE_ARTIFACT_NAME: &str = "prove.latest.json";
 pub(crate) const CERTIFY_ARTIFACT_NAME: &str = "certification.report.json";
 
