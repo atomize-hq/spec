@@ -572,7 +572,7 @@ pub(crate) fn require_family_harness_in<'registry>(
 ) -> Result<&'registry FamilyHarness, XtaskError> {
     family_harness_in(registry, family).ok_or_else(|| {
         XtaskError::NotImplemented(format!(
-            "family `{}` is not registered for `{workflow}`; add an entry to `xtask/src/family/harness.rs` before running family new/prove/certify",
+            "family `{}` is not registered for `{workflow}`; add an entry to `xtask/src/family/harness.rs` before running family new/smoke/prove/certify",
             family.as_str()
         ))
     })

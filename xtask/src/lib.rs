@@ -1,7 +1,7 @@
 mod family;
 
 use clap::{Args, Parser, Subcommand};
-use family::{certify, prove, scaffold};
+use family::{certify, prove, scaffold, smoke};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
@@ -61,6 +61,7 @@ struct FamilyArgs {
 #[derive(Debug, Subcommand)]
 enum FamilyCommand {
     New { family: String },
+    Smoke { family: String },
     Prove { family: String },
     Certify { family: String },
 }
@@ -103,6 +104,7 @@ where
     match cli.command {
         Command::Family(args) => match args.command {
             FamilyCommand::New { family } => scaffold::run(workspace_root, &family),
+            FamilyCommand::Smoke { family } => smoke::run(workspace_root, &family),
             FamilyCommand::Prove { family } => prove::run(workspace_root, &family),
             FamilyCommand::Certify { family } => certify::run(workspace_root, &family),
         },
@@ -139,7 +141,7 @@ mod tests {
             locked_routing_order_with_terminal, locked_routing_order_with_terminal_from,
             routing_diagnostics_in,
         },
-        scaffold,
+        scaffold, smoke,
     };
     use spec_core::loader::load_file;
     use spec_core::semantic_review::{SemanticSupportStatus, evaluate_semantic_review};
@@ -408,6 +410,67 @@ mod tests {
     }
 
     #[test]
+    fn family_smoke_accepts_committed_monotone_down_nonnegative_scaffold_surfaces() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+
+        scaffold::run(temp_dir.path(), family).unwrap();
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "smoke", family]),
+            0
+        );
+    }
+
+    #[test]
+    fn family_smoke_rejects_committed_manifest_drift() {
+        let temp_dir = workspace_root();
+        let family =
+            FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        rewrite_manifest(&paths.manifest, "precedence = 3", "precedence = 33");
+
+        let error = smoke::run(temp_dir.path(), family.as_str()).unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("family smoke failed")
+                && message.contains("committed `family.toml`")));
+    }
+
+    #[test]
+    fn family_smoke_rejects_leaf_aligned_starter_shape_drift() {
+        let committed_root = workspace_root();
+        let scaffolded_root = workspace_root();
+        let family =
+            FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap();
+
+        scaffold::run(committed_root.path(), family.as_str()).unwrap();
+        scaffold::run(scaffolded_root.path(), family.as_str()).unwrap();
+
+        let scaffolded_paths = PacketPaths::new(scaffolded_root.path(), family.clone());
+        let aligned_path = scaffolded_paths
+            .root
+            .join("fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec");
+        let aligned = fs::read_to_string(&aligned_path).unwrap();
+        write_string(
+            &aligned_path,
+            &aligned.replacen("subtotal: Decimal", "amount: Decimal", 1),
+        );
+
+        let failures = smoke::collect_smoke_failures(
+            &PacketPaths::new(committed_root.path(), family.clone()),
+            &scaffolded_paths,
+            *family_harness(&family).unwrap(),
+        )
+        .unwrap();
+
+        assert!(failures.iter().any(|message| {
+            message.contains("aligned starter spec") && message.contains("subtotal: Decimal")
+        }));
+    }
+
+    #[test]
     fn locked_routing_helper_uses_registered_families_plus_terminal() {
         assert_eq!(
             locked_routing_order_with_terminal(),
@@ -542,6 +605,7 @@ mod tests {
 
         for args in [
             vec!["xtask", "family", "new", family],
+            vec!["xtask", "family", "smoke", family],
             vec!["xtask", "family", "prove", family],
             vec!["xtask", "family", "certify", family],
         ] {

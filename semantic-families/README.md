@@ -8,7 +8,7 @@ Packet rules for M23:
 - `family.toml` is packet-local metadata and validation truth; it does not register or orchestrate family workflows.
 - `candidate.md` is review context only.
 - fixtures are self-contained crate roots under `fixtures/<bucket>/`.
-- orchestration is registry-first in `xtask/src/family/harness.rs`; packet files alone do not enable `cargo xtask family new/prove/certify` for a new family id.
+- orchestration is registry-first in `xtask/src/family/harness.rs`; packet files alone do not enable `cargo xtask family new/smoke/prove/certify` for a new family id.
 - `xtask` must treat packet fixtures as source of truth and reject symlinks or extra unit files.
 - certification outputs live under `.semantic-family-artifacts/` and are never checked-in source.
 
@@ -46,7 +46,14 @@ Registered workflow examples:
 
 - `function.wrapper.pipeline.chain3.v1` is registered in `xtask/src/family/harness.rs`, so `cargo xtask family prove ...` and `cargo xtask family certify ...` can run for that id.
 - `function.arithmetic_leaf.monotone_down_nonnegative.v1` is also registered, so the same maintainer workflow now lands a real leaf family packet.
-- unregistered ids such as `function.wrapper.pipeline.chain4.v1` and `function.arithmetic_leaf.monotone_up.v1` must be added to the Rust harness registry before `cargo xtask family new/prove/certify` will succeed.
+- unregistered ids such as `function.wrapper.pipeline.chain4.v1` and `function.arithmetic_leaf.monotone_up.v1` must be added to the Rust harness registry before `cargo xtask family new/smoke/prove/certify` will succeed.
+
+Maintainer smoke-loop note:
+
+- `cargo xtask family new` scaffolds a truthful starter packet. It does not recreate the fully curated committed packet byte-for-byte.
+- `cargo xtask family smoke <family-id>` reruns that scaffold logic in a temp workspace and checks only scaffold-owned surfaces.
+- For `function.arithmetic_leaf.monotone_down_nonnegative.v1`, the stable smoke invariant is narrower: `family.toml` should regenerate byte-for-byte, the locked pricing starter cases should reappear in all four buckets, and the aligned starter spec should still read like the leaf family (`subtotal`, `rate`, nonnegative invariants, optional `money/round` helper dep).
+- A whole-packet diff after deleting and regenerating the committed monotone-down packet is expected to be non-empty because the committed packet adds maintainer-authored rationale in `candidate.md`, packet-local helper units, bucket-local Cargo dependencies, and extra local proof beyond the starter scaffold.
 
 Packet-local locked routing metadata:
 

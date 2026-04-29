@@ -170,8 +170,8 @@
 
 ## Post-M23 follow-ups
 
-- [ ] **M24: promote `function.arithmetic_leaf.monotone_up.v1` as the second real leaf-family packet** — After M23 lands, use the same harness-shaped workflow on the monotone-up family to prove the leaf promotion path is not specific to nonnegative clamp semantics. Do not start until M23's maintainer smoke loop is green.
+- [ ] **M24: promote `function.arithmetic_leaf.monotone_up.v1` as the second real leaf-family packet** — After M23 lands, use the same harness-shaped workflow on the monotone-up family to prove the leaf promotion path is not specific to nonnegative clamp semantics. Do not start until M23's maintainer smoke loop is explicit and green in a clean throwaway checkout: delete the monotone-down packet, rerun `family new`, verify `family.toml` stays byte-for-byte aligned with the committed packet, and verify the locked pricing starter cases plus leaf-shaped aligned starter spec regenerate without hidden code edits.
 
-- [ ] **Run a true non-author maintainer promotion dry run** — M23 planning now treats maintainer legibility as a first-class outcome, but the claim is only fully retired once someone other than the original author follows `family new` → packet authoring → prove/certify without hidden context.
+- [ ] **Run a true non-author maintainer promotion dry run** — M23 planning now treats maintainer legibility as a first-class outcome, but the claim is only fully retired once someone other than the original author follows `family new` → packet authoring → prove/certify without hidden context. Do this only after the narrower starter-scaffold smoke gate is explicit and green so the dry run is testing authoring legibility rather than an ambiguous packet diff.
 
 - [ ] **Reduce packet authoring ceremony only after two real leaf promotions exist** — If M23 and M24 both land cleanly, evaluate whether `candidate.md` scaffolding, starter fixtures, or packet metadata can be made lighter without weakening truthfulness. Do not pre-optimize packet ergonomics before the second leaf-family proof exists.

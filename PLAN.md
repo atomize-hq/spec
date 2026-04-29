@@ -888,10 +888,21 @@ cargo xtask family certify function.wrapper.pipeline.chain3.v1
 Maintainer-legibility smoke loop:
 
 ```bash
+# run in a clean disposable checkout or worktree; this destroys the packet path
 rm -rf semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1
 cargo xtask family new function.arithmetic_leaf.monotone_down_nonnegative.v1
-git diff -- semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1
+git diff --exit-code -- semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/family.toml
+test -f semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec
+test -f semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/drift/units/pricing/apply_discount_drift.unit.spec
+test -f semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/under_specified/units/pricing/apply_discount_under_specified.unit.spec
+test -f semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/unsupported_near_miss/units/pricing/apply_discount_control_flow_unsupported_near_miss.unit.spec
+rg -n 'subtotal: Decimal|rate: Decimal|output <= subtotal|output >= 0|money/round' semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec
 ```
+
+This smoke loop is intentionally checking scaffold honesty, not full packet replay. A raw diff over
+the whole packet is expected to be non-empty because the committed packet contains maintainer-curated
+material beyond the starter scaffold: richer `candidate.md` rationale, packet-local helper units,
+bucket-local Cargo deps, and extra local proof.
 
 Targeted runtime backstop commands if classifier changes are required:
 
@@ -910,7 +921,9 @@ M23 is green only if all of the following are true:
 - the new family certify command passes
 - chain3 prove/certify still pass
 - docs now honestly describe two real promoted function families
-- the maintainer smoke loop does not require hidden edits beyond the planned harness and packet work
+- in a clean throwaway checkout, deleting the monotone-down packet and rerunning `family new`
+  reproduces the committed `family.toml`, recreates the locked pricing starter cases in all four
+  buckets, and emits a leaf-shaped aligned starter spec
 - the implementation uses exactly one dep-topology schema, `dep_min` / `dep_max`, and exactly one
   suite-ownership rule, harness-owned `suite_slug` validation
 
@@ -918,6 +931,8 @@ M23 is red if any of the following remain true:
 
 - adding the leaf family still requires hidden edits outside the harness contract and obvious packet work
 - the generated `family.toml` still looks like chain3 with a different name
+- maintainers still have to interpret a whole-packet diff to guess whether scaffold regeneration is
+  healthy or merely less curated than the committed packet
 - unsupported-near-miss coverage is missing or fake
 - chain3 regresses while promoting the leaf family
 
