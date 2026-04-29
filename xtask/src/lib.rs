@@ -122,8 +122,8 @@ mod tests {
             LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
             MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
             MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
-            ProveSuiteDefinition, ScaffoldDefinition, StarterCaseDefinition, StarterTemplate,
-            TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness, family_harness_in,
+            ProveSuiteDefinition, ScaffoldDefinition, SmokeContract, StarterCaseDefinition,
+            StarterTemplate, TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness, family_harness_in,
             registered_harnesses_in_routing_order_from, require_family_harness_in,
             validate_suite_ownership,
         },
@@ -207,6 +207,10 @@ mod tests {
             unit_namespace: "alpha",
             template: StarterTemplate::GenericPlaceholder,
             starter_cases: &SYNTHETIC_ALPHA_CASES,
+            smoke: SmokeContract {
+                scaffold_exact_match_paths: &[],
+                scaffold_file_contracts: &[],
+            },
         },
         routing: LockedManifestRouting {
             precedence: 20,
@@ -237,6 +241,10 @@ mod tests {
             unit_namespace: "beta",
             template: StarterTemplate::GenericPlaceholder,
             starter_cases: &SYNTHETIC_BETA_CASES,
+            smoke: SmokeContract {
+                scaffold_exact_match_paths: &[],
+                scaffold_file_contracts: &[],
+            },
         },
         routing: LockedManifestRouting {
             precedence: 10,
@@ -267,6 +275,10 @@ mod tests {
             unit_namespace: "gamma",
             template: StarterTemplate::GenericPlaceholder,
             starter_cases: &SYNTHETIC_GAMMA_CASES,
+            smoke: SmokeContract {
+                scaffold_exact_match_paths: &[],
+                scaffold_file_contracts: &[],
+            },
         },
         routing: LockedManifestRouting {
             precedence: 30,
@@ -435,7 +447,8 @@ mod tests {
         let error = smoke::run(temp_dir.path(), family.as_str()).unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(message)
             if message.contains("family smoke failed")
-                && message.contains("committed `family.toml`")));
+                && message.contains("committed scaffold exact-match file")
+                && message.contains("family.toml")));
     }
 
     #[test]
@@ -466,7 +479,8 @@ mod tests {
         .unwrap();
 
         assert!(failures.iter().any(|message| {
-            message.contains("aligned starter spec") && message.contains("subtotal: Decimal")
+            message.contains("scaffolded smoke-contract file")
+                && message.contains("subtotal: Decimal")
         }));
     }
 
@@ -559,6 +573,15 @@ mod tests {
         assert_eq!(harness.shape.dep_min, 0);
         assert_eq!(harness.shape.dep_max, 1);
         assert!(!harness.shape.requires_supported_function_deps);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_exact_match_paths,
+            ["family.toml"]
+        );
+        assert_eq!(harness.scaffold.smoke.scaffold_file_contracts.len(), 1);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_file_contracts[0].path,
+            "fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec"
+        );
         assert_eq!(harness.suite_slug, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG);
     }
 

@@ -1,6 +1,6 @@
 use crate::XtaskError;
 use crate::family::harness::{
-    FamilyHarness, StarterTemplate, registered_family_harnesses, require_family_harness_in,
+    FamilyHarness, registered_family_harnesses, require_family_harness_in,
 };
 use crate::family::paths::{FAMILY_ROOT_DIR, FamilyId, PacketPaths, ensure_packet_path_safe};
 use crate::family::scaffold;
@@ -57,15 +57,11 @@ pub(crate) fn collect_smoke_failures(
 ) -> Result<Vec<String>, XtaskError> {
     let mut failures = Vec::new();
 
-    let committed_manifest = read_file_bytes(&committed_paths.manifest, "committed family.toml")?;
-    let scaffolded_manifest =
-        read_file_bytes(&scaffolded_paths.manifest, "scaffolded family.toml")?;
-    if committed_manifest != scaffolded_manifest {
-        failures.push(format!(
-            "committed `family.toml` at `{}` does not match scaffolded `family.toml` from `cargo xtask family new`",
-            committed_paths.manifest.display()
-        ));
-    }
+    failures.extend(collect_exact_match_failures(
+        committed_paths,
+        scaffolded_paths,
+        harness,
+    )?);
 
     for case in harness.scaffold.starter_cases {
         let path = scaffolded_paths.root.join(case.path);
@@ -82,59 +78,61 @@ pub(crate) fn collect_smoke_failures(
         }
     }
 
-    failures.extend(template_specific_failures(scaffolded_paths, harness)?);
+    failures.extend(collect_file_contract_failures(scaffolded_paths, harness)?);
 
     Ok(failures)
 }
 
-fn template_specific_failures(
+fn collect_exact_match_failures(
+    committed_paths: &PacketPaths,
     scaffolded_paths: &PacketPaths,
     harness: FamilyHarness,
 ) -> Result<Vec<String>, XtaskError> {
-    match harness.scaffold.template {
-        StarterTemplate::GenericPlaceholder => Ok(Vec::new()),
-        StarterTemplate::ArithmeticLeafMonotoneDownNonnegative => {
-            arithmetic_leaf_aligned_failures(scaffolded_paths, harness)
-        }
-    }
-}
-
-fn arithmetic_leaf_aligned_failures(
-    scaffolded_paths: &PacketPaths,
-    harness: FamilyHarness,
-) -> Result<Vec<String>, XtaskError> {
-    let aligned_case = harness
-        .starter_cases_for_bucket("aligned")
-        .next()
-        .ok_or_else(|| {
-            XtaskError::Internal(format!(
-                "family `{}` has no locked aligned starter case",
-                harness.family
-            ))
-        })?;
-    let aligned_path = scaffolded_paths.root.join(aligned_case.path);
-    let aligned = read_file_string(&aligned_path, "scaffolded aligned starter spec")?;
     let mut failures = Vec::new();
 
-    for needle in [
-        "subtotal: Decimal",
-        "rate: Decimal",
-        "- output <= subtotal",
-        "- output >= 0",
-    ] {
-        if !aligned.contains(needle) {
+    for relative_path in harness.scaffold.smoke.scaffold_exact_match_paths {
+        let committed_path = committed_paths.root.join(relative_path);
+        let scaffolded_path = scaffolded_paths.root.join(relative_path);
+        let committed = read_file_bytes(&committed_path, "committed scaffold exact-match file")?;
+        let scaffolded = read_file_bytes(&scaffolded_path, "scaffolded scaffold exact-match file")?;
+        if committed != scaffolded {
             failures.push(format!(
-                "aligned starter spec `{}` is missing `{needle}`",
-                aligned_path.display()
+                "committed scaffold exact-match file `{}` does not match scaffolded file from `cargo xtask family new`",
+                committed_path.display()
             ));
         }
     }
 
-    if aligned.contains("deps:") && !aligned.contains("money/round") {
-        failures.push(format!(
-            "aligned starter spec `{}` mentions deps but does not include optional helper dep `money/round`",
-            aligned_path.display()
-        ));
+    Ok(failures)
+}
+
+fn collect_file_contract_failures(
+    scaffolded_paths: &PacketPaths,
+    harness: FamilyHarness,
+) -> Result<Vec<String>, XtaskError> {
+    let mut failures = Vec::new();
+
+    for contract in harness.scaffold.smoke.scaffold_file_contracts {
+        let path = scaffolded_paths.root.join(contract.path);
+        let contents = read_file_string(&path, "scaffolded smoke-contract file")?;
+
+        for needle in contract.required_contents {
+            if !contents.contains(needle) {
+                failures.push(format!(
+                    "scaffolded smoke-contract file `{}` is missing required content `{needle}`",
+                    path.display()
+                ));
+            }
+        }
+
+        for needle in contract.forbidden_contents {
+            if contents.contains(needle) {
+                failures.push(format!(
+                    "scaffolded smoke-contract file `{}` contains forbidden content `{needle}`",
+                    path.display()
+                ));
+            }
+        }
     }
 
     Ok(failures)

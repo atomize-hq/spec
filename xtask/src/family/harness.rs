@@ -109,6 +109,22 @@ const MONOTONE_DOWN_NONNEGATIVE_STARTER_CASES: [StarterCaseDefinition; 4] = [
     },
 ];
 
+const DEFAULT_SCAFFOLD_EXACT_MATCH_PATHS: [&str; 1] = ["family.toml"];
+const EMPTY_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 0] = [];
+const MONOTONE_DOWN_NONNEGATIVE_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 1] =
+    [SmokeFileContract {
+        path: "fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec",
+        required_contents: &[
+            "subtotal: Decimal",
+            "rate: Decimal",
+            "- output <= subtotal",
+            "- output >= 0",
+            "deps:\n  - money/round",
+            "round(discounted.max(Decimal::ZERO))",
+        ],
+        forbidden_contents: &[],
+    }];
+
 pub(crate) const CHAIN3_PROVE_SUITES: [SuiteDefinition; 3] = [
     SuiteDefinition {
         name: "spec-core:m21_chain3_classifier_",
@@ -355,6 +371,10 @@ const CHAIN3_HARNESS: FamilyHarness = FamilyHarness {
         unit_namespace: "pricing",
         template: StarterTemplate::GenericPlaceholder,
         starter_cases: &CHAIN3_STARTER_CASES,
+        smoke: SmokeContract {
+            scaffold_exact_match_paths: &DEFAULT_SCAFFOLD_EXACT_MATCH_PATHS,
+            scaffold_file_contracts: &EMPTY_SMOKE_FILE_CONTRACTS,
+        },
     },
     routing: LockedManifestRouting {
         precedence: CHAIN3_PRECEDENCE,
@@ -386,6 +406,10 @@ const MONOTONE_DOWN_NONNEGATIVE_HARNESS: FamilyHarness = FamilyHarness {
         unit_namespace: "pricing",
         template: StarterTemplate::ArithmeticLeafMonotoneDownNonnegative,
         starter_cases: &MONOTONE_DOWN_NONNEGATIVE_STARTER_CASES,
+        smoke: SmokeContract {
+            scaffold_exact_match_paths: &DEFAULT_SCAFFOLD_EXACT_MATCH_PATHS,
+            scaffold_file_contracts: &MONOTONE_DOWN_NONNEGATIVE_SMOKE_FILE_CONTRACTS,
+        },
     },
     routing: LockedManifestRouting {
         precedence: MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
@@ -433,6 +457,7 @@ pub(crate) struct ScaffoldDefinition {
     pub unit_namespace: &'static str,
     pub template: StarterTemplate,
     pub starter_cases: &'static [StarterCaseDefinition],
+    pub smoke: SmokeContract,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -445,6 +470,19 @@ pub(crate) struct StarterCaseDefinition {
 pub(crate) enum StarterTemplate {
     GenericPlaceholder,
     ArithmeticLeafMonotoneDownNonnegative,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SmokeContract {
+    pub scaffold_exact_match_paths: &'static [&'static str],
+    pub scaffold_file_contracts: &'static [SmokeFileContract],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SmokeFileContract {
+    pub path: &'static str,
+    pub required_contents: &'static [&'static str],
+    pub forbidden_contents: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
