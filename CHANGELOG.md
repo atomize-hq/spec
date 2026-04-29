@@ -2,14 +2,25 @@
 
 ## Unreleased
 
+## 0.13.1 - 2026-04-29
+
+### Added
+
+- **Workspace-owned semantic-family promotion commands** — the repo now ships `xtask` as a first-class workspace member with locked `family new`, `smoke`, `prove`, and `certify` flows for promoted packets.
+- **Two real promoted family packets beyond the original wrapper seed** — `function.wrapper.pipeline.chain3.v1` and `function.arithmetic_leaf.monotone_up.v1` now ship committed packet truth, scaffold contracts, fixture corpora, and attested proof artifacts.
+- **Targeted promotion regression coverage** — xtask lock tests, runtime classifier/routing regressions, CLI truth-surface regressions, and monotone-up corpus fixtures now exercise the promotion workflow end to end.
+
 ### Changed
 
+- **Unsupported-function proof now survives preserve-mode only when it is still fresh** — passport and export projection keep truthful `unsupported.function.v1` review plus rewrite hints on read-side surfaces until authored truth changes, then drop the stale proof instead of minting new unsupported truth.
 - **Semantic-family artifact schema is now v3** — `prove.latest.json`, certify attempts, and `certification.report.json` now write `schema_version = 3`, and prove `overall_status` reflects only that artifact's `required_gates` instead of implicitly failing on `gate_d`.
 - **xtask routing diagnostics now distinguish packet-local and registry-global truth** — selected-family manifest routing still requires exact equality with its locked harness entry, while registry-global coherence checks only registered families plus terminal `unsupported.function.v1`.
+- **Repo truth and agent docs now teach the promoted-family workflow directly** — `README.md`, `AGENTS.md`, `semantic-families/README.md`, and the M24/M26 planning docs now point at the real smoke/prove/certify loop and the current supported-family inventory.
 
 ### Fixed
 
 - **`prove.latest.json` no longer overstates failure on successful prove runs** — a passing prove artifact can now honestly serialize `overall_status = "pass"` even when `gate_d` remains informationally `fail`.
+- **Canonical ecommerce proof surfaces are fresh again for the promoted families** — checked-in passports, unsupported-truth fixtures, and read-side status fixtures now match the current monotone-down, monotone-up, and wrapper-family contract.
 
 ## 0.13.0 - 2026-04-26
 

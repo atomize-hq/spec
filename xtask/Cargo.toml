@@ -19,4 +19,4 @@ toml = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
-spec-core = { path = "../spec-core", version = "0.13.0" }
+spec-core = { path = "../spec-core", version = "0.13.1" }
