@@ -27,7 +27,7 @@
       "expect": "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
     }
   ],
-  "generated_at": "2026-04-29T14:38:00Z",
+  "generated_at": "2026-04-29T17:20:03Z",
   "source_file": "examples/ecommerce/units/pricing/apply_tax.unit.spec",
   "evidence": {
     "build_status": "pass",
