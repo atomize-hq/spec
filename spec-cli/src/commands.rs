@@ -4800,7 +4800,18 @@ fn print_status_unit(unit: &JsonStatusUnit) {
         unit.status.as_str()
     );
     if let Some(review) = &unit.semantic_review {
-        println!("  · {}", semantic_review_summary(review));
+        if semantic_health_effect(Some(review)) == SemanticHealthEffect::KeepBase
+            && matches!(
+                review.effective_support_status(),
+                spec_core::semantic_review::SemanticSupportStatus::Unsupported
+            )
+        {
+            for hint in &review.rewrite_hints {
+                println!("  · hint: {hint}");
+            }
+        } else {
+            println!("  · {}", semantic_review_summary(review));
+        }
     }
     if unit.status == HealthState::Invalid {
         for entry in &unit.errors {
@@ -5726,6 +5737,9 @@ body:
         let supported_incomplete_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::UnderSpecified,
             compatibility_key: "data.checkout_quote.v1".to_string(),
+            support_status: None,
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
             reason_codes: vec![
                 spec_core::semantic_review::SemanticReasonCode::MissingSemanticMethods,
             ],
@@ -5737,6 +5751,9 @@ body:
         let supported_failing_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::SemanticDrift,
             compatibility_key: "data.checkout_quote.v1".to_string(),
+            support_status: None,
+            unsupported_reason_codes: vec![],
+            rewrite_hints: vec![],
             reason_codes: vec![
                 spec_core::semantic_review::SemanticReasonCode::MethodBodyMissingCapBehavior,
             ],

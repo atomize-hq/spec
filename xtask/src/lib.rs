@@ -1,0 +1,2457 @@
+mod family;
+
+use clap::{Args, Parser, Subcommand};
+use family::{certify, prove, scaffold, smoke};
+use std::ffi::OsString;
+use std::path::Path;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum XtaskError {
+    #[error("{0}")]
+    InvalidInput(String),
+    #[error("{0}")]
+    AlreadyExists(String),
+    #[error("{0}")]
+    ProveSuiteFailure(String),
+    #[error("{0}")]
+    CertifyProveFailure(String),
+    #[error("{0}")]
+    CertifySuiteFailure(String),
+    #[error("{0}")]
+    CertifyArtifactWriteFailure(String),
+    #[error("{0}")]
+    WriteFailure(String),
+    #[error("{0}")]
+    NotImplemented(String),
+    #[error("{0}")]
+    Internal(String),
+}
+
+impl XtaskError {
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            Self::InvalidInput(_) => 2,
+            Self::AlreadyExists(_) | Self::ProveSuiteFailure(_) | Self::CertifyProveFailure(_) => 3,
+            Self::WriteFailure(_) | Self::CertifySuiteFailure(_) => 4,
+            Self::CertifyArtifactWriteFailure(_) => 5,
+            Self::NotImplemented(_) | Self::Internal(_) => 1,
+        }
+    }
+
+    fn safe_message(&self) -> &'static str {
+        match self {
+            Self::InvalidInput(_) => "invalid input",
+            Self::AlreadyExists(_) => "resource already exists",
+            Self::ProveSuiteFailure(_) => "prove suite failure",
+            Self::CertifyProveFailure(_) => "family certify failed after prove",
+            Self::CertifySuiteFailure(_) => "family certify failed one or more certify gates",
+            Self::CertifyArtifactWriteFailure(_) => {
+                "family certify could not write one or more certification artifacts"
+            }
+            Self::WriteFailure(_) => "write failure",
+            Self::NotImplemented(_) => "not implemented",
+            Self::Internal(_) => "internal error",
+        }
+    }
+}
+
+#[derive(Debug, Parser)]
+#[command(bin_name = "xtask")]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    Family(FamilyArgs),
+}
+
+#[derive(Debug, Args)]
+struct FamilyArgs {
+    #[command(subcommand)]
+    command: FamilyCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum FamilyCommand {
+    New { family: String },
+    Smoke { family: String },
+    Prove { family: String },
+    Certify { family: String },
+}
+
+pub fn run() -> i32 {
+    let workspace_root = match std::env::current_dir() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("failed to resolve current directory: {error}");
+            return XtaskError::Internal("failed to resolve current directory".to_string())
+                .exit_code();
+        }
+    };
+
+    run_from(&workspace_root, std::env::args_os())
+}
+
+pub fn run_from<I, S>(workspace_root: &Path, args: I) -> i32
+where
+    I: IntoIterator<Item = S>,
+    S: Into<OsString> + Clone,
+{
+    match dispatch(workspace_root, args) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("{}", error.safe_message());
+            error.exit_code()
+        }
+    }
+}
+
+pub fn dispatch<I, S>(workspace_root: &Path, args: I) -> Result<(), XtaskError>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<OsString> + Clone,
+{
+    let cli =
+        Cli::try_parse_from(args).map_err(|error| XtaskError::InvalidInput(error.to_string()))?;
+
+    match cli.command {
+        Command::Family(args) => match args.command {
+            FamilyCommand::New { family } => scaffold::run(workspace_root, &family),
+            FamilyCommand::Smoke { family } => smoke::run(workspace_root, &family),
+            FamilyCommand::Prove { family } => prove::run(workspace_root, &family),
+            FamilyCommand::Certify { family } => certify::run(workspace_root, &family),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::family::{
+        certify,
+        harness::{
+            CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
+            CHAIN3_SUITE_SLUG, FamilyHarness, LockedManifestArgs, LockedManifestRouting,
+            LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
+            MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
+            MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
+            MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
+            MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
+            ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
+            TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness, family_harness_in,
+            registered_harnesses_in_routing_order_from, require_family_harness_in,
+            validate_suite_ownership,
+        },
+        layout::validate_packet_layout,
+        manifest::Routing,
+        manifest::parse_manifest_file,
+        paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS},
+        prove,
+        report::{
+            CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME, PassFail,
+            SuiteDefinition, certification_report_path, run_suite,
+        },
+        routing::{
+            ManifestRoutingIssue, RegistryRoutingIssue, locked_manifest_routing_in,
+            locked_routing_order_with_terminal, locked_routing_order_with_terminal_from,
+            routing_diagnostics_in,
+        },
+        scaffold, smoke,
+    };
+    use spec_core::loader::load_file;
+    use spec_core::semantic_review::{SemanticSupportStatus, evaluate_semantic_review};
+    use spec_core::validator::validate_full;
+    use std::cell::RefCell;
+    use std::collections::{HashMap, VecDeque};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use tempfile::TempDir;
+
+    const EMPTY_PROVE_SUITES: [ProveSuiteDefinition; 0] = [];
+    const EMPTY_CERTIFY_SUITES: [SuiteDefinition; 0] = [];
+    const SYNTHETIC_ALPHA_CASES: [StarterCaseDefinition; 1] = [StarterCaseDefinition {
+        bucket: "aligned",
+        path: "fixtures/aligned/units/alpha/alpha_wrapper_aligned.unit.spec",
+    }];
+    const SYNTHETIC_BETA_CASES: [StarterCaseDefinition; 1] = [StarterCaseDefinition {
+        bucket: "aligned",
+        path: "fixtures/aligned/units/beta/beta_wrapper_aligned.unit.spec",
+    }];
+    const SYNTHETIC_GAMMA_CASES: [StarterCaseDefinition; 1] = [StarterCaseDefinition {
+        bucket: "aligned",
+        path: "fixtures/aligned/units/gamma/gamma_wrapper_aligned.unit.spec",
+    }];
+    const SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW: [&str; 3] = [
+        "legacy.alpha.v1",
+        "function.wrapper.pipeline.gamma.v1",
+        "legacy.beta.v1",
+    ];
+    const SYNTHETIC_ALPHA_MUST_NOT_SHADOW: [&str; 1] = ["function.wrapper.pipeline.gamma.v1"];
+    const SYNTHETIC_BETA_MUST_NOT_SHADOW: [&str; 2] = [
+        "function.wrapper.pipeline.alpha.v1",
+        "function.wrapper.pipeline.gamma.v1",
+    ];
+    const SYNTHETIC_BETA_MISSING_GAMMA_MUST_NOT_SHADOW: [&str; 1] =
+        ["function.wrapper.pipeline.alpha.v1"];
+    const SYNTHETIC_BETA_DUPLICATE_GAMMA_MUST_NOT_SHADOW: [&str; 3] = [
+        "function.wrapper.pipeline.alpha.v1",
+        "function.wrapper.pipeline.gamma.v1",
+        "function.wrapper.pipeline.gamma.v1",
+    ];
+    const SYNTHETIC_BETA_OUT_OF_ORDER_MUST_NOT_SHADOW: [&str; 2] = [
+        "function.wrapper.pipeline.gamma.v1",
+        "function.wrapper.pipeline.alpha.v1",
+    ];
+    const SYNTHETIC_BETA_UNSUPPORTED_BEFORE_GAMMA_MUST_NOT_SHADOW: [&str; 3] = [
+        "function.wrapper.pipeline.alpha.v1",
+        TERMINAL_UNSUPPORTED_CATCH_ALL,
+        "function.wrapper.pipeline.gamma.v1",
+    ];
+    const SYNTHETIC_BETA_DUPLICATE_UNSUPPORTED_MUST_NOT_SHADOW: [&str; 4] = [
+        "function.wrapper.pipeline.alpha.v1",
+        TERMINAL_UNSUPPORTED_CATCH_ALL,
+        "function.wrapper.pipeline.gamma.v1",
+        TERMINAL_UNSUPPORTED_CATCH_ALL,
+    ];
+    const SYNTHETIC_GAMMA_MUST_NOT_SHADOW: [&str; 1] = [TERMINAL_UNSUPPORTED_CATCH_ALL];
+    const SYNTHETIC_ALPHA_HARNESS: FamilyHarness = FamilyHarness {
+        family: "function.wrapper.pipeline.alpha.v1",
+        summary: "alpha summary",
+        suite_slug: "alpha_",
+        scaffold: ScaffoldDefinition {
+            unit_namespace: "alpha",
+            template: StarterTemplate::GenericPlaceholder,
+            starter_cases: &SYNTHETIC_ALPHA_CASES,
+            smoke: SmokeContract {
+                scaffold_exact_match_paths: &[],
+                scaffold_file_contracts: &[],
+            },
+        },
+        routing: LockedManifestRouting {
+            precedence: 20,
+            must_not_shadow: &SYNTHETIC_ALPHA_MUST_NOT_SHADOW,
+        },
+        shape: LockedManifestShape {
+            dep_min: 1,
+            dep_max: 1,
+            control_flow: "straight_line_only",
+            return_style: "let_then_return_or_direct_return",
+            loops: false,
+            branching: false,
+            requires_supported_function_deps: true,
+        },
+        args: LockedManifestArgs {
+            threading: "ordered_passthrough",
+            allow_nested_argument_expressions: false,
+            allow_literal_only_extra_args: false,
+        },
+        prove_suites: &EMPTY_PROVE_SUITES,
+        certify_suites: &EMPTY_CERTIFY_SUITES,
+    };
+    const SYNTHETIC_BETA_HARNESS: FamilyHarness = FamilyHarness {
+        family: "function.wrapper.pipeline.beta.v1",
+        summary: "beta summary",
+        suite_slug: "beta_",
+        scaffold: ScaffoldDefinition {
+            unit_namespace: "beta",
+            template: StarterTemplate::GenericPlaceholder,
+            starter_cases: &SYNTHETIC_BETA_CASES,
+            smoke: SmokeContract {
+                scaffold_exact_match_paths: &[],
+                scaffold_file_contracts: &[],
+            },
+        },
+        routing: LockedManifestRouting {
+            precedence: 10,
+            must_not_shadow: &SYNTHETIC_BETA_MUST_NOT_SHADOW,
+        },
+        shape: LockedManifestShape {
+            dep_min: 1,
+            dep_max: 1,
+            control_flow: "straight_line_only",
+            return_style: "let_then_return_or_direct_return",
+            loops: false,
+            branching: false,
+            requires_supported_function_deps: true,
+        },
+        args: LockedManifestArgs {
+            threading: "ordered_passthrough",
+            allow_nested_argument_expressions: false,
+            allow_literal_only_extra_args: false,
+        },
+        prove_suites: &EMPTY_PROVE_SUITES,
+        certify_suites: &EMPTY_CERTIFY_SUITES,
+    };
+    const SYNTHETIC_GAMMA_HARNESS: FamilyHarness = FamilyHarness {
+        family: "function.wrapper.pipeline.gamma.v1",
+        summary: "gamma summary",
+        suite_slug: "gamma_",
+        scaffold: ScaffoldDefinition {
+            unit_namespace: "gamma",
+            template: StarterTemplate::GenericPlaceholder,
+            starter_cases: &SYNTHETIC_GAMMA_CASES,
+            smoke: SmokeContract {
+                scaffold_exact_match_paths: &[],
+                scaffold_file_contracts: &[],
+            },
+        },
+        routing: LockedManifestRouting {
+            precedence: 30,
+            must_not_shadow: &SYNTHETIC_GAMMA_MUST_NOT_SHADOW,
+        },
+        shape: LockedManifestShape {
+            dep_min: 1,
+            dep_max: 1,
+            control_flow: "straight_line_only",
+            return_style: "let_then_return_or_direct_return",
+            loops: false,
+            branching: false,
+            requires_supported_function_deps: true,
+        },
+        args: LockedManifestArgs {
+            threading: "ordered_passthrough",
+            allow_nested_argument_expressions: false,
+            allow_literal_only_extra_args: false,
+        },
+        prove_suites: &EMPTY_PROVE_SUITES,
+        certify_suites: &EMPTY_CERTIFY_SUITES,
+    };
+    const SYNTHETIC_MULTI_FAMILY_REGISTRY: [FamilyHarness; 3] = [
+        SYNTHETIC_ALPHA_HARNESS,
+        SYNTHETIC_GAMMA_HARNESS,
+        SYNTHETIC_BETA_HARNESS,
+    ];
+
+    #[test]
+    fn family_new_creates_locked_scaffold() {
+        let temp_dir = workspace_root();
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "new",
+                "function.wrapper.pipeline.chain3.v1",
+            ],
+        );
+
+        assert_eq!(code, 0);
+
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family);
+
+        assert!(paths.root.is_dir());
+        assert!(paths.candidate.is_file());
+        assert!(paths.manifest.is_file());
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains("kind = \"function\""));
+        assert!(manifest.contains(&format!("precedence = {CHAIN3_PRECEDENCE}")));
+        assert!(manifest.contains("dep_min = 3"));
+        assert!(manifest.contains("dep_max = 3"));
+        for family_id in CHAIN3_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+        assert!(manifest.contains(
+            "required_buckets = [\"aligned\", \"drift\", \"under_specified\", \"unsupported_near_miss\"]"
+        ));
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        assert!(candidate.contains("## Aligned"));
+        assert!(candidate.contains("## Drift"));
+        assert!(candidate.contains("## Under Specified"));
+        assert!(candidate.contains("## Unsupported Near Miss"));
+        assert!(!candidate.contains("units/namespace/"));
+        assert!(!candidate.contains("TODO: list each"));
+
+        for bucket in REQUIRED_BUCKETS {
+            let bucket_root = paths.fixtures.join(bucket);
+            assert!(bucket_root.join("Cargo.toml").is_file());
+            assert!(bucket_root.join("src/main.rs").is_file());
+            assert!(bucket_root.join("units/pricing").is_dir());
+            for relative_path in expected_chain3_scaffold_unit_paths(bucket) {
+                let unit_path = paths.root.join(&relative_path);
+                assert!(
+                    unit_path.is_file(),
+                    "missing scaffolded unit `{}`",
+                    unit_path.display()
+                );
+                assert_candidate_lists_path_once(&candidate, &relative_path);
+                assert_starter_spec_is_valid_and_non_proving(&unit_path);
+            }
+        }
+    }
+
+    #[test]
+    fn family_new_creates_locked_monotone_down_nonnegative_scaffold() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family_id);
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains(&format!(
+            "precedence = {MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE}"
+        )));
+        assert!(manifest.contains("dep_min = 0"));
+        assert!(manifest.contains("dep_max = 1"));
+        assert!(manifest.contains("requires_supported_function_deps = false"));
+        for family_id in MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        for case in harness.scaffold.starter_cases {
+            let unit_path = paths.root.join(case.path);
+            assert!(
+                unit_path.is_file(),
+                "missing monotone scaffold `{}`",
+                unit_path.display()
+            );
+            assert_candidate_lists_path_once(&candidate, case.path);
+        }
+
+        let aligned = fs::read_to_string(
+            paths
+                .root
+                .join("fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec"),
+        )
+        .unwrap();
+        assert!(aligned.contains("subtotal: Decimal"));
+        assert!(aligned.contains("rate: Decimal"));
+        assert!(aligned.contains("deps:\n  - money/round"));
+        assert!(aligned.contains("round(discounted.max(Decimal::ZERO))"));
+
+        let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/apply_discount_control_flow_unsupported_near_miss.unit.spec")).unwrap();
+        assert!(unsupported.contains("if discounted < Decimal::ZERO"));
+        assert!(!candidate.contains("TODO: replace"));
+    }
+
+    #[test]
+    fn family_smoke_accepts_committed_monotone_down_nonnegative_scaffold_surfaces() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+
+        scaffold::run(temp_dir.path(), family).unwrap();
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "smoke", family]),
+            0
+        );
+    }
+
+    #[test]
+    fn family_smoke_rejects_committed_manifest_drift() {
+        let temp_dir = workspace_root();
+        let family =
+            FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        rewrite_manifest(&paths.manifest, "precedence = 3", "precedence = 33");
+
+        let error = smoke::run(temp_dir.path(), family.as_str()).unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("family smoke failed")
+                && message.contains("committed scaffold exact-match file")
+                && message.contains("family.toml")));
+    }
+
+    #[test]
+    fn family_smoke_rejects_leaf_aligned_starter_shape_drift() {
+        let committed_root = workspace_root();
+        let scaffolded_root = workspace_root();
+        let family =
+            FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap();
+
+        scaffold::run(committed_root.path(), family.as_str()).unwrap();
+        scaffold::run(scaffolded_root.path(), family.as_str()).unwrap();
+
+        let scaffolded_paths = PacketPaths::new(scaffolded_root.path(), family.clone());
+        let aligned_path = scaffolded_paths
+            .root
+            .join("fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec");
+        let aligned = fs::read_to_string(&aligned_path).unwrap();
+        write_string(
+            &aligned_path,
+            &aligned.replacen("subtotal: Decimal", "amount: Decimal", 1),
+        );
+
+        let failures = smoke::collect_smoke_failures(
+            &PacketPaths::new(committed_root.path(), family.clone()),
+            &scaffolded_paths,
+            *family_harness(&family).unwrap(),
+        )
+        .unwrap();
+
+        assert!(failures.iter().any(|message| {
+            message.contains("scaffolded smoke-contract file")
+                && message.contains("subtotal: Decimal")
+        }));
+    }
+
+    #[test]
+    fn family_new_creates_locked_monotone_up_scaffold() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_up.v1";
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family_id);
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains(&format!("precedence = {MONOTONE_UP_PRECEDENCE}")));
+        assert!(manifest.contains("dep_min = 0"));
+        assert!(manifest.contains("dep_max = 1"));
+        assert!(manifest.contains("requires_supported_function_deps = false"));
+        for family_id in MONOTONE_UP_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        for case in harness.scaffold.starter_cases {
+            let unit_path = paths.root.join(case.path);
+            assert!(
+                unit_path.is_file(),
+                "missing monotone-up scaffold `{}`",
+                unit_path.display()
+            );
+            assert_candidate_lists_path_once(&candidate, case.path);
+        }
+
+        let aligned = fs::read_to_string(
+            paths
+                .root
+                .join("fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec"),
+        )
+        .unwrap();
+        assert!(aligned.contains("subtotal: Decimal"));
+        assert!(aligned.contains("rate: Decimal"));
+        assert!(aligned.contains("- output >= subtotal"));
+        assert!(aligned.contains("deps:\n  - money/round"));
+        assert!(aligned.contains("let taxed = subtotal + subtotal * rate;"));
+        assert!(aligned.contains("round(taxed)"));
+
+        let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec")).unwrap();
+        assert!(unsupported.contains("if rate == Decimal::ZERO"));
+        assert!(!candidate.contains("TODO: replace"));
+    }
+
+    #[test]
+    fn family_smoke_accepts_committed_monotone_up_scaffold_surfaces() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_up.v1";
+
+        scaffold::run(temp_dir.path(), family).unwrap();
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "smoke", family]),
+            0
+        );
+    }
+
+    #[test]
+    fn family_smoke_rejects_monotone_up_aligned_starter_shape_drift() {
+        let committed_root = workspace_root();
+        let scaffolded_root = workspace_root();
+        let family = FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap();
+
+        scaffold::run(committed_root.path(), family.as_str()).unwrap();
+        scaffold::run(scaffolded_root.path(), family.as_str()).unwrap();
+
+        let scaffolded_paths = PacketPaths::new(scaffolded_root.path(), family.clone());
+        let aligned_path = scaffolded_paths
+            .root
+            .join("fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec");
+        let aligned = fs::read_to_string(&aligned_path).unwrap();
+        write_string(
+            &aligned_path,
+            &aligned.replacen("subtotal: Decimal", "amount: Decimal", 1),
+        );
+
+        let failures = smoke::collect_smoke_failures(
+            &PacketPaths::new(committed_root.path(), family.clone()),
+            &scaffolded_paths,
+            *family_harness(&family).unwrap(),
+        )
+        .unwrap();
+
+        assert!(failures.iter().any(|message| {
+            message.contains("scaffolded smoke-contract file")
+                && message.contains("subtotal: Decimal")
+        }));
+    }
+
+    #[test]
+    fn locked_routing_helper_uses_registered_families_plus_terminal() {
+        assert_eq!(
+            locked_routing_order_with_terminal(),
+            [
+                "function.wrapper.pipeline.chain3.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+                "unsupported.function.v1",
+            ]
+        );
+    }
+
+    #[test]
+    fn chain3_harness_contract_is_locked() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.chain3.v1";
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).expect("chain3 harness should be registered");
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+        assert_eq!(CHAIN3_PROVE_SUITES.len(), 3);
+        assert_eq!(CHAIN3_CERTIFY_SUITES.len(), 2);
+        assert_eq!(
+            harness
+                .prove_suites
+                .iter()
+                .map(|definition| definition.gate)
+                .collect::<Vec<_>>(),
+            vec![
+                crate::family::report::GateId::GateA,
+                crate::family::report::GateId::GateC,
+                crate::family::report::GateId::GateB,
+            ]
+        );
+        assert_eq!(
+            CHAIN3_PROVE_SUITES
+                .iter()
+                .map(|suite| suite.name)
+                .collect::<Vec<_>>(),
+            vec![
+                "spec-core:m21_chain3_classifier_",
+                "spec-cli:m21_chain3_truth_surface_",
+                "spec-cli:m21_chain3_corpus_",
+            ]
+        );
+        assert_eq!(
+            CHAIN3_CERTIFY_SUITES
+                .iter()
+                .map(|suite| suite.name)
+                .collect::<Vec<_>>(),
+            vec![
+                "spec-core:m21_chain3_regression_",
+                "spec-cli:m21_chain3_regression_",
+            ]
+        );
+        assert_eq!(harness.suite_slug, CHAIN3_SUITE_SLUG);
+    }
+
+    #[test]
+    fn monotone_down_nonnegative_harness_contract_is_locked() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).expect("leaf harness should be registered");
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+        assert_eq!(MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES.len(), 3);
+        assert_eq!(MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES.len(), 2);
+        assert_eq!(
+            harness
+                .prove_suites
+                .iter()
+                .map(|definition| definition.gate)
+                .collect::<Vec<_>>(),
+            vec![
+                crate::family::report::GateId::GateA,
+                crate::family::report::GateId::GateC,
+                crate::family::report::GateId::GateB,
+            ]
+        );
+        assert_eq!(harness.shape.dep_min, 0);
+        assert_eq!(harness.shape.dep_max, 1);
+        assert!(!harness.shape.requires_supported_function_deps);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_exact_match_paths,
+            ["family.toml"]
+        );
+        assert_eq!(harness.scaffold.smoke.scaffold_file_contracts.len(), 1);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_file_contracts[0].path,
+            "fixtures/aligned/units/pricing/apply_discount_aligned.unit.spec"
+        );
+        assert_eq!(harness.suite_slug, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG);
+    }
+
+    #[test]
+    fn monotone_up_harness_contract_is_locked() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_up.v1";
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).expect("monotone-up harness should be registered");
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+        assert_eq!(MONOTONE_UP_PROVE_SUITES.len(), 3);
+        assert_eq!(MONOTONE_UP_CERTIFY_SUITES.len(), 2);
+        assert_eq!(
+            harness
+                .prove_suites
+                .iter()
+                .map(|definition| definition.gate)
+                .collect::<Vec<_>>(),
+            vec![
+                crate::family::report::GateId::GateA,
+                crate::family::report::GateId::GateC,
+                crate::family::report::GateId::GateB,
+            ]
+        );
+        assert_eq!(harness.shape.dep_min, 0);
+        assert_eq!(harness.shape.dep_max, 1);
+        assert!(!harness.shape.requires_supported_function_deps);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_exact_match_paths,
+            ["family.toml"]
+        );
+        assert_eq!(harness.scaffold.smoke.scaffold_file_contracts.len(), 1);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_file_contracts[0].path,
+            "fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec"
+        );
+        assert_eq!(harness.suite_slug, MONOTONE_UP_SUITE_SLUG);
+    }
+
+    #[test]
+    fn suite_ownership_rejects_suite_names_without_locked_slug() {
+        let harness = family_harness(
+            &FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap(),
+        )
+        .unwrap();
+        let suites = [SuiteDefinition {
+            name: "spec-core:leaf_classifier_",
+            command: &["cargo", "test"],
+            expected_tests: &[
+                "semantic_review::tests::monotone_down_nonnegative_classifier_aligned_fixture_routes_to_promoted_leaf",
+            ],
+        }];
+
+        let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("suite names must include `monotone_down_nonnegative_`")));
+    }
+
+    #[test]
+    fn suite_ownership_rejects_expected_tests_without_locked_slug() {
+        let harness = family_harness(
+            &FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap(),
+        )
+        .unwrap();
+        let suites = [SuiteDefinition {
+            name: "spec-core:monotone_down_nonnegative_classifier_",
+            command: &["cargo", "test"],
+            expected_tests: &["semantic_review::tests::leaf_classifier_aligned_fixture"],
+        }];
+
+        let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("expected test names must include `monotone_down_nonnegative_`")));
+    }
+
+    #[test]
+    fn monotone_up_suite_ownership_rejects_suite_names_without_locked_slug() {
+        let harness =
+            family_harness(&FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap())
+                .unwrap();
+        let suites = [SuiteDefinition {
+            name: "spec-core:leaf_classifier_",
+            command: &["cargo", "test"],
+            expected_tests: &[
+                "semantic_review::tests::monotone_up_classifier_aligned_fixture_routes_to_promoted_leaf",
+            ],
+        }];
+
+        let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("suite names must include `monotone_up_`")));
+    }
+
+    #[test]
+    fn monotone_up_suite_ownership_rejects_expected_tests_without_locked_slug() {
+        let harness =
+            family_harness(&FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap())
+                .unwrap();
+        let suites = [SuiteDefinition {
+            name: "spec-core:monotone_up_classifier_",
+            command: &["cargo", "test"],
+            expected_tests: &["semantic_review::tests::leaf_classifier_aligned_fixture"],
+        }];
+
+        let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("expected test names must include `monotone_up_`")));
+    }
+
+    #[test]
+    fn family_commands_reject_unregistered_families_as_not_implemented() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.chain4.v1";
+
+        for args in [
+            vec!["xtask", "family", "new", family],
+            vec!["xtask", "family", "smoke", family],
+            vec!["xtask", "family", "prove", family],
+            vec!["xtask", "family", "certify", family],
+        ] {
+            let error = dispatch(temp_dir.path(), args).unwrap_err();
+            assert!(
+                matches!(error, XtaskError::NotImplemented(ref message)
+                    if message.contains(family)
+                        && message.contains("xtask/src/family/harness.rs")),
+                "unexpected error variant for `{family}`"
+            );
+        }
+    }
+
+    #[test]
+    fn synthetic_family_registry_supports_lookup_and_locked_manifest_routing() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let gamma = FamilyId::parse("function.wrapper.pipeline.gamma.v1").unwrap();
+        let delta = FamilyId::parse("function.wrapper.pipeline.delta.v1").unwrap();
+
+        assert_eq!(
+            family_harness_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &alpha)
+                .map(|harness| harness.family),
+            Some("function.wrapper.pipeline.alpha.v1")
+        );
+        assert_eq!(
+            family_harness_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &gamma)
+                .map(|harness| harness.family),
+            Some("function.wrapper.pipeline.gamma.v1")
+        );
+
+        let alpha_harness = require_family_harness_in(
+            &SYNTHETIC_MULTI_FAMILY_REGISTRY,
+            &alpha,
+            "synthetic coverage",
+        )
+        .unwrap();
+        assert_eq!(alpha_harness.routing.precedence, 20);
+        assert_eq!(
+            locked_manifest_routing_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &gamma)
+                .map(|routing| (routing.precedence, routing.must_not_shadow)),
+            Some((30, &SYNTHETIC_GAMMA_MUST_NOT_SHADOW[..]))
+        );
+        assert!(matches!(
+            require_family_harness_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &delta, "synthetic coverage"),
+            Err(XtaskError::NotImplemented(message))
+                if message.contains("xtask/src/family/harness.rs")
+                    && message.contains("family `function.wrapper.pipeline.delta.v1`")
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_order_uses_registered_families_plus_terminal() {
+        let routing_order =
+            registered_harnesses_in_routing_order_from(&SYNTHETIC_MULTI_FAMILY_REGISTRY)
+                .into_iter()
+                .map(|harness| harness.family)
+                .collect::<Vec<_>>();
+        assert_eq!(
+            routing_order,
+            [
+                "function.wrapper.pipeline.beta.v1",
+                "function.wrapper.pipeline.alpha.v1",
+                "function.wrapper.pipeline.gamma.v1",
+            ]
+        );
+        assert_ne!(
+            locked_routing_order_with_terminal_from(&SYNTHETIC_MULTI_FAMILY_REGISTRY),
+            locked_routing_order_with_terminal()
+        );
+        assert_eq!(
+            locked_routing_order_with_terminal_from(&SYNTHETIC_MULTI_FAMILY_REGISTRY),
+            [
+                "function.wrapper.pipeline.beta.v1",
+                "function.wrapper.pipeline.alpha.v1",
+                "function.wrapper.pipeline.gamma.v1",
+                TERMINAL_UNSUPPORTED_CATCH_ALL,
+            ]
+        );
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_ignore_unregistered_legacy_entries() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                    must_not_shadow: &SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW,
+                },
+                ..SYNTHETIC_ALPHA_HARNESS
+            },
+            SYNTHETIC_GAMMA_HARNESS,
+            SYNTHETIC_BETA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
+
+        assert!(diagnostics.manifest.passed);
+        assert!(diagnostics.registry.passed);
+    }
+
+    #[test]
+    fn synthetic_manifest_routing_diagnostics_reject_selected_family_unregistered_entry_mismatch() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let mismatched = Routing {
+            precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics =
+            routing_diagnostics_in(&SYNTHETIC_MULTI_FAMILY_REGISTRY, &alpha, &mismatched);
+
+        assert!(!diagnostics.manifest.passed);
+        assert_eq!(
+            diagnostics.manifest.issue,
+            Some(ManifestRoutingIssue::MustNotShadowMismatch {
+                expected: SYNTHETIC_ALPHA_MUST_NOT_SHADOW
+                    .iter()
+                    .map(|family_id| (*family_id).to_string())
+                    .collect(),
+                found: SYNTHETIC_ALPHA_WITH_LEGACY_MUST_NOT_SHADOW
+                    .iter()
+                    .map(|family_id| (*family_id).to_string())
+                    .collect(),
+            })
+        );
+        assert!(diagnostics.registry.passed);
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_duplicate_registered_family_ids() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let registry = [
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_ALPHA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::DuplicateRegisteredFamilyId {
+                family: "function.wrapper.pipeline.alpha.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_duplicate_precedence() {
+        let alpha = FamilyId::parse("function.wrapper.pipeline.alpha.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_ALPHA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
+
+        assert!(
+            diagnostics
+                .registry
+                .issues
+                .contains(&RegistryRoutingIssue::DuplicatePrecedence {
+                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                    families: vec![
+                        "function.wrapper.pipeline.beta.v1".to_string(),
+                        "function.wrapper.pipeline.alpha.v1".to_string(),
+                    ],
+                })
+        );
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_missing_registered_successor() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_MISSING_GAMMA_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_MISSING_GAMMA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::MissingRegisteredSuccessor {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+                successor: "function.wrapper.pipeline.gamma.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_duplicate_registered_successor() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_DUPLICATE_GAMMA_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_DUPLICATE_GAMMA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::DuplicateRegisteredSuccessor {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+                successor: "function.wrapper.pipeline.gamma.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_registered_successors_out_of_order() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_OUT_OF_ORDER_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_OUT_OF_ORDER_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::RegisteredSuccessorsOutOfOrder {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+                expected: vec![
+                    "function.wrapper.pipeline.alpha.v1".to_string(),
+                    "function.wrapper.pipeline.gamma.v1".to_string(),
+                ],
+                found: vec![
+                    "function.wrapper.pipeline.gamma.v1".to_string(),
+                    "function.wrapper.pipeline.alpha.v1".to_string(),
+                ],
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_unsupported_before_registered_successor() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_UNSUPPORTED_BEFORE_GAMMA_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_UNSUPPORTED_BEFORE_GAMMA_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::UnsupportedBeforeRegisteredSuccessor {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn synthetic_registry_routing_diagnostics_reject_duplicate_unsupported_terminal() {
+        let beta = FamilyId::parse("function.wrapper.pipeline.beta.v1").unwrap();
+        let registry = [
+            FamilyHarness {
+                routing: LockedManifestRouting {
+                    must_not_shadow: &SYNTHETIC_BETA_DUPLICATE_UNSUPPORTED_MUST_NOT_SHADOW,
+                    ..SYNTHETIC_BETA_HARNESS.routing
+                },
+                ..SYNTHETIC_BETA_HARNESS
+            },
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        let routing = Routing {
+            precedence: SYNTHETIC_BETA_HARNESS.routing.precedence,
+            must_not_shadow: SYNTHETIC_BETA_DUPLICATE_UNSUPPORTED_MUST_NOT_SHADOW
+                .iter()
+                .map(|family_id| (*family_id).to_string())
+                .collect(),
+        };
+
+        let diagnostics = routing_diagnostics_in(&registry, &beta, &routing);
+
+        assert!(diagnostics.registry.issues.contains(
+            &RegistryRoutingIssue::DuplicateUnsupportedTerminal {
+                family: "function.wrapper.pipeline.beta.v1".to_string(),
+            }
+        ));
+    }
+
+    #[test]
+    fn family_new_rejects_invalid_family_id_without_writes() {
+        let temp_dir = workspace_root();
+        let code = run_from(temp_dir.path(), ["xtask", "family", "new", "../bad"]);
+
+        assert_eq!(code, 2);
+        assert!(
+            fs::read_dir(temp_dir.path().join("semantic-families"))
+                .unwrap()
+                .next()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn family_new_rejects_existing_packet() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family);
+        fs::create_dir(paths.root).unwrap();
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "new",
+                "function.wrapper.pipeline.chain3.v1",
+            ],
+        );
+
+        assert_eq!(code, 3);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn family_new_rejects_packet_root_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family);
+        let outside = TempDir::new().unwrap();
+        symlink(outside.path(), &paths.root).unwrap();
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "new",
+                "function.wrapper.pipeline.chain3.v1",
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn manifest_validation_accepts_locked_example() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        write_string(
+            &paths.root.join("family.toml"),
+            r#"schema_version = 2
+family = "function.wrapper.pipeline.chain3.v1"
+kind = "function"
+compatibility_key = "function.wrapper.pipeline.chain3.v1"
+summary = "Straight-line three-call wrapper pipeline over supported function deps."
+
+[routing]
+precedence = 1
+must_not_shadow = [
+  "function.wrapper.pipeline.v1",
+  "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+  "function.arithmetic_leaf.monotone_up.v1",
+]
+
+[shape]
+dep_min = 3
+dep_max = 3
+control_flow = "straight_line_only"
+return_style = "let_then_return_or_direct_return"
+loops = false
+branching = false
+requires_supported_function_deps = true
+
+[args]
+threading = "ordered_passthrough"
+allow_nested_argument_expressions = false
+allow_literal_only_extra_args = false
+
+[corpus]
+required_buckets = ["aligned", "drift", "under_specified", "unsupported_near_miss"]
+min_cases_per_bucket = 1
+
+[truth_surface]
+requires_refresh_via = ["spec test"]
+preserve_only_via = ["spec build", "spec generate", "spec status", "spec export"]
+requires_stale_demote = true
+
+[gates]
+gate_a = true
+gate_b = true
+gate_c = true
+gate_d = true
+"#,
+        );
+
+        parse_manifest_file(&paths.manifest, &family, family_harness(&family).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn manifest_validation_rejects_extra_top_level_keys() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        write_string(
+            &paths.root.join("family.toml"),
+            r#"schema_version = 2
+family = "function.wrapper.pipeline.chain3.v1"
+kind = "function"
+compatibility_key = "function.wrapper.pipeline.chain3.v1"
+summary = "summary"
+unexpected = true
+
+[routing]
+precedence = 1
+must_not_shadow = ["function.wrapper.pipeline.v1"]
+
+[shape]
+dep_min = 3
+dep_max = 3
+control_flow = "straight_line_only"
+return_style = "direct_return"
+loops = false
+branching = false
+requires_supported_function_deps = true
+
+[args]
+threading = "ordered_passthrough"
+allow_nested_argument_expressions = false
+allow_literal_only_extra_args = false
+
+[corpus]
+required_buckets = ["aligned", "drift", "under_specified", "unsupported_near_miss"]
+min_cases_per_bucket = 1
+
+[truth_surface]
+requires_refresh_via = ["spec test"]
+preserve_only_via = ["spec build", "spec generate", "spec status", "spec export"]
+requires_stale_demote = true
+
+[gates]
+gate_a = true
+gate_b = true
+gate_c = true
+gate_d = true
+"#,
+        );
+
+        let error = parse_manifest_file(&paths.manifest, &family, family_harness(&family).unwrap())
+            .unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn manifest_validation_rejects_wrong_bucket_contract() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        write_string(
+            &paths.root.join("family.toml"),
+            r#"schema_version = 2
+family = "function.wrapper.pipeline.chain3.v1"
+kind = "function"
+compatibility_key = "function.wrapper.pipeline.chain3.v1"
+summary = "summary"
+
+[routing]
+precedence = 1
+must_not_shadow = ["function.wrapper.pipeline.v1"]
+
+[shape]
+dep_min = 3
+dep_max = 3
+control_flow = "straight_line_only"
+return_style = "direct_return"
+loops = false
+branching = false
+requires_supported_function_deps = true
+
+[args]
+threading = "ordered_passthrough"
+allow_nested_argument_expressions = false
+allow_literal_only_extra_args = false
+
+[corpus]
+required_buckets = ["aligned", "drift"]
+min_cases_per_bucket = 1
+
+[truth_surface]
+requires_refresh_via = ["spec test"]
+preserve_only_via = ["spec build", "spec generate", "spec status", "spec export"]
+requires_stale_demote = true
+
+[gates]
+gate_a = true
+gate_b = true
+gate_c = true
+gate_d = true
+"#,
+        );
+
+        let error = parse_manifest_file(&paths.manifest, &family, family_harness(&family).unwrap())
+            .unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn packet_layout_validation_accepts_locked_shape() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let layout = validate_packet_layout(&paths.root, &manifest, harness).unwrap();
+
+        assert_eq!(layout.case_filenames.len(), 16);
+    }
+
+    #[test]
+    fn packet_layout_validation_rejects_non_unit_spec_files() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        write_string(
+            &paths.fixtures.join("aligned/units/pricing/not-allowed.txt"),
+            "bad",
+        );
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn packet_layout_validation_rejects_symlinks_anywhere_under_fixtures() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        let outside = TempDir::new().unwrap();
+        symlink(outside.path(), paths.fixtures.join("drift/src/linked")).unwrap();
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn packet_layout_validation_rejects_duplicate_case_filenames() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        let original = paths
+            .fixtures
+            .join("aligned/units/pricing/checkout_chain3_aligned.unit.spec");
+        let duplicate = paths
+            .fixtures
+            .join("aligned/units/bonus/checkout_chain3_aligned.unit.spec");
+        write_string(&duplicate, &fs::read_to_string(&original).unwrap());
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn packet_layout_validation_allows_helper_units_without_bucket_suffix() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        for bucket in REQUIRED_BUCKETS {
+            write_string(
+                &paths
+                    .fixtures
+                    .join(bucket)
+                    .join("units/money/round.unit.spec"),
+                "kind: function\n",
+            );
+        }
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let layout = validate_packet_layout(&paths.root, &manifest, harness).unwrap();
+        assert_eq!(layout.case_filenames.len(), 16);
+    }
+
+    #[test]
+    fn packet_layout_validation_rejects_hollow_packet_missing_locked_starter_case() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        fs::remove_file(
+            paths
+                .fixtures
+                .join("aligned/units/pricing/checkout_chain3_aligned.unit.spec"),
+        )
+        .unwrap();
+        write_string(
+            &paths
+                .fixtures
+                .join("aligned/units/pricing/hollow_aligned.unit.spec"),
+            "kind: function\n",
+        );
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("locked starter case")));
+    }
+
+    #[test]
+    fn family_prove_writes_locked_report() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        seed_suite_sources(temp_dir.path(), false);
+
+        let runner = prove_runner_with_suite_outputs(&[
+            normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[0])),
+            normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[1])),
+            normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
+        ]);
+
+        prove::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+
+        let report_path = paths.artifacts.join(PROVE_ARTIFACT_NAME);
+        let report = read_report(&report_path);
+        assert_artifact_surface_matches_captured_chain3_baseline(
+            &report_path,
+            &report,
+            PROVE_ARTIFACT_NAME,
+        );
+        assert_eq!(report["schema_version"], 3);
+        assert_required_gates(&report, &["A", "B", "C"]);
+        assert_eq!(report["phase_status"], "pass");
+        assert_eq!(report["overall_status"], "pass");
+        assert_eq!(report["gates"]["gate_a"]["status"], "pass");
+        assert_eq!(report["gates"]["gate_b"]["status"], "pass");
+        assert_eq!(report["gates"]["gate_c"]["status"], "pass");
+        assert_eq!(report["gates"]["gate_d"]["status"], "fail");
+        assert_eq!(report["suites"].as_array().unwrap().len(), 3);
+        assert_report_status_invariants(&report);
+    }
+
+    #[test]
+    fn family_prove_requires_attested_stdout_and_keeps_gate_mapping_explicit() {
+        for (failing_index, failing_gate) in [(0, "gate_a"), (1, "gate_c"), (2, "gate_b")] {
+            let temp_dir = workspace_root();
+            let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+            let paths = PacketPaths::new(temp_dir.path(), family.clone());
+            scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+            seed_valid_manifest(&paths.manifest, family.as_str());
+            seed_valid_cases(&paths);
+            seed_suite_sources(temp_dir.path(), false);
+
+            let mut suite_outputs = vec![
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[0])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[1])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
+            ];
+            suite_outputs[failing_index] = String::new();
+
+            let runner = prove_runner_with_suite_outputs(&suite_outputs);
+            let error =
+                prove::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+            assert!(matches!(error, XtaskError::ProveSuiteFailure(_)));
+
+            let report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
+            assert_eq!(report["schema_version"], 3);
+            assert_eq!(report["phase_status"], "fail");
+            assert_eq!(report["overall_status"], "fail");
+            assert_eq!(report["gates"][failing_gate]["status"], "fail");
+            for gate in ["gate_a", "gate_b", "gate_c"] {
+                if gate != failing_gate {
+                    assert_eq!(report["gates"][gate]["status"], "pass");
+                }
+            }
+            assert_eq!(report["gates"]["gate_d"]["status"], "fail");
+            assert_report_status_invariants(&report);
+        }
+    }
+
+    #[test]
+    fn family_certify_writes_success_report_only_on_full_success() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        seed_suite_sources(temp_dir.path(), true);
+
+        let runner = success_certify_runner();
+
+        certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+
+        let certification_report = certification_report_path(&paths);
+        let report = read_report(&certification_report);
+        assert_artifact_surface_matches_captured_chain3_baseline(
+            &certification_report,
+            &report,
+            CERTIFY_ARTIFACT_NAME,
+        );
+        assert_eq!(report["schema_version"], 3);
+        assert_required_gates(&report, &["A", "B", "C", "D"]);
+        assert_eq!(report["phase_status"], "pass");
+        assert_eq!(report["overall_status"], "pass");
+        assert_eq!(report["gates"]["gate_d"]["status"], "pass");
+        assert_eq!(report["suites"].as_array().unwrap().len(), 5);
+        assert_report_status_invariants(&report);
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        assert_attempt_artifact_name_matches_captured_baseline(&attempts[0]);
+        let attempt = read_report(&attempts[0]);
+        assert_artifact_surface_matches_captured_chain3_baseline(
+            &attempts[0],
+            &attempt,
+            attempts[0]
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap(),
+        );
+        assert_eq!(attempt["schema_version"], 3);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
+        assert_report_status_invariants(&attempt);
+    }
+
+    #[test]
+    fn family_certify_success_rewrites_prove_latest_with_truthful_v3_surface() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        seed_suite_sources(temp_dir.path(), true);
+
+        let runner = success_certify_runner();
+
+        certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+
+        let prove_report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
+        assert_eq!(prove_report["schema_version"], 3);
+        assert_required_gates(&prove_report, &["A", "B", "C"]);
+        assert_eq!(prove_report["phase_status"], "pass");
+        assert_eq!(prove_report["overall_status"], "pass");
+        assert_eq!(prove_report["gates"]["gate_d"]["status"], "fail");
+
+        let attempt = read_report(&attempt_reports(&paths)[0]);
+        assert_eq!(attempt["schema_version"], 3);
+        let certification = read_report(&certification_report_path(&paths));
+        assert_eq!(certification["schema_version"], 3);
+    }
+
+    #[test]
+    fn scaffold_manifest_routing_matches_selected_registered_family_values() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let expected = locked_manifest_routing_in(
+            &[*family_harness(&family).expect("chain3 harness should be registered")],
+            &family,
+        )
+        .expect("chain3 locked routing should exist");
+
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+
+        let manifest = parse_manifest_file(
+            &PacketPaths::new(temp_dir.path(), family.clone()).manifest,
+            &family,
+            family_harness(&family).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest.routing.precedence, expected.precedence);
+        assert_eq!(
+            manifest.routing.must_not_shadow,
+            expected
+                .must_not_shadow
+                .iter()
+                .map(|family| family.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn family_certify_manifest_local_routing_mismatch_fails_gate_d_without_registry_failure() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        rewrite_manifest(&paths.manifest, "precedence = 1", "precedence = 2");
+        seed_suite_sources(temp_dir.path(), true);
+
+        let cert_report_path = certification_report_path(&paths);
+        write_string(&cert_report_path, "{\"previous\":true}\n");
+
+        let runner = success_certify_runner();
+        let error =
+            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
+                if message.contains("manifest-local routing mismatch")
+                    && !message.contains("registry-global routing incoherence")));
+        assert_eq!(
+            fs::read_to_string(&cert_report_path).unwrap(),
+            "{\"previous\":true}\n"
+        );
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt = read_report(&attempts[0]);
+        assert_eq!(attempt["schema_version"], 3);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
+        assert_eq!(attempt["overall_status"], "fail");
+        assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
+        let suites = attempt["suites"].as_array().unwrap();
+        assert_eq!(suites.len(), 5);
+        assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+        assert_report_status_invariants(&attempt);
+    }
+
+    #[test]
+    fn family_certify_missing_shadow_entry_fails_gate_d_without_failing_suites() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        rewrite_manifest(
+            &paths.manifest,
+            "  \"function.arithmetic_leaf.monotone_up.v1\",\n",
+            "",
+        );
+        seed_suite_sources(temp_dir.path(), true);
+
+        let cert_report_path = certification_report_path(&paths);
+        write_string(&cert_report_path, "{\"previous\":true}\n");
+
+        let runner = success_certify_runner();
+        let error =
+            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
+                if message.contains("manifest-local routing mismatch")
+                    && !message.contains("registry-global routing incoherence")));
+        assert_eq!(
+            fs::read_to_string(&cert_report_path).unwrap(),
+            "{\"previous\":true}\n"
+        );
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt = read_report(&attempts[0]);
+        assert_eq!(attempt["schema_version"], 3);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
+        assert_eq!(attempt["overall_status"], "fail");
+        assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
+        let suites = attempt["suites"].as_array().unwrap();
+        assert_eq!(suites.len(), 5);
+        assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+        assert_report_status_invariants(&attempt);
+    }
+
+    #[test]
+    fn family_certify_registry_global_routing_incoherence_fails_gate_d_without_manifest_mismatch() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        let chain3 = *family_harness(&family).unwrap();
+        let registry = [
+            chain3,
+            SYNTHETIC_BETA_HARNESS,
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        seed_suite_sources(temp_dir.path(), true);
+
+        let cert_report_path = certification_report_path(&paths);
+        write_string(&cert_report_path, "{\"previous\":true}\n");
+
+        let runner = success_certify_runner();
+        let error =
+            certify::run_with_runner_in(&registry, temp_dir.path(), family.as_str(), &runner)
+                .unwrap_err();
+
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
+                if message.contains("registry-global routing incoherence")
+                    && !message.contains("manifest-local routing mismatch")));
+        assert_eq!(
+            fs::read_to_string(&cert_report_path).unwrap(),
+            "{\"previous\":true}\n"
+        );
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt = read_report(&attempts[0]);
+        assert_eq!(attempt["schema_version"], 3);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
+        assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
+        let suites = attempt["suites"].as_array().unwrap();
+        assert_eq!(suites.len(), 5);
+        assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+    }
+
+    #[test]
+    fn family_certify_combined_manifest_and_registry_routing_failures_report_both_scopes() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        let chain3 = *family_harness(&family).unwrap();
+        let registry = [
+            chain3,
+            SYNTHETIC_BETA_HARNESS,
+            SYNTHETIC_ALPHA_HARNESS,
+            SYNTHETIC_GAMMA_HARNESS,
+        ];
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        rewrite_manifest(&paths.manifest, "precedence = 1", "precedence = 2");
+        seed_suite_sources(temp_dir.path(), true);
+
+        let cert_report_path = certification_report_path(&paths);
+        write_string(&cert_report_path, "{\"previous\":true}\n");
+
+        let runner = success_certify_runner();
+        let error =
+            certify::run_with_runner_in(&registry, temp_dir.path(), family.as_str(), &runner)
+                .unwrap_err();
+
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
+                if message.contains("manifest-local routing mismatch")
+                    && message.contains("registry-global routing incoherence")));
+        assert_eq!(
+            fs::read_to_string(&cert_report_path).unwrap(),
+            "{\"previous\":true}\n"
+        );
+        let attempts = attempt_reports(&paths);
+        assert_eq!(attempts.len(), 1);
+        let attempt = read_report(&attempts[0]);
+        assert_eq!(attempt["schema_version"], 3);
+        assert_required_gates(&attempt, &["A", "B", "C", "D"]);
+        assert_eq!(attempt["gates"]["gate_d"]["status"], "fail");
+        let suites = attempt["suites"].as_array().unwrap();
+        assert_eq!(suites.len(), 5);
+        assert!(suites.iter().all(|suite| suite["status"] == "pass"));
+    }
+
+    #[test]
+    fn family_certify_keeps_previous_success_report_on_failed_regression_suite() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        seed_suite_sources(temp_dir.path(), true);
+
+        let success_runner = success_certify_runner();
+        certify::run_with_runner(temp_dir.path(), family.as_str(), &success_runner).unwrap();
+
+        let cert_report_path = certification_report_path(&paths);
+        let previous_bytes = fs::read(&cert_report_path).unwrap();
+        let attempts_before = attempt_reports(&paths);
+        assert_eq!(attempts_before.len(), 1);
+
+        let failing_runner = certify_runner_with_outputs(
+            &[
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[0])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[1])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_CERTIFY_SUITES[0])),
+                String::new(),
+            ],
+            "2026-04-27T18:20:00Z\n",
+        );
+
+        let error = certify::run_with_runner(temp_dir.path(), family.as_str(), &failing_runner)
+            .unwrap_err();
+        assert!(matches!(error, XtaskError::CertifySuiteFailure(_)));
+        assert_eq!(fs::read(&cert_report_path).unwrap(), previous_bytes);
+        let attempts_after = attempt_reports(&paths);
+        assert_eq!(attempts_after.len(), 2);
+        let new_attempts = attempts_after
+            .iter()
+            .filter(|path| !attempts_before.contains(path))
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(new_attempts.len(), 1);
+        let failed_attempt = read_report(&new_attempts[0]);
+        assert_required_gates(&failed_attempt, &["A", "B", "C", "D"]);
+        assert_eq!(failed_attempt["phase_status"], "fail");
+        assert_eq!(failed_attempt["overall_status"], "fail");
+        assert_report_status_invariants(&failed_attempt);
+        assert!(
+            !paths
+                .artifacts
+                .join(CERTIFY_ARTIFACT_NAME)
+                .with_extension("tmp")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn suite_attestation_accepts_only_normalized_non_colored_libtest_output() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+
+        let success_runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &normalized_libtest_stdout(&names),
+        )]);
+        let success = run_suite(temp_dir.path(), &success_runner, suite);
+        assert_eq!(success.status, PassFail::Pass);
+
+        let colorized_runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &colorized_libtest_stdout(&names),
+        )]);
+        let colorized = run_suite(temp_dir.path(), &colorized_runner, suite);
+        assert_eq!(colorized.status, PassFail::Fail);
+
+        let variant_runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &format_variant_libtest_stdout(&names),
+        )]);
+        let variant = run_suite(temp_dir.path(), &variant_runner, suite);
+        assert_eq!(variant.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_empty_stdout_even_with_zero_exit() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let runner = FakeRunner::new(&[suite_command_output(suite, 0, "")]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_zero_match_output() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &normalized_libtest_stdout(&Vec::<String>::new()),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_missing_expected_tests() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &normalized_libtest_stdout(&names[..names.len() - 1]),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_extra_matched_tests() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let mut names = expected_suite_test_names(suite);
+        names.push("semantic_review::tests::m21_chain3_classifier_fake_extra".to_string());
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &normalized_libtest_stdout(&names),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_ignored_tests() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &ignored_libtest_stdout(&names[0]),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_non_zero_exit() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            101,
+            &normalized_libtest_stdout(&names),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    #[test]
+    fn suite_attestation_rejects_fake_printed_test_line_without_libtest_surface() {
+        let suite = CHAIN3_PROVE_SUITES[0];
+        let temp_dir = TempDir::new().unwrap();
+        let names = expected_suite_test_names(suite);
+        let runner = FakeRunner::new(&[suite_command_output(
+            suite,
+            0,
+            &format!("test {} ... ok\n", names[0]),
+        )]);
+        let report = run_suite(temp_dir.path(), &runner, suite);
+        assert_eq!(report.status, PassFail::Fail);
+    }
+
+    fn workspace_root() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("semantic-families")).unwrap();
+        temp_dir
+    }
+
+    fn write_string(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, contents).unwrap();
+    }
+
+    fn seed_valid_manifest(manifest_path: &Path, family: &str) {
+        write_string(
+            manifest_path,
+            &format!(
+                r#"schema_version = 2
+family = "{family}"
+kind = "function"
+compatibility_key = "{family}"
+summary = "Straight-line three-call wrapper pipeline over supported function deps."
+
+[routing]
+precedence = 1
+must_not_shadow = [
+  "function.wrapper.pipeline.v1",
+  "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+  "function.arithmetic_leaf.monotone_up.v1",
+]
+
+[shape]
+dep_min = 3
+dep_max = 3
+control_flow = "straight_line_only"
+return_style = "let_then_return_or_direct_return"
+loops = false
+branching = false
+requires_supported_function_deps = true
+
+[args]
+threading = "ordered_passthrough"
+allow_nested_argument_expressions = false
+allow_literal_only_extra_args = false
+
+[corpus]
+required_buckets = ["aligned", "drift", "under_specified", "unsupported_near_miss"]
+min_cases_per_bucket = 1
+
+[truth_surface]
+requires_refresh_via = ["spec test"]
+preserve_only_via = ["spec build", "spec generate", "spec status", "spec export"]
+requires_stale_demote = true
+
+[gates]
+gate_a = true
+gate_b = true
+gate_c = true
+gate_d = true
+"#
+            ),
+        );
+    }
+
+    fn seed_valid_cases(paths: &PacketPaths) {
+        for bucket in REQUIRED_BUCKETS {
+            for relative_path in expected_chain3_scaffold_unit_paths(bucket) {
+                write_string(&paths.root.join(relative_path), "kind: function\n");
+            }
+        }
+    }
+
+    fn seed_suite_sources(workspace_root: &Path, include_cli_regression: bool) {
+        write_string(
+            &workspace_root.join("spec-core/src/semantic_review.rs"),
+            "fn m21_chain3_classifier_alpha() {}\nfn m21_chain3_regression_alpha() {}\n",
+        );
+        write_string(
+            &workspace_root.join("spec-cli/tests/cli.rs"),
+            "fn m21_chain3_truth_surface_alpha() {}\n",
+        );
+        let cli_regression = if include_cli_regression {
+            "fn m21_chain3_regression_alpha() {}\n"
+        } else {
+            ""
+        };
+        write_string(
+            &workspace_root.join("spec-cli/tests/m14_regressions.rs"),
+            &format!("fn m21_chain3_corpus_alpha() {{}}\n{cli_regression}"),
+        );
+    }
+
+    fn success_certify_runner() -> FakeRunner {
+        certify_runner_with_outputs(
+            &[
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[0])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[1])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_CERTIFY_SUITES[0])),
+                normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_CERTIFY_SUITES[1])),
+            ],
+            "2026-04-27T18:10:00Z\n",
+        )
+    }
+
+    fn prove_runner_with_suite_outputs(stdout_by_suite: &[String]) -> FakeRunner {
+        assert_eq!(stdout_by_suite.len(), CHAIN3_PROVE_SUITES.len());
+        let mut outputs = vec![
+            command_output(&["git", "rev-parse", "HEAD"], 0, "abc123\n"),
+            command_output(&["rustc", "--version"], 0, "rustc 1.89.0\n"),
+            command_output(
+                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
+                0,
+                "2026-04-27T18:00:00Z\n",
+            ),
+        ];
+        for (suite, stdout) in CHAIN3_PROVE_SUITES.iter().zip(stdout_by_suite.iter()) {
+            outputs.push(suite_command_output(*suite, 0, stdout));
+        }
+        FakeRunner::new(&outputs)
+    }
+
+    fn certify_runner_with_outputs(
+        stdout_by_suite: &[String],
+        certify_generated_at: &str,
+    ) -> FakeRunner {
+        assert_eq!(
+            stdout_by_suite.len(),
+            CHAIN3_PROVE_SUITES.len() + CHAIN3_CERTIFY_SUITES.len()
+        );
+        let mut outputs = vec![
+            command_output(&["git", "rev-parse", "HEAD"], 0, "abc123\n"),
+            command_output(&["rustc", "--version"], 0, "rustc 1.89.0\n"),
+            command_output(
+                &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
+                0,
+                "2026-04-27T18:00:00Z\n",
+            ),
+        ];
+        for (suite, stdout) in CHAIN3_PROVE_SUITES.iter().zip(stdout_by_suite.iter()) {
+            outputs.push(suite_command_output(*suite, 0, stdout));
+        }
+        outputs.push(command_output(
+            &["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"],
+            0,
+            certify_generated_at,
+        ));
+        for (suite, stdout) in CHAIN3_CERTIFY_SUITES
+            .iter()
+            .zip(stdout_by_suite[CHAIN3_PROVE_SUITES.len()..].iter())
+        {
+            outputs.push(suite_command_output(*suite, 0, stdout));
+        }
+        FakeRunner::new(&outputs)
+    }
+
+    fn command_output(command: &[&str], exit_code: i32, stdout: &str) -> (String, CommandOutput) {
+        (
+            command.join("\u{1f}"),
+            CommandOutput {
+                exit_code,
+                stdout: stdout.to_string(),
+                stderr: String::new(),
+            },
+        )
+    }
+
+    fn suite_command_output(
+        suite: SuiteDefinition,
+        exit_code: i32,
+        stdout: &str,
+    ) -> (String, CommandOutput) {
+        command_output(suite.command, exit_code, stdout)
+    }
+
+    fn expected_chain3_scaffold_unit_paths(bucket: &str) -> [String; 4] {
+        [
+            format!("fixtures/{bucket}/units/pricing/pricing_discount_leaf_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/pricing_tax_leaf_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/pricing_total_wrapper_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/checkout_chain3_{bucket}.unit.spec"),
+        ]
+    }
+
+    fn assert_candidate_lists_path_once(candidate: &str, relative_path: &str) {
+        assert_eq!(candidate.matches(relative_path).count(), 1);
+    }
+
+    fn assert_starter_spec_is_valid_and_non_proving(path: &Path) {
+        let loaded = load_file(path).unwrap();
+        validate_full(&loaded).unwrap();
+        let review = evaluate_semantic_review(&loaded)
+            .expect("starter spec should produce a semantic review");
+        assert_eq!(
+            review.effective_support_status(),
+            SemanticSupportStatus::Unsupported,
+            "starter spec `{}` should remain outside the supported subset",
+            path.display()
+        );
+    }
+
+    fn rewrite_manifest(path: &Path, from: &str, to: &str) {
+        let contents = fs::read_to_string(path).unwrap();
+        assert!(
+            contents.contains(from),
+            "manifest rewrite anchor missing: {from}"
+        );
+        write_string(path, &contents.replacen(from, to, 1));
+    }
+
+    fn attempt_reports(paths: &PacketPaths) -> Vec<PathBuf> {
+        let mut attempts = fs::read_dir(&paths.artifacts)
+            .unwrap()
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                let file_name = path.file_name()?.to_str()?;
+                file_name.starts_with("attempt-").then_some(path)
+            })
+            .collect::<Vec<_>>();
+        attempts.sort();
+        attempts
+    }
+
+    fn read_report(path: &Path) -> serde_json::Value {
+        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    fn assert_required_gates(report: &serde_json::Value, expected: &[&str]) {
+        let gates = report["required_gates"]
+            .as_array()
+            .expect("report required_gates should be an array")
+            .iter()
+            .map(|gate| {
+                gate.as_str()
+                    .expect("gate name should be a string")
+                    .trim_start_matches("gate_")
+                    .to_ascii_uppercase()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(gates, expected);
+    }
+
+    fn assert_report_status_invariants(report: &serde_json::Value) {
+        let required_gates = report["required_gates"]
+            .as_array()
+            .expect("report required_gates should be an array")
+            .iter()
+            .map(|gate| {
+                let raw = gate.as_str().expect("gate name should be a string");
+                if raw.starts_with("gate_") {
+                    raw.to_string()
+                } else {
+                    format!("gate_{}", raw.to_ascii_lowercase())
+                }
+            })
+            .collect::<Vec<_>>();
+        if report["phase_status"] == "pass" {
+            for gate in &required_gates {
+                assert_eq!(
+                    report["gates"][gate]["status"], "pass",
+                    "phase_status=pass requires `{gate}` to pass"
+                );
+            }
+        }
+        if report["overall_status"] == "pass" {
+            for gate in &required_gates {
+                assert_eq!(
+                    report["gates"][gate]["status"], "pass",
+                    "overall_status=pass requires `{gate}` to pass"
+                );
+            }
+        }
+    }
+
+    fn assert_artifact_surface_matches_captured_chain3_baseline(
+        path: &Path,
+        report: &serde_json::Value,
+        expected_file_name: &str,
+    ) {
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some(expected_file_name)
+        );
+        let mut actual_keys = report
+            .as_object()
+            .expect("report should be a JSON object")
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        actual_keys.sort_unstable();
+
+        let mut expected_keys = vec![
+            "artifact_kind",
+            "family",
+            "fixture_digests",
+            "gates",
+            "generated_at",
+            "git_commit_sha",
+            "manifest_schema_version",
+            "overall_status",
+            "phase_status",
+            "required_gates",
+            "rust_toolchain",
+            "schema_version",
+            "suites",
+        ];
+        expected_keys.sort_unstable();
+
+        assert_eq!(actual_keys, expected_keys);
+    }
+
+    fn assert_attempt_artifact_name_matches_captured_baseline(path: &Path) {
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("attempt artifact should have a file name");
+        assert!(file_name.starts_with("attempt-"));
+        assert!(file_name.ends_with(".json"));
+        assert_ne!(file_name, "attempt-.json");
+    }
+
+    fn expected_suite_test_names(suite: SuiteDefinition) -> Vec<String> {
+        suite
+            .expected_tests
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect()
+    }
+
+    fn normalized_libtest_stdout(names: &[String]) -> String {
+        let count = names.len();
+        let noun = if count == 1 { "test" } else { "tests" };
+        let mut stdout = format!("running {count} {noun}\n");
+        for name in names {
+            stdout.push_str(&format!("test {name} ... ok\n"));
+        }
+        stdout.push('\n');
+        stdout.push_str(&format!(
+            "test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n"
+        ));
+        stdout
+    }
+
+    fn ignored_libtest_stdout(name: &str) -> String {
+        format!(
+            "running 1 test\ntest {name} ... ignored\n\ntest result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s\n"
+        )
+    }
+
+    fn colorized_libtest_stdout(names: &[String]) -> String {
+        normalized_libtest_stdout(names).replace("test ", "\u{1b}[32mtest \u{1b}[0m")
+    }
+
+    fn format_variant_libtest_stdout(names: &[String]) -> String {
+        let count = names.len();
+        let noun = if count == 1 { "test" } else { "tests" };
+        let mut stdout = format!("running {count} {noun}\n");
+        for name in names {
+            stdout.push_str(&format!("test {name} ... ok (0.00s)\n"));
+        }
+        stdout.push('\n');
+        stdout.push_str(&format!(
+            "test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n"
+        ));
+        stdout
+    }
+
+    struct FakeRunner {
+        outputs: RefCell<HashMap<String, VecDeque<CommandOutput>>>,
+    }
+
+    impl FakeRunner {
+        fn new(entries: &[(String, CommandOutput)]) -> Self {
+            let mut outputs = HashMap::<String, VecDeque<CommandOutput>>::new();
+            for (command, output) in entries {
+                outputs
+                    .entry(command.clone())
+                    .or_default()
+                    .push_back(output.clone());
+            }
+            Self {
+                outputs: RefCell::new(outputs),
+            }
+        }
+    }
+
+    impl CommandRunner for FakeRunner {
+        fn run(&self, _cwd: &Path, command: &[String]) -> CommandOutput {
+            let key = command.join("\u{1f}");
+            self.outputs
+                .borrow_mut()
+                .get_mut(&key)
+                .and_then(VecDeque::pop_front)
+                .unwrap_or_else(|| panic!("unexpected command: {command:?}"))
+        }
+    }
+}

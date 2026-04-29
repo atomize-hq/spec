@@ -1674,7 +1674,7 @@ mod tests {
     }
 
     #[test]
-    fn load_passports_for_specs_drops_unsupported_review_for_unsupported_kind() {
+    fn load_passports_for_specs_preserves_fresh_unsupported_function_review() {
         let dir = TempDir::new().unwrap();
         let spec = loaded_spec(
             &dir,
@@ -1705,7 +1705,7 @@ mod tests {
 
         assert!(warnings.is_empty());
         assert_eq!(passports.len(), 1);
-        assert!(passports[0].semantic_review.is_none());
+        assert_eq!(passports[0].semantic_review, passport.semantic_review);
     }
 
     #[test]
@@ -1780,6 +1780,88 @@ mod tests {
         assert!(bundle.warnings.is_empty());
         assert_eq!(bundle.passports.len(), 1);
         assert!(bundle.passports[0].semantic_review.is_none());
+    }
+
+    #[test]
+    fn build_export_bundle_preserves_fresh_unsupported_function_review() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_spec(
+            &dir,
+            "units/pricing/calculate_total.unit.spec",
+            "pricing/calculate_total",
+            vec![],
+        );
+
+        let mut passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-05T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            None,
+        );
+        passport.semantic_review = evaluate_semantic_review(&spec);
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let bundle = build_export_bundle(&[spec], &[], "2026-04-05T01:00:00Z", None);
+
+        assert!(bundle.warnings.is_empty());
+        assert_eq!(bundle.passports.len(), 1);
+        assert_eq!(
+            bundle.passports[0].semantic_review,
+            passport.semantic_review
+        );
+    }
+
+    #[test]
+    fn build_export_bundle_drops_stale_unsupported_function_review() {
+        let dir = TempDir::new().unwrap();
+        let original_spec = loaded_spec(
+            &dir,
+            "units/pricing/calculate_total.unit.spec",
+            "pricing/calculate_total",
+            vec![],
+        );
+        let mut changed_spec = original_spec.clone();
+        changed_spec.spec.intent.why = "Apply a revised checkout pricing flow".to_string();
+
+        let mut passport = build_passport_with_evidence(
+            &original_spec,
+            "2026-04-05T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "basic".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-04-05T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            None,
+        );
+        passport.semantic_review = evaluate_semantic_review(&original_spec);
+        write_passport(&passport, Path::new(&original_spec.source.file_path)).unwrap();
+
+        let bundle = build_export_bundle(&[changed_spec], &[], "2026-04-05T01:00:00Z", None);
+
+        assert!(bundle.warnings.is_empty());
+        assert_eq!(bundle.passports.len(), 1);
+        assert!(bundle.passports[0].semantic_review.is_none());
+        assert_eq!(
+            bundle.passports[0]
+                .freshness
+                .as_ref()
+                .map(|freshness| freshness.authored_truth_status),
+            Some(crate::passport::FreshnessStatus::Stale)
+        );
     }
 
     #[test]

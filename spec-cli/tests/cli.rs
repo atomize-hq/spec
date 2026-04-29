@@ -10,7 +10,8 @@ use spec_core::passport::{
     project_passport_truth, read_passport as read_passport_record, write_passport,
 };
 use spec_core::semantic_review::{
-    EvaluatorScope, SemanticProjectionMode, SemanticReasonCode, SemanticReview, SemanticVerdict,
+    EvaluatorScope, SemanticProjectionMode, SemanticReasonCode, SemanticReview,
+    SemanticSupportStatus, SemanticVerdict, UnsupportedFunctionReasonCode,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -441,35 +442,9 @@ fn fixture_json(name: &str) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }
 
-fn strip_unsupported_semantic_review(value: &mut Value) {
-    match value {
-        Value::Array(items) => {
-            for item in items {
-                strip_unsupported_semantic_review(item);
-            }
-        }
-        Value::Object(map) => {
-            let should_remove = map
-                .get("semantic_review")
-                .and_then(|review| review.get("evaluator_scope"))
-                .and_then(Value::as_str)
-                == Some("unsupported_surface");
-            if should_remove {
-                map.remove("semantic_review");
-            }
-            for item in map.values_mut() {
-                strip_unsupported_semantic_review(item);
-            }
-        }
-        _ => {}
-    }
-}
-
 fn assert_stdout_json_matches_fixture(output: &std::process::Output, fixture: &str) {
-    let mut actual = parse_stdout_json(output);
-    let mut expected = fixture_json(fixture);
-    strip_unsupported_semantic_review(&mut actual);
-    strip_unsupported_semantic_review(&mut expected);
+    let actual = parse_stdout_json(output);
+    let expected = fixture_json(fixture);
     assert_eq!(actual, expected);
 }
 
@@ -692,6 +667,9 @@ fn supported_checkout_quote_semantic_review(
     SemanticReview {
         verdict,
         compatibility_key: "data.checkout_quote.v1".to_string(),
+        support_status: None,
+        unsupported_reason_codes: vec![],
+        rewrite_hints: vec![],
         reason_codes,
         summary: summary.to_string(),
         authored_surfaces: vec![],
@@ -844,9 +822,11 @@ local_tests:
 
 const FUNCTION_FAMILY_A_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
 const FUNCTION_FAMILY_A_LEGACY_COMPATIBILITY_KEY: &str = "function.apply_discount.v1";
 const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
 const FUNCTION_FAMILY_B_LEGACY_COMPATIBILITY_KEY: &str = "function.calculate_total.v1";
+const FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.chain3.v1";
 
 fn load_unit_specs_by_id(units_dir: &Path) -> HashMap<String, spec_core::types::LoadedSpec> {
     WalkDir::new(units_dir)
@@ -1101,6 +1081,14 @@ fn unsupported_function_semantic_review(summary: &str) -> SemanticReview {
     SemanticReview {
         verdict: SemanticVerdict::UnderSpecified,
         compatibility_key: "unsupported.function.v1".to_string(),
+        support_status: Some(SemanticSupportStatus::Unsupported),
+        unsupported_reason_codes: vec![
+            UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression,
+        ],
+        rewrite_hints: vec![
+            "pass bare parameter paths to supported wrappers instead of computed argument expressions"
+                .to_string(),
+        ],
         reason_codes: vec![SemanticReasonCode::UnsupportedSurface],
         summary: summary.to_string(),
         authored_surfaces: vec![],
@@ -1118,6 +1106,9 @@ fn supported_function_semantic_review(
     SemanticReview {
         verdict,
         compatibility_key: compatibility_key.to_string(),
+        support_status: Some(SemanticSupportStatus::Supported),
+        unsupported_reason_codes: vec![],
+        rewrite_hints: vec![],
         reason_codes,
         summary: summary.to_string(),
         authored_surfaces: vec![],
@@ -1144,15 +1135,53 @@ fn assert_semantic_review_absent(review: &Value) {
 fn assert_unsupported_function_semantic_review(review: &Value) {
     assert_eq!(review["verdict"], "under_specified");
     assert_eq!(review["evaluator_scope"], "unsupported_surface");
+    assert_eq!(review["support_status"], "unsupported");
     assert_eq!(review["compatibility_key"], "unsupported.function.v1");
     assert_eq!(
         review["reason_codes"],
         serde_json::json!(["unsupported_surface"])
     );
-    assert_eq!(
-        review["summary"].as_str().unwrap(),
-        "this 'function' surface is not evaluated by the semantic reviewer for this unit"
+    assert!(
+        review["summary"]
+            .as_str()
+            .is_some_and(|summary| !summary.trim().is_empty()),
+        "expected non-empty unsupported summary for {review}"
     );
+    assert!(
+        review["unsupported_reason_codes"]
+            .as_array()
+            .is_some_and(|codes| !codes.is_empty()),
+        "expected unsupported_reason_codes for {review}"
+    );
+    assert!(
+        review["rewrite_hints"]
+            .as_array()
+            .is_some_and(|hints| !hints.is_empty()),
+        "expected rewrite_hints for {review}"
+    );
+}
+
+fn assert_supported_function_semantic_review(review: &Value, compatibility_key: &str) {
+    assert_eq!(review["evaluator_scope"], "supported_function_surface");
+    assert_eq!(review["support_status"], "supported");
+    assert_eq!(review["compatibility_key"], compatibility_key);
+    assert!(
+        review["unsupported_reason_codes"]
+            .as_array()
+            .is_none_or(|codes| codes.is_empty()),
+        "expected empty unsupported_reason_codes for {review}"
+    );
+    assert!(
+        review["rewrite_hints"]
+            .as_array()
+            .is_none_or(|hints| hints.is_empty()),
+        "expected empty rewrite_hints for {review}"
+    );
+}
+
+fn assert_unsupported_function_reason(review: &Value, reason: &str) {
+    assert_unsupported_function_semantic_review(review);
+    assert_eq!(review["unsupported_reason_codes"][0], reason, "{review}");
 }
 
 fn copy_m19_semantic_falsification_pack() -> (tempfile::TempDir, PathBuf) {
@@ -1163,6 +1192,30 @@ fn copy_m19_semantic_falsification_pack() -> (tempfile::TempDir, PathBuf) {
         &fixture_dir,
     )
     .expect("failed to copy M19 semantic falsification fixture");
+    (temp_dir, fixture_dir)
+}
+
+fn copy_m20_unsupported_truth_pack() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let fixture_dir = temp_dir.path().join("unsupported_truth_pack");
+    copy_dir_recursive(
+        &repo_root().join("spec-cli/tests/fixtures/m20/unsupported_truth_pack"),
+        &fixture_dir,
+    )
+    .expect("failed to copy M20 unsupported truth fixture");
+    (temp_dir, fixture_dir)
+}
+
+fn copy_m21_chain3_fixture(bucket: &str) -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let fixture_dir = temp_dir.path().join(format!("m21_chain3_{bucket}"));
+    copy_dir_recursive(
+        &repo_root()
+            .join("semantic-families/function.wrapper.pipeline.chain3.v1/fixtures")
+            .join(bucket),
+        &fixture_dir,
+    )
+    .expect("failed to copy M21 chain3 fixture");
     (temp_dir, fixture_dir)
 }
 
@@ -5140,10 +5193,13 @@ fn spec_status_text_stays_neutral_for_unsupported_surface_in_preserve_mode() {
     let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
     let review = unsupported_function_semantic_review("seeded unsupported function review");
     seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
-    let seeded_summary = read_passport_json(&passport_path)["semantic_review"]["summary"]
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    let seeded_summary = seeded_review["summary"]
         .as_str()
-        .expect("expected seeded unsupported semantic review summary")
-        .to_owned();
+        .expect("expected seeded unsupported semantic review summary");
+    let seeded_hint = seeded_review["rewrite_hints"][0]
+        .as_str()
+        .expect("expected seeded unsupported semantic review hint");
 
     let output = run_in(project_dir, &["status", units_dir.to_str().unwrap()]);
     assert!(
@@ -5153,7 +5209,8 @@ fn spec_status_text_stays_neutral_for_unsupported_surface_in_preserve_mode() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("pricing/calculate_total"), "{stdout}");
-    assert!(!stdout.contains(&seeded_summary), "{stdout}");
+    assert!(!stdout.contains(seeded_summary), "{stdout}");
+    assert!(stdout.contains(seeded_hint), "{stdout}");
 }
 
 #[test]
@@ -5774,6 +5831,186 @@ fn supported_wrapper_function_semantic_review_command_matrix_preserves_or_refres
 }
 
 #[test]
+fn m21_chain3_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    let unit_path = fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec");
+    let passport_path =
+        fixture_dir.join("units/pricing/checkout_chain3_aligned.spec.passport.json");
+
+    let test_output = run(&[
+        "test",
+        unit_path.to_str().unwrap(),
+        "--crate-root",
+        fixture_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "M21 chain3 aligned fixture test should succeed",
+        &test_output,
+    );
+
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_supported_function_semantic_review(
+        &seeded_review,
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+    );
+
+    let status_output = run_in(&fixture_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status stays non-green because helper units remain untested"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/checkout_chain3_aligned")
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run_in(&fixture_dir, &["export", "units"]);
+    assert_output_success("M21 chain3 export should succeed", &export_output);
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/checkout_chain3_aligned")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+
+    let generate_output = run_in(
+        &fixture_dir,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success("M21 chain3 generate should succeed", &generate_output);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let build_output = run_in(
+        &fixture_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("M21 chain3 build should succeed", &build_output);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let refresh_output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("M21 chain3 refresh test should succeed", &refresh_output);
+    let refreshed_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_eq!(refreshed_review, seeded_review);
+    assert_eq!(
+        refreshed_review["compatibility_key"],
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY
+    );
+    assert_eq!(
+        refreshed_review["evaluator_scope"],
+        "supported_function_surface"
+    );
+}
+
+#[test]
+fn m21_chain3_truth_surface_stale_status_and_export_preserve_last_proven_review() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    let unit_path = fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec");
+    let passport_path =
+        fixture_dir.join("units/pricing/checkout_chain3_aligned.spec.passport.json");
+
+    let test_output = run(&[
+        "test",
+        unit_path.to_str().unwrap(),
+        "--crate-root",
+        fixture_dir.to_str().unwrap(),
+    ]);
+    assert_output_success(
+        "M21 chain3 aligned fixture test should succeed",
+        &test_output,
+    );
+
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_supported_function_semantic_review(
+        &seeded_review,
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+    );
+
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replace(
+            "Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount.",
+            "Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount with revised authored truth.",
+        ),
+    )
+    .unwrap();
+
+    let status_output = run(&["status", fixture_dir.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "chain3 stale status should exit non-zero"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/checkout_chain3_aligned")
+        .unwrap();
+    assert_eq!(unit["status"], "stale", "{status_json}");
+    assert_eq!(unit["reason"], "authored truth changed since last test");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run(&["export", fixture_dir.to_str().unwrap()]);
+    assert_output_success(
+        "M21 chain3 stale export should preserve prior review",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/checkout_chain3_aligned")
+        .unwrap();
+    assert_eq!(
+        exported_passport["freshness"]["authored_truth_status"],
+        "stale"
+    );
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+}
+
+#[test]
 fn legacy_exact_id_leaf_function_review_drops_on_preserve_and_refreshes_on_test() {
     if !cargo_available() {
         return;
@@ -5859,7 +6096,8 @@ fn unsupported_near_miss_function_semantic_review_remains_additive_only_and_neut
         .unwrap();
     assert_eq!(unit["status"], "valid", "{status_json}");
     assert!(unit["reason"].is_null(), "{status_json}");
-    assert_semantic_review_absent(&unit["semantic_review"]);
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+    assert_unsupported_function_semantic_review(&unit["semantic_review"]);
     assert_eq!(
         read_passport_json(&passport_path)["semantic_review"],
         seeded_review
@@ -5867,71 +6105,17 @@ fn unsupported_near_miss_function_semantic_review_remains_additive_only_and_neut
 }
 
 #[test]
-fn unsupported_near_miss_function_review_drops_on_preserve_and_refreshes_on_test() {
+fn unsupported_function_review_preserves_when_fresh_drops_when_stale_and_refreshes_on_test() {
     if !cargo_available() {
         return;
     }
 
-    let temp_dir = temp_repo_dir();
-    let project_dir = temp_dir.path();
-    let units_dir = write_unsupported_function_semantic_status_project(project_dir);
-    let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
-    let review = unsupported_function_semantic_review("seeded unsupported function review");
-    seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
-    assert_eq!(
-        read_passport_json(&passport_path)["semantic_review"]["compatibility_key"],
-        "unsupported.function.v1"
-    );
-
-    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
-    assert!(
-        !status_output.status.success(),
-        "status stays non-green because helper units remain untested"
-    );
-    let status_json = parse_stdout_json(&status_output);
-    let unit = status_units(&status_json)
-        .iter()
-        .find(|unit| unit["id"] == "pricing/calculate_total")
-        .unwrap();
-    assert_semantic_review_absent(&unit["semantic_review"]);
-
-    let export_output = run_in(project_dir, &["export", "units"]);
-    assert_output_success("unsupported function export should succeed", &export_output);
-    let export_json = parse_stdout_json(&export_output);
-    let exported_passport = export_json["passports"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|passport| passport["id"] == "pricing/calculate_total")
-        .unwrap();
-    assert_semantic_review_absent(&exported_passport["semantic_review"]);
-
-    let generate_output = run_in(
-        project_dir,
-        &["generate", "units", "--output", "src/generated"],
-    );
-    assert_output_success(
-        "unsupported function generate should succeed",
-        &generate_output,
-    );
-    assert_semantic_review_absent(&read_passport_json(&passport_path)["semantic_review"]);
-
-    let build_output = run_in(
-        project_dir,
-        &[
-            "build",
-            "units",
-            "--output",
-            "src/generated",
-            "--crate-root",
-            ".",
-        ],
-    );
-    assert_output_success("unsupported function build should succeed", &build_output);
-    assert_semantic_review_absent(&read_passport_json(&passport_path)["semantic_review"]);
+    let (_temp_dir, fixture_dir) = copy_m20_unsupported_truth_pack();
+    let unit_path = fixture_dir.join("units/pricing/calculate_total.unit.spec");
+    let passport_path = fixture_dir.join("units/pricing/calculate_total.spec.passport.json");
 
     let test_output = run_in(
-        project_dir,
+        &fixture_dir,
         &[
             "test",
             "units",
@@ -5942,9 +6126,260 @@ fn unsupported_near_miss_function_review_drops_on_preserve_and_refreshes_on_test
         ],
     );
     assert_output_success("unsupported function test should succeed", &test_output);
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_unsupported_function_semantic_review(&seeded_review);
+
+    let status_output = run_in(&fixture_dir, &["status", "units", "--format", "json"]);
+    assert_output_success(
+        "fresh unsupported function status should stay green",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/calculate_total")
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert!(unit["reason"].is_null(), "{status_json}");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run_in(&fixture_dir, &["export", "units"]);
+    assert_output_success("unsupported function export should succeed", &export_output);
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/calculate_total")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+
+    let generate_output = run_in(
+        &fixture_dir,
+        &["generate", "units", "--output", "src/generated"],
+    );
+    assert_output_success(
+        "unsupported function generate should succeed",
+        &generate_output,
+    );
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let build_output = run_in(
+        &fixture_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("unsupported function build should succeed", &build_output);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replace(
+            "Return the total after discounting the subtotal and then applying tax.",
+            "Return the total after discounting the subtotal and then applying tax with revised authored truth.",
+        ),
+    )
+    .unwrap();
+
+    let stale_status_output = run_in(&fixture_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !stale_status_output.status.success(),
+        "stale unsupported function status should exit non-zero"
+    );
+    let stale_status_json = parse_stdout_json(&stale_status_output);
+    let stale_unit = status_units(&stale_status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/calculate_total")
+        .unwrap();
+    assert_eq!(stale_unit["status"], "stale", "{stale_status_json}");
+    assert_eq!(
+        stale_unit["reason"], "authored truth changed since last test",
+        "{stale_status_json}"
+    );
+    assert_semantic_review_absent(&stale_unit["semantic_review"]);
+
+    let stale_export_output = run_in(&fixture_dir, &["export", "units"]);
+    assert_output_success(
+        "stale unsupported function export should succeed",
+        &stale_export_output,
+    );
+    let stale_export_json = parse_stdout_json(&stale_export_output);
+    let stale_exported_passport = stale_export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/calculate_total")
+        .unwrap();
+    assert_semantic_review_absent(&stale_exported_passport["semantic_review"]);
+
+    let stale_build_output = run_in(
+        &fixture_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "stale unsupported function build should succeed",
+        &stale_build_output,
+    );
+    assert_semantic_review_absent(&read_passport_json(&passport_path)["semantic_review"]);
+
+    let refresh_output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "unsupported function refresh test should succeed",
+        &refresh_output,
+    );
     assert_unsupported_function_semantic_review(
         &read_passport_json(&passport_path)["semantic_review"],
     );
+}
+
+#[test]
+fn m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m20_unsupported_truth_pack();
+
+    let test_output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "whole-pack unsupported truth test should succeed",
+        &test_output,
+    );
+
+    let supported_cases = [
+        (
+            "pricing/apply_discount",
+            FUNCTION_FAMILY_A_COMPATIBILITY_KEY,
+        ),
+        ("pricing/apply_tax", FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY),
+        (
+            "pricing/checkout_total",
+            FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+        ),
+    ];
+    let unsupported_cases = [
+        (
+            "pricing/apply_discount_control_flow",
+            "unsupported_control_flow",
+        ),
+        (
+            "pricing/calculate_total",
+            "unsupported_required_argument_expression",
+        ),
+        (
+            "pricing/checkout_total_bad_dep_topology",
+            "unsupported_dep_topology",
+        ),
+        (
+            "pricing/checkout_total_bad_body_shape",
+            "unsupported_wrapper_body_shape",
+        ),
+        (
+            "pricing/apply_tax_arithmetic_shape",
+            "unsupported_arithmetic_shape",
+        ),
+    ];
+
+    let mut expected_reviews = HashMap::new();
+
+    for (unit_id, compatibility_key) in supported_cases {
+        let passport_path = fixture_dir
+            .join("units")
+            .join(format!("{unit_id}.spec.passport.json"));
+        let review = read_passport_json(&passport_path)["semantic_review"].clone();
+        assert_supported_function_semantic_review(&review, compatibility_key);
+        expected_reviews.insert(unit_id, review);
+    }
+
+    for (unit_id, reason) in unsupported_cases {
+        let passport_path = fixture_dir
+            .join("units")
+            .join(format!("{unit_id}.spec.passport.json"));
+        let review = read_passport_json(&passport_path)["semantic_review"].clone();
+        assert_unsupported_function_reason(&review, reason);
+        expected_reviews.insert(unit_id, review);
+    }
+
+    let status_output = run_in(&fixture_dir, &["status", ".", "--format", "json"]);
+    assert_output_success(
+        "whole-pack unsupported truth status should stay green",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+
+    let export_output = run_in(&fixture_dir, &["export", "."]);
+    assert_output_success(
+        "whole-pack unsupported truth export should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+
+    for (unit_id, expected_review) in expected_reviews {
+        let status_unit = status_units(&status_json)
+            .iter()
+            .find(|unit| unit["id"] == unit_id)
+            .unwrap();
+        assert_eq!(status_unit["status"], "valid", "{status_json}");
+        assert!(status_unit["reason"].is_null(), "{status_json}");
+        assert_eq!(
+            status_unit["semantic_review"], expected_review,
+            "{status_json}"
+        );
+
+        let exported_passport = export_json["passports"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|passport| passport["id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            exported_passport["semantic_review"], expected_review,
+            "{export_json}"
+        );
+    }
 }
 
 #[test]
@@ -6040,9 +6475,8 @@ fn assert_m19_unsupported_near_miss_command_matrix(unit_relative_path: &str, uni
         "M19 unsupported near-miss test should succeed",
         &test_output,
     );
-    assert_unsupported_function_semantic_review(
-        &read_passport_json(&passport_path)["semantic_review"],
-    );
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_unsupported_function_semantic_review(&seeded_review);
 
     let build_output = run(&[
         "build",
@@ -6054,7 +6488,10 @@ fn assert_m19_unsupported_near_miss_command_matrix(unit_relative_path: &str, uni
         "M19 unsupported near-miss build should succeed",
         &build_output,
     );
-    assert_semantic_review_absent(&read_passport_json(&passport_path)["semantic_review"]);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
 
     let status_output = run(&["status", fixture_dir.to_str().unwrap(), "--format", "json"]);
     assert!(
@@ -6068,7 +6505,7 @@ fn assert_m19_unsupported_near_miss_command_matrix(unit_relative_path: &str, uni
         .unwrap();
     assert_eq!(unit["status"], "valid", "{status_json}");
     assert!(unit["reason"].is_null(), "{status_json}");
-    assert_semantic_review_absent(&unit["semantic_review"]);
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
 
     let export_output = run(&["export", fixture_dir.to_str().unwrap()]);
     assert_output_success(
@@ -6082,7 +6519,10 @@ fn assert_m19_unsupported_near_miss_command_matrix(unit_relative_path: &str, uni
         .iter()
         .find(|passport| passport["id"] == unit_id)
         .unwrap();
-    assert_semantic_review_absent(&exported_passport["semantic_review"]);
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
 
     let generate_output = run(&[
         "generate",
@@ -6094,7 +6534,10 @@ fn assert_m19_unsupported_near_miss_command_matrix(unit_relative_path: &str, uni
         "M19 unsupported near-miss generate should succeed",
         &generate_output,
     );
-    assert_semantic_review_absent(&read_passport_json(&passport_path)["semantic_review"]);
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
 }
 
 #[test]

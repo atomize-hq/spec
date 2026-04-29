@@ -1238,7 +1238,7 @@ dependencies = [
 
 [[package]]
 name = "spec-cli"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "spec-core"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "hex",
@@ -1839,6 +1839,21 @@ name = "writeable"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
+
+[[package]]
+name = "xtask"
+version = "0.13.1"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+ "sha2",
+ "spec-core",
+ "tempfile",
+ "thiserror",
+ "toml",
+ "walkdir",
+]
 
 [[package]]
 name = "yoke"

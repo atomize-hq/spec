@@ -8,3 +8,4 @@ examples/ecommerce/src/generated/
 spec-cli/.tmp*/
 .context
 .runs
+.semantic-family-artifacts/

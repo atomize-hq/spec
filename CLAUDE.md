@@ -15,3 +15,7 @@ Key routing rules:
 - Design system, brand → invoke design-consultation
 - Visual audit, design polish → invoke design-review
 - Architecture review → invoke plan-eng-review
+
+## M20 semantic review note
+
+For unsupported-function semantic review, branch on `semantic_review.support_status == "unsupported"`. The public M20 fields are `semantic_review.support_status`, `semantic_review.unsupported_reason_codes`, and `semantic_review.rewrite_hints`; legacy reviews without `support_status` still fall back to `evaluator_scope` plus `unsupported.*.v1` inference.
