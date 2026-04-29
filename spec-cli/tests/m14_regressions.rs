@@ -330,7 +330,7 @@ fn rewrite_apply_tax_as_unsupported_near_miss(unit_path: &Path) {
     replace_in_file(
         unit_path,
         "    {\n        let taxed = subtotal + subtotal * rate;\n        round(taxed)\n    }\n",
-        "    {\n        let taxed = subtotal + subtotal * rate;\n        if taxed < subtotal {\n            subtotal\n        } else {\n            round(taxed)\n        }\n    }\n",
+        "    {\n        let taxed = subtotal + subtotal * rate;\n        if rate == Decimal::ZERO {\n            subtotal\n        } else {\n            round(taxed)\n        }\n    }\n",
     );
 }
 

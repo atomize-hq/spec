@@ -5481,10 +5481,10 @@ mod tests {
             &["money/round"],
             r#"{
             let taxed = subtotal + subtotal * rate;
-            if rate > Decimal::ZERO {
-                round(taxed)
-            } else {
+            if rate == Decimal::ZERO {
                 subtotal
+            } else {
+                round(taxed)
             }
         }"#,
         );
