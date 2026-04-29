@@ -122,8 +122,10 @@ mod tests {
             LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
             MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
             MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
-            ProveSuiteDefinition, ScaffoldDefinition, SmokeContract, StarterCaseDefinition,
-            StarterTemplate, TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness, family_harness_in,
+            MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
+            MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
+            ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
+            TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness, family_harness_in,
             registered_harnesses_in_routing_order_from, require_family_harness_in,
             validate_suite_ownership,
         },
@@ -485,12 +487,111 @@ mod tests {
     }
 
     #[test]
+    fn family_new_creates_locked_monotone_up_scaffold() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_up.v1";
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family_id);
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains(&format!("precedence = {MONOTONE_UP_PRECEDENCE}")));
+        assert!(manifest.contains("dep_min = 0"));
+        assert!(manifest.contains("dep_max = 1"));
+        assert!(manifest.contains("requires_supported_function_deps = false"));
+        for family_id in MONOTONE_UP_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        for case in harness.scaffold.starter_cases {
+            let unit_path = paths.root.join(case.path);
+            assert!(
+                unit_path.is_file(),
+                "missing monotone-up scaffold `{}`",
+                unit_path.display()
+            );
+            assert_candidate_lists_path_once(&candidate, case.path);
+        }
+
+        let aligned = fs::read_to_string(
+            paths
+                .root
+                .join("fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec"),
+        )
+        .unwrap();
+        assert!(aligned.contains("subtotal: Decimal"));
+        assert!(aligned.contains("rate: Decimal"));
+        assert!(aligned.contains("- output >= subtotal"));
+        assert!(aligned.contains("deps:\n  - money/round"));
+        assert!(aligned.contains("let taxed = subtotal + subtotal * rate;"));
+        assert!(aligned.contains("round(taxed)"));
+
+        let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec")).unwrap();
+        assert!(unsupported.contains("if rate == Decimal::ZERO"));
+        assert!(!candidate.contains("TODO: replace"));
+    }
+
+    #[test]
+    fn family_smoke_accepts_committed_monotone_up_scaffold_surfaces() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_up.v1";
+
+        scaffold::run(temp_dir.path(), family).unwrap();
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "smoke", family]),
+            0
+        );
+    }
+
+    #[test]
+    fn family_smoke_rejects_monotone_up_aligned_starter_shape_drift() {
+        let committed_root = workspace_root();
+        let scaffolded_root = workspace_root();
+        let family = FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap();
+
+        scaffold::run(committed_root.path(), family.as_str()).unwrap();
+        scaffold::run(scaffolded_root.path(), family.as_str()).unwrap();
+
+        let scaffolded_paths = PacketPaths::new(scaffolded_root.path(), family.clone());
+        let aligned_path = scaffolded_paths
+            .root
+            .join("fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec");
+        let aligned = fs::read_to_string(&aligned_path).unwrap();
+        write_string(
+            &aligned_path,
+            &aligned.replacen("subtotal: Decimal", "amount: Decimal", 1),
+        );
+
+        let failures = smoke::collect_smoke_failures(
+            &PacketPaths::new(committed_root.path(), family.clone()),
+            &scaffolded_paths,
+            *family_harness(&family).unwrap(),
+        )
+        .unwrap();
+
+        assert!(failures.iter().any(|message| {
+            message.contains("scaffolded smoke-contract file")
+                && message.contains("subtotal: Decimal")
+        }));
+    }
+
+    #[test]
     fn locked_routing_helper_uses_registered_families_plus_terminal() {
         assert_eq!(
             locked_routing_order_with_terminal(),
             [
                 "function.wrapper.pipeline.chain3.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
                 "unsupported.function.v1",
             ]
         );
@@ -586,6 +687,46 @@ mod tests {
     }
 
     #[test]
+    fn monotone_up_harness_contract_is_locked() {
+        let temp_dir = workspace_root();
+        let family = "function.arithmetic_leaf.monotone_up.v1";
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).expect("monotone-up harness should be registered");
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+        assert_eq!(MONOTONE_UP_PROVE_SUITES.len(), 3);
+        assert_eq!(MONOTONE_UP_CERTIFY_SUITES.len(), 2);
+        assert_eq!(
+            harness
+                .prove_suites
+                .iter()
+                .map(|definition| definition.gate)
+                .collect::<Vec<_>>(),
+            vec![
+                crate::family::report::GateId::GateA,
+                crate::family::report::GateId::GateC,
+                crate::family::report::GateId::GateB,
+            ]
+        );
+        assert_eq!(harness.shape.dep_min, 0);
+        assert_eq!(harness.shape.dep_max, 1);
+        assert!(!harness.shape.requires_supported_function_deps);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_exact_match_paths,
+            ["family.toml"]
+        );
+        assert_eq!(harness.scaffold.smoke.scaffold_file_contracts.len(), 1);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_file_contracts[0].path,
+            "fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec"
+        );
+        assert_eq!(harness.suite_slug, MONOTONE_UP_SUITE_SLUG);
+    }
+
+    #[test]
     fn suite_ownership_rejects_suite_names_without_locked_slug() {
         let harness = family_harness(
             &FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap(),
@@ -619,6 +760,40 @@ mod tests {
         let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(message)
             if message.contains("expected test names must include `monotone_down_nonnegative_`")));
+    }
+
+    #[test]
+    fn monotone_up_suite_ownership_rejects_suite_names_without_locked_slug() {
+        let harness =
+            family_harness(&FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap())
+                .unwrap();
+        let suites = [SuiteDefinition {
+            name: "spec-core:leaf_classifier_",
+            command: &["cargo", "test"],
+            expected_tests: &[
+                "semantic_review::tests::monotone_up_classifier_aligned_fixture_routes_to_promoted_leaf",
+            ],
+        }];
+
+        let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("suite names must include `monotone_up_`")));
+    }
+
+    #[test]
+    fn monotone_up_suite_ownership_rejects_expected_tests_without_locked_slug() {
+        let harness =
+            family_harness(&FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap())
+                .unwrap();
+        let suites = [SuiteDefinition {
+            name: "spec-core:monotone_up_classifier_",
+            command: &["cargo", "test"],
+            expected_tests: &["semantic_review::tests::leaf_classifier_aligned_fixture"],
+        }];
+
+        let error = validate_suite_ownership(harness, &suites, "family prove").unwrap_err();
+        assert!(matches!(error, XtaskError::InvalidInput(message)
+            if message.contains("expected test names must include `monotone_up_`")));
     }
 
     #[test]
