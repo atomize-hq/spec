@@ -6,59 +6,48 @@ Base branch: **main**
 Working branch: **codex/m23-contract**  
 Last rewritten: **2026-04-29**
 
-Source of truth for this plan:
+## Plan Authority
 
-- repo code and docs in this checkout
-- [docs/m26_implementation_plan_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/m26_implementation_plan_v0.1.md)
-- [docs/m26_approval_gated_ai_family_promotion_loop_design_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/m26_approval_gated_ai_family_promotion_loop_design_v0.1.md)
-- [docs/ai_promotion_and_multilanguage_milestones_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/ai_promotion_and_multilanguage_milestones_v0.1.md)
-- [docs/north_star_v0.2.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/north_star_v0.2.md)
-- [docs/high_level_technical_architecture_v0.2.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/high_level_technical_architecture_v0.2.md)
-- [docs/roadmap_and_release_shape_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/roadmap_and_release_shape_v0.1.md)
-- direct repo truth in:
-  - [xtask/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/lib.rs)
-  - [xtask/src/family/harness.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/harness.rs)
-  - [xtask/src/family/scaffold.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/scaffold.rs)
-  - [xtask/src/family/prove.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/prove.rs)
-  - [xtask/src/family/certify.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/certify.rs)
-  - [xtask/src/family/report.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/report.rs)
-  - [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs)
-  - [spec-cli/tests/m14_regressions.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/m14_regressions.rs)
-  - [semantic-families/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/README.md)
+This file is the authoritative M26 plan.
 
-M21 through M24 already proved the narrow Rust wedge. The repo can now distinguish aligned truth,
-drift, under-specification, and unsupported near misses for real promoted function families.
+Upstream docs informed it:
 
-M26 is not another semantics-theory milestone. M26 is the operator-model milestone that makes
-those proofs scale.
+- `docs/m26_implementation_plan_v0.1.md`
+- `docs/m26_approval_gated_ai_family_promotion_loop_design_v0.1.md`
+- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+- `docs/north_star_v0.2.md`
+- `docs/high_level_technical_architecture_v0.2.md`
+- `docs/roadmap_and_release_shape_v0.1.md`
 
-The causal chain is fixed:
+If any upstream doc disagrees with this file, `PLAN.md` wins for M26 execution.
 
-1. prove the intent-drift thesis in one narrow Rust wedge
-2. make family promotion operable by AI under hard proof gates
-3. use that promotion machinery to cover most of Rust family-by-family
-4. only then factor toward multiple languages
+That matters because the upstream docs still carry one major contradiction:
 
-If step 2 stays manual, steps 3 and 4 are fake roadmap confidence.
+- older draft shape: add a new `spec-orchestrator` workspace crate
+- locked M26 shape: keep the workspace boundary unchanged and implement the hard kernel inside `xtask`
+
+This plan resolves that contradiction explicitly. M26 does **not** add a new workspace crate.
 
 ## Problem Statement
 
-After M24, the repo has two strong but separate truths:
+M21 through M24 proved the narrow Rust wedge:
 
-- runtime semantic-review truth in `spec-core` plus read-side truth in `spec-cli`
-- deterministic packet promotion truth in `xtask` plus committed packets in `semantic-families/`
+- runtime semantic review can distinguish aligned truth, drift, under-specification, and unsupported near misses
+- packetized family promotion can land real promoted families under `smoke`, `prove`, and `certify`
 
-What is still missing is the durable machine-operable bridge between them.
+What the repo still does not have is the right operator model.
 
-Right now, family promotion still assumes a human can hold too much ceremony in their head:
+Right now, family promotion still assumes a human can carry too much ceremony in their head:
 
 - which family should be promoted next
-- why that choice is justified by repo truth
+- whether that choice is justified by repo truth
 - how to scaffold a truthful packet
-- how to distinguish a fixable gate failure from an honest blocker
-- what changed across the promotion run
+- how to tell a fixable failure from an honest blocker
+- what changed across a promotion run
 
-That is the wrong operator model for the repo thesis in [docs/north_star_v0.2.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/north_star_v0.2.md). The right model is slower, safer, and explicit:
+If that remains manual, broader Rust family coverage does not scale and multi-language planning is fake confidence.
+
+M26 fixes that bottleneck. It locks a slower, safer loop:
 
 1. AI reads deterministic repo truth and recommends the next family.
 2. Human approves or rejects that candidate family.
@@ -72,22 +61,22 @@ No hidden human rescue work is allowed between those two approvals.
 When M26 is done, the repo can truthfully claim:
 
 - AI-operated family promotion is real, not chat theater
-- the only human approvals are candidate-family approval and final-output approval
+- the only human approvals are target-family approval and final-output approval
 - `cargo xtask family smoke`, `prove`, and `certify` remain the hard proof kernel
-- recommendation, execution, and blocker artifacts are durable machine-readable files
-- the first broadening step after the Rust wedge is now throughput, not re-arguing semantics
+- recommendation, execution, and blocker surfaces are durable machine-readable artifacts
+- the next bottleneck after M26 is throughput, not re-arguing packet ceremony
 
 M26 does **not** claim:
 
 - next-family ranking is globally optimal
 - multi-language promotion is solved
 - non-function families are in scope
-- packet ceremony is fully minimized
-- a new standalone orchestration subsystem deserves to exist forever
+- family authoring ceremony is fully minimized
+- a standalone orchestration subsystem deserves to exist forever
 
 ## Scope
 
-### In scope
+### In Scope
 
 - lock the approval-gated operator contract for family promotion
 - add a deterministic family-scoped repo-truth export surface
@@ -97,7 +86,7 @@ M26 does **not** claim:
 - choose that family from repo truth, not taste
 - make blocker termination honest and durable
 
-### NOT in scope
+### NOT In Scope
 
 - multi-language backend work
 - new target-language lowering
@@ -107,49 +96,94 @@ M26 does **not** claim:
 - background autonomous promotion queues
 - a new workspace crate purely for architectural neatness
 
-## Premise Challenge
+## Step 0 - Scope Challenge
+
+### What already exists
+
+| Area | Current truth | M26 reuse decision |
+|---|---|---|
+| Runtime supported function routes | `spec-core/src/semantic_review.rs` routes `chain3 -> wrapper -> monotone_down -> monotone_up` | Reuse directly. M26 must not invent new runtime family theory. |
+| Current promoted packets | `semantic-families/` already contains `function.wrapper.pipeline.chain3.v1`, `function.arithmetic_leaf.monotone_down_nonnegative.v1`, and `function.arithmetic_leaf.monotone_up.v1` | Reuse as the promoted baseline and routing anchor. |
+| Hard proof primitives | `cargo xtask family new`, `smoke`, `prove`, and `certify` already exist in `xtask` | Keep. Do not replace. |
+| Hard proof artifacts | `.semantic-family-artifacts/semantic-families/<family>/prove.latest.json`, `attempt-*.json`, and `certification.report.json` already exist | Keep them authoritative. M26 references them instead of duplicating them. |
+| Canonical wrapper seed | `examples/ecommerce/units/pricing/calculate_total.unit.spec` already expresses the two-step wrapper semantic shape | Use it as semantic seed truth. |
+| Existing wrapper wedge regressions | `spec-cli/tests/m14_regressions.rs` already exercises aligned, drift, under-specified, and unsupported-near-miss wrapper cases via `calculate_total` | Reuse those patterns instead of inventing a new wedge. |
+| Existing internal wrapper packet corpus | `function.wrapper.pipeline.chain3.v1` already carries packet-local wrapper and leaf fixtures across all four buckets | Reuse as the fastest truthful seed for the dedicated wrapper family. |
+| Workspace boundary | `Cargo.toml` still defines exactly `spec-core`, `spec-cli`, and `xtask` | Keep unchanged in M26. |
+
+### Minimum change
+
+The minimum honest diff is:
+
+1. expose deterministic repo-truth inventory for recommendation input
+2. lock durable orchestration artifact schemas
+3. register and prove the dedicated wrapper family packet
+4. run one real approval-gated loop using the existing hard gates
+
+Anything broader is M27 or later.
+
+### Complexity check
+
+This is already a multi-module milestone, but it is still a bounded one:
+
+- `xtask/src/family/**` takes the majority of the new deterministic work
+- `spec-core` and `spec-cli` only need family-specific truth-surface and regression coverage
+- no new published binary, service, or crate is introduced
+
+That is engineered enough. A new workspace crate here would spend an innovation token for no payoff.
+
+### Completeness check
+
+The complete version is still cheap enough here. M26 should land with:
+
+- full inventory contract
+- locked artifact schemas
+- family-specific scaffold truth
+- prove/certify coverage
+- blocker-path coverage
+- explicit worktree parallelization
+
+Do not ship a happy-path-only version and promise blocker honesty later.
+
+### Distribution check
+
+M26 introduces no new externally distributed artifact.
+
+The ship surface is:
+
+- one new `cargo xtask family inventory --format json` command
+- one new promoted packet directory
+- one new derived orchestration artifact tree under `.semantic-family-artifacts/family-promotion/`
+
+That means there is no release-pipeline blocker for M26 beyond the normal workspace test surface.
+
+## Resolved Premises
 
 | Premise | Verdict | Why |
 |---|---|---|
-| The narrow Rust wedge is already proven | Accept | M21 through M24, plus current runtime routes and packetized families, already established this. M26 should not re-fight it. |
-| The next bottleneck is workflow throughput, not semantic credibility | Accept | Runtime routes, wedge regressions, and packet gates already exist. The limiting factor is how many families can be promoted safely. |
-| Human approvals should be limited to target-family and final-output approval | Accept | This matches the north-star operator model and forces honest machine-operable artifacts. |
-| M26 should add a standalone `spec-orchestrator` workspace crate | Reject | That is one abstraction too early. `xtask` already identifies itself as "Workspace orchestration for semantic family packets" in `xtask/Cargo.toml`. Adding a fourth workspace member before reuse pressure is proven is unnecessary surface area. |
-| `function.wrapper.pipeline.v1` is the right first live proof target | Accept | It already exists in runtime routing order, has a canonical seed at `pricing/calculate_total`, has wedge regressions, and broadens topology from leaves to two-step wrappers. |
-| `cargo xtask family inventory --format json` is the right minimal repo-truth export | Accept | It is family-scoped, deterministic, and policy-free. It exposes truth. It does not pretend to rank or approve. |
-
-## Why This Milestone Now
-
-The repo already proved the thing that had to come first: semantic review can catch meaningful
-intent drift in a narrow real Rust subset.
-
-That changes the honest next question.
-
-The next question is not "can the classifier work?" The next question is "can this family
-promotion workflow be operated by AI without turning into hidden human ceremony?"
-
-That is why M26 exists now:
-
-- broad Rust coverage needs throughput
-- throughput needs deterministic repo truth plus hard gates
-- multi-language work before that loop exists would be premature architecture tourism
+| The narrow Rust wedge is already proven | Accept | M21 through M24 already established this. M26 should not re-fight it. |
+| The next bottleneck is throughput, not semantic credibility | Accept | Runtime routes, packet registry, and hard proof gates already exist. |
+| Human approvals should be limited to target-family and final-output approval | Accept | This is the north-star operator model and forces honest machine-operable artifacts. |
+| M26 should add a standalone `spec-orchestrator` workspace crate | Reject | Overbuilt. The deterministic kernel already lives in `xtask`, and the new crate adds surface without proving reuse pressure. |
+| `function.wrapper.pipeline.v1` is the right first live proof target | Accept | It is already supported at runtime, already has a canonical seed, and broadens topology beyond the leaf families. |
+| `cargo xtask family inventory --format json` is the right minimal repo-truth export | Accept | It exposes truth without embedding ranking policy. |
 
 ## Dream State Delta
 
 ```text
 CURRENT
   runtime routes exist
-  promoted families exist
+  promoted packets exist
   proof kernel exists
-  operator still manual
+  operator loop is still manual
 
         │
         ▼
 
 M26
-  AI reads repo truth
-  human approves target family
-  AI edits + runs smoke/prove/certify
+  AI reads deterministic repo truth
+  human approves candidate family
+  AI edits packet + tests under hard gates
   AI emits execution or blocker artifact
   human approves final output
 
@@ -157,132 +191,162 @@ M26
         ▼
 
 12-MONTH IDEAL
-  most meaningful Rust function families promoted
-  selection pressure measured from coverage truth
-  second-language pilots plug into the same gate model
+  most meaningful Rust function families are promoted
+  family selection pressure is measured from coverage truth
+  second-language pilots plug into the same approval-gated model
   humans govern approvals, not ceremony
 ```
 
-## What Already Exists
-
-| Area | Current truth | M26 reuse decision |
-|---|---|---|
-| Runtime function routing | [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs) routes `WrapperPipelineChain3`, `WrapperPipeline`, `ArithmeticLeafMonotoneDownNonnegative`, then `ArithmeticLeafMonotoneUp` in explicit order | Reuse directly. M26 must not invent new runtime family theory. |
-| Canonical wrapper seed | [examples/ecommerce/units/pricing/calculate_total.unit.spec](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/examples/ecommerce/units/pricing/calculate_total.unit.spec) is already the truthful two-step wrapper wedge | Use as the semantic source for the first live proof. |
-| Existing wrapper wedge regressions | [spec-cli/tests/m14_regressions.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/m14_regressions.rs) already has aligned, reversed-pipeline drift, under-specified, and unsupported-near-miss rewrites for `calculate_total` | Reuse those exact wedge patterns instead of inventing new ones. |
-| Existing internal wrapper packet corpus | `function.wrapper.pipeline.chain3.v1` already carries packet-local `pricing_total_wrapper_*`, `pricing_discount_leaf_*`, and `pricing_tax_leaf_*` fixtures across all four buckets | Reuse this internal corpus as the fastest truthful packet seed for the dedicated wrapper family. |
-| Current promoted packets | `semantic-families/` currently promotes chain3 plus the two arithmetic leaves | Use as the promoted-family baseline and routing order anchor. |
-| Proof kernel | `cargo xtask family new`, `smoke`, `prove`, `certify` already exist and already write machine-readable prove/certify artifacts | Keep. Do not replace. |
-| Proof artifacts | `prove.latest.json`, `attempt-*.json`, and `certification.report.json` are already written under `.semantic-family-artifacts/semantic-families/<family>/` | Keep them authoritative. M26 artifacts must reference them, not duplicate them. |
-| Routing truth | [semantic-families/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/README.md) already documents terminal `unsupported.function.v1` behavior and current promoted-family order | Reuse for doc truth. Update only after M26 is green. |
-| Workspace boundary | [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/Cargo.toml) currently has exactly three workspace members: `spec-core`, `spec-cli`, and `xtask` | Keep this boundary in M26. |
-
-## Alternatives Pressure Test
-
-| Option | Shape | Verdict | Why |
-|---|---|---|---|
-| A | Add new `spec-orchestrator` workspace crate | Reject | Overbuilt for M26. It adds a new package, new workspace wiring, and new API seams before reuse pressure exists. |
-| B | Keep one public binary, extend `xtask` with deterministic inventory export and typed promotion artifact contracts, let the AI operator live outside the repo | Choose | This preserves the proof kernel, minimizes diff, and keeps policy outside deterministic code. |
-| C | Keep the current manual/chat loop and only write docs | Reject | This does not create promotion machinery. It just renames the current bottleneck. |
-
 ## Locked Architecture Decisions
 
-### 1. Orchestration Boundary
+### 1. Workspace boundary
 
-`spec-orchestrator` is **not** the right M26 boundary.
+Keep the public binary surface inside `xtask`.
 
-The right M26 boundary is:
-
-- keep the public binary surface inside `xtask`
-- keep deterministic proof primitives in `xtask/src/family/**`
-- add one pure repo-truth export at `xtask/src/family/inventory.rs`
-- add typed promotion artifact structs and validation tests inside `xtask`
-- keep the actual AI operator outside the repo, using locked artifacts plus shell commands
-
-This matters because the AI operator is a workflow role, not a library boundary yet.
-
-Lock this explicitly:
+Lock this:
 
 - do **not** add a fourth workspace member in M26
-- do **not** make `spec-core` or `spec-cli` depend on approval-state logic
 - do **not** move `smoke`, `prove`, or `certify` out of `xtask`
+- do **not** make `spec-core` or `spec-cli` depend on approval-state logic
 
-### 2. Hard Kernel vs AI Policy
+### 2. Hard kernel vs operator policy
 
 `xtask` owns:
 
-- family registry and routing truth
+- family registry truth
 - scaffold generation
 - smoke validation
 - prove gate execution
 - certify gate execution
 - deterministic report emission
 - pure repo-truth inventory export
+- typed orchestration artifact schemas and validation tests
 
 The AI operator owns:
 
-- ranking candidates from inventory truth
+- ranking families from inventory truth
 - writing recommendation artifacts
-- making repo edits for the approved family
-- deciding when to rerun targeted tests versus full gates
+- editing repo truth for the approved family
+- retrying under hard gates
 - writing promotion execution and blocker artifacts
 
-That split is the M26 contract.
+That split is fixed for M26.
 
-### 3. Minimal Repo-Truth Export
+### 3. No hidden approval state
 
-M26 adds this command:
+Inventory is a projection of repo truth only.
+
+It must not contain:
+
+- approval state
+- LLM-authored reasoning prose
+- inferred "best" choice
+
+Approval state begins only after the AI writes the recommendation artifact.
+
+## Architecture / Dependency View
+
+```text
+spec-core runtime semantic review
+        │
+        ├── explicit supported routes
+        ├── unsupported reason codes
+        └── canonical seed behavior in examples/tests
+                │
+                ▼
+xtask repo-truth inventory export
+                │
+                ▼
+AI recommendation layer
+        │
+        ├── writes recommendation.latest.json
+        └── waits for human target approval
+                │
+                ▼
+AI promotion loop
+        │
+        ├── edits harness / packet / tests / docs for approved family
+        ├── runs cargo xtask family smoke
+        ├── runs cargo xtask family prove
+        ├── runs cargo xtask family certify
+        ├── reads prove/certify artifacts
+        └── repeats until green or blocked
+                │
+                ├── green  -> promotion.execution.json -> human final approval
+                └── blocked -> blocker.report.json
+```
+
+### Primary module ownership
+
+| Layer | Responsibility in M26 | Must not happen |
+|---|---|---|
+| `spec-core` | remain the source of runtime supported-family truth and unsupported diagnostics | do not absorb approval or orchestration policy |
+| `spec-cli` | remain the source of read-side truth-surface and wedge regression proof | do not become the operator loop |
+| `xtask/src/family/**` | remain the deterministic family packet kernel, plus the new inventory export and schema validation | do not embed ranking heuristics or human approvals |
+| `.semantic-family-artifacts/**` | hold proof artifacts and orchestration artifacts | do not become authored source |
+
+## Locked Inventory Contract
+
+M26 adds:
 
 ```bash
 cargo xtask family inventory --format json
 ```
 
-It is the minimal honest export because it answers "what does the repo already know?" without
-smuggling in ranking policy.
+This is the minimal honest export because it answers "what does the repo already know?" without smuggling in approval policy.
 
-Required JSON fields:
+Required fields:
 
 | Field | Meaning |
 |---|---|
-| `schema_version` | Locked to `1` in M26 |
+| `schema_version` | `1` |
 | `generated_at` | UTC timestamp |
-| `promoted_families[]` | Family ids currently registered and packetized |
-| `runtime_supported_routes[]` | Supported runtime compatibility keys in routing order |
-| `supported_unpromoted_families[]` | Repo-supported family ids that are not yet promoted |
-| `supported_unpromoted_families[].canonical_seed_paths[]` | Real source units that anchor the family |
-| `supported_unpromoted_families[].existing_wedge_paths[]` | Existing regression or corpus paths that already exercise the family |
-| `supported_unpromoted_families[].supporting_packet_paths[]` | Existing packet-local fixture paths that can be lifted into a dedicated packet |
-| `supported_unpromoted_families[].routing_predecessor` | Immediate promoted or runtime predecessor |
-| `supported_unpromoted_families[].routing_successors[]` | Lower-precedence family ids and terminal unsupported catch-all |
+| `promoted_families[]` | family ids already registered and packetized |
+| `runtime_supported_routes[]` | supported function compatibility keys in routing order |
+| `supported_unpromoted_families[]` | supported family ids not yet promoted |
+| `supported_unpromoted_families[].family` | repo-supported family id |
+| `supported_unpromoted_families[].canonical_seed_paths[]` | real source-unit paths that anchor the family |
+| `supported_unpromoted_families[].existing_wedge_paths[]` | existing regression or corpus paths that already exercise the family |
+| `supported_unpromoted_families[].supporting_packet_paths[]` | existing packet-local fixture paths that can seed a dedicated packet |
+| `supported_unpromoted_families[].routing_predecessor` | immediate promoted or runtime predecessor |
+| `supported_unpromoted_families[].routing_successors[]` | lower-precedence family ids and terminal unsupported |
 
 Locked rules:
 
 - inventory does **not** rank candidates
-- inventory does **not** contain approval state
-- inventory does **not** contain LLM-written prose
+- inventory does **not** include approval state
 - inventory cites repo truth only
 
-### 4. First Live Proof Target
+### Inventory command behavior
 
-The first live M26 proof target is locked to:
+`cargo xtask family inventory --format json` is a read-only projection command.
 
-- `function.wrapper.pipeline.v1`
+Lock this behavior:
 
-Why this wins now:
+- JSON is written to stdout, not to an artifact file
+- the command does not mutate repo files or `.semantic-family-artifacts/`
+- arrays are deterministically ordered
+  - `promoted_families[]` in registered routing order
+  - `runtime_supported_routes[]` in runtime routing order
+  - `supported_unpromoted_families[]` in runtime routing order
+  - all path arrays sorted lexicographically
+- command exits `0` only when the projection is internally coherent
+- command exits nonzero if runtime-supported route truth and promoted-family registry truth cannot be projected into one coherent inventory
 
-- it already exists in runtime route order
-- it already has a truthful seed in `pricing/calculate_total`
-- it already has aligned, drift, under-specified, and unsupported-near-miss wedge rewrites
-- it broadens topology from arithmetic leaves to two-step wrappers
-- it does not require new evaluator-scope invention
-- chain3 already declares it in `must_not_shadow`, so promoting it stabilizes an existing boundary
+`inventory_path` in downstream artifacts therefore points to a checked-in captured stdout file produced by the operator, not to a second repo-owned command output location.
 
-Fallback rule:
+### Locked initial truth for the first M26 run
 
-- if M26 discovers `function.wrapper.pipeline.v1` is not promotion-ready, the loop must emit a
-  blocker report
-- it may not silently switch to another family without a fresh recommendation artifact and a fresh
-  human approval
+Unless repo truth changes before implementation starts, the first green inventory should show:
+
+- `promoted_families = [`
+  - `function.wrapper.pipeline.chain3.v1`
+  - `function.arithmetic_leaf.monotone_down_nonnegative.v1`
+  - `function.arithmetic_leaf.monotone_up.v1`
+  - `]`
+- `supported_unpromoted_families = [function.wrapper.pipeline.v1]`
+
+If the initial inventory does not show that shape, stop and fix the projection before doing recommendation work.
 
 ## Locked Artifact Contract
 
@@ -292,7 +356,7 @@ M26 adds three durable orchestration artifacts under:
 .semantic-family-artifacts/family-promotion/
 ```
 
-### Recommendation Packet
+### Recommendation packet
 
 Path:
 
@@ -307,21 +371,31 @@ Required fields:
 | `schema_version` | `1` |
 | `artifact_kind` | `family_recommendation` |
 | `generated_at` | UTC timestamp |
-| `inventory_path` | Path to the exact inventory export used |
+| `inventory_path` | exact inventory artifact used |
 | `target_language` | `rust` |
-| `ranked_candidates[]` | Ranked candidate list |
-| `ranked_candidates[0].family` | The only family the human is allowed to approve from this artifact |
-| `ranked_candidates[].evidence[]` | Repo paths, not paraphrases |
-| `ranked_candidates[].expected_leverage` | Why this family matters now |
-| `ranked_candidates[].expected_risks[]` | Known risks before approval |
+| `ranked_candidates[]` | ranked candidate list |
+| `ranked_candidates[0].family` | the only family the human is allowed to approve from this artifact |
+| `ranked_candidates[].evidence[]` | repo paths, not paraphrases |
+| `ranked_candidates[].expected_leverage` | why this family matters now |
+| `ranked_candidates[].expected_risks[]` | known risks before approval |
 
 Locked rules:
 
 - only `ranked_candidates[0]` is approval-eligible
 - every evidence claim must cite a repo path
 - this artifact is recommendation-only, not execution state
+- backup candidates are informational only
 
-### Promotion Execution Report
+### Recommendation packet semantics
+
+Lock this:
+
+- `ranked_candidates[0]` is the sole candidate the human may approve from that file
+- if the human wants candidate `N > 0`, AI must write a fresh recommendation artifact with that family moved to index `0`
+- evidence entries are repo paths only, not prose summaries
+- recommendation generation is external operator behavior, but the schema is repo-owned and validated in `xtask` tests
+
+### Promotion execution report
 
 Path:
 
@@ -335,27 +409,45 @@ Required fields:
 |---|---|
 | `schema_version` | `1` |
 | `artifact_kind` | `promotion_execution` |
-| `run_id` | Stable run id for this attempt series |
-| `family` | Approved family id |
+| `run_id` | stable run id for this attempt series |
+| `family` | approved family id |
 | `status` | `green` or `blocked` |
-| `recommendation_path` | Exact recommendation artifact used |
-| `approvals.target_family.status` | `approved` or `rejected` |
+| `recommendation_path` | exact recommendation artifact used |
+| `approvals.target_family.status` | `approved` |
 | `approvals.final_output.status` | `pending`, `approved`, or `rejected` |
-| `files_changed[]` | Source files changed during promotion |
-| `commands[]` | Every hard-gate command that ran, with exit code |
-| `referenced_proof_artifacts[]` | Exact paths to `prove.latest.json`, `attempt-*.json`, and `certification.report.json` as applicable |
-| `iterations` | Number of AI retry loops |
-| `gate_summary` | Final smoke/prove/certify state |
-| `notes[]` | Short factual notes, not essay text |
+| `files_changed[]` | source files changed during promotion |
+| `commands[]` | every hard-gate command that ran, with exit code |
+| `referenced_proof_artifacts[]` | exact paths to `prove.latest.json`, `attempt-*.json`, and `certification.report.json` |
+| `iterations` | number of AI retry loops |
+| `gate_summary` | final smoke/prove/certify state |
+| `notes[]` | short factual notes, not essay text |
 
 Locked rules:
 
 - this is the final human approval surface
 - it must reference actual proof-artifact paths
-- it must distinguish green completion from blocked termination
 - it may not claim green if `certification.report.json` is missing or failing
+- it exists only for an already-approved target family
 
-### Blocker Report
+### Promotion execution semantics
+
+Lock this:
+
+- `status` is execution outcome only, not human final approval outcome
+- `approvals.target_family.status` is always `approved` in this file
+- `approvals.final_output.status` starts as `pending`; the human may later change it to `approved` or `rejected`
+- `run_id` format is `{UTC-basic-timestamp}-{family}`, for example `20260429T154500Z-function.wrapper.pipeline.v1`
+- `commands[]` entries must include at least:
+  - `step`
+  - `command`
+  - `exit_code`
+  - `started_at`
+  - `finished_at`
+  - `artifact_path` when that command produced or refreshed a proof artifact
+- `files_changed[]` must be repo-relative paths, sorted lexicographically
+- `referenced_proof_artifacts[]` must all exist on disk at report-write time
+
+### Blocker report
 
 Path:
 
@@ -369,14 +461,14 @@ Required fields:
 |---|---|
 | `schema_version` | `1` |
 | `artifact_kind` | `promotion_blocker` |
-| `run_id` | Same run id as the matching execution attempt |
-| `family` | Approved family id |
+| `run_id` | same run id as the matching execution attempt |
+| `family` | approved family id |
 | `blocking_step` | `inventory`, `scaffold`, `smoke`, `prove`, or `certify` |
-| `blocker_kind` | Stable blocker vocabulary |
-| `summary` | One-sentence factual blocker summary |
-| `machine_evidence[]` | Commands, exit codes, and artifact paths |
-| `required_human_action` | The exact missing decision or truth |
-| `safe_next_actions[]` | What must remain unchanged while fixing the blocker |
+| `blocker_kind` | stable blocker vocabulary |
+| `summary` | one-sentence factual blocker summary |
+| `machine_evidence[]` | commands, exit codes, and artifact paths |
+| `required_human_action` | exact missing decision or truth |
+| `safe_next_actions[]` | what must remain unchanged while fixing the blocker |
 
 Locked rules:
 
@@ -384,11 +476,54 @@ Locked rules:
 - blocker classification must cite machine evidence
 - blocker reports must name the exact human decision or missing truth that stopped the loop
 
+### Blocker vocabulary
+
+M26 locks the first blocker kinds to this set:
+
+- `inventory_projection_mismatch`
+- `inventory_no_supported_candidate`
+- `scaffold_contract_mismatch`
+- `smoke_contract_failure`
+- `prove_suite_failure`
+- `certify_suite_failure`
+- `certify_routing_conflict`
+- `proof_artifact_missing`
+- `human_decision_required`
+
+If a blocker does not fit one of those values, stop and extend the vocabulary explicitly in the plan rather than inventing an ad hoc string during implementation.
+
+### Machine evidence contract
+
+Each `machine_evidence[]` entry must include:
+
+- `kind` as one of `command`, `artifact`, or `diff`
+- `path` for artifact or diff evidence
+- `command` and `exit_code` for command evidence
+- `observed_at`
+- `note` as a short factual string
+
+## Locked First Live Proof Target
+
+The first live M26 family proof is locked to:
+
+- `function.wrapper.pipeline.v1`
+
+Why this wins now:
+
+- it already exists in runtime route order
+- it already has a truthful semantic seed in `pricing/calculate_total`
+- it already has aligned, drift, under-specified, and unsupported-near-miss wedge rewrites
+- it broadens topology from arithmetic leaves to a two-step wrapper
+- `function.wrapper.pipeline.chain3.v1` already reserves it in `must_not_shadow`
+
+Fallback rule:
+
+- if implementation truth proves `function.wrapper.pipeline.v1` is not promotion-ready, M26 must emit a blocker report
+- it may not silently switch to another family without a fresh recommendation artifact and a fresh human approval
+
 ## Locked Family Contract
 
-M26 does not leave the first live family packet to implementer taste.
-
-### Family Id
+### Family id
 
 - `function.wrapper.pipeline.v1`
 
@@ -396,7 +531,7 @@ M26 does not leave the first live family packet to implementer taste.
 
 - `Straight-line two-call wrapper pipeline over supported semantic deps.`
 
-### Locked Routing Metadata
+### Locked routing metadata
 
 - `precedence = 2`
 - `must_not_shadow = [`
@@ -405,29 +540,19 @@ M26 does not leave the first live family packet to implementer taste.
   - `unsupported.function.v1`
   - `]`
 
-Why:
-
-- runtime route order is `chain3 -> wrapper -> monotone_down -> monotone_up`
-- chain3 already reserves precedence `1`
-- the wrapper family must sit between chain3 and the leaves
-- the registry contract requires lower-precedence successors plus terminal unsupported to stay explicit
-
-### Locked Suite Slug
+### Locked suite slug
 
 - `wrapper_pipeline_`
 
-Every family-owned prove/certify suite for this family must use that slug.
-
-### Locked Scaffold Template
+### Locked scaffold template
 
 Add a dedicated template:
 
 - `StarterTemplate::WrapperPipelineTwoStep`
 
-Do **not** reuse `GenericPlaceholder`. The current chain3 scaffold deliberately emits unsupported
-placeholder starters. That is wrong for a dedicated promoted wrapper family.
+Do **not** reuse `GenericPlaceholder`.
 
-### Locked Packet-Local Starter Set
+### Locked packet-local starter set
 
 Each bucket must contain exactly these starter units:
 
@@ -435,14 +560,13 @@ Each bucket must contain exactly these starter units:
 - `fixtures/<bucket>/units/pricing/pricing_tax_leaf_<bucket>.unit.spec`
 - `fixtures/<bucket>/units/pricing/pricing_total_wrapper_<bucket>.unit.spec`
 
-This family packet is self-contained on purpose. The wrapper unit depends on packet-local supported
-leaf fixtures, not on mutable external example units.
+This packet is self-contained on purpose. The wrapper unit depends on packet-local supported leaf fixtures, not on mutable external example units.
 
-### Canonical Aligned Truth
+### Canonical aligned truth
 
 Semantic seed:
 
-- [examples/ecommerce/units/pricing/calculate_total.unit.spec](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/examples/ecommerce/units/pricing/calculate_total.unit.spec)
+- `examples/ecommerce/units/pricing/calculate_total.unit.spec`
 
 Packet-local aligned wrapper truth:
 
@@ -459,45 +583,14 @@ Packet-local aligned wrapper truth:
 }
 ```
 
-This is the same semantic claim as `pricing/calculate_total`, but lifted into a self-contained
-family packet.
+### Bucket contract
 
-## Packet Contract By Bucket
-
-### Aligned
-
-- packet-local discount leaf remains monotone-down nonnegative
-- packet-local tax leaf remains monotone-up
-- wrapper body applies discount first, then tax
-
-### Drift
-
-- wrapper body reverses the order and taxes before discount
-- semantic claim still says discount then tax
-- this must project semantic drift, not unsupported
-
-### Under Specified
-
-- wrapper body stays aligned
-- authored semantic surface weakens to vague truth
-- this must project under-specified, not drift
-
-### Unsupported Near Miss
-
-- wrapper body stays semantically close but leaves the honest subset by changing the threaded tax
-  argument to a non-parameter expression
-- locked shape:
-
-```text
-{
-    pricing_tax_leaf_unsupported_near_miss(
-        pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate),
-        tax_rate.max(Decimal::ZERO)
-    )
-}
-```
-
-- this must remain additive-only and health-neutral on read-side surfaces
+| Bucket | Locked behavior |
+|---|---|
+| `aligned` | discount leaf stays monotone-down nonnegative, tax leaf stays monotone-up, wrapper applies discount then tax |
+| `drift` | wrapper reverses the order and taxes before discount, but still claims discount then tax |
+| `under_specified` | wrapper body stays aligned, but semantic surface weakens to vague truth |
+| `unsupported_near_miss` | wrapper stays semantically close but leaves the honest subset by threading `tax_rate.max(Decimal::ZERO)` into the second call |
 
 ## Smoke / Prove / Certify Contract
 
@@ -515,14 +608,12 @@ Smoke must verify:
 
 - `family.toml` regenerates byte-for-byte
 - all twelve locked starter unit specs exist
-- aligned wrapper starter contains:
+- the aligned wrapper starter contains:
   - `subtotal: Decimal`
   - `discount_rate: Decimal`
   - `tax_rate: Decimal`
   - both packet-local dep ids
   - the locked let-threaded wrapper body
-
-Smoke does **not** require whole-packet byte equality against the committed packet.
 
 ### Prove
 
@@ -534,7 +625,7 @@ Required prove suites:
 
 Prove responsibilities:
 
-- classifier routes aligned wrapper fixtures to `function.wrapper.pipeline.v1`
+- aligned wrapper fixtures route to `function.wrapper.pipeline.v1`
 - reversed-pipeline drift projects `semantic_drift`
 - vague intent projects `under_specified`
 - unsupported near miss stays unsupported and additive-only
@@ -633,7 +724,7 @@ CODE PATH COVERAGE
 ===========================
 [+] xtask inventory export
     ├── [GAP] promoted-family projection
-    ├── [GAP] runtime-supported unpromoted family projection
+    ├── [GAP] runtime-supported unpromoted-family projection
     ├── [GAP] canonical seed path emission
     └── [GAP] supporting packet-path emission
 
@@ -646,14 +737,14 @@ CODE PATH COVERAGE
 [+] spec-core semantic review
     ├── [EXISTS] runtime route for function.wrapper.pipeline.v1
     ├── [GAP] dedicated wrapper-packet classifier prove tests
-    ├── [GAP] chain3-vs-wrapper routing order regression
+    ├── [GAP] chain3-vs-wrapper routing-order regression
     └── [GAP] wrapper-family certify slug coverage
 
 [+] spec-cli truth surface + corpus
     ├── [EXISTS] calculate_total wedge regressions
     ├── [GAP] dedicated wrapper-packet corpus tests
     ├── [GAP] truth-surface preserve/stale tests for wrapper packet
-    └── [GAP] read-side additive-only unsupported-near-miss regression
+    └── [GAP] additive-only unsupported-near-miss read-side regression
 
 [+] orchestration artifacts
     ├── [GAP] recommendation artifact schema round-trip
@@ -676,7 +767,7 @@ CRITICAL GAPS
 ===========================
 1. inventory export does not exist yet
 2. wrapper family packet is not yet promoted
-3. artifact schemas are not yet locked in executable tests
+3. orchestration artifact schemas are not yet locked in executable tests
 ```
 
 ## Error & Rescue Registry
@@ -693,22 +784,19 @@ CRITICAL GAPS
 
 | Codepath | Real production failure | Test coverage required | Error handling required | User-visible outcome | Critical gap |
 |---|---|---|---|---|---|
-| `family inventory` | Wrapper pipeline omitted from supported-unpromoted list | Golden JSON fixture test for wrapper candidate presence | Exit nonzero if runtime route and inventory projection disagree structurally | Wrong candidate recommendation | Yes |
-| wrapper scaffold | Starter files are created with generic placeholder semantics | xtask unit tests for starter file paths and smoke contents | `family smoke` fails with exact missing-content error | AI cannot start truthful packet curation | No |
-| `family prove` | Wrapper classifier passes aligned fixture but mislabels drift or under-specified cases | dedicated `wrapper_pipeline_classifier_` plus corpus suites | existing prove artifact plus failing suite list | AI sees prove failure and retries | No |
-| `family certify` | Routing order allows wrapper to shadow leaves or conflict with chain3 | certify regression suite plus Gate D routing diagnostics | blocker report cites manifest or registry routing failure | Honest blocker instead of silent bad promotion | No |
-| execution report writer | Report says green without real `certification.report.json` reference | schema round-trip plus path-exists assertion | artifact validation fails | Human cannot honestly approve | Yes |
+| `family inventory` | wrapper pipeline omitted from the supported-unpromoted list | golden JSON fixture test for wrapper candidate presence | exit nonzero if runtime route and inventory projection disagree structurally | wrong candidate recommendation | Yes |
+| wrapper scaffold | starter files are created with generic placeholder semantics | xtask unit tests for starter file paths and smoke contents | `family smoke` fails with exact missing-content error | AI cannot start truthful packet curation | No |
+| `family prove` | aligned wrapper routes correctly but drift or under-specified cases are mislabeled | dedicated `wrapper_pipeline_classifier_` plus corpus suites | existing prove artifact plus failing suite list | AI sees prove failure and retries | No |
+| `family certify` | routing order allows wrapper to shadow leaves or conflict with chain3 | certify regression suite plus Gate D routing diagnostics | blocker report cites manifest or registry routing failure | honest blocker instead of silent bad promotion | No |
+| execution report writer | report says green without a real `certification.report.json` reference | schema round-trip plus path-exists assertion | artifact validation fails | human cannot honestly approve | Yes |
 
 ## Performance / Operational Notes
 
 - Keep the public binary surface at `cargo xtask ...`. No new crate, no new published artifact.
 - Use targeted `wrapper_pipeline_` test prefixes before full gates to reduce thrash.
-- `family inventory` must stay fast and deterministic. It should read repo truth, not generated
-  caches.
-- Promotion artifacts live under `.semantic-family-artifacts/`. They are derived outputs, not
-  authored source.
-- `xtask` needs a normal `spec-core` dependency in M26 if runtime-supported routes are reused at
-  runtime for inventory export. That is acceptable. Duplicating routing truth is not.
+- `family inventory` must stay fast and deterministic. It should read repo truth, not generated caches.
+- Promotion artifacts live under `.semantic-family-artifacts/`. They are derived outputs, not authored source.
+- `xtask` can take a normal `spec-core` dependency in M26 if inventory reuses runtime route truth directly. Duplicating routing truth would be worse.
 
 ## Distribution / Ship Surface
 
@@ -721,25 +809,23 @@ The ship surface remains:
 - one new promoted family packet: `function.wrapper.pipeline.v1`
 - new derived promotion artifacts under `.semantic-family-artifacts/family-promotion/`
 
-Code without distribution is still a trap, but this milestone is repo-process work. The usable
-surface is the checked-in command and packet truth, not a new external binary.
-
 ## Implementation Sequence
 
 1. Keep the workspace boundary unchanged.
-   Do not add `spec-orchestrator`. `Cargo.toml` must still list only `spec-core`, `spec-cli`, and
-   `xtask`.
+   `Cargo.toml` must still list only `spec-core`, `spec-cli`, and `xtask`.
 
 2. Add `cargo xtask family inventory --format json`.
    Touch:
-   - [xtask/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/lib.rs)
+   - `xtask/src/lib.rs`
    - new `xtask/src/family/inventory.rs`
    - `xtask/Cargo.toml` if `spec-core` becomes a normal dependency
 
 3. Add typed promotion artifact contracts and validation tests.
    Keep them in `xtask`. Do not create a new package just to serialize JSON.
+   Use a dedicated module:
+   - `xtask/src/family/promotion_artifacts.rs`
 
-4. Register `function.wrapper.pipeline.v1` in [xtask/src/family/harness.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/harness.rs).
+4. Register `function.wrapper.pipeline.v1` in `xtask/src/family/harness.rs`.
    Add:
    - `WRAPPER_PIPELINE_PRECEDENCE = 2`
    - `WRAPPER_PIPELINE_MUST_NOT_SHADOW = [...]`
@@ -750,18 +836,20 @@ surface is the checked-in command and packet truth, not a new external binary.
    - `FamilyHarness` entry
    - registry-order tests that place wrapper between chain3 and the leaves
 
-5. Extend [xtask/src/family/scaffold.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/scaffold.rs).
-   Add a truthful wrapper-family starter template that emits the twelve locked starter units and
-   aligned smoke-content contract.
+5. Extend `xtask/src/family/scaffold.rs`.
+   Add a truthful wrapper-family starter template that emits the twelve locked starter units and aligned smoke-content contract.
 
-6. Extend [xtask/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/lib.rs).
+6. Extend `xtask/src/lib.rs` tests.
    Add lock tests for:
    - inventory JSON shape
+   - inventory ordering and exit behavior
    - harness contract
    - registry routing order
    - starter scaffold file paths
    - smoke content contract
    - promotion artifact schema round-trips
+   - blocker vocabulary validation
+   - execution report path-exists validation for referenced proof artifacts
 
 7. Add the committed packet at:
 
@@ -769,14 +857,13 @@ surface is the checked-in command and packet truth, not a new external binary.
 semantic-families/function.wrapper.pipeline.v1/
 ```
 
-Seed it by lifting the existing wrapper-family fixture corpus already embedded in the chain3
-packet, then tighten it to the dedicated wrapper-family contract above.
+Seed it by lifting the existing wrapper-family fixture corpus embedded in the chain3 packet, then tighten it to the dedicated wrapper-family contract above.
 
 8. Extend runtime and read-side proof surfaces.
    Touch:
-   - [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs)
-   - [spec-cli/tests/cli.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/cli.rs)
-   - [spec-cli/tests/m14_regressions.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/m14_regressions.rs)
+   - `spec-core/src/semantic_review.rs`
+   - `spec-cli/tests/cli.rs`
+   - `spec-cli/tests/m14_regressions.rs`
 
 9. Run the real approval-gated loop end to end.
    Required sequence:
@@ -795,7 +882,7 @@ cargo xtask family certify function.wrapper.pipeline.v1
 
 10. Update repo-truth docs only after the loop is green.
     Touch:
-    - [semantic-families/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/README.md)
+    - `semantic-families/README.md`
 
 ## Worktree Parallelization Strategy
 
@@ -805,7 +892,7 @@ M26 has one hard serialization lane and then three safe parallel lanes.
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Lock inventory export + artifact schemas | `xtask/src/lib.rs`, `xtask/src/family/inventory.rs`, `xtask/Cargo.toml` | — |
+| Lock inventory export + artifact schemas | `xtask/src/lib.rs`, `xtask/src/family/inventory.rs`, `xtask/src/family/report.rs`, `xtask/Cargo.toml` | — |
 | Lock wrapper family contract + scaffold | `xtask/src/family/harness.rs`, `xtask/src/family/scaffold.rs`, `xtask/src/lib.rs` | Lock inventory export + artifact schemas |
 | Curate committed wrapper packet | `semantic-families/function.wrapper.pipeline.v1/` | Lock wrapper family contract + scaffold |
 | Add runtime prove/certify tests | `spec-core/src/semantic_review.rs` | Lock wrapper family contract + scaffold |
@@ -814,7 +901,7 @@ M26 has one hard serialization lane and then three safe parallel lanes.
 
 ### Parallel lanes
 
-- Lane A: `Lock inventory export + artifact schemas` → `Lock wrapper family contract + scaffold`
+- Lane A: `Lock inventory export + artifact schemas` -> `Lock wrapper family contract + scaffold`
 - Lane B: `Curate committed wrapper packet`
 - Lane C: `Add runtime prove/certify tests`
 - Lane D: `Add CLI truth-surface/corpus/regression tests`
@@ -829,13 +916,10 @@ M26 has one hard serialization lane and then three safe parallel lanes.
 
 ### Conflict flags
 
-- Lane A is the serialization point because it fixes suite slug, packet file names, inventory
-  fields, and smoke contracts.
+- Lane A is the serialization point because it fixes suite slug, packet file names, inventory fields, and smoke contracts.
 - Lanes B, C, and D are safe in parallel because they touch disjoint primary module roots.
-- If Lane C changes the wrapper-family unsupported-near-miss boundary, Lane B and Lane D must
-  reconcile to that exact shape before Lane E runs.
-- Docs stay out of parallel lanes. Do not claim AI-operated promotion until the end-to-end loop is
-  green.
+- If Lane C changes the wrapper-family unsupported-near-miss boundary, Lane B and Lane D must reconcile to that exact shape before Lane E runs.
+- Docs stay out of parallel lanes. Do not claim AI-operated promotion until the end-to-end loop is green.
 
 ## Acceptance Gates
 
@@ -843,9 +927,11 @@ M26 is done only when all of the following are true:
 
 - `Cargo.toml` still lists only `spec-core`, `spec-cli`, and `xtask`
 - `cargo xtask family inventory --format json` exists and emits the locked family-scoped truth
+- inventory output is deterministic, stdout-only, and side-effect-free
 - inventory truth shows `function.wrapper.pipeline.v1` as supported but unpromoted before the run
 - the only human approvals are target-family approval and final-output approval
 - the recommendation artifact exists and cites repo-path evidence
+- the recommendation artifact allows approval of only `ranked_candidates[0].family`
 - `function.wrapper.pipeline.v1` is registered in `xtask/src/family/harness.rs`
 - `StarterTemplate::WrapperPipelineTwoStep` exists and is used by the harness
 - a committed packet exists at `semantic-families/function.wrapper.pipeline.v1/`
@@ -853,8 +939,9 @@ M26 is done only when all of the following are true:
 - `cargo xtask family prove function.wrapper.pipeline.v1` passes
 - `cargo xtask family certify function.wrapper.pipeline.v1` passes
 - `promotion.execution.json` references real `prove.latest.json` and `certification.report.json`
-- `blocker.report.json` exists as a tested honest termination path even though the milestone exits
-  through the green path
+- `promotion.execution.json` uses the locked `run_id`, `commands[]`, and `files_changed[]` contracts
+- `blocker.report.json` exists as a tested honest termination path even though the milestone exits through the green path
+- `blocker.report.json` uses only locked `blocker_kind` values and locked `machine_evidence[]` shape
 - chain3 remains green and unshadowed
 - both arithmetic leaves remain green and unshadowed
 - `semantic-families/README.md` is updated to match the new promoted-family truth
@@ -870,19 +957,14 @@ M26 is done only when all of the following are true:
 
 ## Unresolved Risks
 
-- `family inventory` is new, and the quickest bad version is an incomplete one. Inventory must be
-  tested as carefully as any gate command.
-- `function.wrapper.pipeline.v1` is the right first target, but it may expose real routing
-  pressure against chain3. If so, certify must force an explicit answer.
-- current proof failures still lean on stderr strings in some paths. M26 may need sharper
-  structured blocker mapping than the current reports expose.
-- lifting wrapper fixtures out of the chain3 packet risks accidental drift if the dedicated packet
-  and chain3 packet stop agreeing on shared helper semantics. Keep the dedicated wrapper packet
-  authoritative for `function.wrapper.pipeline.v1`.
+- `family inventory` is new, and the quickest bad version is an incomplete one. Inventory must be tested as carefully as any gate command.
+- `function.wrapper.pipeline.v1` is the right first target, but it may expose real routing pressure against chain3. If so, certify must force an explicit answer.
+- current proof failures still lean on stderr strings in some paths. M26 may need sharper structured blocker mapping than the current reports expose.
+- lifting wrapper fixtures out of the chain3 packet risks accidental drift if the dedicated packet and chain3 packet stop agreeing on shared helper semantics.
 
 ## Review Summary
 
-- Step 0: Scope Challenge — accepted with one deliberate reduction: **no new workspace crate**
+- Step 0: Scope Challenge — accepted with one deliberate scope reduction: **no new workspace crate**
 - Architecture Review: 3 major decisions locked
 - Code Quality Review: 2 abstraction reductions locked
 - Test Review: diagram produced, 11 required coverage targets identified
@@ -890,32 +972,30 @@ M26 is done only when all of the following are true:
 - NOT in scope: written
 - What already exists: written
 - Failure modes: 2 critical gaps flagged
-- Outside voice: skipped, no separate external model pass was run for this rewrite
+- Outside voice: not run as a separate model pass in this rewrite
 - Parallelization: 5 lanes, 3 parallel after 1 serialization lane
-- Lake Score: 6/6 recommendations chose the more complete option over the shortcut
+- Lake Score: complete option chosen everywhere that materially affected correctness
 
 ## Decision Audit Trail
 
 | # | Phase | Decision | Classification | Principle | Rationale | Rejected |
 |---|---|---|---|---|---|---|
-| 1 | CEO | Keep M26 as the workflow bridge between the Rust wedge and broad Rust coverage | Mechanical | Completeness | This is the next real bottleneck after M24, not a side quest | Re-opening semantic-theory scope |
+| 1 | CEO | Keep M26 as the workflow bridge between the Rust wedge and broader Rust coverage | Mechanical | Completeness | This is the next real bottleneck after M24 | Re-opening semantic-theory scope |
 | 2 | CEO | Limit human approvals to candidate family and final output | Mechanical | Explicit over clever | Hidden mid-loop rescue work would fake the operator model | Manual steering between gates |
-| 3 | CEO | Lock `function.wrapper.pipeline.v1` as the first live proof target | Taste | Pragmatic | It broadens topology with existing repo truth and existing wedge evidence | Another leaf-family proof |
-| 4 | Eng | Reject a new `spec-orchestrator` workspace crate in M26 | Taste | Minimal diff | The current workspace and `xtask` boundary already fit the problem | Adding a fourth workspace member |
+| 3 | CEO | Lock `function.wrapper.pipeline.v1` as the first live proof target | Taste | Pragmatic | It broadens topology using existing repo truth and wedge evidence | Another leaf-family proof |
+| 4 | Eng | Reject a new `spec-orchestrator` workspace crate in M26 | Mechanical | Minimal diff | The current workspace and `xtask` boundary already fit the problem | Adding a fourth workspace member |
 | 5 | Eng | Add `cargo xtask family inventory --format json` as the minimal repo-truth export | Mechanical | Explicit over clever | Inventory exposes truth without embedding ranking policy | Ranking inside `xtask` |
 | 6 | Eng | Add a dedicated `StarterTemplate::WrapperPipelineTwoStep` | Mechanical | Completeness | Generic placeholder starters are not truthful enough for a promoted family | Reusing `GenericPlaceholder` |
 | 7 | Eng | Reuse chain3 packet-local wrapper fixtures as the wrapper packet seed | Mechanical | DRY | The repo already has truthful wrapper-family bucket material | Rebuilding the packet from scratch |
-| 8 | Eng | Keep `xtask` as the hard proof kernel and make promotion artifacts reference its reports | Mechanical | Systems over heroes | One proof source keeps the operator loop auditable | Competing proof artifacts |
+| 8 | Eng | Keep `xtask` as the hard proof kernel and make orchestration artifacts reference its reports | Mechanical | Systems over heroes | One proof source keeps the operator loop auditable | Competing proof artifact systems |
 
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/autoplan` | Scope & strategy | 1 | CLEAR | Kept M26 narrow as the workflow bridge, not a ranking or multi-language milestone. Locked wrapper pipeline as the first proof target and rejected a new crate. |
-| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | No separate external-model review was run in this pass. The plan was rewritten from direct repo inspection instead. |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | No separate external-model pass was run in this rewrite. |
 | Eng Review | `/autoplan` | Architecture & tests (required) | 1 | CLEAR | Locked the `xtask` boundary, the `family inventory` export, the wrapper-family packet contract, the command loop, the coverage map, and worktree parallelization. |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | SKIPPED | No UI scope in M26. |
 
-**VERDICT:** CEO + ENG CLEARED — `PLAN.md` is now an implementation-ready M26 execution
-contract. The main change from the draft is explicit: do **not** add a standalone
-`spec-orchestrator` crate in M26.
+**VERDICT:** CEO + ENG CLEARED. `PLAN.md` is now the single implementation-ready M26 execution contract.
