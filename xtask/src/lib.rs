@@ -39,20 +39,19 @@ impl XtaskError {
         }
     }
 
-    fn cli_message(&self) -> String {
+    fn safe_message(&self) -> &'static str {
         match self {
-            Self::CertifyProveFailure(_) => {
-                "family certify failed after prove; inspect the certification artifacts for details"
-                    .to_string()
-            }
-            Self::CertifySuiteFailure(_) => {
-                "family certify failed one or more certify gates; inspect the certification artifacts for details"
-                    .to_string()
-            }
+            Self::InvalidInput(_) => "invalid input",
+            Self::AlreadyExists(_) => "resource already exists",
+            Self::ProveSuiteFailure(_) => "prove suite failure",
+            Self::CertifyProveFailure(_) => "family certify failed after prove",
+            Self::CertifySuiteFailure(_) => "family certify failed one or more certify gates",
             Self::CertifyArtifactWriteFailure(_) => {
-                "family certify could not write one or more certification artifacts".to_string()
+                "family certify could not write one or more certification artifacts"
             }
-            _ => self.to_string(),
+            Self::WriteFailure(_) => "write failure",
+            Self::NotImplemented(_) => "not implemented",
+            Self::Internal(_) => "internal error",
         }
     }
 }
@@ -104,7 +103,7 @@ where
     match dispatch(workspace_root, args) {
         Ok(()) => 0,
         Err(error) => {
-            eprintln!("{}", error.cli_message());
+            eprintln!("{}", error.safe_message());
             error.exit_code()
         }
     }
