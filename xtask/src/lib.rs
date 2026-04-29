@@ -38,6 +38,23 @@ impl XtaskError {
             Self::NotImplemented(_) | Self::Internal(_) => 1,
         }
     }
+
+    fn cli_message(&self) -> String {
+        match self {
+            Self::CertifyProveFailure(_) => {
+                "family certify failed after prove; inspect the certification artifacts for details"
+                    .to_string()
+            }
+            Self::CertifySuiteFailure(_) => {
+                "family certify failed one or more certify gates; inspect the certification artifacts for details"
+                    .to_string()
+            }
+            Self::CertifyArtifactWriteFailure(_) => {
+                "family certify could not write one or more certification artifacts".to_string()
+            }
+            _ => self.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -87,7 +104,7 @@ where
     match dispatch(workspace_root, args) {
         Ok(()) => 0,
         Err(error) => {
-            eprintln!("{error}");
+            eprintln!("{}", error.cli_message());
             error.exit_code()
         }
     }
@@ -812,7 +829,7 @@ mod tests {
                 matches!(error, XtaskError::NotImplemented(ref message)
                     if message.contains(family)
                         && message.contains("xtask/src/family/harness.rs")),
-                "unexpected error for `{family}`: {error:?}"
+                "unexpected error variant for `{family}`"
             );
         }
     }
