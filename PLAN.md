@@ -3,7 +3,7 @@
 
 Status: **implementation contract**  
 Base branch: **main**  
-Working branch: **codex/m23-contract**  
+Working branch: **feat/m26**  
 Last rewritten: **2026-04-29**
 
 ## Plan Authority
@@ -325,15 +325,21 @@ Lock this behavior:
 
 - JSON is written to stdout, not to an artifact file
 - the command does not mutate repo files or `.semantic-family-artifacts/`
+- stdout bytes are UTF-8 JSON in stable schema field order with exactly one trailing newline
 - arrays are deterministically ordered
   - `promoted_families[]` in registered routing order
   - `runtime_supported_routes[]` in runtime routing order
   - `supported_unpromoted_families[]` in runtime routing order
   - all path arrays sorted lexicographically
+- captured inventory snapshots and `inventory_sha256` are computed from the verbatim stdout bytes,
+  including the trailing newline
 - command exits `0` only when the projection is internally coherent
 - command exits nonzero if runtime-supported route truth and promoted-family registry truth cannot be projected into one coherent inventory
 
-`inventory_path` in downstream artifacts therefore points to a checked-in captured stdout file produced by the operator, not to a second repo-owned command output location.
+`inventory_path` in downstream artifacts therefore points to a captured inventory snapshot
+written by the operator under `.semantic-family-artifacts/family-promotion/inventory/`.
+That snapshot is a derived run artifact, not authored source and not an assumed
+checked-in deliverable.
 
 ### Locked initial truth for the first M26 run
 
@@ -372,6 +378,7 @@ Required fields:
 | `artifact_kind` | `family_recommendation` |
 | `generated_at` | UTC timestamp |
 | `inventory_path` | exact inventory artifact used |
+| `inventory_sha256` | SHA-256 digest of the exact inventory snapshot bytes used |
 | `target_language` | `rust` |
 | `ranked_candidates[]` | ranked candidate list |
 | `ranked_candidates[0].family` | the only family the human is allowed to approve from this artifact |
@@ -394,6 +401,22 @@ Lock this:
 - if the human wants candidate `N > 0`, AI must write a fresh recommendation artifact with that family moved to index `0`
 - evidence entries are repo paths only, not prose summaries
 - recommendation generation is external operator behavior, but the schema is repo-owned and validated in `xtask` tests
+- `inventory_sha256` must be computed from the exact captured inventory snapshot
+  referenced by `inventory_path`
+- Gate 1 is a pre-edit approval over repo truth before approved-family edits begin
+- Gate 1 approval remains valid only while a fresh inventory snapshot of the unchanged
+  pre-edit basis yields both:
+  - the same `inventory_sha256`
+  - the same `ranked_candidates[0].family`
+- the required recheck happens immediately before the first approved-family edit
+- after the first approved-family edit lands, Gate 1 is no longer compared against live
+  post-edit inventory; from that point on, correctness is governed by the hard gates and
+  the post-promotion inventory expectations
+- if the pre-edit Gate 1 basis check changes, the prior approval is stale; AI must halt,
+  write a fresh `recommendation.latest.json`, rerun artifact validation, and wait for a new
+  human approval before wrapper-family edits continue
+- a stale Gate 1 approval may not be reused across packet, runtime, CLI, or
+  integration work
 
 ### Promotion execution report
 
@@ -674,6 +697,19 @@ AI then writes:
 
 Human then approves or rejects `ranked_candidates[0].family`.
 
+Before any approved-family edits continue, the operator must capture and retain the
+inventory snapshot used by that recommendation under:
+
+```text
+.semantic-family-artifacts/family-promotion/inventory/<run-id>.json
+```
+
+The recommendation artifact must reference that snapshot through `inventory_path`
+and `inventory_sha256`. That snapshot is the sole Gate 1 approval basis for the run.
+
+The operator must also record the pre-edit basis commit that produced that snapshot.
+That commit is the only commit on which Gate 1 inventory equality may be rechecked.
+
 ### Phase B - Promotion Loop After Approval
 
 For approved family `<family>`, the AI loop is:
@@ -697,15 +733,25 @@ cargo test -p spec-cli --test m14_regressions wrapper_pipeline_
 Locked loop rule:
 
 1. read the approved recommendation artifact
-2. edit repo truth for the approved family
-3. run targeted tests if useful
-4. rerun `smoke`
-5. rerun `prove`
-6. rerun `certify`
-7. if green, write `promotion.execution.json`
-8. if blocked, write `blocker.report.json`
+2. before the first approved-family edit, verify the unchanged pre-edit basis still matches
+   the approved Gate 1 basis:
+   - rerun inventory
+   - capture the fresh snapshot
+   - compare `inventory_sha256`
+   - compare `ranked_candidates[0].family`
+3. if either pre-edit Gate 1 basis check changed, stop and reopen Gate 1 with a fresh
+   recommendation artifact
+4. edit repo truth for the approved family
+5. run targeted tests if useful
+6. rerun `smoke`
+7. rerun `prove`
+8. rerun `certify`
+9. if green, write `promotion.execution.json`
+10. if blocked, write `blocker.report.json`
 
 The human does not steer those retries.
+The live post-edit repo state is not required to match the original Gate 1 inventory snapshot,
+because approved-family edits are expected to change inventory-visible truth.
 
 ### Phase C - Final Approval
 
@@ -886,7 +932,7 @@ cargo xtask family certify function.wrapper.pipeline.v1
 
 ## Worktree Parallelization Strategy
 
-M26 has one hard serialization lane and then three safe parallel lanes.
+M26 has one hard serialization lane and then three bounded parallel lanes.
 
 ### Dependency table
 
@@ -895,7 +941,7 @@ M26 has one hard serialization lane and then three safe parallel lanes.
 | Lock inventory export + artifact schemas | `xtask/src/lib.rs`, `xtask/src/family/inventory.rs`, `xtask/src/family/report.rs`, `xtask/Cargo.toml` | — |
 | Lock wrapper family contract + scaffold | `xtask/src/family/harness.rs`, `xtask/src/family/scaffold.rs`, `xtask/src/lib.rs` | Lock inventory export + artifact schemas |
 | Curate committed wrapper packet | `semantic-families/function.wrapper.pipeline.v1/` | Lock wrapper family contract + scaffold |
-| Add runtime prove/certify tests | `spec-core/src/semantic_review.rs` | Lock wrapper family contract + scaffold |
+| Add runtime classifier and route-order proof | `spec-core/src/semantic_review.rs` | Lock wrapper family contract + scaffold |
 | Add CLI truth-surface/corpus/regression tests | `spec-cli/tests/cli.rs`, `spec-cli/tests/m14_regressions.rs` | Lock wrapper family contract + scaffold |
 | Final command loop + docs | repo-wide commands, `semantic-families/README.md` | packet curation, runtime tests, CLI tests |
 
@@ -903,22 +949,45 @@ M26 has one hard serialization lane and then three safe parallel lanes.
 
 - Lane A: `Lock inventory export + artifact schemas` -> `Lock wrapper family contract + scaffold`
 - Lane B: `Curate committed wrapper packet`
-- Lane C: `Add runtime prove/certify tests`
+- Lane C: `Add runtime classifier and route-order proof`
 - Lane D: `Add CLI truth-surface/corpus/regression tests`
 - Lane E: `Final command loop + docs`
 
 ### Execution order
 
 1. Run Lane A first and keep it sequential.
-2. Once Lane A is stable, launch Lanes B, C, and D in parallel worktrees.
-3. Merge B, C, and D.
-4. Run Lane E only after that merge.
+2. Treat Lane A output as the frozen wrapper-family contract for M26:
+   - suite slug
+   - packet file names and starter paths
+   - per-bucket starter semantics
+   - unsupported-near-miss boundary
+3. Merge the Lane A result onto `feat/m26` and record that resulting commit as the
+   `contract_freeze_commit`.
+4. Create `ws/m26-packet`, `ws/m26-runtime`, and `ws/m26-cli` from that exact
+   `contract_freeze_commit`, then launch Lanes B, C, and D in parallel worktrees.
+5. Merge B, C, and D.
+6. Run Lane E only after that merge.
+
+### Run-state ownership
+
+- The primary checkout at the live `feat/m26` path is the canonical run-state root for M26.
+- All `.runs/m26/*` and `.semantic-family-artifacts/family-promotion/**` writes are owned by the
+  parent agent and resolved against that primary checkout root, not against worker-local worktree
+  relative paths.
+- Worker worktrees may read frozen prompts or summaries, but they do not become independent
+  sources of truth for approvals, sentinels, or promotion artifacts.
+- Artifact validation in worker or integration contexts must target the canonical artifact path,
+  preferably as an absolute path under the primary checkout root.
 
 ### Conflict flags
 
-- Lane A is the serialization point because it fixes suite slug, packet file names, inventory fields, and smoke contracts.
-- Lanes B, C, and D are safe in parallel because they touch disjoint primary module roots.
-- If Lane C changes the wrapper-family unsupported-near-miss boundary, Lane B and Lane D must reconcile to that exact shape before Lane E runs.
+- Lane A is the serialization point because it fixes suite slug, packet file names, inventory fields, smoke contracts, and all 12 starter semantics.
+- The parent must not launch B, C, or D from a stale pre-freeze commit. The recorded
+  `contract_freeze_commit` is the only valid worker base.
+- Lanes B, C, and D are parallel only after Lane A freezes the wrapper-family contract.
+- Lane C may add classifier proof and route-order assertions, but it may not redefine wrapper-family semantics, starter paths, or the unsupported-near-miss boundary.
+- Lanes B and D must consume the frozen Lane A contract literally. They do not invent or reinterpret family semantics independently.
+- If Lane C discovers that runtime truth disagrees with the frozen Lane A contract, stop parallel lane-local reconciliation, return the mismatch to the serialized owner flow, and relaunch affected lanes only after the contract is updated explicitly.
 - Docs stay out of parallel lanes. Do not claim AI-operated promotion until the end-to-end loop is green.
 
 ## Acceptance Gates

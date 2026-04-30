@@ -2,7 +2,7 @@
 
 Status: **implementation plan**  
 Base branch: **main**  
-Working branch: **codex/m23-contract**  
+Working branch: **feat/m26**  
 Last rewritten: **2026-04-29**
 
 Source of truth for this plan:
@@ -89,8 +89,8 @@ M26 does **not** claim:
 - add durable machine-readable artifacts for recommendation, execution, and blockers
 - define a deterministic repo-truth input surface for the AI recommender
 - keep `xtask` as the hard proof primitive layer
-- place recommendation ranking, retry logic, approval checkpoints, and blocker synthesis in a
-  higher-level orchestration layer
+- place recommendation ranking, retry logic, approval checkpoints, and blocker synthesis in the
+  AI-operated workflow while keeping the deterministic proof kernel in `xtask`
 - complete one real Rust family promotion through the approval-gated AI loop
 - choose the first live proof target from current repo truth, not from speculation
 
@@ -210,8 +210,8 @@ AI promotion loop
 |---|---|---|
 | `spec-core` | remain source of runtime family truth, supported routing order, and unsupported diagnostics | do not absorb AI recommendation or approval state |
 | `spec-cli` | remain source of read-side truth-surface and corpus regressions | do not become the orchestration layer |
-| `xtask/src/family/**` | keep deterministic family packet primitives: scaffold, smoke, prove, certify, report emission, and pure repo-truth export | do not embed ranking heuristics, human approvals, or LLM-specific policy |
-| new workspace crate `spec-orchestrator/src/**` | recommend candidate families, checkpoint approvals, run the edit-and-proof loop, interpret failures, and write M26 orchestration artifacts | do not reimplement `smoke`, `prove`, or `certify` logic |
+| `xtask/src/family/**` | keep deterministic family packet primitives: scaffold, smoke, prove, certify, report emission, pure repo-truth export, and artifact validation | do not embed ranking heuristics, human approvals, or LLM-specific policy |
+| AI operator workflow | recommend candidate families, checkpoint approvals, run the edit-and-proof loop, interpret failures, and write M26 orchestration artifacts | do not reimplement `smoke`, `prove`, or `certify` logic inside repo code |
 | `.semantic-family-artifacts/**` | hold machine-readable proof and orchestration artifacts | do not become authored source |
 
 ## Locked Operator Contract
@@ -238,8 +238,8 @@ No third approval is allowed for ordinary promotion work.
 
 ### Hard boundary
 
-- `xtask` owns deterministic proof primitives and pure repo projections
-- `spec-orchestrator` owns recommendation, approval gating, loop control, and blocker synthesis
+- `xtask` owns deterministic proof primitives, pure repo projections, and artifact validation
+- the AI operator owns recommendation generation, approval gating, loop control, and blocker synthesis
 
 That boundary is fixed for M26.
 
@@ -271,6 +271,8 @@ Provisional schema:
   "schema_version": 1,
   "artifact_kind": "family_recommendation",
   "generated_at": "2026-04-29T00:00:00Z",
+  "inventory_path": ".semantic-family-artifacts/family-promotion/inventory/20260429T120000Z-function.wrapper.pipeline.v1.json",
+  "inventory_sha256": "sha256-of-that-exact-snapshot",
   "target_language": "rust",
   "current_promoted_families": [
     "function.wrapper.pipeline.chain3.v1",
@@ -315,6 +317,18 @@ Locked rules:
 - recommendation is evidence-backed, not gut feel
 - `ranked_candidates[0]` is the only approval target
 - the packet must cite repo paths for every substantive claim
+- `inventory_path` must point to the exact captured inventory snapshot used for ranking
+- `inventory_sha256` must hash the exact bytes at `inventory_path`
+- Gate 1 is a pre-edit approval over repo truth before approved-family edits begin
+- Gate 1 approval remains valid only while a fresh inventory snapshot of the unchanged
+  pre-edit basis yields both the same `inventory_sha256` and the same
+  `ranked_candidates[0].family`
+- the required recheck happens immediately before the first approved-family edit
+- after the first approved-family edit lands, Gate 1 is no longer compared against live
+  post-edit inventory; from that point on, correctness is governed by the hard gates and
+  the post-promotion inventory expectations
+- if either pre-edit basis check changes, the prior approval is stale; AI must halt,
+  write a fresh recommendation artifact, rerun validation, and wait for a new human approval
 
 ### Promotion execution report
 
@@ -424,7 +438,7 @@ Locked rules:
 - blocker classification must cite machine evidence, not conversational opinion
 - the report must tell the human exactly what decision or missing truth prevented completion
 
-## Locked `xtask` vs Orchestration Boundary
+## Locked `xtask` vs Operator Boundary
 
 M26 must answer where logic lives.
 
@@ -444,7 +458,7 @@ Why:
 - they should be testable without AI
 - they already define the hard proof contract
 
-### `spec-orchestrator` should own
+### The AI operator should own
 
 - ranking candidate families from repo truth
 - writing `recommendation.latest.json`
@@ -457,32 +471,15 @@ Why:
 
 - this layer is stateful and workflow-oriented
 - it must encode approval checkpoints
-- it should be able to evolve without destabilizing the deterministic proof kernel
-
-### Locked `spec-orchestrator` module split
-
-The first M26 plan should not leave the orchestration crate structure implicit.
-
-- `spec-orchestrator/src/recommend.rs`
-  reads repo-truth inventory and emits ranked recommendation packets
-- `spec-orchestrator/src/approvals.rs`
-  owns the two approval checkpoints and their persisted state transitions
-- `spec-orchestrator/src/run.rs`
-  owns command ordering, retry state, and loop termination rules
-- `spec-orchestrator/src/blockers.rs`
-  maps proof failures into stable blocker kinds with machine evidence
-- `spec-orchestrator/src/report.rs`
-  writes `promotion.execution.json` and final approval bundles
-
-The crate may start as a binary-only workspace member in M26, but the ownership
-of these responsibilities is locked to this crate rather than left diffuse
-across shell scripts or chat-only glue.
+- it should evolve without destabilizing the deterministic proof kernel or adding
+  a new workspace crate in M26
 
 ### Hard non-goals for `xtask`
 
 - no hidden LLM prompt logic
 - no approval checkpoint persistence
 - no ranking heuristics that choose the next family autonomously
+- no `spec-orchestrator` workspace crate in M26
 
 ## First Live Proof-Family Selection
 
@@ -545,7 +542,16 @@ AI then writes:
 
 - `.semantic-family-artifacts/family-promotion/recommendation.latest.json`
 
+The operator must also retain the exact inventory snapshot used for that
+recommendation under:
+
+- `.semantic-family-artifacts/family-promotion/inventory/<run-id>.json`
+
 Human then approves or rejects `ranked_candidates[0].family`.
+
+The operator must also record the pre-edit basis commit that produced that
+snapshot. That commit is the only commit on which Gate 1 inventory equality may
+be rechecked.
 
 ### Phase B - promotion loop after approval
 
@@ -569,15 +575,25 @@ cargo test -p spec-cli --test m14_regressions <family-slug>
 
 Loop rule:
 
-1. edit repo truth for the approved family
-2. run the fast inner loop if useful
-3. rerun `smoke`
-4. rerun `prove`
-5. rerun `certify`
-6. if green, write the execution report
-7. if blocked, write the blocker report
+1. read the approved recommendation artifact
+2. before the first approved-family edit, rerun inventory on the unchanged pre-edit basis
+   and capture a fresh inventory snapshot
+3. compare that fresh snapshot against the approved Gate 1 basis:
+   - `inventory_sha256`
+   - `ranked_candidates[0].family`
+4. if either pre-edit Gate 1 basis check changed, stop and reopen Gate 1 with a fresh
+   recommendation artifact
+5. edit repo truth for the approved family
+6. run the fast inner loop if useful
+7. rerun `smoke`
+8. rerun `prove`
+9. rerun `certify`
+10. if green, write the execution report
+11. if blocked, write the blocker report
 
 The human does not steer any of those retries.
+The live post-edit repo state is not required to match the original Gate 1 inventory
+snapshot, because approved-family edits are expected to change inventory-visible truth.
 
 ### Phase C - final approval
 
@@ -597,34 +613,74 @@ Human then approves or rejects the final output using that report.
    This belongs in `xtask` because it is a pure projection of current registry, runtime supported
    routes, promoted packets, and seed evidence paths.
 
-3. Add the `spec-orchestrator` workspace crate.
-   Extend the workspace to include one new orchestration crate whose only job is
-   approval-gated AI family promotion. Do not smear this logic across `xtask`,
-   `spec-cli`, or ad hoc repo scripts.
+3. Add path-aware artifact validation in `xtask`.
+   Keep runtime approval gating anchored on repo-owned schema and path checks rather than
+   shell-only convention.
 
-4. Add the recommendation writer.
-   It consumes the inventory export and emits `recommendation.latest.json` with ranked candidates
-   and repo-path evidence.
+4. Lock the wrapper family contract and scaffold in `xtask`.
+   Freeze suite slug, starter paths, per-bucket semantics, and the unsupported-near-miss
+   boundary before parallel lane work begins.
 
-5. Add the orchestration runner.
-   It owns approvals, retry state, command execution ordering, and final artifact writing. It must
-   call into `xtask`, not duplicate `xtask`.
+5. Capture the Gate 1 recommendation basis.
+   Emit `recommendation.latest.json`, retain the exact inventory snapshot under
+   `.semantic-family-artifacts/family-promotion/inventory/<run-id>.json`, and require
+   `inventory_path` plus `inventory_sha256` in the approval artifact.
 
-6. Add blocker classification.
-   Map `smoke`, `prove`, `certify`, routing, manifest, and unsupported-diagnostic failures into a
-   stable `blocker_kind` vocabulary.
+6. Launch the three bounded post-contract lanes.
+   Packet curation, runtime proof, and CLI truth-surface/regression work may proceed in
+   parallel only after the wrapper-family contract is frozen.
 
-7. Prove the loop on `function.wrapper.pipeline.v1`.
+7. Integrate the bounded lanes and run the hard gates.
+   If a lane discovers a mismatch against the frozen wrapper-family contract, stop lane-local
+   reconciliation and return to the serialized owner flow before proceeding.
+
+8. Prove the loop on `function.wrapper.pipeline.v1`.
    Use `pricing/calculate_total` as the canonical seed and the existing `calculate_total` wedge
    rewrites as the initial packet truth.
 
-8. Run the full approval-gated loop end to end.
+9. Run the full approval-gated loop end to end.
    Require the actual two approvals, machine-written artifacts, and green hard gates before
    claiming success.
 
-9. Document only repo truth that is green.
+10. Document only repo truth that is green.
    Do not claim AI-operated promotion has landed until the first real family promotion and its
    artifacts exist.
+
+## Workstream Coordination
+
+The implementation plan follows the serialized-plus-bounded-parallel shape from `PLAN.md`.
+
+### Coordination rules
+
+- The primary checkout at the live `feat/m26` path is the canonical run-state root for M26.
+- All `.runs/m26/*` and `.semantic-family-artifacts/family-promotion/**` writes are owned by the
+  parent agent and resolved against that primary checkout root, not against worker-local
+  worktree relative paths.
+- Worker worktrees may read frozen prompts or summaries, but they do not become independent
+  sources of truth for approvals, sentinels, or promotion artifacts.
+- Lane A is the serialization point. It owns inventory export, artifact schemas, wrapper harness
+  registration, scaffold shape, and the 12 starter semantics.
+- Lane A freezes the wrapper-family contract before any parallel work begins:
+  - suite slug
+  - packet file names and starter paths
+  - per-bucket starter semantics
+  - unsupported-near-miss boundary
+- Lane A must be merged back onto `feat/m26`, and the resulting commit must be recorded as the
+  `contract_freeze_commit` before any worker branch is created.
+- Lane B owns only the committed wrapper packet under
+  `semantic-families/function.wrapper.pipeline.v1/`.
+- Lane C owns only runtime classifier proof and route-order assertions in
+  `spec-core/src/semantic_review.rs`.
+- Lane D owns only CLI truth-surface, corpus, and regression proof in
+  `spec-cli/tests/cli.rs` and `spec-cli/tests/m14_regressions.rs`.
+- Lanes B, C, and D must all fork from the exact recorded `contract_freeze_commit`.
+- Lane C may add proof for the frozen contract, but it may not redefine family semantics,
+  starter paths, or the unsupported-near-miss boundary.
+- Lanes B and D must consume the frozen Lane A contract literally. They do not invent or
+  reinterpret wrapper-family semantics independently.
+- If any parallel lane discovers that runtime truth disagrees with the frozen contract, stop
+  lane-local reconciliation, return to the serialized owner flow, update the contract explicitly,
+  and relaunch affected lanes as needed.
 
 ## Acceptance Gates
 
@@ -632,7 +688,10 @@ M26 is done only when all of the following are true:
 
 - the operator model is explicit and enforced: human approves target family and final output only
 - the recommendation packet exists and cites repo-path evidence for the chosen family
-- the `spec-orchestrator` crate can run the promotion loop without hidden human steering
+- the recommendation artifact encodes a machine-checkable Gate 1 basis through
+  `inventory_path` and `inventory_sha256`
+- Gate 1 approval is reopened automatically when the unchanged pre-edit basis snapshot or top
+  candidate no longer matches the approved recommendation basis
 - `xtask` remains the hard proof kernel for `smoke`, `prove`, and `certify`
 - one real Rust family promotion completes through that loop
 - the first live proof target is selected from repo truth, not ad hoc judgment
@@ -640,7 +699,10 @@ M26 is done only when all of the following are true:
   `certification.report.json` artifacts
 - if the loop cannot finish honestly, it emits a blocker report instead of silently requiring
   manual rescue
-- `xtask`, `spec-core`, and `spec-cli` do not gain reverse dependencies on `spec-orchestrator`
+- the workspace boundary remains exactly `spec-core`, `spec-cli`, and `xtask`
+- the bounded parallel lanes consume one frozen wrapper-family contract instead of negotiating
+  semantics independently
+- the packet, runtime, and CLI workers all start from one recorded `contract_freeze_commit`
 - the M26 implementation leaves the system better positioned for broad Rust family expansion and
   later multi-language work
 
