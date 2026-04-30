@@ -6189,10 +6189,7 @@ fn wrapper_pipeline_truth_surface_unsupported_near_miss_command_matrix_stays_neu
     let review = unsupported_function_semantic_review("seeded unsupported wrapper review");
     seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
     let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
-    assert_unsupported_function_reason(
-        &seeded_review,
-        "unsupported_required_argument_expression",
-    );
+    assert_unsupported_function_reason(&seeded_review, "unsupported_required_argument_expression");
 
     let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
     assert!(
