@@ -196,7 +196,9 @@ pub fn unsupported_function_shape_fingerprint_with_context(
 
 fn review_describes_unsupported_function_shape(review: &SemanticReview) -> bool {
     review.effective_support_status() == SemanticSupportStatus::Unsupported
-        && (review.compatibility_key.starts_with("unsupported.function.")
+        && (review
+            .compatibility_key
+            .starts_with("unsupported.function.")
             || !review.unsupported_reason_codes.is_empty())
 }
 
@@ -6088,7 +6090,7 @@ mod tests {
 
     #[test]
     fn unsupported_function_shape_fingerprint_same_reason_same_shape_stays_equal_across_unit_names()
-     {
+    {
         let canonical = calculate_total_function_spec();
         let renamed = arithmetic_leaf_spec(
             "pricing/calculate_total_again",
@@ -6162,13 +6164,17 @@ mod tests {
         }"#,
         );
         let specs_by_id = HashMap::from([
-            ("pricing/apply_discount".to_string(), apply_discount_function_spec()),
+            (
+                "pricing/apply_discount".to_string(),
+                apply_discount_function_spec(),
+            ),
             (unsupported_pair.spec.id.clone(), unsupported_pair.clone()),
             (fanout.spec.id.clone(), fanout.clone()),
         ]);
         let context = SemanticReviewContext::new(&specs_by_id);
 
-        let pair_review = evaluate_semantic_review_with_context(&unsupported_pair, &context).unwrap();
+        let pair_review =
+            evaluate_semantic_review_with_context(&unsupported_pair, &context).unwrap();
         let fanout_review = evaluate_semantic_review_with_context(&fanout, &context).unwrap();
 
         assert_eq!(

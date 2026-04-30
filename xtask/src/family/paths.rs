@@ -128,7 +128,10 @@ pub fn ensure_packet_path_safe(
     ensure_existing_components_are_not_symlinks(workspace_root, packet_root)
 }
 
-pub(crate) fn validate_repo_relative_path(raw_path: &str, field: &str) -> Result<PathBuf, XtaskError> {
+pub(crate) fn validate_repo_relative_path(
+    raw_path: &str,
+    field: &str,
+) -> Result<PathBuf, XtaskError> {
     let path = Path::new(raw_path);
     if path.as_os_str().is_empty() || path.is_absolute() {
         return Err(XtaskError::InvalidInput(format!(
@@ -205,10 +208,7 @@ pub(crate) fn validate_existing_relative_path(
 pub(crate) fn ensure_repo_path_parent(path: &Path) -> Result<(), XtaskError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| {
-            XtaskError::WriteFailure(format!(
-                "failed to create `{}`: {error}",
-                parent.display()
-            ))
+            XtaskError::WriteFailure(format!("failed to create `{}`: {error}", parent.display()))
         })?;
     }
     Ok(())
@@ -222,18 +222,18 @@ pub(crate) fn write_bytes_atomically(path: &Path, bytes: &[u8]) -> Result<(), Xt
             path.display()
         ))
     })?;
-    let file_name = path.file_name().and_then(|value| value.to_str()).ok_or_else(|| {
-        XtaskError::WriteFailure(format!(
-            "failed to resolve file name for `{}`",
-            path.display()
-        ))
-    })?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| {
+            XtaskError::WriteFailure(format!(
+                "failed to resolve file name for `{}`",
+                path.display()
+            ))
+        })?;
     let tmp_path = parent.join(format!("{file_name}.tmp"));
     fs::write(&tmp_path, bytes).map_err(|error| {
-        XtaskError::WriteFailure(format!(
-            "failed to write `{}`: {error}",
-            tmp_path.display()
-        ))
+        XtaskError::WriteFailure(format!("failed to write `{}`: {error}", tmp_path.display()))
     })?;
     fs::rename(&tmp_path, path).map_err(|error| {
         XtaskError::WriteFailure(format!(

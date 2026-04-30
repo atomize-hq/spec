@@ -111,7 +111,9 @@ pub(crate) fn run(workspace_root: &Path, format: &str) -> Result<(), XtaskError>
     })
 }
 
-pub(crate) fn collect_and_write_latest(workspace_root: &Path) -> Result<CoverageRunOutput, XtaskError> {
+pub(crate) fn collect_and_write_latest(
+    workspace_root: &Path,
+) -> Result<CoverageRunOutput, XtaskError> {
     let generated_at = current_timestamp_rfc3339()?;
     let inventory = collect_inventory(workspace_root)?;
     let inventory_bytes = render_snapshot_bytes(workspace_root)?;
@@ -168,12 +170,13 @@ pub(crate) fn collect_and_write_latest(workspace_root: &Path) -> Result<Coverage
                 counts_toward_recommendation: loaded_source.source.counts_toward_recommendation,
                 bucket: bucket_for_spec_path(&spec.source.file_path),
             };
-            let review = evaluate_semantic_review_with_context(spec, &review_context).ok_or_else(|| {
-                XtaskError::InvalidInput(format!(
-                    "semantic review was unavailable for corpus unit `{}` in source `{}`",
-                    spec.spec.id, loaded_source.source.id
-                ))
-            })?;
+            let review =
+                evaluate_semantic_review_with_context(spec, &review_context).ok_or_else(|| {
+                    XtaskError::InvalidInput(format!(
+                        "semantic review was unavailable for corpus unit `{}` in source `{}`",
+                        spec.spec.id, loaded_source.source.id
+                    ))
+                })?;
             let unit_kind = spec.spec.unit_kind().map_err(|message| {
                 XtaskError::InvalidInput(format!(
                     "unit `{}` is not semantically valid for M27 coverage: {message}",
@@ -200,11 +203,10 @@ pub(crate) fn collect_and_write_latest(workspace_root: &Path) -> Result<Coverage
                         entry.source_ids.insert(unit_context.source_id.clone());
                     } else {
                         function_coverage.unsupported_function_units += 1;
-                        let reason_code = review
-                            .unsupported_reason_codes
-                            .first()
-                            .copied()
-                            .unwrap_or(UnsupportedFunctionReasonCode::UnsupportedFunctionSurface);
+                        let reason_code =
+                            review.unsupported_reason_codes.first().copied().unwrap_or(
+                                UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+                            );
                         let shape_fingerprint = unsupported_function_shape_fingerprint_with_context(
                             spec,
                             &review_context,
@@ -288,23 +290,25 @@ pub(crate) fn collect_and_write_latest(workspace_root: &Path) -> Result<Coverage
 
     let unsupported_clusters = unsupported_clusters
         .into_iter()
-        .map(|((reason_code, shape_fingerprint), accum)| UnsupportedClusterEntry {
-            cluster_id: cluster_id(reason_code, &shape_fingerprint),
-            reason_code,
-            shape_fingerprint,
-            representative_unit_ids: accum.representative_unit_ids.into_iter().collect(),
-            source_ids: accum.source_ids.into_iter().collect(),
-            real_example_hits: accum.real_example_hits,
-            promotion_relevant_regression_hits: accum.promotion_relevant_regression_hits,
-            boundary_only_hits: accum.boundary_only_hits,
-            overlap_family: accum.overlap_family,
-            candidate_status: classify_candidate_status(
-                accum.real_example_hits,
-                accum.promotion_relevant_regression_hits,
-                accum.boundary_only_hits,
-                accum.promotion_relevant_source_ids.len(),
-            ),
-        })
+        .map(
+            |((reason_code, shape_fingerprint), accum)| UnsupportedClusterEntry {
+                cluster_id: cluster_id(reason_code, &shape_fingerprint),
+                reason_code,
+                shape_fingerprint,
+                representative_unit_ids: accum.representative_unit_ids.into_iter().collect(),
+                source_ids: accum.source_ids.into_iter().collect(),
+                real_example_hits: accum.real_example_hits,
+                promotion_relevant_regression_hits: accum.promotion_relevant_regression_hits,
+                boundary_only_hits: accum.boundary_only_hits,
+                overlap_family: accum.overlap_family,
+                candidate_status: classify_candidate_status(
+                    accum.real_example_hits,
+                    accum.promotion_relevant_regression_hits,
+                    accum.boundary_only_hits,
+                    accum.promotion_relevant_source_ids.len(),
+                ),
+            },
+        )
         .collect::<Vec<_>>();
 
     let artifact = FamilyCoverageArtifact {
@@ -355,17 +359,14 @@ pub(crate) fn render_json_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, Xtas
 
 fn load_manifest_and_specs(
     workspace_root: &Path,
-) -> Result<
-    (
-        CorpusManifest,
-        Vec<u8>,
-        Vec<LoadedSource>,
-    ),
-    XtaskError,
-> {
-    let manifest_relative = validate_repo_relative_path(M27_CORPUS_MANIFEST_PATH, "corpus manifest path")?;
-    let manifest_path =
-        validate_existing_relative_path(workspace_root, &manifest_relative, "corpus manifest path")?;
+) -> Result<(CorpusManifest, Vec<u8>, Vec<LoadedSource>), XtaskError> {
+    let manifest_relative =
+        validate_repo_relative_path(M27_CORPUS_MANIFEST_PATH, "corpus manifest path")?;
+    let manifest_path = validate_existing_relative_path(
+        workspace_root,
+        &manifest_relative,
+        "corpus manifest path",
+    )?;
     let manifest_bytes = fs::read(&manifest_path).map_err(|error| {
         XtaskError::WriteFailure(format!(
             "failed to read corpus manifest `{}`: {error}",
@@ -389,7 +390,9 @@ fn load_manifest_and_specs(
     let mut seen_source_ids = BTreeSet::new();
     let mut loaded_sources = Vec::new();
     for source in &manifest.sources {
-        if source.id.trim().is_empty() || source.note.trim().is_empty() || source.note.contains('\n')
+        if source.id.trim().is_empty()
+            || source.note.trim().is_empty()
+            || source.note.contains('\n')
         {
             return Err(XtaskError::InvalidInput(
                 "corpus manifest sources require non-empty single-line id and note".to_string(),
@@ -506,10 +509,7 @@ fn classify_candidate_status(
     boundary_only_hits: usize,
     promotion_relevant_source_count: usize,
 ) -> CandidateStatus {
-    if real_example_hits == 0
-        && promotion_relevant_regression_hits == 0
-        && boundary_only_hits > 0
-    {
+    if real_example_hits == 0 && promotion_relevant_regression_hits == 0 && boundary_only_hits > 0 {
         CandidateStatus::BoundaryOnly
     } else if real_example_hits == 0 && promotion_relevant_regression_hits <= 1 {
         CandidateStatus::InsufficientEvidence

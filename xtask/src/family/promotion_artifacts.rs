@@ -1,9 +1,9 @@
 use crate::XtaskError;
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
-    FAMILY_COVERAGE_LATEST_PATH, FAMILY_PROMOTION_ARTIFACT_ROOT,
-    FAMILY_PROMOTION_INVENTORY_DIR, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId,
-    M27_CORPUS_MANIFEST_PATH, validate_existing_repo_relative_path, validate_repo_relative_path,
+    FAMILY_COVERAGE_LATEST_PATH, FAMILY_PROMOTION_ARTIFACT_ROOT, FAMILY_PROMOTION_INVENTORY_DIR,
+    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId, M27_CORPUS_MANIFEST_PATH,
+    validate_existing_repo_relative_path, validate_repo_relative_path,
 };
 use serde::{Deserialize, Serialize};
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
@@ -421,7 +421,10 @@ impl FamilyRecommendationArtifact {
             &self.inventory_path,
             "recommendation inventory_path",
         )?;
-        if !self.inventory_path.starts_with(FAMILY_PROMOTION_INVENTORY_DIR) {
+        if !self
+            .inventory_path
+            .starts_with(FAMILY_PROMOTION_INVENTORY_DIR)
+        {
             return Err(XtaskError::InvalidInput(format!(
                 "recommendation inventory_path `{}` must stay under `{FAMILY_PROMOTION_INVENTORY_DIR}`",
                 self.inventory_path
@@ -536,8 +539,7 @@ impl FamilyRecommendationAnalysisArtifact {
         }
         if !looks_like_utc_timestamp(&self.generated_at) {
             return Err(XtaskError::InvalidInput(
-                "recommendation analysis generated_at must be a UTC RFC3339 timestamp"
-                    .to_string(),
+                "recommendation analysis generated_at must be a UTC RFC3339 timestamp".to_string(),
             ));
         }
         validate_sha_bound_path(
@@ -987,9 +989,7 @@ fn validate_sha_bound_path(
 
 fn validate_overlap_family(value: &str) -> Result<(), XtaskError> {
     match value {
-        "function.arithmetic_leaf.monotone_*"
-        | "function.wrapper.pipeline*"
-        | "unknown" => Ok(()),
+        "function.arithmetic_leaf.monotone_*" | "function.wrapper.pipeline*" | "unknown" => Ok(()),
         _ => Err(XtaskError::InvalidInput(format!(
             "overlap_family `{value}` must be `function.arithmetic_leaf.monotone_*`, `function.wrapper.pipeline*`, or `unknown`"
         ))),

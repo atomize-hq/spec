@@ -1,7 +1,9 @@
 mod family;
 
 use clap::{Args, Parser, Subcommand};
-use family::{certify, coverage, inventory, promotion_artifacts, prove, recommend, scaffold, smoke};
+use family::{
+    certify, coverage, inventory, promotion_artifacts, prove, recommend, scaffold, smoke,
+};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;

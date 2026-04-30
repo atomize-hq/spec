@@ -1,9 +1,9 @@
 use crate::XtaskError;
-use crate::family::coverage::{collect_and_write_latest, current_timestamp_rfc3339, render_json_bytes};
-use crate::family::inventory::inventory_sha256_hex;
-use crate::family::paths::{
-    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically,
+use crate::family::coverage::{
+    collect_and_write_latest, current_timestamp_rfc3339, render_json_bytes,
 };
+use crate::family::inventory::inventory_sha256_hex;
+use crate::family::paths::{FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically};
 use crate::family::promotion_artifacts::{
     CandidateStatus, ConfidenceLevel, DifficultyTier, FamilyRecommendationAnalysisArtifact,
     PromotionArtifactKind, RecommendationCandidateEntry, RecommendationConfidence,
@@ -183,6 +183,10 @@ fn candidate_id(
     overlap_family: &str,
     cluster: &crate::family::promotion_artifacts::UnsupportedClusterEntry,
 ) -> String {
-    let prefix = if overlap_family == "unknown" { "z" } else { "a" };
+    let prefix = if overlap_family == "unknown" {
+        "z"
+    } else {
+        "a"
+    };
     format!("{prefix}-{:?}-{}", cluster.reason_code, cluster.cluster_id).to_ascii_lowercase()
 }
