@@ -2481,7 +2481,7 @@ gate_d = true
                         status: ApprovalStatus::Approved,
                     },
                     final_output: ApprovalRecord {
-                        status: ApprovalStatus::Pending,
+                        status: ApprovalStatus::Approved,
                     },
                 },
                 files_changed: vec![
