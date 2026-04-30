@@ -119,6 +119,127 @@ impl SemanticReview {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UnsupportedFunctionShapeFingerprint {
+    pub schema_version: u8,
+    pub function_dep_arity: usize,
+    pub callable_dep_topology_class: UnsupportedFunctionDepTopologyClass,
+    pub contract_input_count: usize,
+    pub has_return: bool,
+    pub authored_body_kind: UnsupportedFunctionAuthoredBodyKind,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UnsupportedFunctionDepTopologyClass {
+    NoDepsOrHelper,
+    SupportedCallablePair,
+    UnsupportedCallablePair,
+    SupportedCallableTriple,
+    UnsupportedCallableTriple,
+    Fanout,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UnsupportedFunctionAuthoredBodyKind {
+    WrapperLike,
+    ArithmeticLike,
+    Neither,
+}
+
+impl UnsupportedFunctionShapeFingerprint {
+    pub fn from_spec(spec: &LoadedSpec) -> Option<Self> {
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+        let context = SemanticReviewContext::new(&specs_by_id);
+        Self::from_spec_with_context(spec, &context)
+    }
+
+    pub fn from_spec_with_context(
+        spec: &LoadedSpec,
+        context: &SemanticReviewContext<'_>,
+    ) -> Option<Self> {
+        let review = evaluate_semantic_review_with_context(spec, context)?;
+        if !review_describes_unsupported_function_shape(&review) {
+            return None;
+        }
+        let authored = build_authored_function_packet(spec)?;
+
+        Some(Self {
+            schema_version: 1,
+            function_dep_arity: authored.deps.len(),
+            callable_dep_topology_class: unsupported_function_dep_topology_class(
+                &authored, context,
+            ),
+            contract_input_count: authored.inputs.len(),
+            has_return: authored.returns.is_some(),
+            authored_body_kind: unsupported_function_authored_body_kind(&authored),
+        })
+    }
+
+    pub fn as_key(&self) -> String {
+        serde_json::to_string(self).expect("unsupported-function fingerprint must serialize")
+    }
+}
+
+pub fn unsupported_function_shape_fingerprint(spec: &LoadedSpec) -> Option<String> {
+    UnsupportedFunctionShapeFingerprint::from_spec(spec).map(|fingerprint| fingerprint.as_key())
+}
+
+pub fn unsupported_function_shape_fingerprint_with_context(
+    spec: &LoadedSpec,
+    context: &SemanticReviewContext<'_>,
+) -> Option<String> {
+    UnsupportedFunctionShapeFingerprint::from_spec_with_context(spec, context)
+        .map(|fingerprint| fingerprint.as_key())
+}
+
+fn review_describes_unsupported_function_shape(review: &SemanticReview) -> bool {
+    review.effective_support_status() == SemanticSupportStatus::Unsupported
+        && (review.compatibility_key.starts_with("unsupported.function.")
+            || !review.unsupported_reason_codes.is_empty())
+}
+
+fn unsupported_function_dep_topology_class(
+    authored: &SemanticAuthoredFunctionPacket,
+    context: &SemanticReviewContext<'_>,
+) -> UnsupportedFunctionDepTopologyClass {
+    match authored.deps.len() {
+        0 | 1 => UnsupportedFunctionDepTopologyClass::NoDepsOrHelper,
+        2 => {
+            let mut stack = HashSet::new();
+            if family_b_deps_are_supported(authored, context, &mut stack) {
+                UnsupportedFunctionDepTopologyClass::SupportedCallablePair
+            } else {
+                UnsupportedFunctionDepTopologyClass::UnsupportedCallablePair
+            }
+        }
+        3 => {
+            let mut stack = HashSet::new();
+            if family_c_deps_are_supported(authored, context, &mut stack) {
+                UnsupportedFunctionDepTopologyClass::SupportedCallableTriple
+            } else {
+                UnsupportedFunctionDepTopologyClass::UnsupportedCallableTriple
+            }
+        }
+        _ => UnsupportedFunctionDepTopologyClass::Fanout,
+    }
+}
+
+fn unsupported_function_authored_body_kind(
+    authored: &SemanticAuthoredFunctionPacket,
+) -> UnsupportedFunctionAuthoredBodyKind {
+    if authored_function_looks_like_wrapper_contract(authored)
+        || authored_function_looks_like_chain3_wrapper_contract(authored)
+    {
+        UnsupportedFunctionAuthoredBodyKind::WrapperLike
+    } else if authored_function_looks_like_arithmetic_contract(authored) {
+        UnsupportedFunctionAuthoredBodyKind::ArithmeticLike
+    } else {
+        UnsupportedFunctionAuthoredBodyKind::Neither
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SemanticProjectionMode {
     Preserve,
@@ -5963,6 +6084,138 @@ mod tests {
         );
         assert!(!refreshed.authored_surfaces.is_empty());
         assert!(!refreshed.executable_surfaces.is_empty());
+    }
+
+    #[test]
+    fn unsupported_function_shape_fingerprint_same_reason_same_shape_stays_equal_across_unit_names()
+     {
+        let canonical = calculate_total_function_spec();
+        let renamed = arithmetic_leaf_spec(
+            "pricing/calculate_total_again",
+            "Return a second combined total from pricing inputs.",
+            &["output >= 0"],
+            &[],
+            r#"{
+            subtotal + subtotal * rate
+        }"#,
+        );
+        let canonical_review = evaluate_semantic_review(&canonical).unwrap();
+        let renamed_review = evaluate_semantic_review(&renamed).unwrap();
+        let canonical_key = unsupported_function_shape_fingerprint(&canonical);
+        let renamed_key = unsupported_function_shape_fingerprint(&renamed);
+
+        assert_eq!(
+            canonical_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
+        assert_eq!(
+            renamed_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
+        assert_eq!(
+            canonical_key,
+            Some(
+                r#"{"schema_version":1,"function_dep_arity":0,"callable_dep_topology_class":"no_deps_or_helper","contract_input_count":2,"has_return":true,"authored_body_kind":"arithmetic_like"}"#
+                    .to_string()
+            )
+        );
+        assert_eq!(canonical_key, renamed_key);
+    }
+
+    #[test]
+    fn unsupported_function_shape_fingerprint_same_reason_different_shape_stays_different() {
+        let unsupported_pair = function_spec(
+            "pricing/calculate_total_pair",
+            "Return the total after passing through an unsupported dep pair.",
+            &[
+                ("subtotal", "rust_decimal::Decimal"),
+                ("discount_rate", "rust_decimal::Decimal"),
+                ("tax_rate", "rust_decimal::Decimal"),
+            ],
+            Some("rust_decimal::Decimal"),
+            &[],
+            &["pricing/apply_discount", "pricing/apply_fee"],
+            r#"{
+            apply_fee(apply_discount(subtotal, discount_rate), tax_rate)
+        }"#,
+        );
+        let fanout = function_spec(
+            "pricing/calculate_total_fanout",
+            "Return the total after passing through too many helpers.",
+            &[
+                ("subtotal", "rust_decimal::Decimal"),
+                ("discount_rate", "rust_decimal::Decimal"),
+                ("tax_rate", "rust_decimal::Decimal"),
+                ("surcharge_rate", "rust_decimal::Decimal"),
+                ("loyalty_rate", "rust_decimal::Decimal"),
+            ],
+            Some("rust_decimal::Decimal"),
+            &[],
+            &[
+                "pricing/apply_discount",
+                "pricing/apply_tax",
+                "pricing/apply_fee",
+                "pricing/apply_loyalty_credit",
+            ],
+            r#"{
+            subtotal
+        }"#,
+        );
+        let specs_by_id = HashMap::from([
+            ("pricing/apply_discount".to_string(), apply_discount_function_spec()),
+            (unsupported_pair.spec.id.clone(), unsupported_pair.clone()),
+            (fanout.spec.id.clone(), fanout.clone()),
+        ]);
+        let context = SemanticReviewContext::new(&specs_by_id);
+
+        let pair_review = evaluate_semantic_review_with_context(&unsupported_pair, &context).unwrap();
+        let fanout_review = evaluate_semantic_review_with_context(&fanout, &context).unwrap();
+
+        assert_eq!(
+            pair_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedDepTopology]
+        );
+        assert_eq!(
+            fanout_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedDepTopology]
+        );
+        assert_ne!(
+            unsupported_function_shape_fingerprint_with_context(&unsupported_pair, &context),
+            unsupported_function_shape_fingerprint_with_context(&fanout, &context)
+        );
+    }
+
+    #[test]
+    fn unsupported_function_shape_fingerprint_ignores_reason_and_review_prose_policy() {
+        let arithmetic_shape = calculate_total_function_spec();
+        let control_flow_shape = arithmetic_leaf_spec(
+            "billing/calculate_total_control_flow_same_shape",
+            "Return a combined total from pricing inputs.",
+            &["output >= 0"],
+            &[],
+            r#"{
+            if rate > Decimal::ZERO {
+                subtotal + subtotal * rate
+            } else {
+                subtotal
+            }
+        }"#,
+        );
+        let arithmetic_review = evaluate_semantic_review(&arithmetic_shape).unwrap();
+        let control_flow_review = evaluate_semantic_review(&control_flow_shape).unwrap();
+
+        assert_eq!(
+            arithmetic_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
+        assert_eq!(
+            control_flow_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedControlFlow]
+        );
+        assert_eq!(
+            unsupported_function_shape_fingerprint(&arithmetic_shape),
+            unsupported_function_shape_fingerprint(&control_flow_shape)
+        );
     }
 
     #[test]
