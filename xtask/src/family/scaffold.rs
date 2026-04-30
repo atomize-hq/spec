@@ -257,6 +257,9 @@ fn starter_unit_spec(harness: &FamilyHarness, case: StarterCaseDefinition) -> St
 
     match harness.scaffold.template {
         StarterTemplate::GenericPlaceholder => generic_placeholder_starter(&unit_id, callable_name),
+        StarterTemplate::WrapperPipelineTwoStep => {
+            wrapper_pipeline_two_step_starter(case.bucket, &unit_id, callable_name)
+        }
         StarterTemplate::ArithmeticLeafMonotoneDownNonnegative => {
             arithmetic_leaf_monotone_down_nonnegative_starter(case.bucket, &unit_id, callable_name)
         }
@@ -291,6 +294,138 @@ body:
 local_tests:
   - id: {callable_name}_placeholder
     expect: {callable_name}(Decimal::new(10000, 2)) == Decimal::new(10000, 2)
+"#
+    )
+}
+
+fn wrapper_pipeline_two_step_starter(bucket: &str, unit_id: &str, callable_name: &str) -> String {
+    if unit_id.contains("pricing_discount_leaf_") {
+        return wrapper_pipeline_discount_leaf_starter(unit_id, callable_name);
+    }
+    if unit_id.contains("pricing_tax_leaf_") {
+        return wrapper_pipeline_tax_leaf_starter(unit_id, callable_name);
+    }
+    if unit_id.contains("pricing_total_wrapper_") {
+        return wrapper_pipeline_total_wrapper_starter(bucket, unit_id, callable_name);
+    }
+
+    panic!("unexpected wrapper pipeline starter unit `{unit_id}`");
+}
+
+fn wrapper_pipeline_discount_leaf_starter(unit_id: &str, callable_name: &str) -> String {
+    format!(
+        r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the running checkout subtotal after applying the loyalty discount rate and clamping at zero.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output <= subtotal
+    - output >= 0
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        (subtotal - subtotal * rate).max(Decimal::ZERO)
+    }}
+local_tests:
+  - id: {callable_name}_basic
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
+"#
+    )
+}
+
+fn wrapper_pipeline_tax_leaf_starter(unit_id: &str, callable_name: &str) -> String {
+    format!(
+        r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the running checkout subtotal after applying the surcharge rate.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        subtotal + subtotal * rate
+    }}
+local_tests:
+  - id: {callable_name}_basic
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(11000, 2)
+"#
+    )
+}
+
+fn wrapper_pipeline_total_wrapper_starter(
+    bucket: &str,
+    unit_id: &str,
+    callable_name: &str,
+) -> String {
+    let bucket_suffix = bucket;
+    let (intent_why, body) = match bucket {
+        "aligned" => (
+            "Return the checkout total after discounting the subtotal and then applying tax.",
+            format!(
+                "{{\n        let discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate)\n    }}"
+            ),
+        ),
+        "drift" => (
+            "Return the checkout total after discounting the subtotal and then applying tax.",
+            format!(
+                "{{\n        let taxed = pricing_tax_leaf_{bucket_suffix}(subtotal, tax_rate);\n        pricing_discount_leaf_{bucket_suffix}(taxed, discount_rate)\n    }}"
+            ),
+        ),
+        "under_specified" => (
+            "Adjust the checkout total using the current pricing inputs.",
+            format!(
+                "{{\n        let discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate)\n    }}"
+            ),
+        ),
+        "unsupported_near_miss" => (
+            "Return the checkout total after discounting the subtotal and then applying tax.",
+            format!(
+                "{{\n        let discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate.max(Decimal::ZERO))\n    }}"
+            ),
+        ),
+        other => panic!("unexpected wrapper pipeline bucket `{other}`"),
+    };
+
+    format!(
+        r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: {intent_why}
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/pricing_discount_leaf_{bucket_suffix}
+  - pricing/pricing_tax_leaf_{bucket_suffix}
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {body}
+local_tests:
+  - id: {callable_name}_basic
+    expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(9900, 2)
 "#
     )
 }

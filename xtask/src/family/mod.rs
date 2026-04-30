@@ -1,8 +1,10 @@
 pub mod certify;
 pub mod harness;
+pub mod inventory;
 pub mod layout;
 pub mod manifest;
 pub mod paths;
+pub mod promotion_artifacts;
 pub mod prove;
 pub mod report;
 pub mod routing;

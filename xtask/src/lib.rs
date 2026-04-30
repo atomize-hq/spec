@@ -1,7 +1,7 @@
 mod family;
 
 use clap::{Args, Parser, Subcommand};
-use family::{certify, prove, scaffold, smoke};
+use family::{certify, inventory, promotion_artifacts, prove, scaffold, smoke};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
@@ -76,10 +76,25 @@ struct FamilyArgs {
 
 #[derive(Debug, Subcommand)]
 enum FamilyCommand {
-    New { family: String },
-    Smoke { family: String },
-    Prove { family: String },
-    Certify { family: String },
+    New {
+        family: String,
+    },
+    Inventory {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+    ValidateArtifact {
+        path: String,
+    },
+    Smoke {
+        family: String,
+    },
+    Prove {
+        family: String,
+    },
+    Certify {
+        family: String,
+    },
 }
 
 pub fn run() -> i32 {
@@ -120,6 +135,10 @@ where
     match cli.command {
         Command::Family(args) => match args.command {
             FamilyCommand::New { family } => scaffold::run(workspace_root, &family),
+            FamilyCommand::Inventory { format } => inventory::run(workspace_root, &format),
+            FamilyCommand::ValidateArtifact { path } => {
+                promotion_artifacts::run_validate_artifact(workspace_root, &path)
+            }
             FamilyCommand::Smoke { family } => smoke::run(workspace_root, &family),
             FamilyCommand::Prove { family } => prove::run(workspace_root, &family),
             FamilyCommand::Certify { family } => certify::run(workspace_root, &family),
@@ -141,14 +160,23 @@ mod tests {
             MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
             MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
             ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
-            TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness, family_harness_in,
-            registered_harnesses_in_routing_order_from, require_family_harness_in,
-            validate_suite_ownership,
+            TERMINAL_UNSUPPORTED_CATCH_ALL, WRAPPER_PIPELINE_CERTIFY_SUITES,
+            WRAPPER_PIPELINE_MUST_NOT_SHADOW, WRAPPER_PIPELINE_PRECEDENCE,
+            WRAPPER_PIPELINE_PROVE_SUITES, WRAPPER_PIPELINE_SUITE_SLUG, family_harness,
+            family_harness_in, registered_harnesses_in_routing_order_from,
+            require_family_harness_in, validate_suite_ownership,
         },
+        inventory,
         layout::validate_packet_layout,
         manifest::Routing,
         manifest::parse_manifest_file,
         paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS},
+        promotion_artifacts::{
+            ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CommandRecord,
+            FamilyRecommendationArtifact, GateStatus, GateSummary, MachineEvidence,
+            MachineEvidenceKind, PromotionApprovals, PromotionArtifactKind,
+            PromotionBlockerArtifact, PromotionExecutionArtifact, RankedCandidate, TargetLanguage,
+        },
         prove,
         report::{
             CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME, PassFail,
@@ -606,6 +634,7 @@ mod tests {
             locked_routing_order_with_terminal(),
             [
                 "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
                 "unsupported.function.v1",
@@ -660,6 +689,163 @@ mod tests {
             ]
         );
         assert_eq!(harness.suite_slug, CHAIN3_SUITE_SLUG);
+    }
+
+    #[test]
+    fn family_new_creates_locked_wrapper_pipeline_scaffold() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.v1";
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family_id);
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains(&format!("precedence = {WRAPPER_PIPELINE_PRECEDENCE}")));
+        assert!(manifest.contains("dep_min = 2"));
+        assert!(manifest.contains("dep_max = 2"));
+        assert!(manifest.contains("requires_supported_function_deps = true"));
+        for family_id in WRAPPER_PIPELINE_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        for bucket in REQUIRED_BUCKETS {
+            for relative_path in expected_wrapper_pipeline_scaffold_unit_paths(bucket) {
+                let unit_path = paths.root.join(&relative_path);
+                assert!(
+                    unit_path.is_file(),
+                    "missing wrapper scaffold `{}`",
+                    unit_path.display()
+                );
+                assert_candidate_lists_path_once(&candidate, &relative_path);
+                let loaded = load_file(&unit_path).unwrap();
+                validate_full(&loaded).unwrap();
+            }
+        }
+
+        let aligned = fs::read_to_string(
+            paths
+                .root
+                .join("fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec"),
+        )
+        .unwrap();
+        assert!(aligned.contains("discount_rate: Decimal"));
+        assert!(aligned.contains("tax_rate: Decimal"));
+        assert!(aligned.contains("pricing_discount_leaf_aligned(subtotal, discount_rate)"));
+        assert!(aligned.contains("pricing_tax_leaf_aligned(discounted, tax_rate)"));
+
+        let drift = fs::read_to_string(
+            paths
+                .root
+                .join("fixtures/drift/units/pricing/pricing_total_wrapper_drift.unit.spec"),
+        )
+        .unwrap();
+        assert!(drift.contains("let taxed = pricing_tax_leaf_drift(subtotal, tax_rate);"));
+        assert!(drift.contains("pricing_discount_leaf_drift(taxed, discount_rate)"));
+
+        let under_specified = fs::read_to_string(paths.root.join("fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec")).unwrap();
+        assert!(
+            under_specified
+                .contains("why: Adjust the checkout total using the current pricing inputs.")
+        );
+
+        let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec")).unwrap();
+        assert!(unsupported.contains("tax_rate.max(Decimal::ZERO)"));
+        assert!(!candidate.contains("TODO: replace"));
+        assert_eq!(harness.suite_slug, WRAPPER_PIPELINE_SUITE_SLUG);
+    }
+
+    #[test]
+    fn family_smoke_accepts_committed_wrapper_pipeline_scaffold_surfaces() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.v1";
+
+        scaffold::run(temp_dir.path(), family).unwrap();
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "smoke", family]),
+            0
+        );
+    }
+
+    #[test]
+    fn family_smoke_rejects_wrapper_pipeline_aligned_starter_shape_drift() {
+        let committed_root = workspace_root();
+        let scaffolded_root = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.v1").unwrap();
+
+        scaffold::run(committed_root.path(), family.as_str()).unwrap();
+        scaffold::run(scaffolded_root.path(), family.as_str()).unwrap();
+
+        let scaffolded_paths = PacketPaths::new(scaffolded_root.path(), family.clone());
+        let aligned_path = scaffolded_paths
+            .root
+            .join("fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec");
+        let aligned = fs::read_to_string(&aligned_path).unwrap();
+        write_string(
+            &aligned_path,
+            &aligned.replacen("discount_rate: Decimal", "discount: Decimal", 1),
+        );
+
+        let failures = smoke::collect_smoke_failures(
+            &PacketPaths::new(committed_root.path(), family.clone()),
+            &scaffolded_paths,
+            *family_harness(&family).unwrap(),
+        )
+        .unwrap();
+
+        assert!(failures.iter().any(|message| {
+            message.contains("scaffolded smoke-contract file")
+                && message.contains("discount_rate: Decimal")
+        }));
+    }
+
+    #[test]
+    fn wrapper_pipeline_harness_contract_is_locked() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.v1";
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness =
+            family_harness(&family_id).expect("wrapper pipeline harness should be registered");
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+        assert_eq!(WRAPPER_PIPELINE_PROVE_SUITES.len(), 3);
+        assert_eq!(WRAPPER_PIPELINE_CERTIFY_SUITES.len(), 1);
+        assert_eq!(
+            harness
+                .prove_suites
+                .iter()
+                .map(|definition| definition.gate)
+                .collect::<Vec<_>>(),
+            vec![
+                crate::family::report::GateId::GateA,
+                crate::family::report::GateId::GateC,
+                crate::family::report::GateId::GateB,
+            ]
+        );
+        assert_eq!(harness.shape.dep_min, 2);
+        assert_eq!(harness.shape.dep_max, 2);
+        assert!(harness.shape.requires_supported_function_deps);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_exact_match_paths,
+            ["family.toml"]
+        );
+        assert_eq!(harness.scaffold.smoke.scaffold_file_contracts.len(), 1);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_file_contracts[0].path,
+            "fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec"
+        );
+        assert_eq!(harness.suite_slug, WRAPPER_PIPELINE_SUITE_SLUG);
     }
 
     #[test]
@@ -2058,6 +2244,481 @@ gate_d = true
         assert_eq!(report.status, PassFail::Fail);
     }
 
+    #[test]
+    fn family_inventory_reports_locked_promoted_and_supported_unpromoted_families() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let inventory =
+            inventory::collect_inventory_in(&pre_wrapper_promotion_registry(), temp_dir.path())
+                .unwrap();
+
+        assert_eq!(inventory.schema_version, 1);
+        assert_eq!(inventory.generated_at, "1970-01-01T00:00:00Z");
+        assert_eq!(
+            inventory.promoted_families,
+            vec![
+                "function.wrapper.pipeline.chain3.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+            ]
+        );
+        assert_eq!(
+            inventory.runtime_supported_routes,
+            vec![
+                "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+            ]
+        );
+        assert_eq!(inventory.supported_unpromoted_families.len(), 1);
+
+        let wrapper = inventory.supported_unpromoted_families.first().unwrap();
+        assert_eq!(wrapper.family, "function.wrapper.pipeline.v1");
+        assert_eq!(
+            wrapper.routing_predecessor.as_deref(),
+            Some("function.wrapper.pipeline.chain3.v1")
+        );
+        assert_eq!(
+            wrapper.routing_successors,
+            vec![
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+                "unsupported.function.v1",
+            ]
+        );
+        assert_eq!(
+            wrapper.canonical_seed_paths,
+            vec!["examples/ecommerce/units/pricing/calculate_total.unit.spec"]
+        );
+        assert_eq!(
+            wrapper.existing_wedge_paths,
+            vec!["spec-cli/tests/m14_regressions.rs"]
+        );
+        assert_eq!(wrapper.supporting_packet_paths.len(), 6);
+    }
+
+    #[test]
+    fn family_inventory_snapshot_bytes_are_stable_and_hash_exact_stdout_bytes() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let first =
+            inventory::render_snapshot_bytes_in(&pre_wrapper_promotion_registry(), temp_dir.path())
+                .unwrap();
+        let second =
+            inventory::render_snapshot_bytes_in(&pre_wrapper_promotion_registry(), temp_dir.path())
+                .unwrap();
+
+        assert_eq!(first, second);
+        assert!(first.ends_with(b"\n"));
+        assert!(!first.ends_with(b"\n\n"));
+
+        let rendered: serde_json::Value = serde_json::from_slice(&first).unwrap();
+        assert!(rendered.get("ranked_candidates").is_none());
+        assert!(rendered.get("approval").is_none());
+        assert!(rendered.get("runtime_supported_families").is_none());
+        assert!(rendered.get("families").is_none());
+
+        let exact_hash = inventory::inventory_sha256_hex(&first);
+        let without_trailing_newline = first[..first.len() - 1].to_vec();
+        assert_ne!(
+            exact_hash,
+            inventory::inventory_sha256_hex(&without_trailing_newline)
+        );
+    }
+
+    #[test]
+    fn family_inventory_command_rejects_non_json_format() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let code = run_from(
+            temp_dir.path(),
+            ["xtask", "family", "inventory", "--format", "text"],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_accepts_recommendation_with_exact_inventory_hash() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let inventory_path = write_inventory_snapshot(temp_dir.path(), run_id);
+        let inventory_bytes = fs::read(temp_dir.path().join(&inventory_path)).unwrap();
+        let recommendation_path = temp_dir
+            .path()
+            .join(".semantic-family-artifacts/family-promotion/recommendation.latest.json");
+
+        write_json_file(
+            &recommendation_path,
+            &FamilyRecommendationArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::FamilyRecommendation,
+                generated_at: "2026-04-29T15:45:00Z".to_string(),
+                inventory_path: inventory_path.clone(),
+                inventory_sha256: inventory::inventory_sha256_hex(&inventory_bytes),
+                target_language: TargetLanguage::Rust,
+                ranked_candidates: vec![
+                    RankedCandidate {
+                        family: "function.wrapper.pipeline.v1".to_string(),
+                        evidence: vec![
+                            "spec-core/src/semantic_review.rs".to_string(),
+                            "examples/ecommerce/units/pricing/calculate_total.unit.spec"
+                                .to_string(),
+                        ],
+                        expected_leverage:
+                            "Broadens the promoted corpus from leaves to a two-step wrapper."
+                                .to_string(),
+                        expected_risks: vec![
+                            "Routing order must stay between chain3 and the leaves.".to_string(),
+                        ],
+                    },
+                    RankedCandidate {
+                        family: "function.arithmetic_leaf.monotone_up.v1".to_string(),
+                        evidence: vec!["spec-core/src/semantic_review.rs".to_string()],
+                        expected_leverage: "Already promoted and therefore informational only."
+                            .to_string(),
+                        expected_risks: vec![
+                            "Not approval-eligible from this artifact.".to_string(),
+                        ],
+                    },
+                ],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                ".semantic-family-artifacts/family-promotion/recommendation.latest.json",
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_recommendation_when_inventory_hash_is_recomputed_from_different_bytes()
+     {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let inventory_path = write_inventory_snapshot(temp_dir.path(), run_id);
+        let recommendation_path = temp_dir
+            .path()
+            .join(".semantic-family-artifacts/family-promotion/recommendation.latest.json");
+
+        write_json_file(
+            &recommendation_path,
+            &FamilyRecommendationArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::FamilyRecommendation,
+                generated_at: "2026-04-29T15:45:00Z".to_string(),
+                inventory_path,
+                inventory_sha256: "deadbeef".to_string(),
+                target_language: TargetLanguage::Rust,
+                ranked_candidates: vec![RankedCandidate {
+                    family: "function.wrapper.pipeline.v1".to_string(),
+                    evidence: vec!["spec-core/src/semantic_review.rs".to_string()],
+                    expected_leverage: "Two-step wrapper promotion target.".to_string(),
+                    expected_risks: vec![
+                        "Inventory hash mismatch should fail validation.".to_string(),
+                    ],
+                }],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                ".semantic-family-artifacts/family-promotion/recommendation.latest.json",
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_accepts_execution_report_with_real_proof_artifact_paths() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let recommendation_path = seed_valid_recommendation_artifact(temp_dir.path(), run_id);
+        seed_promoted_wrapper_proof_artifacts(temp_dir.path());
+        write_string(
+            &temp_dir
+                .path()
+                .join("semantic-families/function.wrapper.pipeline.v1/candidate.md"),
+            "# wrapper packet\n",
+        );
+
+        let report_path = temp_dir.path().join(format!(
+            ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/promotion.execution.json"
+        ));
+        write_json_file(
+            &report_path,
+            &PromotionExecutionArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::PromotionExecution,
+                run_id: run_id.to_string(),
+                family: "function.wrapper.pipeline.v1".to_string(),
+                status: promotion_artifacts::ExecutionStatus::Green,
+                recommendation_path,
+                approvals: PromotionApprovals {
+                    target_family: ApprovalRecord {
+                        status: ApprovalStatus::Approved,
+                    },
+                    final_output: ApprovalRecord {
+                        status: ApprovalStatus::Pending,
+                    },
+                },
+                files_changed: vec![
+                    "semantic-families/function.wrapper.pipeline.v1/candidate.md".to_string(),
+                    "spec-cli/tests/cli.rs".to_string(),
+                ],
+                commands: vec![CommandRecord {
+                    step: "prove".to_string(),
+                    command: "cargo xtask family prove function.wrapper.pipeline.v1".to_string(),
+                    exit_code: 0,
+                    started_at: "2026-04-29T15:50:00Z".to_string(),
+                    finished_at: "2026-04-29T15:51:00Z".to_string(),
+                    artifact_path: Some(
+                        ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/prove.latest.json"
+                            .to_string(),
+                    ),
+                }],
+                referenced_proof_artifacts: vec![
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/prove.latest.json"
+                        .to_string(),
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/attempt-20260429T155100Z.json"
+                        .to_string(),
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/certification.report.json"
+                        .to_string(),
+                ],
+                iterations: 1,
+                gate_summary: GateSummary {
+                    smoke: GateStatus::Pass,
+                    prove: GateStatus::Pass,
+                    certify: GateStatus::Pass,
+                },
+                notes: vec!["All hard gates are green.".to_string()],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                &format!(
+                    ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/promotion.execution.json"
+                ),
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_execution_report_when_proof_artifact_path_is_missing() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let recommendation_path = seed_valid_recommendation_artifact(temp_dir.path(), run_id);
+        let report_path = temp_dir.path().join(format!(
+            ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/promotion.execution.json"
+        ));
+        write_json_file(
+            &report_path,
+            &PromotionExecutionArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::PromotionExecution,
+                run_id: run_id.to_string(),
+                family: "function.wrapper.pipeline.v1".to_string(),
+                status: promotion_artifacts::ExecutionStatus::Green,
+                recommendation_path,
+                approvals: PromotionApprovals {
+                    target_family: ApprovalRecord {
+                        status: ApprovalStatus::Approved,
+                    },
+                    final_output: ApprovalRecord {
+                        status: ApprovalStatus::Pending,
+                    },
+                },
+                files_changed: vec![
+                    "semantic-families/function.wrapper.pipeline.v1/candidate.md".to_string(),
+                ],
+                commands: vec![CommandRecord {
+                    step: "certify".to_string(),
+                    command: "cargo xtask family certify function.wrapper.pipeline.v1".to_string(),
+                    exit_code: 1,
+                    started_at: "2026-04-29T15:52:00Z".to_string(),
+                    finished_at: "2026-04-29T15:53:00Z".to_string(),
+                    artifact_path: None,
+                }],
+                referenced_proof_artifacts: vec![
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/prove.latest.json"
+                        .to_string(),
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/attempt-20260429T155100Z.json"
+                        .to_string(),
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/certification.report.json"
+                        .to_string(),
+                ],
+                iterations: 2,
+                gate_summary: GateSummary {
+                    smoke: GateStatus::Pass,
+                    prove: GateStatus::Pass,
+                    certify: GateStatus::Fail,
+                },
+                notes: vec!["Missing proof artifacts should fail validation.".to_string()],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                &format!(
+                    ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/promotion.execution.json"
+                ),
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_accepts_blocker_report_with_locked_vocabulary() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let inventory_path = write_inventory_snapshot(temp_dir.path(), run_id);
+        let report_path = temp_dir.path().join(format!(
+            ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/blocker.report.json"
+        ));
+        write_json_file(
+            &report_path,
+            &PromotionBlockerArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::PromotionBlocker,
+                run_id: run_id.to_string(),
+                family: "function.wrapper.pipeline.v1".to_string(),
+                blocking_step: BlockingStep::Certify,
+                blocker_kind: BlockerKind::CertifyRoutingConflict,
+                summary: "Registry routing order still conflicts with the promoted wrapper family."
+                    .to_string(),
+                machine_evidence: vec![
+                    MachineEvidence {
+                        kind: MachineEvidenceKind::Command,
+                        path: None,
+                        command: Some(
+                            "cargo xtask family certify function.wrapper.pipeline.v1".to_string(),
+                        ),
+                        exit_code: Some(1),
+                        observed_at: "2026-04-29T15:55:00Z".to_string(),
+                        note: "Certify failed during the routing gate.".to_string(),
+                    },
+                    MachineEvidence {
+                        kind: MachineEvidenceKind::Artifact,
+                        path: Some(inventory_path),
+                        command: None,
+                        exit_code: None,
+                        observed_at: "2026-04-29T15:55:01Z".to_string(),
+                        note: "Gate 1 inventory snapshot for this run.".to_string(),
+                    },
+                ],
+                required_human_action:
+                    "Confirm whether the routing conflict should be resolved in the packet or the runtime contract."
+                        .to_string(),
+                safe_next_actions: vec![
+                    "Do not start wrapper-family edits under the stale routing contract."
+                        .to_string(),
+                ],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                &format!(
+                    ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/blocker.report.json"
+                ),
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_blocker_report_with_unknown_blocker_kind() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let report_path = temp_dir.path().join(format!(
+            ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/blocker.report.json"
+        ));
+        write_string(
+            &report_path,
+            r#"{
+  "schema_version": 1,
+  "artifact_kind": "promotion_blocker",
+  "run_id": "20260429T154500Z-function.wrapper.pipeline.v1",
+  "family": "function.wrapper.pipeline.v1",
+  "blocking_step": "smoke",
+  "blocker_kind": "unknown_kind",
+  "summary": "unknown blocker kind",
+  "machine_evidence": [
+    {
+      "kind": "command",
+      "path": null,
+      "command": "cargo xtask family smoke function.wrapper.pipeline.v1",
+      "exit_code": 1,
+      "observed_at": "2026-04-29T15:55:00Z",
+      "note": "smoke failed"
+    }
+  ],
+  "required_human_action": "decide next step",
+  "safe_next_actions": ["do not proceed"]
+}
+"#,
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                &format!(
+                    ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/blocker.report.json"
+                ),
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
     fn workspace_root() -> TempDir {
         let temp_dir = TempDir::new().unwrap();
         fs::create_dir(temp_dir.path().join("semantic-families")).unwrap();
@@ -2069,6 +2730,170 @@ gate_d = true
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, contents).unwrap();
+    }
+
+    fn write_json_file<T: serde::Serialize>(path: &Path, value: &T) {
+        let contents = serde_json::to_string_pretty(value).unwrap();
+        write_string(path, &format!("{contents}\n"));
+    }
+
+    fn seed_inventory_repo_truth(workspace_root: &Path) {
+        write_string(
+            &workspace_root.join("spec-core/src/semantic_review.rs"),
+            r#"const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 4] = [
+    SupportedFunctionRoute::WrapperPipelineChain3,
+    SupportedFunctionRoute::WrapperPipeline,
+    SupportedFunctionRoute::ArithmeticLeafMonotoneDownNonnegative,
+    SupportedFunctionRoute::ArithmeticLeafMonotoneUp,
+];
+"#,
+        );
+        write_string(
+            &workspace_root.join("examples/ecommerce/units/pricing/apply_discount.unit.spec"),
+            "id: pricing/apply_discount\n",
+        );
+        write_string(
+            &workspace_root.join("examples/ecommerce/units/pricing/apply_tax.unit.spec"),
+            "id: pricing/apply_tax\n",
+        );
+        write_string(
+            &workspace_root.join("examples/ecommerce/units/pricing/calculate_total.unit.spec"),
+            "id: pricing/calculate_total\n",
+        );
+        write_string(
+            &workspace_root.join("spec-cli/tests/m14_regressions.rs"),
+            "fn wrapper_pipeline_existing_wedge() {}\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_discount_leaf_aligned.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_tax_leaf_aligned.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/drift/units/pricing/pricing_total_wrapper_drift.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        fs::create_dir_all(
+            workspace_root
+                .join("semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1"),
+        )
+        .unwrap();
+        fs::create_dir_all(
+            workspace_root.join("semantic-families/function.arithmetic_leaf.monotone_up.v1"),
+        )
+        .unwrap();
+    }
+
+    fn write_inventory_snapshot(workspace_root: &Path, run_id: &str) -> String {
+        let relative_path =
+            format!(".semantic-family-artifacts/family-promotion/inventory/{run_id}.json");
+        let absolute_path = workspace_root.join(&relative_path);
+        let bytes =
+            inventory::render_snapshot_bytes_in(&pre_wrapper_promotion_registry(), workspace_root)
+                .unwrap();
+        if let Some(parent) = absolute_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&absolute_path, bytes).unwrap();
+        relative_path
+    }
+
+    fn pre_wrapper_promotion_registry() -> [FamilyHarness; 3] {
+        [
+            *family_harness(&FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap())
+                .unwrap(),
+            *family_harness(
+                &FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap(),
+            )
+            .unwrap(),
+            *family_harness(&FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap())
+                .unwrap(),
+        ]
+    }
+
+    fn seed_valid_recommendation_artifact(workspace_root: &Path, run_id: &str) -> String {
+        let inventory_path = write_inventory_snapshot(workspace_root, run_id);
+        let inventory_bytes = fs::read(workspace_root.join(&inventory_path)).unwrap();
+        let recommendation_path = workspace_root
+            .join(".semantic-family-artifacts/family-promotion/recommendation.latest.json");
+        write_json_file(
+            &recommendation_path,
+            &FamilyRecommendationArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::FamilyRecommendation,
+                generated_at: "2026-04-29T15:45:00Z".to_string(),
+                inventory_path,
+                inventory_sha256: inventory::inventory_sha256_hex(&inventory_bytes),
+                target_language: TargetLanguage::Rust,
+                ranked_candidates: vec![RankedCandidate {
+                    family: "function.wrapper.pipeline.v1".to_string(),
+                    evidence: vec![
+                        "spec-core/src/semantic_review.rs".to_string(),
+                        "examples/ecommerce/units/pricing/calculate_total.unit.spec".to_string(),
+                    ],
+                    expected_leverage:
+                        "Broadens the corpus from leaves to a dedicated wrapper family.".to_string(),
+                    expected_risks: vec![
+                        "Routing order must remain between chain3 and the leaves.".to_string(),
+                    ],
+                }],
+            },
+        );
+        ".semantic-family-artifacts/family-promotion/recommendation.latest.json".to_string()
+    }
+
+    fn seed_promoted_wrapper_proof_artifacts(workspace_root: &Path) {
+        write_string(
+            &workspace_root.join(
+                ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/prove.latest.json",
+            ),
+            "{}\n",
+        );
+        write_string(
+            &workspace_root.join(
+                ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/attempt-20260429T155100Z.json",
+            ),
+            "{}\n",
+        );
+        write_string(
+            &workspace_root.join(
+                ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/certification.report.json",
+            ),
+            "{}\n",
+        );
     }
 
     fn seed_valid_manifest(manifest_path: &Path, family: &str) {
@@ -2239,6 +3064,14 @@ gate_d = true
             format!("fixtures/{bucket}/units/pricing/pricing_tax_leaf_{bucket}.unit.spec"),
             format!("fixtures/{bucket}/units/pricing/pricing_total_wrapper_{bucket}.unit.spec"),
             format!("fixtures/{bucket}/units/pricing/checkout_chain3_{bucket}.unit.spec"),
+        ]
+    }
+
+    fn expected_wrapper_pipeline_scaffold_unit_paths(bucket: &str) -> [String; 3] {
+        [
+            format!("fixtures/{bucket}/units/pricing/pricing_discount_leaf_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/pricing_tax_leaf_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/pricing_total_wrapper_{bucket}.unit.spec"),
         ]
     }
 
