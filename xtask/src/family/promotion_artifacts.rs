@@ -1,18 +1,22 @@
 use crate::XtaskError;
 use crate::family::inventory::inventory_sha256_hex;
-use crate::family::paths::FamilyId;
+use crate::family::paths::{
+    FAMILY_COVERAGE_LATEST_PATH, FAMILY_PROMOTION_ARTIFACT_ROOT,
+    FAMILY_PROMOTION_INVENTORY_DIR, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId,
+    M27_CORPUS_MANIFEST_PATH, validate_existing_repo_relative_path, validate_repo_relative_path,
+};
 use serde::{Deserialize, Serialize};
+use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-
-const PROMOTION_ARTIFACT_ROOT: &str = ".semantic-family-artifacts/family-promotion";
-const INVENTORY_ROOT: &str = ".semantic-family-artifacts/family-promotion/inventory";
 const SCHEMA_VERSION: u64 = 1;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PromotionArtifactKind {
     FamilyRecommendation,
+    FamilyCoverageSnapshot,
+    FamilyRecommendationAnalysis,
     PromotionExecution,
     PromotionBlocker,
 }
@@ -75,6 +79,47 @@ pub(crate) enum MachineEvidenceKind {
     Command,
     Artifact,
     Diff,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SourceKind {
+    RealExample,
+    RegressionUnsupported,
+    ProofOnly,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CandidateStatus {
+    Rankable,
+    BoundaryOnly,
+    LowValue,
+    InsufficientEvidence,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RecommendationStatus {
+    Ranked,
+    NoStrongCandidate,
+    InsufficientRealCorpus,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DifficultyTier {
+    Adjacent,
+    Moderate,
+    Hard,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ConfidenceLevel {
+    Low,
+    Medium,
+    High,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -174,6 +219,124 @@ pub(crate) struct MachineEvidence {
     pub note: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FamilyCoverageArtifact {
+    pub schema_version: u64,
+    pub artifact_kind: PromotionArtifactKind,
+    pub generated_at: String,
+    pub inventory_path: String,
+    pub inventory_sha256: String,
+    pub corpus_manifest_path: String,
+    pub corpus_manifest_sha256: String,
+    pub sources: Vec<CorpusSourceEntry>,
+    pub function_coverage: FunctionCoverageTotals,
+    pub non_function_coverage: NonFunctionCoverageTotals,
+    pub family_coverage: Vec<FamilyCoverageEntry>,
+    pub unsupported_clusters: Vec<UnsupportedClusterEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CorpusSourceEntry {
+    pub id: String,
+    pub path: String,
+    pub kind: SourceKind,
+    pub counts_toward_recommendation: bool,
+    pub note: String,
+    pub unit_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FunctionCoverageTotals {
+    pub total_units: usize,
+    pub promoted_family_units: usize,
+    pub supported_unpromoted_family_units: usize,
+    pub unsupported_function_units: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NonFunctionCoverageTotals {
+    pub total_units: usize,
+    pub supported_sum_units: usize,
+    pub supported_data_units: usize,
+    pub other_units: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FamilyCoverageEntry {
+    pub family: String,
+    pub unit_count: usize,
+    pub unit_ids: Vec<String>,
+    pub source_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UnsupportedClusterEntry {
+    pub cluster_id: String,
+    pub reason_code: UnsupportedFunctionReasonCode,
+    pub shape_fingerprint: String,
+    pub representative_unit_ids: Vec<String>,
+    pub source_ids: Vec<String>,
+    pub real_example_hits: usize,
+    pub promotion_relevant_regression_hits: usize,
+    pub boundary_only_hits: usize,
+    pub overlap_family: String,
+    pub candidate_status: CandidateStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FamilyRecommendationAnalysisArtifact {
+    pub schema_version: u64,
+    pub artifact_kind: PromotionArtifactKind,
+    pub generated_at: String,
+    pub coverage_path: String,
+    pub coverage_sha256: String,
+    pub recommendation_status: RecommendationStatus,
+    pub ranked_candidates: Vec<RecommendationCandidateEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RecommendationCandidateEntry {
+    pub candidate_id: String,
+    pub cluster_ids: Vec<String>,
+    pub primary_reason_code: UnsupportedFunctionReasonCode,
+    pub overlap_family: String,
+    pub leverage: RecommendationLeverage,
+    pub difficulty: RecommendationDifficulty,
+    pub confidence: RecommendationConfidence,
+    pub rationale: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RecommendationLeverage {
+    pub real_example_hits: usize,
+    pub promotion_relevant_regression_hits: usize,
+    pub boundary_only_hits: usize,
+    pub total_units_in_cluster: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RecommendationDifficulty {
+    pub tier: DifficultyTier,
+    pub why: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RecommendationConfidence {
+    pub level: ConfidenceLevel,
+    pub why: String,
+}
+
 pub(crate) fn run_validate_artifact(
     workspace_root: &Path,
     raw_path: &str,
@@ -196,6 +359,16 @@ pub(crate) fn run_validate_artifact(
     match artifact_path {
         ArtifactPath::Recommendation => {
             let artifact: FamilyRecommendationArtifact =
+                serde_json::from_slice(&bytes).map_err(deserialize_error(&absolute))?;
+            artifact.validate(workspace_root)?;
+        }
+        ArtifactPath::Coverage => {
+            let artifact: FamilyCoverageArtifact =
+                serde_json::from_slice(&bytes).map_err(deserialize_error(&absolute))?;
+            artifact.validate(workspace_root)?;
+        }
+        ArtifactPath::RecommendationAnalysis => {
+            let artifact: FamilyRecommendationAnalysisArtifact =
                 serde_json::from_slice(&bytes).map_err(deserialize_error(&absolute))?;
             artifact.validate(workspace_root)?;
         }
@@ -248,9 +421,9 @@ impl FamilyRecommendationArtifact {
             &self.inventory_path,
             "recommendation inventory_path",
         )?;
-        if !self.inventory_path.starts_with(INVENTORY_ROOT) {
+        if !self.inventory_path.starts_with(FAMILY_PROMOTION_INVENTORY_DIR) {
             return Err(XtaskError::InvalidInput(format!(
-                "recommendation inventory_path `{}` must stay under `{INVENTORY_ROOT}`",
+                "recommendation inventory_path `{}` must stay under `{FAMILY_PROMOTION_INVENTORY_DIR}`",
                 self.inventory_path
             )));
         }
@@ -293,6 +466,98 @@ impl FamilyRecommendationArtifact {
             }
         }
 
+        Ok(())
+    }
+}
+
+impl FamilyCoverageArtifact {
+    fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(XtaskError::InvalidInput(format!(
+                "coverage schema_version must be {SCHEMA_VERSION}, found {}",
+                self.schema_version
+            )));
+        }
+        if self.artifact_kind != PromotionArtifactKind::FamilyCoverageSnapshot {
+            return Err(XtaskError::InvalidInput(
+                "coverage artifact_kind must be `family_coverage_snapshot`".to_string(),
+            ));
+        }
+        if !looks_like_utc_timestamp(&self.generated_at) {
+            return Err(XtaskError::InvalidInput(
+                "coverage generated_at must be a UTC RFC3339 timestamp".to_string(),
+            ));
+        }
+        validate_sha_bound_path(
+            workspace_root,
+            &self.inventory_path,
+            FAMILY_PROMOTION_INVENTORY_DIR,
+            &self.inventory_sha256,
+            "coverage inventory_path",
+        )?;
+        validate_sha_bound_path(
+            workspace_root,
+            &self.corpus_manifest_path,
+            M27_CORPUS_MANIFEST_PATH,
+            &self.corpus_manifest_sha256,
+            "coverage corpus_manifest_path",
+        )?;
+        if self.sources.is_empty() {
+            return Err(XtaskError::InvalidInput(
+                "coverage sources[] must not be empty".to_string(),
+            ));
+        }
+        for source in &self.sources {
+            source.validate(workspace_root)?;
+        }
+        for entry in &self.family_coverage {
+            entry.validate()?;
+        }
+        for cluster in &self.unsupported_clusters {
+            cluster.validate()?;
+        }
+        Ok(())
+    }
+}
+
+impl FamilyRecommendationAnalysisArtifact {
+    fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(XtaskError::InvalidInput(format!(
+                "recommendation analysis schema_version must be {SCHEMA_VERSION}, found {}",
+                self.schema_version
+            )));
+        }
+        if self.artifact_kind != PromotionArtifactKind::FamilyRecommendationAnalysis {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis artifact_kind must be `family_recommendation_analysis`"
+                    .to_string(),
+            ));
+        }
+        if !looks_like_utc_timestamp(&self.generated_at) {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis generated_at must be a UTC RFC3339 timestamp"
+                    .to_string(),
+            ));
+        }
+        validate_sha_bound_path(
+            workspace_root,
+            &self.coverage_path,
+            FAMILY_COVERAGE_LATEST_PATH,
+            &self.coverage_sha256,
+            "recommendation analysis coverage_path",
+        )?;
+        if self.recommendation_status == RecommendationStatus::Ranked
+            && self.ranked_candidates.is_empty()
+        {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis ranked status must include ranked_candidates[]"
+                    .to_string(),
+            ));
+        }
+        for candidate in &self.ranked_candidates {
+            candidate.validate()?;
+        }
         Ok(())
     }
 }
@@ -513,17 +778,112 @@ impl MachineEvidence {
     }
 }
 
+impl CorpusSourceEntry {
+    fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+        if self.id.trim().is_empty() || self.note.trim().is_empty() || self.note.contains('\n') {
+            return Err(XtaskError::InvalidInput(
+                "coverage sources[] entries require non-empty single-line id and note".to_string(),
+            ));
+        }
+        validate_existing_repo_relative_path(workspace_root, &self.path, "coverage source path")?;
+        if self.unit_count == 0 {
+            return Err(XtaskError::InvalidInput(format!(
+                "coverage source `{}` must report at least one unit",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
+impl FamilyCoverageEntry {
+    fn validate(&self) -> Result<(), XtaskError> {
+        FamilyId::parse(&self.family)?;
+        if self.unit_count == 0 || self.unit_ids.is_empty() || self.source_ids.is_empty() {
+            return Err(XtaskError::InvalidInput(format!(
+                "family coverage entry `{}` must include unit_count, unit_ids, and source_ids",
+                self.family
+            )));
+        }
+        Ok(())
+    }
+}
+
+impl UnsupportedClusterEntry {
+    fn validate(&self) -> Result<(), XtaskError> {
+        if self.cluster_id.trim().is_empty()
+            || self.shape_fingerprint.trim().is_empty()
+            || self.representative_unit_ids.is_empty()
+            || self.source_ids.is_empty()
+        {
+            return Err(XtaskError::InvalidInput(
+                "unsupported cluster entries must include cluster_id, shape_fingerprint, representative_unit_ids, and source_ids".to_string(),
+            ));
+        }
+        validate_overlap_family(&self.overlap_family)
+    }
+}
+
+impl RecommendationCandidateEntry {
+    fn validate(&self) -> Result<(), XtaskError> {
+        if self.candidate_id.trim().is_empty()
+            || self.cluster_ids.is_empty()
+            || self.rationale.trim().is_empty()
+            || self.rationale.contains('\n')
+        {
+            return Err(XtaskError::InvalidInput(
+                "recommendation candidates require non-empty candidate_id, cluster_ids, and single-line rationale".to_string(),
+            ));
+        }
+        validate_overlap_family(&self.overlap_family)?;
+        self.difficulty.validate()?;
+        self.confidence.validate()?;
+        Ok(())
+    }
+}
+
+impl RecommendationDifficulty {
+    fn validate(&self) -> Result<(), XtaskError> {
+        if self.why.trim().is_empty() || self.why.contains('\n') {
+            return Err(XtaskError::InvalidInput(
+                "recommendation difficulty.why must be a single non-empty line".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl RecommendationConfidence {
+    fn validate(&self) -> Result<(), XtaskError> {
+        if self.why.trim().is_empty() || self.why.contains('\n') {
+            return Err(XtaskError::InvalidInput(
+                "recommendation confidence.why must be a single non-empty line".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ArtifactPath {
     Recommendation,
+    Coverage,
+    RecommendationAnalysis,
     PromotionExecution { family: String, run_id: String },
     PromotionBlocker { family: String, run_id: String },
 }
 
 fn classify_artifact_path(path: &Path) -> Result<ArtifactPath, XtaskError> {
-    let recommendation_path = Path::new(PROMOTION_ARTIFACT_ROOT).join("recommendation.latest.json");
+    let recommendation_path =
+        Path::new(FAMILY_PROMOTION_ARTIFACT_ROOT).join("recommendation.latest.json");
     if path == recommendation_path {
         return Ok(ArtifactPath::Recommendation);
+    }
+    if path == Path::new(FAMILY_COVERAGE_LATEST_PATH) {
+        return Ok(ArtifactPath::Coverage);
+    }
+    if path == Path::new(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH) {
+        return Ok(ArtifactPath::RecommendationAnalysis);
     }
 
     let components = path
@@ -600,37 +960,40 @@ fn validate_family_and_run_id(
     Ok(())
 }
 
-fn validate_existing_repo_relative_path(
+fn validate_sha_bound_path(
     workspace_root: &Path,
     raw_path: &str,
+    expected_prefix: &str,
+    expected_sha: &str,
     field: &str,
-) -> Result<PathBuf, XtaskError> {
-    let relative = validate_repo_relative_path(raw_path, field)?;
-    let absolute = workspace_root.join(&relative);
-    if !absolute.exists() {
+) -> Result<(), XtaskError> {
+    let path = validate_existing_repo_relative_path(workspace_root, raw_path, field)?;
+    if raw_path != expected_prefix && !raw_path.starts_with(expected_prefix) {
         return Err(XtaskError::InvalidInput(format!(
-            "{field} `{raw_path}` does not exist in the workspace"
+            "{field} `{raw_path}` must stay under or equal `{expected_prefix}`"
         )));
     }
-    Ok(absolute)
+    let bytes = fs::read(&path).map_err(|error| {
+        XtaskError::WriteFailure(format!("failed to read `{}`: {error}", path.display()))
+    })?;
+    let observed_sha = inventory_sha256_hex(&bytes);
+    if observed_sha != expected_sha {
+        return Err(XtaskError::InvalidInput(format!(
+            "{field} sha `{expected_sha}` does not match the exact bytes at `{raw_path}` (expected `{observed_sha}`)"
+        )));
+    }
+    Ok(())
 }
 
-fn validate_repo_relative_path(raw_path: &str, field: &str) -> Result<PathBuf, XtaskError> {
-    let path = Path::new(raw_path);
-    if path.as_os_str().is_empty() || path.is_absolute() {
-        return Err(XtaskError::InvalidInput(format!(
-            "{field} must be a non-empty repo-relative path, found `{raw_path}`"
-        )));
+fn validate_overlap_family(value: &str) -> Result<(), XtaskError> {
+    match value {
+        "function.arithmetic_leaf.monotone_*"
+        | "function.wrapper.pipeline*"
+        | "unknown" => Ok(()),
+        _ => Err(XtaskError::InvalidInput(format!(
+            "overlap_family `{value}` must be `function.arithmetic_leaf.monotone_*`, `function.wrapper.pipeline*`, or `unknown`"
+        ))),
     }
-    if path
-        .components()
-        .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        return Err(XtaskError::InvalidInput(format!(
-            "{field} `{raw_path}` must contain only normal path components"
-        )));
-    }
-    Ok(path.to_path_buf())
 }
 
 fn ensure_repo_relative_paths_sorted(paths: &[String], field: &str) -> Result<(), XtaskError> {
