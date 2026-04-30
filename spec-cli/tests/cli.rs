@@ -5831,6 +5831,11 @@ fn supported_wrapper_function_semantic_review_command_matrix_preserves_or_refres
 }
 
 #[test]
+fn wrapper_pipeline_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
+    supported_wrapper_function_semantic_review_command_matrix_preserves_or_refreshes_by_flow();
+}
+
+#[test]
 fn m21_chain3_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
     if !cargo_available() {
         return;
@@ -6011,6 +6016,73 @@ fn m21_chain3_truth_surface_stale_status_and_export_preserve_last_proven_review(
 }
 
 #[test]
+fn wrapper_pipeline_truth_surface_stale_status_and_export_preserve_last_proven_review() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_supported_wrapper_function_semantic_status_project(project_dir);
+    let unit_path = units_dir.join("pricing/calculate_total.unit.spec");
+    let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
+    let review = supported_function_semantic_review(
+        FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
+        SemanticVerdict::Aligned,
+        vec![],
+        "seeded supported wrapper review",
+    );
+    seed_supported_wrapper_function_semantic_status_artifacts(&units_dir, Some(review));
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_supported_function_semantic_review(&seeded_review, FUNCTION_FAMILY_B_COMPATIBILITY_KEY);
+
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replace(
+            "Return the total after discounting the subtotal and then applying tax.",
+            "Return the total after discounting the subtotal and then applying tax with revised authored truth.",
+        ),
+    )
+    .unwrap();
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "wrapper pipeline stale status should exit non-zero"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/calculate_total")
+        .unwrap();
+    assert_eq!(unit["status"], "stale", "{status_json}");
+    assert_eq!(unit["reason"], "authored truth changed since last test");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run_in(project_dir, &["export", "units"]);
+    assert_output_success(
+        "wrapper pipeline stale export should preserve prior review",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/calculate_total")
+        .unwrap();
+    assert_eq!(
+        exported_passport["freshness"]["authored_truth_status"],
+        "stale"
+    );
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+}
+
+#[test]
 fn legacy_exact_id_leaf_function_review_drops_on_preserve_and_refreshes_on_test() {
     if !cargo_available() {
         return;
@@ -6101,6 +6173,97 @@ fn unsupported_near_miss_function_semantic_review_remains_additive_only_and_neut
     assert_eq!(
         read_passport_json(&passport_path)["semantic_review"],
         seeded_review
+    );
+}
+
+#[test]
+fn wrapper_pipeline_truth_surface_unsupported_near_miss_command_matrix_stays_neutral() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_unsupported_function_semantic_status_project(project_dir);
+    let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
+    let review = unsupported_function_semantic_review("seeded unsupported wrapper review");
+    seed_unsupported_function_semantic_status_artifacts(&units_dir, Some(review));
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_unsupported_function_reason(
+        &seeded_review,
+        "unsupported_required_argument_expression",
+    );
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "status stays non-green because helper units remain untested"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/calculate_total")
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert!(unit["reason"].is_null(), "{status_json}");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run_in(project_dir, &["export", "units"]);
+    assert_output_success(
+        "wrapper pipeline unsupported near-miss export should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/calculate_total")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+
+    let build_output = run_in(
+        project_dir,
+        &[
+            "build",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "wrapper pipeline unsupported near-miss build should succeed",
+        &build_output,
+    );
+    assert_eq!(
+        read_passport_json(&passport_path)["semantic_review"],
+        seeded_review
+    );
+
+    let refresh_output = run_in(
+        project_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "wrapper pipeline unsupported near-miss test should succeed",
+        &refresh_output,
+    );
+    let refreshed_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_unsupported_function_reason(
+        &refreshed_review,
+        "unsupported_required_argument_expression",
     );
 }
 
