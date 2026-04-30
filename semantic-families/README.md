@@ -12,6 +12,60 @@ Packet rules for M23:
 - `xtask` must treat packet fixtures as source of truth and reject symlinks or extra unit files.
 - certification outputs live under `.semantic-family-artifacts/` and are never checked-in source.
 
+## M27 Corpus Analysis
+
+M27 adds two maintainer-facing analysis commands for the Rust `kind:function` lane:
+
+- `cargo xtask family coverage --format json`
+- `cargo xtask family recommend --format json`
+
+Both commands load the authored corpus manifest at
+`semantic-families/corpus/rust-function.toml`. `family coverage` evaluates the
+current manifest sources and writes
+`.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`.
+`family recommend` recomputes that coverage in-process first, then writes
+`.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`.
+
+The new M27 outputs live only under the `analysis/` artifact directory. They do
+not overwrite the M26 approval-gated root artifact at
+`.semantic-family-artifacts/family-promotion/recommendation.latest.json`.
+
+### Corpus Source Kinds
+
+The Rust function corpus uses explicit source kinds:
+
+- `real_example`: maintained example units such as `examples/ecommerce/units`
+- `regression_unsupported`: repo regression packs such as the locked M19 and M20
+  sources
+- `proof_only`: semantic-family packet fixtures under
+  `semantic-families/**/fixtures/**`
+
+The locked M27 manifest contains exactly these three sources:
+
+- `examples/ecommerce/units`
+- `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units`
+- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units`
+
+Packet fixtures are `proof_only`. They remain useful for packet certification,
+but they are excluded from the M27 manifest and never act as recommendation
+input.
+
+### Bucket Leverage Rules
+
+M27 derives each unit's bucket from its filename:
+
+- `*_unsupported_near_miss.unit.spec` -> `unsupported_near_miss`
+- `*_under_specified.unit.spec` -> `under_specified`
+- `*_drift.unit.spec` -> `drift`
+- everything else -> `aligned_or_real`
+
+Recommendation leverage depends on both source kind and bucket:
+
+- `real_example`: all function units count toward leverage
+- `regression_unsupported`: `unsupported_near_miss` does not add leverage, while
+  `drift`, `under_specified`, and `aligned_or_real` can add leverage
+- `proof_only`: never counts toward leverage
+
 Promoted packets:
 
 - `semantic-families/function.wrapper.pipeline.chain3.v1/family.toml`
