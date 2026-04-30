@@ -1,7 +1,7 @@
 mod family;
 
 use clap::{Args, Parser, Subcommand};
-use family::{certify, inventory, promotion_artifacts, prove, scaffold, smoke};
+use family::{certify, coverage, inventory, promotion_artifacts, prove, recommend, scaffold, smoke};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
@@ -83,6 +83,14 @@ enum FamilyCommand {
         #[arg(long, default_value = "json")]
         format: String,
     },
+    Coverage {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+    Recommend {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
     ValidateArtifact {
         path: String,
     },
@@ -136,6 +144,8 @@ where
         Command::Family(args) => match args.command {
             FamilyCommand::New { family } => scaffold::run(workspace_root, &family),
             FamilyCommand::Inventory { format } => inventory::run(workspace_root, &format),
+            FamilyCommand::Coverage { format } => coverage::run(workspace_root, &format),
+            FamilyCommand::Recommend { format } => recommend::run(workspace_root, &format),
             FamilyCommand::ValidateArtifact { path } => {
                 promotion_artifacts::run_validate_artifact(workspace_root, &path)
             }

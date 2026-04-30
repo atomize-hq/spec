@@ -3,6 +3,14 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 pub const FAMILY_ROOT_DIR: &str = "semantic-families";
+pub const FAMILY_PROMOTION_ARTIFACT_ROOT: &str = ".semantic-family-artifacts/family-promotion";
+pub const FAMILY_PROMOTION_INVENTORY_DIR: &str =
+    ".semantic-family-artifacts/family-promotion/inventory";
+pub const FAMILY_COVERAGE_LATEST_PATH: &str =
+    ".semantic-family-artifacts/family-promotion/analysis/coverage.latest.json";
+pub const FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH: &str =
+    ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json";
+pub const M27_CORPUS_MANIFEST_PATH: &str = "semantic-families/corpus/rust-function.toml";
 pub const REQUIRED_BUCKETS: [&str; 4] = [
     "aligned",
     "drift",
@@ -118,6 +126,135 @@ pub fn ensure_packet_path_safe(
         &workspace_root.join(FAMILY_ROOT_DIR),
     )?;
     ensure_existing_components_are_not_symlinks(workspace_root, packet_root)
+}
+
+pub(crate) fn validate_repo_relative_path(raw_path: &str, field: &str) -> Result<PathBuf, XtaskError> {
+    let path = Path::new(raw_path);
+    if path.as_os_str().is_empty() || path.is_absolute() {
+        return Err(XtaskError::InvalidInput(format!(
+            "{field} `{raw_path}` must be a non-empty repo-relative path"
+        )));
+    }
+
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(segment) => normalized.push(segment),
+            _ => {
+                return Err(XtaskError::InvalidInput(format!(
+                    "{field} `{raw_path}` must contain only normal path components"
+                )));
+            }
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        return Err(XtaskError::InvalidInput(format!(
+            "{field} `{raw_path}` must be a non-empty repo-relative path"
+        )));
+    }
+
+    Ok(normalized)
+}
+
+pub(crate) fn validate_existing_repo_relative_path(
+    workspace_root: &Path,
+    raw_path: &str,
+    field: &str,
+) -> Result<PathBuf, XtaskError> {
+    let relative = validate_repo_relative_path(raw_path, field)?;
+    validate_existing_relative_path(workspace_root, &relative, field)
+}
+
+pub(crate) fn validate_existing_relative_path(
+    workspace_root: &Path,
+    relative: &Path,
+    field: &str,
+) -> Result<PathBuf, XtaskError> {
+    ensure_existing_components_are_not_symlinks(workspace_root, &workspace_root.join(relative))?;
+    let absolute = workspace_root.join(relative);
+    if !absolute.exists() {
+        return Err(XtaskError::InvalidInput(format!(
+            "{field} `{}` does not exist in the workspace",
+            relative.display()
+        )));
+    }
+
+    let canonical_workspace = workspace_root.canonicalize().map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to canonicalize workspace root `{}`: {error}",
+            workspace_root.display()
+        ))
+    })?;
+    let canonical_absolute = absolute.canonicalize().map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to canonicalize `{}`: {error}",
+            absolute.display()
+        ))
+    })?;
+    if !canonical_absolute.starts_with(&canonical_workspace) {
+        return Err(XtaskError::InvalidInput(format!(
+            "{field} `{}` escapes the workspace root",
+            relative.display()
+        )));
+    }
+
+    Ok(absolute)
+}
+
+pub(crate) fn ensure_repo_path_parent(path: &Path) -> Result<(), XtaskError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            XtaskError::WriteFailure(format!(
+                "failed to create `{}`: {error}",
+                parent.display()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+pub(crate) fn write_bytes_atomically(path: &Path, bytes: &[u8]) -> Result<(), XtaskError> {
+    ensure_repo_path_parent(path)?;
+    let parent = path.parent().ok_or_else(|| {
+        XtaskError::WriteFailure(format!(
+            "failed to resolve parent directory for `{}`",
+            path.display()
+        ))
+    })?;
+    let file_name = path.file_name().and_then(|value| value.to_str()).ok_or_else(|| {
+        XtaskError::WriteFailure(format!(
+            "failed to resolve file name for `{}`",
+            path.display()
+        ))
+    })?;
+    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    fs::write(&tmp_path, bytes).map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to write `{}`: {error}",
+            tmp_path.display()
+        ))
+    })?;
+    fs::rename(&tmp_path, path).map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to move `{}` into `{}`: {error}",
+            tmp_path.display(),
+            path.display()
+        ))
+    })
+}
+
+pub(crate) fn path_is_semantic_family_fixture(relative: &Path) -> bool {
+    let components = relative
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => value.to_str(),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    components.len() >= 3
+        && components.first() == Some(&"semantic-families")
+        && components.contains(&"fixtures")
 }
 
 fn ensure_existing_components_are_not_symlinks(

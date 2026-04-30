@@ -13,10 +13,8 @@ clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"
+spec-core = { path = "../spec-core", version = "0.13.1" }
 tempfile = "3.19"
 thiserror = { workspace = true }
 toml = { workspace = true }
 walkdir = { workspace = true }
-
-[dev-dependencies]
-spec-core = { path = "../spec-core", version = "0.13.1" }
