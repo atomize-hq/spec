@@ -4726,7 +4726,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_aligned_review_requires_contextual_dep_resolution() {
+    fn wrapper_pipeline_classifier_aligned_review_requires_contextual_dep_resolution() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4761,7 +4761,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_reversed_pipeline_order() {
+    fn wrapper_pipeline_classifier_drift_marks_reversed_pipeline_order() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4785,7 +4785,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_under_specified_marks_vague_authored_intent() {
+    fn wrapper_pipeline_classifier_under_specified_marks_vague_authored_intent() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "todo",
@@ -4809,7 +4809,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_swapped_inner_args() {
+    fn wrapper_pipeline_classifier_drift_marks_swapped_inner_args() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4833,7 +4833,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_swapped_outer_rate_arg() {
+    fn wrapper_pipeline_classifier_drift_marks_swapped_outer_rate_arg() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4857,7 +4857,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_wrong_threaded_alias_return() {
+    fn wrapper_pipeline_classifier_drift_marks_wrong_threaded_alias_return() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4882,7 +4882,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_duplicated_param_flow() {
+    fn wrapper_pipeline_classifier_drift_marks_duplicated_param_flow() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4906,7 +4906,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_under_specified_marks_dropped_required_arg() {
+    fn wrapper_pipeline_classifier_under_specified_marks_dropped_required_arg() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4934,7 +4934,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_under_specified_marks_unused_extra_param() {
+    fn wrapper_pipeline_classifier_under_specified_marks_unused_extra_param() {
         let wrapper = function_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4971,7 +4971,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_literal_required_arg_stays_unsupported() {
+    fn wrapper_pipeline_classifier_literal_required_arg_stays_unsupported() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4995,7 +4995,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_arithmetic_required_arg_stays_unsupported() {
+    fn wrapper_pipeline_classifier_arithmetic_required_arg_stays_unsupported() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5019,7 +5019,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_method_chain_required_arg_stays_unsupported() {
+    fn wrapper_pipeline_classifier_unsupported_near_miss_stays_unsupported() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5043,7 +5043,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_extra_let_marks_unsupported_wrapper_body_shape() {
+    fn wrapper_pipeline_classifier_extra_let_marks_unsupported_wrapper_body_shape() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5069,7 +5069,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_non_stacking_rejection_stays_unsupported() {
+    fn wrapper_pipeline_classifier_non_stacking_rejection_stays_unsupported() {
         let inner = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5268,7 +5268,7 @@ mod tests {
     }
 
     #[test]
-    fn m21_chain3_regression_family_b_is_not_shadowed() {
+    fn wrapper_pipeline_classifier_aligned_fixture_routes_to_promoted_family() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5293,7 +5293,7 @@ mod tests {
     }
 
     #[test]
-    fn m21_chain3_regression_runtime_order_matches_locked_precedence() {
+    fn wrapper_pipeline_runtime_route_order_preserves_chain3_wrapper_monotone_down_monotone_up() {
         let routed_keys =
             SUPPORTED_FUNCTION_ROUTING_ORDER.map(SupportedFunctionRoute::compatibility_key);
 

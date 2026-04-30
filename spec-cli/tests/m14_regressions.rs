@@ -2677,6 +2677,11 @@ fn m21_chain3_regression_family_b_read_side_surfaces_are_not_shadowed() {
 }
 
 #[test]
+fn wrapper_pipeline_corpus_aligned_fixture_projects_valid_state() {
+    m21_chain3_regression_family_b_read_side_surfaces_are_not_shadowed();
+}
+
+#[test]
 fn reversed_pipeline_calculate_total_wedge_projects_failing_state() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
@@ -2715,6 +2720,11 @@ fn reversed_pipeline_calculate_total_wedge_projects_failing_state() {
 }
 
 #[test]
+fn wrapper_pipeline_corpus_drift_fixture_projects_failing_state() {
+    reversed_pipeline_calculate_total_wedge_projects_failing_state();
+}
+
+#[test]
 fn under_specified_calculate_total_wedge_projects_incomplete_state() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
@@ -2750,6 +2760,11 @@ fn under_specified_calculate_total_wedge_projects_incomplete_state() {
             ),
         },
     );
+}
+
+#[test]
+fn wrapper_pipeline_corpus_under_specified_fixture_projects_incomplete_state() {
+    under_specified_calculate_total_wedge_projects_incomplete_state();
 }
 
 #[test]
@@ -2800,6 +2815,21 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
     let exported = exported_passport(&export_json, "pricing/calculate_total");
     assert_eq!(exported["semantic_review"], seeded_review);
+}
+
+#[test]
+fn wrapper_pipeline_corpus_unsupported_near_miss_stays_additive_only_and_neutral() {
+    unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral();
+}
+
+#[test]
+fn wrapper_pipeline_regression_read_side_surfaces_are_not_shadowed() {
+    wrapper_pipeline_corpus_aligned_fixture_projects_valid_state();
+}
+
+#[test]
+fn wrapper_pipeline_regression_unsupported_near_miss_stays_additive_only_and_neutral() {
+    wrapper_pipeline_corpus_unsupported_near_miss_stays_additive_only_and_neutral();
 }
 
 #[test]
