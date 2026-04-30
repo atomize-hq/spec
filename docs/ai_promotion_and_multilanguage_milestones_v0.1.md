@@ -10,12 +10,13 @@
 
 ## Purpose
 
-This document gives the current landing description for four late-sequence
+This document gives the current landing description for five late-sequence
 milestones:
 
 - `M26` — landed
-- `M27` — active
-- `M28` — next
+- `M27` — landed
+- `M27.5` — next
+- `M28` — after recommendation-quality hardening
 - `M29` — likely follow-on, not locked yet
 
 The shared premise remains the same:
@@ -108,7 +109,7 @@ That is the ladder below.
 - That non-function family promotion is the next right step
 
 ### M27 — Coverage Accounting + Next-Family Recommendation Engine
-**Status:** Active
+**Status:** Landed
 
 **Current intent**
 
@@ -180,15 +181,60 @@ not hide them.
 - That the same recommendation engine works unchanged across languages
 - That the shared family kernel is already clean enough for language #2
 
-### M28 — Shared-Core Extraction + Escape-Hatch Containment
+### M27.5 — Recommendation Quality Hardening
 **Status:** Next
+
+**Why this milestone exists**
+
+M27 did what it was supposed to do mechanically.
+
+The problem is what the first live output taught us:
+
+- a cluster can be discoverable
+- a cluster can be weak
+- and the current ranking rules can still let it graduate to `ranked`
+
+That is not good enough for roadmap steering.
+
+The repo now needs a narrow follow-up milestone that makes `ranked` mean
+"promotion-worthy next family" rather than "the best thing the engine could find
+in a small corpus."
+
+**What it needs to land on**
+
+- recommendation policy is stricter than raw cluster discovery
+- weak candidates remain visible, but are held back explicitly
+- unknown-overlap / hard / thin-evidence candidates no longer cause a top-level
+  `ranked` result
+- the current locked corpus can honestly yield `no_strong_candidate`
+- recommendation artifacts explain why a candidate is being held
+
+**What this proves**
+
+- the engine is not just deterministic, it is selective enough to be trusted
+  for next-step decisions
+- the repo can distinguish "interesting pressure" from "promote this next"
+- the next milestone will be chosen from a stronger recommendation surface
+
+**What this does not prove**
+
+- that corpus expansion is unnecessary
+- that the next family is definitely known already
+- that shared-core extraction should start immediately afterward
+
+### M28 — Shared-Core Extraction + Escape-Hatch Containment
+**Status:** After M27.5
 
 **Why this is the next milestone now**
 
 The gap is clearer than it was when this document was first written.
 
-If M27 lands honestly, the repo should know which unsupported function pressure
-is real. But that still does **not** mean it should immediately jump to a second
+If M27 and M27.5 land honestly, the repo should know both:
+
+- which unsupported function pressure is real
+- whether the recommendation surface is strong enough to trust
+
+But that still does **not** mean it should immediately jump to a second
 language.
 
 The next blocker is architectural:
@@ -268,14 +314,17 @@ pilot, but it should be treated as conditional, not ceremonial.
 
 1. `M26` first, because the operator model had to become real.
 2. `M27` second, because next-family choice should become evidence-driven.
-3. `M28` next, because second-language work without shared-core extraction and
+3. `M27.5` third, because evidence-driven is not the same thing as
+   recommendation-quality good enough for roadmap steering.
+4. `M28` next, because second-language work without shared-core extraction and
    escape-hatch containment would be fake confidence.
-4. `M29` only after M27 and M28 narrow the portability seam enough to run one
+5. `M29` only after M27.5 and M28 narrow the portability seam enough to run one
    honest second-language pilot.
 
 ## One-Line Summary
 
-`M26` made family promotion AI-operable, `M27` makes next-family choice
-evidence-driven, `M28` should isolate the shared core from Rust-specific escape
-hatches, and `M29` is the likely point where the repo can attempt one honest
+`M26` made family promotion AI-operable, `M27` made next-family choice
+evidence-driven, `M27.5` hardens recommendation quality, `M28` should isolate
+the shared core from Rust-specific escape hatches, and `M29` is the likely
+point where the repo can attempt one honest
 second-language promotion pilot.
