@@ -497,7 +497,7 @@ impl FamilyRecommendationArtifact {
 }
 
 impl FamilyCoverageArtifact {
-    fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+    pub(crate) fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
         if self.schema_version != COVERAGE_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
                 "coverage schema_version must be {COVERAGE_SCHEMA_VERSION}, found {}",
@@ -547,7 +547,7 @@ impl FamilyCoverageArtifact {
 }
 
 impl FamilyRecommendationAnalysisArtifact {
-    fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+    pub(crate) fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
         if self.schema_version != RECOMMENDATION_ANALYSIS_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
                 "recommendation analysis schema_version must be {RECOMMENDATION_ANALYSIS_SCHEMA_VERSION}, found {}",
@@ -572,24 +572,68 @@ impl FamilyRecommendationAnalysisArtifact {
             &self.coverage_sha256,
             "recommendation analysis coverage_path",
         )?;
-        if self.recommendation_status == RecommendationStatus::Ranked
-            && self.ranked_candidates.is_empty()
-        {
-            return Err(XtaskError::InvalidInput(
-                "recommendation analysis ranked status must include ranked_candidates[]"
-                    .to_string(),
-            ));
-        }
-        if self.recommendation_status == RecommendationStatus::Ranked
-            && self.ranked_candidates[0].promotion_readiness != PromotionReadiness::Ready
-        {
-            return Err(XtaskError::InvalidInput(
-                "recommendation analysis ranked status requires the first candidate to be `ready`"
-                    .to_string(),
-            ));
-        }
         for candidate in &self.ranked_candidates {
             candidate.validate()?;
+        }
+        let any_ready = self
+            .ranked_candidates
+            .iter()
+            .any(|candidate| candidate.promotion_readiness == PromotionReadiness::Ready);
+        let all_hold = self
+            .ranked_candidates
+            .iter()
+            .all(|candidate| candidate.promotion_readiness == PromotionReadiness::Hold);
+        let all_zero_real = self
+            .ranked_candidates
+            .iter()
+            .all(|candidate| candidate.leverage.real_example_hits == 0);
+        let any_positive_real = self
+            .ranked_candidates
+            .iter()
+            .any(|candidate| candidate.leverage.real_example_hits > 0);
+        match self.recommendation_status {
+            RecommendationStatus::Ranked => {
+                if self.ranked_candidates.is_empty() {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation analysis ranked status must include ranked_candidates[]"
+                            .to_string(),
+                    ));
+                }
+                if self.ranked_candidates[0].promotion_readiness != PromotionReadiness::Ready {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation analysis ranked status requires the first candidate to be `ready`"
+                            .to_string(),
+                    ));
+                }
+            }
+            RecommendationStatus::InsufficientRealCorpus => {
+                if any_ready {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation analysis non-ranked statuses must not include `ready` candidates"
+                            .to_string(),
+                    ));
+                }
+                if !(self.ranked_candidates.is_empty() || (all_hold && all_zero_real)) {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation analysis insufficient_real_corpus status requires either no candidates or only held candidates with zero real_example_hits"
+                            .to_string(),
+                    ));
+                }
+            }
+            RecommendationStatus::NoStrongCandidate => {
+                if any_ready {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation analysis non-ranked statuses must not include `ready` candidates"
+                            .to_string(),
+                    ));
+                }
+                if self.ranked_candidates.is_empty() || !all_hold || !any_positive_real {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation analysis no_strong_candidate status requires non-empty held candidates with at least one real_example_hits > 0"
+                            .to_string(),
+                    ));
+                }
+            }
         }
         Ok(())
     }

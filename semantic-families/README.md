@@ -46,10 +46,13 @@ Interpret the top-level recommendation statuses as follows:
 
 - `ranked` means the first candidate is `ready`, so the output is claiming
   promotion-worthy next-family pressure
-- `insufficient_real_corpus` means the corpus did not produce enough
-  discoverable real-example pressure to rank anything
-- `no_strong_candidate` is an honest outcome when candidates are still visible
-  but every current candidate is `hold`
+- `insufficient_real_corpus` means either no discoverable candidates exist, or
+  every visible candidate is `hold` and every candidate still has
+  `real_example_hits == 0`
+- `no_strong_candidate` is an honest outcome when candidates are still visible,
+  every current candidate is `hold`, and at least one candidate has some
+  real-example pressure
+- non-ranked outputs must not include any `ready` candidate
 
 Held candidates are not errors. A candidate may remain visible in the output
 with `promotion_readiness = "hold"` so maintainers can see where pressure is

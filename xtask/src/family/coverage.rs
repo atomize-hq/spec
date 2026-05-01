@@ -35,6 +35,13 @@ pub(crate) struct CoverageRunOutput {
     pub latest_path: String,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct PendingCoverageOutput {
+    pub artifact: FamilyCoverageArtifact,
+    pub latest_bytes: Vec<u8>,
+    inventory_bytes: Vec<u8>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CorpusManifest {
@@ -114,6 +121,11 @@ pub(crate) fn run(workspace_root: &Path, format: &str) -> Result<(), XtaskError>
 pub(crate) fn collect_and_write_latest(
     workspace_root: &Path,
 ) -> Result<CoverageRunOutput, XtaskError> {
+    let output = collect_latest(workspace_root)?;
+    write_latest(workspace_root, &output)
+}
+
+pub(crate) fn collect_latest(workspace_root: &Path) -> Result<PendingCoverageOutput, XtaskError> {
     let generated_at = current_timestamp_rfc3339()?;
     let inventory = collect_inventory(workspace_root)?;
     let inventory_bytes = render_snapshot_bytes(workspace_root)?;
@@ -122,7 +134,6 @@ pub(crate) fn collect_and_write_latest(
         FAMILY_PROMOTION_INVENTORY_DIR,
         fresh_artifact_token()
     );
-    write_bytes_atomically(&workspace_root.join(&inventory_path), &inventory_bytes)?;
     let inventory_sha = inventory_sha256_hex(&inventory_bytes);
 
     let (_manifest, manifest_bytes, loaded_sources) = load_manifest_and_specs(workspace_root)?;
@@ -326,14 +337,38 @@ pub(crate) fn collect_and_write_latest(
         unsupported_clusters,
     };
     let latest_bytes = render_json_bytes(&artifact)?;
-    let latest_path = FAMILY_COVERAGE_LATEST_PATH.to_string();
-    write_bytes_atomically(&workspace_root.join(&latest_path), &latest_bytes)?;
-
-    Ok(CoverageRunOutput {
+    Ok(PendingCoverageOutput {
         artifact,
         latest_bytes,
+        inventory_bytes,
+    })
+}
+
+pub(crate) fn write_latest(
+    workspace_root: &Path,
+    output: &PendingCoverageOutput,
+) -> Result<CoverageRunOutput, XtaskError> {
+    write_bytes_atomically(
+        &workspace_root.join(&output.artifact.inventory_path),
+        &output.inventory_bytes,
+    )?;
+    let latest_path = FAMILY_COVERAGE_LATEST_PATH.to_string();
+    write_bytes_atomically(&workspace_root.join(&latest_path), &output.latest_bytes)?;
+    Ok(CoverageRunOutput {
+        artifact: output.artifact.clone(),
+        latest_bytes: output.latest_bytes.clone(),
         latest_path,
     })
+}
+
+pub(crate) fn normalized_for_recommend_determinism(
+    artifact: &FamilyCoverageArtifact,
+) -> FamilyCoverageArtifact {
+    let mut normalized = artifact.clone();
+    normalized.generated_at.clear();
+    normalized.inventory_path.clear();
+    normalized.inventory_sha256.clear();
+    normalized
 }
 
 pub(crate) fn current_timestamp_rfc3339() -> Result<String, XtaskError> {

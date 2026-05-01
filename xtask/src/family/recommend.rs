@@ -1,17 +1,22 @@
 use crate::XtaskError;
 use crate::family::coverage::{
-    collect_and_write_latest, current_timestamp_rfc3339, render_json_bytes,
+    CoverageRunOutput, collect_latest, current_timestamp_rfc3339,
+    normalized_for_recommend_determinism, render_json_bytes, write_latest,
 };
 use crate::family::inventory::inventory_sha256_hex;
-use crate::family::paths::{FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically};
+use crate::family::paths::{
+    FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically,
+};
 use crate::family::promotion_artifacts::{
-    CandidateStatus, ConfidenceLevel, DifficultyTier, FamilyRecommendationAnalysisArtifact,
-    HoldReason, PromotionArtifactKind, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-    RecommendationCandidateEntry, RecommendationConfidence, RecommendationDifficulty,
-    RecommendationLeverage, RecommendationStatus, UnsupportedClusterEntry,
+    CandidateStatus, ConfidenceLevel, DifficultyTier, FamilyCoverageArtifact,
+    FamilyRecommendationAnalysisArtifact, HoldReason, PromotionArtifactKind, PromotionReadiness,
+    RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RecommendationCandidateEntry, RecommendationConfidence,
+    RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
+    UnsupportedClusterEntry,
 };
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::cmp::Ordering;
+use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 
@@ -31,18 +36,14 @@ pub(crate) fn run_with_writer<W: Write>(
         )));
     }
 
-    let coverage = collect_and_write_latest(workspace_root)?;
+    let coverage = effective_coverage_for_recommend(workspace_root)?;
     let artifact = build_recommendation_analysis_artifact(
         current_timestamp_rfc3339()?,
         coverage.latest_path,
         inventory_sha256_hex(&coverage.latest_bytes),
         &coverage.artifact.unsupported_clusters,
     );
-    let latest_bytes = render_json_bytes(&artifact)?;
-    write_bytes_atomically(
-        &workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),
-        &latest_bytes,
-    )?;
+    let latest_bytes = effective_recommendation_bytes(workspace_root, artifact)?;
     writer.write_all(&latest_bytes).map_err(|error| {
         XtaskError::WriteFailure(format!("failed to write recommendation output: {error}"))
     })?;
@@ -74,6 +75,68 @@ pub(crate) fn build_recommendation_analysis_artifact(
         recommendation_status,
         ranked_candidates,
     }
+}
+
+fn effective_coverage_for_recommend(
+    workspace_root: &Path,
+) -> Result<CoverageRunOutput, XtaskError> {
+    let pending = collect_latest(workspace_root)?;
+    let latest_path = FAMILY_COVERAGE_LATEST_PATH.to_string();
+    if let Some((existing, existing_bytes)) = load_existing_coverage_artifact(workspace_root)
+        && normalized_for_recommend_determinism(&existing)
+            == normalized_for_recommend_determinism(&pending.artifact)
+    {
+        return Ok(CoverageRunOutput {
+            artifact: existing,
+            latest_bytes: existing_bytes,
+            latest_path,
+        });
+    }
+    write_latest(workspace_root, &pending)
+}
+
+fn effective_recommendation_bytes(
+    workspace_root: &Path,
+    artifact: FamilyRecommendationAnalysisArtifact,
+) -> Result<Vec<u8>, XtaskError> {
+    let latest_bytes = render_json_bytes(&artifact)?;
+    let latest_path = FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH;
+    if let Some((existing, existing_bytes)) = load_existing_recommendation_artifact(workspace_root)
+        && normalized_recommendation_for_determinism(&existing)
+            == normalized_recommendation_for_determinism(&artifact)
+    {
+        return Ok(existing_bytes);
+    }
+    write_bytes_atomically(&workspace_root.join(latest_path), &latest_bytes)?;
+    Ok(latest_bytes)
+}
+
+fn load_existing_coverage_artifact(
+    workspace_root: &Path,
+) -> Option<(FamilyCoverageArtifact, Vec<u8>)> {
+    let path = workspace_root.join(FAMILY_COVERAGE_LATEST_PATH);
+    let bytes = fs::read(path).ok()?;
+    let artifact: FamilyCoverageArtifact = serde_json::from_slice(&bytes).ok()?;
+    artifact.validate(workspace_root).ok()?;
+    Some((artifact, bytes))
+}
+
+fn load_existing_recommendation_artifact(
+    workspace_root: &Path,
+) -> Option<(FamilyRecommendationAnalysisArtifact, Vec<u8>)> {
+    let path = workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+    let bytes = fs::read(path).ok()?;
+    let artifact: FamilyRecommendationAnalysisArtifact = serde_json::from_slice(&bytes).ok()?;
+    artifact.validate(workspace_root).ok()?;
+    Some((artifact, bytes))
+}
+
+fn normalized_recommendation_for_determinism(
+    artifact: &FamilyRecommendationAnalysisArtifact,
+) -> FamilyRecommendationAnalysisArtifact {
+    let mut normalized = artifact.clone();
+    normalized.generated_at.clear();
+    normalized
 }
 
 #[derive(Debug, Clone)]
@@ -214,15 +277,13 @@ fn confidence_for(
     promotion_relevant_regression_hits: usize,
 ) -> RecommendationConfidence {
     let overlap_is_known = overlap_family != "unknown";
+    let has_medium_signal = real_example_hits >= 2
+        || (real_example_hits == 1
+            && promotion_relevant_regression_hits >= 3
+            && difficulty_tier != DifficultyTier::Hard);
     let level = if overlap_is_known && real_example_hits >= 3 {
         ConfidenceLevel::High
-    } else if overlap_is_known && real_example_hits >= 2 {
-        ConfidenceLevel::Medium
-    } else if overlap_is_known
-        && real_example_hits == 1
-        && promotion_relevant_regression_hits >= 3
-        && difficulty_tier != DifficultyTier::Hard
-    {
+    } else if overlap_is_known && has_medium_signal {
         ConfidenceLevel::Medium
     } else {
         ConfidenceLevel::Low
@@ -275,14 +336,17 @@ fn push_hold_reason(hold_reasons: &mut Vec<HoldReason>, hold_reason: HoldReason)
 fn recommendation_status_for(
     ranked_candidates: &[RecommendationCandidateEntry],
 ) -> RecommendationStatus {
-    if matches!(
-        ranked_candidates
-            .first()
-            .map(|candidate| candidate.promotion_readiness),
-        Some(PromotionReadiness::Ready)
-    ) {
+    if ranked_candidates
+        .iter()
+        .any(|candidate| candidate.promotion_readiness == PromotionReadiness::Ready)
+    {
         RecommendationStatus::Ranked
-    } else if ranked_candidates.is_empty() {
+    } else if ranked_candidates.is_empty()
+        || ranked_candidates.iter().all(|candidate| {
+            candidate.promotion_readiness == PromotionReadiness::Hold
+                && candidate.leverage.real_example_hits == 0
+        })
+    {
         RecommendationStatus::InsufficientRealCorpus
     } else {
         RecommendationStatus::NoStrongCandidate
