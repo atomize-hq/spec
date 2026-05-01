@@ -1,15 +1,20 @@
-use crate::XtaskError;
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
+    validate_existing_repo_relative_path, validate_repo_relative_path, FamilyId,
     FAMILY_COVERAGE_LATEST_PATH, FAMILY_PROMOTION_ARTIFACT_ROOT, FAMILY_PROMOTION_INVENTORY_DIR,
-    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId, M27_CORPUS_MANIFEST_PATH,
-    validate_existing_repo_relative_path, validate_repo_relative_path,
+    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, M27_CORPUS_MANIFEST_PATH,
 };
+use crate::XtaskError;
 use serde::{Deserialize, Serialize};
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-const SCHEMA_VERSION: u64 = 1;
+
+pub(crate) const RECOMMENDATION_SCHEMA_VERSION: u64 = 1;
+pub(crate) const COVERAGE_SCHEMA_VERSION: u64 = 1;
+pub(crate) const RECOMMENDATION_ANALYSIS_SCHEMA_VERSION: u64 = 2;
+const PROMOTION_EXECUTION_SCHEMA_VERSION: u64 = 1;
+const PROMOTION_BLOCKER_SCHEMA_VERSION: u64 = 1;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -120,6 +125,22 @@ pub(crate) enum ConfidenceLevel {
     Low,
     Medium,
     High,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PromotionReadiness {
+    Ready,
+    Hold,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum HoldReason {
+    UnknownOverlapFamily,
+    HardDifficulty,
+    ThinRealExampleSupport,
+    ThinRegressionSupport,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -308,6 +329,8 @@ pub(crate) struct RecommendationCandidateEntry {
     pub cluster_ids: Vec<String>,
     pub primary_reason_code: UnsupportedFunctionReasonCode,
     pub overlap_family: String,
+    pub promotion_readiness: PromotionReadiness,
+    pub hold_reasons: Vec<HoldReason>,
     pub leverage: RecommendationLeverage,
     pub difficulty: RecommendationDifficulty,
     pub confidence: RecommendationConfidence,
@@ -389,9 +412,9 @@ pub(crate) fn run_validate_artifact(
 
 impl FamilyRecommendationArtifact {
     fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
-        if self.schema_version != SCHEMA_VERSION {
+        if self.schema_version != RECOMMENDATION_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
-                "recommendation schema_version must be {SCHEMA_VERSION}, found {}",
+                "recommendation schema_version must be {RECOMMENDATION_SCHEMA_VERSION}, found {}",
                 self.schema_version
             )));
         }
@@ -475,9 +498,9 @@ impl FamilyRecommendationArtifact {
 
 impl FamilyCoverageArtifact {
     fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
-        if self.schema_version != SCHEMA_VERSION {
+        if self.schema_version != COVERAGE_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
-                "coverage schema_version must be {SCHEMA_VERSION}, found {}",
+                "coverage schema_version must be {COVERAGE_SCHEMA_VERSION}, found {}",
                 self.schema_version
             )));
         }
@@ -525,9 +548,9 @@ impl FamilyCoverageArtifact {
 
 impl FamilyRecommendationAnalysisArtifact {
     fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
-        if self.schema_version != SCHEMA_VERSION {
+        if self.schema_version != RECOMMENDATION_ANALYSIS_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
-                "recommendation analysis schema_version must be {SCHEMA_VERSION}, found {}",
+                "recommendation analysis schema_version must be {RECOMMENDATION_ANALYSIS_SCHEMA_VERSION}, found {}",
                 self.schema_version
             )));
         }
@@ -557,6 +580,14 @@ impl FamilyRecommendationAnalysisArtifact {
                     .to_string(),
             ));
         }
+        if self.recommendation_status == RecommendationStatus::Ranked
+            && self.ranked_candidates[0].promotion_readiness != PromotionReadiness::Ready
+        {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis ranked status requires the first candidate to be `ready`"
+                    .to_string(),
+            ));
+        }
         for candidate in &self.ranked_candidates {
             candidate.validate()?;
         }
@@ -571,9 +602,9 @@ impl PromotionExecutionArtifact {
         path_family: &str,
         path_run_id: &str,
     ) -> Result<(), XtaskError> {
-        if self.schema_version != SCHEMA_VERSION {
+        if self.schema_version != PROMOTION_EXECUTION_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
-                "promotion execution schema_version must be {SCHEMA_VERSION}, found {}",
+                "promotion execution schema_version must be {PROMOTION_EXECUTION_SCHEMA_VERSION}, found {}",
                 self.schema_version
             )));
         }
@@ -688,9 +719,9 @@ impl PromotionBlockerArtifact {
         path_family: &str,
         path_run_id: &str,
     ) -> Result<(), XtaskError> {
-        if self.schema_version != SCHEMA_VERSION {
+        if self.schema_version != PROMOTION_BLOCKER_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
-                "blocker report schema_version must be {SCHEMA_VERSION}, found {}",
+                "blocker report schema_version must be {PROMOTION_BLOCKER_SCHEMA_VERSION}, found {}",
                 self.schema_version
             )));
         }
@@ -836,6 +867,21 @@ impl RecommendationCandidateEntry {
             return Err(XtaskError::InvalidInput(
                 "recommendation candidates require non-empty candidate_id, cluster_ids, and single-line rationale".to_string(),
             ));
+        }
+        match self.promotion_readiness {
+            PromotionReadiness::Ready if !self.hold_reasons.is_empty() => {
+                return Err(XtaskError::InvalidInput(
+                    "recommendation candidates marked `ready` must have empty hold_reasons"
+                        .to_string(),
+                ));
+            }
+            PromotionReadiness::Hold if self.hold_reasons.is_empty() => {
+                return Err(XtaskError::InvalidInput(
+                    "recommendation candidates marked `hold` must include at least one hold_reasons entry"
+                        .to_string(),
+                ));
+            }
+            _ => {}
         }
         validate_overlap_family(&self.overlap_family)?;
         self.difficulty.validate()?;
