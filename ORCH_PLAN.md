@@ -1,644 +1,334 @@
-# M27.8 Orchestration Plan
+# M27.8R Orchestration Plan
 
 Status: **execution contract**  
-Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` only**  
-Working branch baseline: **`feat/corpus-expansion`**  
+Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
+Primary branch baseline: **`feat/corpus-expansion`**  
+Frozen run artifacts: **`.runs/m27_8/acceptance.md`, `.runs/m27_8/merge-log.md`, `.runs/m27_8/contract-freeze.json`**  
 Last rewritten: **2026-05-01**
 
 ## Summary
 
-- Execute from the current branch `feat/corpus-expansion`, because that is both the
-  authority-file baseline and the live checked-out branch in this workspace.
-- Keep the critical path local to the parent agent for baseline capture, dirty-state
-  recording, contract freeze, worker launch, integration, derived-artifact
-  regeneration, final acceptance, and landing.
-- Use exactly one safe parallel window after the parent freezes the M27.8 contract:
-  - Lane A: author `examples/crosslib-app/units/pricing/apply_tax.unit.spec` and
-    update `examples/crosslib-app/units/.gitignore`
-  - Lane B: update the command-path lock in `xtask/src/lib.rs`
-- Use dedicated worktrees under
-  `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8/{contract,lane-a,lane-b,int}`
-  with workstream branches:
-  - `ws/m27_8-contract`
-  - `ws/m27_8-lane-a`
-  - `ws/m27_8-lane-b`
-  - `ws/m27_8-int`
+- Execute from the live branch `feat/corpus-expansion`. Treat `PLAN.md` as the implementation contract and the `.runs/m27_8/*` records as the frozen oracle for proof order, recovery commits, and stop conditions.
+- Keep the parent agent as the only integrator. The parent owns baseline capture, worker launch, queue state, lane merges, the exact proof loop, acceptance recording, and any blocked closeout.
+- Use one narrow parallel window only after baseline capture:
+  - Lane A: recover lane-A source truth in `examples/crosslib-app/units/` from `ab11249` / `ws/m27_8-lane-a`
+  - Lane B: preserve ranked xtask lock shape in `xtask/src/lib.rs`, add `semantic-families/function.wrapper.pipeline.v1` to the seeded copy list, and keep the test bound to the frozen truth from `7ae58ae` / `ws/m27_8-lane-b`
+- Keep lane C sequential and parent-owned. Lane C merges A+B, runs the frozen proof loop from `.runs/m27_8/contract-freeze.json.required_build_order`, and either lands the repair or captures seeded temp-workspace evidence and stops.
+- Recommended worktree layout for this run:
+  - parent/control: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on `feat/corpus-expansion`
+  - lane A: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/lane-a` on `ws/m27_8r-lane-a`
+  - lane B: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/lane-b` on `ws/m27_8r-lane-b`
+  - integration: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/int` on `ws/m27_8r-int`
 - Use GPT-5.4 with `reasoning_effort=high` for both workers. Cap concurrency at `2`.
-  The parent agent remains the only integrator.
-- Keep orchestration state in one canonical location owned by the parent agent:
-  - `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-  - `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8`
-  - `RUN_ROOT=$PRIMARY_ROOT/.runs/m27_8`
-  - baseline: `$RUN_ROOT/baseline.json`
-  - dirty-state: `$RUN_ROOT/dirty-state.json`
-  - queue: `$RUN_ROOT/tasks.json`
-  - session log: `$RUN_ROOT/session-log.md`
-  - merge log: `$RUN_ROOT/merge-log.md`
-  - contract freeze: `$RUN_ROOT/contract-freeze.json`
-  - worker prompts: `$RUN_ROOT/prompts/lane-a.md`, `$RUN_ROOT/prompts/lane-b.md`
-  - acceptance record: `$RUN_ROOT/acceptance.md`
-  - per-task sentinels: `$PRIMARY_ROOT/.runs/<task-id>/`
-- Treat `$RUN_ROOT/*`,
-  `examples/crosslib-app/units/*.spec.passport.json`,
-  `examples/shared-spec/units/*.spec.passport.json`, and
-  `.semantic-family-artifacts/family-promotion/analysis/*` as run-state or derived
-  proof surfaces, not authored source.
+- Distinguish source from derived state:
+  - authored source: exactly three tracked files
+  - derived or run-state: passports, generated output, `.semantic-family-artifacts/**`, and parent-owned `.runs/m27_8/**`
+
+## Parent-Owned Run-State Protocol
+
+Canonical run root: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m27_8`
+
+Frozen oracle inputs. Read, cite, preserve:
+
+- `acceptance.md`
+  - blocked integrated-run oracle from the prior attempt
+  - source for the exact failing invariant, proof results at stop, and locked artifact truth
+- `merge-log.md`
+  - frozen recovery-source ledger
+  - source for `ab11249` and `7ae58ae` ownership and disposition
+- `contract-freeze.json`
+  - frozen implementation oracle
+  - source for the locked touch set, locked `apply_tax` shape, locked `.gitignore` line, locked coverage/recommendation deltas, and required build order
+
+Mutable current-run state. Parent-owned, writable for this execution only:
+
+- `baseline.json`
+  - current branch, HEAD SHA, timestamp, and baseline inputs re-read at run start
+- `dirty-state.json`
+  - exact `git status --short` snapshot at run start, plus any allowlisted pre-existing local state the parent intentionally preserved
+- `tasks.json`
+  - authoritative task queue and dependency graph for this run
+- `session-log.md`
+  - append-only run diary for parent decisions, worker launch/return, command outcomes, and stop/land disposition
+- `diagnostics/*`
+  - current-run diagnostic bundle only
+  - empty or absent on a green run
+  - populated only if WS-D blocked closeout is triggered
+
+Input/output rule:
+
+- frozen oracle inputs are read-only unless the parent is deliberately recording a new final blocked or landed state for a successor run
+- mutable current-run state is parent-owned and may be updated during execution
+- workers do not write `.runs/m27_8/**`
 
 ## Hard Guards
 
-- `PLAN.md` is the sole authority for M27.8. If any stale orchestration note, older
-  `ORCH_PLAN.md`, branch-local memory, or worker suggestion disagrees, `PLAN.md` wins.
-- The milestone scope is exactly three tracked source-file edits:
+- `PLAN.md` wins over `ORCH_PLAN.md`, worker suggestions, memory, or stale run notes.
+- Current repo reality must be preserved, not normalized. Baseline capture should record the live dirty state before branching. As of rewrite time, `git status --short` shows ` M PLAN.md`.
+- Do not revert or overwrite edits you did not make. Anything outside the locked M27.8R touch set is preserve-by-default.
+- The locked authored source touch set is exactly:
   - `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
   - `examples/crosslib-app/units/.gitignore`
   - `xtask/src/lib.rs`
-- Explicit non-touch surfaces for this run:
+- The parent may refresh derived proof surfaces during lane C, but workers must not own them:
+  - `examples/crosslib-app/units/**/*.spec.passport.json`
+  - `examples/shared-spec/units/**/*.spec.passport.json`
+  - `examples/shared-crate/src/generated/**`
+  - `examples/crosslib-app/src/generated/**`
+  - `.semantic-family-artifacts/family-promotion/analysis/**`
+  - `.runs/m27_8/**`
+- Explicit non-touch source surfaces remain locked unless the diagnostic stop gate proves the contract wrong:
   - `semantic-families/corpus/rust-function.toml`
   - `xtask/src/family/coverage.rs`
   - `xtask/src/family/recommend.rs`
   - `xtask/src/family/promotion_artifacts.rs`
-  - `docs/recommendation_corpus_expansion_program_v0.1.md`
-  - `spec-cli/tests/fixtures/m19/semantic_falsification_pack/**`
-  - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/**`
-  - `semantic-families/README.md`
-- There are no human approval gates in M27.8. The only intentional pauses are
-  stop-and-replan events.
-- Parent-owned build order is fixed and must not be reordered:
-  1. build `examples/shared-spec/units` into `examples/shared-crate/src/generated`
-  2. run exact-unit proof for `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
-  3. build `examples/crosslib-app/units` into `examples/crosslib-app/src/generated`
-  4. run `examples/crosslib-app` crate tests
-  5. rerun coverage
-  6. rerun recommendation
-  7. validate both artifacts
-  8. run `xtask` tests
-- Worker lanes must not regenerate passports, coverage artifacts, or recommendation
-  artifacts. Those writes are integration-only.
-- If implementation starts requiring source edits outside the locked touch set, stop
-  and re-plan.
-- If any lane discovers it must edit `coverage.rs`, `recommend.rs`,
-  `promotion_artifacts.rs`, the corpus manifest, docs, or fixture packs, stop and
-  re-plan.
-- If the first integrated rerun does not match the locked ranked truth from
-  `PLAN.md`, stop immediately.
-  - Do not silently rewrite expectations.
-  - Do not widen the milestone.
-  - Re-plan from the mismatch.
-- If the baseline worktree is dirty in the locked source touch set or derived proof
-  surfaces, stop before branching.
-- Pre-existing unrelated local state is allowed only as recorded baseline context.
-  The currently known unrelated state is:
-  - modified: `PLAN.md`
-  - untracked: `diagrams.md`
-  - untracked: `docs/semantic_family_capability_corpus_guide_v0.1.md`
+  - `xtask/src/family/inventory.rs`
+  - `.runs/m27_8/*` historical freeze artifacts
+- No new harness framework, fixture registry, recommendation policy change, coverage policy change, or corpus expansion work is allowed in this milestone.
+- No second speculative fix pass. If the final `cargo test -p xtask -- --color never` still diverges after the packet-root repair, capture seeded temp-workspace evidence from inside the failing test path and stop.
+- Workers do not self-merge, rewrite the plan, or invent new owned paths. The parent either merges lane output as-is or bounces it back with a precise correction.
 
-## Discarded Stale Assumptions
+## Source Vs Derived Surfaces
 
-This M27.8 run must not inherit stale M27.75 assumptions.
+Authored source surfaces for M27.8R:
 
-- no manifest-edit lane
-- no docs lane
-- no `semantic-families/README.md` work
-- no corpus source expansion work in `semantic-families/corpus/rust-function.toml`
-- no recommendation, coverage, or promotion-artifacts logic edits
-- no five-source-manifest transition work, because M27.8 operates on the already-expanded
-  corpus and adds one new real example inside `examples_crosslib_app`
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+- `examples/crosslib-app/units/.gitignore`
+- `xtask/src/lib.rs`
 
-## Integrator Model
+Derived or run-state surfaces for M27.8R:
 
-- Parent agent is the only integrator.
-- Parent agent is the only authority for:
-  - baseline capture
-  - dirty-state recording
-  - contract freeze
-  - worker prompt generation
-  - worker launch
-  - merge decisions
-  - conflict resolution
-  - derived-artifact regeneration
-  - acceptance recording
-  - landing or blocked closeout
-- Maximum active workers: `2`
-- Safe worker layout:
-  - Lane A: crosslib spec authoring
-  - Lane B: `xtask` command-path lock
-- Parallelism is intentionally bounded. There is exactly one approved parallel phase,
-  and it starts only after the parent freezes the exact contract.
+- `examples/crosslib-app/units/**/*.spec.passport.json`
+- `examples/shared-spec/units/**/*.spec.passport.json`
+- `examples/shared-crate/src/generated/**`
+- `examples/crosslib-app/src/generated/**`
+- `.semantic-family-artifacts/family-promotion/analysis/**`
+- `.runs/m27_8/**`
 
-## Worktree And Branch Strategy
+Execution rule:
 
-All execution branches fork from the exact current `feat/corpus-expansion` baseline
-SHA. Do not fork from `main`. Do not develop directly on `feat/corpus-expansion`
-once execution starts.
-
-Canonical orchestration roots:
-
-- `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8`
-- `RUN_ROOT=$PRIMARY_ROOT/.runs/m27_8`
-
-Canonical branches:
-
-- contract: `ws/m27_8-contract`
-- Lane A: `ws/m27_8-lane-a`
-- Lane B: `ws/m27_8-lane-b`
-- integration: `ws/m27_8-int`
-
-Canonical worktrees:
-
-- contract: `$WORKTREE_ROOT/contract`
-- Lane A: `$WORKTREE_ROOT/lane-a`
-- Lane B: `$WORKTREE_ROOT/lane-b`
-- integration: `$WORKTREE_ROOT/int`
-
-Creation commands from `PRIMARY_ROOT`:
-
-```bash
-mkdir -p "$WORKTREE_ROOT" "$RUN_ROOT" "$RUN_ROOT/prompts"
-BASE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-BASE_SHA=$(git rev-parse HEAD)
-git worktree add -b ws/m27_8-contract "$WORKTREE_ROOT/contract" "$BASE_SHA"
-```
-
-After baseline capture and contract freeze are written:
-
-```bash
-FREEZE_SHA=$(jq -r '.contract_freeze_commit' "$RUN_ROOT/contract-freeze.json")
-git worktree add -b ws/m27_8-lane-a "$WORKTREE_ROOT/lane-a" "$FREEZE_SHA"
-git worktree add -b ws/m27_8-lane-b "$WORKTREE_ROOT/lane-b" "$FREEZE_SHA"
-git worktree add -b ws/m27_8-int "$WORKTREE_ROOT/int" "$FREEZE_SHA"
-```
-
-Worktree rules:
-
-- do not reuse dirty worktrees
-- do not let workers self-merge
-- do not merge worker branches directly into `feat/corpus-expansion`
-- do not create extra side branches beyond the four locked branches
-- do not branch workers from anything earlier than `contract_freeze_commit`
-- if unrelated local changes expand beyond the recorded dirty-state allowlist before
-  branching, stop and re-record the baseline before proceeding
-
-## Parent-Owned Run State
-
-Parent-managed orchestration state lives under `$RUN_ROOT`:
-
-- `baseline.json`
-- `dirty-state.json`
-- `tasks.json`
-- `session-log.md`
-- `merge-log.md`
-- `contract-freeze.json`
-- `prompts/lane-a.md`
-- `prompts/lane-b.md`
-- `acceptance.md`
-
-Minimum `tasks.json` shape:
-
-- `task_id`
-- `branch`
-- `worktree`
-- `owner`
-- `status`
-- `depends_on`
-- `owned_paths`
-- `required_commands`
-- `sentinel_dir`
-
-Per-task sentinel directories live under `PRIMARY_ROOT/.runs/<task-id>/` and contain:
-
-- `started.json`
-- `status.json`
-- `done.json` or `blocked.json`
-
-Sentinel rules:
-
-- Parent writes every sentinel file, including worker-task sentinels.
-- Workers report status; they do not author sentinel files directly.
-- `blocked.json` must include:
-  - `task_id`
-  - `blocked_at`
-  - `reason`
-  - `required_replan`
-  - `touched_files`
-
-Worker chat is not the source of truth. Parent-owned run artifacts are.
+- workers edit authored source only, within their owned path set
+- derived surfaces are regenerated only in WS-C by the parent after lane merge
+- workers never refresh passports, generated code, coverage artifacts, recommendation artifacts, or `.runs/m27_8/**`
+- `acceptance.md` and `contract-freeze.json` are oracle artifacts, not casual logging surfaces and not worker outputs
 
 ## Task Graph
 
 ```text
-task/m27_8-00-baseline
-  -> task/m27_8-a1-freeze-contract
-      -> task/m27_8-b1-crosslib-unit
-      -> task/m27_8-b2-xtask-lock
-task/m27_8-b1-crosslib-unit
-task/m27_8-b2-xtask-lock
-  -> task/m27_8-c1-integrate-and-rerun
-      -> task/m27_8-c2-land-or-stop
+task/m27_8r-00-baseline
+  -> task/m27_8r-a1-freeze-run-contract
+      -> task/m27_8r-b1-lane-a-recovery
+      -> task/m27_8r-b2-lane-b-harness
+task/m27_8r-b1-lane-a-recovery
+task/m27_8r-b2-lane-b-harness
+  -> task/m27_8r-c1-integrate-and-proof
+      -> task/m27_8r-c2-land-or-stop
 ```
 
 Execution intent:
 
-1. parent captures the exact baseline, branch, SHA, and dirty state
-2. parent freezes the M27.8 contract and writes worker prompts
-3. Lane A and Lane B branch from the same frozen commit and run in parallel
+1. parent records current branch reality and current-run state
+2. parent freezes the run contract for this execution and writes worker prompts
+3. lane A and lane B execute in parallel from the same live baseline
 4. parent merges both lanes into integration
-5. parent alone regenerates passports and analysis artifacts from merged state
-6. parent runs the full proof loop in the locked order
-7. parent records acceptance and either lands or stops
+5. parent alone regenerates derived proof surfaces and runs the exact proof loop
+6. parent either lands the repair or writes a blocked diagnostic closeout and stops
 
-Serialized parent-owned tasks:
+## Workstream Plan
 
-- `task/m27_8-00-baseline`
-- `task/m27_8-a1-freeze-contract`
-- `task/m27_8-c1-integrate-and-rerun`
-- `task/m27_8-c2-land-or-stop`
+### Critical Path
 
-Parallel-safe window:
+`WS-0 baseline/freeze -> WS-A lane-A recovery + WS-B lane-B harness repair (parallel) -> WS-C parent integration/proof -> land or stop`
 
-- `task/m27_8-b1-crosslib-unit`
-- `task/m27_8-b2-xtask-lock`
+Parallelism is useful but intentionally narrow. Lane A and lane B touch disjoint source areas and can run safely in parallel. Everything else is sequential because the expensive and authoritative work is the merged proof loop, not the edits themselves.
 
-That is the only approved parallel phase.
+### Parallelism Boundary
 
-## Lane And Ownership Boundaries
+No third worker lane is justified.
 
-### WS-CONTRACT — parent only
+- there are only three authored source files in scope
+- lane A and lane B already isolate the only disjoint source ownership boundary
+- every derived surface refresh and every acceptance gate depends on both lanes being merged first
+- a separate proof, artifact, or diagnostics worker would either duplicate parent context or violate the parent-only integrator rule
+- additional lane count adds coordination cost without reducing the critical path
 
-Purpose:
+### WS-0 Parent Baseline And Freeze
 
-- record the exact frozen contract from `PLAN.md`
-- capture the allowed dirty state
-- write the worker prompts and merge rules
-- record the freeze commit other lanes must branch from
+Parent only. Do not create a separate contract worktree for this run; the contract is already frozen in `PLAN.md` plus `.runs/m27_8/*`, so another control branch adds ceremony without reducing risk.
 
-Owned files:
+Task ID: `task/m27_8r-00-baseline`, then `task/m27_8r-a1-freeze-run-contract`
 
-- `$RUN_ROOT/baseline.json`
-- `$RUN_ROOT/dirty-state.json`
-- `$RUN_ROOT/tasks.json`
-- `$RUN_ROOT/session-log.md`
-- `$RUN_ROOT/contract-freeze.json`
-- `$RUN_ROOT/prompts/lane-a.md`
-- `$RUN_ROOT/prompts/lane-b.md`
-- parent-owned sentinel files only
+Owned paths:
 
-Forbidden files:
+- `.runs/m27_8/baseline.json`
+- `.runs/m27_8/dirty-state.json`
+- `.runs/m27_8/tasks.json`
+- `.runs/m27_8/session-log.md`
+- `.runs/task-m27_8r-00-baseline/**`
+- `.runs/task-m27_8r-a1-freeze-run-contract/**`
 
-- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
-- `examples/crosslib-app/units/.gitignore`
-- `xtask/src/lib.rs`
-- all derived proof artifacts
-- all explicit non-touch surfaces
+Required commands / policy:
 
-### Lane A — crosslib unit worker
+- parent must run baseline capture commands before any new worktree is created
+- parent must read `PLAN.md`, `.runs/m27_8/acceptance.md`, `.runs/m27_8/merge-log.md`, and `.runs/m27_8/contract-freeze.json` before writing `baseline.json`
+- no source edits are allowed in WS-0
 
-Purpose:
-
-- add the new maintained cross-library unit with the exact locked shape
-- whitelist the new passport intentionally
-
-Owned files:
-
-- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
-- `examples/crosslib-app/units/.gitignore`
-
-Forbidden files:
-
-- `xtask/src/lib.rs`
-- `.semantic-family-artifacts/family-promotion/analysis/*`
-- `examples/crosslib-app/units/*.spec.passport.json`
-- `examples/shared-spec/units/*.spec.passport.json`
-- all explicit non-touch surfaces
-
-### Lane B — `xtask` proof worker
-
-Purpose:
-
-- update the single existing command-path lock to the ranked M27.8 truth
-
-Owned files:
-
-- `xtask/src/lib.rs`
-
-Forbidden files:
-
-- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
-- `examples/crosslib-app/units/.gitignore`
-- `.semantic-family-artifacts/family-promotion/analysis/*`
-- `examples/crosslib-app/units/*.spec.passport.json`
-- `examples/shared-spec/units/*.spec.passport.json`
-- all explicit non-touch surfaces
-
-### WS-INT — parent only
-
-Purpose:
-
-- merge completed worker branches
-- regenerate all derived proof surfaces from merged state only
-- run final validation
-- write merge and acceptance artifacts
-- land the integrated result or stop with a blocked record
-
-Parent integration must not invent new product semantics. Any conflict that requires
-reinterpretation of `PLAN.md` is a stop-and-bounce event back to the owning lane.
-
-## Merge Rules
-
-- Parent merges only into `ws/m27_8-int`.
-- Merge order is fixed:
-  1. `ws/m27_8-lane-a`
-  2. `ws/m27_8-lane-b`
-- A worker branch is merge-eligible only if:
-  - touched files are within its owned paths
-  - required lane-local commands were run
-  - no derived artifacts were written
-  - no non-touch surface changed
-- Parent resolves only mechanical conflicts.
-  - path moves
-  - import-order or formatting collisions inside owned files
-- Parent does not resolve semantic conflicts creatively.
-  - If Lane B's assertions no longer match the frozen `apply_tax` shape, bounce back.
-  - If Lane A needs to broaden crosslib source changes, bounce back.
-- If either lane includes unrelated edits because the codebase moved underneath it,
-  stop and re-plan rather than silently absorbing them.
-- `merge-log.md` must record:
-  - merged branch
-  - merge commit or cherry-picked commit
-  - owned paths verified
-  - conflicts encountered
-  - disposition
-
-## Worker Prompt Contract
-
-Each worker prompt must be written by the parent under `$RUN_ROOT/prompts/` and must
-contain only:
-
-- the exact `contract_freeze_commit`
-- the worker's owned file set
-- the exact `PLAN.md` excerpt relevant to that lane
-- forbidden touch surfaces
-- required commands
-- acceptance conditions
-- stop conditions
-- return format
-
-Each worker must return only:
-
-- changed files
-- commands run and exit codes
-- blockers or unresolved assumptions
-
-Workers must not return or rely on:
-
-- full transcript dumps
-- derived-artifact contents
-- self-authored run-state files
-- creative scope expansions
-
-## Task Contracts
-
-### `task/m27_8-00-baseline` — parent only
-
-Owned files:
-
-- `$RUN_ROOT/baseline.json`
-- `$RUN_ROOT/dirty-state.json`
-- `$RUN_ROOT/tasks.json`
-- `$RUN_ROOT/session-log.md`
-- `PRIMARY_ROOT/.runs/task-m27_8-00-baseline/*`
-
-Required commands:
+1. Record live baseline in `.runs/m27_8/` before any implementation branch is created.
+   Suggested parent-owned files:
+   - `.runs/m27_8/baseline.json`
+   - `.runs/m27_8/dirty-state.json`
+   - `.runs/m27_8/tasks.json`
+   - `.runs/m27_8/session-log.md`
+   - `.runs/m27_8/diagnostics/README.md`
+2. Capture:
+   - `git rev-parse HEAD`
+   - `git branch --show-current`
+   - `git status --short`
+   - confirmation that `PLAN.md`, `.runs/m27_8/acceptance.md`, `.runs/m27_8/merge-log.md`, and `.runs/m27_8/contract-freeze.json` were re-read
+3. Treat these as read-only recovery sources:
+   - lane-A merge commit `ab11249`
+   - lane-B merge commit `7ae58ae`
+   - contract freeze commit `b56a7513b96efb6c4e6d554b42163e7eb97ab4af`
+4. Create execution worktrees from the live current `feat/corpus-expansion` HEAD, not from the older freeze commit. The freeze commit stays the oracle for expected truth; the live branch stays the execution baseline.
+5. Suggested commands:
 
 ```bash
-git rev-parse --abbrev-ref HEAD
-git rev-parse HEAD
-git status --short
-test -f PLAN.md
-test -f ORCH_PLAN.md
-test -f examples/crosslib-app/units/.gitignore
-test -f xtask/src/lib.rs
+mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r
+git worktree add -b ws/m27_8r-lane-a /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/lane-a HEAD
+git worktree add -b ws/m27_8r-lane-b /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/lane-b HEAD
+git worktree add -b ws/m27_8r-int /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/int HEAD
 ```
 
-Acceptance:
+6. Seed `.runs/m27_8/tasks.json` with one parent-owned queue and one sentinel directory per task. Suggested task IDs:
+   - `task/m27_8r-00-baseline`
+   - `task/m27_8r-a1-freeze-run-contract`
+   - `task/m27_8r-b1-lane-a-recovery`
+   - `task/m27_8r-b2-lane-b-harness`
+   - `task/m27_8r-c1-integrate-and-proof`
+   - `task/m27_8r-c2-land-or-stop`
 
-- current branch is `feat/corpus-expansion`
-- baseline SHA is captured
-- dirty state is recorded verbatim
-- the known unrelated dirty files are recorded as allowed local state
-- no dirty file exists in the locked source touch set
-- no dirty file exists in derived proof surfaces
-- `PLAN.md` is present and treated as sole authority
-- task graph, branches, and worktrees are recorded in `tasks.json`
+WS-0 acceptance:
 
-Stop conditions:
+- `baseline.json` records branch, HEAD SHA, timestamp, and re-read oracle inputs
+- `dirty-state.json` records the pre-run dirty tree, including the existing `PLAN.md` modification
+- `tasks.json` contains the current-run execution graph and owned-path contracts
+- worktrees exist for lane A, lane B, and integration
+- no source file outside `.runs/**` changed during WS-0
+- worker prompts are written only after baseline and task records exist
 
-- current branch is not `feat/corpus-expansion`
-- any locked source touch file is already dirty
-- any expected derived artifact is already dirty
-- `PLAN.md` is missing or materially inconsistent with the live repo layout
+### Run-Contract Freeze Record
 
-### `task/m27_8-a1-freeze-contract` — parent only
+`task/m27_8r-a1-freeze-run-contract` is not a source-freeze rewrite. It is a parent-authored execution record inside current-run state that says:
 
-Owned files:
+- the live execution baseline is current `feat/corpus-expansion` HEAD
+- frozen oracle inputs are `PLAN.md`, `acceptance.md`, `merge-log.md`, and `contract-freeze.json`
+- lane A owns the two crosslib recovery files
+- lane B owns `xtask/src/lib.rs`
+- lane C owns all derived refresh and acceptance work
+- the stop gate is the first unexplained seeded-workspace mismatch after the packet-root fix
 
-- `$RUN_ROOT/contract-freeze.json`
-- `$RUN_ROOT/prompts/lane-a.md`
-- `$RUN_ROOT/prompts/lane-b.md`
-- `$RUN_ROOT/session-log.md`
-- `PRIMARY_ROOT/.runs/task-m27_8-a1-freeze-contract/*`
+### WS-A Lane-A Recovery
 
-Must do:
+Worker 1 on `ws/m27_8r-lane-a` in `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/lane-a`.
 
-- record `contract_freeze_commit` equal to the accepted baseline SHA
-- record the exact locked M27.8 touch set
-- record the explicit non-touch list
-- record the exact `apply_tax` unit shape from `PLAN.md`
-- record the required `.gitignore` whitelist line
-- record the exact ranked output deltas Lane B must lock
-- record the required parent-owned build order
-- write prompts for Lane A and Lane B using only frozen contract data
-- create worker and integration worktrees from `contract_freeze_commit`
-
-Must not do:
-
-- edit milestone source files
-- edit derived artifacts
-- reinterpret any locked expected values
-
-Acceptance:
-
-- `contract-freeze.json` contains:
-  - `contract_freeze_commit`
-  - `working_branch`
-  - `locked_source_touch_set`
-  - `explicit_non_touch_set`
-  - `locked_apply_tax_shape`
-  - `locked_gitignore_line`
-  - `locked_coverage_deltas`
-  - `locked_recommendation_deltas`
-  - `required_build_order`
-- worker prompts exist and are lane-specific
-- all worker and integration branches fork from the same frozen commit
-
-Stop conditions:
-
-- the `PLAN.md` contract cannot be reduced to disjoint lane ownership
-- the frozen unit shape is ambiguous enough that Lane B cannot lock against it
-- baseline moves before worker branches are created
-
-### `task/m27_8-b1-crosslib-unit` — Lane A
+Task ID: `task/m27_8r-b1-lane-a-recovery`
 
 Owned files:
 
 - `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
 - `examples/crosslib-app/units/.gitignore`
-- `PRIMARY_ROOT/.runs/task-m27_8-b1-crosslib-unit/*` via parent only
 
-Must do:
+Required commands / policy:
 
-- create `examples/crosslib-app/units/pricing/apply_tax.unit.spec` with the exact
-  authored shape frozen in `contract-freeze.json`
-- add exactly one line to `examples/crosslib-app/units/.gitignore`:
-  - `!pricing/apply_tax.spec.passport.json`
-- keep the change limited to the owned paths
-- validate the new unit source without generating derived artifacts
+- Recover exact authored source truth from `ab11249` or `ws/m27_8-lane-a`.
+- Do not re-author a similar unit. The file should be a literal recovery aligned to `.runs/m27_8/contract-freeze.json.locked_apply_tax_shape`.
+- Restore exactly the whitelist line `!pricing/apply_tax.spec.passport.json` in `examples/crosslib-app/units/.gitignore`.
+- Do not run the full proof loop. Lane A is a source-recovery lane, not an integration lane.
+- worker may use read-only diff commands to verify against `ab11249`
+- worker must not write passports, generated output, or `.runs/**`
 
-Must not do:
+Lane A acceptance:
 
-- edit `examples/crosslib-app/spec.toml`
-- run `spec build` for shared-spec or crosslib-app
-- run `spec test` for the new unit
-- write passport artifacts
-- edit any file outside Lane A ownership
+- diff against `ab11249` for both owned files is empty or explainable only by harmless line-ending normalization
+- owned paths and only owned paths changed
+- worker summary cites the exact recovery source used
 
-Required commands:
+### WS-B Lane-B Harness Repair
 
-```bash
-cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/apply_tax.unit.spec --format json
-```
+Worker 2 on `ws/m27_8r-lane-b` in `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/lane-b`.
 
-Acceptance:
+Task ID: `task/m27_8r-b2-lane-b-harness`
 
-- the new unit file exists with the frozen YAML shape
-- `.gitignore` changes by exactly one whitelist line
-- `spec validate` succeeds for the new unit
-- no non-owned file changes are present
-
-Stop conditions:
-
-- unit validation requires changes to shared-spec, spec.toml, manifest, or fixtures
-- the authored shape from `PLAN.md` does not validate as written
-- Lane A needs to touch generated output or passports to look green
-
-### `task/m27_8-b2-xtask-lock` — Lane B
-
-Owned files:
+Owned file:
 
 - `xtask/src/lib.rs`
-- `PRIMARY_ROOT/.runs/task-m27_8-b2-xtask-lock/*` via parent only
 
-Must do:
+Required commands / policy:
 
-- rename
-  `recommendation_command_path_writes_same_bytes_and_locked_corpus_is_no_strong_candidate()`
-  to
-  `recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held()`
-- keep the existing stdout-bytes-versus-written-artifact checks
-- keep the existing first-run-versus-second-run byte-stability checks
-- update assertions to the exact M27.8 ranked truth locked in `PLAN.md`
-- consume the frozen `apply_tax` unit shape literally from `contract-freeze.json`
+- Start from the ranked lock semantics already proven in `7ae58ae` / `ws/m27_8-lane-b`.
+- Repair `seed_locked_recommendation_workspace()` by adding the copied packet root:
+  - `semantic-families/function.wrapper.pipeline.v1`
+- Add one short comment above the seeded copy list clarifying that promoted packet roots are part of command-path inventory truth in the seeded workspace.
+- Preserve the locked command-path assertions from `.runs/m27_8/contract-freeze.json`:
+  - source IDs: `examples_ecommerce`, `m19_semantic_falsification_pack`, `m20_unsupported_truth_pack`, `examples_shared_spec`, `examples_crosslib_app`
+  - source counts: `6 / 12 / 9 / 1 / 2`
+  - function coverage: `28 / 15 / 0 / 13`
+  - recommendation status `ranked`
+  - arithmetic cluster first and `ready`
+  - `money/round` second and `hold`
+- Do not add diagnostic capture code proactively. Diagnostic edits are reserved for the parent if the integrated rerun still fails.
+- worker may run narrow local verification on `xtask/src/lib.rs` behavior, but must not run the full parent proof loop or write `.runs/**`
 
-Must assert:
+Lane B acceptance:
 
-- coverage source ids remain:
-  - `examples_ecommerce`
-  - `m19_semantic_falsification_pack`
-  - `m20_unsupported_truth_pack`
-  - `examples_shared_spec`
-  - `examples_crosslib_app`
-- coverage source unit counts are:
-  - `6`
-  - `12`
-  - `9`
-  - `1`
-  - `2`
-- `function_coverage.total_units == 28`
-- `function_coverage.promoted_family_units == 15`
-- `function_coverage.supported_unpromoted_family_units == 0`
-- `function_coverage.unsupported_function_units == 13`
-- `recommendation_status == ranked`
-- ranked candidate count is `2`
-- first candidate is `unsupported_arithmetic_shape-2694b2baf65b`
-- first candidate is `ready` with:
-  - `hold_reasons == []`
-  - `real_example_hits == 2`
-  - `promotion_relevant_regression_hits == 1`
-  - `boundary_only_hits == 0`
-  - `total_units_in_cluster == 3`
-  - `difficulty.tier == Adjacent`
-  - `confidence.level == Medium`
-- second candidate is `unsupported_function_surface-e40675da6fa0`
-- second candidate remains `hold` with:
-  - `hold_reasons == [UnknownOverlapFamily]`
-  - `real_example_hits == 2`
-  - `promotion_relevant_regression_hits == 1`
-  - `boundary_only_hits == 0`
-  - `total_units_in_cluster == 3`
-  - `difficulty.tier == Hard`
-  - `confidence.level == Low`
+- `xtask/src/lib.rs` is the only changed source file
+- ranked lock shape remains intact
+- the missing `function.wrapper.pipeline.v1` packet root is present in the seeded copy list
+- no edits appear in `xtask/src/family/**`
 
-Must not do:
+### WS-C Parent Integration And Proof
 
-- edit any file outside `xtask/src/lib.rs`
-- add a second parallel command-path lock for the same flow
-- edit coverage, recommendation, or artifact logic
-- write final derived artifacts
+Parent only on `ws/m27_8r-int` in `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_8r/int`.
 
-Required commands:
+Task ID: `task/m27_8r-c1-integrate-and-proof`
 
-```bash
-cargo test -p xtask recommendation_command_path --no-run
-cargo test -p xtask --no-run
-```
+Owned paths:
 
-Acceptance:
+- derived surfaces only:
+  - `examples/crosslib-app/units/**/*.spec.passport.json`
+  - `examples/shared-spec/units/**/*.spec.passport.json`
+  - `examples/shared-crate/src/generated/**`
+  - `examples/crosslib-app/src/generated/**`
+  - `.semantic-family-artifacts/family-promotion/analysis/**`
+- current-run state:
+  - `.runs/m27_8/session-log.md`
+  - `.runs/m27_8/diagnostics/**` if blocked
+  - `.runs/task-m27_8r-c1-integrate-and-proof/**`
+  - `.runs/task-m27_8r-c2-land-or-stop/**`
 
-- the updated lock compiles cleanly
-- only `xtask/src/lib.rs` changes
-- no policy logic changes are introduced
-- Lane B is prepared for the integrated green run without requiring non-owned files
+Allowed integration mechanics:
 
-Stop conditions:
+- merge lane A and lane B branches
+- resolve straightforward merge mechanics in integration-owned or worker-owned touched files when the final text is already determined by the frozen contract
+- discard worker drift outside owned paths
+- regenerate derived surfaces through the locked proof loop
 
-- the lock can only be made truthful by changing policy or artifact code
-- Lane B needs to edit example files or fixtures
-- Lane B cannot compile the updated test shape from the frozen contract
+Forbidden integration behavior:
 
-### `task/m27_8-c1-integrate-and-rerun` — parent only
+- no new substantive source edits outside the three-file contract
+- no creative source reconciliation when lane output conflicts with the frozen contract
+- no widening into `xtask/src/family/**`, corpus manifests, docs, or new helpers
+- no worker-owned source edits introduced by the parent after merge unless the parent is explicitly performing blocked diagnostics inside WS-D
 
-Owned files:
+Failure policy before the final xtask lock:
 
-- `examples/crosslib-app/units/pricing/apply_tax.spec.passport.json`
-- `examples/crosslib-app/units/pricing/apply_discount.spec.passport.json`
-- `examples/shared-spec/units/money/round.spec.passport.json`
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `$RUN_ROOT/merge-log.md`
-- `$RUN_ROOT/acceptance.md`
-- `PRIMARY_ROOT/.runs/task-m27_8-c1-integrate-and-rerun/*`
+- if a failure is an obvious integration mechanic issue in a derived surface or merge artifact, the parent may correct it and rerun within WS-C
+- if a failure implies a new substantive source change outside the locked contract, stop immediately and close out blocked
+- if a failure occurs on one of the pre-xtask proof commands because lane output itself is wrong, reject the offending lane result rather than patching around it in integration
 
-Must do:
-
-- merge `ws/m27_8-lane-a` and `ws/m27_8-lane-b` into `ws/m27_8-int`
-- verify each worker touched only owned files before merge
-- regenerate all derived proof surfaces from merged state only
-- run the exact proof loop in the locked order
-- compare coverage and recommendation stdout bytes to the written artifact bytes
-- validate both artifacts through the path-aware `xtask` validator
-- confirm all locked output deltas from `PLAN.md`
-
-Required commands:
+1. Merge lane A and lane B output into the integration worktree.
+2. Reject any worker drift outside the locked owned paths.
+3. Run the frozen proof loop in the exact order from `.runs/m27_8/contract-freeze.json.required_build_order`:
 
 ```bash
 cargo run -p spec-cli -- build examples/shared-spec/units --output examples/shared-crate/src/generated
@@ -646,159 +336,184 @@ cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit
 cargo run -p spec-cli -- build examples/crosslib-app/units --output examples/crosslib-app/src/generated
 cargo test --manifest-path examples/crosslib-app/Cargo.toml
 
-tmpdir=$(mktemp -d)
-cargo xtask family coverage --format json > "$tmpdir/coverage.stdout.json"
-cmp -s "$tmpdir/coverage.stdout.json" ".semantic-family-artifacts/family-promotion/analysis/coverage.latest.json"
-cargo xtask family validate-artifact ".semantic-family-artifacts/family-promotion/analysis/coverage.latest.json"
+cargo xtask family coverage --format json > /tmp/m27_8r-coverage.stdout.json
+cmp -s /tmp/m27_8r-coverage.stdout.json .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
 
-cargo xtask family recommend --format json > "$tmpdir/recommend.stdout.json"
-cmp -s "$tmpdir/recommend.stdout.json" ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
-cargo xtask family recommend --format json > "$tmpdir/recommend.stdout.rerun.json"
-cmp -s "$tmpdir/recommend.stdout.json" "$tmpdir/recommend.stdout.rerun.json"
-cargo xtask family validate-artifact ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
+cargo xtask family recommend --format json > /tmp/m27_8r-recommend.stdout.json
+cmp -s /tmp/m27_8r-recommend.stdout.json .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 
 cargo test -p xtask -- --color never
 ```
 
-Acceptance:
+4. Record the result in:
+   - `.runs/m27_8/session-log.md`
+   - `.runs/m27_8/acceptance.md` only if the parent is intentionally updating the current run outcome
+5. If the full loop goes green, close the run with the parent as the final integrator and keep the worker branches disposable.
 
-- exactly three tracked source files changed for the milestone
-- only the expected derived proof artifacts changed beyond the source touch set
-- the shared-library-first build order was preserved
-- `apply_tax.unit.spec` proves successfully
-- the crosslib crate tests clean
-- coverage stdout bytes equal the written `coverage.latest.json`
-- recommendation stdout bytes equal the written `recommendation.latest.json`
-- rerunning recommendation is byte-stable
-- coverage source unit counts are `6 / 12 / 9 / 1 / 2`
-- `function_coverage.total_units == 28`
-- `function_coverage.promoted_family_units == 15`
-- `function_coverage.supported_unpromoted_family_units == 0`
-- `function_coverage.unsupported_function_units == 13`
-- recommendation status is `ranked`
-- ranked candidate count is `2`
-- arithmetic cluster is first and `ready`
-- `money/round` remains second and held for `unknown_overlap_family`
-- `xtask` tests lock the ranked arithmetic result and the held `money/round` truth
+Merge acceptable:
 
-Stop conditions:
+- lane A changes only its two owned files
+- lane B changes only `xtask/src/lib.rs`
+- merged tree contains no unexpected source drift
+- any merge conflict is mechanical and resolved directly to the frozen contract truth
 
-- any integrated proof command fails
-- byte equality fails for coverage or recommendation
-- recommendation rerun is not byte-stable
-- a non-touch source file must change to make acceptance pass
-- the integrated output does not match the frozen M27.8 deltas
+Proof acceptable:
 
-### `task/m27_8-c2-land-or-stop` — parent only
+- all commands in the required build order pass in sequence
+- coverage stdout bytes equal the checked artifact bytes
+- recommendation stdout bytes equal the checked artifact bytes
+- both analysis artifacts validate
+- final `cargo test -p xtask -- --color never` passes with the locked truth
 
-Owned files:
+Blocked termination acceptable:
 
-- `$RUN_ROOT/acceptance.md`
-- `$RUN_ROOT/merge-log.md`
-- `$RUN_ROOT/session-log.md`
-- `PRIMARY_ROOT/.runs/task-m27_8-c2-land-or-stop/*`
+- session log records the first failing command and exit behavior
+- current-run diagnostics bundle is written if and only if the failure is at the final xtask seeded command-path lock
+- frozen oracle files are preserved, not rewritten
+- parent stops after the first unexplained seeded mismatch
 
-Must do on green:
+### WS-D Diagnostic Stop Gate
 
-- record the final accepted command results and invariants
-- merge `ws/m27_8-int` back onto `feat/corpus-expansion`
-- record the landing SHA in `acceptance.md`
+Parent only, and only if WS-C fails at the final `xtask` lock.
 
-Must do on red:
+Task ID: `task/m27_8r-c2-land-or-stop`
 
-- write a blocked closeout with the exact failing invariant
-- record the first failing command, the first failing invariant, and the exact diff
-  scope in `acceptance.md`
-- leave the frozen contract and merge log intact
-- do not bounce into ad hoc follow-up edits under the same run
-- stop without broadening scope
+1. Confirm the failure is still on the seeded command-path truth, especially promoted-family count drift.
+2. Add temporary diagnostic capture inside the failing test path against `temp_dir.path()`, not repo-root state.
+3. Capture the required evidence surfaces named by `PLAN.md`:
+   - `inventory::render_snapshot_bytes(temp_dir.path())`
+   - `FAMILY_COVERAGE_LATEST_PATH` under `temp_dir.path()`
+   - `FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH` under `temp_dir.path()`
+4. First write them to the `/tmp/m27_8r-*` files required by the implementation contract, then copy them into:
+   - `.runs/m27_8/diagnostics/seeded-inventory.json`
+   - `.runs/m27_8/diagnostics/seeded-coverage.json`
+   - `.runs/m27_8/diagnostics/seeded-recommendation.json`
+   - `.runs/m27_8/diagnostics/stop-summary.md`
+5. Revert any temporary diagnostic code before declaring the run blocked, unless the captured evidence proves that the diagnostic helper itself must become permanent.
+6. Stop. Do not invent a second missing input path in the same session.
 
-Acceptance:
+Blocked closeout requirements:
 
-- final disposition is recorded as `landed` or `blocked`
-- landed state references the integration SHA and baseline branch
-- blocked state references the first failing invariant and required re-plan
-
-Stop conditions:
-
-- parent cannot land without extra source edits
-- the accepted integration SHA diverges from the recorded contract freeze ancestry
+- write `blocked.json` sentinel for `task/m27_8r-c2-land-or-stop`
+- preserve the integration tree and current-run diagnostics bundle for handoff
+- preserve frozen oracle files unchanged:
+  - `.runs/m27_8/acceptance.md`
+  - `.runs/m27_8/merge-log.md`
+  - `.runs/m27_8/contract-freeze.json`
+- do not rewrite recommendation or coverage policy to make the failure disappear
+- do not start a second source-edit round in the same run
 
 ## Context-Control Rules
 
-- Parent agent keeps only five live artifacts in working context:
+- Parent working set stays intentionally small:
   - `PLAN.md`
-  - `$RUN_ROOT/tasks.json`
-  - `$RUN_ROOT/contract-freeze.json`
-  - the acceptance checklist
-  - the latest integration diff summary
-- Each worker prompt contains only:
-  - owned file set
-  - exact `PLAN.md` excerpt
+  - `.runs/m27_8/acceptance.md`
+  - `.runs/m27_8/merge-log.md`
+  - `.runs/m27_8/contract-freeze.json`
+  - current `tasks.json`
+  - latest integration diff summary
+- Worker prompts should include only:
+  - owned paths
+  - exact recovery source or locked assertion set
+  - forbidden surfaces
   - required commands
-  - forbidden touch surfaces
-  - the recorded `contract_freeze_commit`
-  - stop conditions
-- Workers do not write `$RUN_ROOT/*`.
-- Workers do not write passports or analysis artifacts.
-- Parent reviews worker summaries plus narrow diffs only.
-- Parent closes each worker immediately after merge.
-- Use sentinels and explicit completion reports, not tight polling.
+  - explicit stop conditions
+  - branch/worktree path
+  - model requirement: GPT-5.4 with `reasoning_effort=high`
+- Workers should return only:
+  - changed files
+  - commands run with exit codes
+  - blockers
+  - any mismatch between recovery source and current branch reality
+- Parent writes all queue and sentinel artifacts. Suggested sentinel layout:
+  - `.runs/task-m27_8r-00-baseline/started.json`
+  - `.runs/task-m27_8r-b1-lane-a-recovery/status.json`
+  - `.runs/task-m27_8r-b2-lane-b-harness/status.json`
+  - `.runs/task-m27_8r-c1-integrate-and-proof/done.json`
+  - `.runs/task-m27_8r-c2-land-or-stop/blocked.json`
+- Worker transcripts are not durable state. Durable state lives in the code diff plus parent-owned `.runs/m27_8/**`.
+- Close worker sessions immediately after merge or rejection. Do not accumulate stale worker context across lanes.
+
+## Sentinel Protocol
+
+Sentinel directories are parent-owned and live under `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-*/`.
+
+Standard files:
+
+- `started.json`
+  - written once when the task begins
+- `status.json`
+  - updated by the parent as the task progresses
+- `done.json` or `blocked.json`
+  - terminal record for the task
+
+Workers report status to the parent. The parent writes all sentinel files.
+
+Minimum `blocked.json` shape:
+
+- `task_id`
+- `blocked_at`
+- `branch`
+- `worktree`
+- `reason`
+- `failed_command`
+- `required_replan`
+- `touched_files`
+- `preserved_artifacts`
+
+Recommended `status.json` shape:
+
+- `task_id`
+- `status`
+- `owner`
+- `owned_paths`
+- `last_update`
+- `notes`
 
 ## Tests And Acceptance
 
-- Lane A source validation
-  - `cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/apply_tax.unit.spec --format json`
-  - no `spec build`
-  - no `spec test`
-- Lane B compile proof
-  - `cargo test -p xtask recommendation_command_path --no-run`
-  - `cargo test -p xtask --no-run`
-- Parent integrated proof loop
-  - `cargo run -p spec-cli -- build examples/shared-spec/units --output examples/shared-crate/src/generated`
-  - `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec`
-  - `cargo run -p spec-cli -- build examples/crosslib-app/units --output examples/crosslib-app/src/generated`
-  - `cargo test --manifest-path examples/crosslib-app/Cargo.toml`
-  - `cargo xtask family coverage --format json`
-  - `cargo xtask family recommend --format json`
-  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-  - `cargo test -p xtask -- --color never`
-
-Required acceptance invariants:
-
-- the five corpus source ids stay unchanged and in the same order
-- source unit counts become `6 / 12 / 9 / 1 / 2`
-- `examples_crosslib_app` grows from `1` to `2`
-- first candidate cluster id is `unsupported_arithmetic_shape-2694b2baf65b`
-- first candidate `promotion_readiness = Ready`
-- first candidate `hold_reasons = []`
-- first candidate `difficulty.tier = Adjacent`
-- first candidate `confidence.level = Medium`
-- arithmetic cluster representative units are:
-  - `examples_crosslib_app::pricing/apply_discount`
-  - `examples_crosslib_app::pricing/apply_tax`
-  - `m20_unsupported_truth_pack::pricing/apply_tax_arithmetic_shape`
-- arithmetic cluster leverage becomes:
-  - `real_example_hits = 2`
-  - `promotion_relevant_regression_hits = 1`
-  - `boundary_only_hits = 0`
-- second candidate cluster id is `unsupported_function_surface-e40675da6fa0`
-- second candidate `hold_reasons = ["unknown_overlap_family"]`
-- second candidate `difficulty.tier = Hard`
-- second candidate `confidence.level = Low`
-- unknown-overlap `money/round` cluster remains materially unchanged and held
-- recommendation output becomes `ranked` with exactly two candidates
-- derived artifacts remain validator-clean and byte-stable
+- Baseline gate:
+  - branch is `feat/corpus-expansion`
+  - baseline SHA and current dirty state are recorded before branching
+  - existing dirty state outside the touch set is preserved
+- Lane A gate:
+  - `examples/crosslib-app/units/pricing/apply_tax.unit.spec` matches frozen lane-A truth
+  - `examples/crosslib-app/units/.gitignore` restores `!pricing/apply_tax.spec.passport.json`
+- Lane B gate:
+  - `xtask/src/lib.rs` retains the ranked command-path lock from lane B
+  - seeded workspace copy list includes `semantic-families/function.wrapper.pipeline.v1`
+  - no source drift outside `xtask/src/lib.rs`
+- Integration proof gate:
+  - shared-spec build passes
+  - `spec test` for `examples/crosslib-app/units/pricing/apply_tax.unit.spec` passes
+  - crosslib build passes
+  - `cargo test --manifest-path examples/crosslib-app/Cargo.toml` passes
+- Artifact equality gate:
+  - coverage stdout bytes match `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+  - recommendation stdout bytes match `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+  - both artifacts validate with `cargo xtask family validate-artifact`
+- Final xtask lock gate:
+  - `cargo test -p xtask -- --color never` passes
+  - the seeded command-path lock observes:
+    - function coverage `28 / 15 / 0 / 13`
+    - recommendation status `ranked`
+    - first candidate arithmetic cluster `ready`
+    - second candidate `money/round` cluster `hold`
+- Stop gate:
+  - if the final xtask lock still fails after the packet-root fix, capture seeded temp-workspace evidence from inside the test, persist the diagnostic bundle, and stop without a second speculative code edit
 
 ## Assumptions
 
-- Worktree naming follows the repo's existing `spec-m27_*` pattern, so
-  `spec-m27_8` and `ws/m27_8-*` are the correct concrete names for this run.
-- The authority-file header `Base branch: main` is historical context, not the
-  execution baseline. M27.8 execution uses `Working branch: feat/corpus-expansion`.
-- Lane B can update and compile the command-path lock from the frozen `apply_tax`
-  contract without owning the new spec file itself; the first full green run
-  happens only after integration.
-- The known dirty planning files are unrelated local state and not milestone
-  deliverables unless they change again during execution.
+- `PLAN.md` is already the single M27.8R implementation contract and will remain so during execution. If it changes materially mid-run, the parent should pause and re-read before merging lanes.
+- The recovery references remain available locally:
+  - `ab11249`
+  - `7ae58ae`
+  - `ws/m27_8-lane-a`
+  - `ws/m27_8-lane-b`
+- The accepted causality model in `PLAN.md` is correct enough to justify a first-pass fix limited to the missing promoted packet root in the seeded workspace.
+- The only safe useful parallelism is lane A plus lane B. Lane C stays parent-owned because derived artifact refresh and the final xtask truth lock are the real acceptance surface.
+- Existing unrelated workspace edits are intentional unless proven otherwise. The parent should record them, avoid them, and not try to clean the tree.
+- A successful run does not require inventing any new source touch surface beyond the three-file contract. If it does, this orchestration plan is no longer authoritative and a new plan is required.
