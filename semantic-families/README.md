@@ -63,17 +63,21 @@ forming without over-claiming that the next family is promotion-ready.
 
 The Rust function corpus uses explicit source kinds:
 
-- `real_example`: maintained example units such as `examples/ecommerce/units`
+- `real_example`: maintained example units such as `examples/ecommerce/units`,
+  `examples/shared-spec/units` (Maintained sibling-library helper example.),
+  and `examples/crosslib-app/units` (Maintained cross-library app example.)
 - `regression_unsupported`: repo regression packs such as the locked M19 and M20
   sources
 - `proof_only`: semantic-family packet fixtures under
   `semantic-families/**/fixtures/**`
 
-The locked M27 manifest contains exactly these three sources:
+The locked M27 manifest contains exactly these five sources, in order:
 
 - `examples/ecommerce/units`
 - `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units`
 - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units`
+- `examples/shared-spec/units`
+- `examples/crosslib-app/units`
 
 Packet fixtures are `proof_only`. They remain useful for packet certification,
 but they are excluded from the M27 manifest and never act as recommendation
