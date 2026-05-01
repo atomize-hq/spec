@@ -164,45 +164,56 @@ mod tests {
     use crate::family::{
         certify,
         harness::{
-            CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
-            CHAIN3_SUITE_SLUG, FamilyHarness, LockedManifestArgs, LockedManifestRouting,
-            LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
-            MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
-            MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
-            MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
-            MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
-            ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
-            TERMINAL_UNSUPPORTED_CATCH_ALL, WRAPPER_PIPELINE_CERTIFY_SUITES,
-            WRAPPER_PIPELINE_MUST_NOT_SHADOW, WRAPPER_PIPELINE_PRECEDENCE,
-            WRAPPER_PIPELINE_PROVE_SUITES, WRAPPER_PIPELINE_SUITE_SLUG, family_harness,
-            family_harness_in, registered_harnesses_in_routing_order_from,
-            require_family_harness_in, validate_suite_ownership,
+            family_harness, family_harness_in, registered_harnesses_in_routing_order_from,
+            require_family_harness_in, validate_suite_ownership, FamilyHarness, LockedManifestArgs,
+            LockedManifestRouting, LockedManifestShape, ProveSuiteDefinition, ScaffoldDefinition,
+            SmokeContract, StarterCaseDefinition, StarterTemplate, CHAIN3_CERTIFY_SUITES,
+            CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES, CHAIN3_SUITE_SLUG,
+            MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES, MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW,
+            MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE, MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES,
+            MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG, MONOTONE_UP_CERTIFY_SUITES,
+            MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE, MONOTONE_UP_PROVE_SUITES,
+            MONOTONE_UP_SUITE_SLUG, TERMINAL_UNSUPPORTED_CATCH_ALL,
+            WRAPPER_PIPELINE_CERTIFY_SUITES, WRAPPER_PIPELINE_MUST_NOT_SHADOW,
+            WRAPPER_PIPELINE_PRECEDENCE, WRAPPER_PIPELINE_PROVE_SUITES,
+            WRAPPER_PIPELINE_SUITE_SLUG,
         },
         inventory,
         layout::validate_packet_layout,
-        manifest::Routing,
         manifest::parse_manifest_file,
-        paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS},
-        promotion_artifacts::{
-            ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CommandRecord,
-            FamilyRecommendationArtifact, GateStatus, GateSummary, MachineEvidence,
-            MachineEvidenceKind, PromotionApprovals, PromotionArtifactKind,
-            PromotionBlockerArtifact, PromotionExecutionArtifact, RankedCandidate, TargetLanguage,
+        manifest::Routing,
+        paths::{
+            FamilyId, PacketPaths, FAMILY_COVERAGE_LATEST_PATH,
+            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, REQUIRED_BUCKETS,
         },
-        prove,
+        promotion_artifacts::{
+            ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CandidateStatus,
+            CommandRecord,
+            ConfidenceLevel, DifficultyTier, FamilyRecommendationAnalysisArtifact,
+            FamilyCoverageArtifact, FamilyRecommendationArtifact, GateStatus, GateSummary,
+            HoldReason, MachineEvidence, MachineEvidenceKind, PromotionApprovals,
+            PromotionArtifactKind,
+            PromotionBlockerArtifact, PromotionExecutionArtifact, PromotionReadiness,
+            RankedCandidate, RecommendationCandidateEntry, RecommendationConfidence,
+            RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
+            TargetLanguage, UnsupportedClusterEntry, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+        },
+        prove, recommend,
         report::{
-            CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME, PassFail,
-            SuiteDefinition, certification_report_path, run_suite,
+            certification_report_path, run_suite, CommandOutput, CommandRunner, PassFail,
+            SuiteDefinition, CERTIFY_ARTIFACT_NAME, PROVE_ARTIFACT_NAME,
         },
         routing::{
-            ManifestRoutingIssue, RegistryRoutingIssue, locked_manifest_routing_in,
-            locked_routing_order_with_terminal, locked_routing_order_with_terminal_from,
-            routing_diagnostics_in,
+            locked_manifest_routing_in, locked_routing_order_with_terminal,
+            locked_routing_order_with_terminal_from, routing_diagnostics_in, ManifestRoutingIssue,
+            RegistryRoutingIssue,
         },
         scaffold, smoke,
     };
     use spec_core::loader::load_file;
-    use spec_core::semantic_review::{SemanticSupportStatus, evaluate_semantic_review};
+    use spec_core::semantic_review::{
+        UnsupportedFunctionReasonCode, evaluate_semantic_review, SemanticSupportStatus,
+    };
     use spec_core::validator::validate_full;
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
@@ -763,10 +774,8 @@ mod tests {
         assert!(drift.contains("pricing_discount_leaf_drift(taxed, discount_rate)"));
 
         let under_specified = fs::read_to_string(paths.root.join("fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec")).unwrap();
-        assert!(
-            under_specified
-                .contains("why: Adjust the checkout total using the current pricing inputs.")
-        );
+        assert!(under_specified
+            .contains("why: Adjust the checkout total using the current pricing inputs."));
 
         let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec")).unwrap();
         assert!(unsupported.contains("tax_rate.max(Decimal::ZERO)"));
@@ -1206,18 +1215,16 @@ mod tests {
 
         let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
 
-        assert!(
-            diagnostics
-                .registry
-                .issues
-                .contains(&RegistryRoutingIssue::DuplicatePrecedence {
-                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
-                    families: vec![
-                        "function.wrapper.pipeline.beta.v1".to_string(),
-                        "function.wrapper.pipeline.alpha.v1".to_string(),
-                    ],
-                })
-        );
+        assert!(diagnostics
+            .registry
+            .issues
+            .contains(&RegistryRoutingIssue::DuplicatePrecedence {
+                precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                families: vec![
+                    "function.wrapper.pipeline.beta.v1".to_string(),
+                    "function.wrapper.pipeline.alpha.v1".to_string(),
+                ],
+            }));
     }
 
     #[test]
@@ -1391,12 +1398,10 @@ mod tests {
         let code = run_from(temp_dir.path(), ["xtask", "family", "new", "../bad"]);
 
         assert_eq!(code, 2);
-        assert!(
-            fs::read_dir(temp_dir.path().join("semantic-families"))
-                .unwrap()
-                .next()
-                .is_none()
-        );
+        assert!(fs::read_dir(temp_dir.path().join("semantic-families"))
+            .unwrap()
+            .next()
+            .is_none());
     }
 
     #[test]
@@ -2123,13 +2128,11 @@ gate_d = true
         assert_eq!(failed_attempt["phase_status"], "fail");
         assert_eq!(failed_attempt["overall_status"], "fail");
         assert_report_status_invariants(&failed_attempt);
-        assert!(
-            !paths
-                .artifacts
-                .join(CERTIFY_ARTIFACT_NAME)
-                .with_extension("tmp")
-                .exists()
-        );
+        assert!(!paths
+            .artifacts
+            .join(CERTIFY_ARTIFACT_NAME)
+            .with_extension("tmp")
+            .exists());
     }
 
     #[test]
@@ -2396,7 +2399,7 @@ gate_d = true
                         expected_leverage: "Already promoted and therefore informational only."
                             .to_string(),
                         expected_risks: vec![
-                            "Not approval-eligible from this artifact.".to_string(),
+                            "Not approval-eligible from this artifact.".to_string()
                         ],
                     },
                 ],
@@ -2417,8 +2420,8 @@ gate_d = true
     }
 
     #[test]
-    fn artifact_schema_rejects_recommendation_when_inventory_hash_is_recomputed_from_different_bytes()
-     {
+    fn artifact_schema_rejects_recommendation_when_inventory_hash_is_recomputed_from_different_bytes(
+    ) {
         let temp_dir = workspace_root();
         seed_inventory_repo_truth(temp_dir.path());
 
@@ -2442,7 +2445,7 @@ gate_d = true
                     evidence: vec!["spec-core/src/semantic_review.rs".to_string()],
                     expected_leverage: "Two-step wrapper promotion target.".to_string(),
                     expected_risks: vec![
-                        "Inventory hash mismatch should fail validation.".to_string(),
+                        "Inventory hash mismatch should fail validation.".to_string()
                     ],
                 }],
             },
@@ -2459,6 +2462,385 @@ gate_d = true
         );
 
         assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_accepts_schema_v2_recommendation_analysis_with_ready_first_candidate() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &FamilyRecommendationAnalysisArtifact {
+                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
+                generated_at: "2026-04-29T15:45:00Z".to_string(),
+                coverage_path,
+                coverage_sha256,
+                recommendation_status: RecommendationStatus::Ranked,
+                ranked_candidates: vec![valid_recommendation_candidate(
+                    PromotionReadiness::Ready,
+                    Vec::new(),
+                )],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_ready_recommendation_candidate_with_hold_reasons() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &FamilyRecommendationAnalysisArtifact {
+                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
+                generated_at: "2026-04-29T15:45:00Z".to_string(),
+                coverage_path,
+                coverage_sha256,
+                recommendation_status: RecommendationStatus::NoStrongCandidate,
+                ranked_candidates: vec![valid_recommendation_candidate(
+                    PromotionReadiness::Ready,
+                    vec![HoldReason::ThinRealExampleSupport],
+                )],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_held_recommendation_candidate_without_hold_reasons() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &FamilyRecommendationAnalysisArtifact {
+                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
+                generated_at: "2026-04-29T15:45:00Z".to_string(),
+                coverage_path,
+                coverage_sha256,
+                recommendation_status: RecommendationStatus::NoStrongCandidate,
+                ranked_candidates: vec![valid_recommendation_candidate(
+                    PromotionReadiness::Hold,
+                    Vec::new(),
+                )],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_ranked_recommendation_analysis_when_first_candidate_is_held() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &FamilyRecommendationAnalysisArtifact {
+                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
+                generated_at: "2026-04-29T15:45:00Z".to_string(),
+                coverage_path,
+                coverage_sha256,
+                recommendation_status: RecommendationStatus::Ranked,
+                ranked_candidates: vec![valid_recommendation_candidate(
+                    PromotionReadiness::Hold,
+                    vec![HoldReason::UnknownOverlapFamily],
+                )],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn recommendation_policy_holds_unknown_overlap_hard_single_real_candidate() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "money-round-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            "unknown",
+            1,
+            1,
+            0,
+            CandidateStatus::Rankable,
+            vec![
+                "examples_ecommerce::money/round".to_string(),
+                "m20_unsupported_truth_pack::money/round".to_string(),
+            ],
+        )]);
+
+        assert_eq!(
+            artifact.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+
+        let candidate = &artifact.ranked_candidates[0];
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Hold);
+        assert_eq!(candidate.confidence.level, ConfidenceLevel::Low);
+        assert_eq!(
+            candidate.hold_reasons,
+            vec![
+                HoldReason::UnknownOverlapFamily,
+                HoldReason::HardDifficulty,
+                HoldReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport,
+            ]
+        );
+    }
+
+    #[test]
+    fn recommendation_policy_returns_insufficient_real_corpus_when_no_discoverable_candidates() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "insufficient-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            "function.wrapper.pipeline*",
+            0,
+            1,
+            0,
+            CandidateStatus::InsufficientEvidence,
+            vec!["m20_unsupported_truth_pack::pricing/checkout_total_bad_body_shape".to_string()],
+        )]);
+
+        assert_eq!(
+            artifact.recommendation_status,
+            RecommendationStatus::InsufficientRealCorpus
+        );
+        assert!(artifact.ranked_candidates.is_empty());
+    }
+
+    #[test]
+    fn recommendation_policy_returns_no_strong_candidate_when_discoverable_candidates_are_held() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "held-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            "function.wrapper.pipeline*",
+            0,
+            1,
+            0,
+            CandidateStatus::Rankable,
+            vec!["m20_unsupported_truth_pack::pricing/checkout_total_bad_body_shape".to_string()],
+        )]);
+
+        assert_eq!(
+            artifact.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+        assert_eq!(
+            artifact.ranked_candidates[0].promotion_readiness,
+            PromotionReadiness::Hold
+        );
+        assert_eq!(
+            artifact.ranked_candidates[0].hold_reasons,
+            vec![
+                HoldReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport,
+            ]
+        );
+    }
+
+    #[test]
+    fn recommendation_policy_ranks_known_overlap_candidate_with_strong_evidence() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "strong-known-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            "function.wrapper.pipeline*",
+            3,
+            1,
+            0,
+            CandidateStatus::Rankable,
+            vec!["examples_ecommerce::pricing/calculate_total".to_string()],
+        )]);
+
+        assert_eq!(artifact.recommendation_status, RecommendationStatus::Ranked);
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+
+        let candidate = &artifact.ranked_candidates[0];
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Ready);
+        assert!(candidate.hold_reasons.is_empty());
+        assert_eq!(candidate.confidence.level, ConfidenceLevel::High);
+    }
+
+    #[test]
+    fn recommendation_policy_sorts_ready_candidates_ahead_of_held_candidates() {
+        let artifact = recommendation_analysis_from_clusters(vec![
+            unsupported_cluster(
+                "held-high-leverage",
+                UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+                "unknown",
+                5,
+                5,
+                0,
+                CandidateStatus::Rankable,
+                vec!["examples_ecommerce::money/round".to_string()],
+            ),
+            unsupported_cluster(
+                "ready-medium-confidence",
+                UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression,
+                "function.wrapper.pipeline*",
+                1,
+                3,
+                0,
+                CandidateStatus::Rankable,
+                vec!["examples_ecommerce::pricing/calculate_total".to_string()],
+            ),
+            unsupported_cluster(
+                "ready-high-confidence",
+                UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+                "function.wrapper.pipeline*",
+                3,
+                1,
+                0,
+                CandidateStatus::Rankable,
+                vec!["examples_ecommerce::pricing/checkout_total".to_string()],
+            ),
+        ]);
+
+        assert_eq!(artifact.recommendation_status, RecommendationStatus::Ranked);
+        assert_eq!(
+            artifact
+                .ranked_candidates
+                .iter()
+                .map(|candidate| candidate.cluster_ids[0].as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "ready-high-confidence",
+                "ready-medium-confidence",
+                "held-high-leverage",
+            ]
+        );
+        assert_eq!(
+            artifact.ranked_candidates[0].promotion_readiness,
+            PromotionReadiness::Ready
+        );
+        assert_eq!(
+            artifact.ranked_candidates[1].confidence.level,
+            ConfidenceLevel::Medium
+        );
+        assert_eq!(
+            artifact.ranked_candidates[2].promotion_readiness,
+            PromotionReadiness::Hold
+        );
+    }
+
+    #[test]
+    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_is_no_strong_candidate() {
+        let temp_dir = workspace_root();
+        seed_locked_recommendation_workspace(temp_dir.path());
+
+        let mut stdout = Vec::new();
+        recommend::run_with_writer(temp_dir.path(), "json", &mut stdout).unwrap();
+
+        let artifact_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+        let written_bytes = fs::read(&artifact_path).unwrap();
+        assert_eq!(stdout, written_bytes);
+
+        let recommendation: FamilyRecommendationAnalysisArtifact =
+            serde_json::from_slice(&written_bytes).unwrap();
+        let coverage: FamilyCoverageArtifact = serde_json::from_slice(
+            &fs::read(temp_dir.path().join(FAMILY_COVERAGE_LATEST_PATH)).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            recommendation.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+
+        let money_round_cluster = coverage
+            .unsupported_clusters
+            .iter()
+            .find(|cluster| {
+                cluster
+                    .representative_unit_ids
+                    .contains(&"examples_ecommerce::money/round".to_string())
+            })
+            .unwrap();
+        let money_round_candidate = recommendation
+            .ranked_candidates
+            .iter()
+            .find(|candidate| candidate.cluster_ids.contains(&money_round_cluster.cluster_id))
+            .unwrap();
+
+        assert_eq!(
+            money_round_candidate.promotion_readiness,
+            PromotionReadiness::Hold
+        );
+        assert!(money_round_candidate
+            .hold_reasons
+            .contains(&HoldReason::UnknownOverlapFamily));
+        assert!(money_round_candidate
+            .hold_reasons
+            .contains(&HoldReason::HardDifficulty));
+        assert!(money_round_candidate
+            .hold_reasons
+            .contains(&HoldReason::ThinRealExampleSupport));
     }
 
     #[test]
@@ -2885,6 +3267,137 @@ gate_d = true
             },
         );
         ".semantic-family-artifacts/family-promotion/recommendation.latest.json".to_string()
+    }
+
+    fn seed_recommendation_analysis_coverage(workspace_root: &Path) -> (String, String) {
+        let coverage_path = FAMILY_COVERAGE_LATEST_PATH.to_string();
+        write_string(
+            &workspace_root.join(FAMILY_COVERAGE_LATEST_PATH),
+            "{\n  \"analysis_fixture\": true\n}\n",
+        );
+        let coverage_bytes = fs::read(workspace_root.join(FAMILY_COVERAGE_LATEST_PATH)).unwrap();
+        (
+            coverage_path,
+            inventory::inventory_sha256_hex(&coverage_bytes),
+        )
+    }
+
+    fn valid_recommendation_candidate(
+        promotion_readiness: PromotionReadiness,
+        hold_reasons: Vec<HoldReason>,
+    ) -> RecommendationCandidateEntry {
+        RecommendationCandidateEntry {
+            candidate_id: "a-unsupportedwrappershape-cluster-01".to_string(),
+            cluster_ids: vec!["cluster-01".to_string()],
+            primary_reason_code: spec_core::semantic_review::UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            overlap_family: "function.wrapper.pipeline*".to_string(),
+            promotion_readiness,
+            hold_reasons,
+            leverage: RecommendationLeverage {
+                real_example_hits: 2,
+                promotion_relevant_regression_hits: 3,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 2,
+            },
+            difficulty: RecommendationDifficulty {
+                tier: DifficultyTier::Adjacent,
+                why: "This cluster is adjacent to the promoted wrapper pipeline family."
+                    .to_string(),
+            },
+            confidence: RecommendationConfidence {
+                level: ConfidenceLevel::Medium,
+                why: "The cluster has enough support for validator coverage.".to_string(),
+            },
+            rationale: "Validator fixture candidate.".to_string(),
+        }
+    }
+
+    fn recommendation_analysis_from_clusters(
+        clusters: Vec<UnsupportedClusterEntry>,
+    ) -> FamilyRecommendationAnalysisArtifact {
+        recommend::build_recommendation_analysis_artifact(
+            "2026-04-29T15:45:00Z".to_string(),
+            FAMILY_COVERAGE_LATEST_PATH.to_string(),
+            "coverage-sha".to_string(),
+            &clusters,
+        )
+    }
+
+    fn unsupported_cluster(
+        cluster_id: &str,
+        reason_code: UnsupportedFunctionReasonCode,
+        overlap_family: &str,
+        real_example_hits: usize,
+        promotion_relevant_regression_hits: usize,
+        boundary_only_hits: usize,
+        candidate_status: CandidateStatus,
+        representative_unit_ids: Vec<String>,
+    ) -> UnsupportedClusterEntry {
+        UnsupportedClusterEntry {
+            cluster_id: cluster_id.to_string(),
+            reason_code,
+            shape_fingerprint: format!("shape::{cluster_id}"),
+            representative_unit_ids,
+            source_ids: vec!["synthetic_source".to_string()],
+            real_example_hits,
+            promotion_relevant_regression_hits,
+            boundary_only_hits,
+            overlap_family: overlap_family.to_string(),
+            candidate_status,
+        }
+    }
+
+    fn seed_locked_recommendation_workspace(workspace_root: &Path) {
+        for relative_path in [
+            "examples/ecommerce/units",
+            "semantic-families/corpus/rust-function.toml",
+            "semantic-families/function.wrapper.pipeline.chain3.v1",
+            "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1",
+            "semantic-families/function.arithmetic_leaf.monotone_up.v1",
+            "spec-cli/tests/fixtures/m19/semantic_falsification_pack/units",
+            "spec-cli/tests/fixtures/m20/unsupported_truth_pack/units",
+            "spec-cli/tests/m14_regressions.rs",
+            "spec-core/src/semantic_review.rs",
+        ] {
+            copy_path_from_repo(workspace_root, relative_path);
+        }
+    }
+
+    fn copy_path_from_repo(destination_root: &Path, relative_path: &str) {
+        let source = repo_workspace_root().join(relative_path);
+        let destination = destination_root.join(relative_path);
+        if source.is_dir() {
+            copy_dir_recursive(&source, &destination);
+        } else {
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::copy(source, destination).unwrap();
+        }
+    }
+
+    fn copy_dir_recursive(source: &Path, destination: &Path) {
+        fs::create_dir_all(destination).unwrap();
+        for entry in fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            let source_path = entry.path();
+            let destination_path = destination.join(entry.file_name());
+            if source_path.is_dir() {
+                copy_dir_recursive(&source_path, &destination_path);
+            } else {
+                if let Some(parent) = destination_path.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::copy(source_path, destination_path).unwrap();
+            }
+        }
+    }
+
+    fn repo_workspace_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf()
     }
 
     fn seed_promoted_wrapper_proof_artifacts(workspace_root: &Path) {
