@@ -2623,6 +2623,48 @@ gate_d = true
     }
 
     #[test]
+    fn artifact_schema_rejects_ranked_recommendation_analysis_when_first_candidate_is_ready_with_low_confidence()
+     {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &FamilyRecommendationAnalysisArtifact {
+                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
+                generated_at: "2026-04-29T15:45:00Z".to_string(),
+                coverage_path,
+                coverage_sha256,
+                recommendation_status: RecommendationStatus::Ranked,
+                ranked_candidates: vec![recommendation_candidate_with_confidence_level(
+                    PromotionReadiness::Ready,
+                    Vec::new(),
+                    2,
+                    3,
+                    ConfidenceLevel::Low,
+                )],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
     fn artifact_schema_accepts_insufficient_real_corpus_with_held_zero_real_candidates() {
         let temp_dir = workspace_root();
         let (coverage_path, coverage_sha256) =
@@ -2951,6 +2993,22 @@ gate_d = true
         assert_eq!(candidate.promotion_readiness, PromotionReadiness::Ready);
         assert!(candidate.hold_reasons.is_empty());
         assert_eq!(candidate.confidence.level, ConfidenceLevel::High);
+    }
+
+    #[test]
+    fn recommendation_status_does_not_rank_ready_low_confidence_candidate() {
+        let candidate = recommendation_candidate_with_confidence_level(
+            PromotionReadiness::Ready,
+            Vec::new(),
+            2,
+            3,
+            ConfidenceLevel::Low,
+        );
+
+        assert_eq!(
+            recommend::recommendation_status_for(&[candidate]),
+            RecommendationStatus::NoStrongCandidate
+        );
     }
 
     #[test]
@@ -3528,7 +3586,13 @@ gate_d = true
         promotion_readiness: PromotionReadiness,
         hold_reasons: Vec<HoldReason>,
     ) -> RecommendationCandidateEntry {
-        recommendation_candidate_with_real_example_hits(promotion_readiness, hold_reasons, 2, 3)
+        recommendation_candidate_with_confidence_level(
+            promotion_readiness,
+            hold_reasons,
+            2,
+            3,
+            ConfidenceLevel::Medium,
+        )
     }
 
     fn recommendation_candidate_with_real_example_hits(
@@ -3536,6 +3600,22 @@ gate_d = true
         hold_reasons: Vec<HoldReason>,
         real_example_hits: usize,
         promotion_relevant_regression_hits: usize,
+    ) -> RecommendationCandidateEntry {
+        recommendation_candidate_with_confidence_level(
+            promotion_readiness,
+            hold_reasons,
+            real_example_hits,
+            promotion_relevant_regression_hits,
+            ConfidenceLevel::Medium,
+        )
+    }
+
+    fn recommendation_candidate_with_confidence_level(
+        promotion_readiness: PromotionReadiness,
+        hold_reasons: Vec<HoldReason>,
+        real_example_hits: usize,
+        promotion_relevant_regression_hits: usize,
+        confidence_level: ConfidenceLevel,
     ) -> RecommendationCandidateEntry {
         RecommendationCandidateEntry {
             candidate_id: "a-unsupportedwrappershape-cluster-01".to_string(),
@@ -3556,7 +3636,7 @@ gate_d = true
                     .to_string(),
             },
             confidence: RecommendationConfidence {
-                level: ConfidenceLevel::Medium,
+                level: confidence_level,
                 why: "The cluster has enough support for validator coverage.".to_string(),
             },
             rationale: "Validator fixture candidate.".to_string(),

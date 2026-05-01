@@ -44,8 +44,9 @@ Each recommendation candidate now exposes:
 
 Interpret the top-level recommendation statuses as follows:
 
-- `ranked` means the first candidate is `ready`, so the output is claiming
-  promotion-worthy next-family pressure
+- `ranked` means the first candidate is `ready` with `confidence.level`
+  `medium` or `high`, so the output is claiming promotion-worthy next-family
+  pressure
 - `insufficient_real_corpus` means either no discoverable candidates exist, or
   every visible candidate is `hold` and every candidate still has
   `real_example_hits == 0`

@@ -381,8 +381,9 @@ Otherwise:
 
 Evaluate in this order:
 
-1. `ranked` when at least one candidate is `ready` and the top ready candidate
-   has `confidence.level` of `medium` or `high`
+1. `ranked` when the first sorted candidate satisfies the shared ranked
+   predicate:
+   `promotion_readiness == "ready"` and `confidence.level` is `medium` or `high`
 2. `insufficient_real_corpus` when every discoverable candidate is `hold` and
    every candidate has `real_example_hits == 0`
 3. `no_strong_candidate` when at least one discoverable candidate exists, every
@@ -438,7 +439,8 @@ CODE PATH COVERAGE
     |
     ├── FamilyRecommendationAnalysisArtifact::validate()
     │   ├── [GAP] schema_version == 2 accepted for recommendation analysis
-    │   ├── [GAP] ranked requires first candidate == ready
+    │   ├── [GAP] ranked requires the first candidate to be `ready` with
+    │   │       confidence `medium` or `high`
     │   ├── [GAP] hold requires non-empty hold_reasons[]
     │   └── [GAP] ready requires empty hold_reasons[]
     |

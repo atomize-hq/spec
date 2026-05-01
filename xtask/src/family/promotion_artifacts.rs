@@ -360,6 +360,16 @@ pub(crate) struct RecommendationConfidence {
     pub why: String,
 }
 
+pub(crate) fn candidate_qualifies_for_ranked_status(
+    candidate: &RecommendationCandidateEntry,
+) -> bool {
+    candidate.promotion_readiness == PromotionReadiness::Ready
+        && matches!(
+            candidate.confidence.level,
+            ConfidenceLevel::Medium | ConfidenceLevel::High
+        )
+}
+
 pub(crate) fn run_validate_artifact(
     workspace_root: &Path,
     raw_path: &str,
@@ -599,10 +609,9 @@ impl FamilyRecommendationAnalysisArtifact {
                             .to_string(),
                     ));
                 }
-                if self.ranked_candidates[0].promotion_readiness != PromotionReadiness::Ready {
+                if !candidate_qualifies_for_ranked_status(&self.ranked_candidates[0]) {
                     return Err(XtaskError::InvalidInput(
-                        "recommendation analysis ranked status requires the first candidate to be `ready`"
-                            .to_string(),
+                        "recommendation analysis ranked status requires the first candidate to be `ready` with confidence `medium` or `high`".to_string(),
                     ));
                 }
             }

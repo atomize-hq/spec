@@ -12,7 +12,7 @@ use crate::family::promotion_artifacts::{
     FamilyRecommendationAnalysisArtifact, HoldReason, PromotionArtifactKind, PromotionReadiness,
     RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RecommendationCandidateEntry, RecommendationConfidence,
     RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
-    UnsupportedClusterEntry,
+    UnsupportedClusterEntry, candidate_qualifies_for_ranked_status,
 };
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::cmp::Ordering;
@@ -333,12 +333,12 @@ fn push_hold_reason(hold_reasons: &mut Vec<HoldReason>, hold_reason: HoldReason)
     }
 }
 
-fn recommendation_status_for(
+pub(crate) fn recommendation_status_for(
     ranked_candidates: &[RecommendationCandidateEntry],
 ) -> RecommendationStatus {
     if ranked_candidates
-        .iter()
-        .any(|candidate| candidate.promotion_readiness == PromotionReadiness::Ready)
+        .first()
+        .is_some_and(candidate_qualifies_for_ranked_status)
     {
         RecommendationStatus::Ranked
     } else if ranked_candidates.is_empty()
