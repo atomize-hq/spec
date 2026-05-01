@@ -1,948 +1,628 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m26-autoplan-restore-20260430-130212.md -->
-# M27 - Coverage Accounting + Next-Family Recommendation Engine
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m27-autoplan-restore-20260430-212234.md -->
+# M27.5 - Recommendation Quality Hardening
 
 Status: **implementation contract**
 Base branch: **main**
-Working branch: **feat/m26**
+Working branch: **feat/m27**
 Last rewritten: **2026-04-30**
 
 ## Plan Authority
 
-This file is the authoritative M27 plan.
+This file is the authoritative M27.5 execution plan for `feat/m27`.
 
-Primary milestone source:
+Primary sources:
 
 - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+- `docs/m27_5_recommendation_quality_plan_v0.1.md`
+- approved design doc:
+  `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m27-design-20260430-173836.md`
 
 Repo truth checked while rewriting this plan:
 
-- `cargo xtask family inventory --format json` on 2026-04-30
-- current `xtask/src/family/**` command and artifact layout
-- current `spec-core/src/semantic_review.rs` semantic-review surface
-- `semantic-families/README.md`
-- `CLAUDE.md`
-- `TODOS.md`
-- current checked-in corpora under:
-  - `examples/ecommerce/units`
-  - `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units`
-  - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units`
+- `xtask/src/family/recommend.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/coverage.rs`
+- `xtask/src/family/paths.rs`
+- `xtask/src/lib.rs`
+- current locked corpus manifest:
+  `semantic-families/corpus/rust-function.toml`
 
-If any older draft, review artifact, or milestone note disagrees with this file,
-`PLAN.md` wins for M27 execution.
+If any older draft, branch-local note, or superseded M27 plan disagrees with this
+file, this file wins for M27.5 execution on `feat/m27`.
 
 ## Problem Statement
 
-M26 solved the operator loop.
+M27 already landed the discovery engine.
 
-The repo now has a real approval-gated family-promotion workflow plus four
-promoted Rust function families:
+The repo can now:
 
-- `function.wrapper.pipeline.chain3.v1`
-- `function.wrapper.pipeline.v1`
-- `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-- `function.arithmetic_leaf.monotone_up.v1`
+- account for checked-in corpus coverage
+- cluster unsupported function pressure
+- rank rankable candidates
+- emit deterministic machine-readable analysis artifacts
 
-That means the old question is gone.
+The live failure is narrower.
 
-The repo is no longer blocked on "which runtime-supported family is still
-unpromoted?" The live inventory answer is currently "none":
+The current recommendation analysis can still emit
+`recommendation_status = "ranked"` even when the top candidate is weak:
 
-- `promoted_families == runtime_supported_routes`
-- `supported_unpromoted_families == []`
+- `overlap_family = "unknown"`
+- `difficulty.tier = "hard"`
+- `real_example_hits = 1`
+- `promotion_relevant_regression_hits = 1`
 
-So the M27 problem is narrower and more honest:
+That is mechanically consistent with current M27 code. It is not good enough for
+roadmap steering.
 
-- account for how the checked-in corpus actually routes today
-- show how much authored function demand is already covered by promoted families
-- show which unsupported function clusters create real promotion pressure
-- separate those clusters from boundary-only or adversarial fixtures that should
-  not drive the next family choice
-
-M27 is the milestone that turns "what should we promote next?" from taste into
-deterministic repo output.
+M27.5 exists to add a trust gate on top of M27 discovery so the repo can say:
+"I found pressure" without overclaiming "promote this next."
 
 ## Milestone Outcome
 
-When M27 lands, the repo can truthfully claim:
+When M27.5 lands, the repo can truthfully claim:
 
-- it can account for checked-in corpus coverage at the unit-shape level
-- it can distinguish:
-  - function units routed to promoted families
-  - function units routed to supported-but-unpromoted families
-  - function units routed to `unsupported.function.v1`
-  - supported non-function semantic surfaces that still matter to read-side truth
-- it can cluster unsupported function demand into deterministic candidate groups
-- it can rank next-family candidates from measured pressure rather than freehand
-  judgment
-- it can emit machine-readable coverage and recommendation artifacts with the
-  exact basis they used
+- `family recommend` remains deterministic
+- weak candidates stay visible in analysis output
+- promotion-worthiness is stricter than raw discoverability
+- recommendation artifacts explain why a candidate is on hold
+- the current locked corpus can honestly yield `no_strong_candidate`
 
-M27 does **not** claim:
+M27.5 does **not** claim:
 
-- the ranking engine is globally optimal
-- every unsupported cluster should become a family
-- the current corpus is large enough to remove human judgment
-- multi-language factoring is solved
-- non-function family promotion is in scope
+- corpus expansion is solved
+- the ranking policy is globally optimal
+- the next family is definitely known
+- M28 shared-core extraction should start immediately
 
 ## Scope
 
 ### In Scope
 
-- extend the family workflow with deterministic coverage accounting
-- keep the existing M26 `inventory` surface and layer M27 on top of it
-- add a checked-in corpus manifest for the Rust function lane
-- emit durable machine-readable M27 analysis artifacts
-- cluster unsupported function units into stable candidate groups
-- rank candidates from repo-owned evidence
-- show supported non-function semantic coverage separately so it does not vanish
-- validate M27 artifacts through the existing `validate-artifact` entrypoint
-- document the maintainer workflow for M27 commands and corpus labels
+- tighten recommendation-analysis policy only
+- keep the existing M27 command surface unchanged
+- add a promotion-readiness layer above current discovery output
+- make hold reasons machine-readable in recommendation analysis
+- upgrade recommendation-analysis validation to schema version `2`
+- add deterministic regression coverage for the current `money/round` failure
+- update maintainer docs so `ranked` has a sharper meaning
 
 ### NOT In Scope
 
-- promoting the next family packet itself
-- changing runtime semantic-review routing order
-- adding a second language
-- ranking sum or data seams as next-family candidates
-- adding a new human dashboard or UI
-- moving orchestration out of `xtask`
-- counting packet-local proof fixtures as real corpus demand
-- broad corpus expansion beyond the three locked M27 sources
+- adding new corpus sources
+- changing coverage accounting semantics
+- changing unsupported-function fingerprint generation
+- ranking non-function seams
+- promoting the next family packet
+- beginning M28 portability work
+- adding a dashboard, UI, or separate binary
+- changing release/distribution infrastructure
 
 ## Step 0 - Scope Challenge
 
-### Current repo truth
-
-| Area | Current truth at 2026-04-30 | M27 implication |
-|---|---|---|
-| Family inventory | `cargo xtask family inventory --format json` reports four promoted runtime-supported function families and `supported_unpromoted_families: []` | Inventory alone cannot answer "what next?" anymore. |
-| Semantic review output | `SemanticReview` already exposes `compatibility_key`, `support_status`, `unsupported_reason_codes`, and `rewrite_hints` | M27 must reuse this truth, not invent a second classifier. |
-| Unsupported vocabulary | Current unsupported function reasons are `unsupported_control_flow`, `unsupported_dep_topology`, `unsupported_required_argument_expression`, `unsupported_wrapper_body_shape`, `unsupported_arithmetic_shape`, and `unsupported_function_surface` | M27 can cluster from structured reason codes instead of vague prose. |
-| Supported non-function surfaces | `sum.discount_policy.v1` and `data.checkout_quote.v1` already exist in repo truth | M27 must report them, but must not rank them as next-family candidates. |
-| Artifact layout | M26 already reserves `.semantic-family-artifacts/family-promotion/recommendation.latest.json` for approval-gated promotion packets | M27 analysis artifacts must live under a different subdirectory to avoid contract collision. |
-| Checked-in corpora | The maintained non-packet corpus is small but real: 6 ecommerce units, 12 M19 falsification fixtures, 9 M20 unsupported-truth fixtures | M27 must be honest about low-confidence output when real-example pressure is weak. |
-
 ### What already exists
 
-| Sub-problem | Existing code or artifact | M27 reuse decision |
+| Sub-problem | Existing code | Reuse decision |
 |---|---|---|
-| Runtime supported-family truth | `xtask/src/family/inventory.rs` | Reuse directly. M27 joins against live inventory output, it does not restate routing logic. |
-| Semantic classification | `spec-core/src/semantic_review.rs` | Reuse directly. M27 reads repo truth from `evaluate_semantic_review`, not from hand-built xtask heuristics. |
-| Spec loading and validation | `spec-core/src/loader.rs`, `spec-core/src/validator.rs` | Reuse directly. M27 loads authored corpus units through `spec-core`, not shelling out to `spec`. |
-| Artifact validation and path hardening | `xtask/src/family/promotion_artifacts.rs`, `xtask/src/family/paths.rs` | Reuse and extend. M27 artifacts should validate through the same style of repo-relative path and schema checks. |
-| Maintainer workflow docs | `semantic-families/README.md` | Extend with M27 commands and corpus-label rules. |
-
-### Current corpus basis
-
-The initial locked M27 corpus is exactly:
-
-- `examples/ecommerce/units`
-- `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units`
-
-Current source counts:
-
-- 6 unit specs in `examples/ecommerce/units`
-- 12 unit specs in the M19 falsification pack
-- 9 unit specs in the M20 unsupported-truth pack
-- 27 total unit specs in the initial M27 corpus
-
-The current family basis was re-verified during this rewrite:
-
-```json
-{
-  "promoted_families": [
-    "function.wrapper.pipeline.chain3.v1",
-    "function.wrapper.pipeline.v1",
-    "function.arithmetic_leaf.monotone_down_nonnegative.v1",
-    "function.arithmetic_leaf.monotone_up.v1"
-  ],
-  "runtime_supported_routes": [
-    "function.wrapper.pipeline.chain3.v1",
-    "function.wrapper.pipeline.v1",
-    "function.arithmetic_leaf.monotone_down_nonnegative.v1",
-    "function.arithmetic_leaf.monotone_up.v1"
-  ],
-  "supported_unpromoted_families": []
-}
-```
-
-That basis is the reason M27 exists.
+| Coverage collection | `xtask/src/family/coverage.rs` | Reuse as-is. M27.5 must not reimplement or broaden coverage accounting. |
+| Recommendation generation | `xtask/src/family/recommend.rs` | Reuse the existing projection path, but split it into explicit discovery and readiness phases. |
+| Artifact validation | `xtask/src/family/promotion_artifacts.rs` | Reuse the validator surface and extend only recommendation-analysis rules. |
+| Artifact paths | `xtask/src/family/paths.rs` | Reuse unchanged. The path contract is already correct. |
+| CLI coverage and artifact tests | `xtask/src/lib.rs` | Reuse existing test harness style and add focused M27.5 regressions. |
+| Maintainer docs | `semantic-families/README.md` | Reuse and tighten wording around what `ranked` now means. |
 
 ### Minimum honest change
 
-The minimum honest M27 diff is:
+The smallest complete M27.5 diff is:
 
-1. add an authored corpus manifest
-2. compute deterministic coverage accounting across that manifest
-3. cluster unsupported function demand into stable groups
-4. rank those groups with machine-readable evidence
-5. persist the coverage and recommendation basis as durable artifacts
+1. keep M27 discovery intact
+2. enrich recommendation-analysis schema with readiness and hold reasons
+3. adjudicate each candidate as `ready` or `hold`
+4. ensure held candidates remain visible but cannot falsely drive `ranked`
+5. prove the current `money/round` case demotes to `no_strong_candidate`
 
-Anything less is still operator taste with nicer wording.
+Anything less is just a nicer explanation of the same weak behavior.
 
-### Complexity hold
+### Complexity check
 
-M27 is a real feature, so the diff will cross the 8-file smell line. That is
-acceptable here because the scope is still intentionally boxed:
+This plan stays under the smell line if implemented correctly.
 
-- keep the command surface inside existing `xtask family ...`
-- keep semantic truth inside `spec-core`
-- add only two new feature modules in `xtask/src/family/`
-- add only one new authored source file outside Rust code, the corpus manifest
-- do **not** create a new crate, service, or binary
+- expected production files touched: `3-5`
+- expected new modules: `0`
+- expected new crates/binaries/services: `0`
 
-This is the smallest change that still lands the milestone honestly.
+Target blast radius:
+
+- `xtask/src/family/recommend.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/lib.rs`
+- `semantic-families/README.md`
+- optional tiny helper edits in `xtask/src/family/coverage.rs` only if borrow or
+  sorting ergonomics demand them
+
+That is "engineered enough." Not a rewrite, not a hack.
+
+### Search check
+
+- **[Layer 1]** Keep the existing `xtask family coverage` and `xtask family recommend`
+  command surfaces. No new command buys enough value to justify the cognitive cost.
+- **[Layer 1]** Reuse the current artifact path and validation entrypoint. Changing
+  paths here would burn review cycles for zero product gain.
+- **[Layer 3]** The real insight is not "ranking must get smarter." It is "ranking
+  needs an abstention layer." That is why readiness adjudication sits *after*
+  discovery instead of replacing it.
+
+### TODOS cross-reference
+
+`TODOS.md` contains many repo-level follow-ups, but none block M27.5 directly.
+The one related future thread is already acknowledged by the milestone itself:
+if the tightened engine still yields `no_strong_candidate`, the next honest move
+is corpus expansion or an explicit policy decision, not automatic M28.
+
+### Completeness check
+
+M27.5 should do the complete version now:
+
+- schema contract
+- validation contract
+- policy logic
+- deterministic regression coverage
+- maintainer docs
+
+Deferring tests or docs here would save minutes and cost confidence. Not worth it.
+
+### Distribution check
+
+No new distributable artifact is introduced. The existing repo-owned `xtask` CLI
+remains the delivery vehicle, so there is no new CI/CD or packaging work in scope.
 
 ## Locked Decisions
 
-These choices close the ambiguity that remained in the prior draft.
-
 | Decision | Lock |
 |---|---|
-| Coverage and recommendation remain separate explicit commands | **Locked.** M27 adds `family coverage` and `family recommend`. No combined `family analyze` command in M27. |
-| `recommend` may depend on a previously written `coverage.latest.json` | **Rejected.** `family recommend` must recompute coverage in-process first, then rank from that fresh basis. |
-| M27 may reuse the M26 root `recommendation.latest.json` path | **Rejected.** That path stays reserved for approval-gated promotion artifacts. M27 writes under a new `analysis/` subdirectory. |
-| M27 should shell out to `spec export` to classify units | **Rejected.** M27 should call `spec-core` directly for loading, validation, and semantic review. |
-| Packet fixtures may count toward leverage if they are "close enough" | **Rejected.** Packet fixtures are `proof_only` and never contribute to promotion pressure. |
-| M27 should rank non-function units too | **Rejected.** M27 reports non-function coverage only. Ranking stays on the Rust function-family lane. |
-| Open questions about stdout vs durable files | **Closed.** Both M27 commands print JSON to stdout and atomically write the same bytes to durable artifact paths. |
+| Introduce a new `family analyze` command | **Rejected.** Command surface stays unchanged. |
+| Change coverage artifact schema while changing recommendation policy | **Rejected.** Coverage remains M27 truth. |
+| Bump one shared artifact schema constant for every artifact type | **Rejected.** Recommendation-analysis must version independently so coverage semantics stay unchanged. |
+| Hide weak candidates entirely | **Rejected.** Visibility and promotion-worthiness are different jobs. |
+| Keep current leverage-first sorting even when a candidate is on hold | **Rejected.** Ready candidates must sort ahead of held candidates or the trust gate is ambiguous. |
+| Fold corpus expansion into M27.5 | **Rejected.** If corpus is too thin, that becomes the *next* milestone or decision. |
 
-## Locked M27 Contract
+## Architecture
 
-The sections below lock the authored inputs, command surfaces, artifact schemas,
-ranking rules, and clustering rules for M27.
+### Dependency graph
 
-### Command Surfaces
-
-M27 adds exactly these subcommands:
-
-- `cargo xtask family coverage --format json`
-- `cargo xtask family recommend --format json`
-
-M27 also extends this existing subcommand:
-
-- `cargo xtask family validate-artifact <path>`
-
-No other CLI surface is in scope.
-
-#### `cargo xtask family coverage --format json`
-
-Behavior:
-
-- loads the authored corpus manifest from
-  `semantic-families/corpus/rust-function.toml`
-- collects the live family inventory in-process
-- writes a retained inventory snapshot under
-  `.semantic-family-artifacts/family-promotion/inventory/`
-- loads every manifest source through `spec-core`
-- validates each loaded unit with `validate_full`
-- classifies each unit through `evaluate_semantic_review`
-- aggregates function coverage, non-function coverage, and unsupported clusters
-- prints the coverage JSON to stdout
-- atomically writes the identical bytes to:
-  `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-
-#### `cargo xtask family recommend --format json`
-
-Behavior:
-
-- runs the full coverage collection path first in-process
-- never trusts an existing `coverage.latest.json` as primary input
-- writes fresh `coverage.latest.json`
-- ranks only `candidate_status == "rankable"` function clusters
-- prints recommendation JSON to stdout
-- atomically writes the identical bytes to:
-  `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-
-#### `cargo xtask family validate-artifact <path>`
-
-M27 extends validation so the command accepts:
-
-- legacy M26 promotion recommendation artifacts
-- legacy M26 promotion execution artifacts
-- legacy M26 blocker artifacts
-- new M27 coverage artifacts
-- new M27 recommendation-analysis artifacts
-
-That keeps one repo-owned validator surface.
-
-### Authored Corpus Manifest
-
-Path:
-
-- `semantic-families/corpus/rust-function.toml`
-
-Schema:
-
-```toml
-schema_version = 1
-target_language = "rust"
-target_lane = "function"
-
-[[sources]]
-id = "examples_ecommerce"
-path = "examples/ecommerce/units"
-kind = "real_example"
-counts_toward_recommendation = true
-note = "Canonical maintained example corpus."
-
-[[sources]]
-id = "m19_semantic_falsification_pack"
-path = "spec-cli/tests/fixtures/m19/semantic_falsification_pack/units"
-kind = "regression_unsupported"
-counts_toward_recommendation = true
-note = "Regression pack with aligned, drift, under-specified, and boundary fixtures."
-
-[[sources]]
-id = "m20_unsupported_truth_pack"
-path = "spec-cli/tests/fixtures/m20/unsupported_truth_pack/units"
-kind = "regression_unsupported"
-counts_toward_recommendation = true
-note = "Explicit unsupported-function truth pack."
+```text
+                    +----------------------------------+
+                    | semantic-families/corpus/*.toml |
+                    +----------------+-----------------+
+                                     |
+                                     v
+                         +-----------+------------+
+                         | coverage::collect_*    |
+                         | M27 truth, unchanged   |
+                         +-----------+------------+
+                                     |
+                                     v
+                       +-------------+--------------+
+                       | recommend.rs                |
+                       | layer 1: discovered cand.   |
+                       | layer 2: readiness policy   |
+                       +-------------+--------------+
+                                     |
+                   +-----------------+------------------+
+                   |                                    |
+                   v                                    v
+    +--------------+----------------+    +--------------+----------------+
+    | recommendation.latest.json    |    | validate-artifact             |
+    | schema_version = 2            |    | promotion_artifacts.rs rules  |
+    +--------------+----------------+    +--------------+----------------+
+                   |                                    |
+                   +-----------------+------------------+
+                                     |
+                                     v
+                           +---------+---------+
+                           | xtask/src/lib.rs  |
+                           | regression tests  |
+                           +-------------------+
 ```
 
-Manifest rules:
+### Data flow
 
-- all source paths are repo-relative and must stay inside the workspace root
-- symlink escapes are rejected
-- each source id is unique
-- each source path must exist and contain at least one `.unit.spec`
-- molecule tests are ignored by M27; unit specs are the only corpus input
-- packet fixtures under `semantic-families/**/fixtures/**` are not allowed in the
-  manifest for M27
+```text
+locked corpus
+   |
+   v
+coverage artifact (M27 semantics, unchanged)
+   |
+   v
+discoverable rankable clusters
+   |
+   v
+promotion-readiness adjudication
+   |                    \
+   |                     \__ hold reasons[] assigned
+   v
+ready-first sorting
+   |
+   v
+top-level recommendation_status
+   |
+   v
+stdout + recommendation.latest.json (schema v2)
+```
 
-### Per-Unit Corpus Role Rules
+### File responsibilities
 
-M27 uses both source kind and filename bucket to decide whether a unit creates
-promotion pressure.
+| File | Responsibility | Must not do |
+|---|---|---|
+| `xtask/src/family/recommend.rs` | implement two-layer recommendation flow | do not reimplement coverage accounting |
+| `xtask/src/family/promotion_artifacts.rs` | define schema v2 fields and validation rules | do not widen unrelated artifact contracts |
+| `xtask/src/lib.rs` | add focused regression and validator tests | do not silently rewrite unrelated M26/M27 assertions |
+| `semantic-families/README.md` | explain the new meaning of `ranked` | do not turn README into milestone theory |
 
-Bucket detection by file name:
+## Implementation Plan
 
-- `*_unsupported_near_miss.unit.spec` -> `unsupported_near_miss`
-- `*_under_specified.unit.spec` -> `under_specified`
-- `*_drift.unit.spec` -> `drift`
-- everything else -> `aligned_or_real`
+### Step 1 - Split schema versioning by artifact type
 
-Pressure rules:
+Current problem:
 
-- `real_example` source:
-  - all function units count toward leverage
-- `regression_unsupported` source:
-  - `unsupported_near_miss` units do **not** add leverage
-  - `drift`, `under_specified`, and `aligned_or_real` units may add leverage
-- `proof_only` source:
-  - never counts toward leverage
+- `promotion_artifacts.rs` uses one shared `SCHEMA_VERSION = 1`
+- M27.5 only wants recommendation-analysis to move to schema `2`
+- coverage semantics must stay unchanged
 
-This is the M27 mechanism that separates "boundary pressure" from "real
-promotion pressure" without hand-waving.
+Required change:
 
-### Coverage Artifact Contract
+- replace the single shared schema constant with artifact-specific constants
+- keep:
+  - family recommendation artifact at current schema
+  - coverage artifact at current schema
+  - promotion execution/blocker artifacts at current schema
+- bump only `FamilyRecommendationAnalysisArtifact` to schema `2`
 
-Path:
+Recommendation:
 
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+- do this explicitly with small named constants near the artifact definitions
+- do **not** build a generic version registry abstraction
 
-Artifact kind:
+Minimal diff beats cleverness here.
 
-- `family_coverage_snapshot`
+### Step 2 - Extend recommendation-analysis schema
 
-Required top-level fields:
+Add to `RecommendationCandidateEntry`:
 
-- `schema_version`
-- `artifact_kind`
-- `generated_at`
-- `inventory_path`
-- `inventory_sha256`
-- `corpus_manifest_path`
-- `corpus_manifest_sha256`
-- `sources[]`
-- `function_coverage`
-- `non_function_coverage`
-- `family_coverage[]`
-- `unsupported_clusters[]`
+- `promotion_readiness`
+- `hold_reasons[]`
 
-Required `sources[]` fields:
+New enums in `promotion_artifacts.rs`:
 
-- `id`
-- `path`
-- `kind`
-- `counts_toward_recommendation`
-- `note`
-- `unit_count`
+- `PromotionReadiness`
+  - `ready`
+  - `hold`
+- `HoldReason`
+  - `unknown_overlap_family`
+  - `hard_difficulty`
+  - `thin_real_example_support`
+  - `thin_regression_support`
 
-Required `function_coverage` fields:
+Validation rules:
 
-- `total_units`
-- `promoted_family_units`
-- `supported_unpromoted_family_units`
-- `unsupported_function_units`
+- `promotion_readiness = "ready"` requires `hold_reasons == []`
+- `promotion_readiness = "hold"` requires `hold_reasons` to be non-empty
+- `recommendation_status = "ranked"` requires at least one ranked candidate and
+  the first candidate must be `ready`
 
-Required `non_function_coverage` fields:
+### Step 3 - Make recommendation logic explicitly two-layer
 
-- `total_units`
-- `supported_sum_units`
-- `supported_data_units`
-- `other_units`
+`recommend.rs` should become conceptually:
 
-Required `family_coverage[]` fields:
+1. **Discovery projection**
+   - map `UnsupportedClusterEntry` -> candidate entry with leverage, difficulty,
+     confidence, overlap, rationale
+2. **Readiness adjudication**
+   - assign `promotion_readiness`
+   - assign `hold_reasons[]`
+3. **Ordering + status**
+   - sort ready candidates before hold candidates
+   - keep current leverage ordering inside each readiness bucket
+   - derive top-level `recommendation_status`
 
-- `family`
-- `unit_count`
-- `unit_ids`
-- `source_ids`
+Implementation guidance:
 
-Required `unsupported_clusters[]` fields:
+- keep this inside `recommend.rs`
+- prefer a couple of explicit helper functions over a new module
+- acceptable helpers:
+  - `project_candidate(...)`
+  - `adjudicate_readiness(...)`
+  - `recommendation_status_for(...)`
 
-- `cluster_id`
-- `reason_code`
-- `shape_fingerprint`
-- `representative_unit_ids`
-- `source_ids`
-- `real_example_hits`
-- `promotion_relevant_regression_hits`
-- `boundary_only_hits`
-- `overlap_family`
-- `candidate_status`
+### Step 4 - Lock policy rules
 
-Allowed `candidate_status` values:
+#### Promotion-readiness rules
 
-- `rankable`
-- `boundary_only`
-- `low_value`
-- `insufficient_evidence`
+A candidate is forced to `hold` when any of these are true:
 
-Classification rules:
+- `overlap_family == "unknown"`
+- `difficulty.tier == "hard"` and `real_example_hits < 2`
+- `real_example_hits == 0`
+- `real_example_hits == 1` and `promotion_relevant_regression_hits < 3`
+- `promotion_relevant_regression_hits <= 1` and `real_example_hits <= 1`
 
-- `boundary_only` when every contributing unsupported unit is either:
-  - from a `proof_only` source, or
-  - an `unsupported_near_miss` bucket unit
-- `insufficient_evidence` when:
-  - `real_example_hits == 0`, and
-  - `promotion_relevant_regression_hits <= 1`
-- `low_value` when:
-  - `real_example_hits == 0`, and
-  - all promotion-relevant hits come from exactly one source id
-- `rankable` otherwise
+Mapped hold reasons:
 
-### Recommendation Artifact Contract
+- unknown overlap -> `unknown_overlap_family`
+- hard difficulty with insufficient real examples -> `hard_difficulty`
+- weak real-example bar -> `thin_real_example_support`
+- weak regression bar -> `thin_regression_support`
 
-Path:
+Deliberate exclusion from the fresh root plan:
 
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+- `single_source_pressure` is deferred from M27.5 because the current serialized
+  coverage artifact does not expose `promotion_relevant_source_count`, and this plan
+  explicitly keeps coverage semantics unchanged. Reintroduce it only in a later
+  milestone that intentionally widens the coverage contract.
 
-Artifact kind:
+#### Confidence rules
 
-- `family_recommendation_analysis`
+`high` only when:
 
-Required top-level fields:
+- `real_example_hits >= 3`
+- `overlap_family != "unknown"`
 
-- `schema_version`
-- `artifact_kind`
-- `generated_at`
-- `coverage_path`
-- `coverage_sha256`
-- `recommendation_status`
-- `ranked_candidates[]`
+`medium` only when:
 
-Allowed `recommendation_status` values:
+- `real_example_hits >= 2` and `overlap_family != "unknown"`
+- or `real_example_hits == 1`, `promotion_relevant_regression_hits >= 3`,
+  `difficulty.tier != "hard"`, and `overlap_family != "unknown"`
 
-- `ranked`
-- `no_strong_candidate`
-- `insufficient_real_corpus`
+Otherwise:
 
-Status rules:
+- `low`
+
+#### Recommendation status rules
 
 Evaluate in this order:
 
-- `insufficient_real_corpus` when:
-  - no rankable candidate has any real-example hits, and
-  - every rankable candidate has `confidence.level == "low"`
-- `no_strong_candidate` when:
-  - at least one candidate is `rankable`, and
-  - every rankable candidate has `confidence.level == "low"`
-- `ranked` when the top rankable candidate has `confidence.level` of `medium`
-  or `high`
+1. `ranked` when at least one candidate is `ready` and the top ready candidate
+   has `confidence.level` of `medium` or `high`
+2. `insufficient_real_corpus` when every discoverable candidate is `hold` and
+   every candidate has `real_example_hits == 0`
+3. `no_strong_candidate` when at least one discoverable candidate exists, every
+   candidate is `hold`, and at least one candidate has `real_example_hits > 0`
 
-Each `ranked_candidates[]` entry must include:
+### Step 5 - Keep coverage semantics unchanged
 
-- `candidate_id`
-- `cluster_ids`
-- `primary_reason_code`
-- `overlap_family`
-- `leverage`
-- `difficulty`
-- `confidence`
-- `rationale`
+Coverage is not the bug.
 
-Required `leverage` fields:
+Do **not**:
 
-- `real_example_hits`
-- `promotion_relevant_regression_hits`
-- `boundary_only_hits`
-- `total_units_in_cluster`
+- change `FamilyCoverageArtifact` schema
+- add readiness fields to coverage
+- reclassify unsupported clusters in `coverage.rs`
+- widen the corpus manifest or source labeling rules
 
-Required `difficulty` fields:
+The only acceptable `coverage.rs` edits are tiny helper extractions or comments
+that make the recommendation layer easier to implement without changing output.
 
-- `tier`
-- `why`
+### Step 6 - Add deterministic regression coverage
 
-Allowed `difficulty.tier` values:
+`xtask/src/lib.rs` must gain focused tests for:
 
-- `adjacent`
-- `moderate`
-- `hard`
+- unknown-overlap hard candidate with one real example -> `hold`
+- no discoverable candidates -> `insufficient_real_corpus`
+- discoverable-but-held candidates -> `no_strong_candidate`
+- known-overlap adjacent candidate with strong evidence -> `ranked`
+- validator accepts schema v2 recommendation-analysis artifact
+- current locked corpus no longer returns `ranked`
 
-Required `confidence` fields:
+The last one is the real regression gate. If that test is missing, the milestone
+is not done.
 
-- `level`
-- `why`
+### Step 7 - Update maintainer docs
 
-Allowed `confidence.level` values:
+`semantic-families/README.md` must say, plainly:
 
-- `high`
-- `medium`
-- `low`
+- `ranked` means promotion-worthy next-family pressure
+- visible held candidates are not errors
+- `no_strong_candidate` is an honest outcome
 
-Confidence rules:
+That wording matters because the product surface here is the artifact contract plus
+the maintainer interpretation of it.
 
-- `high` when `real_example_hits >= 2`
-- `medium` when:
-  - `real_example_hits == 1`, or
-  - `promotion_relevant_regression_hits >= 3`
-- `low` otherwise
+## Test Review
 
-### Ranking Contract
-
-M27 does **not** use an opaque single score.
-
-Rankable candidates are sorted by this tuple, in order:
-
-1. `real_example_hits` descending
-2. `promotion_relevant_regression_hits` descending
-3. `difficulty.tier` ascending (`adjacent` before `moderate` before `hard`)
-4. `boundary_only_hits` ascending
-5. `candidate_id` ascending
-
-Difficulty mapping:
-
-- `unsupported_arithmetic_shape` -> `adjacent`
-- `unsupported_wrapper_body_shape` -> `adjacent`
-- `unsupported_required_argument_expression` -> `moderate`
-- `unsupported_dep_topology` -> `hard`
-- `unsupported_control_flow` -> `hard`
-- `unsupported_function_surface` -> `hard`
-
-Overlap-family mapping:
-
-- arithmetic-shaped clusters -> `function.arithmetic_leaf.monotone_*`
-- wrapper-shaped clusters -> `function.wrapper.pipeline*`
-- everything else -> `unknown`
-
-If `overlap_family == "unknown"`, the candidate may still be surfaced, but it
-must never sort above a cluster with the same leverage and a concrete promoted
-overlap.
-
-### Shape Fingerprint Contract
-
-M27 needs a deterministic fingerprint for unsupported function clustering.
-
-Implementation decision:
-
-- add one narrow public helper in `spec-core` that derives an unsupported
-  function shape fingerprint from the same authored function packet and semantic
-  routing inputs the runtime review already uses
-
-That helper must return a stable string based on:
-
-- function dep arity
-- callable dep topology class
-- contract input count
-- return presence
-- whether the authored body is wrapper-like, arithmetic-like, or neither
-
-M27 must not duplicate semantic-review shape logic in `xtask`.
-
-## Architecture / Dependency View
+### Code path coverage
 
 ```text
-semantic-families/corpus/rust-function.toml
-        │
-        ▼
-xtask/src/family/coverage.rs
-        │
-        ├── inventory::collect_inventory()
-        ├── retained inventory snapshot write
-        ├── spec-core loader + validator + semantic review
-        ├── unsupported fingerprint helper
-        ├── per-unit coverage accounting
-        └── unsupported cluster aggregation
-                │
-                ▼
-.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-                │
-                ▼
-xtask/src/family/recommend.rs
-        │
-        ├── filter rankable clusters
-        ├── deterministic tuple sort
-        ├── confidence + difficulty projection
-        └── recommendation_status derivation
-                │
-                ▼
-.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+CODE PATH COVERAGE
+==================
+[+] xtask/src/family/promotion_artifacts.rs
+    |
+    ├── FamilyRecommendationAnalysisArtifact::validate()
+    │   ├── [GAP] schema_version == 2 accepted for recommendation analysis
+    │   ├── [GAP] ranked requires first candidate == ready
+    │   ├── [GAP] hold requires non-empty hold_reasons[]
+    │   └── [GAP] ready requires empty hold_reasons[]
+    |
+    └── RecommendationCandidateEntry::validate()
+        ├── [GAP] promotion_readiness + hold_reasons[] consistency
+        └── [GAP] duplicate/empty hold reasons rejected or normalized deliberately
+
+[+] xtask/src/family/recommend.rs
+    |
+    ├── discovery projection
+    │   └── [★★ TESTED by existing M27 path] rankable clusters still project into candidates
+    ├── readiness adjudication
+    │   ├── [GAP] unknown overlap -> hold
+    │   ├── [GAP] hard + thin real support -> hold
+    │   └── [GAP] strong adjacent known-overlap candidate -> ready
+    ├── ready-first sorting
+    │   └── [GAP] ready candidate sorts ahead of stronger-but-held candidate
+    └── recommendation_status_for(...)
+        ├── [GAP] ready + medium/high confidence -> ranked
+        ├── [GAP] all hold + some real examples -> no_strong_candidate
+        └── [GAP] all hold + zero real examples -> insufficient_real_corpus
+
+[+] locked corpus rerun
+    |
+    └── [GAP] [→E2E] current three-source corpus returns no_strong_candidate and
+               money/round cluster remains visible with hold reasons
 ```
 
-### Module boundaries
-
-| Module | M27 responsibility | Must not happen |
-|---|---|---|
-| `spec-core/src/semantic_review.rs` | expose one narrow fingerprint helper over existing semantic-review truth | do not absorb M27 artifact IO or ranking policy |
-| `xtask/src/family/coverage.rs` | manifest loading, corpus evaluation, coverage aggregation, coverage artifact write | do not reimplement semantic-review routing |
-| `xtask/src/family/recommend.rs` | cluster ranking and recommendation artifact write | do not read stale artifacts as authoritative input |
-| `xtask/src/family/promotion_artifacts.rs` | validate new analysis artifacts alongside existing M26 artifacts | do not become the implementation home for coverage logic |
-| `semantic-families/corpus/rust-function.toml` | authored corpus source of truth | do not include proof-only packet fixtures |
-| `semantic-families/README.md` | maintainer-facing M27 workflow docs | do not restate the full milestone theory |
-
-### Expected file touch set
-
-The implementation should stay within this file set unless a discovered blocker
-proves otherwise:
-
-- `xtask/Cargo.toml`
-- `xtask/src/lib.rs`
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/paths.rs`
-- `spec-core/src/lib.rs`
-- `spec-core/src/semantic_review.rs`
-- `semantic-families/corpus/rust-function.toml`
-- `semantic-families/README.md`
-
-That is the bounded blast radius. Do not introduce a new crate.
-
-## Implementation Slices
-
-### Slice 1 - Corpus contract and CLI wiring
-
-Goal:
-
-- make the new M27 commands real without implementing ranking yet
-
-Files:
-
-- `xtask/Cargo.toml`
-- `xtask/src/lib.rs`
-- `xtask/src/family/mod.rs`
-- `semantic-families/corpus/rust-function.toml`
-
-Deliverables:
-
-- `xtask` depends on `spec-core` at runtime, not only in dev tests
-- new `FamilyCommand::{Coverage, Recommend}` variants exist
-- the authored corpus manifest exists at the locked path
-- manifest validation rejects path escape, duplicates, missing dirs, and packet fixtures
-
-Tests:
-
-- CLI dispatch tests for `family coverage --format json`
-- CLI dispatch tests for `family recommend --format json`
-- manifest parsing and validation tests
-
-### Slice 2 - Coverage collection and artifact contract
-
-Goal:
-
-- produce a truthful coverage snapshot from the locked corpus
-
-Files:
-
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/paths.rs`
-
-Deliverables:
-
-- retained inventory snapshot write under
-  `.semantic-family-artifacts/family-promotion/inventory/`
-- coverage aggregation across the three locked corpus sources
-- separate function vs non-function coverage reporting
-- atomic write of `analysis/coverage.latest.json`
-- `validate-artifact` accepts coverage artifacts
-
-Tests:
-
-- coverage artifact round-trip validation
-- basis-case integration test proving:
-  - promoted function coverage is non-zero
-  - supported-unpromoted function coverage is zero
-  - unsupported function coverage is non-zero
-  - supported non-function coverage is visible
-- proof-only exclusion test
-
-### Slice 3 - Unsupported fingerprinting and cluster projection
-
-Goal:
-
-- make unsupported clusters deterministic instead of reason-code blobs
-
-Files:
-
-- `spec-core/src/semantic_review.rs`
-- `spec-core/src/lib.rs`
-- `xtask/src/family/coverage.rs`
-
-Deliverables:
-
-- public unsupported function fingerprint helper in `spec-core`
-- cluster key = `(reason_code, shape_fingerprint)`
-- overlap-family hint projected into each cluster
-- `candidate_status` classification implemented exactly as locked above
-
-Tests:
-
-- fingerprint stability tests in `spec-core`
-- cluster split tests proving two units with the same reason but different shape
-  do not collapse into one cluster
-- boundary-only classification tests for `_unsupported_near_miss`
-
-### Slice 4 - Recommendation ranking
-
-Goal:
-
-- turn clusters into deterministic next-family output
-
-Files:
-
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-
-Deliverables:
-
-- `family recommend --format json` recomputes fresh coverage first
-- deterministic tuple ranking implemented exactly as locked above
-- confidence and difficulty projection
-- `recommendation_status` projection
-- atomic write of `analysis/recommendation.latest.json`
-- `validate-artifact` accepts recommendation-analysis artifacts
-
-Tests:
-
-- deterministic ordering test with tied candidates broken by the locked tuple
-- `insufficient_real_corpus` test when rankable pressure exists only in low-value
-  regression signals with zero real-example hits
-- `no_strong_candidate` test when rankable candidates exist but all remain
-  `confidence.level == "low"`
-- golden JSON output test for recommendation artifact shape
-
-### Slice 5 - Maintainer docs and workflow lock
-
-Goal:
-
-- make the workflow usable without hidden context
-
-Files:
-
-- `semantic-families/README.md`
-
-Deliverables:
-
-- document the two new M27 commands
-- document the new `analysis/` artifact directory
-- document that packet fixtures are `proof_only`
-- document corpus source kinds and per-bucket leverage rules
-- document that M27 does not overwrite the root M26
-  `recommendation.latest.json`
-
-Tests:
-
-- none beyond review of doc accuracy against command names and paths
-
-## Test Diagram
+### User-flow style coverage for maintainer outcomes
 
 ```text
-COMMAND PATH COVERAGE
-===========================
-[+] cargo xtask family coverage --format json
-    │
-    ├── manifest load + schema validation
-    │   └── unit test: valid manifest / duplicate id / path escape / packet-fixture rejection
-    │
-    ├── inventory collection + retained inventory snapshot write
-    │   └── unit test: retained snapshot path + sha wired into artifact
-    │
-    ├── source scan + spec-core validate/evaluate loop
-    │   └── integration test: locked M27 corpus basis
-    │
-    ├── function coverage aggregation
-    │   └── integration test: promoted > 0, supported-unpromoted = 0, unsupported > 0
-    │
-    ├── non-function coverage aggregation
-    │   └── integration test: supported sum/data are visible separately
-    │
-    ├── unsupported cluster projection
-    │   ├── unit test: same reason + different fingerprint stay split
-    │   └── unit test: unsupported_near_miss becomes boundary_only
-    │
-    └── stdout bytes == analysis/coverage.latest.json bytes
-        └── golden JSON test
+MAINTAINER FLOW COVERAGE
+========================
+[+] maintainer runs `cargo xtask family recommend --format json`
+    ├── [GAP] stdout bytes exactly match written artifact bytes
+    ├── [GAP] visible held candidates still appear in ranked_candidates[]
+    └── [GAP] top-level status reflects readiness, not raw leverage
 
-[+] cargo xtask family recommend --format json
-    │
-    ├── recompute fresh coverage first
-    │   └── integration test: recommend does not depend on prior latest file
-    │
-    ├── filter rankable clusters
-    │   └── unit test: boundary_only / low_value / insufficient_evidence excluded from ranking
-    │
-    ├── deterministic tuple sort
-    │   └── unit test: leverage, difficulty, boundary count, candidate id tie-break order
-    │
-    ├── recommendation_status projection
-    │   ├── unit test: insufficient_real_corpus
-    │   └── unit test: no_strong_candidate
-    │
-    └── stdout bytes == analysis/recommendation.latest.json bytes
-        └── golden JSON test
-
-ARTIFACT VALIDATION
-===========================
-[+] cargo xtask family validate-artifact <coverage path>
-    └── schema + path + sha checks
-
-[+] cargo xtask family validate-artifact <recommendation-analysis path>
-    └── schema + path + coverage-basis checks
+[+] maintainer runs `cargo xtask family validate-artifact <path>`
+    ├── [GAP] valid schema v2 artifact passes
+    └── [GAP] invalid ready/hold combination fails with actionable error
 ```
+
+Coverage target for M27.5:
+
+- every new readiness rule gets a direct unit-style test
+- every new validator rule gets a negative test
+- one locked-corpus regression proves the real motivating failure is fixed
+- one command-path test proves stdout bytes match the written artifact bytes
+- one command-path test proves the locked corpus artifact contains visible held
+  candidates plus `recommendation_status = "no_strong_candidate"`
+
+### Test files
+
+- `xtask/src/lib.rs`
+  - extend existing family artifact and recommend tests
+- no separate test crate
+- no new end-to-end harness outside current `xtask` test style
+
+Required command-path tests:
+
+- run `cargo xtask family recommend --format json` in a temp workspace and assert
+  stdout bytes equal `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+- run the locked-corpus recommendation flow and assert:
+  - `recommendation_status == "no_strong_candidate"`
+  - the `money/round` candidate is still present
+  - the candidate is `hold`
+  - hold reasons include:
+    - `unknown_overlap_family`
+    - `hard_difficulty`
+    - `thin_real_example_support`
 
 ## Failure Modes Registry
 
-| Codepath | Realistic failure | Test required | Error handling required | User-visible result |
+| Codepath | Realistic production failure | Test required | Error handling required | User-visible outcome |
 |---|---|---|---|---|
-| Manifest loading | repo-relative path escapes workspace or points at packet fixtures | yes | hard fail with invalid-input message | explicit command failure |
-| Coverage collection | one corpus source contains an invalid `.unit.spec` | yes | hard fail naming the source id and path | explicit command failure |
-| Semantic classification | a unit evaluates as unsupported but produces no reason code | yes | map to `unsupported_function_surface`, never panic | explicit artifact entry |
-| Cluster projection | two structurally different unsupported units collapse into one cluster | yes | stable fingerprint helper and cluster-split tests | silent corruption if untested, so treat as critical |
-| Recommendation ranking | root M26 `recommendation.latest.json` gets overwritten | yes | M27 writes only under `analysis/` | explicit path isolation |
-| Artifact retention | stdout and written file diverge | yes | write exactly the serialized bytes that were printed | explicit test catch |
+| schema split | accidentally bumping coverage schema while changing recommendation analysis | yes | yes | validator churn and broken artifact consumers |
+| readiness adjudication | held candidate gets no hold reason | yes | yes | silent ambiguity in artifact output |
+| ready-first ordering | ready candidate stays behind held candidate | yes | yes | false `no_strong_candidate` or misleading top slot |
+| recommendation status | `ranked` still emitted on thin evidence | yes | yes | roadmap steering bug |
+| locked corpus regression | money/round no longer visible at all | yes | yes | hidden pressure instead of honest abstention |
 
-Critical-gap rule for M27:
+Critical gap rule:
 
-- any path that could silently change candidate ordering without a failing test is
-  a critical gap
-- any path that could overwrite the M26 promotion artifact namespace is a
-  critical gap
-
-## Risks
-
-### Risk 1: regression packs overwhelm real-example pressure
-
-If M27 counts adversarial fixtures too aggressively, the top recommendation will
-be flattering but wrong.
-
-Mitigation:
-
-- source kinds are explicit
-- `unsupported_near_miss` is boundary-only pressure
-- `insufficient_real_corpus` is an allowed honest outcome
-
-### Risk 2: fingerprint logic drifts away from semantic-review truth
-
-If xtask invents its own structural model, clusters will stop matching what the
-runtime reviewer actually means.
-
-Mitigation:
-
-- the fingerprint helper lives in `spec-core`
-- xtask consumes that helper, it does not fork it
-
-### Risk 3: M27 collides with the M26 artifact namespace
-
-The repo already has a root `recommendation.latest.json` contract for promotion.
-
-Mitigation:
-
-- M27 writes only under `analysis/`
-- `validate-artifact` learns both contracts explicitly
+- any readiness path with no test and no explicit artifact validation is a **critical gap**
 
 ## Worktree Parallelization Strategy
 
-This plan has parallelization value. It is not fully sequential.
+This plan has bounded parallelization.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| A. Fingerprint helper | `spec-core/semantic_review`, `spec-core/lib` | — |
-| B. Corpus manifest + docs | `semantic-families/` | — |
-| C. Coverage command + artifact validation | `xtask/`, `.semantic-family-artifacts` path rules | A |
-| D. Recommendation command | `xtask/` | A, C |
+| schema + validator update | `xtask/src/family/`, `xtask/src/lib.rs` | — |
+| recommendation policy update | `xtask/src/family/`, `xtask/src/lib.rs` | schema + validator update |
+| docs update | `semantic-families/` | recommendation policy wording settled |
 
 ### Parallel lanes
 
-- Lane A: Step A
-  - `spec-core` helper only
-- Lane B: Step B
-  - `semantic-families/` manifest and docs only
-- Lane C: Step C -> Step D
-  - sequential inside `xtask/`, shared module ownership
+- Lane A: schema + validator update -> recommendation policy update
+  sequential, shared `xtask/src/family/`
+- Lane B: docs update
+  independent once terminology is frozen
 
 ### Execution order
 
-1. Launch Lane A and Lane B in parallel worktrees.
-2. Merge Lane A first, because coverage and recommendation both depend on the
-   fingerprint contract.
-3. Merge Lane B whenever ready. It is independent of code, but must land before
-   the feature is considered complete.
-4. Launch Lane C after Lane A merges.
-5. Execute Step C, then Step D sequentially in the same worktree because both
-   touch `xtask/src/lib.rs`, `xtask/src/family/mod.rs`, and
-   `xtask/src/family/promotion_artifacts.rs`.
+- Launch Lane A first
+- once readiness field names and status rules are frozen, launch Lane B in parallel
+- merge Lane B after Lane A proves the final wording
 
 ### Conflict flags
 
-- Lane A and Lane C both influence the fingerprint contract, but only Lane A
-  touches `spec-core/`; keep that ownership hard.
-- Step C and Step D both touch `xtask/src/lib.rs` and
-  `xtask/src/family/promotion_artifacts.rs`. Do not split them across parallel
-  worktrees.
-- Lane B is safe to run independently because it only touches authored manifest
-  and maintainer docs.
+- `recommend.rs` and `promotion_artifacts.rs` are the same module lane, do not split them
+- `xtask/src/lib.rs` tests depend on final field names, keep them in Lane A
+
+## Deferred to TODOS.md
+
+- If M27.5 still yields `no_strong_candidate`, capture the next step as a dedicated
+  corpus-expansion or policy-decision milestone rather than folding it into this plan.
+- If post-M27.5 reviewers still struggle to interpret held candidates, consider a later
+  read-side summary improvement. Not now.
+
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | intake | replace old M27 root plan with a fresh M27.5 root plan | mechanical | completeness | current `PLAN.md` was authoritative for the wrong milestone | keep stale M27 plan |
+| 2 | scope | keep command surface unchanged | mechanical | explicit over clever | new commands add cognitive load without fixing the trust bug | `family analyze` |
+| 3 | architecture | split recommendation into discovery + readiness layers inside `recommend.rs` | taste | pragmatic | preserves minimal diff while making the policy seam explicit | new module or full rewrite |
+| 4 | schema | version recommendation-analysis independently | mechanical | minimal diff | coverage semantics must remain M27 truth | global schema bump |
+| 5 | ranking | sort ready candidates ahead of held candidates | mechanical | explicit over clever | otherwise a held candidate can still shadow a valid recommendation | leverage-only sort |
+| 6 | review | defer `single_source_pressure` from the root M27.5 slice | mechanical | minimal diff | current serialized coverage contract does not expose the source-count signal without widening M27 semantics | hidden in-memory side channel or coverage schema change |
+| 7 | review | reorder status derivation so `insufficient_real_corpus` is reachable | mechanical | explicit over clever | subset conditions must be checked first or the branch is dead | ambiguous status ladder |
 
 ## Acceptance Gates
 
-M27 is complete only when all of the following are true:
+M27.5 is complete only when all of the following are true:
 
-1. `cargo xtask family coverage --format json` exists and is deterministic.
-2. `cargo xtask family recommend --format json` exists and is deterministic.
-3. Both commands print JSON to stdout and atomically write identical bytes to
-   their locked artifact paths.
-4. Coverage writes a retained inventory snapshot and cites its path and sha.
-5. Coverage reports:
-   - promoted function units
-   - supported-but-unpromoted function units
-   - unsupported function units
-   - supported non-function units
-6. Recommendation ranks only `rankable` function clusters.
-7. Recommendation can emit `insufficient_real_corpus` honestly on the current
-   small-corpus reality.
-8. M27 never overwrites the root M26
-   `.semantic-family-artifacts/family-promotion/recommendation.latest.json`.
-9. `cargo xtask family validate-artifact <path>` accepts both new M27 artifact
-   kinds.
-10. The locked M27 corpus basis is covered by regression tests.
+1. `cargo xtask family recommend --format json` remains deterministic.
+2. Recommendation analysis still prints to stdout and writes identical bytes to
+   `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`.
+3. `cargo xtask family validate-artifact <path>` accepts the schema v2 recommendation-analysis artifact.
+4. Weak candidates remain visible instead of disappearing.
+5. A candidate with `overlap_family = "unknown"` and `difficulty = "hard"` does not cause top-level `ranked` on thin evidence.
+6. The current locked three-source corpus yields `no_strong_candidate`.
+7. A stronger adjacent known-overlap candidate can still yield `ranked`.
+8. Coverage artifact semantics remain unchanged from M27.
 
-## Post-M27 Branch Rule
+## Post-M27.5 Branch Rule
 
-M27 should end with one of exactly two honest next steps:
+After M27.5, the repo must make one of two explicit next moves:
 
-- if `recommendation_status == "ranked"`, the next milestone can be the top
-  family promotion
-- if `recommendation_status == "insufficient_real_corpus"` or
-  `"no_strong_candidate"`, the next milestone should be one small maintained
-  corpus-expansion pack, not fake ranking theatrics
+- if the tightened engine still yields `no_strong_candidate`, the next milestone
+  is a small corpus-expansion pack or explicit human policy choice
+- if the tightened engine yields a genuinely ready candidate, the next milestone
+  is that family promotion
 
-That rule is part of the milestone. M27 is supposed to make the confidence gap
-visible.
+M28 does **not** begin automatically.
+
+## Completion Summary
+
+- Step 0: Scope Challenge — accepted as a narrow `xtask` policy hardening milestone
+- Architecture Review: two major architecture locks, per-artifact schema split and reachable status ladder
+- Code Quality Review: keep explicit helpers, avoid new module churn
+- Test Review: diagram produced, targeted readiness, validator, and command-path regression gaps identified
+- Performance Review: no material runtime risk beyond deterministic sorting and artifact serialization
+- NOT in scope: written
+- What already exists: written
+- TODOS.md updates: follow-up candidates identified, none bundled now
+- Failure modes: readiness ambiguity treated as critical if untested
+- Outside voice: unavailable in this session, host subagent review incorporated
+- Parallelization: 2 lanes, 1 primary sequential lane + 1 docs lane
+- Lake Score: complete option chosen
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clean | 3 issues found, 0 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+
+**UNRESOLVED:** 0
+
+**VERDICT:** ENG CLEARED — fresh M27.5 plan is ready to implement.
