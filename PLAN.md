@@ -1,146 +1,138 @@
-# M27.8 - Crosslib Arithmetic Confirmation Pack
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-autoplan-restore-20260501-192409.md -->
+# M27.8R - Fixture-Owned Harness Truth Repair
 
 Status: **implementation contract**  
 Base branch: **main**  
 Working branch: **feat/corpus-expansion**  
+Nearest source-truth branches: **`ws/m27_8-int`, `ws/m27_8-lane-a`, `ws/m27_8-lane-b`**  
 Last rewritten: **2026-05-01**
 
 ## Summary
 
-M27.8 is a one-wedge corpus-expansion milestone.
+The old M27.8 plan is obsolete.
 
-The job is to add exactly one maintained cross-library real example,
-`examples/crosslib-app/units/pricing/apply_tax.unit.spec`, then prove that this
-single new example is enough to move the current recommendation output from
-`no_strong_candidate` to `ranked` without changing corpus policy, coverage
-logic, recommendation logic, or artifact schemas.
+The integrated M27.8 run already proved the intended product truth on the
+`ws/m27_8-*` worktree branches. It stopped only because the final seeded `xtask`
+command-path lock replayed a different world and observed
+`coverage.function_coverage.promoted_family_units == 10` instead of the locked
+integrated truth `15`.
 
-If this one-example wedge lands and the ranked output matches the locked values
-below, corpus expansion stops and the next milestone becomes promotion-focused.
-If it does not land, corpus expansion also stops and the repo re-plans from the
-mismatch.
+This follow-up is not another corpus-expansion milestone. It is a harness-truth
+repair milestone.
+
+The job is:
+
+1. recover the already-proven lane-A authored source truth from the `ws/m27_8-*`
+   branches
+2. keep the ranked command-path assertions from the blocked lane-B work
+3. repair the seeded workspace so it copies the promoted packet truth that the
+   failing command-path coverage path actually consumes
+4. rerun the exact proof loop until the final `cargo test -p xtask -- --color never`
+   locks the same truth already observed in the blocked integration run
+
+If this lands, the repo can finally trust the final lock again. If it does not,
+stop and re-plan from the next mismatch with captured seeded evidence, not with a
+second guess.
 
 ## Plan Authority
 
-This file is the authoritative next-run contract after M27.75.
+This file supersedes the earlier "Crosslib Arithmetic Confirmation Pack" plan.
 
 Primary sources:
 
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+- [spensermcconnell-feat-corpus-expansion-design-20260501-191122.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260501-191122.md)
+- `.runs/m27_8/acceptance.md`
+- `.runs/m27_8/merge-log.md`
+- `.runs/m27_8/contract-freeze.json`
+- `xtask/src/lib.rs`
+- `xtask/src/family/coverage.rs`
+- `xtask/src/family/inventory.rs`
 - `semantic-families/corpus/rust-function.toml`
 
 Repo truth checked while writing this plan:
 
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/lib.rs`
-- `examples/crosslib-app/spec.toml`
-- `examples/crosslib-app/units/pricing/apply_discount.unit.spec`
-- `examples/shared-spec/units/money/round.unit.spec`
-- `examples/crosslib-app/units/.gitignore`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_arithmetic_shape.unit.spec`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/money/round.unit.spec`
+- current branch `feat/corpus-expansion` does **not** contain the recovered
+  `examples/crosslib-app/units/pricing/apply_tax.unit.spec` source truth
+- the blocked run artifacts show that the integrated truth existed on
+  `ws/m27_8-int`
+- `xtask/src/lib.rs` on the current branch still contains the stale
+  `recommendation_command_path_writes_same_bytes_and_locked_corpus_is_no_strong_candidate()`
+  lock and a seeded workspace copier that omits
+  `semantic-families/function.wrapper.pipeline.v1`
+- the failing command-path test calls `recommend::run_with_writer()`, which flows
+  through `coverage::collect_latest()`, the corpus manifest, and the promoted
+  family inventory, not through cross-library `spec.toml` loading
 
-Live repo truth rechecked while writing this plan:
+Durable truth lives in the blocked run artifacts:
 
-- `cargo xtask family coverage --format json`
-- `cargo xtask family recommend --format json`
-- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+- `.runs/m27_8/acceptance.md`
+- `.runs/m27_8/merge-log.md`
+- `.runs/m27_8/contract-freeze.json`
 
-Detached-worktree dry-run truth captured on `2026-05-01` is also part of this
-contract. The exact expected output deltas below come from that proof run.
-
-If any stale note, tracker intuition, orchestration note, or branch-local memory
-disagrees with this file, this file wins.
+The `ws/m27_8-*` branches are recovery sources for authored files, not the only
+authority.
 
 ## Problem Statement
 
-M27.75 proved the five-source corpus is honest enough to abstain.
+The repo already learned the important product fact:
 
-Current truth is:
+- integrated coverage truth was `28 / 15 / 0 / 13`
+- integrated recommendation truth was `ranked`
+- arithmetic was first and `ready`
+- `money/round` remained second and `hold` for `unknown_overlap_family`
 
-- `recommendation_status = "no_strong_candidate"`
-- `unsupported_function_surface-e40675da6fa0` is still held only for
-  `unknown_overlap_family`
-- `unsupported_arithmetic_shape-2694b2baf65b` is still held for
-  `thin_real_example_support` and `thin_regression_support`
+That truth was observed before the stop in `.runs/m27_8/acceptance.md`.
 
-The key repo-truth conclusion is:
+What failed was narrower:
 
-- the `money/round` cluster is not waiting on more corpus to resolve
-  `unknown_overlap_family`
-- the arithmetic unsupported cluster is still waiting on corpus
+- the final seeded command-path test in `xtask/src/lib.rs`
+- specifically, the copied mini-repo world did not reproduce the same promoted
+  family count as the integrated run
 
-That follows directly from current code:
+The strongest concrete mechanism is now visible in code:
 
-1. `xtask/src/family/coverage.rs` derives overlap family from unsupported reason
-   codes plus stored shape fingerprints.
-2. The current `unsupported_function_surface-e40675da6fa0` cluster stays
-   `unknown` because its reason code is `unsupported_function_surface` and its
-   fingerprint does not advertise `arithmetic_like` or `wrapper_like`.
-3. Adding more examples to that same cluster changes leverage counts, not the
-   inferred overlap family.
-4. The arithmetic cluster already resolves to
-   `function.arithmetic_leaf.monotone_*` with `difficulty.tier = "adjacent"`.
-5. Under `xtask/src/family/recommend.rs`, one more real-example hit in that
-   arithmetic cluster is enough to clear both current hold reasons and make the
-   candidate `ready` at `confidence.level = "medium"`.
+1. `recommendation_command_path_writes_same_bytes...` calls
+   `recommend::run_with_writer()`
+2. that path flows through `coverage::collect_latest()`
+3. `collect_latest()` loads:
+   - the corpus manifest `semantic-families/corpus/rust-function.toml`
+   - the promoted family inventory from `xtask/src/family/inventory.rs`
+4. promoted families are derived from which promoted packet roots exist in the
+   seeded workspace
+5. `seed_locked_recommendation_workspace()` currently copies:
+   - `semantic-families/function.wrapper.pipeline.chain3.v1`
+   - `semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1`
+   - `semantic-families/function.arithmetic_leaf.monotone_up.v1`
+6. but it does **not** copy `semantic-families/function.wrapper.pipeline.v1`
 
-So the smallest honest next wedge is not another manifest expansion, not another
-regression-pack padding run, not a policy change, and not M28 shared-core work.
-It is one maintained repo-owned real example in the already-counted
-`examples_crosslib_app` source, shaped to land in
-`unsupported_arithmetic_shape-2694b2baf65b`.
+That omission explains the observed `15 -> 10` promoted-family drop cleanly:
+five wrapper-family units lose promoted status when the promoted packet root is
+missing from the seeded workspace.
+
+Wild. The branch that proved the feature is not the branch the final copied test
+actually simulates.
 
 ## Milestone Outcome
 
-When M27.8 lands, the repo can truthfully claim:
+When M27.8R lands, the repo can truthfully claim:
 
-- the Rust recommendation corpus still uses the same five manifest sources
-- `examples_crosslib_app` grows from `1` function unit to `2`
-- `function_coverage.total_units` grows from `27` to `28`
-- `function_coverage.unsupported_function_units` grows from `12` to `13`
-- the arithmetic-shape cluster gains a second real-example hit
-- the arithmetic-shape cluster becomes `promotion_readiness = "ready"`
-- the top-level recommendation flips from `no_strong_candidate` to `ranked`
-- the `money/round` unknown-overlap cluster remains visible and honestly held
-- the next milestone should be promotion-focused, not another blind corpus run
+- the already-proven M27.8 source truth has been recovered from the `ws/m27_8-*`
+  branches onto `feat/corpus-expansion`
+- the seeded command-path harness now copies the promoted packet root required to
+  model the same promoted-family inventory the integrated run used
+- the final `xtask` command-path lock reproduces the same ranked truth already
+  observed in the blocked integration run
+- the repo did not widen scope into recommendation policy, coverage policy,
+  schema changes, or broader test-architecture redesign
 
-M27.8 does **not** claim:
+M27.8R does **not** claim:
 
-- recommendation policy changed
-- overlap-family inference changed
-- the `money/round` cluster is now understood
-- shared-core extraction started
-- second-language proof started
-- the multi-run tracker needs to be rewritten mid-run
-
-## Scope
-
-### In Scope
-
-- add exactly one maintained real-example unit under
-  `examples/crosslib-app/units`
-- make that new unit count through the existing `examples_crosslib_app` source
-- whitelist the new passport in `examples/crosslib-app/units/.gitignore`
-- update the locked `xtask` command-path test to the new ranked truth
-- rerun source proof, cross-library build proof, coverage, recommendation,
-  artifact validation, and `xtask` tests
-
-### NOT In Scope
-
-- editing `semantic-families/corpus/rust-function.toml`
-- changing `xtask/src/family/coverage.rs`
-- changing `xtask/src/family/recommend.rs`
-- changing `xtask/src/family/promotion_artifacts.rs`
-- changing artifact schemas
-- rewriting `docs/recommendation_corpus_expansion_program_v0.1.md`
-- adding new regression fixtures
-- doing M28 work
+- a new corpus experiment
+- new recommendation logic
+- new coverage logic
+- new artifact schemas
+- a repo-wide replacement of copied workspace fixtures
+- M28 shared-core extraction
 
 ## Step 0 - Scope Challenge
 
@@ -148,409 +140,233 @@ M27.8 does **not** claim:
 
 | Sub-problem | Existing code or artifact | Reuse decision |
 |---|---|---|
-| Current five-source corpus | `semantic-families/corpus/rust-function.toml` | Reuse as-is. No new source ids. |
-| Arithmetic cross-library real example shape | `examples/crosslib-app/units/pricing/apply_discount.unit.spec` | Reuse as the authored template. |
-| Shared helper dependency path | `examples/crosslib-app/spec.toml` and `examples/shared-spec/units/money/round.unit.spec` | Reuse as-is. The sibling-library route already exists. |
-| Arithmetic regression anchor | `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_arithmetic_shape.unit.spec` | Reuse as the regression-side representative. |
-| Recommendation thresholds | `xtask/src/family/recommend.rs` | Reuse as-is. This milestone is evidence, not policy. |
-| Locked command-path proof | `xtask/src/lib.rs`, test `recommendation_command_path_writes_same_bytes_and_locked_corpus_is_no_strong_candidate()` | Extend and rename. Do not create a parallel lock. |
+| Exact authored `apply_tax` source truth | `.runs/m27_8/contract-freeze.json`, merge commit `ab11249`, branch `ws/m27_8-lane-a` | Reuse literally. Do not re-invent the unit. |
+| Ranked command-path assertion shape | merge commit `7ae58ae`, branch `ws/m27_8-lane-b` | Reuse as the starting point. Repair the harness around it. |
+| Integrated acceptance truth | `.runs/m27_8/acceptance.md` | Reuse as the contract oracle. |
+| Seeded workspace helper seam | `xtask/src/lib.rs::seed_locked_recommendation_workspace()` | Reuse and repair. Do not introduce a new harness framework. |
+| Promoted-family inventory model | `xtask/src/family/inventory.rs` | Reuse as-is. Feed it the missing promoted packet root. |
+| Existing proof loop order | `.runs/m27_8/contract-freeze.json.required_build_order` | Reuse exactly. |
 
 ### Minimum honest change
 
-The smallest complete diff is:
-
-1. one new authored unit spec in `examples/crosslib-app/units/pricing/`
-2. one `.gitignore` whitelist update so the passport is intentional repo truth
-3. one `xtask` command-path lock update to the new ranked output
-
-Anything larger is scope creep. Anything smaller leaves the milestone under-locked.
-
-### Complexity check
-
-This plan touches exactly three tracked source files and introduces zero new Rust
-modules, services, or abstraction layers.
-
-That is the right size. Boring on purpose.
-
-### Completeness check
-
-Do the complete version now:
-
-- add the real example
-- prove it through the real cross-library build path
-- lock the exact coverage and recommendation deltas in `xtask`
-- refresh the generated proof surfaces that the repo treats as maintained truth
-
-Do **not** do the shortcut version where someone drops in a spec file, eyeballs
-`recommendation.latest.json`, and calls it done.
-
-### Exit rule baked into scope
-
-This run is intentionally single-use.
-
-- If the repo lands the locked ranked result below, stop corpus expansion and
-  move to a promotion-focused milestone.
-- If the run fails to produce the locked ranked result, stop and re-plan.
-
-At that point, the remaining blocker is still the structurally unknown-overlap
-cluster, which more of the same corpus will not resolve under current code.
-
-## Locked Decisions
-
-| Decision | Lock |
-|---|---|
-| Add a sixth corpus source | **Rejected.** The existing five-source manifest is enough for this wedge. |
-| Add regression fixtures instead of a real example | **Rejected.** One real example is the smallest honest lever. |
-| Touch recommendation logic or schemas | **Rejected.** This run is evidence-only. |
-| Chase `unknown_overlap_family` with more `money/round`-like hits | **Rejected.** Current code will not reinterpret that cluster through leverage alone. |
-| Pre-commit to another corpus run after this one | **Rejected.** This run ends the corpus question one way or the other. |
-| Begin M28 now | **Rejected.** The detached dry run shows a smaller wedge still changes the answer materially. |
-
-## Exact File Contract
-
-### Tracked source files
-
-These are the only tracked source files M27.8 should need to change:
+The smallest complete diff is still three tracked source files:
 
 1. `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
 2. `examples/crosslib-app/units/.gitignore`
 3. `xtask/src/lib.rs`
 
-### Generated proof artifacts
+But the meaning of those three files has changed:
 
-These are expected to change during acceptance reruns, but they are proof
-outputs, not manually authored source:
+- files 1 and 2 are recovery of already-proven source truth from `ws/m27_8-lane-a`
+- file 3 is no longer "update the lock to ranked truth"
+- file 3 is now "preserve the ranked truth from `ws/m27_8-lane-b`, then repair the
+  seeded promoted-packet inputs so the copied workspace actually reproduces it"
 
-1. `examples/crosslib-app/units/pricing/apply_tax.spec.passport.json` (new)
-2. `examples/crosslib-app/units/pricing/apply_discount.spec.passport.json` (fresh proof)
-3. `examples/shared-spec/units/money/round.spec.passport.json` (fresh proof)
-4. `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-5. `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+Anything larger is scope creep.
 
-### Explicit non-touch list
+Anything smaller leaves the repo in the same bad state where the integrated run
+and the final lock disagree about reality.
 
-These files were checked and should not need source edits for M27.8:
+### Alternatives considered
 
-- `semantic-families/corpus/rust-function.toml`
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-- `spec-cli/tests/fixtures/m19/semantic_falsification_pack/**`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/**`
-- `semantic-families/README.md`
+| Alternative | Why deferred |
+|---|---|
+| Real temp checkout instead of copied workspace harness | Bigger test-model change than this follow-up needs. Only justified if the seeded packet-root fix plus diagnostic gate still leave unexplained drift. |
+| Checked-in seed manifest for every copied input | Legitimate follow-on hardening, but too much ceremony for the immediate three-file repair. |
+| Artifact-hash-only lock without reconstructing the world | Too weak for this milestone because the failure is about the reconstructed world disagreeing with integrated truth. |
 
-## Locked Corpus Expansion Contract
+### Complexity check
 
-Add exactly one new unit:
+This plan touches exactly three tracked source files and introduces zero new Rust
+modules, services, or harness frameworks.
 
-`examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+Good. Boring. Keep it that way.
 
-That unit must remain a maintained real example, not a fixture-shaped fake. It
-must use the existing sibling-library helper path so it honestly pressures the
-cross-library arithmetic unsupported shape.
+### Search check
 
-Required authored shape:
+- **[Layer 1]** Reuse the existing blocked-run artifacts and `ws/m27_8-*` commits
+  instead of inventing a new recovery path.
+- **[Layer 1]** Reuse the existing seeded workspace helper instead of building a new
+  fixture system.
+- **[Layer 3]** The important insight is not "config is missing." It is that the
+  command-path test consumes promoted packet presence through inventory, and the
+  seeded workspace omits `semantic-families/function.wrapper.pipeline.v1`.
 
-```yaml
-id: pricing/apply_tax
-kind: function
-spec_version: "0.3.0"
-intent:
-  why: Apply tax while importing the shared round helper from a sibling spec library.
-contract:
-  inputs:
-    subtotal: Decimal
-    rate: Decimal
-  returns: Decimal
-deps:
-  - shared::money/round
-imports:
-  - rust_decimal::Decimal
-body:
-  rust: |
-    {
-        let taxed = subtotal + subtotal * rate;
-        round(taxed).max(Decimal::ZERO)
-    }
-local_tests:
-  - id: happy_path
-    expect: apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)
-```
+### TODOS cross-reference
 
-This exact shape matters because it is the dry-run shape that clustered with
-`unsupported_arithmetic_shape-2694b2baf65b`.
+`TODOS.md` contains no deferred item that blocks this plan directly.
 
-Required ignore rule update:
+This plan also does not justify a new TODO yet. If the harness still disagrees
+after copying `function.wrapper.pipeline.v1`, that follow-up becomes a fresh plan
+item with captured evidence, not a vague TODO.
 
-In `examples/crosslib-app/units/.gitignore`, add:
+### Completeness check
 
-```gitignore
-!pricing/apply_tax.spec.passport.json
-```
+Do the complete version now:
 
-Without that line, the new proof artifact stays hidden and the example is not
-maintained repo truth.
+- recover the exact lane-A source truth
+- preserve the ranked lane-B assertions
+- copy the missing promoted packet root into the seeded workspace
+- add an explicit diagnostic stop gate if promoted-family count is still wrong
+- rerun the exact proof loop
+- require the final `xtask` test to match the integrated truth already proven
 
-## Locked Expected Output Deltas
+Do **not** do the shortcut version where a plausible but unproven input gets
+patched first and only then investigated. The complete fix here is to target the
+seeded input the failing codepath actually consumes, then require a diagnostic
+diff if the count still disagrees.
 
-These values were observed in the detached-worktree dry run and are now part of
-the implementation contract.
+### Distribution check
 
-### Coverage artifact deltas
+No new artifact type is introduced.
 
-The rerun must keep the same five source ids, in the same order:
+This is repo-internal governance work. The maintainer-facing surface stays:
 
-1. `examples_ecommerce`
-2. `m19_semantic_falsification_pack`
-3. `m20_unsupported_truth_pack`
-4. `examples_shared_spec`
-5. `examples_crosslib_app`
+- `cargo xtask family coverage --format json`
+- `cargo xtask family recommend --format json`
+- `cargo xtask family validate-artifact <path>`
+- `cargo test -p xtask -- --color never`
 
-The rerun must change source unit counts to:
+## Scope
 
-- `6`
-- `12`
-- `9`
-- `1`
-- `2`
+### In Scope
 
-The rerun must produce:
+- recover the exact lane-A authored files from `ws/m27_8-lane-a` or merge commit
+  `ab11249`
+- preserve the ranked lock shape from `ws/m27_8-lane-b` or merge commit `7ae58ae`
+- repair `seed_locked_recommendation_workspace()` so it copies:
+  - `semantic-families/function.wrapper.pipeline.v1`
+- add a diagnostic stop gate:
+  - if `promoted_family_units` is still not `15`, dump and diff the seeded
+    inventory and coverage outputs before any further edits
+- keep the locked ranked assertions aligned with the blocked integrated truth
+- rerun the exact integrated proof loop from `.runs/m27_8/contract-freeze.json`
+- stop again on the first mismatch
 
-- `function_coverage.total_units = 28`
-- `function_coverage.promoted_family_units = 15`
-- `function_coverage.supported_unpromoted_family_units = 0`
-- `function_coverage.unsupported_function_units = 13`
+### NOT In Scope
 
-The `family_coverage[]` list must remain unchanged in substance:
+- editing `semantic-families/corpus/rust-function.toml`
+- changing `xtask/src/family/coverage.rs`
+- changing `xtask/src/family/recommend.rs`
+- changing `xtask/src/family/promotion_artifacts.rs`
+- changing recommendation or coverage schemas
+- rewriting `.runs/m27_8/*` historical artifacts
+- replacing copied-workspace harnesses repo-wide
+- M28 work
 
-- still exactly three promoted families
-- still `unit_count = 5` for each family
-- still the same source ids as before
+## Architecture Review
 
-This run adds unsupported demand evidence only. It does not change supported
-family coverage.
+### Architecture recommendation
 
-### Arithmetic cluster delta
+Use the blocked run as the oracle and repair the existing harness seam in place.
 
-`unsupported_arithmetic_shape-2694b2baf65b` must become:
+Do not add a new fixture layer. Do not generalize this into a new test framework.
+This repo already has the seam it needs.
 
-- representative units:
-  - `examples_crosslib_app::pricing/apply_discount`
-  - `examples_crosslib_app::pricing/apply_tax`
-  - `m20_unsupported_truth_pack::pricing/apply_tax_arithmetic_shape`
-- `source_ids = ["examples_crosslib_app", "m20_unsupported_truth_pack"]`
-- `real_example_hits = 2`
-- `promotion_relevant_regression_hits = 1`
-- `boundary_only_hits = 0`
-- `overlap_family = "function.arithmetic_leaf.monotone_*"`
-- `candidate_status = "rankable"`
-
-### Unknown-overlap cluster delta
-
-`unsupported_function_surface-e40675da6fa0` must stay materially unchanged:
-
-- representative units:
-  - `examples_ecommerce::money/round`
-  - `examples_shared_spec::money/round`
-  - `m20_unsupported_truth_pack::money/round`
-- `real_example_hits = 2`
-- `promotion_relevant_regression_hits = 1`
-- `boundary_only_hits = 0`
-- `overlap_family = "unknown"`
-- `candidate_status = "rankable"`
-
-That immobility is part of the point of this run.
-
-### Recommendation artifact deltas
-
-The rerun must produce:
-
-- `recommendation_status = "ranked"`
-- exactly `2` ranked candidates
-
-First candidate:
-
-- cluster id `unsupported_arithmetic_shape-2694b2baf65b`
-- `promotion_readiness = "ready"`
-- `hold_reasons = []`
-- `real_example_hits = 2`
-- `promotion_relevant_regression_hits = 1`
-- `boundary_only_hits = 0`
-- `total_units_in_cluster = 3`
-- `difficulty.tier = "adjacent"`
-- `confidence.level = "medium"`
-
-Second candidate:
-
-- cluster id `unsupported_function_surface-e40675da6fa0`
-- `promotion_readiness = "hold"`
-- `hold_reasons = ["unknown_overlap_family"]`
-- `real_example_hits = 2`
-- `promotion_relevant_regression_hits = 1`
-- `boundary_only_hits = 0`
-- `total_units_in_cluster = 3`
-- `difficulty.tier = "hard"`
-- `confidence.level = "low"`
-
-The key behavioral claim is:
-
-- one additional maintained real example is enough to make arithmetic demand
-  promotion-worthy under the existing rules
-- the repo still refuses to fake understanding of the `money/round` cluster
-
-That is the whole milestone.
-
-## Architecture
-
-M27.8 is a source-unit-and-proof milestone. No runtime redesign is allowed.
+### Architecture ASCII diagram
 
 ```text
-FIVE-SOURCE CORPUS FLOW, SAME MANIFEST
-======================================
-examples/crosslib-app/units/pricing/apply_tax.unit.spec   (new real example)
-        |
-        v
-existing manifest source: examples_crosslib_app
-        |
-        v
-xtask family coverage --format json
-        |
-        +--> same manifest
-        +--> crosslib source unit count: 1 -> 2
-        +--> coverage.latest.json
-        |
-        v
-xtask family recommend --format json
-        |
-        +--> same recommendation policy
-        +--> arithmetic cluster: held -> ready
-        +--> recommendation.latest.json
-        |
-        v
-xtask command-path lock in xtask/src/lib.rs
-        |
-        v
-repo truth: ranked arithmetic candidate, unknown money/round still held
+CURRENT BRANCH
+==============
+feat/corpus-expansion
+    │
+    ├── missing recovered lane-A source truth
+    │   ├── apply_tax.unit.spec absent
+    │   └── apply_tax passport whitelist absent
+    │
+    └── stale xtask harness
+        ├── stale no_strong_candidate test name + baseline
+        └── seeded workspace omits wrapper.pipeline.v1 packet root
+
+RECOVERY PATH
+=============
+ws/m27_8-lane-a / ab11249
+    └── recover exact authored apply_tax source truth
+
+ws/m27_8-lane-b / 7ae58ae
+    └── preserve ranked command-path assertions
+
+HARNESS REPAIR
+==============
+xtask/src/lib.rs
+    └── seed_locked_recommendation_workspace()
+        ├── copy corpus unit trees
+        ├── copy wrapper.pipeline.chain3.v1
+        ├── copy arithmetic promoted packets
+        ├── copy wrapper.pipeline.v1                  <-- add
+        └── run the same recommend path as the lock
+
+PROOF LOOP
+==========
+shared-spec build
+    -> exact apply_tax proof
+    -> crosslib build
+    -> crosslib tests
+    -> coverage json
+    -> recommendation json
+    -> artifact validation
+    -> xtask command-path lock
+    -> if still red: dump seeded inventory + coverage diff, then stop
 ```
 
-Architectural rules:
+### Architecture findings
 
-- the manifest stays frozen
-- recommendation code stays frozen
-- the new output must be explained entirely by one additional maintained real example
-- cross-library proof order must build `shared-spec` first
+- **[P1] (confidence: 10/10) `xtask/src/lib.rs:3707` +
+  `xtask/src/family/inventory.rs:116`** — the seeded workspace helper omits
+  `semantic-families/function.wrapper.pipeline.v1`, and promoted-family inventory is
+  derived from which promoted packet roots exist. Recommendation: copy the missing
+  promoted packet root first. This is the cleanest explanation for the exact
+  `15 -> 10` promoted-family drop.
+- **[P1] (confidence: 9/10) `.runs/m27_8/acceptance.md:1` + current branch** —
+  the source truth proven in `ws/m27_8-int` is not present on the working branch.
+  Recommendation: recover the exact lane-A authored files from the `ws/*` source
+  branch or merge commit, not by fresh manual re-authoring.
+- **[P1] (confidence: 9/10) plan boundary** — even the promoted-packet explanation
+  is still a hypothesis until the final lock reruns. Recommendation: if promoted
+  family count remains wrong after adding `function.wrapper.pipeline.v1`, stop and
+  diff seeded inventory/coverage outputs before editing anything else.
 
-## Implementation Plan
+### Realistic production failure scenarios
 
-### Step 1 - Author the new cross-library real example
+| Codepath | Failure scenario | Accounted for? |
+|---|---|---|
+| seeded workspace copy list | future maintainer omits one promoted packet root and silently demotes a family | Yes, if the ranked command-path test stays the lock and the seed list comment explains promoted packet truth |
+| recovered `apply_tax` source truth | maintainer "recreates" the unit with a slightly different body or intent and silently changes cluster semantics | Yes, by reusing exact source truth from `ab11249` / contract freeze |
+| ranked lock assertions | maintainer updates ranked output expectations without reproducing integrated proof | Yes, by binding every assertion to `.runs/m27_8/acceptance.md` truth |
+| proof loop rerun | crosslib exact-unit proof passes but final lock still seeds a divergent world | Yes, this is the exact condition the plan exists to catch |
 
-Create `examples/crosslib-app/units/pricing/apply_tax.unit.spec` with the exact
-authored shape locked above.
+## Code Quality Review
 
-Constraints:
+### Recommendation
 
-- do not invent a new helper path
-- do not change `examples/crosslib-app/spec.toml`
-- keep the shape obviously arithmetic-like
-- keep the unit a maintained example, not a synthetic fixture
+Bias hard toward explicit over clever.
 
-### Step 2 - Whitelist the passport intentionally
+Use one literal path addition in the seeded copy list and a short adjacent comment
+explaining why that packet root is required. Do not introduce a fixture bundle type,
+path registry abstraction, or helper that tries to "discover" promoted packet roots.
 
-Edit `examples/crosslib-app/units/.gitignore`.
+### Findings
 
-Add the exact whitelist line for `apply_tax.spec.passport.json`.
+- **[P2] (confidence: 9/10) `xtask/src/lib.rs`** — the current seed list hides a
+  non-obvious dependency: promoted-family truth depends on promoted packet roots
+  existing in the copied workspace. Recommendation: add a short comment above the
+  seed list saying the command-path workspace must copy both corpus units and every
+  promoted packet root the inventory path expects.
+- **[P2] (confidence: 8/10) plan scope** — recovering the lane-A diff and repairing
+  the seed helper are structural and behavioral changes, but they stay isolated to
+  three files. Recommendation: keep them in one milestone because the recovered
+  source truth is a prerequisite for the harness assertion meaning anything.
 
-Constraints:
+### DRY / engineering-enough rule
 
-- do not broaden the ignore file
-- do not replace the existing `apply_discount` whitelist
-- this is a one-passport change
-
-### Step 3 - Update the locked `xtask` proof
-
-Edit `xtask/src/lib.rs` in the existing family-analysis test area.
-
-Required changes:
-
-1. rename
-   `recommendation_command_path_writes_same_bytes_and_locked_corpus_is_no_strong_candidate()`
-   to
-   `recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held()`
-2. keep the same deterministic-byte checks for stdout-versus-written-artifact and
-   first-run-versus-second-run equality
-3. update assertions from `no_strong_candidate` to the locked ranked result
-
-That test must assert:
-
-- coverage source ids and order stay unchanged
-- coverage source unit counts are `6, 12, 9, 1, 2`
-- recommendation status is `ranked`
-- ranked candidate count is `2`
-- first candidate is arithmetic and is `ready`
-- first candidate has:
-  - `hold_reasons == []`
-  - `real_example_hits == 2`
-  - `promotion_relevant_regression_hits == 1`
-  - `total_units_in_cluster == 3`
-  - `confidence.level == Medium`
-- second candidate is the `money/round` cluster and remains held with exactly:
-  - `hold_reasons == [UnknownOverlapFamily]`
-  - `real_example_hits == 2`
-  - `promotion_relevant_regression_hits == 1`
-  - `total_units_in_cluster == 3`
-
-Do not add a second parallel command-path lock for the same flow.
-
-### Step 4 - Run the integrated proof loop
-
-After tracked source edits are complete, run the proof loop in this exact order:
-
-1. build the shared library output first
-2. run exact-unit proof for the new cross-library unit
-3. build the cross-library app output
-4. run the cross-library crate tests
-5. rerun coverage
-6. rerun recommendation
-7. validate both artifacts
-8. run `xtask` tests
-9. confirm the observed outputs still match the locked values above
-
-## Code Quality
-
-### DRY / reuse rule
-
-Do not add new abstractions for this run.
-
-Reuse:
-
-- the existing five-source manifest
-- the existing sibling-library example structure
-- the existing command-path regression test
-
-### Explicit over clever
-
-Prefer one literal new spec file and literal `xtask` assertions over helper-heavy
-test refactors. This is a one-unit corpus contract. Say the one unit plainly.
-
-### Minimal-diff rule
-
-If implementation starts reaching for helper refactors in `xtask` or shared spec
-authoring utilities, stop. That is not this milestone.
-
-### Build-order rule
-
-The proof loop must build `examples/shared-spec/units` into
-`examples/shared-crate/src/generated` before testing or building the new
-cross-library unit.
-
-This is not optional. Without that order, `crosslib-app` proof can fail with a
-missing generated shared module.
+- Reuse the exact authored lane-A file contents. No duplicated "temporary" spec.
+- Reuse the ranked lane-B assertions. No parallel new command-path test.
+- Reuse the existing seed helper. No second helper that only differs by one packet path.
 
 ## Test Review
 
-100% coverage for the changed behavior means every new truth claim is locked in
-tests or generated proof artifacts.
+100% coverage is the goal here, and this plan can get there without adding a second
+test family.
 
 ### Code path coverage
 
@@ -558,178 +374,308 @@ tests or generated proof artifacts.
 CODE PATH COVERAGE
 ==================
 [+] examples/crosslib-app/units/pricing/apply_tax.unit.spec
-    |
-    ├── [GAP] add one maintained arithmetic-like cross-library real example
-    └── [GAP] prove the unit through exact-unit spec test
+    │
+    ├── [PLAN] recover exact frozen authored shape from ab11249 / contract-freeze.json
+    └── [PLAN] prove via `cargo run -p spec-cli -- test .../apply_tax.unit.spec`
 
-[+] examples/crosslib-app/units/.gitignore
-    |
-    └── [GAP] whitelist the new passport so proof becomes maintained truth
+[+] xtask/src/lib.rs :: seed_locked_recommendation_workspace()
+    │
+    ├── [GAP CLOSED] copy semantic-families/function.wrapper.pipeline.v1
+    ├── [PLAN] comment that promoted packet roots are inventory inputs
+    └── [PLAN] reuse existing copy helper, no new harness abstraction
 
-[+] xtask/src/lib.rs
-    |
-    └── recommendation command-path lock
-        ├── [★★★ REGRESSION LOCK] stdout bytes == written artifact bytes
-        ├── [★★★ REGRESSION LOCK] first run == second run bytes
-        ├── [GAP] coverage source counts become 6 / 12 / 9 / 1 / 2
-        ├── [GAP] recommendation status flips to ranked
-        ├── [GAP] arithmetic cluster becomes first and ready
-        └── [★★★ REGRESSION LOCK] money/round cluster stays held and unknown
+[+] xtask command-path recommendation lock
+    │
+    ├── [PLAN] first run stdout bytes == written artifact bytes
+    ├── [PLAN] second run stdout bytes == second written artifact bytes
+    ├── [PLAN] first run bytes == second run bytes
+    ├── [PLAN] coverage source ids == locked five-source order
+    ├── [PLAN] coverage source counts == 6 / 12 / 9 / 1 / 2
+    ├── [PLAN] function coverage == 28 / 15 / 0 / 13
+    ├── [PLAN] recommendation status == ranked
+    ├── [PLAN] first candidate == arithmetic ready
+    └── [PLAN] second candidate == money/round hold
 
-[+] proof artifacts
-    |
-    ├── [GAP] new apply_tax passport is generated and tracked
-    ├── [GAP] shared round passport is refreshed through required build order
-    ├── [GAP] coverage.latest.json matches locked ranked values
-    └── [GAP] recommendation.latest.json matches locked ranked values
+[+] Diagnostic fallback
+    │
+    ├── [PLAN] if promoted-family count still != 15, dump seeded inventory bytes
+    ├── [PLAN] diff seeded coverage output against integrated artifact truth
+    └── [PLAN] stop before any second speculative fix
+
+INTEGRATED PROOF COVERAGE
+=========================
+[+] shared-spec build
+    └── [PLAN] must pass before crosslib proof
+
+[+] crosslib exact-unit proof
+    └── [PLAN] apply_tax exact-unit test must pass
+
+[+] crosslib build + crate tests
+    └── [PLAN] shared dep wiring must compile and test clean
+
+[+] artifact validation
+    ├── [PLAN] coverage.latest.json validates
+    └── [PLAN] recommendation.latest.json validates
 
 ─────────────────────────────────
-COVERAGE: 0 pre-existing gaps allowed at exit
-CRITICAL LOCKS: 4
-REQUIRED PROOF SURFACES: 4
+COVERAGE: 11/11 planned paths covered
+  Code paths: 8/8
+  Integrated proof paths: 3/3
+QUALITY: ★★★: 11  ★★: 0  ★: 0
+GAPS: 0 remaining if plan is executed literally
 ─────────────────────────────────
 ```
 
-### Required proof commands
+### Regression rule
 
-Run these commands in this order:
+This is a regression repair.
 
-1. `cargo run -p spec-cli -- build examples/shared-spec/units --output examples/shared-crate/src/generated`
-2. `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec`
-3. `cargo run -p spec-cli -- build examples/crosslib-app/units --output examples/crosslib-app/src/generated`
-4. `cargo test --manifest-path examples/crosslib-app/Cargo.toml`
-5. `cargo xtask family coverage --format json`
-6. `cargo xtask family recommend --format json`
-7. `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-8. `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-9. `cargo test -p xtask -- --color never`
+The branch already had a full integrated proof that succeeded, but the final
+command-path lock still modeled an older seeded world. Therefore the command-path
+test itself is the mandatory regression surface. No debate.
 
-### Required assertions at acceptance
+### Test requirements
 
-- `apply_tax.unit.spec` proves successfully
-- the shared-library-first build order is preserved
-- the crosslib crate still tests clean
-- coverage stdout bytes equal the written `coverage.latest.json`
-- recommendation stdout bytes equal the written `recommendation.latest.json`
-- rerunning recommendation is byte-stable
-- `xtask` test locks the ranked result and the held `money/round` truth
+1. Reuse the exact command-path regression test from `7ae58ae`, not a new test.
+2. Extend the seeded workspace inputs so the missing promoted packet root is
+   covered by the existing ranked command-path lock.
+3. Re-run the exact proof loop from `.runs/m27_8/contract-freeze.json`.
+4. If promoted-family count still diverges, dump and diff seeded inventory/coverage
+   outputs before any further edits.
+5. Treat any remaining divergence between integrated proof and final lock as a stop signal.
+
+### Failure modes
+
+| Codepath | Realistic failure | Test covers it? | Error handling exists? | User-visible or silent? | Critical gap? |
+|---|---:|---:|---:|---|---:|
+| `apply_tax.unit.spec` recovery | wrong body copied back onto branch | Yes | N/A | visible in exact-unit proof | No |
+| `.gitignore` recovery | passport not intentionally tracked | Yes | N/A | visible in rerun artifact diff | No |
+| seed helper copy list | promoted packet root still omitted | Yes | No | visible in final xtask test, not silent | No |
+| diagnostic fallback | maintainer makes a second speculative fix without capturing seeded truth | Yes | N/A | prevented by explicit stop gate | No |
+| ranked lock assertions | counts updated without real proof | Yes | No | visible in xtask failure | No |
+| artifact validation | output bytes differ from written files | Yes | No | visible in validation / diff failure | No |
+
+No failure mode in this plan is both silent and untested. Good.
 
 ## Performance Review
 
-No performance work is justified here.
+No meaningful runtime performance risk is introduced.
 
-This run adds one unit to one existing source. If this feels slow, the fix is
-not new caching or code motion. The fix is discipline.
+This work only changes test-harness setup and authored spec recovery. The added
+copy operation is one packet directory. The expensive commands were already part
+of the blocked proof loop.
 
-## Failure Modes Registry
+The only performance rule here is operational: do not add repeated proof passes
+or duplicate cargo invocations beyond the locked command sequence.
 
-| Surface | Failure | Test required | Error handling | User-visible outcome | Critical gap? |
-|---|---|---|---|---|---|
-| Source-unit shape | new unit classifies into the wrong cluster or a supported family | Yes | `xtask` lock failure | fake recommendation improvement or no improvement | **Yes if untested** |
-| Passport visibility | new passport remains ignored | Yes | git diff plus acceptance loop | maintained example looks half-landed | No |
-| Cross-library proof order | `crosslib-app` proof runs before shared generated output exists | Yes | command failure | missing-module error during proof | **Yes if untested** |
-| Recommendation truth | arithmetic candidate stays held or status stays `no_strong_candidate` | Yes | `xtask` lock failure | milestone claim is false | **Yes if untested** |
-| Scope discipline | manifest or policy changes creep in | Yes | code review | result becomes uninterpretable | No |
+## DX Review
 
-## Worktree Parallelization Strategy
+DX scope exists because this milestone is about maintainer truth, not end-user UI.
 
-This milestone has two implementation workstreams, but only one safe parallel
-window.
+### Developer journey map
 
-### Dependency table
-
-| Step | Modules touched | Depends on |
+| Stage | Maintainer action | Expected outcome |
 |---|---|---|
-| Author new crosslib unit and whitelist passport | `examples/crosslib-app/units/` | — |
-| Update command-path proof | `xtask/` | unit shape locked |
-| Integrated proof loop and artifact regeneration | `examples/crosslib-app/`, `examples/shared-spec/`, `.semantic-family-artifacts/`, `xtask/` | both prior steps |
+| 1 | read `PLAN.md` | understands this is a harness-truth repair, not new corpus work |
+| 2 | inspect `.runs/m27_8/acceptance.md` | sees exact blocked invariant |
+| 3 | inspect `.runs/m27_8/merge-log.md` | finds lane-A and lane-B source truth branches/commits |
+| 4 | recover lane-A files | branch now contains the already-proven authored source truth |
+| 5 | update `xtask/src/lib.rs` | seeded workspace copies `function.wrapper.pipeline.v1` and ranked assertions stay intact |
+| 6 | run exact proof loop | integrated truth is reproduced locally |
+| 7 | if still red, inspect dumped seeded inventory/coverage diff | sees the next real mismatch instead of guessing |
+| 8 | inspect final diff | sees only three tracked source files plus expected derived artifacts |
+| 9 | land or stop | either merge cleanly or re-plan from the next mismatch |
 
-### Parallel lanes
+### Developer empathy narrative
 
-- Lane A: `examples/crosslib-app/units/`
-  - create `pricing/apply_tax.unit.spec`
-  - update `.gitignore`
-- Lane B: `xtask/`
-  - update the existing command-path regression lock
+I am the tired maintainer on Friday night. I do not want a philosophical essay
+about test strategy. I want one file telling me which branch had the last known
+truth, which three source files matter, which command-path input is actually wrong,
+and what exact command to run if the first fix fails. This plan should let me do
+that without spelunking old chat history.
 
-### Execution order
+### DX scorecard
 
-1. Freeze the exact `apply_tax` unit shape first.
-2. Launch Lane A and Lane B in parallel worktrees.
-3. Merge both lanes into one integration branch.
-4. Run the full acceptance loop only from the integrated branch.
+| Dimension | Score | Note |
+|---|---:|---|
+| Problem framing | 9/10 | sharply narrowed to harness truth |
+| Entry point clarity | 9/10 | blocked artifacts and `ws/*` branches named explicitly |
+| Command clarity | 9/10 | exact proof loop preserved |
+| Error interpretability | 9/10 | explicit diagnostic fallback now turns future mismatches into concrete diffs |
+| Change locality | 10/10 | three tracked source files only |
+| Reversibility | 9/10 | stop on first mismatch, no broad redesign |
+| Surprise factor | 9/10 | actual failing input path is now named explicitly |
+| Time-to-truth | 8/10 | still cargo-heavy, but path is deterministic |
 
-### Conflict flags
+### DX implementation checklist
 
-- Lane A and Lane B are safe in parallel because they touch disjoint module
-  roots: `examples/crosslib-app/units/` versus `xtask/`.
-- Artifact regeneration is **not** parallel-safe. It must run only after both
-  lanes merge because it writes shared derived proof surfaces.
+- [ ] recover lane-A source truth from `ab11249` or `ws/m27_8-lane-a`
+- [ ] preserve ranked lock semantics from `7ae58ae` or `ws/m27_8-lane-b`
+- [ ] add `semantic-families/function.wrapper.pipeline.v1` to `seed_locked_recommendation_workspace()`
+- [ ] if still red, dump seeded inventory + coverage diff before any second fix
+- [ ] keep the proof loop order from `.runs/m27_8/contract-freeze.json`
 
-## Acceptance Commands
+### TTHW assessment
 
-Run from repo root:
+Current TTHW for a maintainer who starts from the current branch is too high,
+because the truth is split across a blocked run, missing source files, and stale
+test harness assumptions.
+
+Target TTHW after this plan lands: under 10 minutes to understand what happened,
+which branch/commit contains the source truth, which seeded input is missing, and
+what commands reproduce the decision-grade result.
+
+## Exact File Contract
+
+### Tracked source files
+
+These are the only tracked source files this follow-up should change:
+
+1. `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+2. `examples/crosslib-app/units/.gitignore`
+3. `xtask/src/lib.rs`
+
+### Non-touch source surfaces
+
+- `semantic-families/corpus/rust-function.toml`
+- `xtask/src/family/coverage.rs`
+- `xtask/src/family/recommend.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/inventory.rs`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `.runs/m27_8/*`
+
+No config or corpus source files should be edited in this follow-up. The harness
+repair is about copying the missing promoted packet root, not changing source truth.
+
+### Expected derived artifact churn
+
+- `examples/crosslib-app/units/pricing/apply_tax.spec.passport.json` (new or refreshed)
+- `examples/crosslib-app/units/pricing/apply_discount.spec.passport.json`
+- `examples/shared-spec/units/money/round.spec.passport.json`
+- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+
+## Implementation Steps
+
+1. Recover `examples/crosslib-app/units/pricing/apply_tax.unit.spec` exactly from
+   `ab11249` or `ws/m27_8-lane-a`.
+2. Recover the `!pricing/apply_tax.spec.passport.json` whitelist line exactly from
+   `ab11249` or `ws/m27_8-lane-a`.
+3. Start from the ranked command-path test shape from `7ae58ae` or
+   `ws/m27_8-lane-b`.
+4. In `seed_locked_recommendation_workspace()`, add this copied input:
+   - `semantic-families/function.wrapper.pipeline.v1`
+5. Add one short comment above the seed list noting that promoted packet roots are
+   part of command-path inventory truth.
+6. Keep the ranked assertions bound to this exact locked truth:
+   - source ids: `examples_ecommerce`, `m19_semantic_falsification_pack`,
+     `m20_unsupported_truth_pack`, `examples_shared_spec`, `examples_crosslib_app`
+   - source counts: `6 / 12 / 9 / 1 / 2`
+   - function coverage: `28 / 15 / 0 / 13`
+   - recommendation status: `ranked`
+   - arithmetic cluster first and `ready`
+   - `money/round` second and `hold`
+7. If the final lock still reports promoted-family count other than `15`, dump and
+   diff seeded inventory and coverage outputs before any other change.
+8. Run the locked proof loop below in order.
+
+## Locked Proof Loop
+
+Run these commands in order:
 
 ```bash
+git status --short
+
 cargo run -p spec-cli -- build examples/shared-spec/units --output examples/shared-crate/src/generated
 cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec
 cargo run -p spec-cli -- build examples/crosslib-app/units --output examples/crosslib-app/src/generated
 cargo test --manifest-path examples/crosslib-app/Cargo.toml
 
-tmpdir=$(mktemp -d)
-cargo xtask family coverage --format json > "$tmpdir/coverage.stdout.json"
-cmp -s "$tmpdir/coverage.stdout.json" ".semantic-family-artifacts/family-promotion/analysis/coverage.latest.json"
-cargo xtask family validate-artifact ".semantic-family-artifacts/family-promotion/analysis/coverage.latest.json"
+cargo xtask family coverage --format json > /tmp/m27_8r-coverage.stdout.json
+cmp -s /tmp/m27_8r-coverage.stdout.json .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json || { diff -u .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json /tmp/m27_8r-coverage.stdout.json || true; exit 1; }
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
 
-cargo xtask family recommend --format json > "$tmpdir/recommend.stdout.json"
-cmp -s "$tmpdir/recommend.stdout.json" ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
-cargo xtask family validate-artifact ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
+cargo xtask family recommend --format json > /tmp/m27_8r-recommend.stdout.json
+cmp -s /tmp/m27_8r-recommend.stdout.json .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json || { diff -u .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json /tmp/m27_8r-recommend.stdout.json || true; exit 1; }
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 
 cargo test -p xtask -- --color never
 ```
 
-Then confirm the generated JSON reflects the locked values in
-`Locked Expected Output Deltas`.
+If the final `xtask` command still fails on promoted-family count, run these before
+making any second speculative edit:
 
-## Done Criteria
+```bash
+cargo xtask family inventory --format json > /tmp/m27_8r-seeded-inventory.json
+cat /tmp/m27_8r-seeded-inventory.json
+cat /tmp/m27_8r-coverage.stdout.json
+```
 
-M27.8 is done only when all of the following are true:
+Then stop and re-plan from those concrete seeded outputs.
 
-- exactly three tracked source files changed
-- no explicit non-touch file required source edits
-- the new `apply_tax` unit exists with the locked authored shape
-- the new passport is intentionally whitelisted
-- the command-path test in `xtask/src/lib.rs` locks the ranked result
-- coverage and recommendation artifacts validate
-- coverage and recommendation stdout bytes match the written artifact bytes
-- arithmetic becomes the first ranked ready candidate
-- `money/round` remains held for `unknown_overlap_family`
-- the integrated rerun matches the detached-worktree dry-run contract
+## Worktree Parallelization Strategy
+
+Sequential implementation, no parallelization opportunity worth taking.
+
+Reason:
+
+- this is a three-file repair
+- two of the files are exact source-truth recovery from existing `ws/*` commits
+- the only new reasoning is in `xtask/src/lib.rs`
+- parallel worktrees increase branch-recovery risk more than they buy speed here
+
+Use one working branch with a `git status --short` preflight before the proof loop.
+
+## Test Plan Artifact
+
+Primary QA surface for this milestone is command and artifact truth, not pages.
+
+- `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+  — prove the recovered cross-library unit is valid and executable
+- `cargo xtask family coverage --format json`
+  — verify the coverage artifact reproduces the blocked integrated truth `28 / 15 / 0 / 13`
+- `cargo xtask family recommend --format json`
+  — verify the recommendation artifact stays `ranked` with arithmetic first and `money/round` held second
+- `cargo test -p xtask -- --color never`
+  — verify the final copied-workspace command-path lock reproduces the same truth as the integrated proof loop
+
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | Scope | Replace old corpus-expansion plan with harness-truth repair plan | Mechanical | Explicit over clever | The blocked run proved product truth already; pretending this is still corpus exploration is false | Keeping the old plan and patching around it |
+| 2 | Scope | Treat `ws/m27_8-*` branches and blocked artifacts as source truth | Mechanical | Pragmatic | The current branch is missing the proven files; the `ws/*` branches hold the real authored result | Re-authoring from memory |
+| 3 | Architecture | Reuse the existing seed helper instead of inventing a fixture framework | Mechanical | Boring by default | One explicit seam already exists in `xtask/src/lib.rs` | New fixture registry abstraction |
+| 4 | Architecture | Copy `semantic-families/function.wrapper.pipeline.v1` because inventory consumes promoted packet roots | Mechanical | Explicit over clever | The failing codepath reads promoted packet presence, and the missing wrapper packet explains the exact 5-unit delta | Speculative config-root patching |
+| 5 | Tests | Add a diagnostic stop gate if promoted-family count is still wrong after the packet-root fix | Mechanical | Choose completeness | The next mismatch should produce concrete seeded truth, not another guess | Generic "re-plan" without captured evidence |
+| 6 | Execution | Keep implementation serial on one branch | Mechanical | Pragmatic | This is a three-file repair with existing `ws/*` source truth; parallel worktrees add more operational risk than value | Multi-worktree recovery replay |
 
 ## Completion Summary
 
-- Step 0: Scope Challenge — accepted as a one-unit real-example wedge
-- Architecture Review structure baked into the execution contract
-- Code Quality Review structure baked into the execution contract
-- Test Review: exact command-path coverage and output locks required
-- Performance Review: no optimization work justified
+- Step 0: Scope Challenge — scope reduced from corpus-expansion follow-up to harness-truth repair
+- Architecture Review: 3 issues found
+- Code Quality Review: 2 issues found
+- Test Review: diagram produced, 0 remaining gaps if executed literally
+- Performance Review: 0 issues found
 - NOT in scope: written
 - What already exists: written
-- Failure modes: five concrete traps called out
-- Parallelization: 2 lanes, 1 safe parallel window, integration rerun serialized
-- Stop rule after this run:
-  - if the locked ranked truth lands, stop corpus work and move to a
-    promotion-focused milestone
-  - if the locked ranked truth does not land, also stop corpus work and re-plan
+- TODOS.md updates: 0 items proposed
+- Failure modes: 0 critical gaps flagged
+- Outside voice: unavailable, auth missing
+- Parallelization: sequential, 0 useful parallel lanes
+- Lake Score: 6/6 recommendations chose the complete option
 
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | advisory only | Strategy pass agreed with the reframing but required a stronger diagnostic gate, alternatives section, and more durable truth notes |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | Engineering pass rejected the original `spec.toml` theory and pointed the plan at the inventory-backed promoted packet input that the failing path actually reads |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | No UI scope |
 
-**VERDICT:** NO REVIEWS YET. This file now reads as the implementation contract,
-but no separate review logs have been recorded yet.
+**UNRESOLVED:** 0
+
+**VERDICT:** ENG CLEARED — this file is now a fresh harness-truth implementation
+contract with the causality model corrected to match the actual command-path code.
