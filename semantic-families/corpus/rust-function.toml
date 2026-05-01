@@ -22,3 +22,17 @@ path = "spec-cli/tests/fixtures/m20/unsupported_truth_pack/units"
 kind = "regression_unsupported"
 counts_toward_recommendation = true
 note = "Explicit unsupported-function truth pack."
+
+[[sources]]
+id = "examples_shared_spec"
+path = "examples/shared-spec/units"
+kind = "real_example"
+counts_toward_recommendation = true
+note = "Maintained sibling-library helper example."
+
+[[sources]]
+id = "examples_crosslib_app"
+path = "examples/crosslib-app/units"
+kind = "real_example"
+counts_toward_recommendation = true
+note = "Maintained cross-library app example."
