@@ -3102,44 +3102,70 @@ gate_d = true
             recommendation.recommendation_status,
             RecommendationStatus::NoStrongCandidate
         );
-
-        let money_round_cluster = coverage
-            .unsupported_clusters
-            .iter()
-            .find(|cluster| {
-                cluster
-                    .representative_unit_ids
-                    .contains(&"examples_ecommerce::money/round".to_string())
-            })
-            .unwrap();
-        let money_round_candidate = recommendation
-            .ranked_candidates
-            .iter()
-            .find(|candidate| {
-                candidate
-                    .cluster_ids
-                    .contains(&money_round_cluster.cluster_id)
-            })
-            .unwrap();
-
         assert_eq!(
-            money_round_candidate.promotion_readiness,
-            PromotionReadiness::Hold
+            coverage
+                .sources
+                .iter()
+                .map(|source| source.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "examples_ecommerce",
+                "m19_semantic_falsification_pack",
+                "m20_unsupported_truth_pack",
+                "examples_shared_spec",
+                "examples_crosslib_app",
+            ]
         );
-        assert!(
-            money_round_candidate
-                .hold_reasons
-                .contains(&HoldReason::UnknownOverlapFamily)
+        assert_eq!(
+            coverage
+                .sources
+                .iter()
+                .map(|source| source.unit_count)
+                .collect::<Vec<_>>(),
+            vec![6, 12, 9, 1, 1]
         );
-        assert!(
-            money_round_candidate
-                .hold_reasons
-                .contains(&HoldReason::HardDifficulty)
+
+        assert_eq!(recommendation.ranked_candidates.len(), 2);
+
+        let first_candidate = &recommendation.ranked_candidates[0];
+        assert_eq!(
+            first_candidate.cluster_ids,
+            vec!["unsupported_function_surface-e40675da6fa0".to_string()]
         );
-        assert!(
-            money_round_candidate
-                .hold_reasons
-                .contains(&HoldReason::ThinRealExampleSupport)
+        assert_eq!(
+            first_candidate.hold_reasons,
+            vec![HoldReason::UnknownOverlapFamily]
+        );
+        assert_eq!(
+            first_candidate.leverage,
+            RecommendationLeverage {
+                real_example_hits: 2,
+                promotion_relevant_regression_hits: 1,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 3,
+            }
+        );
+
+        let second_candidate = &recommendation.ranked_candidates[1];
+        assert_eq!(
+            second_candidate.cluster_ids,
+            vec!["unsupported_arithmetic_shape-2694b2baf65b".to_string()]
+        );
+        assert_eq!(
+            second_candidate.hold_reasons,
+            vec![
+                HoldReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport,
+            ]
+        );
+        assert_eq!(
+            second_candidate.leverage,
+            RecommendationLeverage {
+                real_example_hits: 1,
+                promotion_relevant_regression_hits: 1,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 2,
+            }
         );
     }
 
@@ -3681,6 +3707,8 @@ gate_d = true
     fn seed_locked_recommendation_workspace(workspace_root: &Path) {
         for relative_path in [
             "examples/ecommerce/units",
+            "examples/shared-spec/units",
+            "examples/crosslib-app/units",
             "semantic-families/corpus/rust-function.toml",
             "semantic-families/function.wrapper.pipeline.chain3.v1",
             "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1",
