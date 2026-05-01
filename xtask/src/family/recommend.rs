@@ -1,15 +1,15 @@
+use crate::XtaskError;
 use crate::family::coverage::{
     collect_and_write_latest, current_timestamp_rfc3339, render_json_bytes,
 };
 use crate::family::inventory::inventory_sha256_hex;
-use crate::family::paths::{write_bytes_atomically, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH};
+use crate::family::paths::{FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically};
 use crate::family::promotion_artifacts::{
     CandidateStatus, ConfidenceLevel, DifficultyTier, FamilyRecommendationAnalysisArtifact,
-    HoldReason, PromotionArtifactKind, PromotionReadiness, RecommendationCandidateEntry,
-    RecommendationConfidence, RecommendationDifficulty, RecommendationLeverage,
-    RecommendationStatus, UnsupportedClusterEntry, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+    HoldReason, PromotionArtifactKind, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+    RecommendationCandidateEntry, RecommendationConfidence, RecommendationDifficulty,
+    RecommendationLeverage, RecommendationStatus, UnsupportedClusterEntry,
 };
-use crate::XtaskError;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::cmp::Ordering;
 use std::io::{self, Write};
@@ -255,8 +255,7 @@ fn hold_reasons_for(
     if difficulty_tier == DifficultyTier::Hard && real_example_hits < 2 {
         push_hold_reason(&mut hold_reasons, HoldReason::HardDifficulty);
     }
-    if real_example_hits == 0
-        || (real_example_hits == 1 && promotion_relevant_regression_hits < 3)
+    if real_example_hits == 0 || (real_example_hits == 1 && promotion_relevant_regression_hits < 3)
     {
         push_hold_reason(&mut hold_reasons, HoldReason::ThinRealExampleSupport);
     }
@@ -277,7 +276,9 @@ fn recommendation_status_for(
     ranked_candidates: &[RecommendationCandidateEntry],
 ) -> RecommendationStatus {
     if matches!(
-        ranked_candidates.first().map(|candidate| candidate.promotion_readiness),
+        ranked_candidates
+            .first()
+            .map(|candidate| candidate.promotion_readiness),
         Some(PromotionReadiness::Ready)
     ) {
         RecommendationStatus::Ranked

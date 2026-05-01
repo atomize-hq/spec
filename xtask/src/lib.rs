@@ -164,55 +164,53 @@ mod tests {
     use crate::family::{
         certify,
         harness::{
-            family_harness, family_harness_in, registered_harnesses_in_routing_order_from,
-            require_family_harness_in, validate_suite_ownership, FamilyHarness, LockedManifestArgs,
-            LockedManifestRouting, LockedManifestShape, ProveSuiteDefinition, ScaffoldDefinition,
-            SmokeContract, StarterCaseDefinition, StarterTemplate, CHAIN3_CERTIFY_SUITES,
-            CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES, CHAIN3_SUITE_SLUG,
-            MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES, MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW,
-            MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE, MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES,
-            MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG, MONOTONE_UP_CERTIFY_SUITES,
-            MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE, MONOTONE_UP_PROVE_SUITES,
-            MONOTONE_UP_SUITE_SLUG, TERMINAL_UNSUPPORTED_CATCH_ALL,
-            WRAPPER_PIPELINE_CERTIFY_SUITES, WRAPPER_PIPELINE_MUST_NOT_SHADOW,
-            WRAPPER_PIPELINE_PRECEDENCE, WRAPPER_PIPELINE_PROVE_SUITES,
-            WRAPPER_PIPELINE_SUITE_SLUG,
+            CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
+            CHAIN3_SUITE_SLUG, FamilyHarness, LockedManifestArgs, LockedManifestRouting,
+            LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
+            MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
+            MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
+            MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
+            MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
+            ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
+            TERMINAL_UNSUPPORTED_CATCH_ALL, WRAPPER_PIPELINE_CERTIFY_SUITES,
+            WRAPPER_PIPELINE_MUST_NOT_SHADOW, WRAPPER_PIPELINE_PRECEDENCE,
+            WRAPPER_PIPELINE_PROVE_SUITES, WRAPPER_PIPELINE_SUITE_SLUG, family_harness,
+            family_harness_in, registered_harnesses_in_routing_order_from,
+            require_family_harness_in, validate_suite_ownership,
         },
         inventory,
         layout::validate_packet_layout,
-        manifest::parse_manifest_file,
         manifest::Routing,
+        manifest::parse_manifest_file,
         paths::{
-            FamilyId, PacketPaths, FAMILY_COVERAGE_LATEST_PATH,
-            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, REQUIRED_BUCKETS,
+            FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId,
+            PacketPaths, REQUIRED_BUCKETS,
         },
         promotion_artifacts::{
             ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CandidateStatus,
-            CommandRecord,
-            ConfidenceLevel, DifficultyTier, FamilyRecommendationAnalysisArtifact,
-            FamilyCoverageArtifact, FamilyRecommendationArtifact, GateStatus, GateSummary,
-            HoldReason, MachineEvidence, MachineEvidenceKind, PromotionApprovals,
-            PromotionArtifactKind,
-            PromotionBlockerArtifact, PromotionExecutionArtifact, PromotionReadiness,
-            RankedCandidate, RecommendationCandidateEntry, RecommendationConfidence,
-            RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
-            TargetLanguage, UnsupportedClusterEntry, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            CommandRecord, ConfidenceLevel, DifficultyTier, FamilyCoverageArtifact,
+            FamilyRecommendationAnalysisArtifact, FamilyRecommendationArtifact, GateStatus,
+            GateSummary, HoldReason, MachineEvidence, MachineEvidenceKind, PromotionApprovals,
+            PromotionArtifactKind, PromotionBlockerArtifact, PromotionExecutionArtifact,
+            PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RankedCandidate,
+            RecommendationCandidateEntry, RecommendationConfidence, RecommendationDifficulty,
+            RecommendationLeverage, RecommendationStatus, TargetLanguage, UnsupportedClusterEntry,
         },
         prove, recommend,
         report::{
-            certification_report_path, run_suite, CommandOutput, CommandRunner, PassFail,
-            SuiteDefinition, CERTIFY_ARTIFACT_NAME, PROVE_ARTIFACT_NAME,
+            CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME, PassFail,
+            SuiteDefinition, certification_report_path, run_suite,
         },
         routing::{
-            locked_manifest_routing_in, locked_routing_order_with_terminal,
-            locked_routing_order_with_terminal_from, routing_diagnostics_in, ManifestRoutingIssue,
-            RegistryRoutingIssue,
+            ManifestRoutingIssue, RegistryRoutingIssue, locked_manifest_routing_in,
+            locked_routing_order_with_terminal, locked_routing_order_with_terminal_from,
+            routing_diagnostics_in,
         },
         scaffold, smoke,
     };
     use spec_core::loader::load_file;
     use spec_core::semantic_review::{
-        UnsupportedFunctionReasonCode, evaluate_semantic_review, SemanticSupportStatus,
+        SemanticSupportStatus, UnsupportedFunctionReasonCode, evaluate_semantic_review,
     };
     use spec_core::validator::validate_full;
     use std::cell::RefCell;
@@ -774,8 +772,10 @@ mod tests {
         assert!(drift.contains("pricing_discount_leaf_drift(taxed, discount_rate)"));
 
         let under_specified = fs::read_to_string(paths.root.join("fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec")).unwrap();
-        assert!(under_specified
-            .contains("why: Adjust the checkout total using the current pricing inputs."));
+        assert!(
+            under_specified
+                .contains("why: Adjust the checkout total using the current pricing inputs.")
+        );
 
         let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec")).unwrap();
         assert!(unsupported.contains("tax_rate.max(Decimal::ZERO)"));
@@ -1215,16 +1215,18 @@ mod tests {
 
         let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
 
-        assert!(diagnostics
-            .registry
-            .issues
-            .contains(&RegistryRoutingIssue::DuplicatePrecedence {
-                precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
-                families: vec![
-                    "function.wrapper.pipeline.beta.v1".to_string(),
-                    "function.wrapper.pipeline.alpha.v1".to_string(),
-                ],
-            }));
+        assert!(
+            diagnostics
+                .registry
+                .issues
+                .contains(&RegistryRoutingIssue::DuplicatePrecedence {
+                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                    families: vec![
+                        "function.wrapper.pipeline.beta.v1".to_string(),
+                        "function.wrapper.pipeline.alpha.v1".to_string(),
+                    ],
+                })
+        );
     }
 
     #[test]
@@ -1398,10 +1400,12 @@ mod tests {
         let code = run_from(temp_dir.path(), ["xtask", "family", "new", "../bad"]);
 
         assert_eq!(code, 2);
-        assert!(fs::read_dir(temp_dir.path().join("semantic-families"))
-            .unwrap()
-            .next()
-            .is_none());
+        assert!(
+            fs::read_dir(temp_dir.path().join("semantic-families"))
+                .unwrap()
+                .next()
+                .is_none()
+        );
     }
 
     #[test]
@@ -2128,11 +2132,13 @@ gate_d = true
         assert_eq!(failed_attempt["phase_status"], "fail");
         assert_eq!(failed_attempt["overall_status"], "fail");
         assert_report_status_invariants(&failed_attempt);
-        assert!(!paths
-            .artifacts
-            .join(CERTIFY_ARTIFACT_NAME)
-            .with_extension("tmp")
-            .exists());
+        assert!(
+            !paths
+                .artifacts
+                .join(CERTIFY_ARTIFACT_NAME)
+                .with_extension("tmp")
+                .exists()
+        );
     }
 
     #[test]
@@ -2399,7 +2405,7 @@ gate_d = true
                         expected_leverage: "Already promoted and therefore informational only."
                             .to_string(),
                         expected_risks: vec![
-                            "Not approval-eligible from this artifact.".to_string()
+                            "Not approval-eligible from this artifact.".to_string(),
                         ],
                     },
                 ],
@@ -2420,8 +2426,8 @@ gate_d = true
     }
 
     #[test]
-    fn artifact_schema_rejects_recommendation_when_inventory_hash_is_recomputed_from_different_bytes(
-    ) {
+    fn artifact_schema_rejects_recommendation_when_inventory_hash_is_recomputed_from_different_bytes()
+     {
         let temp_dir = workspace_root();
         seed_inventory_repo_truth(temp_dir.path());
 
@@ -2445,7 +2451,7 @@ gate_d = true
                     evidence: vec!["spec-core/src/semantic_review.rs".to_string()],
                     expected_leverage: "Two-step wrapper promotion target.".to_string(),
                     expected_risks: vec![
-                        "Inventory hash mismatch should fail validation.".to_string()
+                        "Inventory hash mismatch should fail validation.".to_string(),
                     ],
                 }],
             },
@@ -2825,22 +2831,32 @@ gate_d = true
         let money_round_candidate = recommendation
             .ranked_candidates
             .iter()
-            .find(|candidate| candidate.cluster_ids.contains(&money_round_cluster.cluster_id))
+            .find(|candidate| {
+                candidate
+                    .cluster_ids
+                    .contains(&money_round_cluster.cluster_id)
+            })
             .unwrap();
 
         assert_eq!(
             money_round_candidate.promotion_readiness,
             PromotionReadiness::Hold
         );
-        assert!(money_round_candidate
-            .hold_reasons
-            .contains(&HoldReason::UnknownOverlapFamily));
-        assert!(money_round_candidate
-            .hold_reasons
-            .contains(&HoldReason::HardDifficulty));
-        assert!(money_round_candidate
-            .hold_reasons
-            .contains(&HoldReason::ThinRealExampleSupport));
+        assert!(
+            money_round_candidate
+                .hold_reasons
+                .contains(&HoldReason::UnknownOverlapFamily)
+        );
+        assert!(
+            money_round_candidate
+                .hold_reasons
+                .contains(&HoldReason::HardDifficulty)
+        );
+        assert!(
+            money_round_candidate
+                .hold_reasons
+                .contains(&HoldReason::ThinRealExampleSupport)
+        );
     }
 
     #[test]
