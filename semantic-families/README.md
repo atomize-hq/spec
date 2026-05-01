@@ -30,6 +30,31 @@ The new M27 outputs live only under the `analysis/` artifact directory. They do
 not overwrite the M26 approval-gated root artifact at
 `.semantic-family-artifacts/family-promotion/recommendation.latest.json`.
 
+### Recommendation Analysis Status
+
+M27.5 hardens recommendation-analysis so maintainers can distinguish visible
+pressure from promotion-worthy pressure without hiding weak candidates.
+
+Each recommendation candidate now exposes:
+
+- `promotion_readiness`: `ready` or `hold`
+- `hold_reasons`: zero or more of
+  `unknown_overlap_family`, `hard_difficulty`,
+  `thin_real_example_support`, `thin_regression_support`
+
+Interpret the top-level recommendation statuses as follows:
+
+- `ranked` means the first candidate is `ready`, so the output is claiming
+  promotion-worthy next-family pressure
+- `insufficient_real_corpus` means the corpus did not produce enough
+  discoverable real-example pressure to rank anything
+- `no_strong_candidate` is an honest outcome when candidates are still visible
+  but every current candidate is `hold`
+
+Held candidates are not errors. A candidate may remain visible in the output
+with `promotion_readiness = "hold"` so maintainers can see where pressure is
+forming without over-claiming that the next family is promotion-ready.
+
 ### Corpus Source Kinds
 
 The Rust function corpus uses explicit source kinds:
