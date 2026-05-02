@@ -9,6 +9,13 @@ use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_esca
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
 use crate::molecule_evidence::MoleculeEvidence;
+use crate::{
+    AUTHORED_SPEC_VERSION, Result, SpecError,
+    backend_execution::{
+        BackendExecutionMarkerKind, collect_backend_execution_markers,
+        compute_backend_execution_digest as compute_backend_execution_digest_from_boundary,
+    },
+};
 use crate::semantic_review::SemanticProjectionMode;
 use crate::semantic_review::{
     SemanticReview, SemanticReviewContext, project_semantic_review_with_context,
@@ -17,7 +24,6 @@ use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
 };
-use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -417,14 +423,6 @@ struct FunctionAuthoredTruthSurface<'a> {
     body_rust: &'a str,
 }
 
-#[derive(Serialize)]
-struct SeamBackendExecutionSurface<'a> {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    method_lowering_rust_bodies: Vec<&'a str>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    rust_derives: Vec<&'a str>,
-}
-
 /// Compute SHA-256 of the unit's top-level truth surface.
 ///
 /// Function units hash only the legacy top-level `contract` surface.
@@ -498,87 +496,28 @@ pub fn compute_authored_truth_digest(spec: &LoadedSpec) -> Option<String> {
 
 /// Compute the backend-only execution digest for seam escape hatches.
 pub fn compute_backend_execution_digest(spec: &LoadedSpec) -> Option<String> {
-    let seam_kind = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum));
-    if !seam_kind {
-        return None;
-    }
-
-    let method_lowering_rust_bodies: Vec<&str> = spec
-        .spec
-        .extensions
-        .methods
-        .iter()
-        .filter_map(|method| {
-            method
-                .lowering
-                .as_ref()
-                .and_then(|lowering| lowering.rust.as_ref())
-                .map(|rust| rust.body.as_str())
-        })
-        .collect();
-    let rust_derives: Vec<&str> = spec
-        .spec
-        .extensions
-        .backends
-        .as_ref()
-        .and_then(|backends| backends.rust.as_ref())
-        .map(|rust| rust.derives.iter().map(String::as_str).collect())
-        .unwrap_or_default();
-
-    if method_lowering_rust_bodies.is_empty() && rust_derives.is_empty() {
-        return None;
-    }
-
-    let json = serde_json::to_string(&SeamBackendExecutionSurface {
-        method_lowering_rust_bodies,
-        rust_derives,
-    })
-    .expect("seam backend-execution serialization cannot fail for well-formed spec");
-    Some(sha256_digest(&json))
+    compute_backend_execution_digest_from_boundary(spec).map(|digest| format!("sha256:{digest}"))
 }
 
 /// Compute explicit backend-only markers for seam units.
 pub fn compute_passport_markers(spec: &LoadedSpec) -> Option<Vec<PassportMarker>> {
-    match spec.spec.unit_kind() {
-        Ok(UnitKind::Data | UnitKind::Sum) => {
-            let mut markers = Vec::new();
-            if spec
-                .spec
-                .extensions
-                .backends
-                .as_ref()
-                .and_then(|backends| backends.rust.as_ref())
-                .map(|rust| !rust.derives.is_empty())
-                .unwrap_or(false)
-            {
-                markers.push(PassportMarker {
-                    id: PassportMarkerId::BackendRustDerives,
-                    path: "backends.rust.derives".to_string(),
-                });
-            }
-
-            for method in &spec.spec.extensions.methods {
-                if method
-                    .lowering
-                    .as_ref()
-                    .and_then(|lowering| lowering.rust.as_ref())
-                    .is_some()
-                {
-                    markers.push(PassportMarker {
-                        id: PassportMarkerId::MethodLoweringRustBody,
-                        path: format!("methods.{}.lowering.rust.body", method.id),
-                    });
+    let markers = collect_backend_execution_markers(spec)
+        .into_iter()
+        .map(|marker| PassportMarker {
+            id: match marker.kind {
+                BackendExecutionMarkerKind::DomainLowering
+                | BackendExecutionMarkerKind::ProofHelperLowering => {
+                    PassportMarkerId::MethodLoweringRustBody
                 }
-            }
+                BackendExecutionMarkerKind::BackendRustDerives => {
+                    PassportMarkerId::BackendRustDerives
+                }
+            },
+            path: marker.path,
+        })
+        .collect::<Vec<_>>();
 
-            if markers.is_empty() {
-                None
-            } else {
-                Some(markers)
-            }
-        }
-        _ => None,
-    }
+    (!markers.is_empty()).then_some(markers)
 }
 
 /// Default proof-coverage hook for seam-localized review metadata.

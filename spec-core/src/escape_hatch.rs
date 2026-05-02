@@ -1,3 +1,8 @@
+use crate::backend_execution::{
+    BackendExecutionMarkerKind, collect_backend_execution_markers,
+    is_helper_or_example_method as backend_is_helper_or_example_method,
+    summarize_backend_execution_markers,
+};
 use crate::molecule_evidence::{MoleculeEvidence, molecule_evidence_is_current_pass};
 use crate::passport::{
     FreshnessStatus, Passport, compute_passport_markers, resolve_passport_freshness,
@@ -56,12 +61,6 @@ pub(crate) struct EscapeHatchSemanticMarkerSummary {
     pub has_backend_rust_derives: bool,
 }
 
-const ACCEPTED_EXAMPLE_HELPER_IDS: &[&str] = &[
-    "percentage_example",
-    "fixed_amount_example",
-    "fixed_amount_capped_example",
-];
-
 pub fn evaluate_escape_hatch_gate(
     spec: &LoadedSpec,
     passport: Option<&Passport>,
@@ -114,65 +113,34 @@ pub fn evaluate_escape_hatch_gate(
 pub(crate) fn collect_escape_hatch_semantic_markers(
     spec: &LoadedSpec,
 ) -> Vec<EscapeHatchSemanticMarker> {
-    if !matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum)) {
-        return Vec::new();
-    }
-
-    let mut markers = Vec::new();
-    if spec
-        .spec
-        .extensions
-        .backends
-        .as_ref()
-        .and_then(|backends| backends.rust.as_ref())
-        .map(|rust| !rust.derives.is_empty())
-        .unwrap_or(false)
-    {
-        markers.push(EscapeHatchSemanticMarker {
-            kind: EscapeHatchSemanticMarkerKind::BackendRustDerives,
-            path: "backends.rust.derives".to_string(),
-        });
-    }
-
-    for method in &spec.spec.extensions.methods {
-        if method
-            .lowering
-            .as_ref()
-            .and_then(|lowering| lowering.rust.as_ref())
-            .is_some()
-        {
-            markers.push(EscapeHatchSemanticMarker {
-                kind: if is_helper_or_example_method(method) {
-                    EscapeHatchSemanticMarkerKind::ProofHelperLowering
-                } else {
+    collect_backend_execution_markers(spec)
+        .into_iter()
+        .map(|marker| EscapeHatchSemanticMarker {
+            kind: match marker.kind {
+                BackendExecutionMarkerKind::DomainLowering => {
                     EscapeHatchSemanticMarkerKind::DomainLowering
-                },
-                path: format!("methods.{}.lowering.rust.body", method.id),
-            });
-        }
-    }
-
-    markers
+                }
+                BackendExecutionMarkerKind::ProofHelperLowering => {
+                    EscapeHatchSemanticMarkerKind::ProofHelperLowering
+                }
+                BackendExecutionMarkerKind::BackendRustDerives => {
+                    EscapeHatchSemanticMarkerKind::BackendRustDerives
+                }
+            },
+            path: marker.path,
+        })
+        .collect()
 }
 
 pub(crate) fn summarize_escape_hatch_semantic_markers(
     spec: &LoadedSpec,
 ) -> EscapeHatchSemanticMarkerSummary {
-    let mut summary = EscapeHatchSemanticMarkerSummary::default();
-    for marker in collect_escape_hatch_semantic_markers(spec) {
-        match marker.kind {
-            EscapeHatchSemanticMarkerKind::DomainLowering => {
-                summary.has_domain_lowering = true;
-            }
-            EscapeHatchSemanticMarkerKind::ProofHelperLowering => {
-                summary.has_proof_helper_lowering = true;
-            }
-            EscapeHatchSemanticMarkerKind::BackendRustDerives => {
-                summary.has_backend_rust_derives = true;
-            }
-        }
+    let summary = summarize_backend_execution_markers(spec);
+    EscapeHatchSemanticMarkerSummary {
+        has_domain_lowering: summary.has_domain_lowering,
+        has_proof_helper_lowering: summary.has_proof_helper_lowering,
+        has_backend_rust_derives: summary.has_backend_rust_derives,
     }
-    summary
 }
 
 fn required_surfaces() -> Vec<EscapeHatchProofSurface> {
@@ -250,9 +218,7 @@ fn molecule_surface_present(
         .any(|test| {
             molecule_evidence_by_id
                 .get(&test.test.id)
-                .is_some_and(|evidence| {
-                    molecule_evidence_is_current_pass(evidence, test, specs_by_id)
-                })
+                .is_some_and(|evidence| molecule_evidence_is_current_pass(evidence, test, specs_by_id))
         })
 }
 
@@ -270,25 +236,7 @@ fn format_open_reason(missing_surfaces: &[EscapeHatchProofSurface]) -> Option<St
 }
 
 pub(crate) fn is_helper_or_example_method(method: &AuthoredMethod) -> bool {
-    has_helper_or_example_shape(method) && has_accepted_helper_or_example_name(method.id.as_str())
-}
-
-fn has_helper_or_example_shape(method: &AuthoredMethod) -> bool {
-    method.receiver == "shared_ref"
-        && method
-            .contract
-            .as_ref()
-            .and_then(|contract| contract.returns.as_deref())
-            == Some("bool")
-        && method
-            .contract
-            .as_ref()
-            .and_then(|contract| contract.inputs.as_ref())
-            .is_none_or(|inputs| inputs.is_empty())
-}
-
-fn has_accepted_helper_or_example_name(method_id: &str) -> bool {
-    method_id.ends_with("_holds") || ACCEPTED_EXAMPLE_HELPER_IDS.contains(&method_id)
+    backend_is_helper_or_example_method(method)
 }
 
 impl EscapeHatchProofSurface {
@@ -311,6 +259,12 @@ mod tests {
         MoleculeTestStruct, SpecSource, SpecStruct, UnitExtensions,
     };
     use indexmap::IndexMap;
+
+    const ACCEPTED_EXAMPLE_HELPER_IDS: &[&str] = &[
+        "percentage_example",
+        "fixed_amount_example",
+        "fixed_amount_capped_example",
+    ];
 
     fn marked_sum_seam(with_local_tests: bool) -> LoadedSpec {
         seam_with_markers(

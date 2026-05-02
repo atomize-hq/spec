@@ -1,4 +1,6 @@
-use crate::escape_hatch::{is_helper_or_example_method, summarize_escape_hatch_semantic_markers};
+use crate::backend_execution::{
+    is_helper_or_example_method, summarize_backend_execution_markers,
+};
 use crate::generator::{lower_data_seam, lower_sum_seam};
 use crate::normalizer::normalize_unit;
 use crate::types::{
@@ -2294,7 +2296,7 @@ fn executable_data_citations(
 }
 
 fn summarize_markers(spec: &LoadedSpec) -> SemanticMarkerSummary {
-    let summary = summarize_escape_hatch_semantic_markers(spec);
+    let summary = summarize_backend_execution_markers(spec);
     SemanticMarkerSummary {
         has_domain_lowering: summary.has_domain_lowering,
         has_helper_lowering: summary.has_proof_helper_lowering,
