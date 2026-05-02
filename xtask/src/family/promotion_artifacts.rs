@@ -1,10 +1,10 @@
-use crate::XtaskError;
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
+    validate_existing_repo_relative_path, validate_repo_relative_path, FamilyId,
     FAMILY_COVERAGE_LATEST_PATH, FAMILY_PROMOTION_ARTIFACT_ROOT, FAMILY_PROMOTION_INVENTORY_DIR,
-    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId, M27_CORPUS_MANIFEST_PATH,
-    validate_existing_repo_relative_path, validate_repo_relative_path,
+    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, M27_CORPUS_MANIFEST_PATH,
 };
+use crate::XtaskError;
 use serde::{Deserialize, Serialize};
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::fs;
@@ -12,7 +12,7 @@ use std::path::{Component, Path, PathBuf};
 
 pub(crate) const RECOMMENDATION_SCHEMA_VERSION: u64 = 1;
 pub(crate) const COVERAGE_SCHEMA_VERSION: u64 = 1;
-pub(crate) const RECOMMENDATION_ANALYSIS_SCHEMA_VERSION: u64 = 2;
+pub(crate) const RECOMMENDATION_ANALYSIS_SCHEMA_VERSION: u64 = 3;
 const PROMOTION_EXECUTION_SCHEMA_VERSION: u64 = 1;
 const PROMOTION_BLOCKER_SCHEMA_VERSION: u64 = 1;
 
@@ -141,6 +141,23 @@ pub(crate) enum HoldReason {
     HardDifficulty,
     ThinRealExampleSupport,
     ThinRegressionSupport,
+    HelperSurfaceNotPromotable,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum NextStepStatus {
+    Promote,
+    TargetedEvidenceGap,
+    DurableHold,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum NextStepDetail {
+    ReadyForPromotion,
+    TargetedEvidenceGap,
+    HelperSurfaceNotPromotable,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -331,6 +348,8 @@ pub(crate) struct RecommendationCandidateEntry {
     pub overlap_family: String,
     pub promotion_readiness: PromotionReadiness,
     pub hold_reasons: Vec<HoldReason>,
+    pub next_step_status: NextStepStatus,
+    pub next_step_detail: NextStepDetail,
     pub leverage: RecommendationLeverage,
     pub difficulty: RecommendationDifficulty,
     pub confidence: RecommendationConfidence,
@@ -612,6 +631,15 @@ impl FamilyRecommendationAnalysisArtifact {
                 if !candidate_qualifies_for_ranked_status(&self.ranked_candidates[0]) {
                     return Err(XtaskError::InvalidInput(
                         "recommendation analysis ranked status requires the first candidate to be `ready` with confidence `medium` or `high`".to_string(),
+                    ));
+                }
+                if self
+                    .ranked_candidates
+                    .iter()
+                    .any(|candidate| candidate.next_step_status == NextStepStatus::DurableHold)
+                {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation analysis ranked status must not include `durable_hold` candidates".to_string(),
                     ));
                 }
             }
@@ -935,6 +963,62 @@ impl RecommendationCandidateEntry {
                 ));
             }
             _ => {}
+        }
+        match self.promotion_readiness {
+            PromotionReadiness::Ready => {
+                if self.next_step_status != NextStepStatus::Promote
+                    || self.next_step_detail != NextStepDetail::ReadyForPromotion
+                {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation candidates marked `ready` must use next_step_status `promote` and next_step_detail `ready_for_promotion`".to_string(),
+                    ));
+                }
+            }
+            PromotionReadiness::Hold => {
+                if self.next_step_status == NextStepStatus::Promote
+                    || self.next_step_detail == NextStepDetail::ReadyForPromotion
+                {
+                    return Err(XtaskError::InvalidInput(
+                        "recommendation candidates marked `hold` must not use ready-for-promotion next-step fields".to_string(),
+                    ));
+                }
+            }
+        }
+        if self.next_step_status == NextStepStatus::DurableHold {
+            if self.promotion_readiness != PromotionReadiness::Hold {
+                return Err(XtaskError::InvalidInput(
+                    "recommendation candidates with next_step_status `durable_hold` must have promotion_readiness `hold`".to_string(),
+                ));
+            }
+            if !self
+                .hold_reasons
+                .contains(&HoldReason::HelperSurfaceNotPromotable)
+            {
+                return Err(XtaskError::InvalidInput(
+                    "recommendation candidates with next_step_status `durable_hold` must include hold_reason `helper_surface_not_promotable`".to_string(),
+                ));
+            }
+            if self.next_step_detail != NextStepDetail::HelperSurfaceNotPromotable {
+                return Err(XtaskError::InvalidInput(
+                    "recommendation candidates with next_step_status `durable_hold` must use next_step_detail `helper_surface_not_promotable`".to_string(),
+                ));
+            }
+        }
+        if self
+            .hold_reasons
+            .contains(&HoldReason::HelperSurfaceNotPromotable)
+            && self.next_step_status != NextStepStatus::DurableHold
+        {
+            return Err(XtaskError::InvalidInput(
+                "recommendation candidates with hold_reason `helper_surface_not_promotable` must use next_step_status `durable_hold`".to_string(),
+            ));
+        }
+        if self.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
+            && self.next_step_status != NextStepStatus::DurableHold
+        {
+            return Err(XtaskError::InvalidInput(
+                "recommendation candidates with next_step_detail `helper_surface_not_promotable` must use next_step_status `durable_hold`".to_string(),
+            ));
         }
         validate_overlap_family(&self.overlap_family)?;
         self.difficulty.validate()?;

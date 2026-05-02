@@ -1,19 +1,20 @@
-use crate::XtaskError;
 use crate::family::coverage::{
-    CoverageRunOutput, collect_latest, current_timestamp_rfc3339,
-    normalized_for_recommend_determinism, render_json_bytes, write_latest,
+    collect_latest, current_timestamp_rfc3339, normalized_for_recommend_determinism,
+    render_json_bytes, write_latest, CoverageRunOutput,
 };
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
-    FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically,
+    write_bytes_atomically, FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
 };
 use crate::family::promotion_artifacts::{
-    CandidateStatus, ConfidenceLevel, DifficultyTier, FamilyCoverageArtifact,
-    FamilyRecommendationAnalysisArtifact, HoldReason, PromotionArtifactKind, PromotionReadiness,
-    RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RecommendationCandidateEntry, RecommendationConfidence,
-    RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
-    UnsupportedClusterEntry, candidate_qualifies_for_ranked_status,
+    candidate_qualifies_for_ranked_status, CandidateStatus, ConfidenceLevel, DifficultyTier,
+    FamilyCoverageArtifact, FamilyRecommendationAnalysisArtifact, HoldReason, NextStepDetail,
+    NextStepStatus, PromotionArtifactKind, PromotionReadiness, RecommendationCandidateEntry,
+    RecommendationConfidence, RecommendationDifficulty, RecommendationLeverage,
+    RecommendationStatus, UnsupportedClusterEntry, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
 };
+use crate::XtaskError;
+use serde::Deserialize;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::cmp::Ordering;
 use std::fs;
@@ -144,10 +145,22 @@ struct DiscoveryProjectionCandidate {
     candidate_id: String,
     cluster_ids: Vec<String>,
     primary_reason_code: UnsupportedFunctionReasonCode,
+    shape_fingerprint: String,
     overlap_family: String,
     leverage: RecommendationLeverage,
     difficulty: RecommendationDifficulty,
     rationale: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UnsupportedShapeFingerprint {
+    schema_version: u64,
+    function_dep_arity: usize,
+    callable_dep_topology_class: String,
+    contract_input_count: usize,
+    has_return: bool,
+    authored_body_kind: String,
 }
 
 fn project_discovery_candidates(
@@ -160,6 +173,7 @@ fn project_discovery_candidates(
             candidate_id: candidate_id(cluster.overlap_family.as_str(), cluster),
             cluster_ids: vec![cluster.cluster_id.clone()],
             primary_reason_code: cluster.reason_code,
+            shape_fingerprint: cluster.shape_fingerprint.clone(),
             overlap_family: cluster.overlap_family.clone(),
             leverage: RecommendationLeverage {
                 real_example_hits: cluster.real_example_hits,
@@ -179,17 +193,7 @@ fn project_discovery_candidates(
 }
 
 fn adjudicate_candidate(discovery: DiscoveryProjectionCandidate) -> RecommendationCandidateEntry {
-    let hold_reasons = hold_reasons_for(
-        discovery.overlap_family.as_str(),
-        discovery.difficulty.tier,
-        discovery.leverage.real_example_hits,
-        discovery.leverage.promotion_relevant_regression_hits,
-    );
-    let promotion_readiness = if hold_reasons.is_empty() {
-        PromotionReadiness::Ready
-    } else {
-        PromotionReadiness::Hold
-    };
+    let resolution = next_step_resolution_for(&discovery);
     let confidence = confidence_for(
         discovery.overlap_family.as_str(),
         discovery.difficulty.tier,
@@ -202,13 +206,23 @@ fn adjudicate_candidate(discovery: DiscoveryProjectionCandidate) -> Recommendati
         cluster_ids: discovery.cluster_ids,
         primary_reason_code: discovery.primary_reason_code,
         overlap_family: discovery.overlap_family,
-        promotion_readiness,
-        hold_reasons,
+        promotion_readiness: resolution.promotion_readiness,
+        hold_reasons: resolution.hold_reasons,
+        next_step_status: resolution.next_step_status,
+        next_step_detail: resolution.next_step_detail,
         leverage: discovery.leverage,
         difficulty: discovery.difficulty,
         confidence,
         rationale: discovery.rationale,
     }
+}
+
+#[derive(Debug)]
+struct CandidateResolution {
+    promotion_readiness: PromotionReadiness,
+    hold_reasons: Vec<HoldReason>,
+    next_step_status: NextStepStatus,
+    next_step_detail: NextStepDetail,
 }
 
 fn compare_candidates(
@@ -302,6 +316,39 @@ fn confidence_for(
     RecommendationConfidence { level, why }
 }
 
+fn next_step_resolution_for(discovery: &DiscoveryProjectionCandidate) -> CandidateResolution {
+    if is_durable_helper_surface_hold(discovery) {
+        return CandidateResolution {
+            promotion_readiness: PromotionReadiness::Hold,
+            hold_reasons: vec![HoldReason::HelperSurfaceNotPromotable],
+            next_step_status: NextStepStatus::DurableHold,
+            next_step_detail: NextStepDetail::HelperSurfaceNotPromotable,
+        };
+    }
+
+    let hold_reasons = hold_reasons_for(
+        discovery.overlap_family.as_str(),
+        discovery.difficulty.tier,
+        discovery.leverage.real_example_hits,
+        discovery.leverage.promotion_relevant_regression_hits,
+    );
+    if hold_reasons.is_empty() {
+        CandidateResolution {
+            promotion_readiness: PromotionReadiness::Ready,
+            hold_reasons,
+            next_step_status: NextStepStatus::Promote,
+            next_step_detail: NextStepDetail::ReadyForPromotion,
+        }
+    } else {
+        CandidateResolution {
+            promotion_readiness: PromotionReadiness::Hold,
+            hold_reasons,
+            next_step_status: NextStepStatus::TargetedEvidenceGap,
+            next_step_detail: NextStepDetail::TargetedEvidenceGap,
+        }
+    }
+}
+
 fn hold_reasons_for(
     overlap_family: &str,
     difficulty_tier: DifficultyTier,
@@ -331,6 +378,27 @@ fn push_hold_reason(hold_reasons: &mut Vec<HoldReason>, hold_reason: HoldReason)
     if !hold_reasons.contains(&hold_reason) {
         hold_reasons.push(hold_reason);
     }
+}
+
+fn is_durable_helper_surface_hold(discovery: &DiscoveryProjectionCandidate) -> bool {
+    discovery.primary_reason_code == UnsupportedFunctionReasonCode::UnsupportedFunctionSurface
+        && discovery.overlap_family == "unknown"
+        && discovery.leverage.real_example_hits > 0
+        && helper_surface_shape(discovery)
+}
+
+fn helper_surface_shape(discovery: &DiscoveryProjectionCandidate) -> bool {
+    let Ok(fingerprint) =
+        serde_json::from_str::<UnsupportedShapeFingerprint>(&discovery.shape_fingerprint)
+    else {
+        return false;
+    };
+    fingerprint.schema_version == 1
+        && fingerprint.function_dep_arity == 0
+        && fingerprint.callable_dep_topology_class == "no_deps_or_helper"
+        && fingerprint.contract_input_count == 1
+        && fingerprint.has_return
+        && fingerprint.authored_body_kind == "neither"
 }
 
 pub(crate) fn recommendation_status_for(
