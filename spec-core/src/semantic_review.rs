@@ -2471,20 +2471,18 @@ fn classify_family_a_body(
             let Some(tail) = block_tail_expr(&block) else {
                 return SupportedBodyClassification::OutsideHonestSubset;
             };
-            let (tail_inner, helper_present) = strip_outer_helper_if_present(tail, helper_name);
-            let has_clamp = if expr_is_ident(tail_inner, &alias) {
-                false
-            } else if expr_is_alias_max_zero(tail_inner, &alias) {
-                true
-            } else {
+            let Some(tail_shape) = normalize_family_a_terminal_shape(tail, helper_name) else {
                 return SupportedBodyClassification::OutsideHonestSubset;
             };
+            if !expr_is_ident(tail_shape.core_expr, &alias) {
+                return SupportedBodyClassification::OutsideHonestSubset;
+            }
             classify_family_a_shape(
                 authored_role,
                 body_role,
-                has_clamp,
+                tail_shape.has_clamp,
                 helper_name,
-                helper_present,
+                tail_shape.helper_present,
             )
         }
         _ => SupportedBodyClassification::OutsideHonestSubset,
@@ -2498,18 +2496,19 @@ fn classify_family_a_terminal_shape(
     input1_name: &str,
     helper_name: Option<&str>,
 ) -> SupportedBodyClassification {
-    let (inner, helper_present) = strip_outer_helper_if_present(expr, helper_name);
-    let Some((body_role, has_clamp)) =
-        classify_family_a_terminal_expr(inner, input0_name, input1_name)
+    let Some(shape) = normalize_family_a_terminal_shape(expr, helper_name) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(body_role) = classify_family_a_core_role(shape.core_expr, input0_name, input1_name)
     else {
         return SupportedBodyClassification::OutsideHonestSubset;
     };
     classify_family_a_shape(
         authored_role,
         body_role,
-        has_clamp,
+        shape.has_clamp,
         helper_name,
-        helper_present,
+        shape.helper_present,
     )
 }
 
@@ -2533,7 +2532,8 @@ fn classify_family_a_shape(
             }
         }
         FamilyAFunctionRole::MonotoneUp => {
-            if body_role == FamilyAFunctionRole::MonotoneUp && !has_clamp {
+            let clamp_is_supported = !has_clamp || (helper_name.is_some() && helper_present);
+            if body_role == FamilyAFunctionRole::MonotoneUp && clamp_is_supported {
                 SupportedBodyClassification::Aligned
             } else {
                 SupportedBodyClassification::Contradictory
@@ -2542,38 +2542,63 @@ fn classify_family_a_shape(
     }
 }
 
-fn classify_family_a_terminal_expr(
-    expr: &syn::Expr,
-    input0_name: &str,
-    input1_name: &str,
-) -> Option<(FamilyAFunctionRole, bool)> {
-    if let Some((receiver, true)) = expr_as_max_zero(expr) {
-        return Some((
-            classify_family_a_core_role(receiver, input0_name, input1_name)?,
-            true,
-        ));
-    }
-
-    Some((
-        classify_family_a_core_role(expr, input0_name, input1_name)?,
-        false,
-    ))
+#[derive(Clone, Copy)]
+struct FamilyATerminalShape<'a> {
+    core_expr: &'a syn::Expr,
+    helper_present: bool,
+    has_clamp: bool,
 }
 
-fn strip_outer_helper_if_present<'a>(
+fn normalize_family_a_terminal_shape<'a>(
     expr: &'a syn::Expr,
     helper_name: Option<&str>,
-) -> (&'a syn::Expr, bool) {
+) -> Option<FamilyATerminalShape<'a>> {
+    let mut current = strip_expr_wrappers(expr)?;
+    let mut helper_present = false;
+    let mut has_clamp = false;
+
+    loop {
+        if !helper_present {
+            if let Some((inner, true)) = strip_outer_helper_call_if_present(current, helper_name) {
+                current = inner;
+                helper_present = true;
+                continue;
+            }
+        }
+
+        if !has_clamp {
+            if let Some((inner, true)) = expr_as_max_zero(current) {
+                current = inner;
+                has_clamp = true;
+                continue;
+            }
+        }
+
+        break;
+    }
+
+    Some(FamilyATerminalShape {
+        core_expr: current,
+        helper_present,
+        has_clamp,
+    })
+}
+
+fn strip_outer_helper_call_if_present<'a>(
+    expr: &'a syn::Expr,
+    helper_name: Option<&str>,
+) -> Option<(&'a syn::Expr, bool)> {
+    let expr = strip_expr_wrappers(expr)?;
     let Some(helper_name) = helper_name else {
-        return (expr, false);
+        return Some((expr, false));
     };
     let Some(call) = expr_as_call(expr) else {
-        return (expr, false);
+        return Some((expr, false));
     };
     if call.args.len() == 1 && expr_path_is_callable_name(&call.func, helper_name) {
-        (&call.args[0], true)
+        Some((&call.args[0], true))
     } else {
-        (expr, false)
+        Some((expr, false))
     }
 }
 
@@ -2648,19 +2673,6 @@ fn expr_is_subtotal_times_rate_exact_for_inputs(
     matches!(binary.op, syn::BinOp::Mul(_))
         && expr_is_ident(&binary.left, input0_name)
         && expr_is_ident(&binary.right, input1_name)
-}
-
-fn expr_is_alias_max_zero(expr: &syn::Expr, alias: &str) -> bool {
-    let Some(expr) = strip_expr_wrappers(expr) else {
-        return false;
-    };
-    let syn::Expr::MethodCall(call) = expr else {
-        return false;
-    };
-    call.method == "max"
-        && call.args.len() == 1
-        && expr_is_ident(&call.receiver, alias)
-        && expr_is_zero_expr(&call.args[0])
 }
 
 fn expr_is_zero_expr(expr: &syn::Expr) -> bool {
@@ -5451,6 +5463,31 @@ mod tests {
     }
 
     #[test]
+    fn monotone_down_nonnegative_classifier_cross_library_helper_routes_to_promoted_leaf() {
+        let crosslib = arithmetic_leaf_spec(
+            "pricing/apply_discount_crosslib_helper",
+            "Apply a discount while importing the shared round helper from a sibling spec library.",
+            &["output <= subtotal", "output >= 0"],
+            &["shared::money/round"],
+            r#"{
+            let discounted = subtotal - subtotal * rate;
+            round(discounted.max(Decimal::ZERO))
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&crosslib).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+    }
+
+    #[test]
     fn monotone_down_nonnegative_classifier_drift_fixture_reports_semantic_drift() {
         let drift = arithmetic_leaf_spec(
             "pricing/apply_discount_drift",
@@ -5548,6 +5585,56 @@ mod tests {
     }
 
     #[test]
+    fn monotone_up_classifier_helper_then_clamp_routes_to_promoted_leaf() {
+        let helper_then_clamp = arithmetic_leaf_spec(
+            "pricing/apply_tax_helper_then_clamp",
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            &["output >= subtotal"],
+            &["money/round"],
+            r#"{
+            let taxed = subtotal + subtotal * rate;
+            round(taxed).max(Decimal::ZERO)
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&helper_then_clamp).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_cross_library_helper_routes_to_promoted_leaf() {
+        let crosslib = arithmetic_leaf_spec(
+            "pricing/apply_tax_crosslib_helper",
+            "Apply tax while importing the shared round helper from a sibling spec library.",
+            &["output >= subtotal"],
+            &["shared::money/round"],
+            r#"{
+            let taxed = subtotal + subtotal * rate;
+            round(taxed).max(Decimal::ZERO)
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&crosslib).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+    }
+
+    #[test]
     fn monotone_up_classifier_drift_fixture_reports_semantic_drift() {
         let drift = arithmetic_leaf_spec(
             "pricing/apply_tax_drift",
@@ -5608,6 +5695,35 @@ mod tests {
                 subtotal
             } else {
                 round(taxed)
+            }
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&near_miss).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.compatibility_key,
+            UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedControlFlow]
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_cross_library_control_flow_near_miss_stays_unsupported() {
+        let near_miss = arithmetic_leaf_spec(
+            "pricing/apply_tax_crosslib_control_flow_unsupported_near_miss",
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            &["output >= subtotal"],
+            &["shared::money/round"],
+            r#"{
+            let taxed = subtotal + subtotal * rate;
+            if rate == Decimal::ZERO {
+                subtotal
+            } else {
+                round(taxed).max(Decimal::ZERO)
             }
         }"#,
         );
@@ -5791,22 +5907,23 @@ mod tests {
     }
 
     #[test]
-    fn family_a_helper_dep_exclusion_rejects_non_outermost_helper_call() {
+    fn family_a_helper_dep_normalization_allows_helper_then_clamp_for_monotone_up() {
         let spec = arithmetic_leaf_spec(
             "billing/apply_discount",
-            "Return the subtotal after applying the discount rate and clamping at zero.",
-            &["output <= subtotal", "output >= 0"],
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            &["output >= subtotal"],
             &["money/round"],
             r#"{
-            round(subtotal - subtotal * rate).max(Decimal::ZERO)
+            let taxed = subtotal + subtotal * rate;
+            round(taxed).max(Decimal::ZERO)
         }"#,
         );
 
         let review = evaluate_semantic_review(&spec).unwrap();
-        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
         assert_eq!(
-            review.unsupported_reason_codes,
-            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
         );
     }
 
