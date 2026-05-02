@@ -1,765 +1,879 @@
-<!-- plan backup: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-plan-backup-20260502-125438.md -->
-# M27.9B - money/round Durable-Hold Resolution
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-autoplan-restore-20260502-150826.md -->
+# M28 - Shared-Core Boundary Extraction + Escape-Hatch Containment
 
-Status: **implementation contract**  
-Base branch: **main**  
-Working branch: **feat/corpus-expansion**  
-Last rewritten: **2026-05-02**  
-Supersedes: **M27.9A - Stop-Path Closeout And Analysis Contract Recalibration**  
-Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260502-122109.md`**
+Status: **implementation contract**
+Base branch: **main**
+Working branch: **feat/corpus-expansion**
+Last rewritten: **2026-05-02**
+Supersedes: **M27.9B - money/round Durable-Hold Resolution**
+Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260502-150831.md`**
 
 ## Summary
 
-M27.9A already closed the fake arithmetic-ready story.
+M27.9B closed the family-choice lane honestly.
 
-The repo's truthful baseline is now:
+The branch truth is now:
 
-- `function_coverage = 28 / 17 / 0 / 11`
 - `recommendation_status = "no_strong_candidate"`
-- one visible held cluster remains:
+- `money/round` remains visible under
   `unsupported_function_surface-e40675da6fa0`
-- that cluster is represented by `money/round`
+- that surface is durable-held under `helper_surface_not_promotable`
+- corpus run `1` remains unspent and unauthorized by default
 
-M27.9B is the narrow follow-on that removes the last fake ambiguity.
+That means the next blocker is not evidence collection.
 
-This milestone does not spend corpus run `1`.
-It does not reopen semantic-review family routing.
-It does not start M28.
+It is architecture.
 
-It does one thing:
+M28 exists to freeze one explicit shared-core boundary before any second-language
+story starts:
 
-1. replace the generic `unknown_overlap_family` story for the current
-   `money/round` cluster with explicit schema-version-3 durable-hold truth
+1. shared authored semantic truth
+2. backend-specific execution markers and lowering details
+3. the review and health surfaces that decide whether those backend details are
+   contained or leaking
 
-The target repo conclusion is:
+This milestone does **not** add language two.
+It does **not** reopen recommendation policy.
+It does **not** spend corpus run `1`.
+It does one bounded thing:
 
-- `money/round` remains visible pressure
-- `money/round` is not the next family-promotion target
-- `money/round` remains held because it is helper-surface pressure inside
-  already-promoted arithmetic workflows, not a standalone promotable boundary
-- `recommendation_analysis_schema_version = 3`
-- corpus run `1` stays unspent and unauthorized by default
+> Extract one explicit backend-execution boundary inside `spec-core`, route the
+> current seam consumers through it, and prove that Rust-specific escape hatches
+> are boxed rather than silently mixed into the shared core.
 
 That is the whole milestone.
 
 ## Done Means
 
-M27.9B is complete only when all of the following are true:
+M28 is complete only when all of the following are true together:
 
-1. the current `money/round` cluster stays visible in recommendation output
-2. the cluster no longer uses `unknown_overlap_family`
-3. the cluster now uses `helper_surface_not_promotable`
-4. `next_step_status = durable_hold`
-5. `next_step_detail = helper_surface_not_promotable`
-6. `recommendation_status` remains `no_strong_candidate`
-7. corpus run `1` remains unspent and unauthorized by default
-8. `xtask/src/lib.rs` locks the new truth end to end
-9. `PLAN.md` and
-   `docs/recommendation_corpus_expansion_program_v0.1.md` tell the same story
+1. one new shared runtime boundary module owns backend-execution marker
+   collection and backend-execution digest truth for seam units
+2. `spec-core/src/passport.rs` stops hand-rolling backend marker and digest
+   scans
+3. `spec-core/src/escape_hatch.rs` stops classifying Rust markers independently
+   of the shared boundary module
+4. `spec-core/src/semantic_review.rs` consumes the same shared boundary summary
+   when deciding:
+   - backend-only meaning preserved
+   - backend-only semantics leaked
+   - supported seam alignment
+5. `spec-cli` status/export truth surfaces and regressions stay truthful for the
+   current Rust repo behavior
+6. no recommendation, corpus, or `money/round` governance semantics change
+7. no second-language runtime, lowering, packet, or fixture work lands
+8. `xtask` remains read-only unless a runtime audit proves a real Rust-specific
+   proof-surface leak, in which case this milestone halts and splits a follow-on
+9. `PLAN.md` and `ORCH_PLAN.md` tell the same story with no stale M27.9B
+   execution residue
+10. M28 closes with an explicit decision about M29:
+    - proceed to a scoped pilot, or
+    - stop and write a kill memo
 
 ## Current Repo Truth
 
-### Locked baseline after M27.9A
+### Locked baseline from M27.9B
 
-- `function_coverage.total_units = 28`
-- `function_coverage.promoted_family_units = 17`
-- `function_coverage.supported_unpromoted_family_units = 0`
-- `function_coverage.unsupported_function_units = 11`
-- `recommendation_analysis_schema_version = 2`
-- `recommendation_status = "no_strong_candidate"`
-
-### Remaining visible candidate
-
-The current recommendation artifact still exposes one held candidate:
-
+- `function_coverage = 28 / 17 / 0 / 11`
 - `recommendation_analysis_schema_version = 3`
-- candidate id:
+- `recommendation_status = "no_strong_candidate"`
+- visible candidate id:
   `z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0`
-- cluster id: `unsupported_function_surface-e40675da6fa0`
-- reason code: `unsupported_function_surface`
-- promotion readiness: `hold`
-- hold reason: `helper_surface_not_promotable`
-- next step status: `durable_hold`
-- next step detail: `helper_surface_not_promotable`
-- leverage:
-  - `real_example_hits = 2`
-  - `promotion_relevant_regression_hits = 1`
-  - `boundary_only_hits = 0`
-  - `total_units_in_cluster = 3`
+- durable hold reason: `helper_surface_not_promotable`
+- `next_step_status = "durable_hold"`
+- `next_step_detail = "helper_surface_not_promotable"`
+- corpus run `1` remains unspent and unauthorized by default
 
-### Why this was the right next problem
+### The actual M28 leak
 
-The problem was not "there is still a hold."
+The portability problem is no longer hypothetical.
 
-The problem was that the hold was described too vaguely.
+The repo already has four critical consumers that inspect or project
+Rust-specific execution surfaces for seam units:
 
-The three representative units already tell the stronger story:
+- `spec-core/src/passport.rs`
+  - computes backend-execution digests
+  - computes seam marker lists
+- `spec-core/src/escape_hatch.rs`
+  - classifies `methods.*.lowering.rust.body`
+  - distinguishes domain lowering from proof-helper lowering
+  - computes required proof surfaces
+- `spec-core/src/semantic_review.rs`
+  - uses backend-marker summaries to decide whether executable lowering:
+    - agrees with authored semantics
+    - preserves meaning but stays backend-only
+    - leaks backend-only semantics into the shared semantic surface
+- `spec-core/src/export.rs`
+  - projects read-side gate and semantic-review truth for downstream consumers
 
-- `examples/ecommerce/units/money/round.unit.spec`
-  - unary helper-shaped function
-  - placeholder identity body
-- `examples/shared-spec/units/money/round.unit.spec`
-  - unary helper-shaped function
-  - real rounding implementation for sibling reuse
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/money/round.unit.spec`
-  - unary helper-shaped function
-  - placeholder identity body in the explicit unsupported pack
+That logic is shared in meaning, but still partly duplicated in code.
 
-At the same time, maintainer docs already lock the important semantic truth:
-
-- promoted arithmetic leaf families already cover zero-or-one helper deps
-- packet-local `money/round` exists to preserve optional-helper topology
-- `shared::money/round` and local `money/round` are the same helper-aware
-  boundary for the promoted arithmetic leaf families
-
-That means the live ambiguity is gone.
-
-The repo now says this plainly:
-
-> `money/round` remains visible helper-surface pressure, but it is not the next
-> family, its durable hold reason is `helper_surface_not_promotable`, and corpus
-> run `1` stays unspent and unauthorized by default.
-
-## Frozen Terminology Source
-
-The durable-hold wording in this file consumes the authoritative vocabulary
-freeze verbatim from commit `44836f42ea75937f85e9ec72658eb7238db35dd9`.
+That duplication is the M28 wedge.
 
 ## Authority And Evidence
 
 Primary decision inputs:
 
 - `PLAN.md`
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260502-122109.md`
-- `docs/m27_5_recommendation_quality_plan_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `ORCH_PLAN.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260502-150831.md`
 - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/lib.rs`
-- `semantic-families/README.md`
-- `examples/ecommerce/units/money/round.unit.spec`
-- `examples/shared-spec/units/money/round.unit.spec`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/money/round.unit.spec`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `docs/high_level_technical_architecture_v0.2.md`
+- `.runs/m27_9b/final-proof.json`
+- `.runs/m27_9b/closeout.md`
+- `spec-core/src/passport.rs`
+- `spec-core/src/escape_hatch.rs`
+- `spec-core/src/semantic_review.rs`
+- `spec-core/src/generator.rs`
+- `spec-core/src/validator.rs`
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/m14_regressions.rs`
+- `spec-cli/tests/cli.rs`
 
-If any older note still implies that `money/round` is an unresolved maybe-next
-family, this file wins for M27.9B.
+If any older note still implies that more corpus is the default next move, or
+that M28 should start with a second-language pilot, this file wins.
 
-## Scope Challenge
+## Step 0 - Scope Challenge
+
+### Premise challenge
+
+1. The branch is no longer blocked on next-family ambiguity.
+   Verdict: **accept**
+2. The highest-leverage M28 leak is runtime boundary duplication around
+   backend-execution markers.
+   Verdict: **accept**
+3. A docs-only M28 would be fake progress because the leak is already in shipped
+   code paths.
+   Verdict: **accept**
+4. `xtask` should be audit-only unless the runtime audit proves a real proof
+   surface leak.
+   Verdict: **accept**
+5. M28 must unlock a real roadmap decision about M29 instead of ending as
+   cleanup-only architecture work.
+   Verdict: **accept**
 
 ### What already exists
 
-| Sub-problem | Existing code / truth | Decision |
+| Sub-problem | Existing code / truth | Plan decision |
 |---|---|---|
-| Unsupported-cluster discovery | `xtask/src/family/coverage.rs` already groups unsupported units, computes leverage, and assigns coarse `overlap_family` | Reuse. Do not build a second analysis pass or new command. |
-| Recommendation gating | `xtask/src/family/recommend.rs` already converts unsupported clusters into held or ready candidates | Reuse. Narrow the current hold story instead of inventing a parallel recommendation workflow. |
-| Artifact contract enforcement | `xtask/src/family/promotion_artifacts.rs` already validates recommendation-analysis artifacts strictly | Reuse. Extend the existing contract with the new durable-hold fields and validation rules. |
-| Locked proof surface | `xtask/src/lib.rs` already owns the locked-corpus command-path assertions | Reuse. Add the new durable-hold lock there. |
-| Maintainer explanation of helper-aware arithmetic leaves | `semantic-families/README.md` already says optional helper deps are inside the promoted arithmetic leaf boundary | Treat as authoritative input. Do not reopen family semantics in M27.9B. |
-| Program governance | `docs/recommendation_corpus_expansion_program_v0.1.md` already tracks whether corpus work is still justified | Reuse. Update the program state after durable-hold resolution lands. |
+| Shared authored truth hashing | `spec-core/src/passport.rs` already computes authored-truth digests separately from backend execution | Reuse. Do not redesign freshness. |
+| Backend-only execution marker classification | `spec-core/src/escape_hatch.rs` already distinguishes domain lowering, proof-helper lowering, and backend derives | Extract. Make this the single shared source. |
+| Supported seam semantic drift classification | `spec-core/src/semantic_review.rs` already projects backend-only preserved vs leaked semantics | Reuse. Rewire to the extracted boundary module. |
+| Seam lowering policy | `spec-core/src/validator.rs` already confines seam escape hatches to `methods[].lowering.rust.body` and `backends.rust.derives` | Treat as authoritative. Do not widen allowed escape hatches. |
+| Seam code generation | `spec-core/src/generator.rs` already lowers seams from shared authored truth plus backend details | Reuse. M28 does not rewrite lowering. |
+| CLI status projection | `spec-cli/src/commands.rs` already demotes health from semantic drift and open escape-hatch gates | Reuse. Preserve behavior, tighten shared data source. |
+| Export read-side projection | `spec-core/src/export.rs` already projects read-side passport / semantic-review / gate truth for downstream consumers | Reuse. Preserve parity with `status`, tighten shared data source. |
+| Proof workflow / promotion loop | `xtask` already owns approval, prove, certify, and family recommendation artifacts | Audit only. Do not rewrite unless a real Rust-only proof leak is demonstrated. |
+| Coverage reporting | `xtask/src/family/coverage.rs` already summarizes family coverage and recommendation surfaces | Audit only. Freeze no-drift output unless recommendation semantics intentionally change. |
 
 ### Minimum honest change
 
-The minimum complete M27.9B diff is:
+The smallest complete M28 diff is:
 
-1. enrich the existing recommendation-analysis artifact with explicit next-step
-   resolution for held unsupported-function candidates
-2. classify the current `money/round` cluster as durable hold for a
-   machine-readable helper-surface reason
-3. lock that outcome in `xtask` tests and artifact validation
-4. rewrite the plan/program docs so future sessions stop treating this as
-   generic unresolved family pressure
+1. record one explicit portability-consumer preflight so the branch proves this
+   seam is the actual choke point
+2. add one new shared `spec-core` boundary module for backend-execution
+   markers and digest surfaces
+3. route current seam consumers through it
+4. update CLI truth-surface coverage and regressions
+5. force a post-M28 M29 go / no-go gate
+6. rewrite the active plan/orchestration docs so the branch stops carrying stale
+   M27.9B execution detail
 
-Anything smaller leaves the repo in the same ambiguous state.
+Anything smaller leaves the portability leak in place.
+Anything larger risks turning M28 into a rewrite.
 
-### Complexity and blast radius
+### Complexity check
 
-This milestone touches six authored files plus two derived JSON refreshes:
+Implementation scope is intentionally capped at **9 runtime/test files** plus
+the two active plan files:
 
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/lib.rs`
+- `spec-core/src/backend_execution.rs` **new**
+- `spec-core/src/passport.rs`
+- `spec-core/src/escape_hatch.rs`
+- `spec-core/src/semantic_review.rs`
+- `spec-core/src/lib.rs`
+- `spec-cli/src/commands.rs`
+- `spec-core/src/export.rs`
+- `spec-cli/tests/m14_regressions.rs`
+- `spec-cli/tests/cli.rs`
 - `PLAN.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `ORCH_PLAN.md`
 
-Derived proof surfaces expected to refresh:
+This is at the smell threshold, not beyond it.
 
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-
-That is small enough to proceed as one milestone, but it is still one contract
-surface. If implementation expands beyond those authored files plus the two
-derived artifacts, stop and split the work.
+That is acceptable because the milestone is architectural and the diff is still
+concentrated in one bounded seam. No new infrastructure. No new binaries. No
+new command family. No new target language.
 
 ### Search and boring-tech rule
 
-- **[Layer 1]** Reuse the current coverage artifact instead of inventing a new
-  `family inspect money-round` command.
-- **[Layer 1]** Reuse the current recommendation-analysis artifact instead of
-  adding a second governance artifact.
-- **[Layer 1]** Reuse the existing locked-corpus command-path tests in
-  `xtask/src/lib.rs`.
-- **[EUREKA]** The remaining problem is not missing semantic support for helper
-  deps. The repo already proved helper-aware arithmetic leaves. The remaining
-  problem is that a helper function surface is still being described like a
-  latent family-promotion candidate.
+- **[Layer 1]** Reuse the current seam policy encoded in `validator.rs`. Do not
+  invent a second escape-hatch policy layer.
+- **[Layer 1]** Reuse current health projection in `spec-cli/src/commands.rs`.
+  Do not build a second status interpreter.
+- **[Layer 1]** Reuse existing M14 regression surfaces instead of inventing a
+  new portability-only fixture lane.
+- **[EUREKA]** The real blocker is not "lack of portability support." The real
+  blocker is that the repo still computes Rust-specific execution meaning in
+  multiple places. Portability work starts by making that one thing explicit.
 
-### Locked decisions
+### TODOS cross-reference
 
-1. No new corpus run is part of M27.9B.
-2. No semantic-review family routing changes are part of M27.9B.
-3. `money/round` is resolved in the recommendation/governance layer, not by
-   inventing a new promoted-family packet.
-4. The intended outcome is a durable hold, not another "still unknown, think
-   later" placeholder.
-5. M28 remains out of scope during this milestone, but M27.9B may unblock the
-   later M28 decision by making the current hold explicit.
+No existing `TODOS.md` item blocks M28 directly.
 
-### Exact file contract
+M28 may create one follow-on TODO only if the `xtask` audit proves a real
+Rust-specific proof-surface leak. That follow-on must **not** be silently
+expanded into this milestone.
 
-| File | Responsibility | Must not happen |
-|---|---|---|
-| `xtask/src/family/coverage.rs` | Preserve the current cluster-discovery path while exposing enough helper-context truth for recommendation resolution | Do not add a second repo scan or new corpus source. |
-| `xtask/src/family/recommend.rs` | Convert the current `money/round` cluster from generic `unknown_overlap_family` into explicit durable-hold resolution | Do not loosen ranked-status rules or rerank the corpus. |
-| `xtask/src/family/promotion_artifacts.rs` | Validate the new durable-hold fields and forbid contradictory combinations | Do not make schema validation softer. |
-| `xtask/src/lib.rs` | Lock the end-to-end command-path truth for the durable-hold outcome | Do not leave old `unknown_overlap_family` expectations in locked tests. |
-| `PLAN.md` | Record M27.9B as durable-hold resolution work | Do not preserve "maybe corpus next" language. |
-| `docs/recommendation_corpus_expansion_program_v0.1.md` | Update the program tracker so corpus run `1` remains unspent and the current hold is treated as durable helper pressure | Do not silently authorize a follow-up corpus run. |
+### Completeness check
 
-### NOT in scope
+The shortcut version of M28 would be "write docs, defer the extraction."
+That saves almost nothing with AI assistance and leaves the architectural leak
+untouched.
 
-- adding repo-owned corpus examples
-  reason: the whole point of M27.9B is to avoid spending corpus budget by habit
-- promoting a helper-function family packet
-  reason: the current roadmap and packet inventory do not authorize a standalone
-  `money/round` promotion path
-- widening semantic-review support for unary helper surfaces
-  reason: promoted arithmetic leaves already prove helper-aware consumption
-- changing coverage accounting
-  reason: `28 / 17 / 0 / 11` is already the truthful locked baseline
-- starting M28 shared-core extraction
-  reason: M27.9B only resolves the last lingering next-family ambiguity
-- broad README or roadmap cleanup
-  reason: only the surfaces needed to encode the new durable-hold truth should move
+This plan chooses the complete version:
 
-## Output Contract
+- real shared boundary extraction
+- real regression coverage
+- real halt rule for `xtask`
 
-M27.9B adds an explicit next-step resolution contract for held
-`unsupported_function_surface` candidates.
+### Distribution check
 
-### Required artifact contract changes
+M28 introduces no new distributed artifact type.
 
-`RecommendationCandidateEntry` gains two required fields:
+No release pipeline work is required.
+No package publishing work is required.
+No new install surface is required.
 
-- `next_step_status`
-- `next_step_detail`
+## Alternatives Considered
 
-Additive enum surface for this milestone:
+| Approach | Summary | Effort | Risk | Verdict |
+|---|---|---:|---:|---|
+| A. Docs-only M28 | Write down the boundary and defer code | S | High | Rejected |
+| B. Runtime boundary extraction first | Extract one shared backend-execution module and route current consumers through it | M | Low-Med | **Recommended** |
+| C. Full portability-kernel rewrite | Refactor `spec-core`, `spec-cli`, and `xtask` together before any future language work | L | High | Rejected |
+| D. Shadow portability probe first | Try one cheap portability probe before extracting the boundary | S-M | Med | Rejected as a standalone milestone, retained as the closeout forcing function |
 
-- `HoldReason::HelperSurfaceNotPromotable`
-- `NextStepStatus::DurableHold`
-- `NextStepDetail::HelperSurfaceNotPromotable`
-
-Because these are new required fields in the recommendation-analysis artifact,
-`RECOMMENDATION_ANALYSIS_SCHEMA_VERSION` must bump when the contract lands.
-
-### M27.9B target outcome
-
-For the current visible `money/round` candidate, the resulting recommendation
-analysis must read as:
+## Dream State
 
 ```text
-candidate_id = z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0
-cluster_ids = [unsupported_function_surface-e40675da6fa0]
-promotion_readiness = hold
-hold_reasons = [helper_surface_not_promotable]
-next_step_status = durable_hold
-next_step_detail = helper_surface_not_promotable
-recommendation_status = no_strong_candidate
+CURRENT
+  Shared semantic intent exists,
+  but Rust-specific execution markers are interpreted in multiple places.
+        |
+        v
+THIS PLAN (M28)
+  One shared backend-execution boundary
+  -> seam consumers reuse it
+  -> CLI health stays truthful
+  -> xtask audited, not rewritten by habit
+        |
+        v
+12-MONTH IDEAL
+  Shared semantic core is explicit,
+  backend adapters are boxed,
+  proof workflow is language-portable enough for one honest M29 pilot.
 ```
-
-### Meaning of the target outcome
-
-`helper_surface_not_promotable` means:
-
-- the cluster is visible and real
-- the repo keeps it in the artifact
-- the repo does not treat it as the next family-promotion target
-- the repo does not authorize a corpus run to rescue it automatically
-
-### Rejected alternatives inside M27.9B
-
-- `known_overlap`
-  reason: the current `money/round` cluster is not itself a promoted-family leaf
-  or wrapper boundary
-- `targeted_evidence_gap`
-  reason: the current repo already has enough truth to say the helper surface is
-  not the right next-family pressure surface
-
-If implementation evidence contradicts this target outcome, stop and rewrite
-the contract before landing. Do not silently widen scope.
 
 ## Architecture Review
 
-### Core rule
+### Architecture decision
 
-Do not solve this with a new workflow.
+Use **one new explicit module** in `spec-core`:
 
-Solve it inside the workflow the repo already trusts:
+- `spec-core/src/backend_execution.rs`
 
-- coverage artifact projects the unsupported cluster
-- recommendation-analysis artifact explains what that cluster means
-- locked `xtask` tests prove the explanation stays true
+This module owns:
 
-### Layered model
+- backend-execution marker collection
+- marker classification:
+  - domain lowering
+  - proof-helper lowering
+  - backend derives
+- backend-execution digest computation for seam units
+- shared summaries consumed by:
+  - passport freshness / markers
+  - escape-hatch gate
+  - semantic review
+
+This is better than burying helper functions inside `escape_hatch.rs` because
+the seam is already shared by four direct runtime consumers.
+
+### Portability-relevant consumer inventory
+
+Before the first runtime edit, M28 must freeze this consumer inventory:
+
+| Consumer | Why it matters | Decision criticality |
+|---|---|---|
+| `spec-core/src/passport.rs` | authored/backend digest truth and freshness projection | high |
+| `spec-core/src/escape_hatch.rs` | proof-surface containment gate truth | high |
+| `spec-core/src/semantic_review.rs` | preserved-vs-leaked backend-only meaning | high |
+| `spec-core/src/export.rs` | downstream read-side export truth must stay aligned with `status` truth | high |
+| `spec-cli/src/commands.rs` | user-visible health/status projection | high |
+| `xtask/src/family/coverage.rs` | frozen coverage/recommendation surface that can reveal semantic drift even when runtime code stays green | medium, audit-only |
+| `xtask/src/family/*` | roadmap/proof surfaces, but not the direct runtime seam | medium, audit-only |
+
+If the planned extraction does not materially simplify every high-criticality
+consumer above, halt before merge and re-scope.
+
+### Dependency graph
 
 ```text
-LAYER 1: DISCOVERY
-==================
-authored corpus units
-    -> semantic review
-    -> unsupported clusters
-
-LAYER 2: INTERPRETATION
-=======================
-unsupported_function_surface cluster
-    -> helper-surface resolution rule
-    -> recommendation candidate next-step contract
-
-LAYER 3: GOVERNANCE
-===================
-recommendation.latest.json
-    -> PLAN.md
-    -> recommendation_corpus_expansion_program_v0.1.md
-    -> later milestone choice
+AUTHORED SPEC
+   |
+   +--> validator.rs
+   |      `- freezes where escape hatches are allowed
+   |
+   +--> generator.rs
+   |      `- lowers shared authored truth + backend-specific details
+   |
+   `--> backend_execution.rs   [NEW SHARED BOUNDARY]
+           |
+           +--> passport.rs
+           |      `- authored/backend digests, markers
+           |
+           +--> escape_hatch.rs
+           |      `- proof-surface gate, marker summary
+           |
+           +--> semantic_review.rs
+           |      `- preserved vs leaked backend-only meaning
+           |
+           +--> spec-core/src/export.rs
+           |      `- export read-side projection
+           |
+           `--> spec-cli/src/commands.rs
+                  `- health/status projection
 ```
 
 ### Data flow
 
 ```text
-AUTHORED SOURCE TRUTH
-=====================
-examples/ecommerce::money/round
-examples_shared_spec::money/round
-m20_unsupported_truth_pack::money/round
-        |
-        v
-COVERAGE PROJECTION
-===================
-xtask/src/family/coverage.rs
-  - discover cluster
-  - preserve leverage counts
-  - expose helper-context facts needed for resolution
-        |
-        v
-RECOMMENDATION RESOLUTION
-=========================
-xtask/src/family/recommend.rs
-  - candidate remains hold
-  - hold reason becomes explicit
-  - next_step_status = durable_hold
-        |
-        v
-GOVERNANCE CONTRACT
-===================
-recommendation.latest.json
-xtask/src/lib.rs lock tests
-PLAN.md
-corpus expansion program tracker
+seam unit
+  -> validator confirms escape-hatch policy
+  -> backend_execution extracts backend-only markers
+  -> passport records authored/backend digests
+  -> escape_hatch computes required proof surfaces
+  -> semantic_review decides aligned / preserved / leaked
+  -> export projects bundle read-side truth
+  -> spec-cli projects final health status
 ```
 
-### Dependency graph
+### Exact file contract
+
+| File | Responsibility | Must not happen |
+|---|---|---|
+| `spec-core/src/backend_execution.rs` | Single shared source for seam backend-execution markers, helper/example identity, and backend-execution digests | Do not bake in second-language abstractions or new runtime routing policy. |
+| `spec-core/src/passport.rs` | Reuse shared backend boundary for digests and markers | Do not change authored-truth hashing semantics. |
+| `spec-core/src/escape_hatch.rs` | Reuse shared backend boundary for marker summaries and containment logic | Do not loosen required proof surfaces. |
+| `spec-core/src/semantic_review.rs` | Reuse shared backend boundary for preserved-vs-leaked decisions | Do not change supported family routing order or recommendation policy. |
+| `spec-core/src/lib.rs` | Export the new boundary module | Do not become a grab-bag for unrelated refactors. |
+| `spec-core/src/export.rs` | Preserve truthful export bundle projection against the refactored runtime boundary | Do not let export/status truth drift apart for the same fixture. |
+| `spec-cli/src/commands.rs` | Preserve truthful health projection against the refactored runtime boundary | Do not rewrite unrelated status/proof rules. |
+| `spec-cli/tests/m14_regressions.rs` | Lock regressions around contained vs leaked backend execution | Do not weaken current M14 truth surfaces. |
+| `spec-cli/tests/cli.rs` | Lock CLI read-side truth after the refactor | Do not add unrelated fixture churn. |
+
+### Production failure scenario per new codepath
+
+| Codepath | Realistic failure | Accounted for in this plan? |
+|---|---|---|
+| `backend_execution.rs` marker classification | helper-only lowering gets misclassified as domain lowering and silently demotes healthy seams | Yes, targeted regression tests required |
+| `passport.rs` digest reuse | authored-truth and backend-execution digests collapse back together and stale/fresh truth lies | Yes, digest-specific regression required |
+| `escape_hatch.rs` summary reuse | open gate closes incorrectly because marker summary loses proof-helper distinction | Yes, current-surface + marker tests required |
+| `semantic_review.rs` shared summary | backend-only preserved seams get reported as drift, or leaked semantics get treated as preserved | Yes, supported data/sum/function regressions required |
+| `export.rs` read-side reuse | export bundle truth drifts from `status` truth for the same fixture | Yes, status/export parity regressions required |
+| `spec-cli/src/commands.rs` health projection | read-side health changes without an implementation truth change | Yes, CLI JSON/status regressions required |
+
+## Code Quality Review
+
+### Primary DRY issue this milestone fixes
+
+The repo currently has one conceptual boundary, but more than one code owner:
+
+- backend-only marker collection lives in more than one consumer
+- backend-only digest truth is computed separately from marker truth
+- helper/example identity can be re-derived differently by different consumers
+- the semantic meaning of "backend-only preserved" vs "backend-only leaked" is
+  therefore too easy to drift
+
+That is classic architectural duplication.
+
+M28 removes it by extracting one obvious module instead of adding a clever
+framework.
+
+### Quality bar
+
+- prefer free functions and plain structs over trait-heavy indirection
+- keep naming literal:
+  - `BackendExecutionMarker`
+  - `BackendExecutionMarkerKind`
+  - `BackendExecutionSummary`
+  - `compute_backend_execution_digest`
+- keep helper/example identity as an explicit shared exported API, not an
+  implicit re-derivation hidden inside `escape_hatch` and `semantic_review`
+- keep the boundary module seam-local, not a fake universal portability layer
+
+### Existing diagrams
+
+No nearby runtime ASCII diagrams currently need code-comment maintenance.
+
+If `backend_execution.rs` lands with more than one classification path, add a
+small inline ASCII comment in that file showing:
 
 ```text
-xtask/src/family/coverage.rs
-    |
-    v
-xtask/src/family/recommend.rs
-    |
-    v
-xtask/src/family/promotion_artifacts.rs
-    |
-    v
-xtask/src/lib.rs
+method lowering / derives
+  -> collect markers
+  -> classify marker kind
+  -> summarize
+  -> digest / review / gate consumers
 ```
-
-### State transition
-
-```text
-PRE-M27.9B
-==========
-money/round visible
-hold reason = unknown_overlap_family
-next move still ambiguous
-        |
-        | M27.9B
-        v
-POST-M27.9B
-===========
-money/round visible
-hold reason = helper_surface_not_promotable
-next_step_status = durable_hold
-corpus run 1 stays unspent
-```
-
-### Architecture-specific failure scenario
-
-If the new resolution logic lives only in docs and not in the artifact
-contract, future runs will regenerate `unknown_overlap_family` and erase the
-decision. That would put the repo back in the same ambiguous state while still
-looking green.
-
-This milestone is only real if the command path owns it.
-
-## Code Quality And Complexity Guardrails
-
-- Keep the diff boring.
-- Do not create a second artifact file.
-- Do not add a new `cargo xtask family ...` command.
-- Do not hide the durable-hold rule behind a generic policy engine if one
-  explicit helper-surface branch will do.
-- If the resolution logic needs an inline diagram comment, place it next to the
-  branch-heavy rule in `xtask/src/family/recommend.rs` and keep it updated with
-  the code.
-
-## Implementation Plan
-
-### Step 0 - Freeze the M27.9A baseline as authoritative input
-
-Before changing code, confirm the repo still reproduces:
-
-- `28 / 17 / 0 / 11`
-- `recommendation_status = "no_strong_candidate"`
-- one visible held candidate:
-  `unsupported_function_surface-e40675da6fa0`
-
-Done means M27.9B starts from the already-locked post-closeout baseline, not
-from memory.
-
-### Step 1 - Surface helper-context facts during unsupported-cluster projection
-
-Extend the existing coverage projection just enough to support truthful
-recommendation resolution.
-
-Required facts:
-
-1. the representative units are unary helper-shaped functions
-2. the current real-example pressure comes from helper surfaces already used
-   inside promoted arithmetic leaf workflows
-3. the cluster itself is not a new leaf or wrapper boundary
-
-Do this inside `xtask/src/family/coverage.rs`, not in an ad hoc follow-up scan.
-
-Done means `recommend.rs` has enough repo-owned truth to stop saying
-"unknown" by default.
-
-### Step 2 - Replace the generic hold story with durable-hold resolution
-
-In `xtask/src/family/recommend.rs`, add the narrow resolution branch for the
-current `unsupported_function_surface` case.
-
-Decision rule for M27.9B:
-
-- if the cluster is helper-shaped, lacks a standalone promoted-family boundary,
-  and its real-example pressure is still only helper pressure inside already
-  promoted arithmetic workflows, then:
-  - keep `promotion_readiness = hold`
-  - replace `unknown_overlap_family` with
-    `helper_surface_not_promotable`
-  - set `next_step_status = durable_hold`
-  - set `next_step_detail = helper_surface_not_promotable`
-
-This is explicit over clever. No scoring system. No generic resolver
-abstraction. No policy engine.
-
-Done means the command path now says what the repo should do:
-do not promote this, do not spend corpus by default, move on.
-
-### Step 3 - Tighten artifact validation around the durable-hold contract
-
-Update `xtask/src/family/promotion_artifacts.rs` so the new fields are required
-and internally consistent.
-
-Required validation rules:
-
-1. `helper_surface_not_promotable` is allowed only with
-   `next_step_status = durable_hold`
-2. `next_step_status = durable_hold` requires
-   `promotion_readiness = hold`
-3. `next_step_status = durable_hold` must not coexist with
-   `recommendation_status = ranked`
-4. the old bare `unknown_overlap_family` shape is rejected for the locked
-   `money/round` command-path case
-5. `RECOMMENDATION_ANALYSIS_SCHEMA_VERSION` is bumped as part of this change
-
-Done means the schema enforces the decision instead of merely describing it.
-
-### Step 4 - Lock the new truth in end-to-end command-path tests
-
-Update `xtask/src/lib.rs` so the locked-corpus tests assert:
-
-- the top-level status stays `no_strong_candidate`
-- the visible candidate remains
-  `unsupported_function_surface-e40675da6fa0`
-- the candidate stays `hold`
-- the hold reason is now `helper_surface_not_promotable`
-- `next_step_status = durable_hold`
-- `next_step_detail = helper_surface_not_promotable`
-- no corpus-expansion authorization signal appears anywhere in the current
-  command-path output
-
-Done means future refactors cannot quietly reintroduce the generic hold story.
-
-### Step 5 - Rewrite the planning and program ledger
-
-Update `PLAN.md` and
-`docs/recommendation_corpus_expansion_program_v0.1.md` so they both encode:
-
-- `money/round` is still visible
-- `money/round` is not the next family
-- corpus run `1` stays unspent
-- the repo now needs an explicit post-M27.9B milestone choice rather than more
-  shadow argument over this helper surface
-
-Done means future sessions stop trying to rescue the wrong thing.
 
 ## Test Review
 
-### Framework and suites
-
-Runtime: Rust workspace with `cargo test`
-
-Suites that must move together:
-
-- `xtask` family coverage/recommendation unit tests
-- `xtask` recommendation-analysis artifact validation tests
-- `xtask` locked-corpus command-path tests
-
-No `spec-core` or `spec-cli` implementation changes should be required for
-M27.9B. If those crates need edits, the milestone has already drifted.
-
-### Code path coverage
+### Code path coverage target
 
 ```text
-CODE PATH COVERAGE
-==================
-[+] xtask/src/family/coverage.rs
+CODE PATH COVERAGE TARGET
+=========================
+[+] spec-core/src/backend_execution.rs
     |
-    |- [ADD TEST] helper-surface context is exposed consistently for the
-    |             current unsupported_function_surface cluster
-    |- [ADD TEST] current money/round cluster still preserves leverage
-    |             counts 2 / 1 / 0 / 3
-    `- [ADD TEST] no new cluster ids or rankable candidates appear
+    ├── collect_backend_execution_markers()
+    │   ├── [REQUIRED] no markers for non-seam units
+    │   ├── [REQUIRED] backend derives only
+    │   ├── [REQUIRED] proof-helper lowering only
+    │   └── [REQUIRED] domain lowering only
+    |
+    ├── summarize_backend_execution_markers()
+    │   ├── [REQUIRED] domain + helper summary stays distinct
+    │   └── [REQUIRED] derive marker preserved
+    |
+    └── compute_backend_execution_digest()
+        ├── [REQUIRED] seam digest present when lowering/derives exist
+        ├── [REQUIRED] digest absent for seam units without backend execution
+        ├── [REQUIRED] backend-only lowering change flips backend freshness only
+        └── [REQUIRED] authored-only seam change leaves backend freshness alone
 
-[+] xtask/src/family/recommend.rs
+[+] Runtime consumer coverage
     |
-    |- [ADD TEST] helper-only visible cluster resolves to
-    |             hold + helper_surface_not_promotable
-    |- [ADD TEST] next_step_status = durable_hold
-    |- [ADD TEST] recommendation_status remains no_strong_candidate
-    `- [ADD TEST] generic unknown_overlap_family is no longer emitted
-                for the locked money/round case
-
-[+] xtask/src/family/promotion_artifacts.rs
+    ├── passport.rs
+    │   ├── [REQUIRED] authored digest unchanged
+    │   ├── [REQUIRED] backend digest/markers unchanged in meaning
+    │   ├── [REQUIRED] authored-only seam edits do not change backend freshness
+    │   └── [REQUIRED] backend-only edits do not change authored freshness
     |
-    |- [ADD TEST] durable_hold requires hold readiness
-    |- [ADD TEST] helper_surface_not_promotable requires durable_hold
-    |- [ADD TEST] ranked status rejects durable-hold candidates
-    `- [ADD TEST] schema version bump is enforced for the new required fields
-
-[+] xtask/src/lib.rs
+    ├── escape_hatch.rs
+    │   ├── [REQUIRED] helper-only marker keeps gate semantics
+    │   └── [REQUIRED] domain lowering still marks domain execution
     |
-    |- [LOCK TEST] command path writes same bytes deterministically
-    |- [LOCK TEST] visible candidate id remains e40675da6fa0
-    |- [LOCK TEST] hold reason becomes helper_surface_not_promotable
-    `- [LOCK TEST] next_step_status = durable_hold
-
-[+] Governance docs
+    ├── semantic_review.rs
+    │   ├── [REQUIRED] preserved backend-only meaning stays preserved
+    │   ├── [REQUIRED] leaked backend-only meaning stays failing
+    │   └── [REQUIRED] aligned supported seams stay aligned
     |
-    |- [MUST LAND] PLAN.md records durable helper hold explicitly
-    `- [MUST LAND] corpus program tracker leaves run 1 unspent
+    ├── export.rs
+    │   ├── [REQUIRED] export gate truth matches status truth
+    │   └── [REQUIRED] export semantic-review truth matches status truth
+    |
+    ├── spec-cli/src/commands.rs
+    │   ├── [REQUIRED] CLI health still demotes open escape-hatch gates
+    │   ├── [REQUIRED] CLI health still reports semantic drift correctly
+    │   └── [REQUIRED] status/read-side wording remains stable where intended
+    |
+    `── xtask/src/family/coverage.rs   [AUDIT-ONLY]
+        └── [REQUIRED] frozen no-drift coverage JSON under unchanged recommendation semantics
 ```
 
-### Required tests and proof assertions
+### User-flow / operator-flow coverage
 
-1. `xtask/src/family/recommend.rs`
-   - helper-surface candidate stays held
-   - hold reason becomes `helper_surface_not_promotable`
-   - `next_step_status = durable_hold`
-   - `recommendation_status` stays `no_strong_candidate`
-2. `xtask/src/family/promotion_artifacts.rs`
-   - new field validation for `next_step_status`
-   - invalid combinations are rejected
-   - schema version bump is asserted
-3. `xtask/src/lib.rs`
-   - end-to-end locked-corpus command-path test updated to the new durable-hold
-     truth
+```text
+OPERATOR FLOW COVERAGE TARGET
+=============================
+[+] Maintainer changes seam lowering
+    ├── [REQUIRED] stale/fresh projection remains truthful
+    └── [REQUIRED] preserved-vs-leaked semantic review remains truthful
+
+[+] Maintainer runs status/export/read-side commands
+    ├── [REQUIRED] open escape-hatch gate remains incomplete, not valid
+    ├── [REQUIRED] semantic drift remains failing, not preserved
+    └── [REQUIRED] export and status agree on the same fixture truth
+
+[+] Future M29 operator audits portability readiness
+    └── [REQUIRED] one shared runtime boundary exists to inspect
+```
+
+### Required tests
+
+Add or update tests in exactly these surfaces:
+
+1. `spec-core` unit tests for the new boundary module:
+   - non-seam units produce no markers
+   - helper-only lowering stays helper-only
+   - domain lowering stays domain
+   - backend derives remain visible independently
+2. `spec-core` passport regressions:
+   - authored truth digest unchanged by the extraction
+   - backend-execution digest semantics unchanged
+   - authored-only seam edit does not change backend freshness
+   - backend-only seam edit changes backend freshness without changing authored freshness
+3. `spec-core` escape-hatch regressions:
+   - proof-helper marker does not silently become domain lowering
+4. `spec-core` semantic-review regressions:
+   - supported data/sum surfaces preserve:
+     - aligned
+     - backend-only meaning preserved
+     - backend-only semantics leaked
+5. `spec-core` export regressions:
+   - export bundle gate truth matches status truth for the same fixture
+   - export semantic-review truth matches status truth for the same fixture
+6. `spec-cli/tests/m14_regressions.rs`:
+   - regression that previously leaked backend-only semantics still fails
+   - preserved backend-only meaning still remains additive-only where expected
+7. `spec-cli/tests/cli.rs`:
+   - CLI read-side health/status reason strings remain truthful after the
+     extraction
+8. Frozen audit regression:
+   - `cargo xtask family coverage --format json` matches
+     `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+     when recommendation semantics are intentionally unchanged
 
 ### Regression rule
 
-This entire milestone is a governance regression fix.
+This milestone touches existing runtime behavior.
 
-The old regression is:
+Therefore these tests are **critical regressions**, not optional improvements:
 
-- repo truth already showed helper-aware arithmetic coverage
-- the artifact still described `money/round` like unresolved next-family pressure
-
-The new regression tests must prove that cannot happen again.
+- backend-only preserved vs leaked classification
+- escape-hatch gate open/closed read-side projection
+- passport authored/backend digest distinction
+- status/export parity for the same fixture
+- family coverage no-drift under unchanged recommendation semantics
 
 ### Test plan artifact
 
-During implementation verification, write the QA-facing artifact to:
+The associated QA-oriented test plan artifact for this plan is:
 
-- `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-eng-review-test-plan-{timestamp}.md`
-
-That artifact should tell QA to verify:
-
-- the visible candidate still exists
-- the cluster id and leverage counts did not change
-- the hold reason changed from generic overlap ambiguity to explicit helper
-  non-promotability
-- `next_step_status = durable_hold`
-- corpus run `1` is still not authorized by the resulting docs and artifacts
-
-## Failure Modes
-
-| Codepath | Realistic failure | Test required? | Error handling exists? | Silent if missed? | Critical gap? |
-|---|---|---|---|---|---|
-| coverage helper-context facts are wrong | recommend layer classifies the candidate with the wrong next-step meaning | yes | test-only | yes | **yes** |
-| recommend layer keeps `unknown_overlap_family` fallback | repo appears to resolve the issue in docs but not in artifacts | yes | no | yes | **yes** |
-| artifact validation accepts contradictory fields | future changes can emit `durable_hold` fields with `ranked` top-level status | yes | test-only | yes | **yes** |
-| schema version is not bumped | consumers cannot distinguish old vs new recommendation-analysis bytes | yes | no | yes | **yes** |
-| locked command-path tests are not updated | branch truth drifts back to ambiguity after a refactor | yes | test-only | yes | **yes** |
-| program doc silently authorizes corpus run 1 | future sessions spend evidence budget on a problem already resolved as durable hold | yes | no | yes | **yes** |
-
-If any one of those lands, the repo will make the wrong milestone decision
-while still looking green.
+- `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-eng-review-test-plan-20260502-151200.md`
 
 ## Performance And Operational Review
 
-There is no meaningful user-facing runtime risk here.
+### Performance
 
-The real risks are:
+This milestone must preserve an **O(method count)** scan over seam units.
 
-- artifact determinism drift
-- governance drift
-- needless extra repo scans
+Do not introduce:
 
-Operational rules:
+- global caches
+- repeated JSON serialization inside inner loops
+- cross-command memoization
+- extra repo scans from `spec-cli`
 
-- keep the helper-resolution logic in the existing coverage/recommend path
-- do not add a second full workspace traversal if current cluster facts are
-  already sufficient
-- refresh the two analysis artifacts once after tests pass
-- do not hand-edit the derived JSON files
+The new module may compute summaries and digests, but each consumer should call
+one shared extraction path instead of each re-scanning the unit differently.
+
+### Operational quality
+
+- no new command family
+- no new build flag
+- no new generated artifact class
+- no new release workflow
+
+### Read-only xtask audit
+
+M28 includes an explicit audit of current `xtask` proof/report surfaces only.
+
+If the audit proves a real Rust-specific semantic leak in:
+
+- `xtask/src/family/report.rs`
+- prove/certify artifact wording
+- promotion artifact schemas
+
+then halt this milestone and split a follow-on M28.x plan.
+
+Do **not** expand this milestone opportunistically.
+
+## Failure Modes Registry
+
+| Codepath | Realistic failure | Test required? | Error handling exists? | Silent if missed? | Critical gap? |
+|---|---|---|---|---|---|
+| `backend_execution.rs` helper/domain classification | helper-only lowering treated as domain lowering | yes | no runtime fallback | yes | **yes** |
+| `passport.rs` digest reuse | stale/fresh projection lies after extraction | yes | no | yes | **yes** |
+| `escape_hatch.rs` summary reuse | required proof surfaces close incorrectly | yes | partial read-side demotion only | yes | **yes** |
+| `semantic_review.rs` shared summary | preserved backend-only meaning becomes failing drift, or vice versa | yes | yes, but only if correctly classified | yes | **yes** |
+| `spec-cli/src/commands.rs` read-side health | drift/open-gate state silently regresses in JSON/text status | yes | no | yes | **yes** |
+
+## NOT in scope
+
+- spending corpus run `1`
+  reason: M27.9B already closed the evidence lane for now
+- changing recommendation policy or recommendation artifacts
+  reason: this milestone is not a family-choice milestone
+- changing supported function routing order
+  reason: M28 is not a routing milestone
+- rewriting `generator.rs` lowering semantics
+  reason: the goal is boundary extraction, not lowering redesign
+- adding a second target language
+  reason: that is M29 at the earliest
+- preemptively rewriting `xtask`
+  reason: audit-only unless a real proof-surface leak is proven
+- broad docs cleanup outside `PLAN.md` and `ORCH_PLAN.md`
+  reason: keep the blast radius bounded
 
 ## Worktree Parallelization Strategy
-
-This milestone has limited but real parallelization.
-
-The core `xtask` contract changes are sequential. The governance rewrite can run
-in parallel only after the durable-hold wording is frozen.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Freeze baseline and inspect current artifact bytes | `xtask/`, `.semantic-family-artifacts/` | - |
-| Add helper-context projection | `xtask/src/family/` | baseline confirmed |
-| Add durable-hold recommendation resolution | `xtask/src/family/` | helper-context projection |
-| Add schema validation and lock tests | `xtask/src/family/`, `xtask/src/` | durable-hold recommendation resolution |
-| Rewrite plan/program governance language | repo root docs, `docs/` | durable-hold terminology frozen |
-| Final proof and artifact refresh | `xtask/`, `.semantic-family-artifacts/`, docs | all prior steps complete |
+| A. Boundary extraction | `spec-core/src/`, especially boundary + passport + escape hatch | — |
+| B. Semantic review rewire | `spec-core/src/semantic_review.rs`, `spec-core/src/lib.rs` | A |
+| C. CLI truth-surface regressions | `spec-cli/src/`, `spec-cli/tests/` | A, B |
+| D. Plan / orchestration docs | repo root plan files only | — |
+| E. xtask audit | `xtask/src/family/` read-only unless leak found | A, B |
 
 ### Parallel lanes
 
-- Lane A: implementation contract
-  `coverage.rs -> recommend.rs -> promotion_artifacts.rs -> lib.rs`
-- Lane B: governance docs
-  `PLAN.md -> docs/recommendation_corpus_expansion_program_v0.1.md`
+- **Lane A:** A -> B -> C
+  sequential, shared `spec-core/src/` boundary
+- **Lane B:** D
+  independent, docs only
+- **Lane C:** E
+  independent read-only audit, but must not mutate runtime scope
 
 ### Execution order
 
-1. Launch Lane A first.
-2. Start Lane B only after Lane A fixes the output vocabulary:
-   `helper_surface_not_promotable` + `durable_hold`.
-3. Merge Lane B only after Lane A proves the artifact fields and tests match
-   the new outcome.
-4. Run the proof loop once on the integrated branch.
+Launch **Lane A** and **Lane B** in parallel worktrees.
+
+Lane C may run in parallel as a read-only audit.
+
+Merge Lane B at any time.
+Merge Lane A only after the new boundary compiles and regressions are green.
+If Lane C finds a real `xtask` leak, stop before final merge and split a
+follow-on plan.
 
 ### Conflict flags
 
-- Steps inside `xtask/src/family/` are not parallel-safe. Keep them sequential.
-- Do not split `xtask/src/family/recommend.rs` and
-  `xtask/src/family/promotion_artifacts.rs` across separate workers. They are
-  one contract surface.
-- Lane B must not invent terminology that Lane A does not emit.
+- Steps A and B both touch `spec-core/src/` and are therefore intentionally
+  sequential
+- Lane C must remain read-only; if it requires edits in `xtask/src/family/`,
+  that is a scope break, not a merge conflict to improvise through
 
-### Practical recommendation
+## Implementation Plan
 
-Use two workstreams:
+### Step 0 - Record the portability-consumer preflight
 
-- Workstream 1: `xtask` implementation plus lock tests
-- Workstream 2: plan/program rewrite after the durable-hold wording is fixed
+Before the first runtime edit:
 
-Then integrate once and refresh the derived analysis artifacts.
+1. enumerate every portability-relevant consumer
+   - must include `spec-core/src/export.rs`
+   - must include `xtask/src/family/coverage.rs`
+2. confirm that all high-criticality consumers are directly covered by this
+   extraction
+3. record any uncovered high-criticality consumer as a blocker, not as a
+   hand-waved TODO
+
+### Step 1 - Create the shared boundary module
+
+Add `spec-core/src/backend_execution.rs` with:
+
+- marker kind enum
+- marker struct
+- helper/example identity surface shared by `escape_hatch` and `semantic_review`
+- summary struct
+- marker collection function
+- summary function
+- backend-execution digest function
+
+This module must be seam-only.
+Function units remain out of scope.
+
+It must also lock two invariants:
+
+- authored-only seam edits do **not** change backend-execution freshness
+- backend-only lowering / derives edits do **not** change authored freshness
+
+### Step 2 - Rewire passport truth surfaces
+
+Update `spec-core/src/passport.rs` so:
+
+- backend-execution digest truth comes from the shared boundary module
+- seam marker truth comes from the shared boundary module
+- authored-truth digest logic remains unchanged
+
+### Step 3 - Rewire escape-hatch containment
+
+Update `spec-core/src/escape_hatch.rs` so:
+
+- marker collection is delegated to the shared boundary module
+- helper vs domain lowering distinction is preserved exactly
+- proof surface requirements remain:
+  - atom
+  - molecule
+
+### Step 4 - Rewire semantic-review containment
+
+Update `spec-core/src/semantic_review.rs` so:
+
+- backend-only preserved meaning uses the shared boundary summary
+- backend-only leaked meaning uses the shared boundary summary
+- supported seam aligned/drift/under-specified behavior remains unchanged
+
+### Step 5 - Rewire read-side truth surfaces
+
+Update `spec-cli/src/commands.rs` and `spec-core/src/export.rs` only where needed
+so read-side truth:
+
+- still demotes open escape-hatch gates to `incomplete`
+- still demotes semantic drift to `failing`
+- stays aligned between `status` and `export` for the same fixture
+- does not gain new wording drift from the extraction
+
+### Step 6 - Land regressions
+
+Add or update the required regressions in:
+
+- `spec-core/src/export.rs`
+- `spec-cli/tests/m14_regressions.rs`
+- `spec-cli/tests/cli.rs`
+
+### Step 7 - Run the xtask audit
+
+Audit `xtask` prove/certify/report/coverage surfaces for real Rust-only semantic
+leakage.
+
+If no leak is found:
+
+- record `xtask` as read-only for M28
+- record frozen no-drift coverage output against the current baseline artifact
+
+If a leak is found:
+
+- halt
+- write the finding into run-state / closeout notes
+- split a follow-on bounded plan instead of expanding this milestone
+
+### Step 8 - Force the M29 decision
+
+M28 does not close with "refactor complete."
+
+It closes with exactly one of these two outcomes:
+
+1. **Proceed to M29**
+   - all high-criticality runtime consumers are now covered by the same shared boundary path
+   - no `xtask` proof leak blocks the pilot
+   - the exact closeout probe below passes
+2. **Kill memo**
+   - a larger portability blocker still dominates
+   - or `xtask` / proof surfaces remain the real choke point
+   - or the exact closeout probe fails
+
+### Exact M29 closeout probe
+
+Use the existing helper-only and domain-lowering seam fixtures already covered by
+the targeted regressions.
+
+Run exactly this command path:
+
+```bash
+cargo test -p spec-core --lib -- --color never
+cargo test -p spec-cli --test m14_regressions -- --color never
+cargo test -p spec-cli --test cli -- --color never
+cargo xtask family coverage --format json >/tmp/m28.coverage.actual.json
+diff -u .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json /tmp/m28.coverage.actual.json
+```
+
+Pass:
+
+- helper-only fixture remains helper-only / additive-only where expected
+- domain-lowering fixture still reports the same failing or gated truth where expected
+- `status` and `export` agree on both fixtures
+- coverage JSON stays byte-stable against the frozen baseline
+
+Fail:
+
+- any helper-only fixture becomes domain-lowering
+- any domain-lowering fixture becomes silently preserved
+- `status` and `export` disagree on the same fixture
+- coverage JSON drifts without an intentional recommendation-policy change
+
+No third option.
 
 ## Proof Loop
 
-Run in this exact order:
+### Required proof loop
 
 ```bash
-cargo test -p xtask -- --color never
-
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo test -p spec-core --lib -- --color never
+cargo test -p spec-cli --test m14_regressions -- --color never
+cargo test -p spec-cli --test cli -- --color never
+cargo xtask family coverage --format json >/tmp/m28.coverage.actual.json
+diff -u .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json /tmp/m28.coverage.actual.json
 ```
 
-Acceptance rule:
+### Optional full confirmation
 
-- `xtask` tests pass
-- coverage generation succeeds
-- recommendation generation succeeds
-- both artifacts validate
-- the visible candidate remains `unsupported_function_surface-e40675da6fa0`
-- the hold reason is `helper_surface_not_promotable`
-- `next_step_status = durable_hold`
-- the top-level output remains `no_strong_candidate`
+Run this if the diff touches broader `spec-cli` read-side behavior than the
+targeted regressions above:
 
-If any one of those fails, stop before touching the program ledger again.
+```bash
+cargo test -p spec-cli -- --color never
+```
+
+### Halt rule
+
+If any `xtask/src/family/*` file must change to make M28 green, stop and split a
+follow-on plan instead of broadening this milestone.
 
 ## Acceptance Criteria
 
-M27.9B is accepted only if the implementation branch proves all of the
-following together:
+The milestone is accepted only if all of these are true together:
 
-1. the current `money/round` cluster stays visible in recommendation output
-2. the cluster no longer uses `unknown_overlap_family`
-3. the cluster now uses `helper_surface_not_promotable`
-4. `next_step_status = durable_hold`
-5. `next_step_detail = helper_surface_not_promotable`
-6. `recommendation_status` remains `no_strong_candidate`
-7. corpus run `1` remains unspent and unauthorized by default
-8. `xtask/src/lib.rs` locks the new truth end to end
-9. `PLAN.md` and the corpus-expansion program tracker tell the same story
+1. a single shared runtime boundary module exists for seam backend execution and helper/example identity
+2. the four direct runtime consumers reuse it and `spec-cli/src/commands.rs` stays aligned with that shared path
+3. current Rust status/export truth stays green under targeted regressions
+4. backend-execution freshness invariants are proven
+5. no recommendation/corpus semantics changed
+6. no second-language runtime landed
+7. `xtask` either:
+   - stayed read-only, or
+   - triggered a documented halt and follow-on split
+8. frozen coverage JSON stayed byte-stable unless an intentional recommendation-policy change was made
+9. the closeout explicitly says whether M29 should proceed
 
-## Next Step After M27.9B
+## Halt Conditions
 
-After M27.9B lands, the repo should stop asking whether `money/round` is the
-next family.
+Halt immediately if any of these happen:
 
-That question is answered.
+- `xtask` edit becomes necessary
+- validator policy widening appears necessary
+- recommendation/corpus semantics drift
+- runtime proof loop requires changes outside the closed file contract
+- second-language work starts sneaking in through fixtures or packet scaffolds
+- the milestone cannot produce a credible M29 go / no-go decision
 
-The next decision becomes a separate, explicit roadmap choice:
+## Completion Summary
 
-- do we have any other real next-family pressure worth planning
-- or is it time to advance the post-M27.5 M28 architectural decision
+- Step 0: Scope Challenge — accepted as written
+- Architecture Review: 3 primary architectural decisions locked
+- Code Quality Review: 1 central DRY issue addressed by design
+- Test Review: diagram produced, 18 required test expectations listed
+- Performance Review: 1 runtime constraint locked, no new infra
+- NOT in scope: written
+- What already exists: written
+- TODOS.md updates: 0 by default, 1 only if xtask audit proves a leak
+- Failure modes: 6 critical gaps explicitly covered by required tests
+- Outside voice: CEO + Eng review integrated
+- Post-M28 decision gate: required
+- Parallelization: 3 lanes, 2 parallel / 1 sequential-audit
+- Lake Score: 4/4 major decisions chose the complete option
 
-That follow-on choice is downstream of M27.9B and is not part of this file.
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | CEO | Move to M28 now instead of another corpus run | Mechanical | P1, P6 | The branch already has an honest `no_strong_candidate` result and a durable hold; more evidence is no longer the default blocker. | another corpus milestone |
+| 2 | CEO | Keep M28 as one milestone with serial phases | Taste | P1, P3 | One milestone keeps the branch story coherent while still forcing explicit phase boundaries. | splitting immediately into M28A/M28B |
+| 3 | CEO | Force M28 to end with an M29 go / no-go decision | Mechanical | P1, P6 | Internal cleanup without a roadmap decision would be elegant drift, not progress. | cleanup-only closeout |
+| 4 | Eng | Add one new shared `spec-core` boundary module | Mechanical | P5 | Four direct runtime consumers already prove the seam is shared; one explicit module is clearer than hidden helpers. | burying helpers in one existing file |
+| 5 | Eng | Keep `xtask` audit-only unless a real leak is proven | Mechanical | P2, P4 | Rewriting proof workflow by habit would spend scope on a problem not yet demonstrated. | preemptive xtask rewrite |
+| 6 | Eng | Cap runtime implementation scope at 9 files | Mechanical | P3, P5 | Architectural cleanup only pays off if the blast radius stays bounded. | full portability-kernel rewrite |
