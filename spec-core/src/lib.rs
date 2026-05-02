@@ -8,6 +8,7 @@
 
 pub const AUTHORED_SPEC_VERSION: &str = "0.3.0";
 
+pub mod backend_execution;
 pub mod escape_hatch;
 pub mod export;
 pub mod generator;
