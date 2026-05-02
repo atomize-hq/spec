@@ -21,10 +21,14 @@ Last rewritten: **2026-05-02**
   - no ranked arithmetic-ready candidate remains
   - `unsupported_function_surface-e40675da6fa0` remains the visible held candidate for `unknown_overlap_family`, concretely `money/round`
 - The authoritative authored source truth lives in the live content of `ws/m27_9-int`, not merely its committed tip. Source landing must read from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/int`.
-- Use existing worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/{int,m20-cli,docs}` with branches:
+- Use existing worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/{int,m20-cli,docs}` as provisional inputs, not assumed-ready execution lanes:
   - `ws/m27_9-int`
   - `ws/m27_9-m20-cli`
   - `ws/m27_9-docs`
+- The current live state matters:
+  - `ws/m27_9-int` is authoritative because its live worktree contains the authored source delta, even though it is dirty by design with both authored and derived changes.
+  - `ws/m27_9-m20-cli` may remain dirty because it is reference-only.
+  - `ws/m27_9-docs` is not reusable as-is for Lane B if it is still pinned to the frozen `cc12c859d99d409a4f861be64b9d7df7a653caba` baseline or still carries the stray `semantic-families/README.md` change.
 - Use GPT-5.4 with `reasoning_effort=high` for workers. Cap worker concurrency at `1`. The parent remains the sole integrator and the only writer of run-state and derived proof surfaces.
 - Maximum safe concurrency is intentionally narrow:
   - Lane A is parent-only and serialized because it owns branch truth, source import, and reproduced stop-state proof.
@@ -61,6 +65,10 @@ Last rewritten: **2026-05-02**
   - `examples/crosslib-app/units/pricing/apply_discount.spec.passport.json`
   - `examples/crosslib-app/units/pricing/apply_tax.spec.passport.json`
   They must not be hand-copied into `feat/corpus-expansion`.
+- Lane B may not start from a stale or dirty docs worktree. Before any worker writes docs/program wording, the parent must prove one of these states:
+  - the existing `ws/m27_9-docs` worktree is rebased or recreated from the current `feat/corpus-expansion` head and is clean except for Lane B owned paths, or
+  - a replacement docs worktree at the same path/role has been created from the current `feat/corpus-expansion` head.
+- If `ws/m27_9-docs` contains changes outside `PLAN.md` and `docs/recommendation_corpus_expansion_program_v0.1.md`, reject it as a worker base and recreate or cleanly replace it before Lane B starts.
 - `PLAN.md` is not open for a fresh rewrite. Lane B may adjust closeout wording only so the file accurately records:
   - implementation success
   - accounting failure
@@ -206,7 +214,8 @@ Run-state rules:
 task/m27_9a-00-kickoff
   -> task/m27_9a-01-seed-run-state
       -> task/m27_9a-02-accept-frozen-evidence
-          -> task/m27_9a-a1-import-authored-source-truth
+          -> task/m27_9a-03-verify-worktree-viability
+              -> task/m27_9a-a1-import-authored-source-truth
               -> task/m27_9a-a2-land-source-truth-on-parent
                   -> task/m27_9a-a3-reproduce-stop-state
                       -> task/m27_9a-b2-finalize-ledger-wording
@@ -216,19 +225,21 @@ task/m27_9a-00-kickoff
                                       -> task/m27_9a-d1-final-proof
                                           -> task/m27_9a-d2-closeout-or-stop
 
-task/m27_9a-02-accept-frozen-evidence
-  -> task/m27_9a-b1-draft-ledger-rewrite
+task/m27_9a-03-verify-worktree-viability
+  -> task/m27_9a-b0-prepare-docs-lane
+      -> task/m27_9a-b1-draft-ledger-rewrite
       -> task/m27_9a-b2-finalize-ledger-wording
 ```
 
 Execution meaning:
 
 1. WS-0 seeds the run-state and freezes the kickoff contract before any authored file edit.
-2. Lane A imports the live `ws/m27_9-int` authored truth by direct file sync, lands it on `feat/corpus-expansion`, and proves reproduced stop-state.
-3. Lane B may draft bounded closeout wording in parallel once frozen evidence is accepted, but it cannot finalize or merge until Lane A confirms reproduced stop-state.
-4. WS-INT is a dedicated parent-owned integration phase on `feat/corpus-expansion`. It integrates Lane B back into the already-landed parent truth and runs a pre-`xtask` integration gate.
-5. Lane C remains parent-only and blocked until source truth is landed, stop-state is reproduced, and integration is complete.
-6. If any gate fails after Lane B exists, the parent writes deterministic blocked-closeout artifacts instead of reopening scope informally.
+2. WS-0 also proves that each reused worktree is viable for its role and repairs or recreates the docs lane before any worker writes against it.
+3. Lane A imports the live `ws/m27_9-int` authored truth by direct file sync, lands it on `feat/corpus-expansion`, and proves reproduced stop-state.
+4. Lane B may draft bounded closeout wording in parallel once frozen evidence is accepted and the docs lane has been prepared, but it cannot finalize or merge until Lane A confirms reproduced stop-state.
+5. WS-INT is a dedicated parent-owned integration phase on `feat/corpus-expansion`. It integrates Lane B back into the already-landed parent truth and runs a pre-`xtask` integration gate.
+6. Lane C remains parent-only and blocked until source truth is landed, stop-state is reproduced, and integration is complete.
+7. If any gate fails after Lane B exists, the parent writes deterministic blocked-closeout artifacts instead of reopening scope informally.
 
 ## Workstream Plan
 
@@ -239,6 +250,7 @@ Task IDs:
 - `task/m27_9a-00-kickoff`
 - `task/m27_9a-01-seed-run-state`
 - `task/m27_9a-02-accept-frozen-evidence`
+- `task/m27_9a-03-verify-worktree-viability`
 
 Required parent actions:
 
@@ -265,13 +277,24 @@ Required parent actions:
    - truthful target state `28 / 17 / 0 / 11`
    - truthful recommendation `no_strong_candidate`
    - surviving held candidate `unsupported_function_surface-e40675da6fa0`
-6. Inspect `ws/m27_9-int` status directly. Do not substitute committed branch state for live worktree content.
+6. Inspect all three existing worktrees directly. Do not substitute committed branch state for live worktree content.
+   - `ws/m27_9-int` status is captured as source-authority input.
+   - `ws/m27_9-m20-cli` status is captured as reference-only corroboration.
+   - `ws/m27_9-docs` status is captured as lane-viability input.
+7. Record in run-state the branch, HEAD, and dirty-path snapshot for each worktree, plus an explicit viability decision:
+   - `ws/m27_9-int = authoritative_dirty_allowed`
+   - `ws/m27_9-m20-cli = reference_only_dirty_allowed`
+   - `ws/m27_9-docs = ready|needs_recreation|needs_cleanup`
+8. If `ws/m27_9-docs` is not already based on the current `feat/corpus-expansion` HEAD or contains out-of-scope dirty paths, prepare Lane B before any worker starts by recreating or cleanly replacing the docs worktree from current `feat/corpus-expansion`.
+   - The prepared docs lane must begin from the current M27.9A `PLAN.md`, not the frozen M27.9 plan text.
+   - The prepared docs lane must be clean before the worker edits owned files.
 
 WS-0 acceptance:
 
 - `tasks.json`, `baseline.json`, `evidence-acceptance.json`, and initialized `source-import.json` all exist before any authored file edit
 - frozen evidence is captured as machine-readable parent-owned run-state
 - the authoritative integration-worktree status is captured before import begins
+- worktree viability is captured before import begins, including whether the docs lane was reused or recreated
 - the kickoff contract clearly distinguishes authored source, derived proof, and recalibration surfaces
 - no authored source files change during WS-0
 
@@ -345,6 +368,7 @@ WS-A blocked path:
 
 Task IDs:
 
+- `task/m27_9a-b0-prepare-docs-lane`
 - `task/m27_9a-b1-draft-ledger-rewrite`
 - `task/m27_9a-b2-finalize-ledger-wording`
 
@@ -355,7 +379,10 @@ Owned files:
 
 Start gate:
 
-- WS-B may start only after `task/m27_9a-02-accept-frozen-evidence` is complete.
+- WS-B may start only after:
+  - `task/m27_9a-02-accept-frozen-evidence` is complete
+  - `task/m27_9a-03-verify-worktree-viability` is complete
+  - `task/m27_9a-b0-prepare-docs-lane` has produced a clean docs worktree based on the current `feat/corpus-expansion` HEAD
 
 Finalization gate:
 
@@ -370,6 +397,7 @@ Bounded scope rule:
 Required worker rules:
 
 - Treat `.runs/m27_9` blocked evidence as authoritative input.
+- Treat the prepared docs worktree baseline as authoritative, not the old frozen `cc12c859d99d409a4f861be64b9d7df7a653caba` tree state.
 - Draft from frozen evidence first, then reconcile the final wording against the reproduced parent-branch stop-state before return or merge.
 - Record M27.9 as implementation success plus accounting failure.
 - Retire arithmetic-ready pressure as a live next-step driver.
@@ -386,6 +414,7 @@ WS-B acceptance:
   - `PLAN.md`
   - `docs/recommendation_corpus_expansion_program_v0.1.md`
 - no other path changes are accepted from this lane
+- the worker base for `ws/m27_9-docs` is the current `feat/corpus-expansion` branch state, not the stale frozen M27.9 branch state
 - `PLAN.md` remains structurally the same milestone and step contract, with closeout wording only
 - both documents lock the truthful target state `28 / 17 / 0 / 11` plus `no_strong_candidate`
 - both documents describe the surviving held candidate consistently
@@ -407,7 +436,7 @@ Purpose:
 Integration ownership and mechanism:
 
 - Source truth from `ws/m27_9-int` is already landed by parent direct file sync in WS-A.
-- Lane B returns a narrow docs/program diff from `ws/m27_9-docs`.
+- Lane B returns a narrow docs/program diff from the prepared `ws/m27_9-docs` lane.
 - Parent integrates Lane B back into `feat/corpus-expansion` by:
   - preferred path: cherry-pick clean docs-only worker commit(s)
   - fallback path: manual patch-copy of only `PLAN.md` and `docs/recommendation_corpus_expansion_program_v0.1.md` after reviewing the worker diff
@@ -461,6 +490,7 @@ WS-INT acceptance:
 WS-INT blocked path:
 
 - If Lane B proposes changes outside its owned paths, reject the lane and stop.
+- If Lane B was started from a stale docs base or from a docs worktree still carrying out-of-scope dirty paths, reject the lane and stop.
 - If cherry-pick fails and docs-only manual conflict resolution cannot preserve reproduced truth cleanly, stop.
 - If the pre-`xtask` integration gate fails, stop before `xtask` work begins.
 - On any WS-INT failure, write or refresh:
@@ -616,7 +646,7 @@ WS-D blocked closeout:
   - the latest reproduced-stop-state summary
   - the latest integration summary
 - `ws/m27_9-int` is the read-side source authority for authored M27.9 landing.
-- `ws/m27_9-docs` is the only writing worker lane in this milestone.
+- `ws/m27_9-docs` is the only writing worker lane in this milestone, but only after the parent has recreated or cleaned it onto the current `feat/corpus-expansion` base.
 - `ws/m27_9-m20-cli` is non-authoritative reference context only for M27.9A. It does not own source landing, integration, or final truth.
 - Parent-only phases are:
   - WS-0 kickoff and run-state seed
@@ -662,5 +692,5 @@ WS-D blocked closeout:
 - The live execution branch remains `feat/corpus-expansion`.
 - The blocked evidence bundle in `.runs/m27_9/**` is still present and trustworthy enough to serve as the frozen basis record.
 - The current `ws/m27_9-int` worktree content remains the authoritative authored M27.9 source truth even if the branch tip alone is incomplete.
-- Existing worktrees `ws/m27_9-int`, `ws/m27_9-m20-cli`, and `ws/m27_9-docs` remain available; if recreated, they keep the same names and ownership roles.
+- Existing worktrees `ws/m27_9-int`, `ws/m27_9-m20-cli`, and `ws/m27_9-docs` may be reused only if their live state matches their lane role. In the current repo state, `ws/m27_9-docs` may require recreation or clean replacement before use because it can be stale relative to `feat/corpus-expansion` and can carry an out-of-scope README edit.
 - Unrelated local edits may exist elsewhere in the repo. This run integrates around them and never reverts them.
