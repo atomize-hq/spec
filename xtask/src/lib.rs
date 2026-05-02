@@ -3068,7 +3068,7 @@ gate_d = true
     }
 
     #[test]
-    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_is_no_strong_candidate() {
+    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held() {
         let temp_dir = workspace_root();
         seed_locked_recommendation_workspace(temp_dir.path());
 
@@ -3100,7 +3100,7 @@ gate_d = true
 
         assert_eq!(
             recommendation.recommendation_status,
-            RecommendationStatus::NoStrongCandidate
+            RecommendationStatus::Ranked
         );
         assert_eq!(
             coverage
@@ -3122,19 +3122,28 @@ gate_d = true
                 .iter()
                 .map(|source| source.unit_count)
                 .collect::<Vec<_>>(),
-            vec![6, 12, 9, 1, 1]
+            vec![6, 12, 9, 1, 2]
         );
+        assert_eq!(coverage.function_coverage.total_units, 28);
+        assert_eq!(coverage.function_coverage.promoted_family_units, 15);
+        assert_eq!(coverage.function_coverage.supported_unpromoted_family_units, 0);
+        assert_eq!(coverage.function_coverage.unsupported_function_units, 13);
 
         assert_eq!(recommendation.ranked_candidates.len(), 2);
 
         let first_candidate = &recommendation.ranked_candidates[0];
         assert_eq!(
             first_candidate.cluster_ids,
-            vec!["unsupported_function_surface-e40675da6fa0".to_string()]
+            vec!["unsupported_arithmetic_shape-2694b2baf65b".to_string()]
         );
         assert_eq!(
+            first_candidate.promotion_readiness,
+            PromotionReadiness::Ready
+        );
+        assert!(first_candidate.hold_reasons.is_empty());
+        assert_eq!(
             first_candidate.hold_reasons,
-            vec![HoldReason::UnknownOverlapFamily]
+            Vec::<HoldReason>::new()
         );
         assert_eq!(
             first_candidate.leverage,
@@ -3145,28 +3154,33 @@ gate_d = true
                 total_units_in_cluster: 3,
             }
         );
+        assert_eq!(first_candidate.difficulty.tier, DifficultyTier::Adjacent);
+        assert_eq!(first_candidate.confidence.level, ConfidenceLevel::Medium);
 
         let second_candidate = &recommendation.ranked_candidates[1];
         assert_eq!(
             second_candidate.cluster_ids,
-            vec!["unsupported_arithmetic_shape-2694b2baf65b".to_string()]
+            vec!["unsupported_function_surface-e40675da6fa0".to_string()]
+        );
+        assert_eq!(
+            second_candidate.promotion_readiness,
+            PromotionReadiness::Hold
         );
         assert_eq!(
             second_candidate.hold_reasons,
-            vec![
-                HoldReason::ThinRealExampleSupport,
-                HoldReason::ThinRegressionSupport,
-            ]
+            vec![HoldReason::UnknownOverlapFamily]
         );
         assert_eq!(
             second_candidate.leverage,
             RecommendationLeverage {
-                real_example_hits: 1,
+                real_example_hits: 2,
                 promotion_relevant_regression_hits: 1,
                 boundary_only_hits: 0,
-                total_units_in_cluster: 2,
+                total_units_in_cluster: 3,
             }
         );
+        assert_eq!(second_candidate.difficulty.tier, DifficultyTier::Hard);
+        assert_eq!(second_candidate.confidence.level, ConfidenceLevel::Low);
     }
 
     #[test]
@@ -3705,11 +3719,13 @@ gate_d = true
     }
 
     fn seed_locked_recommendation_workspace(workspace_root: &Path) {
+        // Promoted packet roots are command-path inventory truth in the seeded workspace.
         for relative_path in [
             "examples/ecommerce/units",
             "examples/shared-spec/units",
             "examples/crosslib-app/units",
             "semantic-families/corpus/rust-function.toml",
+            "semantic-families/function.wrapper.pipeline.v1",
             "semantic-families/function.wrapper.pipeline.chain3.v1",
             "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1",
             "semantic-families/function.arithmetic_leaf.monotone_up.v1",
