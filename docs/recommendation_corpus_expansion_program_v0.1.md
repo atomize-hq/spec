@@ -1,7 +1,7 @@
 # Recommendation Corpus Expansion Program
 **Version:** v0.1
-**Status:** Active tracking doc
-**Date:** 2026-05-01
+**Status:** Review checkpoint reached
+**Date:** 2026-05-02
 
 ## Purpose
 
@@ -19,19 +19,23 @@ small corpus-expansion runs so the repo can answer one question honestly:
 
 M27.5 fixed the recommendation honesty problem.
 
-M27.75 improved the evidence surface, but the current output still says:
+M27.75 improved the evidence surface, and M27.8R then repaired the seeded
+command-path harness so the repo now reproduces the truthful post-expansion
+output consistently.
 
-- `recommendation_status = "no_strong_candidate"`
-- the top visible candidate is still held for `unknown_overlap_family`
-- the second visible candidate is still held for
-  `thin_real_example_support` and `thin_regression_support`
+The current truthful output says:
 
-That means the repo is now good at telling the truth, but the truth is still:
-the next-family decision is not settled yet.
+- `recommendation_status = "ranked"`
+- the first ranked candidate is the arithmetic-shape cluster and it is `ready`
+- the second ranked candidate is still `money/round`, held for
+  `unknown_overlap_family`
 
-The right response is not to pre-commit to 5-10 corpus milestones.
-The right response is a bounded iterative program with hard review gates after
-each run.
+That means this program is no longer answering "is the engine honest?" or even
+"is there any rankable candidate at all?" It is now answering a narrower
+question:
+
+> Is more corpus evidence still the best next move, or has the program already
+> produced enough truth to switch to a promotion-focused milestone?
 
 ## Relationship To Milestone Plans
 
@@ -86,10 +90,13 @@ to avoid the architectural decision.
 
 ### Baseline anchor
 
-- Baseline milestone: `M27.75`
-- Baseline branch context: `feat/m27`
-- Baseline proof date: `2026-05-01`
-- Baseline status: `no_strong_candidate`
+- Program origin milestone: `M27.75`
+- Current truthful baseline milestone: `M27.8R`
+- Baseline branch context: `feat/corpus-expansion`
+- Baseline proof date: `2026-05-02`
+- Baseline status: `ranked`
+- Baseline note: `M27.8R` was a harness-truth repair milestone, not a new
+  corpus-expansion run, so it does not consume the corpus-run budget
 
 ### Counter
 
@@ -114,18 +121,30 @@ These values are the starting truth for the program.
   - `12`
   - `9`
   - `1`
-  - `1`
-- `function_coverage.total_units = 27`
+  - `2`
+- `function_coverage.total_units = 28`
 - `function_coverage.promoted_family_units = 15`
 - `function_coverage.supported_unpromoted_family_units = 0`
-- `function_coverage.unsupported_function_units = 12`
+- `function_coverage.unsupported_function_units = 13`
 
 ### Recommendation baseline
 
-- `recommendation_status = "no_strong_candidate"`
-- visible held candidate count: `2`
+- `recommendation_status = "ranked"`
+- ranked candidate count: `2`
 
 Candidate 1:
+
+- cluster id: `unsupported_arithmetic_shape-2694b2baf65b`
+- overlap family: `function.arithmetic_leaf.monotone_*`
+- promotion readiness: `ready`
+- hold reasons: none
+- leverage:
+  - `real_example_hits = 2`
+  - `promotion_relevant_regression_hits = 1`
+  - `boundary_only_hits = 0`
+  - `total_units_in_cluster = 3`
+
+Candidate 2:
 
 - cluster id: `unsupported_function_surface-e40675da6fa0`
 - overlap family: `unknown`
@@ -137,20 +156,6 @@ Candidate 1:
   - `promotion_relevant_regression_hits = 1`
   - `boundary_only_hits = 0`
   - `total_units_in_cluster = 3`
-
-Candidate 2:
-
-- cluster id: `unsupported_arithmetic_shape-2694b2baf65b`
-- overlap family: `function.arithmetic_leaf.monotone_*`
-- promotion readiness: `hold`
-- hold reasons:
-  - `thin_real_example_support`
-  - `thin_regression_support`
-- leverage:
-  - `real_example_hits = 1`
-  - `promotion_relevant_regression_hits = 1`
-  - `boundary_only_hits = 0`
-  - `total_units_in_cluster = 2`
 
 ## What Counts As a Good Run
 
@@ -209,6 +214,11 @@ Then review these questions in order:
 5. Did any candidate become `ready`?
 6. If nothing decisive changed, is the missing evidence still specific enough to justify one more corpus run?
 
+Before asking question 6, apply one additional gate:
+
+7. Did the latest truthful baseline already unlock Stop Rule A without spending
+   another corpus run?
+
 ## Stop Rules
 
 Stop the corpus-expansion program early if any of these become true:
@@ -217,6 +227,8 @@ Stop the corpus-expansion program early if any of these become true:
 
 - a candidate becomes clearly promotion-worthy
 - or the output is now specific enough to justify a narrow promotion-focused milestone
+
+Current state: this rule is now met by the arithmetic-shape candidate.
 
 ### Stop Rule B — corpus is no longer the blocker
 
@@ -274,6 +286,7 @@ Use this when:
 | Run | Milestone / Plan | Date | Corpus delta | Recommendation status | Key candidate change | Decision |
 |---|---|---|---|---|---|---|
 | Baseline | `M27.75` | 2026-05-01 | `3 -> 5` sources | `no_strong_candidate` | `money/round` gains second real-example hit; arithmetic-shape candidate becomes visible | Continue program |
+| Checkpoint | `M27.8R` | 2026-05-02 | no corpus delta; harness-truth repair only | `ranked` | arithmetic-shape cluster becomes `ready`; `money/round` remains held for `unknown_overlap_family` | Switch to promotion-focused milestone |
 | 1 | — | — | — | — | — | — |
 | 2 | — | — | — | — | — | — |
 | 3 | — | — | — | — | — | — |
@@ -296,12 +309,17 @@ When a new run completes, update the log with:
 
 ## Immediate Next-Step Guidance
 
-As of this baseline, the recommendation is:
+As of the `M27.8R` checkpoint, the recommendation is:
 
 - do **not** commit to a long 5-10 milestone corpus roadmap
+- do **not** spend corpus run `1` yet
 - do **not** jump to M28 yet
-- do one more small evidence-expansion milestone
-- review immediately after that run using this document
+- switch next to a narrow promotion-focused milestone for the arithmetic-shape
+  candidate
+- keep this document as the corpus fallback ledger in case that promotion work
+  proves the remaining blocker is still evidence quality rather than execution
 
-The current evidence says the repo still needs one more honest attempt at
-decision-thickening before it declares the architectural blocker has taken over.
+The current evidence no longer supports "one more corpus run by default."
+The truthful baseline already has one `ready` candidate, so the next honest move
+is to test whether promotion execution, not corpus size, is now the real
+bottleneck.
