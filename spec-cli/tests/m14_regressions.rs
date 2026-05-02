@@ -321,7 +321,7 @@ fn rewrite_apply_tax_as_under_specified(unit_path: &Path) {
     );
 }
 
-fn rewrite_apply_tax_as_clamp_drift(unit_path: &Path) {
+fn rewrite_apply_tax_as_helper_then_clamp(unit_path: &Path) {
     replace_in_file(unit_path, "round(taxed)", "round(taxed.max(Decimal::ZERO))");
 }
 
@@ -2610,11 +2610,11 @@ fn under_specified_apply_tax_wedge_projects_incomplete_state() {
 }
 
 #[test]
-fn clamp_drift_apply_tax_wedge_projects_failing_state() {
+fn helper_then_clamp_apply_tax_wedge_projects_valid_state() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let unit_path = fixture_dst.join("units/pricing/apply_tax.unit.spec");
     let passport_path = fixture_dst.join("units/pricing/apply_tax.spec.passport.json");
-    rewrite_apply_tax_as_clamp_drift(&unit_path);
+    rewrite_apply_tax_as_helper_then_clamp(&unit_path);
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2625,22 +2625,55 @@ fn clamp_drift_apply_tax_wedge_projects_failing_state() {
             fixture_dst.to_str().unwrap(),
         ],
     );
-    assert_success(&unit_test_output, "clamp drift apply_tax wedge unit test");
+    assert_success(&unit_test_output, "helper-then-clamp apply_tax wedge unit test");
 
-    run_supported_function_wedge_assertions(
+    let passport = read_json(&passport_path);
+    assert_function_semantic_review(
+        &passport["semantic_review"],
+        FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+
+    let status_output = run_spec(
         &fixture_dst,
-        &passport_path,
-        SupportedFunctionWedgeExpectation {
-            unit_id: "pricing/apply_tax",
-            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
-            verdict: "semantic_drift",
-            reason_codes: &["function_body_contradicts_semantic_intent"],
-            summary: "executable lowering contradicts authored semantic claims",
-            expected_status: "failing",
-            expected_reason: Some(
-                "semantic drift: executable lowering contradicts authored semantic claims",
-            ),
-        },
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(
+        &status_output,
+        1,
+        "helper-then-clamp apply_tax status should stay non-green while covered molecule proof is stale",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let apply_tax_status = status_unit(&status_json, "pricing/apply_tax");
+    assert_eq!(apply_tax_status["status"], "valid");
+    assert!(apply_tax_status["reason"].is_null());
+    assert_function_semantic_review(
+        &apply_tax_status["semantic_review"],
+        FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+
+    let discount_policy = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(discount_policy["status"], "incomplete");
+    assert_eq!(
+        discount_policy["reason"],
+        "missing required escape-hatch proof: molecule"
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(&export_output, "helper-then-clamp apply_tax export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/apply_tax");
+    assert_function_semantic_review(
+        &exported["semantic_review"],
+        FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
     );
 }
 
