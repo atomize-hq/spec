@@ -10,44 +10,50 @@ Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/sp
 
 ## Summary
 
-M27.9A is not another semantic-routing milestone.
+M27.9A is a closeout-and-recalibration milestone.
 
-It is a closeout-and-recalibration milestone that does three things together:
+It does not reopen semantic-family scope. It does not ask for one more corpus
+run. It does not try to rescue stale scoreboard math.
 
-1. lands the truthful authored M27.9 source changes already isolated in
-   `ws/m27_9-int`
-2. closes M27.9 as a stop-path success on implementation truth and a failure on
-   milestone accounting
-3. rewrites the locked analysis contract around the actual observed result:
-   `28 / 17 / 0 / 11` with `recommendation_status = "no_strong_candidate"`
+It does four concrete things:
 
-The repo already proved the important product truth:
+1. lands the already-authored M27.9 source truth from the integration worktree
+2. reproduces the blocked stop-path evidence on `feat/corpus-expansion`
+3. refreshes the locked `xtask` analysis contract to the truthful post-fix
+   baseline
+4. rewrites the planning and program ledger so the repo records M27.9 as
+   implementation success plus accounting failure
 
-- `examples_crosslib_app::pricing/apply_discount` now belongs in
+The important repo truth is already known:
+
+- cross-library `pricing/apply_discount` now routes to
   `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-- `examples_crosslib_app::pricing/apply_tax` now belongs in
+- cross-library `pricing/apply_tax` now routes to
   `function.arithmetic_leaf.monotone_up.v1`
-- the obsolete M20 arithmetic-shape fixture was retired and replaced by a
+- the obsolete M20 arithmetic-shape fixture was removed and replaced with a
   truthful control-flow near miss
-- the fake arithmetic promotion pressure disappeared
+- the arithmetic-ready recommendation candidate disappeared
+- the truthful post-fix analysis is `28 / 17 / 0 / 11` with
+  `recommendation_status = "no_strong_candidate"`
 
-What failed was the old milestone math, not the semantic work.
+What failed was the old milestone accounting assumption, not the semantic work.
 
-## Milestone Outcome
+## Done Means
 
-M27.9A is done only when all of the following are true:
+M27.9A is complete only when all of the following are true:
 
-1. the authored semantic, CLI, fixture, and maintainer-doc changes from
-   `ws/m27_9-int` are preserved on `feat/corpus-expansion`
-2. the repo can reproduce the blocked stop-path evidence on the merged branch:
-   `28 / 17 / 0 / 11` and `no_strong_candidate`
-3. `xtask/src/lib.rs` locks the truthful new baseline instead of the stale
+1. the authored semantic, fixture, CLI, and maintainer-doc changes from the
+   integration worktree are preserved on `feat/corpus-expansion`
+2. the merged branch reproduces `function_coverage = 28 / 17 / 0 / 11`
+3. the merged branch reproduces
+   `recommendation_status = "no_strong_candidate"`
+4. `xtask/src/lib.rs` locks the truthful post-fix baseline instead of the stale
    arithmetic-ready baseline
-4. `PLAN.md` and the program ledger describe M27.9 as semantic success plus
-   accounting failure, not as a failed implementation milestone
-5. future milestone selection stops chasing the retired arithmetic candidate and
-   instead treats `money/round` as the next live held surface after the
-   accounting recalibration is complete
+5. `PLAN.md` and `docs/recommendation_corpus_expansion_program_v0.1.md`
+   explicitly record M27.9 as semantic success plus accounting failure
+6. future next-step selection stops treating the retired arithmetic cluster as
+   live roadmap pressure
+7. `money/round` remains the next visible held candidate after the recalibration
 
 ## Current Repo Truth
 
@@ -62,7 +68,7 @@ M27.9A is done only when all of the following are true:
   `unsupported_function_surface-e40675da6fa0`
   with `promotion_readiness = "hold"` for `unknown_overlap_family`
 
-### Blocked stop-path observation from `.runs/m27_9`
+### Observed stop-path baseline from `.runs/m27_9`
 
 - `function_coverage = 28 / 17 / 0 / 11`
 - `recommendation_status = "no_strong_candidate"`
@@ -70,7 +76,7 @@ M27.9A is done only when all of the following are true:
   families
 - `pricing/apply_tax_arithmetic_shape` is gone from the M20 pack
 - `pricing/apply_tax_control_flow` replaces it as truthful unsupported demand
-- the arithmetic ready candidate disappears from ranking
+- the arithmetic-ready cluster disappears from ranked candidates
 - `unsupported_function_surface-e40675da6fa0` remains the only visible held
   candidate
 
@@ -82,14 +88,15 @@ The correct interpretation is:
   because the two cross-library arithmetic examples reclassified into promoted
   families
 - `-2 unsupported-function units`
-  because those same two cross-library units left unsupported demand
+  because those same cross-library units left unsupported demand
 - `0 new promoted hits from M20`
-  because the obsolete M20 arithmetic fixture was not converted into supported
-  truth, it was replaced with a truthful unsupported control-flow near miss
+  because the obsolete M20 arithmetic fixture was replaced with a truthful
+  unsupported near miss rather than converted into a promoted-family hit
 
-So the old `+3 / -3` target was wrong even though the semantic fix worked.
+The old `+3 / -3` target was therefore wrong even though the semantic fix
+worked.
 
-## Plan Authority
+## Authority And Evidence
 
 Primary decision inputs:
 
@@ -109,23 +116,23 @@ Primary decision inputs:
 
 Implementation note:
 
-- The current `ORCH_PLAN.md` still encodes the invalid `28 / 18 / 0 / 10` gate.
-  It is stale the moment this plan lands.
-- Do not execute from `ORCH_PLAN.md` until it is regenerated from the M27.9A
+- `ORCH_PLAN.md` is stale for this pass because it still encodes the invalid
+  `28 / 18 / 0 / 10` gate.
+- Do not execute from `ORCH_PLAN.md` until it is regenerated from this M27.9A
   contract.
 
 ## Problem Statement
 
 M27.9 surfaced a repo-governance bug.
 
-The semantic reviewer, CLI truth surfaces, and recommendation output all moved
-in the intended direction. The milestone still stopped because the old plan
-assumed that removing one fake unsupported corpus unit would also create one
-more promoted-family unit.
+The semantic reviewer, CLI truth surfaces, and recommendation analysis all
+moved in the intended direction. The milestone still stopped because the old
+plan assumed that removing one fake unsupported corpus unit would also create
+one more promoted-family unit.
 
 That assumption is false.
 
-M27.9A therefore fixes the planning and accounting contract without reopening
+M27.9A fixes the planning and locked-analysis contract without reopening
 semantic-family scope, recommendation-policy scope, or corpus-expansion scope.
 
 ## Scope Challenge
@@ -134,129 +141,80 @@ semantic-family scope, recommendation-policy scope, or corpus-expansion scope.
 
 | Sub-problem | Existing code / truth | Decision |
 |---|---|---|
-| Truthful semantic fix | `ws/m27_9-int` already contains the authored semantic-review, fixture, CLI, and README updates | Reuse. Do not reimplement the fix from scratch. |
+| Truthful semantic fix | The integration worktree at `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/int` already contains the authored semantic-review, fixture, CLI, and README updates | Reuse. Do not reimplement the fix from scratch. |
 | Blocked evidence bundle | `.runs/m27_9/session-log.md` plus `.runs/m27_9/diagnostics/*.json` already record the exact stop-path facts | Reuse. Do not reconstruct the story from memory. |
-| Locked recommendation harness | `xtask/src/lib.rs` already has a single locked-corpus assertion point for coverage and recommendation truth | Update the existing lock. Do not build a second analysis harness. |
-| Program stop-rule language | `docs/recommendation_corpus_expansion_program_v0.1.md` already distinguishes corpus work from promotion/policy work | Reuse and recalibrate. Do not invent a new governance document. |
+| Locked recommendation harness | `xtask/src/lib.rs` already owns the single locked-corpus assertion surface | Update the existing lock. Do not build a second analysis harness. |
+| Program tracker | `docs/recommendation_corpus_expansion_program_v0.1.md` already distinguishes per-run planning from multi-run program tracking | Reuse and recalibrate. Do not invent a new governance document. |
 | Next live held pressure | `unsupported_function_surface-e40675da6fa0` already survives as the only held candidate | Preserve. Do not solve `money/round` in this milestone. |
 
 ### Minimum honest change
 
 The minimum complete M27.9A change set is:
 
-1. land the authored source truth from `ws/m27_9-int`
-2. reproduce the blocked stop-path evidence on the merged branch
-3. refresh `xtask/src/lib.rs` so the locked corpus expects
-   `28 / 17 / 0 / 11` and `no_strong_candidate`
+1. import the authored source truth from the integration worktree
+2. reproduce the blocked stop-state on the main working branch
+3. refresh `xtask/src/lib.rs` to expect `28 / 17 / 0 / 11` and
+   `no_strong_candidate`
 4. rewrite planning and program-language surfaces so M27.9 is recorded as
    implementation success plus accounting failure
 
-Anything smaller leaves the repo split across two contradictory stories.
+Anything smaller leaves the repo split across contradictory stories.
 
-### Complexity rule
+### Complexity and blast-radius rule
 
-This milestone should stay inside one narrow blast radius:
+This milestone stays inside one narrow blast radius:
 
-- the four authored source surfaces already proven in `ws/m27_9-int`
-- one `xtask` lock surface
-- one primary plan surface
-- one program ledger surface
+- `spec-core/src/semantic_review.rs`
+- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/`
+- `spec-cli/tests/cli.rs`
+- `semantic-families/README.md`
+- `xtask/src/lib.rs`
+- `PLAN.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
 
-If implementation expands past that set, stop and split the work. M27.9A is a
-truth-and-accounting closeout, not a fresh architecture project.
+If implementation expands beyond that authored set plus the required proof
+artifacts, stop and split the work.
 
 ### Search and boring-tech rule
 
 - **[Layer 1]** Reuse the frozen blocked diagnostics instead of re-deriving the
   output story manually.
-- **[Layer 1]** Reuse the authored source diff in `ws/m27_9-int` instead of
-  writing a second semantic fix.
-- **[Layer 1]** Reuse the existing `xtask` artifact and lock contract. Update
-  expectations, not framework shape.
-- **[EUREKA]** The bug is not in semantic routing and not in evidence volume.
-  The bug is the assumption that corpus repair should count like new promoted
-  demand.
+- **[Layer 1]** Reuse the authored worktree diff instead of writing a second
+  semantic fix locally.
+- **[Layer 1]** Reuse the existing `xtask` lock surface. Update expectations,
+  not framework shape.
+- **[EUREKA]** The bug is not semantic routing and not insufficient evidence.
+  The bug is the assumption that truthful corpus repair should count like a new
+  promoted-family addition.
 
-### Completeness rule
-
-Do the complete version now:
-
-- semantic truth lands
-- CLI truth lands
-- truthful M20 repair lands
-- maintainer docs land
-- `xtask` locks land
-- plan and program accounting language land
-
-Do not land only the semantic fix or only the doc rewrite. That would keep the
-repo in a half-truth state.
-
-### Distribution check
-
-No new user-facing distribution artifact exists here.
-
-The relevant distribution surface is repo governance truth:
-
-- checked-in source and tests
-- checked-in analysis lock expectations
-- checked-in planning and program documents
-- generated analysis artifacts validated from current repo truth
-
-## Locked Decisions
+### Locked decisions
 
 1. M27.9 semantic work stands. This milestone does not reopen the classifier
    decision.
 2. The M20 pack remains an unsupported truth pack.
 3. `xtask` policy does not get loosened to force the old arithmetic-ready
    outcome.
-4. `28 / 17 / 0 / 11` becomes the expected locked truth if the merged branch
+4. `28 / 17 / 0 / 11` becomes the locked expected truth if the merged branch
    reproduces the current blocked diagnostics.
-5. `recommendation_status = "no_strong_candidate"` is the correct outcome for
-   the post-fix corpus.
-6. The arithmetic ready candidate is retired as roadmap pressure.
+5. `recommendation_status = "no_strong_candidate"` is the correct post-fix
+   result.
+6. The arithmetic-ready cluster is retired as roadmap pressure.
 7. `money/round` remains the next live held candidate after M27.9A.
-8. `ORCH_PLAN.md` is non-authoritative until rewritten from this contract.
+8. `ORCH_PLAN.md` is non-authoritative until regenerated from this plan.
 
-## Alternatives Rejected
-
-### Reopen M27.9 until promoted count reaches 18
-
-Rejected.
-
-That optimizes for stale scoreboard math instead of repo truth.
-
-### Edit `xtask` locks to force `28 / 18 / 0 / 10`
-
-Rejected.
-
-That would make the analysis layer lie about the corpus.
-
-### Treat M27.9 as a failed implementation milestone and discard `ws/m27_9-int`
-
-Rejected.
-
-The authored semantic and CLI work is the successful part.
-
-### Jump straight to `money/round` without recalibrating accounting
-
-Rejected.
-
-That would leave the repo steering future roadmap choices from an already
-retired arithmetic-pressure story.
-
-## NOT in Scope
+### NOT in scope
 
 - new family packet authoring
   reason: M27.9A closes accounting around a landed semantic fix
 - another corpus-expansion run
-  reason: the corpus is not the current blocker
+  reason: corpus growth is not the active blocker
 - `money/round` overlap-family resolution
   reason: it remains the next held pressure surface after this closeout
 - recommendation-policy changes
   reason: this milestone updates locked outputs, not ranking heuristics
 - artifact schema changes
-  reason: no evidence says the artifact shape is the blocker
-- shared-core / M28 work
+  reason: no evidence says artifact shape is the blocker
+- shared-core or M28 work
   reason: still downstream of truthful next-family governance
 - second-language or non-function expansion
   reason: unrelated to the blocked stop-path
@@ -265,7 +223,19 @@ retired arithmetic-pressure story.
 
 ## Exact File Contract
 
-### Authored source surfaces that must land from `ws/m27_9-int`
+### Authoritative source-of-truth nuance
+
+The authoritative authored M27.9 source truth is the current content of the
+integration worktree at:
+
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/int`
+
+That matters because the critical CLI, README, and M20 fixture edits currently
+exist as worktree changes, not as a clean branch delta. Do not assume the
+committed tip of `ws/m27_9-int` alone is sufficient. The worktree content must
+be inspected and landed intentionally.
+
+### Authored source surfaces that must land
 
 1. `spec-core/src/semantic_review.rs`
 2. `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_arithmetic_shape.unit.spec`
@@ -292,20 +262,20 @@ retired arithmetic-pressure story.
 
 | File | Responsibility | Must not happen |
 |---|---|---|
-| `spec-core/src/semantic_review.rs` | Preserve the optional-helper cross-library arithmetic fix exactly as proven in `ws/m27_9-int` | Do not widen wrapper, chain3, or unrelated family routing. |
+| `spec-core/src/semantic_review.rs` | Preserve the optional-helper cross-library arithmetic fix exactly as proven in the integration worktree | Do not widen wrapper, chain3, or unrelated family routing. |
 | `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/` | Keep the M20 pack truthfully unsupported by replacing the obsolete arithmetic-shape unit with a control-flow near miss | Do not convert the M20 pack into a mixed or supported pack. |
 | `spec-cli/tests/cli.rs` | Lock the public `status`, `export`, and passport truth for the new cross-library and M20 behavior | Do not weaken unsupported-reason coverage. |
 | `semantic-families/README.md` | State plainly that promoted arithmetic leaf families already cover zero-or-one helper deps, including cross-library helper-aware examples | Do not turn README into milestone meta-commentary. |
 | `xtask/src/lib.rs` | Replace the stale locked-corpus arithmetic-ready expectation with the truthful `no_strong_candidate` and `28 / 17 / 0 / 11` contract | Do not rewrite ranking policy or artifact schema here. |
 | `PLAN.md` | Close M27.9 on the stop path and define the M27.9A success contract | Do not preserve the invalid `18 / 10` success gate anywhere in the file. |
-| `docs/recommendation_corpus_expansion_program_v0.1.md` | Update the run log and immediate-next-step guidance so arithmetic pressure is retired and the program ledger matches the new truth | Do not reopen corpus-run planning by habit. |
+| `docs/recommendation_corpus_expansion_program_v0.1.md` | Update the baseline, run-log language, and immediate-next-step guidance so arithmetic pressure is retired and the program ledger matches the new truth | Do not reopen corpus-run planning by habit. |
 
-## Architecture Contract
+## Architecture Review
 
 ### Core rule
 
-M27.9A lands semantic truth first, then re-locks analysis truth around what that
-semantic fix actually produced.
+Land semantic truth first, then re-lock analysis truth around what the semantic
+fix actually produced.
 
 Never reverse that order.
 
@@ -332,7 +302,7 @@ CLI read-side surfaces
 ```text
 AUTHORED SOURCE CHANGES
 =======================
-ws/m27_9-int
+integration worktree
   - spec-core semantic review
   - M20 fixture repair
   - spec-cli truth locks
@@ -383,8 +353,8 @@ PLAN.md + recommendation_corpus_expansion_program_v0.1.md
 ### State transition
 
 ```text
-OLD STATE
-=========
+OLD LOCKED STATE
+================
 15 promoted / 13 unsupported / ranked arithmetic-ready candidate
         │
         │ semantic truth fix + truthful M20 repair
@@ -401,25 +371,61 @@ same observed counts, same recommendation outcome,
 new success interpretation, retired arithmetic pressure
 ```
 
+### Architecture-specific failure scenario
+
+If `xtask` is refreshed before the merged branch reproduces the stop-state, the
+repo will lock a governance story that may not actually match branch truth.
+That is the primary architectural landmine here.
+
+## Code Quality And Complexity Guardrails
+
+- Reuse the authored integration worktree diff. Do not restate the same logic in
+  a fresh local patch.
+- Keep all recalibration logic on the existing lock surfaces. No new helpers, no
+  new harness layer, no secondary analysis fixtures.
+- Preserve the current semantic-family boundary. This milestone is not allowed to
+  widen classifier scope to make the counts look prettier.
+- Keep docs explicit. The plan and program tracker must say plainly that corpus
+  repair and promoted-family reclassification are different accounting events.
+
 ## Implementation Plan
 
-### Step 1 - Land the authored M27.9 truth from `ws/m27_9-int`
+### Step 0 - Capture and import the actual authored source truth
 
-Bring the already-proven authored source changes onto `feat/corpus-expansion`
-without reworking their intent:
+Before editing the parent branch, inspect the integration worktree diff and
+import the authored source changes from the worktree content, not just the
+branch name:
+
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/int`
+
+Required import set:
+
+- `spec-core/src/semantic_review.rs`
+- `spec-cli/tests/cli.rs`
+- `semantic-families/README.md`
+- delete `apply_tax_arithmetic_shape.unit.spec`
+- add `apply_tax_control_flow.unit.spec`
+
+Do not import derived passport files by hand. They are proof surfaces and must
+be regenerated during the proof loop.
+
+### Step 1 - Land the authored M27.9 semantic and CLI truth
+
+Bring the already-proven authored source changes onto
+`feat/corpus-expansion` without reworking their intent:
 
 - semantic-review optional-helper parity
 - truthful M20 control-flow replacement
 - CLI truth-lock expansion
 - maintainer doc update
 
-Done means the branch source diff matches the intentional authored state, not
-just the partial parent-workspace semantic edit.
+Done means the branch source diff matches the intended authored state, not just
+the earlier partial parent-workspace semantic edit.
 
-### Step 2 - Reproduce the blocked stop-path evidence on the merged branch
+### Step 2 - Reproduce the blocked stop-state on the merged branch
 
 Before changing `xtask` locks, rerun the proof surfaces and confirm the branch
-still lands on the same stop-state:
+still lands on:
 
 - `function_coverage = 28 / 17 / 0 / 11`
 - `recommendation_status = "no_strong_candidate"`
@@ -434,86 +440,43 @@ truth.
 Update the locked-corpus assertions in `xtask/src/lib.rs` to reflect the real
 baseline:
 
-- rename or rewrite the stale arithmetic-ready command-path test
+- replace the stale arithmetic-ready expectation block
 - assert `RecommendationStatus::NoStrongCandidate`
 - assert `promoted_family_units = 17`
 - assert `unsupported_function_units = 11`
-- assert the surviving ranked candidate set no longer contains
+- assert ranked candidates no longer include
   `unsupported_arithmetic_shape-2694b2baf65b`
-- assert `unsupported_function_surface-e40675da6fa0` remains held for
-  `unknown_overlap_family`
+- assert the remaining visible held candidate is
+  `unsupported_function_surface-e40675da6fa0`
+  with `unknown_overlap_family`
 
-Done means the analysis harness now encodes the truthful post-fix corpus, not
-the old milestone fantasy.
+Done means the analysis harness encodes the truthful post-fix corpus.
 
-### Step 4 - Rewrite plan and program accounting language
+### Step 4 - Rewrite the planning and program ledger
 
-Update planning surfaces so future sessions and maintainers read the correct
-story:
+Update the planning surfaces so future sessions read the correct story:
 
 - M27.9 semantic work succeeded
 - the old count target was wrong
 - corpus repair and promoted-family reclassification are different accounting
   categories
-- arithmetic ready pressure is retired
+- arithmetic-ready pressure is retired
 - `money/round` remains the next live held candidate after this closeout
 
-Done means the repo stops steering roadmap choices from stale arithmetic
+Done means the repo stops steering future roadmap choices from stale arithmetic
 pressure.
 
-### Step 5 - Close M27.9 and hand off cleanly
+### Step 5 - Run final proof and close M27.9 cleanly
 
 Record the closeout explicitly:
 
 - M27.9 closed on the stop path
 - M27.9A owns the lock refresh and accounting recalibration
-- next milestone selection starts from the truthful `no_strong_candidate`
-  baseline, not from the old arithmetic-ready narrative
+- next milestone selection starts from the truthful
+  `28 / 17 / 0 / 11` + `no_strong_candidate` baseline
 
 Done means nobody has to reverse-engineer why the milestone stopped or what the
 next honest move is.
-
-## Expected Output Delta
-
-### Coverage
-
-The truthful post-fix lock for M27.9A is:
-
-- `function_coverage.total_units = 28`
-- `function_coverage.promoted_family_units = 17`
-- `function_coverage.supported_unpromoted_family_units = 0`
-- `function_coverage.unsupported_function_units = 11`
-
-### Recommendation
-
-- `recommendation_status = "no_strong_candidate"`
-- `unsupported_arithmetic_shape-2694b2baf65b` is absent from ranked candidates
-- `unsupported_function_surface-e40675da6fa0` remains visible and held for
-  `unknown_overlap_family`
-
-### Cluster interpretation
-
-The accounting interpretation must explicitly separate:
-
-- promoted-count gains from reclassification
-- unsupported-count drops from those reclassifications
-- unsupported-count preservation from truthful fixture repair
-
-The repo must not blur those three things into one raw count target again.
-
-### Stop gate
-
-If the merged branch does not reproduce the observed `28 / 17 / 0 / 11` and
-`no_strong_candidate` state, stop.
-
-Capture:
-
-- the per-unit semantic-review outputs for both cross-library arithmetic units
-- the M20 control-flow fixture truth
-- the full recommendation artifact
-
-Then split the work again. Do not patch `xtask` locks or planning docs around a
-non-reproduced state.
 
 ## Test Review
 
@@ -527,47 +490,48 @@ Suites that must move together:
 - `spec-cli` integration tests
 - `xtask` locked-analysis tests
 
-### Coverage diagram
+### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ==================
 [+] spec-core/src/semantic_review.rs
     │
-    ├── [WORKTREE READY] cross-library monotone-down canonical route
+    ├── [MUST LAND] cross-library monotone-down canonical route
     │   -> promoted monotone-down family
     │
-    ├── [WORKTREE READY] cross-library monotone-up canonical route
+    ├── [MUST LAND] cross-library monotone-up canonical route
     │   -> promoted monotone-up family
     │
-    ├── [WORKTREE READY] helper-then-clamp monotone-up normalization
+    ├── [MUST LAND] helper-then-clamp monotone-up normalization
     │   -> still supported
     │
-    └── [WORKTREE READY] cross-library control-flow near miss
+    └── [MUST LAND] cross-library control-flow near miss
         -> stays unsupported
 
 [+] spec-cli/tests/cli.rs
     │
-    ├── [WORKTREE READY] passport / status / export truth for cross-library tax
-    ├── [WORKTREE READY] whole-pack M20 unsupported reason matrix
-    └── [WORKTREE READY] repo-root crosslib workspace status now shows 2 units
+    ├── [MUST LAND] passport / status / export truth for cross-library tax
+    ├── [MUST LAND] whole-pack M20 unsupported reason matrix
+    └── [MUST LAND] repo-root crosslib workspace status now shows 2 units
 
 [+] xtask/src/lib.rs
     │
-    ├── [GAP] lock coverage at 28 / 17 / 0 / 11
-    ├── [GAP] lock recommendation_status = no_strong_candidate
-    ├── [GAP] remove arithmetic-ready candidate expectation
-    └── [GAP] keep money/round held for unknown_overlap_family
+    ├── [ADD TEST LOCK] coverage at 28 / 17 / 0 / 11
+    ├── [ADD TEST LOCK] recommendation_status = no_strong_candidate
+    ├── [ADD TEST LOCK] arithmetic-ready cluster absent from ranking
+    └── [ADD TEST LOCK] money/round surface remains held
 
 [+] governance docs
     │
-    ├── [GAP] PLAN.md records stop-path success plus accounting failure
-    └── [GAP] program ledger retires arithmetic pressure explicitly
+    ├── [MUST LAND] PLAN.md records stop-path success plus accounting failure
+    └── [MUST LAND] program ledger retires arithmetic pressure explicitly
 ```
 
-### Required tests
+### Required tests and proof assertions
 
-Tests already authored in `ws/m27_9-int` and required to survive intact:
+Tests already authored in the integration worktree and required to survive
+intact:
 
 1. `spec-core/src/semantic_review.rs`
    - `monotone_down_nonnegative_classifier_cross_library_canonical_example_routes_to_promoted_leaf_without_invariants`
@@ -575,22 +539,19 @@ Tests already authored in `ws/m27_9-int` and required to survive intact:
    - `monotone_up_classifier_cross_library_canonical_example_routes_to_promoted_leaf_without_invariants`
    - `monotone_up_classifier_cross_library_control_flow_near_miss_stays_unsupported`
    - `family_a_helper_dep_normalization_allows_helper_then_clamp_for_monotone_up`
-
 2. `spec-cli/tests/cli.rs`
    - `cross_library_monotone_up_truth_surfaces_preserve_supported_semantic_review`
    - the M20 whole-pack unsupported reason-code matrix
    - the repo-root crosslib status/export assertions
-
 3. `xtask/src/lib.rs`
-   - replace the stale
-     `recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held`
-     expectation with the truthful post-fix lock
+   - replace the stale arithmetic-ready lock expectations with the truthful
+     post-fix lock
 
 ### Regression rule
 
 This is partly a regression-preservation milestone.
 
-Any path that previously claimed the arithmetic candidate was `ready` but now
+Any path that previously claimed the arithmetic cluster was `ready` but now
 truthfully resolves to `no_strong_candidate` must be locked with an explicit
 regression test. No shortcut.
 
@@ -600,7 +561,7 @@ During implementation verification, write the QA-facing artifact to:
 
 - `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-eng-review-test-plan-{timestamp}.md`
 
-The artifact should tell QA to verify:
+That artifact should tell QA to verify:
 
 - both cross-library arithmetic units now classify as supported promoted leaves
 - the M20 pack stays unsupported for `unsupported_control_flow`
@@ -612,18 +573,31 @@ The artifact should tell QA to verify:
 
 | Codepath | Realistic failure | Test required? | Error handling exists? | Silent if missed? | Critical gap? |
 |---|---|---|---|---|---|
-| semantic fix partially lands | parent workspace keeps only the semantic file but loses CLI or fixture truth | yes | no | yes | **yes** |
+| worktree truth is only partially imported | parent branch keeps the semantic file but loses CLI, README, or M20 fixture truth | yes | no | yes | **yes** |
 | merged branch cannot reproduce stop-state counts | branch drift or partial source landing changes `28 / 17 / 0 / 11` | yes | no, only proof-loop detection | yes | **yes** |
-| `xtask` lock stays on arithmetic-ready baseline | roadmap steering still treats retired arithmetic pressure as live | yes | test-only | yes | **yes** |
+| `xtask` lock stays on the arithmetic-ready baseline | roadmap steering still treats retired arithmetic pressure as live | yes | test-only | yes | **yes** |
 | plan/program docs remain stale | future sessions reopen arithmetic work or misclassify M27.9 as execution failure | yes | no | yes | **yes** |
-| M20 pack truth drifts back toward supported arithmetic shape | unsupported regression pack stops being honest | yes | test-only | yes | **yes** |
+| M20 pack drifts back toward supported arithmetic shape | the unsupported regression pack stops being honest | yes | test-only | yes | **yes** |
 
 Critical here means the repo would silently make the wrong next-milestone
 decision.
 
+## Performance And Operational Review
+
+There is no meaningful runtime-performance risk in the shipped product surface.
+The risk here is proof-loop cost and governance drift, not user-facing latency.
+
+Operational rules:
+
+- do not rerun `xtask` lock edits speculatively before the branch reproduces the
+  stop-state
+- refresh derived analysis artifacts only after source truth is integrated
+- regenerate passports and analysis artifacts once on the integrated branch,
+  not independently in multiple lanes
+
 ## Proof Loop
 
-Run in this order:
+Run in this exact order:
 
 ```bash
 cargo test -p spec-core -- --color never
@@ -649,37 +623,40 @@ Acceptance rule:
   `28 / 17 / 0 / 11` and `no_strong_candidate`
 
 If any one of those fails, stop and inspect branch truth before editing
-governance language.
+governance language further.
 
 ## Worktree Parallelization Strategy
 
-This milestone does have real parallelization, but only after the source-of-
-truth boundaries are respected.
+This milestone has limited but real parallelization.
+
+The rule is simple: source truth first, docs in parallel once the evidence
+bundle is accepted, `xtask` last.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Land `ws/m27_9-int` authored source truth | `spec-core/src/`, `spec-cli/tests/`, `semantic-families/` | — |
-| Reproduce blocked stop-state | `spec-core/`, `spec-cli/`, `.semantic-family-artifacts/`, `examples/` | Land `ws/m27_9-int` authored source truth |
+| Import and land authored source truth | `spec-core/src/`, `spec-cli/tests/`, `semantic-families/`, `spec-cli/tests/fixtures/` | — |
+| Reproduce blocked stop-state | `spec-core/`, `spec-cli/`, `examples/`, `.semantic-family-artifacts/` | Import and land authored source truth |
+| Rewrite plan and program accounting language | repo root docs, `docs/` | blocked evidence bundle accepted as source truth |
 | Refresh `xtask` locked corpus expectations | `xtask/src/` | Reproduce blocked stop-state |
-| Rewrite plan and program accounting language | repo root docs, `docs/` | blocked evidence already exists; final wording should confirm reproduced stop-state |
+| Final proof and closeout | `spec-core/`, `spec-cli/`, `xtask/`, docs, proof artifacts | prior three steps complete |
 
 ### Parallel lanes
 
-- Lane A: land authored source truth -> reproduce blocked stop-state
-  `spec-core/src/`, `spec-cli/tests/`, `semantic-families/`, proof surfaces
-- Lane B: rewrite plan and program accounting language
+- Lane A: source landing -> reproduced stop-state
+  `spec-core/src/`, `spec-cli/tests/`, `spec-cli/tests/fixtures/`,
+  `semantic-families/`, proof surfaces
+- Lane B: plan/program closeout rewrite
   `PLAN.md`, `docs/recommendation_corpus_expansion_program_v0.1.md`
-- Lane C: refresh `xtask` locked corpus expectations
+- Lane C: `xtask` lock refresh
   `xtask/src/`
 
 ### Execution order
 
 1. Launch Lane A first. It owns branch truth.
-2. Lane B can start in parallel once the blocked evidence bundle is accepted as
-   source truth, but it should finalize only after Lane A reproduces the same
-   stop-state.
+2. Lane B may run in parallel once the blocked evidence bundle is accepted as
+   authoritative input, but its final wording must match the reproduced stop-state.
 3. Launch Lane C only after Lane A proves the merged branch still lands on
    `28 / 17 / 0 / 11` and `no_strong_candidate`.
 4. Merge A + B, then finish C, then run the proof loop once on the integrated
@@ -687,16 +664,16 @@ truth boundaries are respected.
 
 ### Conflict flags
 
-- Lane A and Lane C must stay separate. `xtask/src/` should not be edited until
-  the merged source truth is proven.
+- Lane A and Lane C must stay separate. `xtask/src/` should not move until the
+  merged source truth is proven.
 - Lane B must not quietly rewrite counts or candidate interpretation without
-  reading the blocked evidence bundle.
+  reading `.runs/m27_9/diagnostics/blocked-summary.md` and the actual artifacts.
 - Do not use the current `ORCH_PLAN.md` as a worker prompt source. It still
   encodes the invalid `18 / 10` gate.
 
 ### Practical recommendation
 
-Use two real workstreams:
+Use two real concurrent workstreams:
 
 - Workstream 1: authored source landing plus proof reproduction
 - Workstream 2: plan/program closeout rewrite
@@ -708,11 +685,11 @@ aligned on the reproduced stop-state.
 
 M27.9A is complete only when all of the following are true:
 
-1. the `ws/m27_9-int` authored source truth is merged onto
+1. the integration worktree authored source truth is merged onto
    `feat/corpus-expansion`
 2. the branch reproduces `28 / 17 / 0 / 11`
 3. the branch reproduces `recommendation_status = "no_strong_candidate"`
-4. the arithmetic ready candidate is absent from ranked candidates
+4. the arithmetic-ready cluster is absent from ranked candidates
 5. `unsupported_function_surface-e40675da6fa0` remains held for
    `unknown_overlap_family`
 6. the M20 pack remains truthfully unsupported through
@@ -722,33 +699,13 @@ M27.9A is complete only when all of the following are true:
 9. `docs/recommendation_corpus_expansion_program_v0.1.md` no longer points the
    next move at arithmetic promotion pressure
 
-## TODOS.md Impact
+## Next Step After Closeout
 
-No new TODO belongs in `TODOS.md` if M27.9A lands cleanly.
+After M27.9A lands, the next live decision surface is:
 
-If implementation proves the merged branch cannot reproduce the blocked
-diagnostics, that is not TODO debt. That is a new explicit milestone with a new
-problem statement.
+- `unsupported_function_surface-e40675da6fa0`
+- held for `unknown_overlap_family`
+- concretely represented today by `money/round`
 
-## Decision Audit Trail
-
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-|---|---|---|---|---|---|---|
-| 1 | CEO | Treat M27.9 as implementation success plus accounting failure | mechanical | explicit over clever | the semantic and CLI truth already moved correctly | call it generic failure |
-| 2 | CEO | Keep M27.9A narrow and do not reopen corpus expansion | mechanical | pragmatic | corpus is no longer the active blocker | one more evidence run by reflex |
-| 3 | Eng | Reuse `ws/m27_9-int` as the authored source of truth | mechanical | minimal diff | reimplementation adds risk with no new value | rewrite the semantic fix locally |
-| 4 | Eng | Re-lock `xtask` to `28 / 17 / 0 / 11` and `no_strong_candidate` | mechanical | systems over heroes | roadmap steering must match repo truth deterministically | preserve stale arithmetic-ready lock |
-| 5 | Eng | Keep the M20 pack unsupported through control-flow truth | mechanical | choose completeness | pack naming and semantic reality must agree | keep a knowingly supported arithmetic shape in the unsupported pack |
-| 6 | CEO | Keep `money/round` as the next live held pressure after M27.9A | taste | bias toward action | arithmetic pressure is retired, but the next decision surface already exists | open another vague search milestone |
-
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | no UI scope |
-
-**VERDICT:** NEW M27.9A PLAN WRITTEN. This file replaces the stale M27.9
-contract and is ready for implementation or a formal review pass.
+That next milestone is downstream of this recalibration. Do not start it inside
+M27.9A.

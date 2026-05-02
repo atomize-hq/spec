@@ -1,530 +1,666 @@
-# M27.9 Orchestration Plan
+# M27.9A Orchestration Plan
 
 Status: **execution contract**  
 Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
 Primary branch baseline: **`feat/corpus-expansion`**  
-Starting HEAD: **`1ef4489`**  
-Frozen run artifacts: **`.runs/m27_9/tasks.json`, `.runs/m27_9/session-log.md`, `.runs/m27_9/baseline.json`**  
-Last rewritten: **2026-05-01**
+Frozen evidence basis: **`.runs/m27_9/session-log.md`, `.runs/m27_9/diagnostics/blocked-summary.md`, `.runs/m27_9/diagnostics/coverage.actual.json`, `.runs/m27_9/diagnostics/recommendation.actual.json`**  
+Authoritative source worktree: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/int`**  
+Last rewritten: **2026-05-02**
 
 ## Summary
 
-- Execute from the live branch `feat/corpus-expansion`. `PLAN.md` is the only implementation authority. `ORCH_PLAN.md` exists to drive execution, not reinterpret scope.
-- Keep the critical path local to the parent agent for:
-  - baseline capture
-  - semantic-boundary implementation and validation
-  - final integration
-  - xtask lock refresh
-  - final proof loop
-- Use subagents only for the two honest post-semantic lanes:
-  - Lane B: repair the M20 unsupported pack and lock CLI truth
-  - Lane C: refresh maintainer docs
-- Do not invent fake parallelism. M27.9 is mostly serialized because `xtask` truth must stay downstream of semantic truth and CLI truth.
-- Use dedicated worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/{m20-cli,docs,int}` with workstream branches:
+- Execute from the live branch `feat/corpus-expansion`. `PLAN.md` is the only implementation authority. `ORCH_PLAN.md` defines execution order, workstream ownership, integration mechanics, and stop conditions only.
+- M27.9A is a closeout-and-recalibration run. It does four things and only four things:
+  - land the already-authored M27.9 source truth from the integration worktree
+  - reproduce the blocked stop-path evidence on `feat/corpus-expansion`
+  - refresh the locked `xtask` analysis contract to the truthful post-fix baseline
+  - rewrite the planning and program ledger so the repo records M27.9 as implementation success plus accounting failure
+- The truthful target state is:
+  - `function_coverage = 28 / 17 / 0 / 11`
+  - `recommendation_status = "no_strong_candidate"`
+  - no ranked arithmetic-ready candidate remains
+  - `unsupported_function_surface-e40675da6fa0` remains the visible held candidate for `unknown_overlap_family`, concretely `money/round`
+- The authoritative authored source truth lives in the live content of `ws/m27_9-int`, not merely its committed tip. Source landing must read from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/int`.
+- Use existing worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/{int,m20-cli,docs}` with branches:
+  - `ws/m27_9-int`
   - `ws/m27_9-m20-cli`
   - `ws/m27_9-docs`
-  - `ws/m27_9-int`
-- Keep the parent agent as the only integrator. Workers never self-merge and never own derived artifacts.
-- Use GPT-5.4 with `reasoning_effort=high` for all workers. Cap concurrency at `2`.
-- Keep orchestration state in one parent-owned source of truth:
-  - queue: `.runs/m27_9/tasks.json`
-  - session log: `.runs/m27_9/session-log.md`
-  - baseline snapshot: `.runs/m27_9/baseline.json`
-  - dirty-tree snapshot: `.runs/m27_9/dirty-state.json`
-  - per-task sentinels: `.runs/<TASK_ID>/`
-- Treat `.runs/m27_9/**` and `.semantic-family-artifacts/**` as run artifacts and derived proof surfaces, not authored source.
+- Use GPT-5.4 with `reasoning_effort=high` for workers. Cap worker concurrency at `1`. The parent remains the sole integrator and the only writer of run-state and derived proof surfaces.
+- Maximum safe concurrency is intentionally narrow:
+  - Lane A is parent-only and serialized because it owns branch truth, source import, and reproduced stop-state proof.
+  - Lane B is the only safe concurrent worker lane before reproduced stop-state because its scope is bounded to docs/program closeout wording over frozen evidence.
+  - A second post-reproduction worker lane is intentionally forbidden. After reproduced stop-state, the only remaining authored code surface is `xtask/src/lib.rs`, which must lock exactly the parent-produced outputs and would gain nothing from a second integration cycle.
+- `ws/m27_9-m20-cli` may be inspected for corroboration from the earlier blocked run, but it is not an authoritative source of truth for M27.9A source landing.
 
 ## Hard Guards
 
-- `PLAN.md` wins over memory, worker suggestions, stale run notes, and old `ORCH_PLAN.md`.
-- No new family packet, no new packet directory, and no new compatibility key.
-- No recommendation-policy rewrite.
-- No artifact schema rewrite.
-- No corpus manifest change.
-- No edits to:
-  - `semantic-families/corpus/rust-function.toml`
-  - `xtask/src/family/coverage.rs`
-  - `xtask/src/family/recommend.rs`
-  - `xtask/src/family/promotion_artifacts.rs`
-  - `xtask/src/family/inventory.rs`
-  unless the parent explicitly stops the run and opens a new plan because M27.9 was mis-scoped.
-- The M20 pack must remain an unsupported truth pack.
-  - It may be repaired.
-  - It may not be quietly converted into a mixed or supported pack.
-- `xtask/src/lib.rs` may only be updated after:
-  - semantic truth is stable
-  - M20 unsupported truth is repaired
-  - CLI truth locks are updated and passing
-- Derived analysis outputs are downstream proof only:
+- `PLAN.md` wins over memory, stale orchestration notes, worker suggestions, and previous run summaries.
+- The old `28 / 18 / 0 / 10` expectation is historical diagnosis only. It is never an execution target in M27.9A.
+- Source landing must import the exact authored source set from the live `ws/m27_9-int` worktree content:
+  - `spec-core/src/semantic_review.rs`
+  - delete `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_arithmetic_shape.unit.spec`
+  - add `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_control_flow.unit.spec`
+  - `spec-cli/tests/cli.rs`
+  - `semantic-families/README.md`
+- Source landing mechanism is locked:
+  - use direct file sync or patch-copy of the exact authored files above from `ws/m27_9-int`
+  - do not use branch merge as the landing mechanism
+  - do not use whole-worktree checkout or blanket sync
+  - do not cherry-pick `ws/m27_9-int` as a branch-level unit, because the authoritative truth includes uncommitted worktree content and excludes derived passports
+- Recalibration ownership is limited to:
+  - `xtask/src/lib.rs`
+  - `PLAN.md`
+  - `docs/recommendation_corpus_expansion_program_v0.1.md`
+- Derived proof surfaces are downstream only. Do not hand-copy, stage as authored truth, or use as source-import inputs:
   - `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
   - `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- If the refreshed analysis delta is not exactly:
-  - promoted `15 -> 18`
-  - unsupported `13 -> 10`
-  - recommendation `ranked -> no_strong_candidate`
-  then stop immediately, capture evidence, and do not hand-edit `xtask` locks to force the expected answer.
-- Workers do not write:
-  - `.runs/**`
-  - `.semantic-family-artifacts/**`
-  - generated output
-  - passports
+  - `examples/shared-crate/src/generated/**`
+  - `examples/crosslib-app/units/pricing/*.spec.passport.json`
+  - `.runs/m27_9/**`
+- The two modified passport files visible in `ws/m27_9-int` are derived proof only:
+  - `examples/crosslib-app/units/pricing/apply_discount.spec.passport.json`
+  - `examples/crosslib-app/units/pricing/apply_tax.spec.passport.json`
+  They must not be hand-copied into `feat/corpus-expansion`.
+- `PLAN.md` is not open for a fresh rewrite. Lane B may adjust closeout wording only so the file accurately records:
+  - implementation success
+  - accounting failure
+  - truthful target state
+  - truthful next-step pressure
+  It must not reopen scope, redefine steps `0-5`, or invent new milestone work.
+- No new family packet.
+- No new corpus run.
+- No recommendation-policy rewrite.
+- No artifact schema rewrite.
+- No shared-core or M28 work.
+- `xtask/src/lib.rs` is blocked until Lane A confirms reproduced branch truth is exactly:
+  - `function_coverage = 28 / 17 / 0 / 11`
+  - `recommendation_status = "no_strong_candidate"`
+- If reproduced branch truth does not match that stop-state exactly:
+  - stop M27.9A before editing `xtask/src/lib.rs`
+  - keep Lane B draft-only
+  - do not finalize closeout wording as settled repo truth
+  - write machine-evidence diagnostics under `.runs/m27_9/diagnostics/`
+  - require a fresh planning decision instead of forcing the lock or hand-explaining the drift away
 
 ## Source Vs Derived Surfaces
 
-Authored source surfaces for M27.9:
+### Authored source truth that must land
 
 - `spec-core/src/semantic_review.rs`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/*`
+- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_arithmetic_shape.unit.spec` deleted
+- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_control_flow.unit.spec` added
 - `spec-cli/tests/cli.rs`
-- `xtask/src/lib.rs`
 - `semantic-families/README.md`
 
-Derived or run-state surfaces for M27.9:
+### Recalibration surfaces owned by M27.9A
+
+- `xtask/src/lib.rs`
+- `PLAN.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+
+### Current authoritative integration-worktree status to import from
+
+- `M semantic-families/README.md`
+- `M spec-cli/tests/cli.rs`
+- `D spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_arithmetic_shape.unit.spec`
+- `?? spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_control_flow.unit.spec`
+- `M spec-core/src/semantic_review.rs`
+- `M examples/crosslib-app/units/pricing/apply_discount.spec.passport.json`
+- `M examples/crosslib-app/units/pricing/apply_tax.spec.passport.json`
+
+Import rule:
+
+- The first five entries above are the authored source delta.
+- The last two entries are derived proof and excluded from source landing.
+
+### Downstream-only proof surfaces
 
 - `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
 - `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `examples/**/src/generated/**`
-- `examples/**/*.spec.passport.json`
+- `examples/shared-crate/src/generated/**`
+- `examples/crosslib-app/units/pricing/*.spec.passport.json`
 - `.runs/m27_9/**`
-
-Execution rule:
-
-- workers edit authored source only, within their owned path set
-- derived surfaces are refreshed only by the parent in integration / proof phases
-- no worker refreshes analysis JSON, generated code, or passports
 
 ## Parent-Owned Run-State Protocol
 
-Canonical run root: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m27_9`
+Canonical roots:
+
+- `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
+- `M27_9_RUN_ROOT=$PRIMARY_ROOT/.runs/m27_9`
+- `M27_9_ANALYSIS_ROOT=$PRIMARY_ROOT/.semantic-family-artifacts/family-promotion/analysis`
+- `M27_9_INT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/int`
+- `M27_9_DOCS_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/docs`
+- `M27_9_M20CLI_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/m20-cli`
 
 Parent-owned mutable run-state:
 
-- `baseline.json`
-  - branch, HEAD SHA, timestamp, and authoritative file list re-read at run start
-- `dirty-state.json`
-  - exact `git status --short` snapshot before any worktree is created
-- `tasks.json`
-  - authoritative task queue and dependency graph
-- `session-log.md`
-  - append-only run diary with worker launch/return, command results, and stop/land disposition
-- `diagnostics/*`
-  - blocked-closeout evidence bundle only
+- queue: `$M27_9_RUN_ROOT/tasks.json`
+- session log: `$M27_9_RUN_ROOT/session-log.md`
+- baseline snapshot: `$M27_9_RUN_ROOT/baseline.json`
+- frozen evidence acceptance record: `$M27_9_RUN_ROOT/evidence-acceptance.json`
+- source import contract and completion record: `$M27_9_RUN_ROOT/source-import.json`
+- reproduced stop-state record: `$M27_9_RUN_ROOT/reproduced-stop-state.json`
+- integration record: `$M27_9_RUN_ROOT/integration-state.json`
+- final proof record: `$M27_9_RUN_ROOT/final-proof.json`
+- diagnostics: `$M27_9_RUN_ROOT/diagnostics/**`
+- per-task sentinels: `$PRIMARY_ROOT/.runs/<TASK_ID>/`
 
-Minimum parent-owned task IDs:
+Required queue and log exactness:
 
-- `task/m27_9-00-baseline`
-- `task/m27_9-a1-freeze-run-contract`
-- `task/m27_9-a2-semantic-boundary`
-- `task/m27_9-b1-m20-cli-truth`
-- `task/m27_9-b2-docs-refresh`
-- `task/m27_9-c1-integrate-pre-xtask`
-- `task/m27_9-c2-analysis-lock-refresh`
-- `task/m27_9-c3-final-proof`
-- `task/m27_9-c4-land-or-stop`
+- `tasks.json` is seeded before any authored file edit and records for each task:
+  - `id`
+  - `owner`
+  - `worktree`
+  - `depends_on`
+  - `owned_paths`
+  - `status`
+  - `gate`
+- `session-log.md` is append-only and records:
+  - timestamp
+  - task id
+  - actor
+  - branch or worktree
+  - commands run
+  - exit codes
+  - stop reason or completion note
+- `baseline.json` records:
+  - live branch name
+  - live `git rev-parse HEAD`
+  - live `git status --short`
+  - freeze-time blocked-run HEAD `cc12c859d99d409a4f861be64b9d7df7a653caba`
+- `source-import.json` is initialized before edits with:
+  - expected authored source paths
+  - excluded derived paths
+  - mechanism `pending_direct_file_sync`
+  and completed after landing with:
+  - actual imported paths
+  - actual excluded paths
+  - source worktree
+  - completion timestamp
+
+Frozen evidence basis that must be copied into run-state, not paraphrased from memory:
+
+- freeze-time observed HEAD: `cc12c859d99d409a4f861be64b9d7df7a653caba`
+- semantic gate passed in `spec-core`
+- worker lane B repaired M20 plus CLI truth
+- worker lane C updated `semantic-families/README.md`
+- integration gate passed on `ws/m27_9-int` for `fmt + spec-core + spec-cli`
+- parent refreshed derived proof surfaces needed for merged CLI truth
+- stop rule triggered because actual coverage was `28 / 17 / 0 / 11` while the old expected coverage was wrong
+- actual recommendation was `no_strong_candidate`
+- no `xtask/src/lib.rs` edit was made in the blocked run
+- current parent workspace still lacks the full merged source truth
 
 Run-state rules:
 
-- parent writes all `.runs/m27_9/**` files
-- workers may read `PLAN.md` and `ORCH_PLAN.md`
-- workers may not write logs, queue state, or diagnostics
-- if the run blocks, the parent records the exact stop reason before any retry
+- The parent writes all `.runs/m27_9/**` files.
+- Workers may read run-state but never write it.
+- The parent records both:
+  - the frozen blocked-run basis commit
+  - the live execution-start commit on `feat/corpus-expansion`
+- If those differ in ways that can explain a reproduction mismatch, the parent records drift explicitly before any `xtask` work begins.
 
 ## Task Graph
 
 ```text
-task/m27_9-00-baseline
-  -> task/m27_9-a1-freeze-run-contract
-      -> task/m27_9-a2-semantic-boundary
-          -> task/m27_9-b1-m20-cli-truth
-          -> task/m27_9-b2-docs-refresh
-task/m27_9-b1-m20-cli-truth
-task/m27_9-b2-docs-refresh
-  -> task/m27_9-c1-integrate-pre-xtask
-      -> task/m27_9-c2-analysis-lock-refresh
-          -> task/m27_9-c3-final-proof
-              -> task/m27_9-c4-land-or-stop
+task/m27_9a-00-kickoff
+  -> task/m27_9a-01-seed-run-state
+      -> task/m27_9a-02-accept-frozen-evidence
+          -> task/m27_9a-a1-import-authored-source-truth
+              -> task/m27_9a-a2-land-source-truth-on-parent
+                  -> task/m27_9a-a3-reproduce-stop-state
+                      -> task/m27_9a-b2-finalize-ledger-wording
+                          -> task/m27_9a-i1-integrate-docs-lane
+                              -> task/m27_9a-i2-pre-xtask-integration-gate
+                                  -> task/m27_9a-c1-refresh-xtask-lock
+                                      -> task/m27_9a-d1-final-proof
+                                          -> task/m27_9a-d2-closeout-or-stop
+
+task/m27_9a-02-accept-frozen-evidence
+  -> task/m27_9a-b1-draft-ledger-rewrite
+      -> task/m27_9a-b2-finalize-ledger-wording
 ```
 
-Execution intent:
+Execution meaning:
 
-1. parent captures the live repo baseline and freezes the run contract
-2. parent lands the semantic-boundary change first
-3. once semantic truth is proven, worker lanes B and C run in parallel
-4. parent merges both lanes into integration
-5. parent refreshes `xtask` locks only after semantic + CLI truth are both stable
-6. parent runs the full proof loop and either lands or writes a blocked closeout
+1. WS-0 seeds the run-state and freezes the kickoff contract before any authored file edit.
+2. Lane A imports the live `ws/m27_9-int` authored truth by direct file sync, lands it on `feat/corpus-expansion`, and proves reproduced stop-state.
+3. Lane B may draft bounded closeout wording in parallel once frozen evidence is accepted, but it cannot finalize or merge until Lane A confirms reproduced stop-state.
+4. WS-INT is a dedicated parent-owned integration phase on `feat/corpus-expansion`. It integrates Lane B back into the already-landed parent truth and runs a pre-`xtask` integration gate.
+5. Lane C remains parent-only and blocked until source truth is landed, stop-state is reproduced, and integration is complete.
+6. If any gate fails after Lane B exists, the parent writes deterministic blocked-closeout artifacts instead of reopening scope informally.
 
 ## Workstream Plan
 
-### Critical Path
-
-`WS-0 baseline/freeze -> WS-A parent semantic boundary -> WS-B M20+CLI + WS-C docs (parallel) -> WS-D parent integration -> WS-E parent xtask refresh -> WS-F final proof / land-or-stop`
-
-This is intentionally not a many-lane plan. The milestone is dominated by one
-semantic change and one downstream re-projection chain.
-
-### Parallelism Boundary
-
-Only two worker lanes are justified.
-
-- Lane B is real because M20 repair and CLI truth locks are coupled and can be isolated after semantic behavior is fixed.
-- Lane C is real because the README change is downstream of semantic truth but independent of CLI and `xtask` mechanics.
-- No `xtask` worker lane is allowed, because `xtask` expectations depend on the final merged semantic + CLI truth.
-- No separate fixture-only lane is allowed, because the M20 fixture and CLI assertions should move together.
-
-### WS-0 Parent Baseline And Freeze
-
-Parent only.
+### WS-0 Kickoff And Run-State Seed (`feat/corpus-expansion`) - parent only
 
 Task IDs:
 
-- `task/m27_9-00-baseline`
-- `task/m27_9-a1-freeze-run-contract`
-
-Owned paths:
-
-- `.runs/m27_9/baseline.json`
-- `.runs/m27_9/dirty-state.json`
-- `.runs/m27_9/tasks.json`
-- `.runs/m27_9/session-log.md`
-- `.runs/task-m27_9-00-baseline/**`
-- `.runs/task-m27_9-a1-freeze-run-contract/**`
+- `task/m27_9a-00-kickoff`
+- `task/m27_9a-01-seed-run-state`
+- `task/m27_9a-02-accept-frozen-evidence`
 
 Required parent actions:
 
 1. Re-read:
    - `PLAN.md`
    - `ORCH_PLAN.md`
-2. Record:
-   - `git rev-parse HEAD`
-   - `git branch --show-current`
-   - `git status --short`
-3. Create worktrees from live `feat/corpus-expansion` HEAD:
-
-```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9
-git worktree add -b ws/m27_9-m20-cli /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/m20-cli HEAD
-git worktree add -b ws/m27_9-docs /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/docs HEAD
-git worktree add -b ws/m27_9-int /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/int HEAD
-```
-
-4. Seed `tasks.json` with owned-path contracts and dependencies.
-5. Write a freeze record in `session-log.md` that says:
-   - semantic truth is parent-owned and must go first
-   - worker lanes start only after semantic gate passes
-   - `xtask` is downstream only
+   - `.runs/m27_9/session-log.md`
+   - `.runs/m27_9/diagnostics/blocked-summary.md`
+   - `.runs/m27_9/diagnostics/coverage.actual.json`
+   - `.runs/m27_9/diagnostics/recommendation.actual.json`
+2. Record in `baseline.json`:
+   - live branch name
+   - live `git rev-parse HEAD`
+   - live `git status --short`
+   - freeze-time HEAD `cc12c859d99d409a4f861be64b9d7df7a653caba`
+3. Seed `tasks.json` with the full task graph, owners, dependencies, and owned-path contracts.
+4. Initialize `source-import.json` with:
+   - expected authored source paths
+   - excluded derived paths
+   - mechanism `pending_direct_file_sync`
+5. Write `evidence-acceptance.json` that locks the accepted frozen story:
+   - implementation success
+   - accounting failure
+   - truthful target state `28 / 17 / 0 / 11`
+   - truthful recommendation `no_strong_candidate`
+   - surviving held candidate `unsupported_function_surface-e40675da6fa0`
+6. Inspect `ws/m27_9-int` status directly. Do not substitute committed branch state for live worktree content.
 
 WS-0 acceptance:
 
-- baseline and dirty-tree snapshots exist
-- worktrees exist for `m20-cli`, `docs`, and `int`
-- no authored source file changed during WS-0
-- worker prompts are not sent before baseline capture completes
+- `tasks.json`, `baseline.json`, `evidence-acceptance.json`, and initialized `source-import.json` all exist before any authored file edit
+- frozen evidence is captured as machine-readable parent-owned run-state
+- the authoritative integration-worktree status is captured before import begins
+- the kickoff contract clearly distinguishes authored source, derived proof, and recalibration surfaces
+- no authored source files change during WS-0
 
-### WS-A Semantic Boundary
+### WS-A Source Landing And Stop-State Reproduction (`feat/corpus-expansion` using `ws/m27_9-int` as source authority) - parent only
 
-Parent only. Keep the semantic core on the critical path.
+Task IDs:
 
-Task ID: `task/m27_9-a2-semantic-boundary`
+- `task/m27_9a-a1-import-authored-source-truth`
+- `task/m27_9a-a2-land-source-truth-on-parent`
+- `task/m27_9a-a3-reproduce-stop-state`
 
-Owned file:
+Owned authored paths on the parent branch:
 
 - `spec-core/src/semantic_review.rs`
+- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_arithmetic_shape.unit.spec`
+- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/apply_tax_control_flow.unit.spec`
+- `spec-cli/tests/cli.rs`
+- `semantic-families/README.md`
 
-Required outcome:
+Locked import mechanism:
 
-- cross-library `shared::money/round` helper refs route the same way as local `money/round`
-- control-flow arithmetic near-misses remain unsupported
-- route precedence remains:
-  `chain3 -> wrapper -> monotone_down -> monotone_up`
+- Parent imports authored source by direct file sync or patch-copy of the exact files above from the live `ws/m27_9-int` worktree.
+- Parent does not merge the worktree branch and does not bulk-check out the worktree tree.
+- Parent records the chosen mechanism and touched files in `source-import.json`.
 
-Required commands:
+Required parent actions:
+
+1. Import the exact authored source truth from the live `ws/m27_9-int` worktree content.
+2. Confirm the imported source set excludes both crosslib passport files.
+3. Complete `source-import.json` with actual landed paths and excluded derived paths.
+4. Run the source-truth gate:
 
 ```bash
 cargo test -p spec-core -- --color never
+cargo test -p spec-cli --test cli -- --color never
 ```
 
-Semantic gate:
+5. Reproduce the stop-state on the merged parent branch:
 
-- do not launch workers until `spec-core` is green enough to prove the boundary
-- if semantic behavior is still ambiguous, stop before parallel work begins
+```bash
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+```
+
+6. Record the reproduced outputs in `reproduced-stop-state.json` and in diagnostics copies under `.runs/m27_9/diagnostics/`.
 
 WS-A acceptance:
 
-- only `spec-core/src/semantic_review.rs` changed in this phase
-- regression coverage exists for:
-  - cross-library monotone-down
-  - cross-library monotone-up
-  - unsupported control-flow near-miss
-  - precedence non-shadowing
-- parent records semantic-gate success or failure in `session-log.md`
+- the parent branch now contains the full authored M27.9 source truth, not just the earlier partial semantic edit
+- only the five authored source surfaces land in this phase
+- both crosslib passport files remain excluded from source landing
+- the reproduced branch truth is exactly:
+  - `function_coverage = 28 / 17 / 0 / 11`
+  - `recommendation_status = "no_strong_candidate"`
+- no ranked arithmetic-ready candidate remains
+- `unsupported_function_surface-e40675da6fa0` remains held for `unknown_overlap_family`
 
-### WS-B M20 Unsupported Pack And CLI Truth
+WS-A blocked path:
 
-Worker 1 on `ws/m27_9-m20-cli` in `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/m20-cli`
+- If coverage or recommendation differ from the expected reproduced stop-state, stop immediately.
+- Write or refresh:
+  - `.runs/m27_9/diagnostics/blocked-summary.md`
+  - `.runs/m27_9/diagnostics/coverage.actual.json`
+  - `.runs/m27_9/diagnostics/recommendation.actual.json`
+  - `.runs/m27_9/diagnostics/reproduction-failure.json`
+- Mark Lane B as draft-only pending replanning.
+- Do not edit `xtask/src/lib.rs`.
+- Do not finalize plan/program language that claims the reproduction was confirmed.
 
-Task ID: `task/m27_9-b1-m20-cli-truth`
+### WS-B Docs/Program Closeout Wording (`ws/m27_9-docs`) - single worker lane
+
+Task IDs:
+
+- `task/m27_9a-b1-draft-ledger-rewrite`
+- `task/m27_9a-b2-finalize-ledger-wording`
 
 Owned files:
 
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/*`
-- `spec-cli/tests/cli.rs`
+- `PLAN.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
 
-Required commands / policy:
+Start gate:
 
-- read the semantic-boundary result before editing
-- keep M20 as an unsupported truth pack
-- repair the current supported arithmetic-shape slot honestly
-- update CLI truth locks to reflect:
-  - cross-library arithmetic is supported
-  - repaired M20 near-miss is unsupported for the right reason
-- worker may run:
+- WS-B may start only after `task/m27_9a-02-accept-frozen-evidence` is complete.
 
-```bash
-cargo test -p spec-cli --test cli -- --color never
-```
+Finalization gate:
 
-Forbidden:
+- WS-B may be finalized and merged only after `task/m27_9a-a3-reproduce-stop-state` confirms the branch really reproduces the frozen stop-state.
 
-- no edits to `spec-core/src/semantic_review.rs`
-- no edits to `xtask/src/lib.rs`
-- no edits to `semantic-families/README.md`
-- no refresh of `.semantic-family-artifacts/**`
+Bounded scope rule:
+
+- `PLAN.md` edits are limited to closeout wording adjustments inside the existing M27.9A contract.
+- WS-B must not materially rewrite the milestone shape, file contract, step ordering, or implementation scope.
+- The worker is aligning repo-recorded closeout language, not authoring a new plan.
+
+Required worker rules:
+
+- Treat `.runs/m27_9` blocked evidence as authoritative input.
+- Draft from frozen evidence first, then reconcile the final wording against the reproduced parent-branch stop-state before return or merge.
+- Record M27.9 as implementation success plus accounting failure.
+- Retire arithmetic-ready pressure as a live next-step driver.
+- Keep `money/round` as the next visible held candidate.
+- Do not author any language that implies:
+  - a new family packet is part of this milestone
+  - another corpus run is part of this milestone
+  - recommendation policy is being revised here
+- Do not use the wrong `28 / 18 / 0 / 10` gate except to describe the obsolete expectation that caused the stop.
 
 WS-B acceptance:
 
-- the M20 pack remains an unsupported pack on its face and in behavior
-- fixture naming and unit ids are truthful
-- CLI assertions cover:
-  - supported cross-library arithmetic semantic-review surfaces
-  - repaired M20 unsupported truth in `status`, `export`, and passport reads
-- owned paths and only owned paths changed
+- changed files are exactly:
+  - `PLAN.md`
+  - `docs/recommendation_corpus_expansion_program_v0.1.md`
+- no other path changes are accepted from this lane
+- `PLAN.md` remains structurally the same milestone and step contract, with closeout wording only
+- both documents lock the truthful target state `28 / 17 / 0 / 11` plus `no_strong_candidate`
+- both documents describe the surviving held candidate consistently
+- wording tracks reproduced stop-state, not merely the frozen run summary
 
-### WS-C Maintainer Docs Refresh
+### WS-INT Parent Integration (`feat/corpus-expansion`) - parent only
 
-Worker 2 on `ws/m27_9-docs` in `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m27_9/docs`
+Task IDs:
 
-Task ID: `task/m27_9-b2-docs-refresh`
+- `task/m27_9a-i1-integrate-docs-lane`
+- `task/m27_9a-i2-pre-xtask-integration-gate`
 
-Owned file:
+Purpose:
 
-- `semantic-families/README.md`
+- WS-INT is the explicit integration phase for M27.9A.
+- There is no separate long-lived integration branch for this run.
+- The parent integrates onto `feat/corpus-expansion` directly after WS-A and before any `xtask` lock refresh.
 
-Required outcome:
+Integration ownership and mechanism:
 
-- docs state plainly that promoted arithmetic leaf families already cover zero-or-one helper deps
-- docs explain that packet-local `money/round` models helper-aware shape truth
-- docs now align cross-library helper-aware examples with the promoted boundary
+- Source truth from `ws/m27_9-int` is already landed by parent direct file sync in WS-A.
+- Lane B returns a narrow docs/program diff from `ws/m27_9-docs`.
+- Parent integrates Lane B back into `feat/corpus-expansion` by:
+  - preferred path: cherry-pick clean docs-only worker commit(s)
+  - fallback path: manual patch-copy of only `PLAN.md` and `docs/recommendation_corpus_expansion_program_v0.1.md` after reviewing the worker diff
+- Parent does not use `git merge` for the whole docs worktree.
 
-Forbidden:
+Conflict handling rules:
 
-- no milestone-theory essay
-- no edits outside `semantic-families/README.md`
-- no claims about new family ids or policy changes
+- If cherry-pick conflicts, the parent resolves only within:
+  - `PLAN.md`
+  - `docs/recommendation_corpus_expansion_program_v0.1.md`
+- Conflict resolution preserves parent branch factual truth from WS-A first:
+  - `28 / 17 / 0 / 11`
+  - `no_strong_candidate`
+  - arithmetic-ready pressure retired
+  - `money/round` held
+- If worker wording conflicts with reproduced branch truth, branch truth wins and the wording is rewritten narrowly.
+- No conflict may be resolved by changing `spec-core`, `spec-cli`, fixtures, README, or `xtask`.
 
-WS-C acceptance:
+Required parent actions:
 
-- README diff is narrow and contract-focused
-- wording matches the semantic truth that WS-A established
-
-### WS-D Parent Integration Before xtask Refresh
-
-Parent only on `ws/m27_9-int`
-
-Task ID: `task/m27_9-c1-integrate-pre-xtask`
-
-Parent merges:
-
-- WS-A semantic change from the control workspace
-- WS-B worker branch
-- WS-C worker branch
-
-Integration rules:
-
-- do not resolve semantic/CLI contract conflicts creatively
-- if worker output conflicts with `PLAN.md`, apply `PLAN.md`
-- if the M20 lane and docs lane disagree about the boundary, treat the semantic core as source of truth and fix docs, not runtime
-
-Required commands:
+1. Review Lane B diff and confirm it touches only the two owned docs/program files.
+2. Integrate Lane B onto `feat/corpus-expansion` using the preferred or fallback mechanism above.
+3. Write `integration-state.json` with:
+   - integration inputs
+   - chosen integration mechanism
+   - worker commit ids if any
+   - changed paths
+   - conflict resolution mode `none|manual_docs_only`
+4. Run the pre-`xtask` integration gate:
 
 ```bash
-cargo fmt --all
 cargo test -p spec-core -- --color never
 cargo test -p spec-cli --test cli -- --color never
 ```
 
-Pre-xtask gate:
+5. Verify integrated branch state before `xtask` work begins:
+   - source-truth files from WS-A still match intended authored state
+   - docs/program files are present and aligned to reproduced stop-state
+   - `xtask/src/lib.rs` is still untouched
 
-- semantic and CLI truth must both be green before `xtask` lock refresh begins
-- if this gate fails, stop and write a blocked diagnostic bundle
+WS-INT acceptance:
 
-WS-D acceptance:
+- parent branch contains:
+  - the five authored source-truth surfaces from WS-A
+  - the two bounded docs/program closeout surfaces from WS-B
+- no unrelated path changes are introduced during integration
+- `xtask/src/lib.rs` remains unchanged before the integration gate completes
+- pre-`xtask` integration gate passes on the integrated branch
+- `integration-state.json` records the actual integration mechanism and result
 
-- merged repo contains semantic, M20/CLI, and README truth together
-- no `xtask` expectation edits have happened yet
-- parent records exact pre-xtask gate result
+WS-INT blocked path:
 
-### WS-E Parent Analysis Lock Refresh
+- If Lane B proposes changes outside its owned paths, reject the lane and stop.
+- If cherry-pick fails and docs-only manual conflict resolution cannot preserve reproduced truth cleanly, stop.
+- If the pre-`xtask` integration gate fails, stop before `xtask` work begins.
+- On any WS-INT failure, write or refresh:
+  - `.runs/m27_9/diagnostics/blocked-summary.md`
+  - `.runs/m27_9/diagnostics/integration-failure.json`
+  - `.runs/m27_9/diagnostics/coverage.actual.json` when coverage was rerun
+  - `.runs/m27_9/diagnostics/recommendation.actual.json` when recommendation was rerun
+- Do not proceed to `xtask`.
 
-Parent only.
+### WS-C xtask Lock Refresh (`feat/corpus-expansion`) - parent only
 
-Task ID: `task/m27_9-c2-analysis-lock-refresh`
+Task ID:
+
+- `task/m27_9a-c1-refresh-xtask-lock`
 
 Owned file:
 
 - `xtask/src/lib.rs`
 
-Execution order is locked:
+Hard start gate:
 
-1. run analysis commands from merged repo truth
-2. inspect generated output
-3. update `xtask/src/lib.rs` to match that truth
-4. do not modify any policy code to force the expected result
+- WS-C is forbidden until all of the following are true:
+  - WS-A reproduced exactly `28 / 17 / 0 / 11`
+  - WS-A reproduced exactly `no_strong_candidate`
+  - WS-INT integrated Lane B and passed the pre-`xtask` integration gate
 
-Required commands:
+Required parent actions:
+
+1. Reuse the reproduced coverage and recommendation outputs from WS-A as the locking basis.
+2. Update `xtask/src/lib.rs` to assert:
+   - coverage at `28 / 17 / 0 / 11`
+   - `RecommendationStatus::NoStrongCandidate`
+   - arithmetic-ready ranking removed
+   - `unsupported_function_surface-e40675da6fa0` remains the visible held candidate for `unknown_overlap_family`
+3. Do not rewrite ranking policy, artifact schema, or other `xtask/src/family/*` surfaces.
+4. Verify with:
 
 ```bash
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
+cargo test -p xtask -- --color never
 ```
 
-Expected analysis truth:
+WS-C acceptance:
 
-- coverage moves from `28 / 15 / 0 / 13` to `28 / 18 / 0 / 10`
-- recommendation moves from `ranked` to `no_strong_candidate`
-- arithmetic ready candidate disappears
-- `unsupported_function_surface-e40675da6fa0` remains held
+- changed file is exactly `xtask/src/lib.rs`
+- the lock surface reflects reproduced merged-branch truth only
+- no policy or schema code outside the lock surface changes
+- locked tests pass against the recalibrated baseline
 
-Stop rule:
+WS-C blocked path:
 
-- if output truth differs from the expected delta, do not update locks blindly
-- capture the real output and stop
+- If WS-A or WS-INT did not complete cleanly, WS-C does not start.
+- If `cargo test -p xtask` fails after the lock edit, stop and diagnose the lock surface only.
+- On failure, write or refresh:
+  - `.runs/m27_9/diagnostics/blocked-summary.md`
+  - `.runs/m27_9/diagnostics/xtask-lock-failure.json`
+- Do not widen scope into policy code.
 
-WS-E acceptance:
+### WS-D Final Proof And Stop-Path Closeout (`feat/corpus-expansion`) - parent only
 
-- `xtask/src/lib.rs` reflects the real merged-truth output
-- no policy files outside `xtask/src/lib.rs` changed
-- parent records the actual coverage/recommendation delta
+Task IDs:
 
-### WS-F Final Proof Loop
+- `task/m27_9a-d1-final-proof`
+- `task/m27_9a-d2-closeout-or-stop`
 
-Parent only.
+Preconditions:
 
-Task ID: `task/m27_9-c3-final-proof`
+- WS-A accepted
+- WS-B accepted and integrated through WS-INT
+- WS-C accepted
 
-Run the full proof loop from `PLAN.md`:
+Run the final proof loop in this exact order:
 
 ```bash
 cargo test -p spec-core -- --color never
 cargo test -p spec-cli --test cli -- --color never
-cargo test -p xtask -- --color never
-
 cargo xtask family coverage --format json
 cargo xtask family recommend --format json
-
+cargo test -p xtask -- --color never
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 ```
 
-Green-path rules:
+Required parent actions:
 
-- all three test suites pass
-- both analysis commands succeed
-- both artifacts validate
-- locked delta remains exactly the expected delta after refresh
+1. Write `final-proof.json` with command list, exit codes, and artifact-validation results.
+2. Refresh diagnostics copies of actual coverage and recommendation outputs if those commands rerun during final proof.
+3. Record final closeout in `session-log.md` as either:
+   - clean stop-path closeout
+   - blocked closeout with gate failure
 
-Red-path rules:
+WS-D acceptance:
 
-- stop at the first unexplained mismatch
-- do not patch `xtask` again to chase the failure
-- write blocked-closeout diagnostics
+- `spec-core` passes
+- `spec-cli` CLI truth passes
+- `xtask` passes
+- coverage artifact validates
+- recommendation artifact validates
+- final outputs still read:
+  - `function_coverage = 28 / 17 / 0 / 11`
+  - `recommendation_status = "no_strong_candidate"`
+- the remaining visible held candidate is still `unsupported_function_surface-e40675da6fa0`
+- M27.9 is closed as implementation success plus accounting failure, not as a failed semantic fix
 
-### WS-G Land Or Stop
+WS-D blocked closeout:
 
-Parent only.
+- Stop at the first unexplained mismatch.
+- Write or refresh the exact machine-evidence closeout bundle:
+  - `.runs/m27_9/diagnostics/blocked-summary.md`
+  - `.runs/m27_9/diagnostics/final-proof-failure.json`
+  - `.runs/m27_9/diagnostics/coverage.actual.json`
+  - `.runs/m27_9/diagnostics/recommendation.actual.json`
+  - `.runs/m27_9/final-proof.json`
+- Record the failed gate explicitly:
+  - `reproduction`
+  - `integration`
+  - `xtask_lock`
+  - `final_proof`
+- Do not hand-tune `xtask` a second time to chase the failure.
+- Do not silently retry with broadened scope.
+- Require a fresh planning decision if final proof diverges from the reproduced stop-state.
 
-Task ID: `task/m27_9-c4-land-or-stop`
+## Worker Protocol
 
-Green path:
-
-- record success in `session-log.md`
-- record final acceptance checklist in `.runs/m27_9/`
-- leave derived analysis artifacts refreshed from the merged repo state
-
-Blocked path:
-
-- write `.runs/m27_9/diagnostics/blocked-summary.md`
-- write `.runs/m27_9/diagnostics/coverage.actual.json`
-- write `.runs/m27_9/diagnostics/recommendation.actual.json`
-- write `.runs/m27_9/diagnostics/semantic-review-notes.md`
-- record which gate failed:
-  - semantic gate
-  - pre-xtask integration gate
-  - analysis delta gate
-  - final proof loop
-
-Blocked-closeout rule:
-
-- no silent retries after blocked closeout
-- a new run must start from a fresh orchestration decision, not from ad hoc patching
-
-## Worker Prompt Rules
-
-- Each worker prompt contains only:
+- Worker prompt contents are fixed:
   - owned file set
-  - relevant `PLAN.md` excerpt
-  - required commands
+  - relevant frozen-evidence excerpt
+  - reproduced stop-state once available
+  - allowed scope
   - forbidden surfaces
-- Each worker returns only:
+  - required return format
+- Worker return contents are fixed:
   - changed files
-  - commands run with exit codes
+  - commands run
+  - exit codes
   - blockers or unresolved assumptions
-- The parent reviews narrow diffs and summaries only.
-- Close each worker immediately after merge.
+  - whether the lane is draft-only or finalizable
+- Workers must not write:
+  - `.runs/**`
+  - `.semantic-family-artifacts/**`
+  - generated output
+  - passport files
+  - source-truth code surfaces outside their owned paths
+- The parent reviews only narrow diffs and structured returns, not full worker transcripts.
+- Each worker is closed immediately after merge or rejection. No long-lived worker remains attached after its lane is integrated or stopped.
+
+## Context-Control Rules
+
+- Parent context stays bounded to:
+  - `PLAN.md`
+  - `ORCH_PLAN.md`
+  - `.runs/m27_9/session-log.md`
+  - `.runs/m27_9/diagnostics/blocked-summary.md`
+  - the latest reproduced-stop-state summary
+  - the latest integration summary
+- `ws/m27_9-int` is the read-side source authority for authored M27.9 landing.
+- `ws/m27_9-docs` is the only writing worker lane in this milestone.
+- `ws/m27_9-m20-cli` is non-authoritative reference context only for M27.9A. It does not own source landing, integration, or final truth.
+- Parent-only phases are:
+  - WS-0 kickoff and run-state seed
+  - WS-A source landing and reproduced stop-state
+  - WS-INT integration
+  - WS-C `xtask` lock refresh
+  - WS-D final proof and closeout
+- Worker concurrency remains capped at `1` for the entire run. The orchestration does not create a second worker lane after reproduction because there is no independent authored surface left that can move safely without forcing another integration gate.
 
 ## Tests And Acceptance
 
-- Semantic boundary
-  - `spec-core/src/semantic_review.rs` proves cross-library helper parity with local helper semantics.
-  - control-flow arithmetic near-misses stay unsupported.
-  - route order stays `chain3 -> wrapper -> monotone_down -> monotone_up`.
-- M20 unsupported pack
-  - pack remains unsupported in both naming and behavior.
-  - no supported arithmetic unit remains parked inside the unsupported pack.
-- CLI truth
-  - `status`, `export`, and passport-facing semantic-review surfaces show supported cross-library arithmetic truth.
-  - repaired M20 truth remains unsupported on read-side surfaces.
-- xtask truth
-  - `xtask/src/lib.rs` locks the actual merged-truth analysis output only after runtime and CLI truth are stable.
-  - no recommendation-policy logic changes are required or allowed here.
-- Docs
-  - `semantic-families/README.md` matches runtime truth literally.
-- Operator flow
-  - parent-owned run-state exists and reflects the live baseline.
-  - worker lanes touch only their owned authored files.
-  - blocked-closeout captures real evidence instead of opinion.
-
-## Completion Criteria
-
-The run is complete only when all of the following are true:
-
-1. semantic truth is fixed first
-2. M20 is repaired as an unsupported pack
-3. CLI truth locks pass
-4. `xtask` locks are refreshed from merged truth
-5. coverage is `28 / 18 / 0 / 10`
-6. recommendation is `no_strong_candidate`
-7. arithmetic ready candidate is gone
-8. `unsupported_function_surface-e40675da6fa0` remains held
-9. README is aligned
-10. the final proof loop passes cleanly
+- Kickoff and run-state
+  - parent-owned run-state is initialized before any authored edits
+  - task queue, baseline, frozen evidence, and source-import contract are all recorded explicitly
+- Source landing
+  - `spec-core/src/semantic_review.rs` preserves the cross-library arithmetic fix exactly as proven in the integration worktree
+  - `spec-cli/tests/cli.rs` preserves the supported cross-library truth surfaces and the M20 unsupported whole-pack reason matrix
+  - `semantic-families/README.md` lands with the authored helper-aware explanation from the integration worktree
+  - derived passports remain excluded from source landing
+- Reproduced stop-state
+  - merged branch truth is `28 / 17 / 0 / 11`
+  - recommendation is `no_strong_candidate`
+  - arithmetic-ready ranking is absent
+  - `money/round` remains the next visible held candidate
+- Docs/program closeout
+  - `PLAN.md` receives bounded closeout wording only
+  - `docs/recommendation_corpus_expansion_program_v0.1.md` retires arithmetic pressure and points future work at `money/round`
+  - no other path changes come from the worker lane
+- Integration
+  - parent integrates Lane B explicitly and records how
+  - pre-`xtask` integration gate passes on integrated branch state
+  - `xtask/src/lib.rs` is still untouched when integration completes
+- Locked analysis contract
+  - `xtask/src/lib.rs` locks the truthful post-fix baseline and no longer encodes arithmetic-ready pressure
+  - no ranking-policy or artifact-schema rewrites occur
+- Final proof
+  - all commands in the final proof loop succeed in order
+  - both analysis artifacts validate
+  - final outputs match the reproduced stop-state exactly
 
 ## Assumptions
 
-- The existing branch `feat/corpus-expansion` remains the live execution baseline.
-- `cargo xtask family validate-artifact <path>` already exists and remains the runtime validator for the generated analysis artifacts.
-- `spec-core/src/semantic_review.rs` contains both runtime code and enough local tests to make WS-A self-contained.
-- The only worthwhile worker parallelism is:
-  - M20 fixture + CLI truth
-  - README refresh
-- Generated analysis JSON remains a derived proof surface, not a checked-in authored contract by itself.
+- The live execution branch remains `feat/corpus-expansion`.
+- The blocked evidence bundle in `.runs/m27_9/**` is still present and trustworthy enough to serve as the frozen basis record.
+- The current `ws/m27_9-int` worktree content remains the authoritative authored M27.9 source truth even if the branch tip alone is incomplete.
+- Existing worktrees `ws/m27_9-int`, `ws/m27_9-m20-cli`, and `ws/m27_9-docs` remain available; if recreated, they keep the same names and ownership roles.
+- Unrelated local edits may exist elsewhere in the repo. This run integrates around them and never reverts them.
