@@ -29,7 +29,7 @@ It does not start M28.
 It does one thing:
 
 1. replace the generic `unknown_overlap_family` story for the current
-   `money/round` cluster with explicit durable-hold truth
+   `money/round` cluster with explicit schema-version-3 durable-hold truth
 
 The target repo conclusion is:
 
@@ -37,6 +37,7 @@ The target repo conclusion is:
 - `money/round` is not the next family-promotion target
 - `money/round` remains held because it is helper-surface pressure inside
   already-promoted arithmetic workflows, not a standalone promotable boundary
+- `recommendation_analysis_schema_version = 3`
 - corpus run `1` stays unspent and unauthorized by default
 
 That is the whole milestone.
@@ -64,31 +65,34 @@ M27.9B is complete only when all of the following are true:
 - `function_coverage.promoted_family_units = 17`
 - `function_coverage.supported_unpromoted_family_units = 0`
 - `function_coverage.unsupported_function_units = 11`
+- `recommendation_analysis_schema_version = 3`
 - `recommendation_status = "no_strong_candidate"`
+- `frozen_from_commit = 44836f42ea75937f85e9ec72658eb7238db35dd9`
 
 ### Remaining visible candidate
 
 The current recommendation artifact still exposes one held candidate:
 
+- `recommendation_analysis_schema_version = 3`
 - candidate id:
   `z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0`
 - cluster id: `unsupported_function_surface-e40675da6fa0`
 - reason code: `unsupported_function_surface`
-- overlap family: `unknown`
 - promotion readiness: `hold`
-- hold reasons:
-  - `unknown_overlap_family`
+- hold reason: `helper_surface_not_promotable`
+- next step status: `durable_hold`
+- next step detail: `helper_surface_not_promotable`
 - leverage:
   - `real_example_hits = 2`
   - `promotion_relevant_regression_hits = 1`
   - `boundary_only_hits = 0`
   - `total_units_in_cluster = 3`
 
-### Why this is the right next problem
+### Why this was the right next problem
 
-The problem is not "there is still a hold."
+The problem was not "there is still a hold."
 
-The problem is that the hold is still described too vaguely.
+The problem was that the hold was described too vaguely.
 
 The three representative units already tell the stronger story:
 
@@ -109,15 +113,18 @@ At the same time, maintainer docs already lock the important semantic truth:
 - `shared::money/round` and local `money/round` are the same helper-aware
   boundary for the promoted arithmetic leaf families
 
-That means the live ambiguity is not "which family should we promote next?"
+That means the live ambiguity is gone.
 
-It is:
+The repo now says this plainly:
 
-> should the repo keep treating this helper surface like latent family
-> pressure, or should it say plainly that this is durable helper-only pressure
-> under the current roadmap?
+> `money/round` remains visible helper-surface pressure, but it is not the next
+> family, its durable hold reason is `helper_surface_not_promotable`, and corpus
+> run `1` stays unspent and unauthorized by default.
 
-M27.9B answers that explicitly.
+## Frozen Terminology Source
+
+The durable-hold wording in this file consumes the authoritative vocabulary
+freeze verbatim from commit `44836f42ea75937f85e9ec72658eb7238db35dd9`.
 
 ## Authority And Evidence
 

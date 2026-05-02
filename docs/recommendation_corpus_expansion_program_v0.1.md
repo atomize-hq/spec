@@ -26,17 +26,20 @@ output consistently.
 The current truthful output says:
 
 - `function_coverage = 28 / 17 / 0 / 11`
+- `recommendation_analysis_schema_version = 3`
 - `recommendation_status = "no_strong_candidate"`
 - the arithmetic-ready cluster no longer survives as a ranked next-step driver
-- `money/round` remains the next visible held candidate through
+- `money/round` remains visible through
   `unsupported_function_surface-e40675da6fa0`
+- `money/round` is not the next family
+- corpus run `1` remains unspent and unauthorized by default
 
 That means this program is no longer answering "is the engine honest?" or even
 "is there any rankable candidate at all?" It is now answering a narrower
 question:
 
-> Is more corpus evidence still the best next move, or has the program already
-> produced enough truth to show that corpus growth is not the active blocker?
+> Is any later corpus run worth explicitly justifying, or has the program
+> already produced enough truth to leave corpus run `1` unspent by default?
 
 ## Relationship To Milestone Plans
 
@@ -57,6 +60,11 @@ In short:
 
 - `docs/recommendation_corpus_expansion_program_v0.1.md` = program tracker
 - `PLAN.md` = one specific run contract
+
+## Frozen Terminology Source
+
+This tracker consumes the authoritative M27.9B vocabulary freeze verbatim from
+commit `44836f42ea75937f85e9ec72658eb7238db35dd9`.
 
 ## Program Shape
 
@@ -131,6 +139,7 @@ These values are the starting truth for the program.
 
 ### Recommendation baseline
 
+- `recommendation_analysis_schema_version = 3`
 - `recommendation_status = "no_strong_candidate"`
 - ranked candidate count: `0`
 - retired historical expectation: `unsupported_arithmetic_shape-2694b2baf65b`
@@ -140,15 +149,21 @@ These values are the starting truth for the program.
 Next visible held candidate:
 
 - cluster id: `unsupported_function_surface-e40675da6fa0`
-- overlap family: `unknown`
 - promotion readiness: `hold`
-- hold reasons:
-  - `unknown_overlap_family`
+- hold reason: `helper_surface_not_promotable`
+- next step status: `durable_hold`
+- next step detail: `helper_surface_not_promotable`
 - leverage:
   - `real_example_hits = 2`
   - `promotion_relevant_regression_hits = 1`
   - `boundary_only_hits = 0`
   - `total_units_in_cluster = 3`
+
+Current governance meaning:
+
+- `money/round` remains visible
+- `money/round` is not the next family
+- corpus run `1` remains unspent and unauthorized by default
 
 ## What Counts As a Good Run
 
@@ -156,12 +171,13 @@ A corpus-expansion run is good only if it improves decision quality.
 
 That means at least one of these must happen:
 
-- `unknown_overlap_family` resolves into a real overlap direction
-- `real_example_hits` increases for the visible held candidate that matters
-- `promotion_relevant_regression_hits` increases for the visible held candidate
-  that matters
+- a different candidate gains enough evidence to become the next scoped target
+- `real_example_hits` increases for a later explicitly justified candidate
+- `promotion_relevant_regression_hits` increases for a later explicitly
+  justified candidate
 - a previously invisible but plausible candidate becomes rankable
-- a held candidate becomes `ready`
+- a held candidate other than the durable-held `money/round` helper surface
+  becomes `ready`
 - the repo gains enough evidence to justify saying corpus growth is no longer the blocker
 
 What does **not** count as a good run:
@@ -177,9 +193,9 @@ Future runs in this program may do one or more of:
 
 - add maintained repo-owned real examples to the manifest
 - add targeted regression examples that improve promotion-relevant evidence
-- add examples that help resolve `unknown_overlap_family`
-- add examples that clarify the surviving held candidate without reopening
-  retired arithmetic pressure
+- add examples that support a later explicitly scoped candidate
+- add examples that clarify a later candidate without reopening retired
+  arithmetic pressure
 
 Future runs in this program must **not** do any of:
 
@@ -204,8 +220,10 @@ Then review these questions in order:
 
 1. Is the top-level status still `no_strong_candidate`?
 2. Did the visible held candidate's hold reasons get simpler, stronger, or narrower?
-3. Did `unknown_overlap_family` resolve?
-4. Did the surviving held candidate gain materially better overlap clarity?
+3. Did any non-held candidate become specific enough to justify a scoped
+   follow-on milestone?
+4. Did any surviving candidate gain materially better promotion clarity without
+   reopening `money/round` as the default target?
 5. Did any candidate become `ready`?
 6. If nothing decisive changed, is the missing evidence still specific enough to justify one more corpus run?
 
@@ -224,14 +242,15 @@ Stop the corpus-expansion program early if any of these become true:
 - or the output is now specific enough to justify a narrow promotion-focused milestone
 
 Current state: this rule is not met at the M27.9 stop-state because no ranked
-candidate survives. The next visible held candidate is still `money/round`
-under `unsupported_function_surface-e40675da6fa0`.
+candidate survives. `money/round` is still visible under
+`unsupported_function_surface-e40675da6fa0`, but the durable hold means it is
+not the next family and does not authorize corpus run `1` by default.
 
 ### Stop Rule B — corpus is no longer the blocker
 
 - the same hold reasons survive two successive runs
 - and leverage only improves marginally
-- and no new overlap clarity appears
+- and no new promotion clarity appears
 
 That means more corpus is probably not the main problem anymore.
 
@@ -283,8 +302,8 @@ Use this when:
 | Run | Milestone / Plan | Date | Corpus delta | Recommendation status | Key candidate change | Decision |
 |---|---|---|---|---|---|---|
 | Baseline | `M27.75` | 2026-05-01 | `3 -> 5` sources | `no_strong_candidate` | `money/round` gains second real-example hit; arithmetic-shape candidate becomes visible | Continue program |
-| Checkpoint | `M27.8R` | 2026-05-02 | no corpus delta; harness-truth repair only | `ranked` | arithmetic-shape cluster becomes `ready`; `money/round` remains held for `unknown_overlap_family` | Switch to promotion-focused milestone |
-| Closeout checkpoint | `M27.9` stop-state | 2026-05-02 | no corpus delta; semantic implementation landed, accounting target failed | `no_strong_candidate` | arithmetic-ready pressure retires; `money/round` remains the next visible held candidate | Hold corpus program; close out accounting |
+| Checkpoint | `M27.8R` | 2026-05-02 | no corpus delta; harness-truth repair only | `ranked` | arithmetic-shape cluster becomes `ready`; `money/round` remains visible as the held helper surface later frozen as durable hold in M27.9B | Switch to promotion-focused milestone |
+| Closeout checkpoint | `M27.9` stop-state | 2026-05-02 | no corpus delta; semantic implementation landed, accounting target failed | `no_strong_candidate` | arithmetic-ready pressure retires; `money/round` remains visible but is not the next family, and corpus run `1` stays unspent pending the M27.9B freeze | Hold corpus program; close out accounting |
 | 1 | — | — | — | — | — | — |
 | 2 | — | — | — | — | — | — |
 | 3 | — | — | — | — | — | — |
@@ -315,12 +334,11 @@ As of the `M27.9` stop-state closeout, the recommendation is:
 - do **not** treat M28 as part of this closeout
 - keep this document as the corpus fallback ledger while the repo records the
   truthful stop-state
-- keep `money/round` visible as the next downstream held candidate after this
-  closeout
+- keep `money/round` visible without treating it as the next family
 
 The current evidence no longer supports "one more corpus run by default."
 It also no longer supports steering from the retired arithmetic-ready story.
 The truthful closeout state is `28 / 17 / 0 / 11` with
 `recommendation_status = "no_strong_candidate"`, while `money/round` remains
-the next visible held candidate if and when the repo starts a downstream
-milestone.
+visible under `helper_surface_not_promotable` plus `durable_hold` and corpus
+run `1` remains unspent and unauthorized by default.
