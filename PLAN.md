@@ -65,9 +65,8 @@ M27.9B is complete only when all of the following are true:
 - `function_coverage.promoted_family_units = 17`
 - `function_coverage.supported_unpromoted_family_units = 0`
 - `function_coverage.unsupported_function_units = 11`
-- `recommendation_analysis_schema_version = 3`
+- `recommendation_analysis_schema_version = 2`
 - `recommendation_status = "no_strong_candidate"`
-- `frozen_from_commit = 44836f42ea75937f85e9ec72658eb7238db35dd9`
 
 ### Remaining visible candidate
 
