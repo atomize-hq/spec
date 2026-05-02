@@ -37,6 +37,8 @@ The important repo truth is already known:
   `recommendation_status = "no_strong_candidate"`
 
 What failed was the old milestone accounting assumption, not the semantic work.
+The obsolete `28 / 18 / 0 / 10` target survives only as the wrong historical
+expectation that M27.9A closes out.
 
 ## Done Means
 
@@ -68,7 +70,9 @@ M27.9A is complete only when all of the following are true:
   `unsupported_function_surface-e40675da6fa0`
   with `promotion_readiness = "hold"` for `unknown_overlap_family`
 
-### Observed stop-path baseline from `.runs/m27_9`
+### Observed reproduced stop-state on `feat/corpus-expansion`
+
+Commit anchor: `8577dfb5a64daaa02be54501f97131fb25459f72`
 
 - `function_coverage = 28 / 17 / 0 / 11`
 - `recommendation_status = "no_strong_candidate"`
@@ -78,7 +82,7 @@ M27.9A is complete only when all of the following are true:
 - `pricing/apply_tax_control_flow` replaces it as truthful unsupported demand
 - the arithmetic-ready cluster disappears from ranked candidates
 - `unsupported_function_surface-e40675da6fa0` remains the only visible held
-  candidate
+  candidate, represented by `money/round`
 
 ### Why the counts changed this way
 
@@ -94,7 +98,8 @@ The correct interpretation is:
   unsupported near miss rather than converted into a promoted-family hit
 
 The old `+3 / -3` target was therefore wrong even though the semantic fix
-worked.
+worked. The old `28 / 18 / 0 / 10` gate is historical context only, not a live
+target state.
 
 ## Authority And Evidence
 
@@ -102,10 +107,8 @@ Primary decision inputs:
 
 - `PLAN.md`
 - `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260502-105221.md`
-- `.runs/m27_9/session-log.md`
-- `.runs/m27_9/diagnostics/blocked-summary.md`
-- `.runs/m27_9/diagnostics/coverage.actual.json`
-- `.runs/m27_9/diagnostics/recommendation.actual.json`
+- reproduced parent stop-state on `feat/corpus-expansion` at
+  `8577dfb5a64daaa02be54501f97131fb25459f72`
 - `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
 - `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
 - `docs/recommendation_corpus_expansion_program_v0.1.md`

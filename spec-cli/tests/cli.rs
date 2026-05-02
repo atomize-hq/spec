@@ -108,6 +108,26 @@ fn setup_m9_repo_fixture() -> M9RepoFixture {
     }
 }
 
+fn setup_isolated_m9_repo_fixture() -> M9RepoFixture {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let repo_root = temp_dir.path().join("repo");
+    let app_root = repo_root.join("app-spec");
+    let shared_root = repo_root.join("shared-spec");
+    let payments_root = repo_root.join("payments-spec");
+
+    fs::create_dir_all(app_root.join("units")).unwrap();
+    fs::create_dir_all(shared_root.join("units")).unwrap();
+    fs::create_dir_all(payments_root.join("units")).unwrap();
+    fs::write(repo_root.join(".git"), "gitdir: .git/modules/spec-tests\n").unwrap();
+
+    M9RepoFixture {
+        _temp_dir: temp_dir,
+        app_root,
+        shared_root,
+        payments_root,
+    }
+}
+
 fn write_m9_unit(dir: &Path, relative_path: &str, id: &str, deps: &[&str]) {
     let deps_yaml = if deps.is_empty() {
         String::new()
@@ -5836,6 +5856,174 @@ fn wrapper_pipeline_truth_surface_command_matrix_preserves_until_spec_test_refre
 }
 
 #[test]
+fn cross_library_monotone_up_truth_surfaces_preserve_supported_semantic_review() {
+    if !cargo_available() {
+        return;
+    }
+
+    let fixture = setup_isolated_m9_repo_fixture();
+    fs::write(
+        fixture.app_root.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    write_file(
+        &fixture.app_root,
+        "Cargo.toml",
+        r#"[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+shared = { path = "../shared-crate" }
+
+[workspace]
+"#,
+    );
+    write_file(
+        &fixture.app_root,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    let shared_crate_root = fixture.app_root.parent().unwrap().join("shared-crate");
+    write_file(
+        &shared_crate_root,
+        "Cargo.toml",
+        r#"[package]
+name = "shared"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[lib]
+path = "src/lib.rs"
+"#,
+    );
+    write_file(
+        &shared_crate_root,
+        "src/lib.rs",
+        "pub mod money {\n    pub mod round {\n        use rust_decimal::Decimal;\n\n        pub fn round(value: Decimal) -> Decimal {\n            value\n        }\n    }\n}\n",
+    );
+    write_spec(
+        &fixture.app_root.join("units"),
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+intent:
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+deps:
+  - shared::money/round
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let taxed = subtotal + subtotal * rate;
+        round(taxed)
+    }
+local_tests:
+  - id: basic_tax
+    expect: "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
+"#,
+    );
+    write_spec(
+        &fixture.shared_root.join("units"),
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round a decimal value to two fractional digits for pricing flows.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    value: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        value
+    }
+local_tests:
+  - id: basic
+    expect: "round(Decimal::new(1001, 2)) == Decimal::new(1001, 2)"
+"#,
+    );
+
+    let test_output = run_in(
+        &fixture.app_root,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "cross-library monotone-up spec test should succeed",
+        &test_output,
+    );
+
+    let passport_path = fixture
+        .app_root
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_supported_function_semantic_review(
+        &seeded_review,
+        FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+    );
+
+    let status_output = run_in(&fixture.app_root, &["status", "units", "--format", "json"]);
+    assert_output_success(
+        "cross-library monotone-up status should stay green",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let status_unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/apply_tax")
+        .unwrap();
+    assert_eq!(status_unit["status"], "valid", "{status_json}");
+    assert!(status_unit["reason"].is_null(), "{status_json}");
+    assert_eq!(
+        status_unit["semantic_review"], seeded_review,
+        "{status_json}"
+    );
+
+    let export_output = run_in(&fixture.app_root, &["export", "units"]);
+    assert_output_success(
+        "cross-library monotone-up export should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/apply_tax")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
+}
+
+#[test]
 fn m21_chain3_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
     if !cargo_available() {
         return;
@@ -6477,10 +6665,7 @@ fn m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_m
             "pricing/checkout_total_bad_body_shape",
             "unsupported_wrapper_body_shape",
         ),
-        (
-            "pricing/apply_tax_arithmetic_shape",
-            "unsupported_arithmetic_shape",
-        ),
+        ("pricing/apply_tax_control_flow", "unsupported_control_flow"),
     ];
 
     let mut expected_reviews = HashMap::new();
@@ -7257,15 +7442,27 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         .find(|root| root["root"] == "crosslib-app")
         .expect("expected crosslib-app root in repo status");
     let units = crosslib_root["units"].as_array().unwrap();
-    assert_eq!(units.len(), 1, "{json}");
+    assert_eq!(units.len(), 2, "{json}");
     assert_eq!(units[0]["id"], "pricing/apply_discount");
     assert_eq!(units[0]["status"], "valid", "{json}");
+    assert_eq!(
+        units[0]["semantic_review"]["compatibility_key"], FUNCTION_FAMILY_A_COMPATIBILITY_KEY,
+        "{json}"
+    );
+    assert_eq!(units[1]["id"], "pricing/apply_tax");
+    assert_eq!(units[1]["status"], "valid", "{json}");
+    assert_eq!(
+        units[1]["semantic_review"]["compatibility_key"], FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "{json}"
+    );
     assert!(
-        !units[0]["errors"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|error| error["code"] == "SPEC_UNKNOWN_LIBRARY_NAMESPACE"),
+        units.iter().all(|unit| {
+            !unit["errors"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|error| error["code"] == "SPEC_UNKNOWN_LIBRARY_NAMESPACE")
+        }),
         "{json}"
     );
 

@@ -24,7 +24,7 @@
       "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
     }
   ],
-  "generated_at": "2026-05-02T00:05:28Z",
+  "generated_at": "2026-05-02T15:59:27Z",
   "source_file": "examples/crosslib-app/units/pricing/apply_discount.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -34,9 +34,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-26T18:42:45Z",
+    "observed_at": "2026-05-02T15:59:29Z",
     "provenance": {
-      "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+      "git_commit_sha": "8577dfb5a64daaa02be54501f97131fb25459f72"
     }
   },
   "freshness_anchor": {
@@ -48,13 +48,35 @@
     "backend_execution_status": "unknown"
   },
   "semantic_review": {
-    "verdict": "under_specified",
-    "compatibility_key": "unsupported.function.v1",
-    "reason_codes": [
-      "unsupported_surface"
+    "verdict": "aligned",
+    "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+    "support_status": "supported",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Apply a discount while importing the shared round helper from a sibling spec library."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "2 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "deps",
+        "summary": "1 declared dep(s)"
+      }
     ],
-    "summary": "this 'function' surface is not evaluated by the semantic reviewer for this unit",
-    "evaluator_scope": "unsupported_surface"
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function apply_discount with 2 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
   },
   "contract_hash": "sha256:a40bb5809eb8af8ebe7f3e247aff4691f1c22a13fd72baf3ed6ca67e269d6b67"
 }

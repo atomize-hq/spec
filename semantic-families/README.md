@@ -64,8 +64,9 @@ forming without over-claiming that the next family is promotion-ready.
 The Rust function corpus uses explicit source kinds:
 
 - `real_example`: maintained example units such as `examples/ecommerce/units`,
-  `examples/shared-spec/units` (Maintained sibling-library helper example.),
-  and `examples/crosslib-app/units` (Maintained cross-library app example.)
+  `examples/shared-spec/units` (Maintained sibling-library optional-helper
+  example.), and `examples/crosslib-app/units` (Maintained cross-library
+  optional-helper app example.)
 - `regression_unsupported`: repo regression packs such as the locked M19 and M20
   sources
 - `proof_only`: semantic-family packet fixtures under
@@ -154,10 +155,12 @@ Promoted packets:
 - `semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/under_specified/units/pricing/apply_tax_under_specified.unit.spec`
 - `semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec`
 
-The monotone-down packet also carries a packet-local `money/round` helper in every bucket. That
-helper keeps the optional helper-dep shape truthful without depending on units outside the packet.
-The monotone-up packet follows the same packet-local helper pattern for the canonical `apply_tax`
-family.
+The promoted arithmetic leaf families already cover the helper-aware leaf shape with zero or one
+helper dep. The packet-local `money/round` unit models that same optional-helper shape truth in
+every bucket without depending on units outside the packet. `shared::money/round` and local
+`money/round` are the same optional-helper shape, so the shared-spec and cross-library examples
+align with the promoted monotone-down and monotone-up boundaries. Control-flow arithmetic
+near-misses remain unsupported.
 
 Registered workflow examples:
 

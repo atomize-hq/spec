@@ -1,5 +1,5 @@
 
-id: pricing/apply_tax_arithmetic_shape
+id: pricing/apply_tax_control_flow
 kind: function
 intent:
   why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
@@ -19,8 +19,12 @@ body:
   rust: |
     {
         let taxed = subtotal + subtotal * rate;
-        round(taxed).max(Decimal::ZERO)
+        if taxed < Decimal::ZERO {
+            Decimal::ZERO
+        } else {
+            round(taxed)
+        }
     }
 local_tests:
-  - id: arithmetic_shape
-    expect: "apply_tax_arithmetic_shape(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
+  - id: control_flow
+    expect: "apply_tax_control_flow(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"

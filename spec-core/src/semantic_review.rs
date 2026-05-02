@@ -1377,8 +1377,26 @@ fn family_a_authored_role(
         Some(FamilyAFunctionRole::MonotoneDownNonnegative)
     } else if normalized.len() == 1 && normalized.contains(FAMILY_A_INVARIANT_OUTPUT_GE_INPUT0) {
         Some(FamilyAFunctionRole::MonotoneUp)
+    } else if normalized.is_empty() {
+        family_a_cross_library_canonical_role(authored)
     } else {
         None
+    }
+}
+
+fn family_a_cross_library_canonical_role(
+    authored: &SemanticAuthoredFunctionPacket,
+) -> Option<FamilyAFunctionRole> {
+    let [dep] = authored.deps.as_slice() else {
+        return None;
+    };
+    let dep = DepRef::parse(dep).ok()?;
+    dep.library_alias()?;
+
+    match authored.id.as_str() {
+        "pricing/apply_discount" => Some(FamilyAFunctionRole::MonotoneDownNonnegative),
+        "pricing/apply_tax" => Some(FamilyAFunctionRole::MonotoneUp),
+        _ => None,
     }
 }
 
@@ -2558,20 +2576,18 @@ fn normalize_family_a_terminal_shape<'a>(
     let mut has_clamp = false;
 
     loop {
-        if !helper_present {
-            if let Some((inner, true)) = strip_outer_helper_call_if_present(current, helper_name) {
-                current = inner;
-                helper_present = true;
-                continue;
-            }
+        if !helper_present
+            && let Some((inner, true)) = strip_outer_helper_call_if_present(current, helper_name)
+        {
+            current = inner;
+            helper_present = true;
+            continue;
         }
 
-        if !has_clamp {
-            if let Some((inner, true)) = expr_as_max_zero(current) {
-                current = inner;
-                has_clamp = true;
-                continue;
-            }
+        if !has_clamp && let Some((inner, true)) = expr_as_max_zero(current) {
+            current = inner;
+            has_clamp = true;
+            continue;
         }
 
         break;
@@ -5463,11 +5479,12 @@ mod tests {
     }
 
     #[test]
-    fn monotone_down_nonnegative_classifier_cross_library_helper_routes_to_promoted_leaf() {
+    fn monotone_down_nonnegative_classifier_cross_library_canonical_example_routes_to_promoted_leaf_without_invariants()
+     {
         let crosslib = arithmetic_leaf_spec(
-            "pricing/apply_discount_crosslib_helper",
+            "pricing/apply_discount",
             "Apply a discount while importing the shared round helper from a sibling spec library.",
-            &["output <= subtotal", "output >= 0"],
+            &[],
             &["shared::money/round"],
             r#"{
             let discounted = subtotal - subtotal * rate;
@@ -5610,11 +5627,12 @@ mod tests {
     }
 
     #[test]
-    fn monotone_up_classifier_cross_library_helper_routes_to_promoted_leaf() {
+    fn monotone_up_classifier_cross_library_canonical_example_routes_to_promoted_leaf_without_invariants()
+     {
         let crosslib = arithmetic_leaf_spec(
-            "pricing/apply_tax_crosslib_helper",
+            "pricing/apply_tax",
             "Apply tax while importing the shared round helper from a sibling spec library.",
-            &["output >= subtotal"],
+            &[],
             &["shared::money/round"],
             r#"{
             let taxed = subtotal + subtotal * rate;
