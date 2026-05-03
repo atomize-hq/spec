@@ -20,6 +20,11 @@ body:
         let taxed = subtotal - subtotal * rate;
         round(taxed.max(Decimal::ZERO))
     }
+  typescript: |
+    {
+        const taxed = subtotal - subtotal * rate;
+        return round(taxed >= Decimal.ZERO ? taxed : Decimal.ZERO);
+    }
 local_tests:
   - id: apply_tax_drift_drift
     expect: apply_tax_drift(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(9275, 2)
