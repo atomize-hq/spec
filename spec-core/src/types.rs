@@ -39,11 +39,13 @@ pub struct Intent {
     pub why: String,
 }
 
-/// Body containing the native Rust implementation
+/// Body containing authored implementation blocks.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Body {
     #[serde(default)]
     pub rust: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typescript: Option<String>,
 }
 
 /// Contract metadata - human-readable specifications (not used for codegen in M1)
@@ -209,6 +211,8 @@ pub struct ResolvedSpec {
     pub imports: Vec<String>,
     /// Raw Rust code from body.rust block
     pub body_rust: String,
+    /// Raw TypeScript code from body.typescript when authored
+    pub body_typescript: Option<String>,
     /// Contract metadata (stored, not used for codegen in M1)
     pub contract: Option<Contract>,
     /// Local tests (stored, not executed in M1)
@@ -607,6 +611,7 @@ impl ResolvedSpec {
             deps: spec.deps,
             imports: spec.imports,
             body_rust: spec.body.rust,
+            body_typescript: spec.body.typescript,
             contract: spec.contract,
             local_tests: spec.local_tests,
             links: spec.links,
@@ -1001,6 +1006,7 @@ mod tests {
             imports: vec![],
             body: Body {
                 rust: "{ }".to_string(),
+                typescript: None,
             },
             local_tests: vec![],
             links: None,
@@ -1028,6 +1034,7 @@ mod tests {
             imports: vec![],
             body: Body {
                 rust: "{ }".to_string(),
+                typescript: Some("{ return true; }".to_string()),
             },
             local_tests: vec![],
             links: None,
@@ -1039,6 +1046,10 @@ mod tests {
         assert_eq!(resolved.id, "utils/math/round");
         assert_eq!(resolved.fn_name, "round");
         assert_eq!(resolved.module_path, "utils/math");
+        assert_eq!(
+            resolved.body_typescript.as_deref(),
+            Some("{ return true; }")
+        );
     }
 
     #[test]

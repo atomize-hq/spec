@@ -441,6 +441,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: "{ value }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "basic".to_string(),
@@ -621,6 +622,7 @@ mod tests {
     round((subtotal - subtotal * rate).max(Decimal::ZERO))
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -666,6 +668,7 @@ mod tests {
     round(subtotal + subtotal * rate)
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -724,6 +727,7 @@ mod tests {
     apply_tax(discounted, tax_rate)
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -905,6 +909,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: Some("0.3.0".to_string()),
             },
@@ -950,6 +955,7 @@ mod tests {
                 imports: imports.map(|values| values.into_iter().map(str::to_string).collect()),
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },
@@ -1009,6 +1015,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },

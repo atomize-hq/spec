@@ -1171,6 +1171,7 @@ mod tests {
             imports: imports.into_iter().map(str::to_string).collect(),
             body: Body {
                 rust: "{ }".to_string(),
+                typescript: None,
             },
             local_tests: vec![],
             links: None,
@@ -1199,6 +1200,7 @@ mod tests {
                 .collect(),
             body: Body {
                 rust: body.to_string(),
+                typescript: None,
             },
             local_tests: vec![],
             links: None,
@@ -1462,6 +1464,7 @@ mod tests {
             imports: vec![],
             body: Body {
                 rust: "{\n    round(value)\n}".to_string(),
+                typescript: None,
             },
             local_tests: vec![],
             links: None,

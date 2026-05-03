@@ -262,6 +262,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -290,6 +291,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: body.to_string(),
+                    typescript: None,
                 },
                 spec_version: Some("0.3.0".to_string()),
             },

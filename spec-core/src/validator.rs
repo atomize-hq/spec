@@ -1422,6 +1422,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: rust_body.to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -1446,6 +1447,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },
@@ -1469,6 +1471,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: String::new(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -2237,6 +2240,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "use std::collections::HashMap; pub fn test() {}".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -2665,6 +2669,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "pub use std::collections::HashMap;\npub fn func() {}".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -2768,6 +2773,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "injection_attempt".to_string(),
@@ -2804,6 +2810,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -2836,6 +2843,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "block_allowed".to_string(),
@@ -2873,6 +2881,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![
                     LocalTest {
@@ -2916,6 +2925,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "block_attempt".to_string(),
@@ -2952,6 +2962,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_call_arg".to_string(),
@@ -2989,6 +3000,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "block_in_binary_operand".to_string(),
@@ -3026,6 +3038,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_method_arg".to_string(),
@@ -3063,6 +3076,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_field_base".to_string(),
@@ -3100,6 +3114,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_index".to_string(),
@@ -3137,6 +3152,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_unary".to_string(),
@@ -3174,6 +3190,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_cast".to_string(),
@@ -3218,6 +3235,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ () }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -3606,6 +3624,7 @@ body:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "deep".to_string(),
@@ -3841,6 +3860,7 @@ methods:
                 imports: None,
                 body: Body {
                     rust: body.to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },

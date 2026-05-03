@@ -354,6 +354,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: "{ }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: links.map(|molecule_tests| Links {
@@ -380,6 +381,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },

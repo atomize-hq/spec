@@ -307,6 +307,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: String::new(),
+                    typescript: None,
                 },
                 local_tests: if with_local_tests {
                     vec![LocalTest {
@@ -506,6 +507,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: "{ 1 }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "basic".to_string(),
@@ -533,6 +535,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: Some("0.3.0".to_string()),
             },

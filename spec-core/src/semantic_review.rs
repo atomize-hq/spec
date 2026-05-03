@@ -4168,6 +4168,7 @@ mod tests {
                 imports: vec!["rust_decimal::Decimal".to_string()],
                 body: Body {
                     rust: body.to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
