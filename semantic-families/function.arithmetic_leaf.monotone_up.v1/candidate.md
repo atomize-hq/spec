@@ -10,6 +10,11 @@ Each bucket keeps its locked starter case path and uses a packet-local `money/ro
 the same local unit id. The helper is intentionally semantically boring: it exists only so this
 packet proves the optional helper-dep shape without depending on units outside the packet.
 
+For M29, the packet truth is additive: the authored function fixtures keep their existing Rust
+bodies and add co-located `body.typescript` bodies for the same semantics. Rust remains the
+default omitted-flag lane; this packet only makes the second-language pilot explicit inside the
+owned monotone-up fixtures.
+
 ## Aligned
 
 - `fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec`: truthful lift of `examples/ecommerce/units/pricing/apply_tax.unit.spec`. The body adds `subtotal * rate` to the subtotal and routes through the optional helper dep.
