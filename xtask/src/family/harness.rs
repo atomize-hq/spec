@@ -229,6 +229,9 @@ const MONOTONE_UP_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 1] = [SmokeFileContr
         "deps:\n  - money/round",
         "let taxed = subtotal + subtotal * rate;",
         "round(taxed)",
+        "typescript: |",
+        "const taxed = subtotal + subtotal * rate;",
+        "return round(taxed);",
     ],
     forbidden_contents: &[],
 }];
