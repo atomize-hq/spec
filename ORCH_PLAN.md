@@ -1,1170 +1,813 @@
-# M28 Orchestration Plan
+# M29 Orchestration Plan
 
-Status: **execution contract**  
-Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
-Integration branch: **`feat/corpus-expansion`**  
-Review base: **`main`**  
-Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m28_shared_backend_boundary`**  
-Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m28-shared-backend-boundary`**  
+Status: **execution contract, recovery refreeze**
+Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**
+Live branch: **`feat/corpus-expansion`**
+Recovery seed: **`741a83e`**
+Blocked checkpoint history: **`d10679a`**
+Review base: **`main`**
+Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot`**
+Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m29-typescript-pilot`**
+Locked packet root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/function.arithmetic_leaf.monotone_up.v1`**
 Last rewritten: **2026-05-02**
 
 ## Summary
 
-M28 is a bounded architecture milestone, not an evidence or language-expansion
-milestone.
-
-The only implementation objective is to extract one explicit shared
-backend-execution boundary in `spec-core`, route the current seam consumers
-through it, and prove that current Rust status/export/read-side truth remains
-unchanged.
-
-Critical path:
-
-1. Parent captures the live branch/dirty-state baseline and freezes scope from
-   the current `PLAN.md`.
-2. Parent stabilizes `ORCH_PLAN.md` as the execution contract and records that
-   contract in run-state before any runtime freeze occurs.
-3. Parent lands the shared seam contract locally in
-   `spec-core/src/backend_execution.rs`, exports it from `spec-core/src/lib.rs`,
-   and records that contract in `freeze.json`.
-4. After the execution contract lock and runtime freeze, workers fan out in
-   parallel:
-   - Lane A rewires core consumers.
-   - Lane B rewires read-side projection and regressions against the frozen
-     seam.
-   - Lane C audits `xtask` read-only.
-5. Parent merges Lane A first, then Lane B, then consumes Lane C before final
-   closeout.
-6. Parent runs the exact proof loop from `PLAN.md`, records final proof, and
-   closes M28 with an explicit M29 go/no-go decision.
-
-Worker runtime policy:
-
-- Intended worker model/class: `GPT-5.4`, `reasoning=high`.
-- Maximum worker concurrency after freeze: `3`.
-- Parent remains the sole integrator, merger, re-freeze authority, relaunch
-  authority, scope interpreter, and final verifier.
-- Only the parent may integrate, re-freeze, relaunch, or reinterpret scope.
-- Workers may only execute their assigned lane contract. A blocker is never
-  permission for a worker to broaden M28 on its own.
-
-Single-parent model:
-
-- The parent is the only integrator, merger, rebase authority, freeze owner,
-  run-state owner, and final verifier.
-- Workers edit only their assigned files in dedicated worktrees forked from the
-  recorded freeze commit.
-- `PLAN.md` remains read-only authority throughout this run. If the runtime work
-  reveals that `PLAN.md` itself must change, halt and split a follow-on instead
-  of broadening M28.
-
-There are no human approval gates in this run. Only hard guards, execution
-contract lock gates, freeze gates, lane acceptance gates, and final proof gates
-may stop execution.
+- M29 remains one milestone: `M29 - Scoped Second-Language TypeScript Pilot`.
+- Execute from the live branch `feat/corpus-expansion`, but do not continue from the blocked integration state. The active recovery loop is fixed:
+  1. re-freeze from `741a83e`
+  2. preserve `d10679a` as blocked history only
+  3. relaunch `Lane A` and `Lane B` from the same frozen foundation SHA
+  4. merge both into a fresh integration base
+  5. freeze the packet contract
+  6. launch `Lane C`
+  7. merge packet truth and freeze the CI contract
+  8. launch `Lane D`
+  9. run the final local proof loop from merged state
+  10. push the integration candidate
+  11. observe CI on the exact pushed SHA
+  12. close with exactly one verdict: `EXPAND`, `NARROW`, or `STOP`
+- Parent is the sole integrator, merger, freeze authority, relaunch authority, push authority, CI observer, and final verifier.
+- Maximum worker concurrency is `2`, and only `Lane A` plus `Lane B` may run in parallel.
+- `Lane C` waits for the post-foundation packet freeze. `Lane D` waits for the post-packet CI freeze.
+- The implementation surface stays closed to the M29 surfaces already locked by `PLAN.md`. If honest completion needs wider files or repo-wide target-language plumbing, stop M29.
 
 ## Hard Guards
 
-- Scope is locked to the current M28 in `PLAN.md`.
-- The milestone is about shared backend-execution boundary extraction inside
-  `spec-core`, not about recommendation policy, corpus policy, or language-two
-  implementation.
-- Preserve current Rust read-side truth for:
-  - `spec status`
-  - `spec export`
-  - passport/backend freshness
-  - semantic-review preserved-vs-leaked behavior
-- Preserve the closed runtime file contract from `PLAN.md`:
-  - `spec-core/src/backend_execution.rs` new
-  - `spec-core/src/passport.rs`
-  - `spec-core/src/escape_hatch.rs`
+- `PLAN.md` is the only milestone authority. If any worker suggestion, stale run artifact, or branch-local state conflicts with `PLAN.md`, `PLAN.md` wins.
+- `ORCH_PLAN.md` is parent-owned only.
+- Parent remains the only actor allowed to:
+  - create or recreate worktrees
+  - freeze or refreeze any contract
+  - merge branches
+  - resolve cross-lane conflicts
+  - invalidate stale lanes
+  - push a branch
+  - observe CI on the pushed SHA
+  - issue the final verdict
+- Workers may not merge, rebase, push, or reinterpret the milestone scope.
+- Only these surfaces are in scope for M29 execution:
+  - `spec-core/src/types.rs`
+  - `spec-core/src/validator.rs`
+  - `spec-core/src/generator.rs`
   - `spec-core/src/semantic_review.rs`
-  - `spec-core/src/lib.rs`
-  - `spec-core/src/export.rs`
-  - `spec-cli/src/commands.rs`
-  - `spec-cli/tests/m14_regressions.rs`
-  - `spec-cli/tests/cli.rs`
-- Preserve the closed planning contract from `PLAN.md`:
-  - `PLAN.md` is authority and remains read-only for this run
-  - `ORCH_PLAN.md` is parent-owned execution contract
-- `xtask` is audit-only in M28.
-  - Read-only targets include `xtask/src/family/coverage.rs`,
-    `xtask/src/family/report.rs`, and related proof/report surfaces.
-  - If an `xtask` code edit is required to make M28 green, halt and split a
-    bounded follow-on. Do not expand scope inside M28.
-- Do not widen validator policy beyond
-  `methods[].lowering.rust.body` and `backends.rust.derives`.
-- Do not change recommendation, corpus, or `money/round` governance semantics.
-- Do not add a second-language runtime, lowering path, packet, fixture, or
-  scaffold.
-- Do not add a new command family, artifact class, or release workflow.
-- Never fork worker branches from `main`.
-- Never assume the repo is clean. Capture and respect actual dirty state at
-  launch.
+  - `xtask/src/lib.rs`
+  - `xtask/src/family/harness.rs`
+  - `xtask/src/family/layout.rs`
+  - `xtask/src/family/scaffold.rs`
+  - `xtask/src/family/smoke.rs`
+  - `xtask/src/family/prove.rs`
+  - `xtask/src/family/certify.rs`
+  - `xtask/src/family/report.rs`
+  - `xtask/src/family/promotion_artifacts.rs`
+  - `xtask/src/family/paths.rs`
+  - `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
+  - `.github/workflows/ci.yml`
+  - `PLAN.md`
+- For this M29 run, `PLAN.md` is treated as read-only authority. Closeout goes into run-state unless a separate explicit authorization reopens plan editing.
+- The packet root is locked to `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`.
+- `semantic-families-typescript/` is forbidden.
+- `kind:function` uses additive authored bodies only:
 
-Stop immediately if any of the following become true:
+```yaml
+body:
+  rust: |
+    { ... }
+  typescript: |
+    { ... }
+```
 
-- `PLAN.md` and the frozen M28 execution contract cannot be reconciled without
-  editing `PLAN.md`
-- the shared boundary needs files outside the closed runtime contract
-- validator policy widening becomes necessary
-- `xtask` changes become necessary
-- recommendation/corpus semantics drift
-- second-language work enters the diff
-- the run can no longer end with a credible M29 go/no-go decision
+- TypeScript pilot truth is packet-local only. M29 must not add:
+  - repo-wide `spec build --target-language typescript`
+  - repo-wide `spec test --target-language typescript`
+  - TypeScript support for `kind:data`
+  - TypeScript support for `kind:sum`
+  - passport redesign
+  - `spec status` redesign
+  - `spec export` redesign
+  - second family rollout
+  - second target-language rollout
+- Rust remains the default when `--target-language` is omitted.
+- The public family command surface remains:
+  - `cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1`
+  - `cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
+  - `cargo xtask family prove function.arithmetic_leaf.monotone_up.v1`
+  - `cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
+  - `cargo xtask family certify function.arithmetic_leaf.monotone_up.v1`
+  - `cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
+- Stop immediately if any of these become true:
+  - M29 needs files outside the closed implementation surface
+  - TypeScript packet truth cannot stay under the locked packet root
+  - the pilot requires repo-wide target-language CLI support
+  - Rust-default behavior regresses
+  - the final branch push cannot trigger automatic CI for the pilot
+
+## Locked Recovery Basis
+
+- `feat/corpus-expansion` is the live user branch and remains the human-facing baseline for this run.
+- `d10679a` is preserved as blocked checkpoint history only. It is evidence of the failed first foundation merge, not an active execution base.
+- `741a83e` is the recovery refreeze seed. Every relaunched foundation branch must fork from the same `741a83e`-based integration seed.
+- The parent must record both values in run-state before any worker starts:
+  - `recovery_seed_sha = 741a83e`
+  - `blocked_checkpoint_sha = d10679a`
+- The first active integration branch for the recovery is a fresh `ws/m29-int` rooted from `741a83e`, not a continuation of the blocked checkpoint.
+- No packet or CI work may start until the parent has:
+  - relaunched `Lane A` and `Lane B`
+  - merged them into the fresh integration base
+  - written the post-foundation `packet-contract-freeze.json`
 
 ## Canonical Run-State
 
-Parent-owned orchestration state lives only under:
+Parent-owned orchestration truth lives under:
 
-- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m28_shared_backend_boundary`
+- `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
+- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot`
+- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m29-typescript-pilot`
 
-Canonical parent-owned state files:
+Canonical parent-owned files:
 
 - `baseline.json`
-  - live branch
-  - launch HEAD SHA
-  - dirty-file summary
-  - lane ownership snapshot against actual dirty state
-  - note of any lane delayed or narrowed because of pre-existing dirt
+  - live branch name
+  - live checkout SHA
+  - live dirty status summary
+  - `741a83e` recovery seed confirmation
+  - `d10679a` blocked checkpoint confirmation
+  - overlap check between live dirtiness and lane-owned surfaces
 - `tasks.json`
-  - ordered task queue
-  - owner
-  - status
-  - dependencies
-  - restart count
+  - ordered task ledger
+  - `task_id`
+  - `owner`
+  - `branch`
+  - `worktree`
+  - `depends_on`
+  - `owned_paths`
+  - `status`
+  - `restart_count`
 - `session-log.md`
-  - chronological parent decisions
-  - worker launch notes
-  - relaunch reasons
-  - deviations resolved without widening scope
+  - append-only parent timeline
+  - freeze creation
+  - worker launch
+  - merge results
+  - relaunch decisions
+  - push and CI observation notes
 - `docs-contract.json`
-  - `PLAN.md` read-only confirmation
-  - `ORCH_PLAN.md` stabilization timestamp
-  - execution-contract hash or commit reference
-  - parent-confirmed worker model and concurrency cap
-  - parent-confirmed lane map before runtime freeze
-- `freeze.json`
-  - `freeze_commit_sha`
-  - frozen public functions and types in `spec-core/src/backend_execution.rs`
-  - digest/freshness invariants
+  - authority path
+  - live milestone
+  - worker model
+  - concurrency cap
   - lane ownership map
-  - forbidden surfaces per lane
+- `recovery-freeze.json`
+  - fresh integration branch seed SHA
+  - frozen record that `d10679a` is history only
+  - fresh worktree and branch map
+- `foundation-freeze.json`
+  - exact `ws/m29-int` SHA used to fork `Lane A` and `Lane B`
+  - owned paths
+  - forbidden paths
+  - exact lane acceptance commands
+- `packet-contract-freeze.json`
+  - exact post-foundation integration SHA
+  - frozen `body.typescript` authoring contract
+  - frozen generator and semantic-review expectations
+  - frozen packet layout and artifact-path rules
+  - exact `Lane C` acceptance commands
+- `ci-freeze.json`
+  - exact post-packet integration SHA
+  - exact workflow commands
+  - exact `Lane D` branch point
 - `merge-log.md`
-  - merge order
-  - merge attempt result
-  - local smoke results after each merge
-  - relaunch/reject reasons
-  - downstream stale-lane notes
-- `integration-state.json`
-  - current integrated tasks
-  - pending tasks
-  - proof-loop status
-  - audit disposition
-- `acceptance.md`
-  - final acceptance checklist against this file and `PLAN.md`
-- `final-proof.json`
-  - ordered final commands
-  - exit codes
-  - artifact paths
-  - final verdict
+  - ordered merge history
+  - merge SHAs
+  - mechanical conflict notes
+  - stale-lane invalidations
+- `proof-log.json`
+  - actual final local proof commands
+  - exit code per command
+  - artifact locations
+  - packet dirtiness checks
+- `push-record.json`
+  - remote
+  - pushed branch
+  - pushed SHA
+  - push timestamp
+- `ci-observation.json`
+  - workflow name
+  - run id or URL
+  - observed branch
+  - observed SHA
+  - Rust lane result
+  - TypeScript lane result
 - `blocked.json`
-  - stop reason
   - blocking task
   - blocking evidence
-  - required follow-on plan
+  - required next decision
 - `closeout.md`
-  - final narrative closeout
-  - explicit M29 decision
+  - what stayed shared
+  - what leaked
+  - packet contract honesty
+  - verdict
 
-Per-task sentinels live under:
+Per-task sentinel directories:
 
-- `REPO_ROOT/.runs/task-m28-00-baseline/`
-- `REPO_ROOT/.runs/task-m28-01-stabilize-execution-contract/`
-- `REPO_ROOT/.runs/task-m28-02-freeze-backend-boundary/`
-- `REPO_ROOT/.runs/task-m28-03-core-consumers/`
-- `REPO_ROOT/.runs/task-m28-04-read-side-regressions/`
-- `REPO_ROOT/.runs/task-m28-05-xtask-audit/`
-- `REPO_ROOT/.runs/task-m28-06-integrate-proof/`
-- `REPO_ROOT/.runs/task-m28-07-closeout-m29/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-00-baseline/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-01-lock-contract/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-02-refreeze-foundation/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-a-lane-spec-core/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-b-lane-xtask/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-03-freeze-packet/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-c-lane-packet/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-04-freeze-ci/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-d-lane-ci/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-05-final-proof/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-06-push-observe/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-07-closeout/`
 
-Each task sentinel directory uses:
+Each sentinel directory contains:
 
 - `started.json`
 - `status.json`
 - exactly one terminal file: `done.json` or `blocked.json`
 
-Worker handoff artifacts live under:
+## Worktree Plan
 
-- `RUN_ROOT/handoffs/task-m28-03-core-consumers/`
-- `RUN_ROOT/handoffs/task-m28-04-read-side-regressions/`
-- `RUN_ROOT/handoffs/task-m28-05-xtask-audit/`
+Branches and worktrees:
 
-Every worker handoff must contain:
+- integration
+  - branch: `ws/m29-int`
+  - worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m29-typescript-pilot/int`
+- `Lane A`
+  - branch: `ws/m29-spec-core`
+  - worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m29-typescript-pilot/spec-core`
+- `Lane B`
+  - branch: `ws/m29-xtask`
+  - worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m29-typescript-pilot/xtask`
+- `Lane C`
+  - branch: `ws/m29-packet`
+  - worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m29-typescript-pilot/packet`
+- `Lane D`
+  - branch: `ws/m29-ci`
+  - worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m29-typescript-pilot/ci`
 
-- `result.json`
-- `handoff.md`
-- `commands.json`
-- exactly one terminal marker: `done.ok` or `blocked.ok`
+Creation and restart rules:
 
-Run-state rules:
+- `ws/m29-int` is created from `741a83e`.
+- `ws/m29-spec-core` and `ws/m29-xtask` are both created from the same recorded `foundation-freeze.json` SHA.
+- `ws/m29-packet` is created only after `packet-contract-freeze.json` exists.
+- `ws/m29-ci` is created only after `ci-freeze.json` exists.
+- A stale lane is discarded and recreated from the newest relevant freeze SHA. The parent never hand-forwards a stale worker branch.
+- The parent does not integrate on the live checkout. All merges and proof happen in `ws/m29-int`.
 
-- `.runs/**` are parent-owned run artifacts, not authored source.
-- Workers do not modify `RUN_ROOT/*` or any `.runs/task-m28-*/` sentinel
-  directly.
-- Parent writes all orchestration state back to `REPO_ROOT`.
+## Command Contract
 
-## Execution Model And Critical Path
+### Lane A command contract
 
-Parent-only serialized phases:
+Owned files:
 
-1. `task/m28-00-baseline`
-2. `task/m28-01-stabilize-execution-contract`
-3. `task/m28-02-freeze-backend-boundary`
-4. `task/m28-06-integrate-proof`
-5. `task/m28-07-closeout-m29`
-
-Parallel worker lanes after the execution contract lock and runtime freeze:
-
-- Lane A: `task/m28-03-core-consumers`
-- Lane B: `task/m28-04-read-side-regressions`
-- Lane C: `task/m28-05-xtask-audit`
-
-Why this split is safe:
-
-- Parent owns the new shared seam itself:
-  - `spec-core/src/backend_execution.rs`
-  - `spec-core/src/lib.rs`
-- Parent also owns the only live execution contract:
-  - `ORCH_PLAN.md`
-  - `docs-contract.json`
-- Lane A owns only core consumer rewires.
-- Lane B owns only read-side/status/tests rewires against the frozen seam.
-- Lane C stays read-only and cannot create merge conflicts by design.
-
-Why this split is strict:
-
-- Worker launch is forbidden until both `docs-contract.json` and `freeze.json`
-  exist.
-- If parent changes the execution contract or the frozen seam after workers
-  launch, affected lanes are stale and must be relaunched from the new freeze.
-- If Lane C concludes that `xtask` must change, M28 stops in a blocked state.
-  That result does not authorize “small enough to fix now.”
-
-## Parent vs Worker Ownership Model
-
-### Parent-only ownership
-
-Parent-owned files:
-
-- `ORCH_PLAN.md`
-- `spec-core/src/backend_execution.rs`
-- `spec-core/src/lib.rs`
-- all `.runs/**`
-- all merges, rebases, and conflict resolution
-- `acceptance.md`
-- `final-proof.json`
-- `blocked.json`
-- `closeout.md`
-
-Parent-only responsibilities:
-
-- capture actual baseline branch/SHA/dirty state
-- stabilize the execution contract before worker launch
-- freeze the shared seam contract before worker launch
-- create worker branches and worktrees from `freeze_commit_sha`
-- reject stale or out-of-bounds worker output
-- merge lanes in order
-- run the exact final proof loop
-- decide the M29 go/no-go closeout
-
-### Worker lane ownership
-
-Lane A owns only:
-
-- `spec-core/src/passport.rs`
-- `spec-core/src/escape_hatch.rs`
+- `spec-core/src/types.rs`
+- `spec-core/src/validator.rs`
+- `spec-core/src/generator.rs`
 - `spec-core/src/semantic_review.rs`
 
-Lane B owns only:
-
-- `spec-core/src/export.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/m14_regressions.rs`
-- `spec-cli/tests/cli.rs`
-
-Lane C owns no authored files. It is read-only against:
-
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/report.rs`
-- related prove/certify/report schemas or fixtures needed to support the audit
-
-Workers never own:
-
-- `PLAN.md`
-- `ORCH_PLAN.md`
-- `spec-core/src/backend_execution.rs`
-- `spec-core/src/lib.rs`
-- any `xtask` source file for edit
-- `generator.rs`
-- `validator.rs`
-- `.runs/**`
-
-## Context-Control Rules
-
-Parent active context stays narrow:
-
-- `PLAN.md`
-- `ORCH_PLAN.md`
-- `RUN_ROOT/baseline.json`
-- `RUN_ROOT/tasks.json`
-- `RUN_ROOT/docs-contract.json`
-- `RUN_ROOT/freeze.json` after freeze
-- `RUN_ROOT/session-log.md`
-- latest integration diff summary
-
-Worker prompts contain only:
-
-- owned files
-- forbidden surfaces
-- relevant `PLAN.md` excerpts
-- the current `docs-contract.json`
-- the current `freeze.json`
-- the required commands
-- the lane acceptance criteria
-
-Context rules:
-
-- Workers do not get the full repo or unrelated docs by default.
-- Workers stop and return a blocker if they need a parent-owned file changed.
-- Parent closes workers immediately after merge or rejection.
-- There is no worker docs lane in M28.
-  - `PLAN.md` never changes.
-  - `ORCH_PLAN.md` is parent-owned and is stabilized in an explicit pre-freeze
-    parent task.
-  - If the parent materially changes `ORCH_PLAN.md` after worker launch, open
-    lanes are stale and must be relaunched from a new freeze.
-
-## Worktree And Branch Plan With Concrete Names
-
-Canonical paths:
-
-- `REPO_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m28-shared-backend-boundary`
-
-Integration surface:
-
-- branch: `feat/corpus-expansion`
-- worktree: `REPO_ROOT`
-- owner: parent only
-
-Worker branches and worktrees, created only after `docs-contract.json` and
-`freeze.json` both exist:
-
-- Lane A
-  - branch: `codex/m28-core-consumers`
-  - worktree: `$WORKTREE_ROOT/core-consumers`
-- Lane B
-  - branch: `codex/m28-read-side-regressions`
-  - worktree: `$WORKTREE_ROOT/read-side-regressions`
-- Lane C
-  - branch: `codex/m28-xtask-audit`
-  - worktree: `$WORKTREE_ROOT/xtask-audit`
-
-Creation commands from `REPO_ROOT` after freeze:
+Required acceptance commands:
 
 ```bash
-mkdir -p "$WORKTREE_ROOT" "$RUN_ROOT"
-FREEZE_SHA=$(jq -r '.freeze_commit_sha' "$RUN_ROOT/freeze.json")
-
-git worktree add -b codex/m28-core-consumers \
-  "$WORKTREE_ROOT/core-consumers" \
-  "$FREEZE_SHA"
-
-git worktree add -b codex/m28-read-side-regressions \
-  "$WORKTREE_ROOT/read-side-regressions" \
-  "$FREEZE_SHA"
-
-git worktree add -b codex/m28-xtask-audit \
-  "$WORKTREE_ROOT/xtask-audit" \
-  "$FREEZE_SHA"
+cargo test -p spec-core --lib body_typescript_ -- --color never
+cargo test -p spec-core --lib validator_typescript_ -- --color never
+cargo test -p spec-core --lib generator_typescript_ -- --color never
+cargo test -p spec-core --lib monotone_up_typescript_ -- --color never
+cargo test -p spec-core --lib semantic_review_typescript_ -- --color never
+cargo test -p spec-core --lib -- --color never
 ```
 
-Worktree rules:
+Lane A must deliver:
 
-- never fork workers from `main`
-- never fork workers before the contract-stabilization and freeze tasks complete
-- never reuse a dirty worker worktree
-- never let workers merge back into `feat/corpus-expansion`
+- additive `body.typescript` support for `kind:function`
+- TypeScript pilot validation that reads `body.typescript`
+- TypeScript lowering limited to the locked pilot family
+- TypeScript semantic-review wedge limited to `function.arithmetic_leaf.monotone_up.v1`
+- unchanged Rust-default behavior
 
-## Freeze Artifact And Restart Rule
+### Lane B command contract
 
-The freeze point is the first parent commit where all of the following are true
-together:
+Owned files:
 
-- `spec-core/src/backend_execution.rs` exists
-- `spec-core/src/lib.rs` exports the new module
-- the module exposes the parent-approved boundary API for:
-  - marker collection
-  - marker classification
-  - summary construction
-  - backend-execution digest computation
-  - shared helper/example identity surface
-- `docs-contract.json` records the stabilized execution contract
-- `freeze.json` records the frozen contract and lane ownership
+- `xtask/src/lib.rs`
+- `xtask/src/family/harness.rs`
+- `xtask/src/family/layout.rs`
+- `xtask/src/family/scaffold.rs`
+- `xtask/src/family/smoke.rs`
+- `xtask/src/family/prove.rs`
+- `xtask/src/family/certify.rs`
+- `xtask/src/family/report.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/paths.rs`
 
-`freeze.json` is the authoritative runtime worker contract.
-`docs-contract.json` is the authoritative execution-contract lock.
+Required acceptance commands:
 
-Shared-seam or execution-contract change after worker launch means any change
-to:
+```bash
+cargo test -p xtask target_language_ -- --color never
+cargo test -p xtask typescript_layout_ -- --color never
+cargo test -p xtask scaffold_typescript_ -- --color never
+cargo test -p xtask smoke_typescript_ -- --color never
+cargo test -p xtask prove_typescript_ -- --color never
+cargo test -p xtask certify_typescript_ -- --color never
+cargo test -p xtask artifact_path_ -- --color never
+cargo test -p xtask report_target_language_ -- --color never
+cargo test -p xtask -- --color never
+cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
+```
 
-- public function or type signatures in `spec-core/src/backend_execution.rs`
-- marker-kind semantics
-- digest/freshness invariants
-- the export of the module from `spec-core/src/lib.rs`
-- lane ownership or forbidden surfaces recorded in `freeze.json`
-- lane assumptions or parent-owned execution rules recorded in
-  `docs-contract.json`
+Lane B must deliver:
 
-Mandatory stale-lane rule:
+- `--target-language rust|typescript` on `family smoke/prove/certify`
+- Rust-default behavior when flag is omitted
+- locked packet-root handling under `semantic-families/`
+- target-partitioned artifact paths
+- TypeScript scaffold and layout truth under the locked packet root
 
-1. If the frozen seam or execution contract changes after any worker starts,
-   affected open lanes are stale.
-2. Stale worker output must not be merged, cherry-picked, or manually
-   reconciled.
-3. Parent must:
-   - update `docs-contract.json` if execution-contract assumptions changed
-   - update `freeze.json`
-   - record the new `freeze_commit_sha`
-   - mark affected tasks blocked/stale in sentinel state
-   - delete stale worker worktrees and branches
-   - relaunch fresh worktrees from the new freeze commit
-4. Lane C is stale only if the audit scope itself changes.
+### Lane C command contract
 
-## Worker Handoff And Parent Review Contract
+Owned files:
 
-Every worker handoff package is mandatory and must be complete before the
-parent reviews code. The parent does not improvise missing context from git
-history or prior chat text.
+- `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
 
-Generic required files for all worker handoffs:
+Required acceptance commands:
 
-- `result.json`
-  - `task_id`
-  - `lane`
-  - `freeze_commit_sha`
-  - `head_commit_sha`
-  - `status`
-  - `changed_files`
-  - `commands_run`
-  - `exit_codes`
-  - `assumptions`
-  - `blockers`
-- `handoff.md`
-  - short human-readable summary
-  - what changed
-  - why the lane believes acceptance passed
-  - explicit note of anything not verified
-- `commands.json`
-  - ordered command list
-  - working directories
-  - exit codes
-- exactly one terminal marker:
-  - `done.ok`
-  - `blocked.ok`
+```bash
+cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
+cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+rg --files semantic-families/function.arithmetic_leaf.monotone_up.v1/targets/typescript/fixtures
+rg -n "typescript:" semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures
+```
 
-Parent pre-merge review is mandatory for every lane:
+Lane C must deliver:
 
-1. verify `freeze_commit_sha` matches current `RUN_ROOT/freeze.json`
-2. verify changed files stay inside lane ownership
-3. verify required commands were actually run and exited `0`, unless the lane
-   returned `blocked.ok`
-4. verify the handoff explains assumptions and unresolved risk plainly
-5. verify the lane did not edit parent-owned files or `.runs/**`
-6. verify the lane is not stale against post-freeze semantic changes already
-   recorded in `merge-log.md`
+- additive `body.typescript` truth in the pilot packet only
+- committed TypeScript runtime roots for all four buckets
+- no checked-in generated output
+- no checked-in `node_modules`
+- no packet truth outside the locked packet root
 
-Reject and relaunch rules:
+### Lane D command contract
 
-- Reject immediately if the handoff is incomplete.
-- Reject immediately if `freeze_commit_sha` is stale.
-- Reject immediately if the diff includes out-of-scope edits.
-- Reject immediately if required command accounting is missing.
-- Reject immediately if the lane depends on a parent reinterpretation of scope.
-- Relaunch from the current freeze if the lane is directionally correct but
-  stale against updated post-freeze assumptions.
-- Stop the entire run instead of relaunching if the reject reason implies M28
-  scope expansion.
+Owned files:
 
-## Merge Policy
+- `.github/workflows/ci.yml`
 
-- Parent is the only merger.
-- Parent merges only into `feat/corpus-expansion` in `REPO_ROOT`.
-- Parent does not ask workers to rebase.
-- Parent may do local mechanical conflict resolution only inside worker-owned
-  files.
-- Any conflict that changes the frozen seam or the locked execution contract is
-  a stop-and-relaunch event.
+Workflow commands that must exist after merge:
 
-Merge order:
+```bash
+cargo test -p spec-core --lib body_typescript_ -- --color never
+cargo test -p xtask target_language_ -- --color never
+cargo test -p xtask typescript_ -- --color never
+cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
+cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
+cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+```
 
-1. Parent completes `task/m28-01-stabilize-execution-contract`.
-2. Parent completes `task/m28-02-freeze-backend-boundary`.
-3. Launch Lanes A, B, and C from `freeze_commit_sha`.
-4. Merge Lane A first.
-5. Rerun Lane A post-merge verification locally.
-6. Merge Lane B second.
-7. Rerun Lane B post-merge verification locally.
-8. Consume Lane C audit result before closeout:
-   - if `no_leak_found`, continue
-   - if `leak_found_follow_on_required`, stop M28 in blocked closeout
-9. Parent runs the final proof loop locally.
+Lane D must deliver:
 
-Post-merge local verification is required after each successful merge attempt:
-
-- After Lane A merge:
-  - rerun `cargo test -p spec-core --lib -- --color never`
-  - confirm Lane A did not silently invalidate Lane B's fixture or read-side
-    assumptions
-- After Lane B merge:
-  - rerun `cargo test -p spec-cli --test m14_regressions -- --color never`
-  - rerun `cargo test -p spec-cli --test cli -- --color never`
-  - confirm `status`/`export` parity claims still match the integrated tree
-- After Lane C disposition:
-  - record whether the audit was accepted as `no_leak_found` or forced a stop
-
-`merge-log.md` must record after every merge attempt:
-
-- lane/task ID
-- worker branch and handoff commit SHA
-- accepted or rejected disposition
-- reason for rejection or relaunch if applicable
-- local post-merge commands run
-- local post-merge exit codes
-- whether downstream lanes became stale
-
-Lane B invalidation rule:
-
-- Even without a seam signature change, Lane B becomes stale if the accepted
-  Lane A merge changes semantic assumptions behind Lane B's parity or regression
-  expectations.
-- In that case the parent must reject or relaunch Lane B from the current
-  freeze/integrated state instead of manually patching its output.
-
-Docs-vs-runtime merge rule:
-
-- There is no worker docs merge in M28.
-- `ORCH_PLAN.md` must already be stable before worker launch.
-- Runtime lane merges do not authorize late plan drift.
-- If runtime work appears to require a `PLAN.md` edit, stop rather than
-  backfitting the plan after the fact.
-
-Reject a worker lane immediately if it:
-
-- edits a file outside its ownership set
-- depends on a parent-owned seam change after launch
-- assumes a clean tree and drops unrelated local state
-- returns without command and exit-code accounting
-- returns a handoff package that is incomplete or stale against `freeze.json`
+- automatic CI execution on branch push
+- existing Rust lane preserved
+- Node setup before the TypeScript pilot lane
+- exact pushed-SHA observability
 
 ## Task Graph
 
 ```text
-task/m28-00-baseline
-  ->
-task/m28-01-stabilize-execution-contract
-  ->
-task/m28-02-freeze-backend-boundary
-  ->
-parallel:
-  task/m28-03-core-consumers
-  task/m28-04-read-side-regressions
-  task/m28-05-xtask-audit
-  ->
-task/m28-06-integrate-proof
-  ->
-task/m28-07-closeout-m29
+task/m29-00-baseline
+  -> task/m29-01-lock-contract
+      -> task/m29-02-refreeze-foundation
+          -> task/m29-a-lane-spec-core
+          -> task/m29-b-lane-xtask
+              -> task/m29-03-freeze-packet
+                  -> task/m29-c-lane-packet
+                      -> task/m29-04-freeze-ci
+                          -> task/m29-d-lane-ci
+                              -> task/m29-05-final-proof
+                                  -> task/m29-06-push-observe
+                                      -> task/m29-07-closeout
 ```
+
+Execution meaning:
+
+1. Parent captures baseline and recovery facts from the live branch.
+2. Parent stabilizes the orchestration contract.
+3. Parent refreezes the foundation from `741a83e`.
+4. `Lane A` and `Lane B` run in parallel, and only those two lanes.
+5. Parent merges both, freezes the packet contract, then and only then launches `Lane C`.
+6. Parent merges packet truth, freezes the CI contract, then and only then launches `Lane D`.
+7. Parent merges CI truth, runs the final proof loop, pushes, observes CI on the exact pushed SHA, and closes the milestone.
 
 ## Workstream Plan
 
-### task/m28-00-baseline
+### WS-0 Baseline And Recovery Refreeze - parent only
 
-Owner:
+#### `task/m29-00-baseline`
 
-- parent
+Required parent actions:
 
-Owned surfaces:
-
-- `RUN_ROOT/baseline.json`
-- `RUN_ROOT/tasks.json`
-- `RUN_ROOT/session-log.md`
-- `REPO_ROOT/.runs/task-m28-00-baseline/**`
-
-Required work:
-
-- capture current branch, HEAD SHA, and dirty-state summary
-- confirm `PLAN.md` is the M28 source of truth
-- record that `PLAN.md` is read-only for this run
-- snapshot lane ownership against actual dirty files
-- identify whether pre-existing dirt touches any worker-owned surface
+1. Capture live branch and dirty state from `feat/corpus-expansion`.
+2. Record whether any live dirty files overlap with the M29-owned surfaces.
+3. Record `741a83e` as the recovery seed and `d10679a` as blocked history.
+4. Stop if unresolved dirty overlap exists inside any lane-owned path.
 
 Required commands:
 
 ```bash
-git branch --show-current
+git rev-parse --abbrev-ref HEAD
 git rev-parse HEAD
 git status --short
+git rev-parse 741a83e
+git rev-parse d10679a
 ```
 
 Acceptance:
 
-- baseline reflects actual repo state at launch
-- lane ownership snapshot exists
-- any pre-existing dirt that overlaps owned files is recorded before freeze
+- `baseline.json` exists
+- `recovery_seed_sha` and `blocked_checkpoint_sha` are recorded
+- unresolved dirty overlap is either empty or explicitly blocked
 
-### task/m28-01-stabilize-execution-contract
+#### `task/m29-01-lock-contract`
 
-Owner:
+Required parent actions:
 
-- parent
-
-Owned surfaces:
-
-- `ORCH_PLAN.md`
-- `RUN_ROOT/docs-contract.json`
-- `RUN_ROOT/session-log.md`
-- `REPO_ROOT/.runs/task-m28-01-stabilize-execution-contract/**`
-
-Forbidden surfaces:
-
-- runtime implementation files
-- any `xtask` source file
-- `PLAN.md`
-
-Required work:
-
-- stabilize `ORCH_PLAN.md` as the execution contract for the run
-- record that `PLAN.md` is read-only authority and `ORCH_PLAN.md` is the
-  parent-owned execution contract
-- lock worker model, concurrency cap, lane map, and merge ordering in
-  `docs-contract.json`
-- record the exact point at which the execution contract became stable enough
-  for runtime freeze to proceed
+1. Stabilize `ORCH_PLAN.md`.
+2. Write `docs-contract.json`.
+3. Write `tasks.json`.
+4. Record worker model, concurrency cap, lane ownership, and blocker rules.
 
 Acceptance:
 
-- `ORCH_PLAN.md` is stable enough that workers can be launched without further
-  plan reinterpretation
-- `docs-contract.json` records the lane contract and parent-only docs policy
-- the runtime freeze task can proceed without another docs pass
+- no worker launches before `docs-contract.json`
+- all worker prompts reference the same frozen contract snapshot
 
-### task/m28-02-freeze-backend-boundary
+#### `task/m29-02-refreeze-foundation`
 
-Owner:
+Required parent actions:
 
-- parent
+1. Create `ws/m29-int` from `741a83e`.
+2. Create `ws/m29-spec-core` and `ws/m29-xtask` from the same `ws/m29-int` SHA.
+3. Write `recovery-freeze.json`.
+4. Write `foundation-freeze.json`.
 
-Owned surfaces:
+Acceptance:
 
-- `spec-core/src/backend_execution.rs`
-- `spec-core/src/lib.rs`
-- `RUN_ROOT/freeze.json`
-- `REPO_ROOT/.runs/task-m28-02-freeze-backend-boundary/**`
+- both foundation lanes fork from the same recorded SHA
+- `d10679a` is preserved in run-state as blocked history only
+- both foundation worker prompts include exact owned paths and commands
 
-Forbidden surfaces:
+### WS-1 Foundation Lanes - parallel, concurrency cap 2
 
-- Lane A files
-- Lane B files
-- all `xtask` source files
-- `PLAN.md`
+#### `task/m29-a-lane-spec-core` - worker
 
-Required work:
+Mission:
 
-- add the new shared boundary module
-- freeze the boring, explicit API for:
-  - backend-execution marker collection
-  - marker classification
-  - marker summary
-  - backend-execution digest computation
-  - helper/example identity reuse
-- record the contract and invariants in `freeze.json`
+- repair the shared `spec-core` body contract so the TypeScript pilot reads `body.typescript`
+- keep all support bounded to the locked pilot family
+- preserve Rust-default behavior
 
-Required invariants to record:
+Acceptance:
 
-- authored-only seam edits do not change backend-execution freshness
-- backend-only lowering/derives edits do not change authored freshness
-- helper-only and domain-lowering markers remain distinguishable
+- all `Lane A` commands pass, or exact narrower replacements are documented and pass
+- no files outside `Lane A` ownership change
 
-Required commands:
+#### `task/m29-b-lane-xtask` - worker
+
+Mission:
+
+- repair target-aware family plumbing under the locked packet root
+- keep Rust-default behavior on omitted `--target-language`
+- freeze layout, scaffold, smoke/prove/certify, artifact path, and report rules
+
+Acceptance:
+
+- all `Lane B` commands pass, or exact narrower replacements are documented and pass
+- no files outside `Lane B` ownership change
+
+### WS-2 Parent Merge And Packet Freeze - parent only
+
+#### `task/m29-03-freeze-packet`
+
+Strict merge order:
+
+1. merge `ws/m29-spec-core` into `ws/m29-int`
+2. verify `Lane A`
+3. merge `ws/m29-xtask` into `ws/m29-int`
+4. verify `Lane B`
+5. write `packet-contract-freeze.json`
+
+Parent may resolve only:
+
+- straightforward import or module ordering
+- adjacent test additions
+- mechanical context drift inside already-approved owned files
+
+Parent must bounce back to lane owners for:
+
+- packet-root disagreements
+- body-selection disagreements
+- artifact-path disagreements
+- target-language command-surface disagreements
+- any conflict that changes meaning rather than syntax
+
+Acceptance:
+
+- both foundation lanes are merged into a fresh recovery integration branch
+- `packet-contract-freeze.json` exists
+- `Lane C` has exact frozen packet expectations and exact commands
+
+### WS-3 Packet Lane - serialized after packet freeze
+
+#### `task/m29-c-lane-packet` - worker
+
+Mission:
+
+- land the committed TypeScript pilot packet under the locked packet root
+- add all four TypeScript bucket runtime roots
+- consume the post-foundation frozen contract literally
+
+Acceptance:
+
+- all `Lane C` commands pass
+- no files outside the locked packet root change
+- no generated TypeScript output or `node_modules` are checked in
+
+### WS-4 Parent Merge And CI Freeze - parent only
+
+#### `task/m29-04-freeze-ci`
+
+Required parent actions:
+
+1. merge `ws/m29-packet` into `ws/m29-int`
+2. rerun the packet acceptance commands from merged state
+3. write `ci-freeze.json`
+4. create `ws/m29-ci` from the recorded post-packet SHA
+
+Acceptance:
+
+- `ci-freeze.json` contains the exact workflow command list
+- `Lane D` starts only from the recorded post-packet freeze SHA
+
+### WS-5 CI Lane - serialized after CI freeze
+
+#### `task/m29-d-lane-ci` - worker
+
+Mission:
+
+- add the automatic CI lane for the TypeScript pilot
+- preserve existing Rust CI behavior
+- encode the exact frozen command list in `.github/workflows/ci.yml`
+
+Acceptance:
+
+- `.github/workflows/ci.yml` is the only changed file
+- workflow uses Node setup before the TypeScript pilot commands
+- workflow runs the frozen Rust and TypeScript command list
+
+### WS-6 Final Proof, Push, Observation, Closeout - parent only
+
+#### `task/m29-05-final-proof`
+
+Required final local proof loop in `ws/m29-int`:
 
 ```bash
+cargo fmt --all --check
+cargo test -p spec-core --lib body_typescript_ -- --color never
+cargo test -p spec-core --lib validator_typescript_ -- --color never
+cargo test -p spec-core --lib generator_typescript_ -- --color never
+cargo test -p spec-core --lib monotone_up_typescript_ -- --color never
+cargo test -p spec-core --lib semantic_review_typescript_ -- --color never
 cargo test -p spec-core --lib -- --color never
+cargo test -p xtask target_language_ -- --color never
+cargo test -p xtask typescript_layout_ -- --color never
+cargo test -p xtask scaffold_typescript_ -- --color never
+cargo test -p xtask smoke_typescript_ -- --color never
+cargo test -p xtask prove_typescript_ -- --color never
+cargo test -p xtask certify_typescript_ -- --color never
+cargo test -p xtask artifact_path_ -- --color never
+cargo test -p xtask report_target_language_ -- --color never
+cargo test -p xtask -- --color never
+cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
+cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
+cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
 ```
+
+Rules:
+
+- if workers introduced exact narrower selectors instead of the prefix selectors above, the parent substitutes the documented exact selectors and records them in `proof-log.json`
+- every actual command and exit code must be recorded
+- parent must confirm the committed packet tree is clean after TypeScript prove and certify
+- parent must confirm Rust artifact paths remain stable and TypeScript artifacts land under the target partition
+
+#### `task/m29-06-push-observe`
+
+Required parent actions:
+
+1. merge `ws/m29-ci` into `ws/m29-int`
+2. push `ws/m29-int` or a designated final candidate branch
+3. record branch name, remote, and pushed SHA in `push-record.json`
+4. observe the CI run triggered by that exact pushed SHA
+5. record workflow run id or URL and per-lane results in `ci-observation.json`
 
 Acceptance:
 
-- `backend_execution.rs` exists and is exported
-- workers can consume the frozen seam without editing parent-owned files
-- `freeze.json` is concrete enough to relaunch stale lanes deterministically
-
-### task/m28-03-core-consumers
-
-Owner:
-
-- worker A
-
-Owned surfaces:
-
-- `spec-core/src/passport.rs`
-- `spec-core/src/escape_hatch.rs`
-- `spec-core/src/semantic_review.rs`
-
-Forbidden surfaces:
-
-- `spec-core/src/backend_execution.rs`
-- `spec-core/src/lib.rs`
-- `spec-core/src/export.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/**`
-- any `xtask` file
-- `.runs/**`
-- `PLAN.md`
-- `ORCH_PLAN.md`
-
-Required work:
-
-- route passport backend digest and marker truth through the frozen boundary
-- route escape-hatch gate logic through the frozen boundary
-- route semantic-review aligned/preserved/leaked classification through the
-  frozen boundary
-- preserve current helper-only vs domain-lowering meaning exactly
-
-Required commands:
-
-```bash
-cargo test -p spec-core --lib -- --color never
-```
-
-Required handoff payload:
-
-- `result.json` with owned-file diff summary, `freeze_commit_sha`, and explicit
-  pass/fail status
-- `handoff.md` explaining how each owned consumer now uses the frozen boundary
-- `commands.json` proving the required test command ran locally
-- `done.ok` or `blocked.ok`
-
-Parent pre-merge checks:
-
-- owned files only
-- handoff references the current `freeze_commit_sha`
-- no independent backend marker scan remains in the owned files
-- required `spec-core` test command exited `0`
-
-Acceptance:
-
-- no independent backend marker scan remains in the owned files
-- passport authored/backend freshness invariants stay intact
-- required proof surfaces remain `atom` + `molecule`
-- preserved-vs-leaked semantic-review behavior stays truthful
-
-### task/m28-04-read-side-regressions
-
-Owner:
-
-- worker B
-
-Owned surfaces:
-
-- `spec-core/src/export.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/m14_regressions.rs`
-- `spec-cli/tests/cli.rs`
-
-Forbidden surfaces:
-
-- `spec-core/src/backend_execution.rs`
-- `spec-core/src/lib.rs`
-- Lane A files
-- any `xtask` file
-- `.runs/**`
-- `PLAN.md`
-- `ORCH_PLAN.md`
-
-Required work:
-
-- preserve export/status parity against the frozen boundary
-- preserve CLI health demotion behavior for open escape-hatch gates and
-  semantic drift
-- land the targeted regressions from `PLAN.md`
-
-Required commands:
-
-```bash
-cargo test -p spec-cli --test m14_regressions -- --color never
-cargo test -p spec-cli --test cli -- --color never
-```
-
-Required handoff payload:
-
-- `result.json` with parity assumptions, changed files, and
-  `freeze_commit_sha`
-- `handoff.md` naming the fixtures and invariants relied on
-- `commands.json` for both targeted `spec-cli` test runs
-- `done.ok` or `blocked.ok`
-
-Parent pre-merge checks:
-
-- owned files only
-- handoff references the current `freeze_commit_sha`
-- assumptions still hold after accepted Lane A merge
-- targeted `spec-cli` tests exited `0`
-
-Acceptance:
-
-- export truth matches status truth for the same fixture
-- CLI JSON/text reasons remain truthful
-- backend-only preserved vs leaked behavior remains locked by regression tests
-
-### task/m28-05-xtask-audit
-
-Owner:
-
-- worker C
-
-Owned surfaces:
-
-- none for edit
-
-Read-only audit targets:
-
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/report.rs`
-- prove/certify/report wording or schemas needed to support the audit
-
-Forbidden surfaces:
-
-- every authored source file for edit
-- `.runs/**`
-- `PLAN.md`
-- `ORCH_PLAN.md`
-
-Required work:
-
-- inspect whether current `xtask` proof/report/coverage surfaces embed a real
-  Rust-specific backend semantic leak
-- confirm that the frozen runtime extraction leaves coverage output byte-stable
-  under unchanged recommendation semantics
-- return only one of:
-  - `no_leak_found`
-  - `leak_found_follow_on_required`
-
-Required commands:
-
-```bash
-rg -n "Rust|rust|lowering|backend|escape|semantic" xtask/src/family xtask/src/lib.rs
-cargo xtask family coverage --format json >/tmp/m28.coverage.actual.json
-diff -u .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json /tmp/m28.coverage.actual.json
-```
-
-Required handoff payload:
-
-- `result.json` with explicit audit disposition and cited files
-- `handoff.md` explaining why the audit did or did not force a follow-on
-- `commands.json` for the audit commands and exit codes
-- `done.ok` or `blocked.ok`
-
-Parent pre-merge checks:
-
-- no authored source edits exist
-- audit disposition is one of the two allowed values
-- any claimed leak is evidence-backed and cannot be solved inside M28 honestly
-
-Acceptance:
-
-- audit result is explicit
-- no `xtask` file changed
-- any claimed leak cites the exact file/path and why it cannot be addressed
-  inside M28 without expanding scope
-
-### task/m28-06-integrate-proof
-
-Owner:
-
-- parent
-
-Owned surfaces:
-
-- merged integration branch state
-- `RUN_ROOT/merge-log.md`
-- `RUN_ROOT/integration-state.json`
-- `RUN_ROOT/acceptance.md`
-- `REPO_ROOT/.runs/task-m28-06-integrate-proof/**`
-
-Required work:
-
-- merge Lane A, then rerun its smoke command locally
-- merge Lane B, then rerun its smoke commands locally
-- consume Lane C audit disposition before declaring M28 complete
-- verify no out-of-scope file drift entered the integration branch
-- run the exact proof loop from `PLAN.md`
-
-Required commands:
-
-```bash
-cargo test -p spec-core --lib -- --color never
-cargo test -p spec-cli --test m14_regressions -- --color never
-cargo test -p spec-cli --test cli -- --color never
-cargo xtask family coverage --format json >/tmp/m28.coverage.actual.json
-diff -u .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json /tmp/m28.coverage.actual.json
-```
-
-Optional full confirmation:
-
-```bash
-cargo test -p spec-cli -- --color never
-```
-
-Local post-merge verification runbook:
-
-- after Lane A merge:
-  - run `cargo test -p spec-core --lib -- --color never`
-  - inspect whether Lane B's stated fixtures or invariants are now stale
-  - if stale, reject/relaunch Lane B before merging it
-- after Lane B merge:
-  - run targeted `spec-cli` tests
-  - confirm integrated `status`/`export` parity claims still hold
-- after Lane C disposition:
-  - record audit outcome in `merge-log.md` and `integration-state.json`
-
-Acceptance:
-
-- exact proof loop is green
-- coverage JSON is byte-stable
-- no recommendation/corpus semantics drift occurred
-- no `xtask` edits were needed
-- if audit found a leak, the run transitions to blocked closeout instead of
-  pretending to complete
-
-### task/m28-07-closeout-m29
-
-Owner:
-
-- parent
-
-Owned surfaces:
-
-- `RUN_ROOT/final-proof.json`
-- `RUN_ROOT/blocked.json` if needed
-- `RUN_ROOT/closeout.md`
-- `REPO_ROOT/.runs/task-m28-07-closeout-m29/**`
-
-Required work:
-
-- write final proof accounting
-- write closeout narrative
-- decide one explicit M29 outcome:
-  - `go`
-  - `no_go`
-
-Required M29 `go` conditions:
-
-- all high-criticality runtime consumers share the frozen boundary path
-- current Rust status/export/read-side truth stayed intact
-- coverage stayed byte-stable
-- `xtask` audit disposition is `no_leak_found`
-- closeout states that the runtime boundary is now honest enough for a scoped
-  M29 pilot, not that M29 begins automatically
-
-Required M29 `no_go` conditions:
-
-- `xtask` leak requires a follow-on plan
-- a runtime consumer still derives backend truth independently
-- proof loop drifted outside the closed contract
-- recommendation/corpus or second-language scope drift occurred
-- `closeout.md` names the blocker theme that stops an honest scoped pilot
-
-Acceptance:
-
-- `closeout.md` ends with an explicit M29 decision and rationale
-- `no_go` closeout includes a named follow-on blocker theme
-- `final-proof.json` and `blocked.json` agree with `closeout.md`
-- there is no cleanup-only or “mostly ready” third option
-
-## Integration Sequence
-
-Parent integration order is fixed:
-
-1. Capture baseline.
-2. Stabilize the execution contract locally.
-3. Freeze the shared seam locally.
-4. Launch workers from `freeze_commit_sha`.
-5. Merge Lane A.
-6. Run Lane A post-merge local verification.
-7. Merge Lane B.
-8. Run Lane B post-merge local verification.
-9. Consume Lane C audit disposition.
-10. Run the full final proof loop.
-11. Write closeout and M29 go/no-go.
-
-If Lane A changes the frozen seam by necessity, stop, update `freeze.json`, and
-relaunch Lane B from the new freeze instead of manually reconciling its output.
-
-If Lane A invalidates Lane B assumptions without changing the seam signature,
-reject or relaunch Lane B from the current integrated state rather than merging
-it optimistically.
+- push succeeded
+- the pushed branch triggered the CI workflow
+- the observed workflow run references the exact pushed SHA
+- Rust lane is green
+- TypeScript pilot lane is green
+
+#### `task/m29-07-closeout`
+
+Closeout must write `closeout.md` and answer exactly:
+
+1. what stayed truly shared between Rust and TypeScript
+2. what portability seams leaked
+3. whether the packet contract stayed honest across both targets
+4. whether the verdict is `EXPAND`, `NARROW`, or `STOP`
+
+Verdict rules:
+
+- `EXPAND` only if:
+  - final local proof is green
+  - pushed-SHA CI is green
+  - Rust path stability held
+  - TypeScript stayed packet-local and additive
+  - no closed-surface breach was required
+- `NARROW` only if:
+  - final local proof is green
+  - pushed-SHA CI is green
+  - the pilot worked, but the closeout shows that expansion would first require tighter containment or follow-on repair
+- `STOP` if:
+  - any final proof command fails
+  - pushed-SHA CI fails or does not run on the exact pushed SHA
+  - the pilot leaked beyond the locked implementation surface
+  - Rust-default behavior was not preserved
+
+## Worker Return Contract
+
+Every worker handoff must contain only:
+
+- changed files
+- commands run
+- exit code for every command
+- blockers
+- unresolved assumptions
+- skipped acceptance commands, if any
+
+If a command was skipped, the worker must also report:
+
+- the exact skipped command
+- why it was skipped
+- the exact narrower substitute, if any
+- whether the skip blocks merge
+
+Workers do not return:
+
+- new milestone scope
+- new authority text
+- merge decisions
+- push decisions
+- narrative status reports beyond the contract above
+
+## Conflict Policy And Stale-Lane Invalidation
+
+- Parent does not invent a hybrid contract during merge.
+- If a worker result conflicts with a frozen contract, parent must do exactly one of:
+  - reject the lane and relaunch from the latest freeze
+  - apply the already-frozen authority literally if the lane drifted
+  - block the run if the conflict exposes real authority drift
+- Stale-lane invalidation is automatic when:
+  - `body.typescript` contract changes after a lane was forked
+  - generator or semantic-review shape changes after `Lane C` was forked
+  - packet layout or artifact-path rules change after `Lane C` was forked
+  - workflow command list changes after `Lane D` was forked
+- Stale lanes are discarded and recreated. The parent does not hand-patch them.
+
+## Blocker Protocol
+
+Workers must stop and return a blocker when:
+
+- they need a file outside owned paths
+- they need to widen M29 scope
+- they cannot preserve Rust-default behavior
+- they need repo-wide target-language CLI support
+- they cannot satisfy acceptance commands with concrete evidence
+
+Worker blocker response:
+
+- stop work
+- write the sentinel `blocked` terminal state
+- report the smallest blocking fact, not a speculative redesign
+
+Parent blocker response:
+
+- write `blocked.json`
+- stop downstream launches
+- stop push and closeout
+- do not report partial green success
+
+## Context-Control Rules
+
+- Worker prompts must include only:
+  - the relevant `PLAN.md` excerpt
+  - the relevant `ORCH_PLAN.md` excerpt
+  - owned paths
+  - forbidden paths
+  - exact acceptance commands
+  - handoff contract
+  - freeze SHA
+- Parent-owned run-state under `.runs/m29_typescript_pilot` is the orchestration source of truth. Worker chat is not.
+- Parent reviews only:
+  - changed files
+  - command results
+  - blockers
+  - unresolved assumptions
+- Parent should not keep idle workers attached after a merge or relaunch decision.
 
 ## Acceptance Gates
 
-### Gate 0 - Launch gate
+### Gate 0: baseline and recovery gate
 
-- baseline captured against actual dirty state
-- `PLAN.md` authority confirmed
-- `PLAN.md` marked read-only for the run
+Required:
 
-### Gate 1 - Execution-contract lock gate
+- `baseline.json`
+- `recovery-freeze.json` draft state
+- recorded `741a83e`
+- recorded `d10679a`
+- no unresolved dirty overlap inside lane-owned paths
 
-- `ORCH_PLAN.md` is stable for this run
-- `docs-contract.json` exists and records worker model, concurrency cap, lane
-  map, and parent-only docs policy
+### Gate 1: foundation launch gate
 
-### Gate 2 - Runtime freeze gate
+Required:
 
-- `backend_execution.rs` exists
-- `spec-core/src/lib.rs` exports it
-- `freeze.json` records the frozen seam and invariants
+- `docs-contract.json`
+- `foundation-freeze.json`
+- `Lane A` and `Lane B` forked from the same recorded SHA
+- both worker prompts include exact commands and owned paths
 
-### Gate 3A - Core consumer lane gate
+### Gate 2: packet launch gate
 
-- Lane A stays within ownership
-- owned files consume the frozen seam
-- handoff package is complete
-- `cargo test -p spec-core --lib -- --color never` exits `0`
+Required:
 
-### Gate 3B - Read-side lane gate
+- `Lane A` merged and verified
+- `Lane B` merged and verified
+- `packet-contract-freeze.json`
+- packet authorship can proceed without guessing body, layout, or artifact rules
 
-- Lane B stays within ownership
-- status/export parity and CLI regressions are covered
-- handoff package is complete
-- targeted `spec-cli` tests exit `0`
+### Gate 3: CI launch gate
 
-### Gate 3C - Audit gate
+Required:
 
-- Lane C remains read-only
-- handoff package is complete
-- returns only `no_leak_found` or `leak_found_follow_on_required`
-- any leak claim is evidence-backed
+- `Lane C` merged and verified
+- `ci-freeze.json`
+- workflow command list is frozen and explicit
 
-### Gate 4 - Final proof gate
+### Gate 4: final local proof gate
 
-- exact proof loop from `PLAN.md` is green
-- coverage output is byte-stable
-- no out-of-scope files entered the diff
+Required:
 
-### Gate 5 - M29 decision gate
+- `Lane D` merged
+- the full local proof loop passes from `ws/m29-int`
+- `proof-log.json` records every actual command and exit code
+- packet tree remains clean after TypeScript prove and certify
 
-- `go` only if runtime seam extraction is complete and `xtask` stays read-only
-- `go` means M28 leaves the runtime boundary honest enough for a scoped M29
-  pilot
-- `go` does not mean M29 starts automatically
-- `no_go` requires a named follow-on blocker theme in `closeout.md`
+### Gate 5: pushed-SHA CI observation gate
 
-## Halt Conditions
+Required:
 
-Halt immediately if any of the following occur:
+- push succeeded
+- `push-record.json` records the pushed branch and SHA
+- the branch CI run is observed on that exact pushed SHA
+- `ci-observation.json` records Rust lane green and TypeScript lane green
 
-- a required code edit falls outside the closed runtime contract
-- `PLAN.md` would need to change to justify the runtime diff
-- `xtask` change becomes necessary
-- validator policy widening becomes necessary
-- coverage JSON drifts under unchanged recommendation semantics
-- `status` and `export` disagree on the same fixture
-- helper-only lowering becomes domain-lowering
-- leaked backend-only meaning becomes silently preserved
-- second-language work enters the branch
-- the run cannot produce an explicit M29 go/no-go outcome
+### Gate 6: closeout gate
 
-## Closeout Requirements And Blocked-Run Handling
+Required:
 
-`closeout.md` must state:
+- `closeout.md`
+- exact verdict: `EXPAND`, `NARROW`, or `STOP`
+- verdict justified by the Gate 4 and Gate 5 results
 
-- launch branch and freeze commit
-- whether pre-existing dirt affected any lane
-- exact merge order
-- exact proof commands run
-- coverage diff result
-- whether CLI/status/export wording changed or only internals changed
-- whether current Rust read-side truth stayed aligned
-- `xtask` audit disposition
-- explicit M29 decision with rationale
-- if `no_go`, the named follow-on blocker theme
+## Completion Criteria
 
-`final-proof.json` must record:
+M29 orchestration is complete only when all are true:
 
-- ordered commands
-- exit codes
-- relevant artifact paths
-- final acceptance verdict
-
-If the run blocks, `blocked.json` must record:
-
-- blocking task ID
-- exact halt condition
-- evidence file or command output path
-- why the blocker cannot be solved inside M28 honestly
-- required follow-on plan name
-
-Blocked-run rule:
-
-- A blocked M28 may preserve completed runtime extraction work in local branch
-  state for analysis, but it does not count as an accepted milestone close.
-- A blocked M28 must still produce final proof/accounting artifacts and an
-  explicit M29 `no_go`.
-
-## Tests And Acceptance
-
-Required final ordered sequence from `PLAN.md`:
-
-```bash
-cargo test -p spec-core --lib -- --color never
-cargo test -p spec-cli --test m14_regressions -- --color never
-cargo test -p spec-cli --test cli -- --color never
-cargo xtask family coverage --format json >/tmp/m28.coverage.actual.json
-diff -u .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json /tmp/m28.coverage.actual.json
-```
-
-Optional only if `spec-cli` diff widens:
-
-```bash
-cargo test -p spec-cli -- --color never
-```
-
-Expected invariants after the final sequence:
-
-- exactly one shared backend-execution boundary exists in `spec-core`
-- `passport.rs`, `escape_hatch.rs`, `semantic_review.rs`, `export.rs`, and
-  `spec-cli/src/commands.rs` all consume that boundary instead of re-deriving
-  backend truth independently
-- authored-only seam changes do not alter backend freshness
-- backend-only lowering/derive changes do not alter authored freshness
-- helper-only markers remain helper-only
-- domain-lowering markers remain domain-lowering
-- preserved backend-only meaning remains preserved
-- leaked backend-only meaning remains failing
-- `status` and `export` agree on the same fixtures
-- coverage output remains byte-stable
-- no recommendation/corpus semantics change occurred
-- no second-language work landed
-
-## Assumptions
-
-- `feat/corpus-expansion` remains the live integration branch for M28.
-- `PLAN.md` already contains the normative milestone scope and proof loop.
-- Current dirty state, including any local `PLAN.md` edits, is real repo state
-  and must be recorded rather than overwritten.
-- `spec-core/src/backend_execution.rs` can expose a stable enough seam contract
-  for workers without needing broader refactors.
-- The existing M14 regressions and CLI fixtures are sufficient to prove current
-  Rust read-side truth without inventing a new fixture family.
-- Any real `xtask` leak discovered by Lane C is a follow-on planning input, not
-  permission to expand M28.
+1. recovery restarted from `741a83e`
+2. `d10679a` is preserved as blocked history only
+3. only `Lane A` and `Lane B` ran in parallel
+4. parent remained sole integrator, sole freeze authority, sole push authority, and sole final verifier
+5. `Lane C` started only after the post-foundation packet freeze
+6. `Lane D` started only after the post-packet CI freeze
+7. Rust stayed green and path-stable
+8. TypeScript completed smoke, prove, and certify under the locked packet-local pilot
+9. the final branch push triggered CI on the exact observed SHA
+10. closeout ended with exactly one verdict: `EXPAND`, `NARROW`, or `STOP`
