@@ -585,6 +585,12 @@ mod tests {
                 unit_path.display()
             );
             assert_candidate_lists_path_once(&candidate, case.path);
+            let authored = fs::read_to_string(&unit_path).unwrap();
+            assert!(
+                authored.contains("  typescript: |"),
+                "missing additive typescript body in `{}`",
+                unit_path.display()
+            );
         }
 
         let aligned = fs::read_to_string(
@@ -599,9 +605,13 @@ mod tests {
         assert!(aligned.contains("deps:\n  - money/round"));
         assert!(aligned.contains("let taxed = subtotal + subtotal * rate;"));
         assert!(aligned.contains("round(taxed)"));
+        assert!(aligned.contains("typescript: |"));
+        assert!(aligned.contains("const taxed = subtotal + subtotal * rate;"));
+        assert!(aligned.contains("return round(taxed);"));
 
         let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec")).unwrap();
         assert!(unsupported.contains("if rate == Decimal::ZERO"));
+        assert!(unsupported.contains("if (rate === Decimal.ZERO)"));
         assert!(!candidate.contains("TODO: replace"));
     }
 
@@ -634,7 +644,7 @@ mod tests {
         let aligned = fs::read_to_string(&aligned_path).unwrap();
         write_string(
             &aligned_path,
-            &aligned.replacen("subtotal: Decimal", "amount: Decimal", 1),
+            &aligned.replacen("typescript: |", "javascript: |", 1),
         );
 
         let failures = smoke::collect_smoke_failures(
@@ -646,7 +656,7 @@ mod tests {
 
         assert!(failures.iter().any(|message| {
             message.contains("scaffolded smoke-contract file")
-                && message.contains("subtotal: Decimal")
+                && message.contains("typescript: |")
         }));
     }
 
@@ -944,6 +954,16 @@ mod tests {
         assert_eq!(
             harness.scaffold.smoke.scaffold_file_contracts[0].path,
             "fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec"
+        );
+        assert!(
+            harness.scaffold.smoke.scaffold_file_contracts[0]
+                .required_contents
+                .contains(&"typescript: |")
+        );
+        assert!(
+            harness.scaffold.smoke.scaffold_file_contracts[0]
+                .required_contents
+                .contains(&"return round(taxed);")
         );
         assert_eq!(harness.suite_slug, MONOTONE_UP_SUITE_SLUG);
     }

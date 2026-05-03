@@ -582,6 +582,11 @@ body:
         let taxed = subtotal + subtotal * rate;
         round(taxed)
     }}
+  typescript: |
+    {{
+        const taxed = subtotal + subtotal * rate;
+        return round(taxed);
+    }}
 local_tests:
   - id: {callable_name}_happy_path
     expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)
@@ -610,6 +615,11 @@ body:
         let taxed = subtotal - subtotal * rate;
         round(taxed.max(Decimal::ZERO))
     }}
+  typescript: |
+    {{
+        const taxed = subtotal - subtotal * rate;
+        return round(taxed >= Decimal.ZERO ? taxed : Decimal.ZERO);
+    }}
 local_tests:
   - id: {callable_name}_drift
     expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(9275, 2)
@@ -637,6 +647,11 @@ body:
     {{
         let taxed = subtotal + subtotal * rate;
         round(taxed)
+    }}
+  typescript: |
+    {{
+        const taxed = subtotal + subtotal * rate;
+        return round(taxed);
     }}
 local_tests:
   - id: {callable_name}_under_specified
@@ -669,6 +684,14 @@ body:
         }} else {{
             round(taxed)
         }}
+    }}
+  typescript: |
+    {{
+        const taxed = subtotal + subtotal * rate;
+        if (rate === Decimal.ZERO) {{
+            return subtotal;
+        }}
+        return round(taxed);
     }}
 local_tests:
   - id: {callable_name}_unsupported_near_miss

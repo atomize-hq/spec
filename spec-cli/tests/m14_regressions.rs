@@ -99,7 +99,75 @@ fn copied_m24_monotone_up_fixture(bucket: &str) -> (TempDir, PathBuf) {
             .join(bucket),
         &fixture_dst,
     );
+    inject_monotone_up_typescript_body(
+        &fixture_dst.join(monotone_up_fixture_unit_relative_path(bucket)),
+        monotone_up_typescript_body(bucket),
+    );
     (temp_dir, fixture_dst)
+}
+
+fn monotone_up_fixture_unit_relative_path(bucket: &str) -> &'static str {
+    match bucket {
+        "aligned" => "units/pricing/apply_tax_aligned.unit.spec",
+        "drift" => "units/pricing/apply_tax_drift.unit.spec",
+        "under_specified" => "units/pricing/apply_tax_under_specified.unit.spec",
+        "unsupported_near_miss" => {
+            "units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec"
+        }
+        other => panic!("unexpected monotone-up bucket `{other}`"),
+    }
+}
+
+fn monotone_up_typescript_body(bucket: &str) -> &'static str {
+    match bucket {
+        "aligned" => {
+            "    {\n        const taxed = subtotal + subtotal * rate;\n        return round(taxed);\n    }"
+        }
+        "drift" => {
+            "    {\n        const taxed = subtotal - subtotal * rate;\n        return round(taxed >= Decimal.ZERO ? taxed : Decimal.ZERO);\n    }"
+        }
+        "under_specified" => {
+            "    {\n        const taxed = subtotal + subtotal * rate;\n        return round(taxed);\n    }"
+        }
+        "unsupported_near_miss" => {
+            "    {\n        const taxed = subtotal + subtotal * rate;\n        if (rate === Decimal.ZERO) {\n            return subtotal;\n        }\n        return round(taxed);\n    }"
+        }
+        other => panic!("unexpected monotone-up bucket `{other}`"),
+    }
+}
+
+fn inject_monotone_up_typescript_body(unit_path: &Path, typescript_body: &str) {
+    let contents = fs::read_to_string(unit_path).unwrap();
+    if contents.contains("\n  typescript: |\n") {
+        return;
+    }
+
+    let rewritten = contents.replace(
+        "\nlocal_tests:\n",
+        &format!("\n  typescript: |\n{typescript_body}\nlocal_tests:\n"),
+    );
+    assert_ne!(
+        rewritten,
+        contents,
+        "expected to inject a typescript body into `{}`",
+        unit_path.display()
+    );
+    fs::write(unit_path, rewritten).unwrap();
+}
+
+fn assert_monotone_up_fixture_has_additive_typescript(fixture_dst: &Path, bucket: &str) {
+    let unit_path = fixture_dst.join(monotone_up_fixture_unit_relative_path(bucket));
+    let contents = fs::read_to_string(&unit_path).unwrap();
+    assert!(
+        contents.contains("\n  typescript: |\n"),
+        "expected additive typescript body in `{}`",
+        unit_path.display()
+    );
+    assert!(
+        contents.contains(monotone_up_typescript_body(bucket)),
+        "expected truthful monotone-up typescript body in `{}`",
+        unit_path.display()
+    );
 }
 
 fn status_unit<'a>(status_json: &'a Value, id: &str) -> &'a Value {
@@ -2332,6 +2400,7 @@ fn monotone_up_truth_surface_stale_status_and_export_preserve_last_proven_review
 fn monotone_up_corpus_aligned_fixture_projects_valid_state() {
     let (_temp_dir, fixture_dst) = copied_m24_monotone_up_fixture("aligned");
     let passport_path = fixture_dst.join("units/pricing/apply_tax_aligned.spec.passport.json");
+    assert_monotone_up_fixture_has_additive_typescript(&fixture_dst, "aligned");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2368,6 +2437,7 @@ fn monotone_up_corpus_aligned_fixture_projects_valid_state() {
 fn monotone_up_corpus_drift_fixture_projects_failing_state() {
     let (_temp_dir, fixture_dst) = copied_m24_monotone_up_fixture("drift");
     let passport_path = fixture_dst.join("units/pricing/apply_tax_drift.spec.passport.json");
+    assert_monotone_up_fixture_has_additive_typescript(&fixture_dst, "drift");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2404,6 +2474,7 @@ fn monotone_up_corpus_under_specified_fixture_projects_incomplete_state() {
     let (_temp_dir, fixture_dst) = copied_m24_monotone_up_fixture("under_specified");
     let passport_path =
         fixture_dst.join("units/pricing/apply_tax_under_specified.spec.passport.json");
+    assert_monotone_up_fixture_has_additive_typescript(&fixture_dst, "under_specified");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2443,6 +2514,7 @@ fn monotone_up_corpus_unsupported_near_miss_stays_additive_only_and_neutral() {
     let (_temp_dir, fixture_dst) = copied_m24_monotone_up_fixture("unsupported_near_miss");
     let passport_path = fixture_dst
         .join("units/pricing/apply_tax_control_flow_unsupported_near_miss.spec.passport.json");
+    assert_monotone_up_fixture_has_additive_typescript(&fixture_dst, "unsupported_near_miss");
 
     let unit_test_output = run_spec(
         &fixture_dst,
