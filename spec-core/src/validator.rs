@@ -439,6 +439,14 @@ fn validate_body_rust_block(spec: &LoadedSpec) -> Result<()> {
     Ok(())
 }
 
+fn reject_top_level_typescript_body(spec: &LoadedSpec, message: &'static str) -> Result<()> {
+    if spec.spec.body.typescript.is_some() {
+        return Err(semantic_error(spec, message));
+    }
+
+    Ok(())
+}
+
 fn validate_contract_types(contract: &Contract, field_root: &str, path: &str) -> Result<()> {
     if let Some(inputs) = &contract.inputs {
         for (name, type_str) in inputs {
@@ -489,6 +497,10 @@ fn validate_data_escape_hatches(spec: &LoadedSpec) -> Result<()> {
             "kind:data must not use top-level imports; Rust-specific escape hatches are limited to methods[].lowering.rust.body and backends.rust.derives",
         ));
     }
+    reject_top_level_typescript_body(
+        spec,
+        "kind:data must not declare top-level body.typescript; shared seam behavior belongs in methods[].lowering.rust.body",
+    )?;
     if !spec.spec.body.rust.trim().is_empty() {
         return Err(semantic_error(
             spec,
@@ -518,6 +530,10 @@ fn validate_sum_escape_hatches(spec: &LoadedSpec) -> Result<()> {
             "kind:sum must not use top-level imports; Rust-specific escape hatches are limited to methods[].lowering.rust.body and backends.rust.derives",
         ));
     }
+    reject_top_level_typescript_body(
+        spec,
+        "kind:sum must not declare top-level body.typescript; shared seam behavior belongs in methods[].lowering.rust.body",
+    )?;
     if !spec.spec.body.rust.trim().is_empty() {
         return Err(semantic_error(
             spec,
@@ -1273,6 +1289,15 @@ pub fn validate_raw_molecule_test_yaml(yaml_value: &YamlValue, file_path: &str) 
 /// 3. id segments must not be Rust reserved keywords
 /// 4. id segments must not use reserved generated namespace names
 pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> {
+    if test.test.body.typescript.is_some() {
+        return Err(SpecError::SemanticValidation {
+            message:
+                "body.typescript is not supported in .test.spec; molecule tests remain Rust-only"
+                    .to_string(),
+            path: test.source.file_path.clone(),
+        });
+    }
+
     syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
         SpecError::MoleculeBodyRustMustBeBlock {
             message: e.to_string(),
@@ -2315,6 +2340,15 @@ local_tests:
     }
 
     #[test]
+    fn test_validate_semantic_allows_additive_function_typescript_body() {
+        let mut spec = create_test_spec("pricing/apply_tax", "{ subtotal + subtotal * rate }");
+        spec.spec.body.typescript = Some("return subtotal + subtotal * rate;".to_string());
+
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
     fn test_validate_data_semantic_valid_spec() {
         let spec = create_data_spec("pricing/checkout_quote");
         let result = validate_semantic(&spec);
@@ -2390,6 +2424,18 @@ local_tests:
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
             err.contains("conflicts with the emitted enum name 'CheckoutStatus'"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_sum_semantic_rejects_top_level_typescript_body() {
+        let mut spec = create_sum_spec("pricing/checkout_status");
+        spec.spec.body.typescript = Some("return \"pending\";".to_string());
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("kind:sum must not declare top-level body.typescript"),
             "{err}"
         );
     }
@@ -2538,6 +2584,18 @@ local_tests:
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
             err.contains("kind:data must leave body.rust empty"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_top_level_typescript_body() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.body.typescript = Some("return unreachable();".to_string());
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("kind:data must not declare top-level body.typescript"),
             "{err}"
         );
     }
@@ -3903,6 +3961,20 @@ methods:
         assert!(
             err.contains("unsafe"),
             "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_typescript_is_rejected() {
+        let mut test = make_molecule_test("pricing/checkout_flow", "{ true }");
+        test.test.body.typescript = Some("return true;".to_string());
+
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("body.typescript is not supported in .test.spec"),
+            "{err}"
         );
     }
 
