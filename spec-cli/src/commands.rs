@@ -5002,6 +5002,7 @@ mod tests {
                 imports: Vec::new(),
                 body: spec_core::types::Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: (0..tests_per_spec)
                     .map(|test_index| spec_core::types::LocalTest {
@@ -5653,6 +5654,7 @@ body:
                 imports: vec![],
                 body: spec_core::types::Body {
                     rust: "{ subtotal }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![spec_core::types::LocalTest {
                     id: "basic".to_string(),
