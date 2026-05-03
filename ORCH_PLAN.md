@@ -124,6 +124,8 @@ Parent-owned orchestration truth lives under:
 - `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot`
 - `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m29-typescript-pilot`
 
+All canonical parent-owned run-state files and per-task sentinels live under `RUN_ROOT`.
+
 Canonical parent-owned files:
 
 - `baseline.json`
@@ -209,18 +211,18 @@ Canonical parent-owned files:
 
 Per-task sentinel directories:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-00-baseline/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-01-lock-contract/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-02-refreeze-foundation/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-a-lane-spec-core/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-b-lane-xtask/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-03-freeze-packet/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-c-lane-packet/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-04-freeze-ci/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-d-lane-ci/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-05-final-proof/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-06-push-observe/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m29-07-closeout/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-00-baseline/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-01-lock-contract/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-02-refreeze-foundation/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-a-lane-spec-core/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-b-lane-xtask/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-03-freeze-packet/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-c-lane-packet/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-04-freeze-ci/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-d-lane-ci/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-05-final-proof/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-06-push-observe/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m29_typescript_pilot/task-m29-07-closeout/`
 
 Each sentinel directory contains:
 
@@ -250,6 +252,7 @@ Branches and worktrees:
 
 Creation and restart rules:
 
+- If a named M29 recovery worktree or branch already exists, the parent removes it first and records that teardown in `session-log.md` before recreating the frozen replacement.
 - `ws/m29-int` is created from `741a83e`.
 - `ws/m29-spec-core` and `ws/m29-xtask` are both created from the same recorded `foundation-freeze.json` SHA.
 - `ws/m29-packet` is created only after `packet-contract-freeze.json` exists.
@@ -337,6 +340,7 @@ Required acceptance commands:
 cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
 cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1 --target-language typescript
 cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
 rg --files semantic-families/function.arithmetic_leaf.monotone_up.v1/targets/typescript/fixtures
 rg -n "typescript:" semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures
 ```
@@ -450,10 +454,11 @@ Acceptance:
 
 Required parent actions:
 
-1. Create `ws/m29-int` from `741a83e`.
-2. Create `ws/m29-spec-core` and `ws/m29-xtask` from the same `ws/m29-int` SHA.
-3. Write `recovery-freeze.json`.
-4. Write `foundation-freeze.json`.
+1. Remove any pre-existing `ws/m29-int`, `ws/m29-spec-core`, and `ws/m29-xtask` worktrees or branches that still point at blocked or stale recovery state.
+2. Create `ws/m29-int` from `741a83e`.
+3. Create `ws/m29-spec-core` and `ws/m29-xtask` from the same `ws/m29-int` SHA.
+4. Write `recovery-freeze.json`.
+5. Write `foundation-freeze.json`.
 
 Acceptance:
 
@@ -740,7 +745,6 @@ Parent blocker response:
 Required:
 
 - `baseline.json`
-- `recovery-freeze.json` draft state
 - recorded `741a83e`
 - recorded `d10679a`
 - no unresolved dirty overlap inside lane-owned paths
@@ -750,6 +754,7 @@ Required:
 Required:
 
 - `docs-contract.json`
+- `recovery-freeze.json`
 - `foundation-freeze.json`
 - `Lane A` and `Lane B` forked from the same recorded SHA
 - both worker prompts include exact commands and owned paths
