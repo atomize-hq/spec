@@ -84,7 +84,8 @@ pub(crate) fn execute_in<R: CommandRunner>(
     validate_target_language(&family, target_language, "family prove")?;
     let harness = *require_family_harness_in(registry, &family, "family prove")?;
     let paths = PacketPaths::new(workspace_root, family.clone());
-    let mut report = crate::family::report::build_report(workspace_root, &family, runner);
+    let mut report =
+        crate::family::report::build_report(workspace_root, &family, target_language, runner);
 
     if let Err(error) = ensure_packet_path_safe(workspace_root, &paths.root) {
         set_gates(&mut report, false, false, false, false);
@@ -199,7 +200,7 @@ pub(crate) fn execute_in<R: CommandRunner>(
     })
 }
 
-fn validate_target_language(
+pub(crate) fn validate_target_language(
     family: &FamilyId,
     target_language: FamilyTargetLanguage,
     command: &str,

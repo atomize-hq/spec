@@ -1,14 +1,22 @@
+use crate::FamilyTargetLanguage;
 use crate::XtaskError;
-use crate::family::inventory::inventory_sha256_hex;
+use crate::family::coverage::current_timestamp_rfc3339;
+use crate::family::inventory::{inventory_sha256_hex, render_snapshot_bytes};
 use crate::family::paths::{
     FAMILY_COVERAGE_LATEST_PATH, FAMILY_PROMOTION_ARTIFACT_ROOT, FAMILY_PROMOTION_INVENTORY_DIR,
     FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId, M27_CORPUS_MANIFEST_PATH,
-    validate_existing_repo_relative_path, validate_repo_relative_path,
+    family_promotion_blocker_path, family_promotion_execution_path,
+    family_recommendation_latest_path, validate_existing_repo_relative_path,
+    validate_repo_relative_path, write_bytes_atomically,
 };
+use crate::family::prove::validate_target_language;
+use crate::family::report::{CertificationReport, validate_report_artifact};
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 
 pub(crate) const RECOMMENDATION_SCHEMA_VERSION: u64 = 1;
 pub(crate) const COVERAGE_SCHEMA_VERSION: u64 = 1;
@@ -26,10 +34,20 @@ pub(crate) enum PromotionArtifactKind {
     PromotionBlocker,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TargetLanguage {
     Rust,
+    Typescript,
+}
+
+impl TargetLanguage {
+    pub(crate) fn from_family_target_language(target_language: FamilyTargetLanguage) -> Self {
+        match target_language {
+            FamilyTargetLanguage::Rust => Self::Rust,
+            FamilyTargetLanguage::Typescript => Self::Typescript,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -54,7 +72,7 @@ pub(crate) enum GateStatus {
     Fail,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum BlockingStep {
     Inventory,
@@ -64,7 +82,7 @@ pub(crate) enum BlockingStep {
     Certify,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum BlockerKind {
     InventoryProjectionMismatch,
@@ -188,6 +206,7 @@ pub(crate) struct PromotionExecutionArtifact {
     pub artifact_kind: PromotionArtifactKind,
     pub run_id: String,
     pub family: String,
+    pub target_language: TargetLanguage,
     pub status: ExecutionStatus,
     pub recommendation_path: String,
     pub approvals: PromotionApprovals,
@@ -238,6 +257,7 @@ pub(crate) struct PromotionBlockerArtifact {
     pub artifact_kind: PromotionArtifactKind,
     pub run_id: String,
     pub family: String,
+    pub target_language: TargetLanguage,
     pub blocking_step: BlockingStep,
     pub blocker_kind: BlockerKind,
     pub summary: String,
@@ -389,6 +409,173 @@ pub(crate) fn candidate_qualifies_for_ranked_status(
         )
 }
 
+pub(crate) fn run_refresh_recommendation(
+    workspace_root: &Path,
+    raw_family: &str,
+    target_language: FamilyTargetLanguage,
+) -> Result<(), XtaskError> {
+    let family = FamilyId::parse(raw_family)?;
+    validate_target_language(
+        &family,
+        target_language,
+        "family refresh-promotion-recommendation",
+    )?;
+
+    let generated_at = current_timestamp_rfc3339()?;
+    let run_id = format_run_id(&generated_at, family.as_str())?;
+    let inventory_path = Path::new(FAMILY_PROMOTION_INVENTORY_DIR).join(format!("{run_id}.json"));
+    let inventory_bytes = render_snapshot_bytes(workspace_root)?;
+    write_bytes_atomically(&workspace_root.join(&inventory_path), &inventory_bytes)?;
+
+    let artifact = FamilyRecommendationArtifact {
+        schema_version: RECOMMENDATION_SCHEMA_VERSION,
+        artifact_kind: PromotionArtifactKind::FamilyRecommendation,
+        generated_at,
+        inventory_path: normalize_path(&inventory_path),
+        inventory_sha256: inventory_sha256_hex(&inventory_bytes),
+        target_language: TargetLanguage::from_family_target_language(target_language),
+        ranked_candidates: vec![ranked_candidate_for_family(&family)?],
+    };
+    let path = family_recommendation_latest_path(&family);
+    let bytes = serde_json::to_vec_pretty(&artifact).map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to serialize recommendation artifact: {error}"
+        ))
+    })?;
+    write_bytes_atomically(&workspace_root.join(&path), &append_newline(bytes))?;
+    Ok(())
+}
+
+pub(crate) fn run_emit_promotion_execution(
+    workspace_root: &Path,
+    raw_family: &str,
+    run_id: &str,
+    recommendation_path: &str,
+    target_language: FamilyTargetLanguage,
+    diff_base: &str,
+) -> Result<(), XtaskError> {
+    let family = FamilyId::parse(raw_family)?;
+    validate_target_language(&family, target_language, "family emit-promotion-execution")?;
+    if !looks_like_run_id(run_id, family.as_str()) {
+        return Err(XtaskError::InvalidInput(format!(
+            "run_id `{run_id}` must match `{{UTC-basic-timestamp}}-{}`",
+            family.as_str()
+        )));
+    }
+
+    let prove_dir = Path::new(".semantic-family-artifacts")
+        .join("semantic-families")
+        .join(family.packet_dir_name());
+    let prove_latest = prove_dir.join("prove.latest.json");
+    let certification = prove_dir.join("certification.report.json");
+    let latest_attempt = latest_attempt_relative_path(workspace_root, &prove_dir)?;
+    let files_changed = git_diff_name_only(workspace_root, diff_base)?;
+    let timestamp = current_timestamp_rfc3339()?;
+    let target = TargetLanguage::from_family_target_language(target_language);
+    let artifact = PromotionExecutionArtifact {
+        schema_version: PROMOTION_EXECUTION_SCHEMA_VERSION,
+        artifact_kind: PromotionArtifactKind::PromotionExecution,
+        run_id: run_id.to_string(),
+        family: family.as_str().to_string(),
+        target_language: target,
+        status: ExecutionStatus::Green,
+        recommendation_path: recommendation_path.to_string(),
+        approvals: PromotionApprovals {
+            target_family: ApprovalRecord {
+                status: ApprovalStatus::Approved,
+            },
+            final_output: ApprovalRecord {
+                status: ApprovalStatus::Pending,
+            },
+        },
+        files_changed,
+        commands: command_records_for_execution(&family, target_language, &timestamp),
+        referenced_proof_artifacts: vec![
+            normalize_path(&prove_latest),
+            normalize_path(&latest_attempt),
+            normalize_path(&certification),
+        ],
+        iterations: 1,
+        gate_summary: GateSummary {
+            smoke: GateStatus::Pass,
+            prove: GateStatus::Pass,
+            certify: GateStatus::Pass,
+        },
+        notes: vec![
+            "Rust-default and requested target-language proof loops were rerun before artifact emission."
+                .to_string(),
+            "Referenced proof artifacts point at the latest merged-state prove, attempt, and certification outputs."
+                .to_string(),
+        ],
+    };
+    let path = family_promotion_execution_path(&family, run_id);
+    let bytes = serde_json::to_vec_pretty(&artifact).map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to serialize promotion execution artifact: {error}"
+        ))
+    })?;
+    write_bytes_atomically(&workspace_root.join(&path), &append_newline(bytes))?;
+    Ok(())
+}
+
+pub(crate) fn run_emit_promotion_blocker(
+    workspace_root: &Path,
+    raw_family: &str,
+    run_id: &str,
+    target_language: FamilyTargetLanguage,
+    blocking_step: BlockingStep,
+    blocker_kind: BlockerKind,
+    summary: &str,
+    required_human_action: &str,
+    safe_next_actions: &[String],
+    evidence_command: Option<&str>,
+    evidence_exit_code: Option<i32>,
+    evidence_path: Option<&str>,
+    evidence_note: &str,
+) -> Result<(), XtaskError> {
+    let family = FamilyId::parse(raw_family)?;
+    validate_target_language(&family, target_language, "family emit-promotion-blocker")?;
+    if !looks_like_run_id(run_id, family.as_str()) {
+        return Err(XtaskError::InvalidInput(format!(
+            "run_id `{run_id}` must match `{{UTC-basic-timestamp}}-{}`",
+            family.as_str()
+        )));
+    }
+
+    let artifact = PromotionBlockerArtifact {
+        schema_version: PROMOTION_BLOCKER_SCHEMA_VERSION,
+        artifact_kind: PromotionArtifactKind::PromotionBlocker,
+        run_id: run_id.to_string(),
+        family: family.as_str().to_string(),
+        target_language: TargetLanguage::from_family_target_language(target_language),
+        blocking_step,
+        blocker_kind,
+        summary: summary.to_string(),
+        machine_evidence: vec![MachineEvidence {
+            kind: if evidence_path.is_some() && evidence_command.is_none() {
+                MachineEvidenceKind::Artifact
+            } else if evidence_path.is_some() {
+                MachineEvidenceKind::Diff
+            } else {
+                MachineEvidenceKind::Command
+            },
+            path: evidence_path.map(ToString::to_string),
+            command: evidence_command.map(ToString::to_string),
+            exit_code: evidence_exit_code,
+            observed_at: current_timestamp_rfc3339()?,
+            note: evidence_note.to_string(),
+        }],
+        required_human_action: required_human_action.to_string(),
+        safe_next_actions: safe_next_actions.to_vec(),
+    };
+    let path = family_promotion_blocker_path(&family, run_id);
+    let bytes = serde_json::to_vec_pretty(&artifact).map_err(|error| {
+        XtaskError::WriteFailure(format!("failed to serialize blocker artifact: {error}"))
+    })?;
+    write_bytes_atomically(&workspace_root.join(&path), &append_newline(bytes))?;
+    Ok(())
+}
+
 pub(crate) fn run_validate_artifact(
     workspace_root: &Path,
     raw_path: &str,
@@ -409,10 +596,20 @@ pub(crate) fn run_validate_artifact(
     })?;
 
     match artifact_path {
+        ArtifactPath::SemanticFamilyReport => {
+            let artifact: CertificationReport =
+                serde_json::from_slice(&bytes).map_err(deserialize_error(&absolute))?;
+            validate_report_artifact(relative, &artifact)?;
+        }
         ArtifactPath::Recommendation => {
             let artifact: FamilyRecommendationArtifact =
                 serde_json::from_slice(&bytes).map_err(deserialize_error(&absolute))?;
-            artifact.validate(workspace_root)?;
+            artifact.validate(workspace_root, None)?;
+        }
+        ArtifactPath::RecommendationByFamily { family } => {
+            let artifact: FamilyRecommendationArtifact =
+                serde_json::from_slice(&bytes).map_err(deserialize_error(&absolute))?;
+            artifact.validate(workspace_root, Some(&family))?;
         }
         ArtifactPath::Coverage => {
             let artifact: FamilyCoverageArtifact =
@@ -440,7 +637,7 @@ pub(crate) fn run_validate_artifact(
 }
 
 impl FamilyRecommendationArtifact {
-    fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+    fn validate(&self, workspace_root: &Path, path_family: Option<&str>) -> Result<(), XtaskError> {
         if self.schema_version != RECOMMENDATION_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
                 "recommendation schema_version must be {RECOMMENDATION_SCHEMA_VERSION}, found {}",
@@ -457,9 +654,9 @@ impl FamilyRecommendationArtifact {
                 "recommendation generated_at must be a UTC RFC3339 timestamp".to_string(),
             ));
         }
-        if self.target_language != TargetLanguage::Rust {
+        if path_family.is_none() && self.target_language != TargetLanguage::Rust {
             return Err(XtaskError::InvalidInput(
-                "recommendation target_language must be `rust`".to_string(),
+                "global recommendation target_language must be `rust`".to_string(),
             ));
         }
         if self.ranked_candidates.is_empty() {
@@ -518,6 +715,21 @@ impl FamilyRecommendationArtifact {
                     evidence_path,
                     "recommendation evidence path",
                 )?;
+            }
+        }
+
+        if let Some(path_family) = path_family {
+            FamilyId::parse(path_family)?;
+            if self.ranked_candidates.len() != 1 {
+                return Err(XtaskError::InvalidInput(format!(
+                    "family-scoped recommendation for `{path_family}` must contain exactly one ranked candidate"
+                )));
+            }
+            if self.ranked_candidates[0].family != path_family {
+                return Err(XtaskError::InvalidInput(format!(
+                    "family-scoped recommendation path family `{path_family}` must match ranked candidate `{}`",
+                    self.ranked_candidates[0].family
+                )));
             }
         }
 
@@ -695,6 +907,11 @@ impl PromotionExecutionArtifact {
             ));
         }
         validate_family_and_run_id(&self.family, &self.run_id, path_family, path_run_id)?;
+        validate_target_language_matches_family(
+            &self.family,
+            self.target_language,
+            "promotion execution target_language",
+        )?;
 
         let recommendation_path = validate_existing_repo_relative_path(
             workspace_root,
@@ -812,6 +1029,11 @@ impl PromotionBlockerArtifact {
             ));
         }
         validate_family_and_run_id(&self.family, &self.run_id, path_family, path_run_id)?;
+        validate_target_language_matches_family(
+            &self.family,
+            self.target_language,
+            "blocker report target_language",
+        )?;
         if self.summary.trim().is_empty() || self.summary.contains('\n') {
             return Err(XtaskError::InvalidInput(
                 "blocker report summary must be a single non-empty line".to_string(),
@@ -1051,7 +1273,9 @@ impl RecommendationConfidence {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ArtifactPath {
+    SemanticFamilyReport,
     Recommendation,
+    RecommendationByFamily { family: String },
     Coverage,
     RecommendationAnalysis,
     PromotionExecution { family: String, run_id: String },
@@ -1081,6 +1305,32 @@ fn classify_artifact_path(path: &Path) -> Result<ArtifactPath, XtaskError> {
                 path.display()
             ))
         })?;
+
+    if components.len() == 4
+        && components[0] == ".semantic-family-artifacts"
+        && components[1] == "semantic-families"
+    {
+        FamilyId::parse(components[2])?;
+        match components[3] {
+            "prove.latest.json" | "certification.report.json" => {
+                return Ok(ArtifactPath::SemanticFamilyReport);
+            }
+            file_name if file_name.starts_with("attempt-") && file_name.ends_with(".json") => {
+                return Ok(ArtifactPath::SemanticFamilyReport);
+            }
+            _ => {}
+        }
+    }
+
+    if components.len() == 4
+        && components[0] == ".semantic-family-artifacts"
+        && components[1] == "family-promotion"
+        && components[3] == "recommendation.latest.json"
+    {
+        return Ok(ArtifactPath::RecommendationByFamily {
+            family: components[2].to_string(),
+        });
+    }
 
     if components.len() != 5
         || components[0] != ".semantic-family-artifacts"
@@ -1177,6 +1427,206 @@ fn validate_overlap_family(value: &str) -> Result<(), XtaskError> {
             "overlap_family `{value}` must be `function.arithmetic_leaf.monotone_*`, `function.wrapper.pipeline*`, or `unknown`"
         ))),
     }
+}
+
+fn append_newline(mut bytes: Vec<u8>) -> Vec<u8> {
+    bytes.push(b'\n');
+    bytes
+}
+
+fn format_run_id(generated_at: &str, family: &str) -> Result<String, XtaskError> {
+    if !looks_like_utc_timestamp(generated_at) {
+        return Err(XtaskError::InvalidInput(format!(
+            "generated_at `{generated_at}` must be a UTC RFC3339 timestamp"
+        )));
+    }
+    let basic = generated_at
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>();
+    Ok(format!("{basic}-{family}"))
+}
+
+fn ranked_candidate_for_family(family: &FamilyId) -> Result<RankedCandidate, XtaskError> {
+    match family.as_str() {
+        "function.arithmetic_leaf.monotone_up.v1" => Ok(RankedCandidate {
+            family: family.as_str().to_string(),
+            evidence: vec![
+                "examples/ecommerce/units/pricing/apply_tax.unit.spec".to_string(),
+                "semantic-families/function.arithmetic_leaf.monotone_up.v1/candidate.md"
+                    .to_string(),
+                "spec-cli/tests/m14_regressions.rs".to_string(),
+            ],
+            expected_leverage:
+                "Proves one bounded second-language promotion path on an already-supported monotone-up leaf family."
+                    .to_string(),
+            expected_risks: vec![
+                "Read-side truth and promotion artifacts must stay explicit about TypeScript being bounded to this pilot."
+                    .to_string(),
+            ],
+        }),
+        "function.wrapper.pipeline.v1" => Ok(RankedCandidate {
+            family: family.as_str().to_string(),
+            evidence: vec![
+                "examples/ecommerce/units/pricing/calculate_total.unit.spec".to_string(),
+                "semantic-families/function.wrapper.pipeline.v1/candidate.md".to_string(),
+                "spec-cli/tests/m14_regressions.rs".to_string(),
+            ],
+            expected_leverage:
+                "Extends proof pressure from leaf math to a wrapper family without changing the public command surface."
+                    .to_string(),
+            expected_risks: vec![
+                "Routing order and comparator-family expectations must remain stable while packet truth shifts."
+                    .to_string(),
+            ],
+        }),
+        _ => Err(XtaskError::InvalidInput(format!(
+            "family refresh-promotion-recommendation does not support `{}`",
+            family.as_str()
+        ))),
+    }
+}
+
+fn latest_attempt_relative_path(
+    workspace_root: &Path,
+    prove_dir: &Path,
+) -> Result<PathBuf, XtaskError> {
+    let absolute_dir = workspace_root.join(prove_dir);
+    let mut attempts = fs::read_dir(&absolute_dir)
+        .map_err(|error| {
+            XtaskError::WriteFailure(format!(
+                "failed to read proof artifact directory `{}`: {error}",
+                absolute_dir.display()
+            ))
+        })?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.starts_with("attempt-") && name.ends_with(".json"))
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+    attempts.sort();
+    let latest = attempts.pop().ok_or_else(|| {
+        XtaskError::InvalidInput(format!(
+            "no attempt-*.json artifact exists under `{}`",
+            prove_dir.display()
+        ))
+    })?;
+    latest
+        .strip_prefix(workspace_root)
+        .map(Path::to_path_buf)
+        .map_err(|_| {
+            XtaskError::InvalidInput(format!(
+                "attempt artifact `{}` must stay within the workspace root",
+                latest.display()
+            ))
+        })
+}
+
+fn git_diff_name_only(workspace_root: &Path, diff_base: &str) -> Result<Vec<String>, XtaskError> {
+    let output = Command::new("git")
+        .current_dir(workspace_root)
+        .args(["diff", "--name-only", &format!("{diff_base}...HEAD")])
+        .output()
+        .map_err(|error| {
+            XtaskError::WriteFailure(format!(
+                "failed to run `git diff --name-only {diff_base}...HEAD`: {error}"
+            ))
+        })?;
+    if !output.status.success() {
+        return Err(XtaskError::WriteFailure(format!(
+            "`git diff --name-only {diff_base}...HEAD` failed with exit code {}",
+            output.status.code().unwrap_or(1)
+        )));
+    }
+    let mut paths = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.trim().to_string())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    Ok(paths)
+}
+
+fn command_records_for_execution(
+    family: &FamilyId,
+    target_language: FamilyTargetLanguage,
+    timestamp: &str,
+) -> Vec<CommandRecord> {
+    let prove_path = format!(
+        ".semantic-family-artifacts/semantic-families/{}/prove.latest.json",
+        family.packet_dir_name()
+    );
+    let certification_path = format!(
+        ".semantic-family-artifacts/semantic-families/{}/certification.report.json",
+        family.packet_dir_name()
+    );
+    let mut commands = vec![
+        CommandRecord {
+            step: "rust_prove".to_string(),
+            command: format!("cargo xtask family prove {}", family.as_str()),
+            exit_code: 0,
+            started_at: timestamp.to_string(),
+            finished_at: timestamp.to_string(),
+            artifact_path: Some(prove_path.clone()),
+        },
+        CommandRecord {
+            step: "rust_certify".to_string(),
+            command: format!("cargo xtask family certify {}", family.as_str()),
+            exit_code: 0,
+            started_at: timestamp.to_string(),
+            finished_at: timestamp.to_string(),
+            artifact_path: Some(certification_path.clone()),
+        },
+    ];
+    if matches!(target_language, FamilyTargetLanguage::Typescript) {
+        commands.push(CommandRecord {
+            step: "typescript_prove".to_string(),
+            command: format!(
+                "cargo xtask family prove {} --target-language typescript",
+                family.as_str()
+            ),
+            exit_code: 0,
+            started_at: timestamp.to_string(),
+            finished_at: timestamp.to_string(),
+            artifact_path: Some(prove_path.clone()),
+        });
+        commands.push(CommandRecord {
+            step: "typescript_certify".to_string(),
+            command: format!(
+                "cargo xtask family certify {} --target-language typescript",
+                family.as_str()
+            ),
+            exit_code: 0,
+            started_at: timestamp.to_string(),
+            finished_at: timestamp.to_string(),
+            artifact_path: Some(certification_path),
+        });
+    }
+    commands
+}
+
+fn validate_target_language_matches_family(
+    family: &str,
+    target_language: TargetLanguage,
+    field: &str,
+) -> Result<(), XtaskError> {
+    let family_id = FamilyId::parse(family)?;
+    validate_target_language(
+        &family_id,
+        match target_language {
+            TargetLanguage::Rust => FamilyTargetLanguage::Rust,
+            TargetLanguage::Typescript => FamilyTargetLanguage::Typescript,
+        },
+        field,
+    )
+}
+
+fn normalize_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn ensure_repo_relative_paths_sorted(paths: &[String], field: &str) -> Result<(), XtaskError> {

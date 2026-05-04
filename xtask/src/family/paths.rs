@@ -117,6 +117,28 @@ impl PacketPaths {
     }
 }
 
+pub(crate) fn family_promotion_dir(family: &FamilyId) -> PathBuf {
+    Path::new(FAMILY_PROMOTION_ARTIFACT_ROOT)
+        .join(family.packet_dir_name())
+        .to_path_buf()
+}
+
+pub(crate) fn family_recommendation_latest_path(family: &FamilyId) -> PathBuf {
+    family_promotion_dir(family).join("recommendation.latest.json")
+}
+
+pub(crate) fn family_promotion_execution_path(family: &FamilyId, run_id: &str) -> PathBuf {
+    family_promotion_dir(family)
+        .join(run_id)
+        .join("promotion.execution.json")
+}
+
+pub(crate) fn family_promotion_blocker_path(family: &FamilyId, run_id: &str) -> PathBuf {
+    family_promotion_dir(family)
+        .join(run_id)
+        .join("blocker.report.json")
+}
+
 pub fn ensure_packet_path_safe(
     workspace_root: &Path,
     packet_root: &Path,
