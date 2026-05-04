@@ -350,14 +350,14 @@ mod tests {
                 deps: vec![],
                 imports: vec![],
                 body: Body::default(),
-                local_tests: with_local_tests
-                    .then(|| {
-                        vec![LocalTest {
-                            id: "variant_none".to_string(),
-                            expect: "true".to_string(),
-                        }]
-                    })
-                    .unwrap_or_default(),
+                local_tests: if with_local_tests {
+                    vec![LocalTest {
+                        id: "variant_none".to_string(),
+                        expect: "true".to_string(),
+                    }]
+                } else {
+                    Vec::new()
+                },
                 links: None,
                 extensions: UnitExtensions {
                     sum: Some(AuthoredSumShape { variants }),
