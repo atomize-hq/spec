@@ -780,20 +780,6 @@ fn passport_freshness_anchor_for_write(
         .flatten()
 }
 
-fn project_passport_proof_coverage(
-    spec: &LoadedSpec,
-    passport: Option<&Passport>,
-    context: &PassportProjectionContext<'_>,
-) -> Option<Vec<PassportProofCoverage>> {
-    let portability_context = PortabilityProjectionContext {
-        molecule_tests: context.molecule_tests,
-        molecule_evidence_by_id: context.molecule_evidence_by_id,
-        specs_by_id: context.specs_by_id,
-    };
-    let portability_projection = project_portability_truth(spec, passport, &portability_context);
-    project_passport_proof_coverage_from_portability(spec, portability_projection.as_ref())
-}
-
 fn projected_passport_markers(
     portability_projection: Option<&PortabilityProjection>,
 ) -> Option<Vec<PassportMarker>> {
