@@ -20,6 +20,11 @@ body:
         let taxed = pricing_tax_leaf_drift(subtotal, tax_rate);
         pricing_discount_leaf_drift(taxed, discount_rate)
     }
+  typescript: |
+    {
+        const taxed = pricing_tax_leaf_drift(subtotal, tax_rate);
+        return pricing_discount_leaf_drift(taxed, discount_rate);
+    }
 local_tests:
   - id: pricing_total_wrapper_drift_basic
     expect: pricing_total_wrapper_drift(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(9900, 2)

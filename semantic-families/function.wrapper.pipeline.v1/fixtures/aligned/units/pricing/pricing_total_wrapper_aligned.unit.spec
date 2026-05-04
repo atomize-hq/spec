@@ -20,6 +20,11 @@ body:
         let discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);
         pricing_tax_leaf_aligned(discounted, tax_rate)
     }
+  typescript: |
+    {
+        const discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);
+        return pricing_tax_leaf_aligned(discounted, tax_rate);
+    }
 local_tests:
   - id: pricing_total_wrapper_aligned_basic
     expect: pricing_total_wrapper_aligned(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(9900, 2)

@@ -334,6 +334,11 @@ body:
     {{
         (subtotal - subtotal * rate).max(Decimal::ZERO)
     }}
+  typescript: |
+    {{
+        const discounted = subtotal - subtotal * rate;
+        return discounted >= Decimal.ZERO ? discounted : Decimal.ZERO;
+    }}
 local_tests:
   - id: {callable_name}_basic
     expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
@@ -362,6 +367,10 @@ body:
     {{
         subtotal + subtotal * rate
     }}
+  typescript: |
+    {{
+        return subtotal + subtotal * rate;
+    }}
 local_tests:
   - id: {callable_name}_basic
     expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(11000, 2)
@@ -375,11 +384,14 @@ fn wrapper_pipeline_total_wrapper_starter(
     callable_name: &str,
 ) -> String {
     let bucket_suffix = bucket;
-    let (intent_why, body) = match bucket {
+    let (intent_why, body, typescript_body) = match bucket {
         "aligned" => (
             "Return the checkout total after discounting the subtotal and then applying tax.",
             format!(
                 "{{\n        let discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate)\n    }}"
+            ),
+            format!(
+                "{{\n        const discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        return pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate);\n    }}"
             ),
         ),
         "drift" => (
@@ -387,17 +399,26 @@ fn wrapper_pipeline_total_wrapper_starter(
             format!(
                 "{{\n        let taxed = pricing_tax_leaf_{bucket_suffix}(subtotal, tax_rate);\n        pricing_discount_leaf_{bucket_suffix}(taxed, discount_rate)\n    }}"
             ),
+            format!(
+                "{{\n        const taxed = pricing_tax_leaf_{bucket_suffix}(subtotal, tax_rate);\n        return pricing_discount_leaf_{bucket_suffix}(taxed, discount_rate);\n    }}"
+            ),
         ),
         "under_specified" => (
             "Adjust the checkout total using the current pricing inputs.",
             format!(
                 "{{\n        let discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate)\n    }}"
             ),
+            format!(
+                "{{\n        const discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        return pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate);\n    }}"
+            ),
         ),
         "unsupported_near_miss" => (
             "Return the checkout total after discounting the subtotal and then applying tax.",
             format!(
                 "{{\n        let discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate.max(Decimal::ZERO))\n    }}"
+            ),
+            format!(
+                "{{\n        const discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        return pricing_tax_leaf_{bucket_suffix}(\n            discounted,\n            tax_rate >= Decimal.ZERO ? tax_rate : Decimal.ZERO\n        );\n    }}"
             ),
         ),
         other => panic!("unexpected wrapper pipeline bucket `{other}`"),
@@ -423,6 +444,8 @@ imports:
 body:
   rust: |
     {body}
+  typescript: |
+    {typescript_body}
 local_tests:
   - id: {callable_name}_basic
     expect: {callable_name}(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(9900, 2)

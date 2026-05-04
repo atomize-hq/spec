@@ -787,6 +787,11 @@ mod tests {
         assert!(aligned.contains("tax_rate: Decimal"));
         assert!(aligned.contains("pricing_discount_leaf_aligned(subtotal, discount_rate)"));
         assert!(aligned.contains("pricing_tax_leaf_aligned(discounted, tax_rate)"));
+        assert!(aligned.contains("typescript: |"));
+        assert!(aligned.contains(
+            "const discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);"
+        ));
+        assert!(aligned.contains("return pricing_tax_leaf_aligned(discounted, tax_rate);"));
 
         let drift = fs::read_to_string(
             paths
@@ -796,15 +801,19 @@ mod tests {
         .unwrap();
         assert!(drift.contains("let taxed = pricing_tax_leaf_drift(subtotal, tax_rate);"));
         assert!(drift.contains("pricing_discount_leaf_drift(taxed, discount_rate)"));
+        assert!(drift.contains("const taxed = pricing_tax_leaf_drift(subtotal, tax_rate);"));
+        assert!(drift.contains("return pricing_discount_leaf_drift(taxed, discount_rate);"));
 
         let under_specified = fs::read_to_string(paths.root.join("fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec")).unwrap();
         assert!(
             under_specified
                 .contains("why: Adjust the checkout total using the current pricing inputs.")
         );
+        assert!(under_specified.contains("typescript: |"));
 
         let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec")).unwrap();
         assert!(unsupported.contains("tax_rate.max(Decimal::ZERO)"));
+        assert!(unsupported.contains("tax_rate >= Decimal.ZERO ? tax_rate : Decimal.ZERO"));
         assert!(!candidate.contains("TODO: replace"));
         assert_eq!(harness.suite_slug, WRAPPER_PIPELINE_SUITE_SLUG);
     }
@@ -892,6 +901,17 @@ mod tests {
             harness.scaffold.smoke.scaffold_file_contracts[0].path,
             "fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec"
         );
+        let aligned = fs::read_to_string(
+            temp_dir.path().join(
+                "semantic-families/function.wrapper.pipeline.v1/fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec",
+            ),
+        )
+        .unwrap();
+        assert!(aligned.contains("typescript: |"));
+        assert!(aligned.contains(
+            "const discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);"
+        ));
+        assert!(aligned.contains("return pricing_tax_leaf_aligned(discounted, tax_rate);"));
         assert_eq!(harness.suite_slug, WRAPPER_PIPELINE_SUITE_SLUG);
     }
 
