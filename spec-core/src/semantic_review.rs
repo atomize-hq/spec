@@ -5636,6 +5636,40 @@ mod tests {
     }
 
     #[test]
+    fn wrapper_pipeline_classifier_reads_authored_typescript_without_spec_version_sentinel() {
+        let mut spec = wrapper_pipeline_spec(
+            "pricing/calculate_total_typescript_authored",
+            "Return the checkout total after discounting the subtotal and then applying tax.",
+            r#"{
+            let discounted = pricing/apply_discount(subtotal, discount_rate);
+            pricing/apply_tax(discounted, tax_rate)
+        }"#,
+        );
+        spec.spec.spec_version = None;
+        spec.spec.body.typescript = Some(
+            "{\n            const discounted = apply_discount(subtotal, discount_rate);\n            return apply_tax(discounted, tax_rate);\n        }"
+                .to_string(),
+        );
+
+        let authored = build_authored_function_packet(&spec).unwrap();
+        assert_eq!(
+            authored.body_typescript.as_deref(),
+            Some(
+                "{\n            const discounted = apply_discount(subtotal, discount_rate);\n            return apply_tax(discounted, tax_rate);\n        }"
+            )
+        );
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert!(
+            review
+                .authored_surfaces
+                .iter()
+                .any(|citation| citation.path == "body.typescript"),
+            "{review:?}"
+        );
+    }
+
+    #[test]
     fn monotone_up_classifier_helper_then_clamp_routes_to_promoted_leaf() {
         let helper_then_clamp = arithmetic_leaf_spec(
             "pricing/apply_tax_helper_then_clamp",
