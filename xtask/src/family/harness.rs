@@ -204,6 +204,9 @@ const WRAPPER_PIPELINE_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 1] = [SmokeFile
         "deps:\n  - pricing/pricing_discount_leaf_aligned\n  - pricing/pricing_tax_leaf_aligned",
         "let discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);",
         "pricing_tax_leaf_aligned(discounted, tax_rate)",
+        "typescript: |",
+        "const discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);",
+        "return pricing_tax_leaf_aligned(discounted, tax_rate);",
     ],
     forbidden_contents: &["TODO: replace"],
 }];
@@ -367,6 +370,7 @@ pub(crate) const WRAPPER_PIPELINE_PROVE_SUITES: [SuiteDefinition; 3] = [
             "semantic_review::tests::wrapper_pipeline_classifier_extra_let_marks_unsupported_wrapper_body_shape",
             "semantic_review::tests::wrapper_pipeline_classifier_literal_required_arg_stays_unsupported",
             "semantic_review::tests::wrapper_pipeline_classifier_non_stacking_rejection_stays_unsupported",
+            "semantic_review::tests::wrapper_pipeline_classifier_reads_authored_typescript_without_spec_version_sentinel",
             "semantic_review::tests::wrapper_pipeline_classifier_under_specified_marks_dropped_required_arg",
             "semantic_review::tests::wrapper_pipeline_classifier_under_specified_marks_unused_extra_param",
             "semantic_review::tests::wrapper_pipeline_classifier_under_specified_marks_vague_authored_intent",

@@ -17,6 +17,10 @@ body:
     {
         subtotal + subtotal * rate
     }
+  typescript: |
+    {
+        return subtotal + subtotal * rate;
+    }
 local_tests:
   - id: pricing_tax_leaf_drift_basic
     expect: pricing_tax_leaf_drift(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(11000, 2)
