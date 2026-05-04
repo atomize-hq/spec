@@ -11,19 +11,22 @@
 //! Consumers must handle the `kind` field: `"dep"` edges have structured `from`/`to` refs;
 //! `"covers"` edges have `test`/`unit` string fields.
 
-use crate::AUTHORED_SPEC_VERSION;
-use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
-use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
+use crate::graph::{top_level_deps, SpecEdge, SpecGraph};
+use crate::molecule_evidence::{read_molecule_evidence, MoleculeEvidence};
 use crate::passport::{
-    ArtifactProvenance, Passport, PassportProjectionContext, apply_projected_passport_truth,
-    passport_path_for, project_passport_truth_with_context,
+    apply_projected_passport_truth, passport_path_for, project_passport_truth_with_context,
+    ArtifactProvenance, Passport, PassportMarker, PassportMarkerId, PassportProjectionContext,
 };
 use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
+use crate::portability::{
+    project_portability_truth, PortabilityMarkerKind, PortabilityProjectionContext,
+};
 use crate::semantic_review::{SemanticProjectionMode, SemanticReviewContext};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
 };
+use crate::AUTHORED_SPEC_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -201,6 +204,11 @@ fn enrich_passports_for_export(
         specs_by_id,
         semantic_projection_mode: SemanticProjectionMode::Preserve,
     };
+    let portability_context = PortabilityProjectionContext {
+        molecule_tests,
+        molecule_evidence_by_id,
+        specs_by_id,
+    };
     passports
         .into_iter()
         .map(|mut passport| {
@@ -212,10 +220,42 @@ fn enrich_passports_for_export(
                     &semantic_review_context,
                 );
                 apply_projected_passport_truth(&mut passport, projected_truth);
+                apply_projected_portability_truth(&mut passport, spec, &portability_context);
             }
             passport
         })
         .collect()
+}
+
+fn apply_projected_portability_truth(
+    passport: &mut Passport,
+    spec: &LoadedSpec,
+    context: &PortabilityProjectionContext<'_>,
+) {
+    let portability = project_portability_truth(spec, Some(passport), context);
+    passport.markers = portability_markers_for_passport(portability.as_ref());
+    passport.escape_hatch_gate = portability.and_then(|projection| projection.escape_hatch_gate);
+}
+
+fn portability_markers_for_passport(
+    portability: Option<&crate::portability::PortabilityProjection>,
+) -> Option<Vec<PassportMarker>> {
+    let markers = portability?
+        .markers
+        .iter()
+        .map(|marker| PassportMarker {
+            id: match marker.kind {
+                PortabilityMarkerKind::DomainLowering
+                | PortabilityMarkerKind::ProofHelperLowering => {
+                    PassportMarkerId::MethodLoweringRustBody
+                }
+                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
+            },
+            path: marker.path.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    (!markers.is_empty()).then_some(markers)
 }
 
 fn load_molecule_evidence_for_tests(
@@ -296,6 +336,11 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
         specs_by_id: &specs_by_id,
         semantic_projection_mode: SemanticProjectionMode::Preserve,
     };
+    let portability_context = PortabilityProjectionContext {
+        molecule_tests: empty_molecule_tests,
+        molecule_evidence_by_id: &empty_molecule_evidence,
+        specs_by_id: &specs_by_id,
+    };
     let passports = passports
         .into_iter()
         .map(|mut passport| {
@@ -307,6 +352,7 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
                     &semantic_review_context,
                 );
                 apply_projected_passport_truth(&mut passport, projected_truth);
+                apply_projected_portability_truth(&mut passport, spec, &portability_context);
             }
             passport
         })
@@ -392,18 +438,18 @@ mod tests {
     use super::*;
     use crate::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus, EscapeHatchProofSurface};
     use crate::molecule_evidence::{
-        MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
+        build_molecule_evidence, write_molecule_evidence, MoleculeEvidenceStatus,
     };
     use crate::passport::{
-        PassportEvidence, PassportTestResult, ProofSurface, build_passport_with_evidence,
-        write_passport,
+        build_passport_with_evidence, write_passport, PassportEvidence, PassportTestResult,
+        ProofSurface,
     };
     use crate::plan::{
         LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
         PlanComputedImpactStatus, PlanReport, PlanSource, PlanStruct,
     };
     use crate::semantic_review::{
-        SemanticReviewContext, evaluate_semantic_review, evaluate_semantic_review_with_context,
+        evaluate_semantic_review, evaluate_semantic_review_with_context, SemanticReviewContext,
     };
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
@@ -1146,11 +1192,9 @@ mod tests {
         assert!(passports.is_empty());
         assert_eq!(warnings.len(), 1);
         assert_eq!(warnings[0].code, "passport_malformed");
-        assert!(
-            warnings[0]
-                .message
-                .contains("Failed to parse passport JSON")
-        );
+        assert!(warnings[0]
+            .message
+            .contains("Failed to parse passport JSON"));
     }
 
     #[test]
@@ -1549,8 +1593,8 @@ mod tests {
     }
 
     #[test]
-    fn load_passports_for_specs_preserve_does_not_promote_unsupported_additive_review_into_supported_family_truth()
-     {
+    fn load_passports_for_specs_preserve_does_not_promote_unsupported_additive_review_into_supported_family_truth(
+    ) {
         let dir = TempDir::new().unwrap();
         let apply_discount = loaded_supported_apply_discount_function(
             &dir,
