@@ -534,7 +534,6 @@ Goal: make the public doc say what the code now actually means.
 Files:
 
 - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-- `PLAN.md`
 
 Required work:
 
@@ -542,7 +541,9 @@ Required work:
 - describe M31 as shared-core extraction plus escape-hatch containment
 - describe M32 as the next executable-truth question, not a retroactive part of
   M31
-- make plan, roadmap, and landed code use the same terms
+- keep `PLAN.md`, the roadmap, and the landed code on the same terms, with
+  `PLAN.md` treated as authority during execution rather than a worker-owned
+  edit surface
 
 Exit condition:
 

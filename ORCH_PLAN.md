@@ -98,6 +98,10 @@ Parent-owned orchestration truth lives under:
 - `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction`
 - `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m31-shared-core-extraction`
 
+`RUN_ROOT` is a parent-written control plane. Workers may read it, but they do not
+create, update, or delete files under `RUN_ROOT`. Every canonical file and every
+sentinel state transition under `RUN_ROOT` is written by the parent only.
+
 Canonical parent-owned files:
 
 - `baseline.json`
@@ -136,8 +140,8 @@ Canonical parent-owned files:
   - exact acceptance commands for `Lane B` and `Lane C`
 - `lane-b-launch.md`
   - reproducible launch packet for `Lane B`
-  - exact `PLAN.md` excerpt references
-  - exact `ORCH_PLAN.md` excerpt references
+  - exact `PLAN.md` excerpt text
+  - exact `ORCH_PLAN.md` excerpt text
   - owned paths
   - forbidden paths
   - exact acceptance commands
@@ -145,8 +149,8 @@ Canonical parent-owned files:
   - freeze record path and frozen SHA
 - `lane-c-launch.md`
   - reproducible launch packet for `Lane C`
-  - exact `PLAN.md` excerpt references
-  - exact `ORCH_PLAN.md` excerpt references
+  - exact `PLAN.md` excerpt text
+  - exact `ORCH_PLAN.md` excerpt text
   - owned paths
   - forbidden paths
   - exact acceptance commands
@@ -158,8 +162,8 @@ Canonical parent-owned files:
   - exact `Lane D` acceptance commands
 - `lane-d-launch.md`
   - reproducible launch packet for `Lane D`
-  - exact `PLAN.md` excerpt references
-  - exact `ORCH_PLAN.md` excerpt references
+  - exact `PLAN.md` excerpt text
+  - exact `ORCH_PLAN.md` excerpt text
   - owned paths
   - forbidden paths
   - exact acceptance commands
@@ -210,7 +214,7 @@ Per-task sentinel directories:
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-05-push-observe/`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-06-closeout/`
 
-Each sentinel directory contains:
+Each sentinel directory contains parent-written task state only:
 
 - `started.json`
 - `status.json`
@@ -633,11 +637,12 @@ Workers must stop and return a blocker when:
 Worker blocker response:
 
 - stop work
-- write the sentinel terminal blocked state
 - report the smallest blocking fact with evidence
+- do not write or mutate any file under `RUN_ROOT`
 
 Parent blocker response:
 
+- write the sentinel terminal blocked state for the blocked task
 - write `blocked.json`
 - stop downstream launches
 - stop push and closeout
