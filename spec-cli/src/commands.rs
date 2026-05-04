@@ -1,51 +1,50 @@
 use crate::config::{
-    load_workspace_context, read_workspace_config_file, repo_root_for,
-    rewrite_workspace_config_relative_paths, ResolvedLibrary, WorkspaceConfigError,
-    WorkspaceContext,
+    ResolvedLibrary, WorkspaceConfigError, WorkspaceContext, load_workspace_context,
+    read_workspace_config_file, repo_root_for, rewrite_workspace_config_relative_paths,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
 use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
 use spec_core::export::{build_export_bundle, build_plan_export_bundle};
 use spec_core::generator::{
-    clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
+    GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
     generate_unit_code_with_options, safe_output_path_with_project_root, write_generated_file,
-    GenerateOptions,
 };
-use spec_core::graph::{project_unit, top_level_deps, ProjectedUnitRef};
+use spec_core::graph::{ProjectedUnitRef, project_unit, top_level_deps};
 use spec_core::loader::{
-    discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec, load_directory_report,
-    load_directory_report_bounded, load_file, load_molecule_test_directory,
+    DirectoryLoadReport, discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec,
+    load_directory_report, load_directory_report_bounded, load_file, load_molecule_test_directory,
     load_molecule_test_directory_report, load_molecule_test_directory_report_bounded,
-    load_molecule_test_file, load_plan_file, DirectoryLoadReport,
+    load_molecule_test_file, load_plan_file,
 };
 use spec_core::molecule_evidence::{
-    build_molecule_evidence, ensure_gitignore_entry as ensure_molecule_evidence_gitignore_entry,
+    MoleculeEvidence, MoleculeEvidenceStatus, build_molecule_evidence,
+    ensure_gitignore_entry as ensure_molecule_evidence_gitignore_entry,
     molecule_evidence_is_current_pass, molecule_evidence_is_stale, read_molecule_evidence,
-    write_molecule_evidence, MoleculeEvidence, MoleculeEvidenceStatus,
+    write_molecule_evidence,
 };
 use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
-    apply_projected_passport_truth, build_passport_preserving_proof_state_with_context,
-    build_passport_with_evidence, compute_contract_hash, ensure_gitignore_entry,
-    project_passport_truth_with_context, read_passport, rfc3339_now, write_passport,
     ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker, PassportMarkerId,
-    PassportProjectionContext, PassportTestResult,
+    PassportProjectionContext, PassportTestResult, apply_projected_passport_truth,
+    build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
+    compute_contract_hash, ensure_gitignore_entry, project_passport_truth_with_context,
+    read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
-    cargo_available, output_module_prefix, parse_cargo_test_output, run_cargo_build,
-    run_cargo_test, workspace_root_for, zero_tests_ran, ParsedCargoTestResult, Verbosity,
+    ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
+    parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
 };
 use spec_core::plan::{
-    build_plan_report, PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact,
+    PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
 };
 use spec_core::portability::{
-    project_portability_truth, PortabilityMarkerKind, PortabilityProjectionContext,
+    PortabilityMarkerKind, PortabilityProjectionContext, project_portability_truth,
 };
 use spec_core::semantic_review::{
-    semantic_health_effect, semantic_review_summary, SemanticHealthEffect, SemanticProjectionMode,
-    SemanticReview, SemanticReviewContext,
+    SemanticHealthEffect, SemanticProjectionMode, SemanticReview, SemanticReviewContext,
+    semantic_health_effect, semantic_review_summary,
 };
 #[cfg(test)]
 use spec_core::types::ResolvedSpec;
@@ -53,10 +52,10 @@ use spec_core::types::{
     DepRef, LoadedMoleculeTest, LoadedSpec, NormalizedUnit, QualifiedUnitRef, ResolvedMoleculeTest,
 };
 use spec_core::validator::{
-    check_spec_versions, validate_full_with_options, validate_molecule_test_covers,
-    validate_molecule_test_semantic, validate_no_duplicate_molecule_test_ids,
-    validate_no_duplicate_qualified_ids, validate_qualified_deps_exist_with_options,
-    QualifiedLoadedSpec, ValidationOptions,
+    QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
+    validate_molecule_test_covers, validate_molecule_test_semantic,
+    validate_no_duplicate_molecule_test_ids, validate_no_duplicate_qualified_ids,
+    validate_qualified_deps_exist_with_options,
 };
 #[cfg(test)]
 use spec_core::validator::{validate_deps_exist_with_options, validate_no_duplicate_ids};
@@ -4987,11 +4986,7 @@ fn count_unique_files(errors: &DiagnosticMap) -> usize {
 }
 
 fn pluralize(count: usize) -> &'static str {
-    if count == 1 {
-        ""
-    } else {
-        "s"
-    }
+    if count == 1 { "" } else { "s" }
 }
 
 #[cfg(test)]

@@ -1,18 +1,18 @@
 use serde_json::Value;
+use spec_core::AUTHORED_SPEC_VERSION;
 use spec_core::loader::{load_file, load_molecule_test_file};
 use spec_core::molecule_evidence::{
-    build_molecule_evidence, write_molecule_evidence, MoleculeEvidenceStatus,
+    MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
 };
 use spec_core::passport::{
+    PassportEvidence, PassportProjectionContext, PassportTestResult,
     apply_projected_passport_truth, build_passport_with_evidence, compute_contract_hash,
     project_passport_truth, read_passport as read_passport_record, write_passport,
-    PassportEvidence, PassportProjectionContext, PassportTestResult,
 };
 use spec_core::semantic_review::{
     EvaluatorScope, SemanticProjectionMode, SemanticReasonCode, SemanticReview,
     SemanticSupportStatus, SemanticVerdict, UnsupportedFunctionReasonCode,
 };
-use spec_core::AUTHORED_SPEC_VERSION;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
