@@ -20,6 +20,14 @@ body:
         let discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);
         pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate.max(Decimal::ZERO))
     }
+  typescript: |
+    {
+        const discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);
+        return pricing_tax_leaf_unsupported_near_miss(
+            discounted,
+            tax_rate >= Decimal.ZERO ? tax_rate : Decimal.ZERO
+        );
+    }
 local_tests:
   - id: pricing_total_wrapper_unsupported_near_miss_basic
     expect: pricing_total_wrapper_unsupported_near_miss(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(9900, 2)

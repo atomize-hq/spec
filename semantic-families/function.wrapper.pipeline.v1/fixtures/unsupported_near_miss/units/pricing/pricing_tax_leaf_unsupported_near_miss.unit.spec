@@ -17,6 +17,10 @@ body:
     {
         subtotal + subtotal * rate
     }
+  typescript: |
+    {
+        return subtotal + subtotal * rate;
+    }
 local_tests:
   - id: pricing_tax_leaf_unsupported_near_miss_basic
     expect: pricing_tax_leaf_unsupported_near_miss(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(11000, 2)

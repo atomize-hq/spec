@@ -18,6 +18,11 @@ body:
     {
         (subtotal - subtotal * rate).max(Decimal::ZERO)
     }
+  typescript: |
+    {
+        const discounted = subtotal - subtotal * rate;
+        return discounted >= Decimal.ZERO ? discounted : Decimal.ZERO;
+    }
 local_tests:
   - id: pricing_discount_leaf_unsupported_near_miss_basic
     expect: pricing_discount_leaf_unsupported_near_miss(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
