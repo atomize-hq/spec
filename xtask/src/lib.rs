@@ -93,6 +93,44 @@ enum FamilyCommand {
         #[arg(long, default_value = "json")]
         format: String,
     },
+    RefreshPromotionRecommendation {
+        family: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
+    },
+    EmitPromotionExecution {
+        family: String,
+        run_id: String,
+        recommendation_path: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
+        #[arg(long)]
+        diff_base: String,
+    },
+    EmitPromotionBlocker {
+        family: String,
+        run_id: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
+        #[arg(long, value_enum)]
+        blocking_step: promotion_artifacts::BlockingStep,
+        #[arg(long, value_enum)]
+        blocker_kind: promotion_artifacts::BlockerKind,
+        #[arg(long)]
+        summary: String,
+        #[arg(long)]
+        required_human_action: String,
+        #[arg(long = "safe-next-action")]
+        safe_next_actions: Vec<String>,
+        #[arg(long)]
+        evidence_command: Option<String>,
+        #[arg(long)]
+        evidence_exit_code: Option<i32>,
+        #[arg(long)]
+        evidence_path: Option<String>,
+        #[arg(long)]
+        evidence_note: String,
+    },
     ValidateArtifact {
         path: String,
     },
@@ -158,6 +196,56 @@ where
             FamilyCommand::Inventory { format } => inventory::run(workspace_root, &format),
             FamilyCommand::Coverage { format } => coverage::run(workspace_root, &format),
             FamilyCommand::Recommend { format } => recommend::run(workspace_root, &format),
+            FamilyCommand::RefreshPromotionRecommendation {
+                family,
+                target_language,
+            } => promotion_artifacts::run_refresh_recommendation(
+                workspace_root,
+                &family,
+                target_language,
+            ),
+            FamilyCommand::EmitPromotionExecution {
+                family,
+                run_id,
+                recommendation_path,
+                target_language,
+                diff_base,
+            } => promotion_artifacts::run_emit_promotion_execution(
+                workspace_root,
+                &family,
+                &run_id,
+                &recommendation_path,
+                target_language,
+                &diff_base,
+            ),
+            FamilyCommand::EmitPromotionBlocker {
+                family,
+                run_id,
+                target_language,
+                blocking_step,
+                blocker_kind,
+                summary,
+                required_human_action,
+                safe_next_actions,
+                evidence_command,
+                evidence_exit_code,
+                evidence_path,
+                evidence_note,
+            } => promotion_artifacts::run_emit_promotion_blocker(
+                workspace_root,
+                &family,
+                &run_id,
+                target_language,
+                blocking_step,
+                blocker_kind,
+                &summary,
+                &required_human_action,
+                &safe_next_actions,
+                evidence_command.as_deref(),
+                evidence_exit_code,
+                evidence_path.as_deref(),
+                &evidence_note,
+            ),
             FamilyCommand::ValidateArtifact { path } => {
                 promotion_artifacts::run_validate_artifact(workspace_root, &path)
             }
@@ -200,7 +288,7 @@ mod tests {
         manifest::parse_manifest_file,
         paths::{
             FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId,
-            PacketPaths, REQUIRED_BUCKETS,
+            PacketPaths, REQUIRED_BUCKETS, family_recommendation_latest_path,
         },
         promotion_artifacts::{
             ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CandidateStatus,
@@ -1118,6 +1206,52 @@ mod tests {
             }
             other => panic!("unexpected command shape: {other:?}"),
         }
+    }
+
+    #[test]
+    fn family_refresh_promotion_recommendation_writes_family_scoped_typescript_artifact() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+        write_string(
+            &temp_dir
+                .path()
+                .join("semantic-families/function.arithmetic_leaf.monotone_up.v1/candidate.md"),
+            "# monotone up packet\n",
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "refresh-promotion-recommendation",
+                "function.arithmetic_leaf.monotone_up.v1",
+                "--target-language",
+                "typescript",
+            ],
+        );
+
+        assert_eq!(code, 0);
+        let recommendation_path = family_recommendation_latest_path(
+            &FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap(),
+        );
+        let artifact = read_report(&temp_dir.path().join(&recommendation_path));
+        assert_eq!(artifact["target_language"], "typescript");
+        assert_eq!(
+            artifact["ranked_candidates"][0]["family"],
+            "function.arithmetic_leaf.monotone_up.v1"
+        );
+
+        let validate_code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                recommendation_path.to_str().unwrap(),
+            ],
+        );
+        assert_eq!(validate_code, 0);
     }
 
     #[test]
@@ -3563,6 +3697,7 @@ gate_d = true
                 artifact_kind: PromotionArtifactKind::PromotionExecution,
                 run_id: run_id.to_string(),
                 family: "function.wrapper.pipeline.v1".to_string(),
+                target_language: TargetLanguage::Rust,
                 status: promotion_artifacts::ExecutionStatus::Green,
                 recommendation_path,
                 approvals: PromotionApprovals {
@@ -3638,6 +3773,7 @@ gate_d = true
                 artifact_kind: PromotionArtifactKind::PromotionExecution,
                 run_id: run_id.to_string(),
                 family: "function.wrapper.pipeline.v1".to_string(),
+                target_language: TargetLanguage::Rust,
                 status: promotion_artifacts::ExecutionStatus::Green,
                 recommendation_path,
                 approvals: PromotionApprovals {
@@ -3709,6 +3845,7 @@ gate_d = true
                 artifact_kind: PromotionArtifactKind::PromotionBlocker,
                 run_id: run_id.to_string(),
                 family: "function.wrapper.pipeline.v1".to_string(),
+                target_language: TargetLanguage::Rust,
                 blocking_step: BlockingStep::Certify,
                 blocker_kind: BlockerKind::CertifyRoutingConflict,
                 summary: "Registry routing order still conflicts with the promoted wrapper family."
@@ -4495,6 +4632,7 @@ gate_d = true
             "rust_toolchain",
             "schema_version",
             "suites",
+            "target_language",
         ];
         expected_keys.sort_unstable();
 

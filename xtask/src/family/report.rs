@@ -1,5 +1,9 @@
+use crate::FamilyTargetLanguage;
 use crate::XtaskError;
 use crate::family::paths::{FamilyId, PacketPaths};
+use crate::family::promotion_artifacts::TargetLanguage;
+use crate::family::prove::validate_target_language;
+use serde::Deserialize;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -20,7 +24,7 @@ pub(crate) struct SuiteDefinition {
     pub expected_tests: &'static [&'static str],
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum PassFail {
     Pass,
@@ -37,12 +41,12 @@ impl PassFail {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct GateStatus {
     pub status: PassFail,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct GateStatuses {
     pub gate_a: GateStatus,
     pub gate_b: GateStatus,
@@ -50,7 +54,7 @@ pub(crate) struct GateStatuses {
     pub gate_d: GateStatus,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum GateId {
     GateA,
@@ -59,7 +63,7 @@ pub(crate) enum GateId {
     GateD,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ArtifactKind {
     ProveLatest,
@@ -67,7 +71,7 @@ pub(crate) enum ArtifactKind {
     Certification,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SuiteReport {
     pub name: String,
     pub command: Vec<String>,
@@ -76,17 +80,18 @@ pub(crate) struct SuiteReport {
     pub attested_tests: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct FixtureDigest {
     pub bucket: String,
     pub path: String,
     pub sha256: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CertificationReport {
     pub schema_version: u64,
     pub family: String,
+    pub target_language: TargetLanguage,
     pub manifest_schema_version: u64,
     pub git_commit_sha: String,
     pub rust_toolchain: String,
@@ -103,6 +108,7 @@ pub(crate) struct CertificationReport {
 impl CertificationReport {
     pub(crate) fn new(
         family: &FamilyId,
+        target_language: FamilyTargetLanguage,
         git_commit_sha: String,
         rust_toolchain: String,
         generated_at: String,
@@ -110,6 +116,7 @@ impl CertificationReport {
         Self {
             schema_version: REPORT_SCHEMA_VERSION,
             family: family.as_str().to_string(),
+            target_language: TargetLanguage::from_family_target_language(target_language),
             manifest_schema_version: MANIFEST_SCHEMA_VERSION,
             git_commit_sha,
             rust_toolchain,
@@ -185,6 +192,7 @@ impl CommandRunner for SystemRunner {
 pub(crate) fn build_report<R: CommandRunner>(
     workspace_root: &Path,
     family: &FamilyId,
+    target_language: FamilyTargetLanguage,
     runner: &R,
 ) -> CertificationReport {
     let git_commit_sha = first_line_or(
@@ -218,7 +226,13 @@ pub(crate) fn build_report<R: CommandRunner>(
         "1970-01-01T00:00:00Z".to_string(),
     );
 
-    CertificationReport::new(family, git_commit_sha, rust_toolchain, generated_at)
+    CertificationReport::new(
+        family,
+        target_language,
+        git_commit_sha,
+        rust_toolchain,
+        generated_at,
+    )
 }
 
 pub(crate) fn refresh_generated_at<R: CommandRunner>(
@@ -310,6 +324,83 @@ pub(crate) fn write_report(path: &Path, report: &CertificationReport) -> Result<
             path.display()
         ))
     })
+}
+
+pub(crate) fn validate_report_artifact(
+    path: &Path,
+    report: &CertificationReport,
+) -> Result<(), XtaskError> {
+    let artifact_kind = artifact_kind_for_path(path)?;
+    if report.schema_version != REPORT_SCHEMA_VERSION {
+        return Err(XtaskError::InvalidInput(format!(
+            "report schema_version must be {REPORT_SCHEMA_VERSION}, found {}",
+            report.schema_version
+        )));
+    }
+    let family = FamilyId::parse(&report.family)?;
+    validate_target_language(
+        &family,
+        match report.target_language {
+            TargetLanguage::Rust => FamilyTargetLanguage::Rust,
+            TargetLanguage::Typescript => FamilyTargetLanguage::Typescript,
+        },
+        "report target_language",
+    )?;
+    if report.artifact_kind != artifact_kind {
+        return Err(XtaskError::InvalidInput(format!(
+            "report artifact_kind `{}` does not match path `{}`",
+            report.artifact_kind.as_str(),
+            path.display()
+        )));
+    }
+    if report.required_gates != artifact_kind.required_gates() {
+        return Err(XtaskError::InvalidInput(format!(
+            "report required_gates do not match artifact kind `{}`",
+            artifact_kind.as_str()
+        )));
+    }
+    if !looks_like_utc_timestamp(&report.generated_at) {
+        return Err(XtaskError::InvalidInput(
+            "report generated_at must be a UTC RFC3339 timestamp".to_string(),
+        ));
+    }
+    let phase_status = PassFail::from_passed(
+        report
+            .required_gates
+            .iter()
+            .all(|gate| report.gates.status(*gate).is_pass()),
+    );
+    if report.phase_status != phase_status || report.overall_status != phase_status {
+        return Err(XtaskError::InvalidInput(
+            "report phase_status and overall_status must match the required gate outcomes"
+                .to_string(),
+        ));
+    }
+    if report.suites.is_empty() {
+        return Err(XtaskError::InvalidInput(
+            "report suites[] must not be empty".to_string(),
+        ));
+    }
+    for suite in &report.suites {
+        if suite.name.trim().is_empty() || suite.command.is_empty() {
+            return Err(XtaskError::InvalidInput(
+                "report suites[] must include non-empty name and command".to_string(),
+            ));
+        }
+    }
+    for fixture in &report.fixture_digests {
+        if fixture.bucket.trim().is_empty()
+            || fixture.path.trim().is_empty()
+            || fixture.sha256.len() != 64
+            || !fixture.sha256.chars().all(|ch| ch.is_ascii_hexdigit())
+        {
+            return Err(XtaskError::InvalidInput(
+                "report fixture_digests[] entries must include bucket/path and a 64-character hex sha256"
+                    .to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn collect_fixture_digests(
@@ -426,6 +517,14 @@ impl ArtifactKind {
             }
         }
     }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ProveLatest => "prove_latest",
+            Self::CertifyAttempt => "certify_attempt",
+            Self::Certification => "certification",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -478,6 +577,20 @@ fn artifact_kind_for_path(path: &Path) -> Result<ArtifactKind, XtaskError> {
             path.display()
         )))
     }
+}
+
+fn looks_like_utc_timestamp(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 20
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes[10] == b'T'
+        && bytes[13] == b':'
+        && bytes[16] == b':'
+        && bytes[19] == b'Z'
+        && bytes.iter().enumerate().all(|(index, byte)| {
+            matches!(index, 4 | 7 | 10 | 13 | 16 | 19) || byte.is_ascii_digit()
+        })
 }
 
 fn attest_suite_output(
@@ -685,6 +798,7 @@ mod tests {
         let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
         let mut report = CertificationReport::new(
             &family,
+            crate::FamilyTargetLanguage::Rust,
             "abc123".to_string(),
             "rustc 1.89.0".to_string(),
             "2026-04-27T18:00:00Z".to_string(),
