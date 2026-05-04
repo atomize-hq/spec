@@ -61,11 +61,35 @@ jobs:
           cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
           cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
           cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-          cargo test --workspace
+
+  wrapper_pipeline_pilot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable (pinned 2026-04-01)
+        with:
+          toolchain: 1.89.0
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Wrapper pipeline pilot
+        run: |
+          cargo test -p spec-core --lib wrapper_pipeline_ -- --color never
+          cargo test -p spec-cli --test cli wrapper_pipeline_truth_surface_ -- --color never
+          cargo test -p spec-cli --test m14_regressions wrapper_pipeline_corpus_ -- --color never
+          cargo xtask family prove function.wrapper.pipeline.v1
+          cargo xtask family prove function.wrapper.pipeline.v1 --target-language typescript
+          cargo xtask family certify function.wrapper.pipeline.v1
+          cargo xtask family certify function.wrapper.pipeline.v1 --target-language typescript
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, monotone_up_pilot]
+    needs: [test, monotone_up_pilot, wrapper_pipeline_pilot]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -105,7 +129,7 @@ jobs:
 
   create_release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, monotone_up_pilot]
+    needs: [test, monotone_up_pilot, wrapper_pipeline_pilot]
     runs-on: ubuntu-latest
     permissions:
       contents: write
