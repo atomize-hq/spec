@@ -721,7 +721,7 @@ contract shape is locked.
 | A. Portability contract extraction | `spec-core/src/` portability, backend execution, escape hatch, lib exports | - |
 | B. Passport + semantic-review integration | `spec-core/src/` passport, semantic review | A |
 | C. Export + status/read-side integration | `spec-core/src/` export, `spec-cli/src/` commands, `spec-cli/tests/` | A |
-| D. Roadmap rewrite + closeout | `docs/`, `PLAN.md` | A, then final terminology from B/C |
+| D. Roadmap rewrite + closeout | `docs/` | A, then final terminology from B/C |
 
 ### Parallel lanes
 

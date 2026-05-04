@@ -262,11 +262,13 @@ Required parent actions:
 
 1. Confirm the live branch is still `feat/corpus-expansion`.
 2. Record the live SHA, dirty state, and overlap with the M31 closed surface.
-3. Stop immediately if unresolved dirty overlap exists inside the M31-owned surface.
+3. Stop immediately if the live checkout is dirty.
+4. If local changes must be preserved, commit them first or rewrite authority to describe how they will be carried into the seeded worktrees. Do not silently drop non-overlapping live edits by forking from SHA only.
 
 Acceptance:
 
 - `baseline.json` exists.
+- live dirty state is empty, or the run is explicitly blocked.
 - overlap is either empty or explicitly blocked.
 - the live SHA used to seed `ws/m31-int` is recorded.
 
@@ -486,7 +488,7 @@ Required acceptance commands:
 ```bash
 cargo test -p spec-core validator -- --color never
 rg -n "M31|M32" /Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/ai_promotion_and_multilanguage_milestones_v0.1.md /Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md
-! rg -n "M28|M29" /Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/ai_promotion_and_multilanguage_milestones_v0.1.md /Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md
+! rg -n "M28|M29" /Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/ai_promotion_and_multilanguage_milestones_v0.1.md
 ```
 
 Lane D must deliver:
@@ -514,7 +516,10 @@ cargo test -p spec-cli --test cli -- --color never
 cargo run -p spec-cli -- status examples/ecommerce --format json
 cargo run -p spec-cli -- export examples/ecommerce --format json
 rg -n "M31|M32" docs/ai_promotion_and_multilanguage_milestones_v0.1.md PLAN.md
-! rg -n "M28|M29" docs/ai_promotion_and_multilanguage_milestones_v0.1.md PLAN.md
+! rg -n "M28|M29" docs/ai_promotion_and_multilanguage_milestones_v0.1.md
+BASE_SHA=$(sed -n 's/.*"live_sha"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/baseline.json)
+git diff --name-only "${BASE_SHA}...HEAD"
+! git diff --name-only "${BASE_SHA}...HEAD" | rg -v '^(spec-core/src/(portability|backend_execution|escape_hatch|passport|semantic_review|validator|export|lib)\.rs|spec-cli/src/commands\.rs|spec-cli/tests/cli\.rs|docs/ai_promotion_and_multilanguage_milestones_v0\.1\.md|spec-core/src/(types|molecule_evidence|generator|graph)\.rs|spec-core/src/schema/unit\.spec\.json)$'
 cargo test --workspace
 ```
 
