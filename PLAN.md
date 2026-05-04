@@ -1,217 +1,216 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-autoplan-restore-20260503-085418.md -->
-# M29R - Additive Body Contract Recovery
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-autoplan-restore-20260503-232225.md -->
+# M30 - Add Second Bounded TypeScript Family Proof
 
 Status: **authoritative implementation plan**
 Base branch: **main**
 Working branch: **feat/corpus-expansion**
 Last rewritten: **2026-05-03**
-Supersedes: **M29 - Scoped Second-Language TypeScript Pilot**
-Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260503-084150.md`**
-Execution authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md` must be rewritten to match this plan before implementation starts**
+Supersedes: **M29R - Additive Body Contract Recovery**
+Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260503-231926.md`**
 Related roadmap: **`docs/ai_promotion_and_multilanguage_milestones_v0.1.md`**
-Blocked checkpoint history: **`d10679a`**
-Recovery seed: **`741a83e`**
+Public proof baseline: **GitHub Actions run `25296654428` on `6c100d05902519634dc5002445036a050b506934`**
+Execution note: **This plan does not require a fresh `ORCH_PLAN.md` up front. Add one only if implementation expands beyond the closed surface or needs parallel worktrees.**
 
 ## Decision
 
-This milestone is now **M29R**.
+M29R and the narrow CI truth-repair follow-on answered the first real question:
+the shared `kind:function` authoring boundary can carry additive
+`body.typescript` truth without hidden `spec_version` routing and without
+breaking the Rust-default lane.
 
-The product goal did not change. The shared authoring contract did.
+M30 should answer the next question and only that question:
 
-M29 assumed the repo could truthfully author a single packet that carried
-Rust and TypeScript body truth for the monotone-up family. The current merged
-state proves that claim is false on the authoritative shared path. The packet
-already contains additive `body.typescript`, but the shared schema and shared
-parsed model still behave as if only `body.rust` exists.
+> Does the same explicit authored TypeScript contract hold on a second,
+> materially different promoted `kind:function` family?
 
-M29R is the authority reset:
+The chosen forcing function is `function.wrapper.pipeline.v1`.
 
-1. make additive `body.typescript` real in the shared unit schema and shared
-   parsed model
-2. route the monotone-up TypeScript pilot through that explicit field, not
-   hidden metadata
-3. re-anchor the read-side proof surfaces on the repaired contract
-4. replay packet and CI work only after the foundation is coherent again
+M30 is not a TypeScript corpus-analysis milestone. It is not repo-wide
+target-language support. It is one second family proof.
 
 ## Problem Statement
 
-The blocker is not a packet-formatting bug. It is a shared-core truth bug.
+The branch now has public evidence that the first TypeScript pilot is real:
 
-Hard evidence from the current branch:
+1. `kind:function` specs can author additive `body.typescript` through the
+   shared path.
+2. `cargo xtask family prove/certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
+   pass.
+3. Ordinary CI and the monotone-up pilot both passed publicly on
+   GitHub Actions run `25296654428`.
 
-1. The promoted monotone-up packet under
-   `semantic-families/function.arithmetic_leaf.monotone_up.v1/**` now carries
-   additive `body.typescript`.
-2. `spec-core/src/schema/unit.spec.json` still allows only `body.rust` for
-   `kind:function`.
-3. `spec-core/src/types.rs` still defines `Body` as Rust-only and
-   `ResolvedSpec::from_spec()` still copies only `body.rust`.
-4. `spec-core/src/semantic_review.rs::build_authored_function_packet()` still
-   rebuilds authored function truth without any TypeScript body field.
-5. `spec-cli/tests/m14_regressions.rs` copies the promoted packet fixtures
-   directly, so the shared loader path now fails with
-   `Schema validation failed: unknown field at /body: typescript`.
+The remaining uncertainty is cross-family generalization.
 
-There are two hidden blast-radius details that must be called out explicitly:
+The repo already contains a promoted wrapper family packet under
+`semantic-families/function.wrapper.pipeline.v1/**`, complete with Rust prove
+and certify suites, read-side regressions, and a registered family harness.
+But the current target-language gate in `xtask/src/family/prove.rs` still says:
 
-1. `spec-core/src/types.rs::Body` is reused by both `.unit.spec` and
-   `.test.spec`. Widening `Body` carelessly would also widen molecule-test
-   authoring. M29R must keep `test.spec` Rust-only.
-2. Changing the `Body` struct will trigger compile-fix fallout in test helpers
-   and fixture constructors across `spec-core` and `spec-cli`. Those edits are
-   mechanical, but they are real. Pretending the change is isolated to three
-   files is how this plan would become fake again.
+- `Rust` is accepted for all registered families
+- `Typescript` is accepted only for
+  `function.arithmetic_leaf.monotone_up.v1`
+
+That means the repo currently has:
+
+- one shared family registry
+- one Rust-only maintainer corpus manifest
+- one explicit TypeScript proof family
+
+It does **not** yet have proof that the same authored TypeScript contract can
+survive the wrapper-pipeline family shape with supported dep threading and
+packet-local leaf dependencies.
+
+There is one repo-local truth wrinkle worth naming up front:
+`spec-cli/tests/m14_regressions.rs` still contains a monotone-up helper that
+copies fixtures and injects TypeScript bodies at test time when they are
+missing. M30 must not copy that pattern forward as the second-family template.
 
 ## Done Means
 
-M29R is complete only when all of these are true:
+M30 is complete only when all of these are true:
 
-1. `spec-core/src/schema/unit.spec.json` accepts additive
-   `body.typescript: string` for `kind:function` and still rejects it for
-   `kind:data`, `kind:sum`, and `.test.spec`.
-2. `spec-core/src/types.rs::Body` becomes:
-
-   ```rust
-   pub struct Body {
-       pub rust: String,
-       pub typescript: Option<String>,
-   }
-   ```
-
-   with serde defaults so authored absence stays distinct from authored presence.
-3. `ResolvedSpec` carries `body_typescript: Option<String>` explicitly. Rust
-   generation still consumes `body_rust` only.
-4. No hidden `spec_version` sentinel is required to infer whether a TypeScript
-   body exists.
-5. `validate_function_semantic()` accepts additive TypeScript on function units,
-   while `validate_data_semantic()` and `validate_sum_semantic()` explicitly
-   reject top-level `body.typescript`.
-6. `test.spec.json` remains Rust-only and `.test.spec` authoring still rejects
-   additive `body.typescript`.
-7. The monotone-up semantic-review route can read explicit authored TypeScript
-   truth directly when the TypeScript pilot asks for it.
-8. `cargo test -p spec-cli --test m14_regressions monotone_up_corpus_ -- --color never`
-   passes against copied promoted fixtures that include additive
-   `body.typescript`.
-9. `cargo xtask family prove function.arithmetic_leaf.monotone_up.v1` passes
-   from merged state without regressing the Rust-default lane.
-10. `cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
-    and `cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
-    still pass.
-11. CI proves both the ordinary workspace lane and the monotone-up pilot lane
-    on the exact pushed SHA.
-12. Closeout can truthfully say one packet carries explicit additive truth for
-    both targets and both targets read that truth through the same shared
-    authoring boundary.
+1. `semantic-families/function.wrapper.pipeline.v1/**` remains the authoritative
+   packet root for the second proof. No alternate packet root is introduced.
+2. The committed wrapper packet fixtures truthfully carry additive
+   `body.typescript` where the second-language proof depends on it, across all
+   four required buckets:
+   `aligned`, `drift`, `under_specified`, `unsupported_near_miss`.
+3. The wrapper packet stays self-contained. If the wrapper proof depends on
+   packet-local discount and tax leaf behavior, those packet-local units also
+   carry truthful additive TypeScript bodies rather than relying on hidden
+   external target assumptions.
+4. Rust prove/certify for `function.wrapper.pipeline.v1` still pass unchanged:
+   - `cargo xtask family prove function.wrapper.pipeline.v1`
+   - `cargo xtask family certify function.wrapper.pipeline.v1`
+5. TypeScript prove/certify for `function.wrapper.pipeline.v1` pass:
+   - `cargo xtask family prove function.wrapper.pipeline.v1 --target-language typescript`
+   - `cargo xtask family certify function.wrapper.pipeline.v1 --target-language typescript`
+6. The existing monotone-up TypeScript proof still passes. M30 must not earn a
+   second family by regressing the first.
+7. Wrapper read-side proof surfaces stay honest:
+   - copied wrapper packet fixtures load truthfully through the shared loader
+   - wrapper status/export projections still classify buckets correctly
+   - unsupported near-miss remains additive-only and neutral
+   - copied-fixture proof does not depend on new test-time TypeScript injection
+     helpers
+8. The second proof does not require new hidden family-specific routing
+   metadata, new packet roots, or repo-wide `spec build/test --target-language typescript`.
+9. Ordinary CI remains green on the exact pushed SHA, and public CI also proves
+   the wrapper TypeScript path.
+10. Closeout can truthfully say one shared authored TypeScript contract now
+    holds across **two** promoted `kind:function` families with different
+    shapes:
+    `function.arithmetic_leaf.monotone_up.v1` and
+    `function.wrapper.pipeline.v1`.
 
 ## NOT in Scope
 
 The following work was considered and is explicitly deferred:
 
+- `semantic-families/corpus/typescript-function.toml`
+  Reason: corpus-analysis symmetry is not the question M30 is answering.
 - Repo-wide `spec build --target-language typescript`
-  Reason: M29R repairs packet-local truth, not repo-wide multi-target CLI.
+  Reason: M30 is family-local proof, not repo-wide CLI support.
 - Repo-wide `spec test --target-language typescript`
-  Reason: same as above.
+  Reason: same blast-radius control.
 - TypeScript support for `kind:data`
-  Reason: seam kinds stay outside this recovery loop.
+  Reason: M30 remains bounded to promoted `kind:function` families only.
 - TypeScript support for `kind:sum`
-  Reason: same blast-radius control.
+  Reason: same boundary.
 - TypeScript support for `.test.spec`
-  Reason: molecule tests remain authored as Rust blocks only.
-- Passport redesign
-  Reason: proof storage is not the current break.
-- `spec status` multi-target redesign
-  Reason: read-side surface redesign is outside this milestone.
-- `spec export` multi-target redesign
-  Reason: same blast-radius control.
-- Second family rollout
-  Reason: one family is the smallest honest proof.
-- Second second-language rollout
-  Reason: one target is enough to prove the repaired contract.
-- npm publishing or external TypeScript distribution
-  Reason: this is an internal milestone, not a user-facing artifact release.
+  Reason: molecule tests remain Rust-only.
+- Third TypeScript family proof
+  Reason: two families is the complete M30 claim.
 - New packet roots such as `semantic-families-typescript/`
-  Reason: one packet root must stay authoritative.
+  Reason: one packet root per family must remain authoritative.
+- Recommendation / coverage analysis changes
+  Reason: the Rust maintainer corpus stays unchanged in M30.
+- npm publishing, runtime distribution, or external TypeScript packaging
+  Reason: this is still an internal proof milestone.
 
 ## What Already Exists
 
 | Sub-problem | Existing code | Reuse decision |
 |---|---|---|
-| Shared authoring validation entry | `spec-core/src/validator.rs`, `spec-core/src/schema/unit.spec.json` | Reuse. Widen the unit schema truthfully. Keep `test.spec.json` closed. |
-| Shared parsed spec model | `spec-core/src/types.rs` | Reuse, but promote `body.typescript` into the real `Body` and `ResolvedSpec` surfaces. |
-| Rust generation path | `spec-core/src/generator.rs` | Reuse. Preserve Rust-default output. Do not let TypeScript widen Rust codegen. |
-| Semantic family evaluation | `spec-core/src/semantic_review.rs` | Reuse. Re-anchor the TypeScript pilot on explicit authored truth. |
-| Corpus truth surface and regression coverage | `spec-cli/tests/m14_regressions.rs` | Reuse. Update fixture/expectation truth so additive packets are legal. |
-| Family harness and locked prove/certify selectors | `xtask/src/family/harness.rs`, `xtask/src/lib.rs`, `xtask/src/family/{prove,certify,paths,scaffold,report}.rs` | Reuse. Keep the command surface and selector names. Repair only the contract assumptions underneath. |
-| Promoted packet root | `semantic-families/function.arithmetic_leaf.monotone_up.v1/**` | Reuse. Do not introduce a second packet tree. |
-| CI baseline | `.github/workflows/ci.yml` | Reuse. Extend, do not replace, the existing workspace gate. |
+| Shared authored TypeScript contract for `kind:function` | `spec-core/src/schema/unit.spec.json`, `spec-core/src/types.rs`, `spec-core/src/semantic_review.rs` | Reuse unchanged unless wrapper proof demonstrates a real gap. |
+| Registered wrapper family harness | `xtask/src/family/harness.rs` | Reuse. Extend target-language proof, do not redesign the registry. |
+| Wrapper packet root and Rust fixtures | `semantic-families/function.wrapper.pipeline.v1/**` | Reuse. Add additive TypeScript truth inside the existing packet. |
+| Wrapper Rust prove/certify suites | `xtask/src/family/harness.rs`, `xtask/src/family/prove.rs`, `xtask/src/family/certify.rs` | Reuse. Keep Rust behavior stable while widening the explicit target-language gate. |
+| Wrapper read-side regression coverage | `spec-cli/tests/m14_regressions.rs` | Reuse. Extend copied-fixture proof rather than inventing a new test harness. |
+| Monotone-up TypeScript pilot pattern | `xtask/src/family/prove.rs`, `.github/workflows/ci.yml`, `spec-core/src/semantic_review.rs`, `semantic-families/function.arithmetic_leaf.monotone_up.v1/**` | Reuse as the template, not the permanent one-family exception. |
+| Rust maintainer corpus analysis | `semantic-families/corpus/rust-function.toml`, `xtask/src/family/coverage.rs`, `xtask/src/family/recommend.rs` | Reuse unchanged. M30 does not widen corpus analysis. |
 
 ## Step 0 - Scope Challenge
 
 ### Premises
 
-1. The additive authored body contract must be real in the shared loader path,
-   not only in a pilot-only side lane.
+1. The next uncertainty is cross-family generalization, not shared-core truth.
    Verdict: **accept**
-2. Hidden version metadata is the wrong mechanism for target selection here.
+2. `function.wrapper.pipeline.v1` is the best second proof because it exercises
+   a materially different promoted `kind:function` shape.
    Verdict: **accept**
-3. The smallest honest repair is an authority reset in `spec-core`, not a
-   prove-suite band-aid.
+3. A TypeScript corpus manifest is the wrong next move. It adds a new workflow
+   before the second family proof exists.
    Verdict: **accept**
-4. The milestone rename to `M29R` is warranted because the implementation
-   contract changed materially.
+4. M30 should extend the existing pilot architecture, not replace it with
+   repo-wide target-language machinery.
    Verdict: **accept**
 
 ### Minimum Change That Still Counts
 
-The minimum honest M29R diff is:
+The minimum honest M30 diff is:
 
-1. widen the shared unit schema and shared `Body` model
-2. thread `body.typescript` into `ResolvedSpec` and the monotone-up semantic
-   route without widening unrelated execution IR
-3. keep `.test.spec` and seam kinds closed to TypeScript bodies
-4. align the corpus, prove, certify, and CI surfaces with the repaired contract
-5. absorb only mechanical compile-fix fallout caused by the `Body` struct
-   change
+1. add truthful additive TypeScript bodies to the committed
+   `function.wrapper.pipeline.v1` packet surfaces that the proof depends on
+2. widen the target-language prove/certify gate to allow
+   `function.wrapper.pipeline.v1`
+3. add wrapper-specific read-side and semantic-review proof that authored
+   TypeScript survives the second family path
+4. prove the result publicly in CI without widening repo-wide TypeScript
+   command support
+5. reuse existing prove/certify suite and artifact surfaces instead of
+   inventing target-specific report paths or a second suite registry
 
-Anything smaller creates another fake green state.
+Anything smaller turns M30 into naming theater.
 
 ### Complexity Check
 
-This plan touches more than 8 files. Normally that is a smell.
+This plan likely touches more than 8 files. Normally that is a smell.
 
-Here it is still the smallest honest surface because the bug crosses four
-layers that must agree:
+Here it is still the smallest honest surface because a second family proof has
+to align four layers:
 
-- authored schema truth
-- shared parsed model
-- read-side family evaluation and proof selectors
-- copied-fixture and CI surfaces that exercise the promoted packet
+- packet-local authored truth
+- wrapper-family semantic-review proof
+- target-language prove/certify gate
+- public CI proof
 
-No new subsystem is introduced. That matters.
+No new subsystem is introduced. The milestone is still sequential and bounded.
 
 ### TODOS Cross-Reference
 
-`TODOS.md` contains no open item that blocks M29R directly.
+`TODOS.md` does not contain an open item that blocks M30 directly.
 
-The only relevant standing theme is prior deferral discipline: do not let
-multi-target distribution, read-side redesign, or second-family expansion sneak
-back in under a "small follow-up" label.
+The most relevant standing theme is the post-M23 discipline note:
+do not reduce packet ceremony or generalize target-language support before the
+repo has enough real family proofs. M30 is exactly the milestone that earns the
+right to revisit that later.
 
 ### Completeness Check
 
-The obvious shortcut is to special-case the failing corpus path and keep the
-hidden sentinel model alive.
+The obvious shortcut is to add wrapper-family target-language support without
+putting truthful additive TypeScript into the packet-local fixtures.
 
-That saves almost no time with AI help and leaves the same contradiction in
-place. Reject it.
+Reject it.
 
-M29R takes the complete option:
+That would prove a second routing carveout, not a second authored contract.
 
-- shared contract repair
-- seam/test-schema containment
-- regression-proofed read/write surfaces
-- explicit pilot verification in both local proof and CI
+M30 should take the complete bounded option:
+
+- truthful packet-local additive TypeScript
+- wrapper-family read-side proof
+- explicit target-language widening only for the second family
+- ordinary CI and public pilot proof on the pushed SHA
 
 ### Distribution Check
 
@@ -219,494 +218,395 @@ No new user-facing artifact type is introduced.
 
 Internal delivery surfaces only:
 
-- shared schema/model repair
-- packet truth replay
-- prove/certify artifacts
+- committed wrapper packet truth
+- `cargo xtask` prove/certify selectors
+- regression and semantic-review test surfaces
 - CI verification
 - milestone closeout
+
+## Dream State Delta
+
+Today the repo can only claim one promoted `kind:function` family with public
+TypeScript prove/certify proof.
+
+If M30 lands cleanly, the repo can claim:
+
+- two promoted `kind:function` families with materially different shapes share
+  one explicit authored TypeScript contract
+- the second proof reused the existing family registry, wrapper suites, and
+  prove/certify artifact surfaces
+- CI exposes each family proof separately, so failure attribution stays obvious
+
+It still will **not** claim:
+
+- TypeScript corpus analysis
+- repo-wide `spec build/test --target-language typescript`
+- TypeScript support for seam kinds or molecule tests
+
+## Architecture Diagram
+
+```text
+Committed wrapper packet truth
+semantic-families/function.wrapper.pipeline.v1/**
+    │
+    ├── wrapper packet-local units
+    │     pricing_discount_leaf_*
+    │     pricing_tax_leaf_*
+    │     pricing_total_wrapper_*
+    │
+    └── additive authored bodies
+          body.rust + body.typescript
+                    │
+                    v
+Shared loader / validator / normalized function packet
+spec-core shared kind:function path
+                    │
+                    ├── Rust-default semantic review and prove/certify
+                    └── TypeScript target-language pilot for wrapper family
+                              │
+                              v
+                    xtask family prove/certify
+                              │
+                              ├── spec-core wrapper classifier suites
+                              ├── spec-cli wrapper corpus/status/export regressions
+                              └── CI public proof on pushed SHA
+```
 
 ## Closed Implementation Surface
 
 ### Primary implementation files
 
-- `spec-core/src/schema/unit.spec.json`
-- `spec-core/src/schema/test.spec.json`
-- `spec-core/src/types.rs`
-- `spec-core/src/validator.rs`
-- `spec-core/src/generator.rs`
+- `semantic-families/function.wrapper.pipeline.v1/**`
 - `spec-core/src/semantic_review.rs`
-- `spec-core/src/lib.rs` only if error or export plumbing requires it
 - `spec-cli/tests/m14_regressions.rs`
-- `xtask/src/lib.rs`
-- `xtask/src/family/harness.rs`
-- `xtask/src/family/layout.rs`
-- `xtask/src/family/scaffold.rs`
-- `xtask/src/family/smoke.rs`
 - `xtask/src/family/prove.rs`
 - `xtask/src/family/certify.rs`
-- `xtask/src/family/report.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/paths.rs`
-- `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
+- `xtask/src/family/harness.rs`
+- `xtask/src/family/scaffold.rs`
+- `xtask/src/lib.rs`
 - `.github/workflows/ci.yml`
 - `PLAN.md`
-- `ORCH_PLAN.md`
 
-### Allowed mechanical compile-fix spillover
+### Allowed mechanical spillover
 
-Because `Body` is a shared Rust struct, adding `typescript: Option<String>` will
-require non-semantic compile fixes anywhere the repo constructs `Body { rust: ...
-}` literals in tests or fixture helpers. These spillover edits are allowed only
-when all of the following are true:
+Because wrapper-family proof is exercised through existing prove/certify and test
+helpers, small mechanical updates are allowed only when all of the following are
+true:
 
-1. the file is only being updated to compile against the widened `Body`
-2. the change is mechanical, typically `typescript: None`
-3. no runtime behavior or product scope changes in that file
+1. the edit is a direct compile-fix or expectation-fix caused by the M30 closed
+   surface
+2. the edit does not widen the family registry beyond
+   `function.wrapper.pipeline.v1`
+3. the edit does not introduce repo-wide TypeScript support
+4. the edit does not change maintainer corpus analysis behavior
 
-Likely spillover sites include test/helper code in:
-
-- `spec-core/src/{export,escape_hatch,generator,graph,molecule_evidence,normalizer,passport,plan,semantic_review,validator}.rs`
-- `spec-cli/src/commands.rs`
-
-Anything beyond that mechanical spillover requires stopping and rewriting the
-plan first.
-
-## Architecture
-
-### Current Broken State
-
-```text
-promoted packet fixtures
-author body.typescript
-        |
-        v
-shared unit schema rejects field
-shared Body model drops field
-        |
-        +--> copied corpus fixtures fail to load
-        +--> semantic pilot truth must be rediscovered elsewhere
-        +--> Rust prove and TypeScript pilot disagree on what is authored
-```
-
-### Target State
-
-```text
-authored unit truth
-body.rust + body.typescript?
-        |
-        v
-shared unit schema + shared Body model + ResolvedSpec
-        |
-        +--> validator sees explicit authored truth
-        +--> semantic review sees explicit authored truth
-        +--> Rust default lane consumes body.rust
-        +--> monotone-up TypeScript pilot consumes body.typescript
-        |
-        v
-copied corpus fixtures, prove/certify, packet, and CI all evaluate the same packet honestly
-```
-
-### Dependency Graph
-
-```text
-spec-core/src/schema/unit.spec.json
-            |
-            v
-spec-core/src/types.rs::Body + ResolvedSpec::from_spec()
-            |
-            +--> spec-core/src/validator.rs
-            +--> spec-core/src/generator.rs
-            +--> spec-core/src/semantic_review.rs
-            |
-            v
-spec-cli/tests/m14_regressions.rs
-            |
-            v
-xtask/src/family/{harness,prove,certify,paths,report,scaffold,...}
-            |
-            v
-.github/workflows/ci.yml
-```
-
-### Locked Architecture Rules
-
-1. `body.typescript` is represented as `Option<String>`, not `String`, and not
-   inferred from `spec_version`.
-2. `Body` may be widened, but `.test.spec` remains Rust-only through
-   `spec-core/src/schema/test.spec.json`.
-3. `ResolvedSpec` may carry `body_typescript`, but `spec-core/src/generator.rs`
-   must remain Rust-only in M29R.
-4. The monotone-up TypeScript pilot may branch on explicit authored truth and
-   explicit CLI target choice, not on hidden version text.
-5. The packet root remains
-   `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`.
-6. Any code path that silently drops authored `body.typescript` is a bug.
-
-### File-Level Change Map
-
-| Surface | Exact change | Must stay true after change |
-|---|---|---|
-| `spec-core/src/schema/unit.spec.json` | Widen `function_body` with optional `typescript` string; keep seam bodies closed | `kind:data`, `kind:sum`, and unknown fields still fail |
-| `spec-core/src/schema/test.spec.json` | No TypeScript widening; keep Rust-only body schema | `.test.spec` remains Rust-only |
-| `spec-core/src/types.rs` | Add `Body.typescript: Option<String>` and `ResolvedSpec.body_typescript: Option<String>`; thread through `ResolvedSpec::from_spec()` | Rust-default consumers still see unchanged `body_rust` |
-| `spec-core/src/validator.rs` | Allow function `body.typescript`; explicitly reject it on data/sum seams; keep molecule tests Rust-only through test schema | no cross-kind widening |
-| `spec-core/src/generator.rs` | Ignore `body_typescript`; preserve Rust codegen contract | Rust generation output remains stable |
-| `spec-core/src/semantic_review.rs` | Thread explicit TypeScript authored truth into monotone-up evaluation where target-language pilot requires it | no sentinel-based target inference |
-| `spec-cli/tests/m14_regressions.rs` | Update copied monotone-up fixture expectations so additive packet truth loads and projects correctly | Rust truth-surface and corpus selectors remain locked |
-| `xtask/src/family/harness.rs` and family command plumbing | Keep selector names and command matrix stable; ensure prove/certify assumptions match repaired contract | no new packet root, no CLI sprawl |
-| `.github/workflows/ci.yml` | Run the targeted monotone-up proof surface alongside workspace health | exact pushed SHA proves both lanes |
-
-### Diagram Maintenance Targets
-
-If implementation adds or changes nearby ASCII diagrams, update them in the
-same commit. At minimum review these files for stale diagrams or stale comments:
+Likely spillover sites, only if forced:
 
 - `spec-core/src/types.rs`
 - `spec-core/src/generator.rs`
-- `spec-core/src/semantic_review.rs`
-- `xtask/src/family/harness.rs`
-- `xtask/src/lib.rs`
+- `spec-core/src/passport.rs`
 
-## Implementation Plan
+If M30 needs semantic changes outside the primary surface, stop and rewrite the
+plan before implementation continues.
 
-### Phase 1 - Shared Contract Repair
+## Workstreams
 
-Goal: make additive `body.typescript` legal and preservable in the ordinary
-shared authoring path without widening other authoring surfaces.
+### WS-1 Packet-local additive TypeScript truth
 
-Work:
+Goal: make the wrapper packet itself truthful for second-language proof.
 
-1. Widen `function_body` in `spec-core/src/schema/unit.spec.json` to allow
-   optional `typescript`.
-2. Leave `spec-core/src/schema/test.spec.json` unchanged so `.test.spec`
-   authoring stays Rust-only.
-3. Extend `spec-core/src/types.rs::Body` to:
-   `rust: String, typescript: Option<String>`.
-4. Extend `ResolvedSpec` with `body_typescript: Option<String>` and thread it
-   through `ResolvedSpec::from_spec()`.
-5. Apply only mechanical compile-fix updates to helper/test `Body` literals
-   outside the primary surface.
+Required work:
 
-Exit criteria:
+- add additive `body.typescript` to the wrapper family fixtures that participate
+  in the proof
+- keep the packet self-contained rather than relying on hidden external target
+  assumptions
+- update any scaffold smoke contract that claims to represent the wrapper packet
 
-- shared unit schema accepts additive `body.typescript`
-- `.test.spec` schema remains Rust-only
-- parsed shared `Body` preserves TypeScript truth
-- `ResolvedSpec` carries explicit TypeScript authored truth
+Acceptance:
 
-### Phase 2 - Re-anchor Shared Consumers
+- committed wrapper packet fixtures show explicit additive TypeScript truth
+- smoke and packet-layout expectations still pass
 
-Goal: eliminate authority drift inside `spec-core`.
+### WS-2 Wrapper read-side and semantic proof
 
-Work:
+Goal: prove the shared loader and wrapper semantic-review route read the new
+packet truth honestly.
 
-1. Update `validate_function_semantic()` so additive TypeScript is allowed for
-   function units.
-2. Update `validate_data_escape_hatches()` and `validate_sum_escape_hatches()`
-   so top-level `body.typescript` is explicitly rejected for seam kinds.
-3. Keep `validate_body_rust_block()` and Rust generation rules unchanged for the
-   default lane.
-4. Update the monotone-up semantic-review path so explicit authored TypeScript
-   truth is available without using `spec_version` as a target sentinel.
-5. Keep the TypeScript-specific logic bounded to the monotone-up pilot surface.
+Required work:
 
-Exit criteria:
+- add at least one explicit wrapper semantic-review assertion that authored
+  `body.typescript` is preserved on the second-family path
+- extend copied-wrapper fixture regressions in
+  `spec-cli/tests/m14_regressions.rs` so the shared loader path proves additive
+  TypeScript survives for all four buckets
+- retire or bypass the existing test-time TypeScript injection pattern in
+  `spec-cli/tests/m14_regressions.rs` so wrapper proof is grounded in committed
+  packet bytes
+- preserve existing wrapper bucket health outcomes
 
-- Rust default lane remains unchanged
-- seam kinds still reject top-level TypeScript bodies
-- TypeScript pilot logic no longer depends on hidden version semantics
-- new read path is explicit and inspectable
+Acceptance:
 
-### Phase 3 - Re-anchor Prove, Certify, and Corpus Surfaces
+- wrapper classifier suites stay green
+- wrapper corpus/status/export regressions stay green
 
-Goal: make the authoritative proof paths exercise the repaired contract.
+### WS-3 Target-language prove/certify widening
 
-Work:
+Goal: widen the existing TypeScript pilot only far enough to include the second
+family.
 
-1. Update `spec-cli/tests/m14_regressions.rs` so copied monotone-up fixtures are
-   legal when they carry additive `body.typescript`, and still prove the Rust
-   lane remains stable.
-2. Keep the existing monotone-up selector buckets:
-   `monotone_up_truth_surface_`, `monotone_up_corpus_`,
-   `monotone_up_regression_`.
-3. Update `xtask/src/family/harness.rs` and adjacent family surfaces only where
-   prove/certify expectations assumed the old contract.
-4. Keep `xtask/src/family/paths.rs` and `scaffold.rs` locked to the existing
-   packet root. No parallel TypeScript packet tree.
+Required work:
 
-Exit criteria:
+- extend `xtask` target-language validation to allow
+  `function.wrapper.pipeline.v1`
+- preserve the current explicit rejection for every other family
+- keep Rust-default prove/certify unchanged
+- keep prove/certify artifact paths and suite ownership exactly as they are;
+  the second-family proof should extend wrapper-owned suites rather than
+  introduce target-specific suite names or output trees
 
-- monotone-up corpus tests pass with additive packet fixtures
-- prove/certify route through the same shared truth the corpus tests use
-- no packet-root drift
+Acceptance:
 
-### Phase 4 - Packet Replay
+- wrapper TypeScript prove/certify pass
+- non-wrapper, non-monotone-up families still fail fast on
+  `--target-language typescript`
+- existing wrapper suite slugs and prove/certify artifact surfaces remain
+  authoritative
 
-Goal: re-freeze the packet only after the foundation is honest.
+### WS-4 CI and public proof
 
-Work:
+Goal: make the second family publicly provable on the pushed SHA.
 
-1. Refresh only the required monotone-up packet fixtures under
-   `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`.
-2. Preserve the four required buckets:
-   `aligned`, `drift`, `under_specified`, `unsupported_near_miss`.
-3. Keep packet truth explicit and additive. No side-channel target encoding.
+Required work:
 
-Exit criteria:
+- keep the ordinary workspace lane green
+- preserve the existing monotone-up TypeScript pilot proof
+- add a dedicated `wrapper_pipeline_pilot` CI job
+- keep `monotone_up_pilot` as its own job; do not collapse both families into
+  one opaque multi-family TypeScript lane
 
-- packet fixtures and family metadata agree with the repaired contract
-- local prove and certify consume the refreshed packet without ad hoc shims
+Acceptance:
 
-### Phase 5 - CI and Closeout
+- public CI on the pushed SHA shows ordinary lane green
+- public CI shows monotone-up pilot green
+- public CI shows wrapper pipeline TypeScript proof green
 
-Goal: prove the exact pushed SHA is green for both ordinary workspace health and
-the monotone-up pilot lane.
-
-Work:
-
-1. Extend `.github/workflows/ci.yml` so CI explicitly runs the monotone-up proof
-   surface in addition to workspace health.
-2. Keep the new CI additions targeted. Do not duplicate full-workspace work
-   unnecessarily.
-3. Close the milestone with one explicit verdict and a truthful note on what
-   stayed shared versus what remained pilot-local.
-
-Exit criteria:
-
-- CI runs on the exact pushed SHA
-- Rust and TypeScript pilot lanes both pass
-- closeout can make a truthful claim about the repaired contract
-
-## Code Quality Review
-
-1. **Explicit over clever**
-   The target-language split must be visible in data structures and routing.
-   No "magic" inference path.
-2. **Minimal diff**
-   Add `body_typescript` only where read-side consumers actually need it. Do not
-   widen unrelated IR or CLI surfaces.
-3. **DRY**
-   There must be exactly one shared representation of TypeScript authored truth:
-   `Body.typescript` flowing into `ResolvedSpec.body_typescript`.
-4. **Contain the blast radius**
-   Mechanical `Body` compile-fix edits are allowed. Semantic behavior changes
-   outside the primary surface are not.
-5. **Rust-default safety**
-   Any change that perturbs existing Rust-only callers without opting into the
-   TypeScript pilot is a regression.
-6. **No dead compatibility baggage**
-   If any sentinel or compatibility helper survives temporarily, it must be
-   inert, named as temporary, and removed before M29R closeout.
-
-## Test Review
-
-100% planned coverage is required for every surface M29R touches. No "we will
-add the regression later."
-
-### Required Coverage Diagram
+## Test and Failure Map
 
 ```text
-CODE PATH COVERAGE
-===========================
-[+] Shared schema and model
-    |
-    ├── unit schema accepts function body.typescript
-    │   └── [REQUIRED] unit schema validation regression
-    ├── test schema still rejects body.typescript
-    │   └── [REQUIRED] negative test.spec schema regression
-    ├── seam kinds still reject top-level body.typescript
-    │   └── [REQUIRED] data + sum semantic regressions
-    ├── Body model preserves rust + typescript together
-    │   └── [REQUIRED] deserialize / round-trip regression
-    └── unknown body fields still fail
-        └── [REQUIRED] negative schema regression
+M30 proof paths
+================
 
-[+] Shared consumer routing
-    |
-    ├── ResolvedSpec carries body_typescript explicitly
-    │   └── [REQUIRED] normalization / model regression
-    ├── validator accepts additive function body without widening seams
-    │   └── [REQUIRED] validator regression
-    ├── generator still emits Rust-default code from body.rust only
-    │   └── [REQUIRED] Rust generation regression
-    ├── semantic review reads explicit body.typescript for pilot routing
-    │   └── [REQUIRED] monotone-up semantic-review regression
-    └── no hidden spec_version target selection required
-        └── [REQUIRED] regression proving explicit-field route works without sentinel
+[+] Packet-local authored truth
+    ├── aligned wrapper fixture carries additive TS body
+    ├── drift wrapper fixture carries additive TS body
+    ├── under_specified wrapper fixture carries additive TS body
+    └── unsupported_near_miss wrapper fixture carries additive TS body
 
-[+] Corpus and read-side proof
-    |
-    ├── aligned fixture projects valid state
-    ├── drift fixture projects failing state
-    ├── under_specified fixture projects incomplete state
-    ├── unsupported_near_miss stays additive-only and neutral
-    └── copied fixtures with body.typescript no longer fail schema load
-        └── [REQUIRED] extend m14_regressions coverage
+[+] Shared read-side loader
+    ├── copied wrapper aligned fixture loads and projects valid
+    ├── copied wrapper drift fixture loads and projects failing
+    ├── copied wrapper under_specified fixture loads and projects incomplete
+    └── copied wrapper unsupported_near_miss stays additive-only and neutral
 
-[+] Prove / certify command matrix
-    |
-    ├── cargo xtask family prove ... (Rust default)
-    ├── cargo xtask family prove ... --target-language typescript
-    ├── cargo xtask family certify ... (Rust default)
-    └── cargo xtask family certify ... --target-language typescript
-        └── [REQUIRED] harness and selector coverage stay explicit
+[+] Wrapper semantic-review target path
+    ├── authored TS body preserved in wrapper semantic packet
+    └── wrapper Rust-default route still classifies the same family correctly
 
-[+] CI flow
-    |
-    ├── workspace health lane still passes
-    ├── monotone-up pilot proof lane runs on push / PR
-    └── failing pilot lane fails CI loudly
-        └── [REQUIRED] workflow update + dry-run verification
+[+] xtask target-language gate
+    ├── wrapper prove/certify typescript accepted
+    ├── monotone_up prove/certify typescript still accepted
+    └── every other family still rejected
+
+[+] Public proof
+    ├── ordinary workspace lane green
+    ├── monotone_up pilot green
+    └── wrapper pipeline pilot green
 ```
 
-### Required Test/Additive Change Matrix
+Critical silent-failure risks M30 must prevent:
 
-| Surface | Test home | Required assertion |
-|---|---|---|
-| unit schema widening | `spec-core/src/validator.rs` schema tests | function units accept `body.typescript`; unknown body keys still fail |
-| seam containment | `spec-core/src/validator.rs` semantic tests | `kind:data` and `kind:sum` reject top-level `body.typescript` |
-| test-spec containment | `spec-core/src/validator.rs` or loader tests | `.test.spec` rejects `body.typescript` at schema-validation time |
-| model threading | `spec-core/src/types.rs` tests | `ResolvedSpec::from_spec()` preserves `body_typescript` |
-| Rust-default generation | `spec-core/src/generator.rs` tests | adding `body_typescript` does not change generated Rust |
-| monotone-up authored truth route | `spec-core/src/semantic_review.rs` under `monotone_up_classifier_` / `monotone_up_regression_` | explicit authored TypeScript path works without sentinel inference |
-| copied packet fixture load | `spec-cli/tests/m14_regressions.rs` under `monotone_up_corpus_` | copied additive fixture loads and projects expected health |
-| command matrix stability | `xtask/src/lib.rs` and/or family harness tests | existing prove/certify selectors remain locked |
-| CI pilot lane | workflow verification | exact monotone-up proof commands run in CI |
+1. Wrapper fixtures gain TypeScript bodies in only one bucket, so the packet
+   looks truthful on the happy path and lies on regressions.
+2. Wrapper target-language gate is widened, but copied packet fixtures are not
+   exercised through the shared loader path.
+3. CI bundles both families into one opaque pilot command without preserving
+   clear failure attribution.
 
-### Required Commands
+## Error and Rescue Registry
 
-These commands are the verification floor for M29R:
-
-```bash
-cargo test -p spec-core --lib monotone_up_classifier_ -- --color never
-cargo test -p spec-core --lib monotone_up_regression_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_truth_surface_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_corpus_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_regression_ -- --color never
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo test --workspace
-```
-
-### Regression Rule
-
-Any fix for the current `unknown field at /body: typescript` break must land
-with a regression test in the same change set. No exceptions.
-
-## Performance Review
-
-This milestone is correctness-heavy, not throughput-heavy, but there are still
-three real performance risks:
-
-1. Do not turn CI into duplicated full-workspace work plus duplicated prove
-   work. Keep the added lane targeted to monotone-up proof surfaces.
-2. Do not create extra packet trees or duplicated fixture scans that multiply
-   filesystem churn for no gain.
-3. Do not introduce a second parsed representation of authored TypeScript truth.
-   That would buy short-term convenience and permanent maintenance cost.
-
-The right performance posture is boring:
-
-- one packet root
-- one shared parse model
-- targeted prove/certify suites
-- explicit CI additions
+| Risk | Where it shows up | Early signal | Rescue path |
+|---|---|---|---|
+| Wrapper fixtures gain partial TS coverage only | `semantic-families/function.wrapper.pipeline.v1/fixtures/**` | one bucket passes TS prove while another still lacks `body.typescript` | stop and finish packet truth across all four buckets before touching CI |
+| Wrapper proof depends on new ad hoc test rewriting | `spec-cli/tests/m14_regressions.rs` | new helper injects or mutates wrapper TS bodies at test time | reject the helper, move the truth into committed fixture bytes, re-run read-side coverage |
+| TS widening leaks beyond the intended families | `xtask/src/family/prove.rs`, `xtask/src/family/certify.rs` | non-wrapper families start accepting `--target-language typescript` | revert to explicit allowlist of `monotone_up` + `wrapper_pipeline` only |
+| CI hides which family broke | `.github/workflows/ci.yml` | one TypeScript pilot job runs both families and emits one red badge | split back into `monotone_up_pilot` and `wrapper_pipeline_pilot` before calling the milestone done |
 
 ## Failure Modes Registry
 
-| Failure mode | Surface | Test required | Error handling expectation | User-visible effect if missed | Critical gap |
-|---|---|---|---|---|---|
-| Unit schema accepts `body.typescript` but `ResolvedSpec` still drops it | `spec-core/src/schema/unit.spec.json`, `spec-core/src/types.rs` | deserialize / model regression | fail fast in tests | silent truth loss in TypeScript lane | **yes** |
-| `Body` widening accidentally makes `.test.spec` accept TypeScript | `spec-core/src/schema/test.spec.json`, loader/validator path | negative test-spec regression | schema rejection | new hidden authoring surface | **yes** |
-| Seam kinds silently accept top-level TypeScript bodies | `spec-core/src/validator.rs` | data/sum negative regressions | semantic rejection | contract drift across kinds | **yes** |
-| Semantic review still routes through hidden metadata | `spec-core/src/semantic_review.rs` | monotone-up semantic-review regression | explicit assertion that authored field is used | fake green TypeScript classification | **yes** |
-| Generator accidentally changes Rust-default behavior | `spec-core/src/generator.rs` | Rust generation regression | ordinary Rust lane tests fail | existing Rust users see unexplained drift | **yes** |
-| Corpus fixtures stay truthful but copied fixture load still fails | `spec-cli/tests/m14_regressions.rs` | copied fixture load regression | test failure | milestone appears blocked after foundation repair | no |
-| CI continues to run only workspace health and misses pilot proof | `.github/workflows/ci.yml` | workflow verification | CI must fail loudly on pilot break | false confidence on pushed SHA | **yes** |
-| Packet root drifts to a TypeScript-only tree | `xtask/src/family/paths.rs`, scaffold surfaces | path-layout regression | hard fail | split-brain packet ownership | **yes** |
+| Failure mode | Severity | Why it matters | Mitigation in M30 |
+|---|---|---|---|
+| Shared contract looks generalized but only because tests patched fixtures in memory | High | maintainer proof becomes misleading and the packet stops being the source of truth | committed wrapper fixtures must carry additive TS directly |
+| Wrapper family passes TS prove but on a bespoke suite/output path | High | repo learns nothing about whether the existing harness generalizes | require reuse of wrapper-owned suites and current artifact surfaces |
+| Combined TypeScript CI lane masks the failing family | Medium | diagnosis slows down and maintainers lose confidence in the pilot signal | dedicated wrapper pilot job with monotone-up kept separate |
+| Scaffold claims wrapper starter truth that does not match the committed packet | Medium | future packet refreshes drift and reintroduce hidden cleanup work | update `xtask/src/family/scaffold.rs` in the same milestone if starter output claims TypeScript support |
 
-## Worktree Parallelization Strategy
+## Parallelization Strategy
 
-Sequential implementation is not required here. There are two legitimate
-parallel workstreams once the contract freeze is landed.
+Sequential implementation, no parallelization opportunity.
 
-### Dependency Table
+The likely touch set is small enough and coupled enough that parallel worktrees
+would create merge friction for little gain:
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| 1. Freeze M29R contract and rewrite `ORCH_PLAN.md` | `PLAN.md`, `ORCH_PLAN.md` | — |
-| 2. Shared schema/model repair | `spec-core/src/schema/`, `spec-core/src/types.rs`, mechanical `Body` compile-fix sites | 1 |
-| 3. Shared consumer re-anchor | `spec-core/src/validator.rs`, `spec-core/src/generator.rs`, `spec-core/src/semantic_review.rs` | 2 |
-| 4. Read-side proof and harness alignment | `spec-cli/tests/`, `xtask/src/family/`, `xtask/src/lib.rs` | 2 |
-| 5. Packet replay | `semantic-families/function.arithmetic_leaf.monotone_up.v1/` | 3, 4 |
-| 6. CI lane update and final verification | `.github/workflows/`, proof commands, final merged surfaces | 5 |
+| WS-1 packet truth | `semantic-families/function.wrapper.pipeline.v1/`, `xtask/src/family/scaffold.rs`, `xtask/src/lib.rs` | — |
+| WS-2 read-side proof | `spec-core/src/semantic_review.rs`, `spec-cli/tests/`, `xtask/src/family/harness.rs` | WS-1 |
+| WS-3 target gate | `xtask/src/family/prove.rs`, `xtask/src/family/certify.rs`, `xtask/src/family/harness.rs` | WS-2 |
+| WS-4 CI proof | `.github/workflows/ci.yml` | WS-3 |
 
-### Parallel Lanes
+## DX Review
 
-- **Lane A:** Step 2 -> Step 3
-  Sequential, shared `spec-core/` ownership.
-- **Lane B:** Step 4
-  Independent from Lane A after Step 2 lands, owns `spec-cli/tests/` plus
-  `xtask/`.
-- **Lane C:** Step 5
-  Waits for Lane A and Lane B to merge.
-- **Lane D:** Step 6
-  Waits for Lane C.
+### DX Scorecard
 
-### Execution Order
+| Dimension | Score | Why |
+|---|---|---|
+| Discoverability | 8/10 | family ids and harness slugs are explicit in `xtask/src/family/harness.rs`, but TS support is still gated in one place that contributors have to find |
+| Local iteration speed | 7/10 | targeted wrapper and monotone-up suites exist, but the ordinary verification floor is still heavyweight |
+| Failure attribution | 9/10 | dedicated wrapper pilot plus preserved monotone-up pilot keeps the red badge actionable |
+| Fixture truthfulness | 6/10 | current monotone-up injection helper proves the repo can still cheat accidentally |
+| Reversibility | 9/10 | M30 remains allowlist-based and can be backed out family by family |
+| Test ergonomics | 8/10 | existing suite slugs are well-factored for selective execution |
+| Consistency | 8/10 | one shared family registry and one packet root per family stay intact |
+| Onboarding clarity | 7/10 | `PLAN.md` can make the milestone legible, but code comments/tests still need to carry the boundary clearly |
 
-1. Rewrite `ORCH_PLAN.md` and freeze M29R authority.
-2. Land Step 2 first. This is the contract freeze.
-3. Launch Lane A and Lane B in parallel from the same post-Step-2 SHA.
-4. Merge Lane A and Lane B.
-5. Run Lane C.
-6. Run Lane D.
+DX overall: **7.8/10**
 
-### Conflict Flags
+### Developer Journey Map
 
-- Steps 2 and 3 both touch `spec-core/`, so they stay in the same lane.
-- Step 2 may cause mechanical compile-fix spillover in test/helper files. Those
-  edits belong to Lane A if they arise from the `Body` shape change.
-- Step 4 touches `spec-cli/tests/` and `xtask/`. Keep it out of Lane A to avoid
-  merge churn in `spec-core/`.
-- Step 6 may need a small follow-up in `xtask/` if CI commands drift. Treat that
-  as a late, parent-owned merge risk.
+```text
+Contributor asks "how do I add TS proof to a second family?"
+    │
+    ├── reads PLAN.md and design doc
+    ├── finds current gate in xtask/src/family/prove.rs
+    ├── inspects wrapper packet fixtures
+    ├── runs targeted wrapper semantic + spec-cli regressions
+    ├── runs wrapper prove/certify in Rust and Typescript
+    └── pushes and reads separate pilot jobs in CI
+```
+
+### Developer Empathy Narrative
+
+The tired maintainer failure case is obvious here. They add
+`--target-language typescript` for wrapper, CI goes red, and now they have to
+guess whether the problem is fixture truth, semantic review, prove gating, or
+one huge combined pilot job.
+
+M30 should remove that guesswork. The packet bytes should already be truthful.
+The wrapper-owned suites should stay the same. The CI job name should tell you
+which family broke. That is the difference between "I can land this in an
+evening" and "I am spelunking a one-off pilot exception at 11:30pm."
+
+### TTHW
+
+Current time-to-honest-wrapper-proof: **~20 minutes**
+
+Why:
+- contributors must inspect the gate, harness, packet fixtures, and CI wiring
+- current monotone-up injection precedent creates doubt about where truth is
+- verification spans both targeted suites and the ordinary lane
+
+Target after M30: **~10 minutes**
+
+How:
+- one committed wrapper packet with additive TS in all required buckets
+- one explicit allowlist expansion in `xtask/src/family/prove.rs`
+- one dedicated `wrapper_pipeline_pilot` job
+- no new suite names or artifact paths to discover
+
+### DX Implementation Checklist
+
+- [ ] packet bytes, not tests, author the wrapper TypeScript truth
+- [ ] `xtask` allowlist names exactly two TS-proof families
+- [ ] wrapper suite slugs stay unchanged
+- [ ] wrapper pilot has its own CI job name
+- [ ] verification commands in this plan stay sufficient for a newcomer to reproduce the result
 
 ## Explicit Verification Sequence
 
-Run this sequence from merged state before calling M29R done:
+Run this exact merged-state verification sequence before calling M30 done:
 
 ```bash
-cargo test -p spec-core --lib monotone_up_classifier_ -- --color never
-cargo test -p spec-core --lib monotone_up_regression_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_truth_surface_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_corpus_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_regression_ -- --color never
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
+cargo run -p spec-cli -- generate examples/ecommerce/units --output examples/ecommerce/src/generated
+cargo check --manifest-path examples/ecommerce/Cargo.toml
+cargo test -p spec-core wrapper_pipeline_classifier_ -- --color never
+cargo test -p spec-cli --test m14_regressions wrapper_pipeline_ -- --color never
+cargo test -p spec-cli --test m14_regressions monotone_up_ -- --color never
+cargo xtask family smoke function.wrapper.pipeline.v1
+cargo xtask family prove function.wrapper.pipeline.v1
+cargo xtask family certify function.wrapper.pipeline.v1
+cargo xtask family prove function.wrapper.pipeline.v1 --target-language typescript
+cargo xtask family certify function.wrapper.pipeline.v1 --target-language typescript
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
 ```
 
-## Closeout Contract
+These commands are the verification floor for M30.
 
-M29R closes with exactly one verdict:
+## Cross-Phase Themes
 
-- `EXPAND` if the repaired shared contract holds and both targets prove cleanly
-- `NARROW` if the shared contract repair works but the pilot surface must stay
-  narrower than currently planned
-- `STOP` if the repo still cannot preserve one honest shared authoring contract
-  for Rust and TypeScript without wider architecture work
+**Truth over convenience** — the same theme shows up in scope, architecture,
+and DX. Every shortcut that makes M30 easier in the moment, test-time fixture
+injection, combined CI pilot lanes, target-specific suite names, weakens the
+one thing this milestone is supposed to prove.
 
-The closeout must say plainly:
+**Boring reuse is the win** — the right shape is not more TypeScript machinery.
+It is proving that the existing registry, packet root, wrapper suites, and
+prove/certify surfaces already generalize one family further.
 
-1. what changed in the shared contract
-2. whether `.test.spec` and seam kinds stayed closed to TypeScript bodies
-3. whether Rust-default behavior stayed stable
-4. whether any temporary compatibility baggage survived
-5. whether CI proved the exact pushed SHA
+## Closeout and Verdict
+
+M30 closes with exactly one verdict:
+
+- `EXPAND` if the second family proof passes cleanly, ordinary CI is green on
+  the pushed SHA, and no new hidden target-language carveout was required
+- `NARROW` if the wrapper family works but one additional bounded follow-on is
+  needed before broader TypeScript expansion is honest
+- `STOP` if the second family proof requires a new packet root, repo-wide
+  target-language support, or hidden family-specific metadata to pass
+
+The closeout must answer plainly:
+
+1. Did one shared authored TypeScript contract survive on two promoted
+   `kind:function` families?
+2. Did ordinary CI and both pilot lanes pass on the pushed SHA?
+3. What exact question is still unanswered after M30?
 
 Anything softer is not a real closeout.
+
+<!-- AUTONOMOUS DECISION LOG -->
+## Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|-------|----------|----------------|-----------|-----------|----------|
+| 1 | CEO | Make `function.wrapper.pipeline.v1` the M30 target instead of adding a TypeScript corpus manifest | Scope | Incremental over revolutionary | It answers the next unknown directly without creating a new maintainer-analysis lane first. | `typescript-function.toml` first |
+| 2 | ENG | Require committed wrapper packet fixtures to carry additive `body.typescript` across all four buckets | Truth boundary | Make the change easy, then make the easy change | The packet has to remain the source of truth or the proof becomes synthetic. | test-time fixture mutation |
+| 3 | ENG | Reuse existing wrapper prove/certify suites and artifact paths | Architecture | Boring by default | A second-family proof should demonstrate harness reuse, not new target-specific plumbing. | new suite registry or TS-specific output tree |
+| 4 | ENG | Require a dedicated `wrapper_pipeline_pilot` CI job and preserve `monotone_up_pilot` | Observability | Systems over heroes | Separate jobs keep failure attribution obvious for maintainers and future contributors. | one combined multi-family pilot lane |
+| 5 | DX | Keep the TS allowlist explicitly limited to `monotone_up` and `wrapper_pipeline` in M30 | Blast radius | Reversibility preference | The smallest reversible expansion gives the repo a real signal without spending more innovation tokens. | repo-wide TS prove/certify widening |
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAN | 1 proposal, 1 accepted, 0 deferred |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAN | 3 issues, 0 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | SKIPPED | no UI scope in M30 |
+
+- **DX:** 1 review path through `/autoplan`, clean. TTHW: ~20 min -> ~10 min.
+- **UNRESOLVED:** 0
+- **VERDICT:** CEO + ENG CLEARED — ready to implement M30 on the closed surface above.
