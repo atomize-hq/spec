@@ -2,7 +2,7 @@ id: pricing/pricing_total_wrapper_under_specified
 kind: function
 spec_version: "0.3.0"
 intent:
-  why: Adjust the checkout total using the current pricing inputs.
+  why: todo
 contract:
   inputs:
     subtotal: Decimal
