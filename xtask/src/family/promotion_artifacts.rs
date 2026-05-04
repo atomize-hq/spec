@@ -518,6 +518,7 @@ pub(crate) fn run_emit_promotion_execution(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_emit_promotion_blocker(
     workspace_root: &Path,
     raw_family: &str,
