@@ -17,7 +17,8 @@ milestones:
 - `M27` — landed
 - `M27.5` — next
 - `M31` — after recommendation-quality hardening
-- `M32` — likely follow-on, not locked yet
+- `M32` — landed as one bounded second-language pilot for
+  `function.arithmetic_leaf.monotone_up.v1`
 
 The shared premise remains the same:
 
@@ -273,43 +274,43 @@ M31 is the seam-only milestone that has to land first:
 - That function portability is solved
 - That M32 has already been earned
 
-### M32 — Executable-Truth Question For Second-Language Promotion
-**Status:** Likely follow-on, not locked
+### M32 — One Bounded Second-Language Promotion Path
+**Status:** Landed, bounded
 
-If M27.5 and M31 land cleanly, the next milestone becomes an executable-truth
-question rather than a retroactive part of M31.
+After M31 made the seam boundary explicit, M32 stopped being a generic
+portability aspiration and became one concrete executable-truth pilot.
 
-M32 is where the repo can ask, with live proof surfaces rather than aspiration,
-whether one honest second-language promotion path actually works.
+M32 proves one bounded second-language promotion path for
+`function.arithmetic_leaf.monotone_up.v1` and nothing broader.
 
-**Likely shape**
+**What landed**
 
-- Re-prove a small set of already-understood shapes in a second target
-  language.
-- Keep packet lifecycle, artifact contracts, approval surfaces, and proof-gate
-  semantics as shared as possible.
-- Use the pilot to expose which assumptions still remain target-specific after
-  M31 containment work.
+- `function.arithmetic_leaf.monotone_up.v1` now carries the bounded
+  second-language pilot alongside its existing Rust packet truth.
+- TypeScript is explicit for that one monotone-up packet so the repo can test
+  the shared promotion flow against a real second-language path.
+- packet lifecycle, artifact contracts, approval surfaces, and proof-gate
+  semantics stay shared rather than forking into a separate second-language
+  workflow.
+- `function.wrapper.pipeline.v1` stays in the story as regression pressure only;
+  it is not a second M32 certify target.
 
-**What it would need to land on**
+**What this proves**
 
-- At least one small, honest second-language packet flow completes without
-  re-inventing the promotion workflow from scratch.
-- The resulting proof surfaces show:
-  - what semantics are genuinely shared
-  - what target-specific lowering assumptions still remain
-  - whether the M31 escape-hatch boundary actually held
+- One already-understood family can complete a second-language promotion path
+  without re-inventing the promotion workflow from scratch.
+- The proof surfaces are now concrete about which parts of the flow stayed
+  shared and which assumptions still remain target-specific.
+- The M31 containment work was strong enough to support one bounded pilot on a
+  real promoted family.
 
-**What it would prove**
+**What this does not prove**
 
-- The system is starting to answer the executable-truth question for
-  second-language promotion instead of merely describing the boundary in prose.
-
-**What it would still not prove**
-
-- Broad second-language coverage
-- Full parity across arbitrary language features
-- That the portability kernel is finished
+- General second-language family coverage
+- Additional M32 certify targets beyond
+  `function.arithmetic_leaf.monotone_up.v1`
+- Finished parity across arbitrary language features
+- That the portability kernel is complete
 
 ## Suggested Ordering Logic
 
@@ -319,13 +320,14 @@ whether one honest second-language promotion path actually works.
    recommendation-quality good enough for roadmap steering.
 4. `M31` next, because second-language work without shared-core extraction and
    escape-hatch containment would be fake confidence.
-5. `M32` only after M27.5 and M31 narrow the portability seam enough to run one
-   honest second-language pilot.
+5. `M32` after M27.5 and M31, as the bounded
+   `function.arithmetic_leaf.monotone_up.v1` second-language pilot and not a
+   broader portability claim.
 
 ## One-Line Summary
 
 `M26` made family promotion AI-operable, `M27` made next-family choice
 evidence-driven, `M27.5` hardens recommendation quality, `M31` isolates
-the shared core from Rust-specific escape hatches, and `M32` is the likely
-point where the repo can attempt one honest
-second-language promotion pilot.
+the shared core from Rust-specific escape hatches, and `M32` proves one bounded
+second-language promotion path for `function.arithmetic_leaf.monotone_up.v1`
+while keeping broader portability claims out of scope.

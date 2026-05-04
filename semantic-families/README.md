@@ -12,6 +12,19 @@ Packet rules for M23:
 - `xtask` must treat packet fixtures as source of truth and reject symlinks or extra unit files.
 - certification outputs live under `.semantic-family-artifacts/` and are never checked-in source.
 
+## M31 / M32 Boundary
+
+- `M31` is the shared-core extraction and escape-hatch containment milestone.
+  This README still documents promoted packet truth; it is not the place to
+  imply wider portability than the code actually proves.
+- `M32` is one bounded second-language promotion path for
+  `function.arithmetic_leaf.monotone_up.v1`.
+- `function.wrapper.pipeline.v1` remains promoted Rust-family truth plus
+  regression pressure for the M32 pilot. It is not a second M32 certify target.
+- TypeScript is explicit only inside the bounded
+  `function.arithmetic_leaf.monotone_up.v1` pilot surfaces described by this
+  repo state.
+
 ## M27 Corpus Analysis
 
 M27 adds two maintainer-facing analysis commands for the Rust `kind:function` lane:
