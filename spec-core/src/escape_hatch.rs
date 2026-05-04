@@ -1,13 +1,17 @@
-use crate::backend_execution::{
-    BackendExecutionMarkerKind, collect_backend_execution_markers,
-    is_helper_or_example_method as backend_is_helper_or_example_method,
-    summarize_backend_execution_markers,
-};
 use crate::molecule_evidence::{MoleculeEvidence, molecule_evidence_is_current_pass};
 use crate::passport::{
     FreshnessStatus, Passport, compute_passport_markers, resolve_passport_freshness,
 };
-use crate::types::{AuthoredMethod, LoadedMoleculeTest, LoadedSpec, UnitKind};
+use crate::types::{LoadedMoleculeTest, LoadedSpec, UnitKind};
+#[cfg(test)]
+use crate::{
+    backend_execution::{
+        BackendExecutionMarkerKind, collect_backend_execution_markers,
+        is_helper_or_example_method as backend_is_helper_or_example_method,
+        summarize_backend_execution_markers,
+    },
+    types::AuthoredMethod,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -41,6 +45,7 @@ pub(crate) struct CurrentProofSurfaces {
     pub molecule: bool,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum EscapeHatchSemanticMarkerKind {
     DomainLowering,
@@ -48,12 +53,14 @@ pub(crate) enum EscapeHatchSemanticMarkerKind {
     BackendRustDerives,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EscapeHatchSemanticMarker {
     pub kind: EscapeHatchSemanticMarkerKind,
     pub path: String,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct EscapeHatchSemanticMarkerSummary {
     pub has_domain_lowering: bool,
@@ -110,6 +117,7 @@ pub fn evaluate_escape_hatch_gate(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn collect_escape_hatch_semantic_markers(
     spec: &LoadedSpec,
 ) -> Vec<EscapeHatchSemanticMarker> {
@@ -132,6 +140,7 @@ pub(crate) fn collect_escape_hatch_semantic_markers(
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn summarize_escape_hatch_semantic_markers(
     spec: &LoadedSpec,
 ) -> EscapeHatchSemanticMarkerSummary {
@@ -218,7 +227,9 @@ fn molecule_surface_present(
         .any(|test| {
             molecule_evidence_by_id
                 .get(&test.test.id)
-                .is_some_and(|evidence| molecule_evidence_is_current_pass(evidence, test, specs_by_id))
+                .is_some_and(|evidence| {
+                    molecule_evidence_is_current_pass(evidence, test, specs_by_id)
+                })
         })
 }
 
@@ -235,6 +246,7 @@ fn format_open_reason(missing_surfaces: &[EscapeHatchProofSurface]) -> Option<St
     Some(format!("missing required escape-hatch proof: {joined}"))
 }
 
+#[cfg(test)]
 pub(crate) fn is_helper_or_example_method(method: &AuthoredMethod) -> bool {
     backend_is_helper_or_example_method(method)
 }

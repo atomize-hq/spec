@@ -233,7 +233,7 @@ mod tests {
             baseline_summary.has_proof_helper_lowering,
             summary.has_proof_helper_lowering
         );
-        assert_eq!(summary.has_backend_rust_derives, true);
+        assert!(summary.has_backend_rust_derives);
         assert_eq!(
             markers
                 .iter()

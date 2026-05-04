@@ -1,19 +1,20 @@
+use crate::XtaskError;
 use crate::family::coverage::{
-    collect_latest, current_timestamp_rfc3339, normalized_for_recommend_determinism,
-    render_json_bytes, write_latest, CoverageRunOutput,
+    CoverageRunOutput, collect_latest, current_timestamp_rfc3339,
+    normalized_for_recommend_determinism, render_json_bytes, write_latest,
 };
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
-    write_bytes_atomically, FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+    FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically,
 };
 use crate::family::promotion_artifacts::{
-    candidate_qualifies_for_ranked_status, CandidateStatus, ConfidenceLevel, DifficultyTier,
-    FamilyCoverageArtifact, FamilyRecommendationAnalysisArtifact, HoldReason, NextStepDetail,
-    NextStepStatus, PromotionArtifactKind, PromotionReadiness, RecommendationCandidateEntry,
-    RecommendationConfidence, RecommendationDifficulty, RecommendationLeverage,
-    RecommendationStatus, UnsupportedClusterEntry, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+    CandidateStatus, ConfidenceLevel, DifficultyTier, FamilyCoverageArtifact,
+    FamilyRecommendationAnalysisArtifact, HoldReason, NextStepDetail, NextStepStatus,
+    PromotionArtifactKind, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+    RecommendationCandidateEntry, RecommendationConfidence, RecommendationDifficulty,
+    RecommendationLeverage, RecommendationStatus, UnsupportedClusterEntry,
+    candidate_qualifies_for_ranked_status,
 };
-use crate::XtaskError;
 use serde::Deserialize;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::cmp::Ordering;

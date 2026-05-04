@@ -2697,7 +2697,10 @@ fn helper_then_clamp_apply_tax_wedge_projects_valid_state() {
             fixture_dst.to_str().unwrap(),
         ],
     );
-    assert_success(&unit_test_output, "helper-then-clamp apply_tax wedge unit test");
+    assert_success(
+        &unit_test_output,
+        "helper-then-clamp apply_tax wedge unit test",
+    );
 
     let passport = read_json(&passport_path);
     assert_function_semantic_review(

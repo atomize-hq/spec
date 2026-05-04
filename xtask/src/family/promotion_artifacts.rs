@@ -1,10 +1,10 @@
+use crate::XtaskError;
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
-    validate_existing_repo_relative_path, validate_repo_relative_path, FamilyId,
     FAMILY_COVERAGE_LATEST_PATH, FAMILY_PROMOTION_ARTIFACT_ROOT, FAMILY_PROMOTION_INVENTORY_DIR,
-    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, M27_CORPUS_MANIFEST_PATH,
+    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId, M27_CORPUS_MANIFEST_PATH,
+    validate_existing_repo_relative_path, validate_repo_relative_path,
 };
-use crate::XtaskError;
 use serde::{Deserialize, Serialize};
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::fs;
