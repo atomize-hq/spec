@@ -1,6 +1,10 @@
-use crate::backend_execution::{is_helper_or_example_method, summarize_backend_execution_markers};
+use crate::backend_execution::is_helper_or_example_method;
 use crate::generator::{lower_data_seam, lower_sum_seam};
 use crate::normalizer::normalize_unit;
+use crate::portability::{
+    PortabilityContaminationSummary, PortabilityMarkerSummary, summarize_portability_contamination,
+    summarize_portability_markers,
+};
 use crate::types::{
     AuthoredDataShape, AuthoredSumShape, DepRef, LoadedSpec, NormalizedUnit, UnitKind,
     callable_name,
@@ -352,11 +356,10 @@ pub struct SemanticConstructorPacket {
     pub inputs: Vec<SemanticFieldPacket>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SemanticMarkerSummary {
-    pub has_domain_lowering: bool,
-    pub has_helper_lowering: bool,
-    pub has_backend_derives: bool,
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct SupportedSeamPortabilitySummary {
+    markers: PortabilityMarkerSummary,
+    contamination: PortabilityContaminationSummary,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1010,10 +1013,10 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         .map(|method| method.id.clone())
         .collect::<HashSet<_>>();
     let executable = build_executable_packet(spec, &helper_method_ids)?;
-    let markers = summarize_markers(spec);
+    let portability = supported_seam_portability_summary(spec);
     let mut reasons = Vec::new();
     let mut authored_surfaces = authored_citations(spec, &authored);
-    let mut executable_surfaces = executable_citations(spec, &executable, markers);
+    let mut executable_surfaces = executable_citations(spec, &executable, portability.markers);
 
     if authored.methods.is_empty() {
         reasons.push(SemanticReasonCode::MissingSemanticMethods);
@@ -1110,7 +1113,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     drift_reasons.dedup();
 
     if !drift_reasons.is_empty() {
-        let verdict = if markers.has_domain_lowering {
+        let verdict = if portability.contamination.has_contaminating_domain_lowering {
             SemanticVerdict::BackendOnlySemanticsLeaked
         } else {
             SemanticVerdict::SemanticDrift
@@ -1129,9 +1132,9 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         });
     }
 
-    if markers.has_backend_derives || markers.has_helper_lowering {
+    if portability.contamination.has_backend_only_detail {
         let mut reason_codes = vec![SemanticReasonCode::BackendOnlyExecutionMarker];
-        if markers.has_helper_lowering {
+        if portability.markers.has_proof_helper_lowering {
             reason_codes.push(SemanticReasonCode::ProofHelperOnlyMarker);
         }
         return Some(SemanticReview {
@@ -1149,7 +1152,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         });
     }
 
-    if markers.has_domain_lowering {
+    if portability.markers.has_domain_lowering {
         authored_surfaces.push(SemanticCitation {
             path: "methods".to_string(),
             summary: "domain methods fully described by authored intent and contracts".to_string(),
@@ -1663,10 +1666,10 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         .map(|method| method.id.clone())
         .collect::<HashSet<_>>();
     let executable = build_executable_data_packet(spec, &helper_method_ids)?;
-    let markers = summarize_markers(spec);
+    let portability = supported_seam_portability_summary(spec);
     let mut reasons = Vec::new();
     let authored_surfaces = authored_data_citations(&authored);
-    let executable_surfaces = executable_data_citations(&executable, markers);
+    let executable_surfaces = executable_data_citations(&executable, portability.markers);
 
     if semantic_text_is_vague(&authored.intent) {
         reasons.push(SemanticReasonCode::VagueUnitIntent);
@@ -1761,7 +1764,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
     drift_reasons.dedup();
 
     if !drift_reasons.is_empty() {
-        let verdict = if markers.has_domain_lowering {
+        let verdict = if portability.contamination.has_contaminating_domain_lowering {
             SemanticVerdict::BackendOnlySemanticsLeaked
         } else {
             SemanticVerdict::SemanticDrift
@@ -1780,9 +1783,9 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         });
     }
 
-    if markers.has_backend_derives || markers.has_helper_lowering {
+    if portability.contamination.has_backend_only_detail {
         let mut reason_codes = vec![SemanticReasonCode::BackendOnlyExecutionMarker];
-        if markers.has_helper_lowering {
+        if portability.markers.has_proof_helper_lowering {
             reason_codes.push(SemanticReasonCode::ProofHelperOnlyMarker);
         }
         return Some(SemanticReview {
@@ -2233,7 +2236,7 @@ fn authored_data_citations(authored: &SemanticAuthoredDataPacket) -> Vec<Semanti
 fn executable_citations(
     _spec: &LoadedSpec,
     executable: &SemanticExecutablePacket,
-    markers: SemanticMarkerSummary,
+    markers: PortabilityMarkerSummary,
 ) -> Vec<SemanticCitation> {
     let mut citations = vec![SemanticCitation {
         path: "sum".to_string(),
@@ -2246,7 +2249,7 @@ fn executable_citations(
             summary: format!("{} executable semantic method(s)", executable.methods.len()),
         });
     }
-    if markers.has_backend_derives {
+    if markers.has_backend_rust_derives {
         citations.push(SemanticCitation {
             path: "backends.rust.derives".to_string(),
             summary: "Rust derives contribute backend-only execution metadata".to_string(),
@@ -2270,7 +2273,7 @@ fn executable_function_citations(
 
 fn executable_data_citations(
     executable: &SemanticExecutableDataPacket,
-    markers: SemanticMarkerSummary,
+    markers: PortabilityMarkerSummary,
 ) -> Vec<SemanticCitation> {
     let mut citations = vec![SemanticCitation {
         path: "data".to_string(),
@@ -2292,7 +2295,7 @@ fn executable_data_citations(
             summary: format!("{} executable semantic method(s)", executable.methods.len()),
         });
     }
-    if markers.has_backend_derives {
+    if markers.has_backend_rust_derives {
         citations.push(SemanticCitation {
             path: "backends.rust.derives".to_string(),
             summary: "Rust derives contribute backend-only execution metadata".to_string(),
@@ -2302,12 +2305,10 @@ fn executable_data_citations(
     citations
 }
 
-fn summarize_markers(spec: &LoadedSpec) -> SemanticMarkerSummary {
-    let summary = summarize_backend_execution_markers(spec);
-    SemanticMarkerSummary {
-        has_domain_lowering: summary.has_domain_lowering,
-        has_helper_lowering: summary.has_proof_helper_lowering,
-        has_backend_derives: summary.has_backend_rust_derives,
+fn supported_seam_portability_summary(spec: &LoadedSpec) -> SupportedSeamPortabilitySummary {
+    SupportedSeamPortabilitySummary {
+        markers: summarize_portability_markers(spec).unwrap_or_default(),
+        contamination: summarize_portability_contamination(spec).unwrap_or_default(),
     }
 }
 
