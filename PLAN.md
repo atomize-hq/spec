@@ -371,6 +371,7 @@ Expected wrapper pilot commands:
 cargo test -p spec-core --lib wrapper_pipeline_ -- --color never
 cargo test -p spec-cli --test cli wrapper_pipeline_truth_surface_ -- --color never
 cargo test -p spec-cli --test m14_regressions wrapper_pipeline_corpus_ -- --color never
+cargo test -p spec-cli --test m14_regressions wrapper_pipeline_regression_ -- --color never
 cargo xtask family prove function.wrapper.pipeline.v1
 cargo xtask family prove function.wrapper.pipeline.v1 --target-language typescript
 cargo xtask family certify function.wrapper.pipeline.v1
