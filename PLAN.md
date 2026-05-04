@@ -1,282 +1,300 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-autoplan-restore-20260503-232225.md -->
-# M31 - Shared-Core Extraction And Escape-Hatch Containment
+# M32 - One Bounded Second-Language Promotion Path
 
 Status: **authoritative implementation plan**
 Base branch: **main**
 Working branch: **feat/corpus-expansion**
 Last rewritten: **2026-05-04**
-Supersedes: **M30 - Add Second Bounded TypeScript Family Proof**
-Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260504-122024.md`**
+Supersedes: **M31 - Shared-Core Extraction And Escape-Hatch Containment**
+Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260504-143928.md`**
 Related roadmap: **`docs/ai_promotion_and_multilanguage_milestones_v0.1.md`**
 Execution note: **Do not create `ORCH_PLAN.md` up front. Create it only if the post-foundation lanes below are actually split into separate worktrees.**
+Foundation precondition: **Start from `ws/m31-int` at `945284ea7ab6bf788d7202ff674b81581afd47c6` or a merged equivalent before doing any M32 implementation work.**
 
 ## Objective
 
 Make the repository able to say one precise, enforceable thing:
 
-> for seam units, the shared portability boundary is explicit, Rust-specific
-> execution details are boxed behind that boundary, and every read-side truth
-> surface stays honest about when portability claims are contaminated.
+> one existing promoted family can complete the full promotion proof path in a
+> second-language lane, and the repo can describe that result honestly on the
+> same public truth surfaces it already asks users to trust.
 
-This is the full M31 claim.
+This is the full M32 claim.
 
-M31 is not a second-language execution milestone. It is the milestone that
-stops the repo from calling something "shared" when it is still leaning on
-Rust-only execution machinery.
+M32 is not broad TypeScript support.
+
+M32 is one bounded proof:
+
+- one already-known function family
+- one second-language lane
+- one set of promotion artifacts
+- one set of read-side truth surfaces
+- one explicit closeout of what remained shared versus target-specific
 
 ## Decision
 
-M31 ships as a seam-only shared-core extraction milestone with one dedicated
-portability contract module in `spec-core`.
+M32 ships as a single-family pilot centered on
+`function.arithmetic_leaf.monotone_up.v1`.
 
 That means:
 
-1. Do **not** spread new portability logic across `passport.rs`,
-   `semantic_review.rs`, `export.rs`, and `spec-cli/src/commands.rs` as separate
-   ad hoc rules.
-2. Introduce one explicit contract module, `spec-core/src/portability.rs`,
-   that becomes the sole cross-surface source of truth for seam portability
-   classification and projection.
-3. Reuse the existing marker, freshness, proof, and health machinery where it
-   is already correct. This is a boundary extraction, not a style rewrite.
+1. `function.arithmetic_leaf.monotone_up.v1` is the only family that must pass
+   the full M32 pilot contract.
+2. `function.wrapper.pipeline.v1` stays as regression pressure only. Its
+   existing suites must stay green, but it is not a second certification target
+   for this milestone.
+3. Acceptance requires both:
+   - the existing Rust-default `prove` and `certify` path staying green
+   - the bounded TypeScript `prove` and `certify` path going green on the same
+     family
+4. M32 reuses the M31 portability boundary. It does not reopen seam portability
+   semantics or invent cross-language truth for `kind:data`, `kind:sum`, or
+   `.test.spec`.
 
 ## Problem Statement
 
-M30 proved that additive authored `body.typescript` survives across two
-promoted `kind:function` families. Good.
+The repo already has important pieces of the second-language story:
 
-It did not answer the next architectural question:
+- `xtask` exposes `--target-language` on `family prove` and `family certify`
+- `xtask/src/family/prove.rs` already allows `typescript` for
+  `function.arithmetic_leaf.monotone_up.v1` and `function.wrapper.pipeline.v1`
+- `semantic-families/function.arithmetic_leaf.monotone_up.v1/` already carries
+  additive `body.typescript` fixtures
+- `spec-core/src/semantic_review.rs` already reads authored `body.typescript`
+  when building semantic-review truth
+- `spec-core/src/passport.rs`, `spec-core/src/export.rs`, and
+  `spec-cli/src/commands.rs` already project public read-side truth
 
-- what in this repo is genuinely platform-neutral
-- what is still Rust-specific execution machinery
-- what must be true before a seam with Rust-only escape hatches can be treated
-  as a credible portability surface
+Good. That means the repo is not starting from zero.
 
-Today those answers exist, but they are scattered:
+But the path is still incomplete and partly misleading:
 
-- `spec-core/src/backend_execution.rs` classifies backend-only seam markers and
-  computes the backend-execution digest
-- `spec-core/src/escape_hatch.rs` computes current proof surfaces and the live
-  escape-hatch gate
-- `spec-core/src/passport.rs` already splits authored-truth freshness from
-  backend-execution freshness and projects read-side truth
-- `spec-core/src/semantic_review.rs` already distinguishes backend-only meaning
-  preserved vs leaked for supported seam surfaces
-- `spec-core/src/export.rs` and `spec-cli/src/commands.rs` already expose those
-  signals on read-side surfaces
+- promotion execution artifacts still hard-code `target_language = rust` in
+  `xtask/src/family/promotion_artifacts.rs`
+- there is no frozen parent-usable runtime command surface yet for emitting
+  `promotion.execution.json` or `blocker.report.json`
+- certification reports do not record which target-language lane produced the
+  artifact
+- the current promotion-artifact chain can still point at a stale
+  `recommendation.latest.json` that does not describe the monotone-up pilot
+- the plan does not currently lock whether Rust-default proof must remain green
+  while TypeScript proof is added
+- there is no single milestone contract that says which read-side surfaces must
+  agree on the same second-language pilot result
+- the current branch still points at pre-closeout M31 planning rather than an
+  M32 authority document
 
-That is too fragmented to count as a trustworthy shared-core boundary.
+That is exactly the kind of half-true state that produces fake confidence.
 
 ## Locked Decisions
 
 These decisions remove the remaining ambiguity. They are part of the milestone
 contract, not suggestions.
 
-### 1. Dedicated contract module
+### 1. M31 is a hard prerequisite
 
-Create `spec-core/src/portability.rs`.
+No M32 implementation begins on stale pre-M31 state.
 
-This module owns the seam portability contract and is the only place allowed to
-compose:
+Start from:
 
-- backend execution markers
-- backend execution digest
-- current proof surfaces
-- escape-hatch gate state
-- portability contamination summary
-- read-side portability projection inputs
+- `ws/m31-int` at `945284ea7ab6bf788d7202ff674b81581afd47c6`, or
+- a merged equivalent that already contains the M31 portability contract
 
-`backend_execution.rs` and `escape_hatch.rs` remain reusable helpers. Read-side
-consumers stop recomputing portability truth directly.
+If that precondition is not met, stop and re-anchor before doing anything else.
 
-### 2. Seam-only scope
+### 2. One primary family only
 
-M31 covers `kind:data` and `kind:sum` only.
+`function.arithmetic_leaf.monotone_up.v1` is the only primary M32 packet.
 
-It does **not** redefine:
+Do not add:
 
-- function-family portability claims
-- packet promotion semantics
-- TypeScript execution semantics
-- second-language proof policy
+- a new third family
+- a second primary pilot family
+- a cross-family promotion milestone
 
-### 3. Validator policy stays split by problem class
+### 3. Rust-default and TypeScript lanes are both required
 
-Keep the current hard validation errors for illegal shared-surface escape
-hatches on seam kinds:
+M32 is only complete when the monotone-up family passes:
 
-- top-level `contract`
-- top-level `deps`
-- top-level `imports`
-- top-level `body.rust`
-- top-level `body.typescript`
+- `cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1`
+- `cargo xtask family prove function.arithmetic_leaf.monotone_up.v1`
+- `cargo xtask family certify function.arithmetic_leaf.monotone_up.v1`
+- `cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
+- `cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
 
-Do **not** turn allowed backend-specific details into validation failures.
+This is the complete version and the cost delta is tiny compared to the value
+of proving the second-language lane did not quietly regress the original one.
 
-Allowed Rust-specific details remain:
+### 4. Wrapper pipeline is comparator pressure, not a second pilot
 
-- `methods[].lowering.rust.body`
-- `backends.rust.derives`
+`function.wrapper.pipeline.v1` remains a required regression surface in tests.
 
-They remain valid authored input, but their portability consequences must be
-projected truthfully.
+It is not required to pass a second M32 certify lane. Its job is to catch
+shared-kernel regressions, not to widen the milestone.
 
-### 4. Marker taxonomy is fixed
+### 5. Public truth must stay on existing surfaces first
 
-The canonical seam backend marker classes remain:
+Default stance: reuse the repo's existing public truth surfaces and make them
+target-language-aware where needed:
 
-- `DomainLowering`
-  Meaning: Rust-specific lowering that participates in domain behavior.
-  Effect: contaminating unless the broader seam projection still lands in an
-  honest meaning-preserved state.
-
-- `ProofHelperLowering`
-  Meaning: Rust-specific helper/example/proof-only lowering.
-  Effect: backend-only, visible, non-contaminating by itself.
-
-- `BackendRustDerives`
-  Meaning: Rust-only implementation detail with no semantic claim by itself.
-  Effect: backend-only and health-neutral by itself.
-
-M31 does not invent new marker kinds.
-
-### 5. Reuse existing public read-side fields first
-
-Default stance: reuse the current public fields and make them truthful through
-one shared projection path:
-
-- `freshness.backend_execution_status`
-- `markers`
-- `proof_coverage`
-- `escape_hatch_gate`
-- `semantic_review`
-
-Add a new public JSON field only if a concrete truth gap remains after the
-shared projection is wired in.
-
-### 6. Escape-hatch containment is visible truth
-
-If portability claims are contaminated, users must be able to see that in the
-surfaces they already read:
-
-- passport JSON
+- promotion execution artifacts
+- certification reports
+- passport
 - `spec status`
 - `spec export`
-- semantic-review summaries
+- semantic-review summaries and citations
 
-No hidden maintainer-only interpretation layer.
+Add a new public surface only if a concrete truth gap remains after the reused
+surfaces are made honest.
 
-### 7. M32 boundary is hard
+### 6. Artifact truth must stop pretending everything is Rust
 
-M31 stops before:
+If an artifact participates in M32 closeout, it must record the actual
+target-language lane.
 
-- TypeScript executable semantic review
-- second-language lowering classification
-- second-language prove/certify expansion
-- new portability logic for `kind:function`
+At minimum, the M32 implementation must make target language explicit in:
 
-If implementation pressure asks for those, stop and rewrite the plan.
+- prove/certify reports
+- the monotone-up promotion recommendation artifact used by closeout
+- promotion execution artifacts
+- artifact validation rules
+
+### 7. Read-side truth is part of acceptance, not follow-up polish
+
+The same pilot path must leave honest truth on:
+
+- passport output
+- `spec status`
+- `spec export`
+- semantic-review summaries and citations
+
+If the commands go green but the read-side story is still vague or stale, M32
+is not done.
+
+### 8. Scope stays function-only
+
+M32 does not widen support for:
+
+- `kind:data`
+- `kind:sum`
+- `.test.spec` target-language execution
+- general target-language lowering policy outside the chosen function family
+
+### 9. The closeout must distinguish shared versus target-specific residue
+
+The repo must exit M32 able to state, with evidence:
+
+- what remained genuinely shared
+- what stayed target-specific
+- whether the M31 containment boundary held under the pilot
+
+That summary belongs in repo truth, not hidden maintainer context.
 
 ## Done Means
 
-M31 is complete only when all of the following are true:
+M32 is complete only when all of the following are true:
 
-1. `spec-core` exposes one explicit seam portability contract module that
-   read-side surfaces consume.
-2. backend execution marker classification, proof-surface evaluation, and
-   portability contamination projection are no longer re-derived in multiple
-   unrelated places.
-3. seam units still hard-reject illegal shared-surface escape hatches at
-   validation time.
-4. allowed Rust-specific seam details remain additive, but their portability
-   consequences are projected truthfully through passport, export, status, and
-   semantic review.
-5. freshness splitting between authored truth and backend execution remains
-   intact and is clearly part of the portability contract.
-6. open escape-hatch proof gates remain seam-only and continue to demote only an
-   otherwise-valid unit to `incomplete`.
-7. supported seam semantic review continues to distinguish:
-   - aligned
-   - under-specified
-   - backend-only meaning preserved
-   - backend-only semantics leaked
-8. supported-function and unsupported-function truth remain unchanged outside
-   the seam portability path.
-9. the roadmap doc explicitly says `M31` then `M32`, not the older `M28` /
-   `M29` shape.
-10. the test suite proves the boundary rather than merely compiling through it.
+1. the branch or integration target already includes the validated M31 boundary
+2. `function.arithmetic_leaf.monotone_up.v1` passes `smoke`, Rust `prove`,
+   Rust `certify`, TypeScript `prove`, and TypeScript `certify`
+3. prove/certify artifacts and validation logic no longer hard-code
+   `target_language = rust` for M32-relevant outputs
+4. the monotone-up pilot still keeps existing wrapper-pipeline regression suites
+   green
+5. public read-side truth surfaces stay honest for the same pilot path:
+   passport, status, export, semantic-review summaries
+6. the repo can explain what stayed shared versus what remained
+   target-specific without relying on chat-only interpretation
+7. no new family, no new broad TypeScript support claim, and no seam-kind
+   widening was needed to land the milestone
+8. the roadmap and this plan describe the same `M31 -> M32` sequence
+9. the tests prove the second-language lane rather than only compiling through
+   the flag plumbing
+10. the plan's parallelization and failure-mode sections still match the actual
+    landed implementation shape
 
 ## NOT in Scope
 
 The following work was considered and is explicitly deferred:
 
-- TypeScript executable semantic review
-  Reason: that is M32, not M31.
-- Repo-wide second-language lowering policy
-  Reason: M31 is seam containment, not generalized portability across all kinds.
-- New marker classes beyond the current seam trio
-  Reason: widens ontology before proving the current boundary is sufficient.
-- New public CLI command for portability
-  Reason: existing read-side surfaces are the intended source of truth.
-- Packet promotion, coverage ranking, or recommendation-engine changes
-  Reason: not the current bottleneck.
-- Full privacy cleanup of legacy helper modules
-  Reason: logical boundary comes first; purely mechanical visibility cleanup is
-  optional unless compile-forced.
-- Non-seam example expansion
-  Reason: the canonical seam fixtures are enough to prove M31.
-- New distribution artifacts
-  Reason: the deliverable is repo truth, not a new binary/package/container.
+- Broad repo-wide "TypeScript is supported" messaging
+  Reason: M32 proves one bounded family path only.
+- A new third function family
+  Reason: that changes both the package and the belt at the same time.
+- `kind:data` or `kind:sum` second-language execution semantics
+  Reason: that would reopen M31 and widen the ontology too early.
+- `.test.spec` target-language execution
+  Reason: molecule tests remain Rust-only in current validator policy.
+- A replacement for `xtask` proof commands
+  Reason: `smoke`, `prove`, and `certify` are already the deterministic kernel.
+- A new standalone public CLI command for target-language closeout
+  Reason: existing read-side and artifact surfaces should carry the truth first.
+- Recommendation-engine target-language expansion
+  Reason: M27/M27.5 artifacts are still intentionally Rust-scoped today.
+- A second certify lane for `function.wrapper.pipeline.v1`
+  Reason: useful pressure, wrong milestone.
 
 ## What Already Exists
 
 | Sub-problem | Existing code | Reuse decision |
 |---|---|---|
-| Backend-only seam marker detection | `spec-core/src/backend_execution.rs` | Reuse `collect_backend_execution_markers`, `summarize_backend_execution_markers`, and `compute_backend_execution_digest`. Do not rebuild marker discovery. |
-| Escape-hatch proof surfaces and gate semantics | `spec-core/src/escape_hatch.rs` | Reuse `current_proof_surfaces` and `evaluate_escape_hatch_gate`. Move composition ownership, not the proof rules. |
-| Split freshness between authored truth and backend execution | `spec-core/src/passport.rs` | Reuse `resolve_passport_freshness*`. Keep the split and route projection through the shared contract. |
-| Supported seam semantic-review behavior | `spec-core/src/semantic_review.rs` | Reuse the current verdict vocabulary. Replace direct marker summarization with shared portability inputs. |
-| Read-side health demotion rules | `spec-cli/src/commands.rs` | Reuse the existing `valid -> incomplete/failing` demotion behavior. Preserve the "demote only otherwise-valid rows" rule. |
-| Export-side truth enrichment | `spec-core/src/export.rs` | Reuse the current export enrichment path. Route it through the same portability projection used by passports/status. |
-| Seam validation guardrails | `spec-core/src/validator.rs` | Reuse current hard-reject rules. Tighten wording only if clarity is missing. |
-| Canonical seam fixtures and tests | `pricing/discount_policy`, `pricing/checkout_quote`, `spec-cli/tests/cli.rs` | Reuse as the main proof bed. No new example family is needed. |
-| Public milestone narrative | `docs/ai_promotion_and_multilanguage_milestones_v0.1.md` | Rewrite in place as part of done. |
+| CLI target-language flag | `xtask/src/lib.rs` defines `FamilyTargetLanguage::{Rust, Typescript}` and threads it into `family prove` and `family certify` | Reuse the existing flag surface. Do not invent a second CLI entrypoint. |
+| Bounded TypeScript gate admission | `xtask/src/family/prove.rs` already allows `typescript` only for `function.arithmetic_leaf.monotone_up.v1` and `function.wrapper.pipeline.v1` | Reuse the existing admission rule and tighten the proof/reporting around it. |
+| Certify flow reuse of prove | `xtask/src/family/certify.rs` already runs `prove::execute_in(...)` and layers gate D routing checks on top | Reuse the same kernel. Do not fork a second certify implementation for TypeScript. |
+| Locked monotone-up harness | `xtask/src/family/harness.rs` already defines monotone-up smoke contracts, prove suites, certify suites, routing precedence, and regression suite names | Reuse as the pilot harness surface. Extend only where M32 truth requires it. |
+| Committed pilot packet | `semantic-families/function.arithmetic_leaf.monotone_up.v1/` already exists with additive `body.typescript` starter fixtures in all four buckets | Reuse the packet instead of creating a fresh family. |
+| Semantic-review authored TypeScript visibility | `spec-core/src/semantic_review.rs` already reads authored `body.typescript` and cites it in monotone-up and wrapper-family tests | Reuse this as the read-side truth foundation, not as proof that the full lane is already done. |
+| Passport truth surface | `spec-core/src/passport.rs` already projects freshness, markers, proof state, and semantic review into the public passport | Reuse the passport path as one of the required M32 honesty surfaces. |
+| Export truth surface | `spec-core/src/export.rs` already enriches passports for export and projects current semantic truth | Reuse and keep it aligned with passport/status. |
+| Status truth surface | `spec-cli/src/commands.rs` already emits structured `spec status` health including freshness and semantic review | Reuse as the live health/read-side surface. |
+| Monotone-up regression fixtures | `spec-cli/tests/m14_regressions.rs` already contains monotone-up truth-surface and corpus regressions with additive TypeScript bodies | Reuse as the main spec-cli regression bed rather than creating a new test fixture universe. |
+| Promotion artifact framework | `xtask/src/family/promotion_artifacts.rs` already owns execution and blocker artifact schemas | Reuse, but extend it so M32 artifacts can tell the truth about target language instead of forcing `rust`. |
 
 ## Step 0 - Scope Challenge
 
 This milestone touches more than 8 files. Normally that is a smell.
 
-Here it is justified because the milestone definition is shared truth across
-multiple read-side consumers. Reducing below this surface would leave at least
-one of passport, semantic review, export, status, or the public roadmap telling
-a stale or partial story.
+Here it is justified because the gap is cross-surface truth:
+
+- the proof kernel already accepts the flag
+- the committed family packet already contains additive TypeScript bodies
+- the read-side surfaces already expose semantic truth
+- the artifact layer still says "rust"
+
+Reducing below that surface would leave one of these stories false:
+
+- the proof commands
+- the proof artifacts
+- the read-side truth surfaces
+- the public roadmap
 
 The minimum honest implementation surface is:
 
-- one new portability contract module
-- the existing seam helpers it composes
-- the passport projection path
-- supported seam semantic review
-- export/status consumers of projected truth
-- validator wording only if needed
-- the roadmap doc
+- the existing `xtask` prove/certify/report/artifact path
+- the existing monotone-up packet and harness
+- the existing read-side truth surfaces
+- the roadmap and this plan
 
-Anything larger is scope creep. Anything materially smaller is fake confidence.
+Anything smaller is a partial patch that still leaves the repo flattering
+itself.
 
 ## Closed Implementation Surface
 
 ### Primary modules
 
-- `spec-core/src/portability.rs` (new)
-- `spec-core/src/backend_execution.rs`
-- `spec-core/src/escape_hatch.rs`
-- `spec-core/src/passport.rs`
+- `xtask/src/lib.rs`
+- `xtask/src/family/prove.rs`
+- `xtask/src/family/certify.rs`
+- `xtask/src/family/report.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/harness.rs`
 - `spec-core/src/semantic_review.rs`
-- `spec-core/src/validator.rs`
+- `spec-core/src/passport.rs`
 - `spec-core/src/export.rs`
-- `spec-core/src/lib.rs`
 - `spec-cli/src/commands.rs`
 - `spec-cli/tests/cli.rs`
+- `spec-cli/tests/m14_regressions.rs`
+- `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
+- `semantic-families/README.md`
 - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
 - `PLAN.md`
 
@@ -284,13 +302,13 @@ Anything larger is scope creep. Anything materially smaller is fake confidence.
 
 Only if compile- or fixture-forced:
 
+- `xtask/src/family/paths.rs`
+- `xtask/src/family/routing.rs`
 - `spec-core/src/types.rs`
-- `spec-core/src/molecule_evidence.rs`
-- `spec-core/src/generator.rs`
-- `spec-core/src/graph.rs`
-- `spec-core/src/schema/unit.spec.json`
+- `spec-core/src/lib.rs`
+- `spec-core/src/validator.rs`
 
-If implementation needs new semantics outside this surface, stop and rewrite
+If implementation needs broader semantics outside this surface, stop and rewrite
 the plan before continuing.
 
 ## Architecture
@@ -298,238 +316,217 @@ the plan before continuing.
 ### Current shape
 
 ```text
-Rust-specific seam details
-backend_execution.rs     escape_hatch.rs
-        |                      |
-        +--------------+       |
-        |              |       |
-        v              v       v
-   passport.rs   semantic_review.rs
-        |              |
-        +-------+      |
-        v       v      v
-   export.rs  status / commands.rs
+committed family packet
+        |
+        +--> family smoke
+        |
+        +--> family prove/certify
+              |
+              +--> accepts --target-language typescript for 2 families
+              |
+              `--> writes reports/artifacts that still assume rust-first truth
 
-Truth exists, but the portability boundary is implicit and spread around.
+spec-core / spec-cli read-side surfaces
+passport -> export -> status -> semantic review summaries
+        |
+        `--> already expose public truth, but not yet locked to one M32 pilot contract
 ```
 
 ### Target shape
 
 ```text
-Authored seam truth
-data.fields / sum.variants / constructors / methods
+M31-integrated repo base
+        |
+        v
+monotone-up committed packet + locked harness
+        |
+        +--> smoke contract stays stable
+        |
+        +--> Rust prove/certify lane stays green
+        |
+        `--> TypeScript prove/certify lane goes green
                 |
-                v
-          validator.rs
-  hard-reject illegal shared-surface escape hatches
-                |
-                v
-        portability.rs
- canonical seam portability contract
-                |
-                +-- composes backend_execution.rs
-                +-- composes escape_hatch.rs
-                +-- preserves freshness split from passport.rs
-                +-- computes shared projection inputs
+                +--> target-language-aware report + execution artifacts
+                +--> explicit shared-vs-target-specific closeout notes
                 |
                 +-----------+--------------+--------------+
-                v           v              v              v
-          passport.rs   semantic_review.rs  export.rs   spec status
-                                                    spec-cli/src/commands.rs
+                            v              v              v
+                        passport         spec export    spec status
+                            \              |              /
+                             \             |             /
+                              `------ semantic review --'
 ```
 
-The important change is not "one more module exists." The important change is
-that every read-side surface stops re-deriving portability truth differently.
+The important change is not just "TypeScript commands pass."
 
-## Portability Contract
+The important change is that the same bounded pilot can be read honestly from
+both the proof artifacts and the public truth surfaces.
 
-`spec-core/src/portability.rs` owns seam portability composition.
+## Pilot Contract
 
-It must expose enough shared structure that downstream code can consume one
-projection instead of recomputing pieces. The exact Rust names may differ, but
-the ownership boundary cannot.
+M32 owns one bounded second-language contract.
 
-### Required responsibilities
+### Primary pilot
 
-1. Canonical portability marker identity and summary.
-2. Canonical backend-execution digest access for seam units.
-3. Canonical proof-surface evaluation for atom and molecule containment.
-4. Canonical read-side portability projection.
-5. Canonical contamination summary for supported seam semantic review.
+- family: `function.arithmetic_leaf.monotone_up.v1`
+- target language: `typescript`
+- baseline lane: `rust`
+- smoke lane: scaffold contract only, no target-language flag
 
-### Expected API shape
+### Comparator pressure
 
-```text
-collect_portability_markers(spec) -> ...
-summarize_portability_markers(spec) -> ...
-compute_portability_backend_digest(spec) -> ...
-evaluate_portability_gate(spec, passport, context) -> ...
-project_portability_truth(spec, passport, context) -> PortabilityProjection
-```
+- keep wrapper-pipeline suites green in `spec-core` and `spec-cli`
+- do not add a second full certify requirement for wrapper-pipeline
 
-### Non-negotiable wiring rules
+### Artifact contract
 
-- `portability.rs` may call into `backend_execution.rs` and `escape_hatch.rs`.
-- `passport.rs`, `semantic_review.rs`, `export.rs`, and `spec-cli/src/commands.rs`
-  must not add fresh portability logic outside that contract.
-- `semantic_review.rs` must stop treating `summarize_backend_execution_markers`
-  as its own private source of truth for supported seam reviews.
+The prove/certify path must emit target-language-aware machine truth.
+
+The exact Rust type names may differ, but the ownership boundary cannot:
+
+- `CertificationReport` must record the target-language lane
+- the promotion chain must refresh a monotone-up recommendation artifact before
+  emitting closeout artifacts
+- promotion execution artifacts must record the target language
+- artifact validation must accept the new truthful shape
+- closeout notes must distinguish shared semantics from target-specific residue
 
 ## Read-Side Truth Rules
 
 These rules are locked.
 
-### Validation
+### Packet and harness truth
 
-- Illegal shared-surface seam escape hatches remain hard errors.
-- Allowed Rust-specific details remain valid authored input.
-- Validation does not decide portability health by itself.
+- `family smoke` remains the scaffold contract for the committed monotone-up
+  packet
+- additive `body.typescript` stays part of the committed packet truth
+- the TypeScript lane must not require packet-local cheats hidden outside the
+  packet, harness, or deterministic proof kernel
 
-### Freshness
+### Rust baseline truth
 
-- Authored-truth freshness and backend-execution freshness remain separate.
-- Seam portability claims continue to consider backend-execution staleness, not
-  just authored-contract staleness.
+- the existing Rust-default monotone-up `prove` and `certify` path must stay
+  green
+- M32 is not allowed to break the original lane in order to make the
+  second-language lane look green
 
-### Escape-hatch proof gate
+### Semantic-review truth
 
-- Required proof surfaces remain `atom` and `molecule`.
-- An open gate demotes only an otherwise-valid seam unit to `incomplete`.
-- A stale unit remains `stale`, not `incomplete`.
+- `spec-core/src/semantic_review.rs` must continue to cite authored
+  `body.typescript` honestly
+- existing supported-function and unsupported-function verdict vocabulary stays
+  unchanged unless a compile-local fix is forced
 
-### Semantic review
+### Passport, export, and status truth
 
-- Supported seam reviews consume the shared portability projection.
-- `ProofHelperLowering` and `BackendRustDerives` remain backend-only but
-  meaning-preserved unless another supported-seam semantic problem exists.
-- `DomainLowering` remains the contaminating marker class for
-  `backend_only_semantics_leaked`.
-
-### Export and status
-
-- `spec export` and `spec status` must project the same portability truth as
-  the passport path.
-- No read-side consumer may preserve stale portability claims that the shared
-  projection would now drop.
+- the same monotone-up pilot path must project coherently through passport,
+  export, and status
+- these surfaces must not imply broad repo-wide TypeScript execution support
+- if a lane stays target-specific or requires bounded exceptions, that truth
+  must remain visible rather than smoothed over
 
 ## Implementation Plan
 
-### Step 1 - Introduce the canonical portability contract module
+### Step 1 - Re-anchor on the validated M31 base and freeze the M32 pilot contract
 
-Goal: create `spec-core/src/portability.rs` and move seam portability ownership
-there.
-
-Files:
-
-- `spec-core/src/portability.rs`
-- `spec-core/src/lib.rs`
-- `spec-core/src/backend_execution.rs` if helper extraction is needed
-- `spec-core/src/escape_hatch.rs` if helper visibility changes are needed
-
-Required work:
-
-- add `pub mod portability;` in `spec-core/src/lib.rs`
-- define the shared projection types
-- route marker summary, backend-execution digest access, and gate composition
-  through `portability.rs`
-- keep `backend_execution.rs` and `escape_hatch.rs` focused on helper logic
-  rather than cross-surface orchestration
-
-Exit condition:
-
-- downstream consumers can ask one portability module for seam portability
-  truth instead of composing the pieces themselves
-
-### Step 2 - Rewire passport projection around the portability contract
-
-Goal: make passport truth the reference implementation for seam portability
-projection.
+Goal: start from a truthful baseline and remove branch-history ambiguity.
 
 Files:
 
-- `spec-core/src/passport.rs`
+- `PLAN.md`
+- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
 
 Required work:
 
-- route `project_passport_truth_with_context` through the portability contract
-- keep `markers`, `proof_coverage`, `escape_hatch_gate`, and
-  `freshness.backend_execution_status` truthful
-- preserve current non-test proof-state behavior for `spec build` /
-  `spec generate`
-- keep `apply_projected_passport_truth` as the sink that writes the projected
-  portability truth into the public passport surface
+- confirm the working implementation base already includes `ws/m31-int` or
+  merge it first
+- replace the stale M31 authority plan with this M32 authority plan
+- lock the primary pilot family, acceptance commands, comparator policy, and
+  stop conditions before touching code
 
 Exit condition:
 
-- passport write and read paths consume one seam portability projection
+- there is one unambiguous M32 authority document and it matches the design doc
 
-### Step 3 - Rewire supported seam semantic review to consume the shared contract
+### Step 2 - Make prove/certify/report/artifact truth target-language-aware
 
-Goal: stop `semantic_review.rs` from being a second portability classifier.
+Goal: stop the proof artifact layer from pretending the pilot is Rust-only.
+
+Files:
+
+- `xtask/src/lib.rs`
+- `xtask/src/family/prove.rs`
+- `xtask/src/family/certify.rs`
+- `xtask/src/family/report.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+
+Required work:
+
+- preserve the current CLI target-language flag shape
+- thread the chosen target language into prove/certify reporting
+- update report and promotion-artifact schemas so M32-relevant outputs can say
+  `typescript` truthfully
+- update artifact validation to accept the new truthful schema
+- keep Rust-default behavior unchanged when the flag is omitted
+
+Exit condition:
+
+- the prove/certify path can produce machine-readable artifacts that explicitly
+  identify the Rust lane versus the TypeScript lane
+
+### Step 3 - Lock the monotone-up pilot packet and harness around the M32 contract
+
+Goal: make the chosen family the authoritative bounded pilot, not just a loose
+  example.
+
+Files:
+
+- `xtask/src/family/harness.rs`
+- `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
+
+Required work:
+
+- keep the committed monotone-up scaffold truth aligned with `family smoke`
+- ensure the prove/certify suites named in the harness still describe the pilot
+  accurately once target-language reporting becomes explicit
+- keep the packet-local TypeScript bodies additive and truthful
+- leave public packet wording to the final docs-closeout lane so packet docs
+  describe the landed pilot rather than an intermediate assumption
+
+Exit condition:
+
+- the committed packet, harness, and smoke contract still agree on the same
+  monotone-up pilot story
+
+### Step 4 - Re-prove the read-side truth surfaces against the same pilot
+
+Goal: make public repo truth match the proof artifact story.
 
 Files:
 
 - `spec-core/src/semantic_review.rs`
-
-Required work:
-
-- replace direct backend marker summarization for supported seam review with
-  shared portability inputs
-- preserve current verdict vocabulary and compatibility-key behavior
-- keep supported-function and unsupported-function paths unchanged unless
-  compile-local adjustments are forced
-
-Exit condition:
-
-- supported seam semantic review still returns the same honest verdict classes,
-  but now does so from the shared portability contract
-
-### Step 4 - Rewire export and status/read-side health surfaces
-
-Goal: make `spec export` and `spec status` consume the same projected truth.
-
-Files:
-
+- `spec-core/src/passport.rs`
 - `spec-core/src/export.rs`
 - `spec-cli/src/commands.rs`
 - `spec-cli/tests/cli.rs`
+- `spec-cli/tests/m14_regressions.rs`
 
 Required work:
 
-- route export passport enrichment through the shared portability projection
-- keep `apply_escape_hatch_gate_to_health` and `apply_semantic_review_to_health`
-  as the CLI health demotion sinks, but feed them truth produced by the shared
-  contract
-- preserve current "demote only otherwise-valid rows" behavior
-- prove export, passport, and status agree on the same authored fixture set
+- preserve monotone-up authored TypeScript visibility in semantic review
+- prove that passport, export, and status stay aligned for the pilot fixtures
+- verify that the repo can surface target-specific residue honestly instead of
+  implying broad support
+- keep wrapper-pipeline regression surfaces green while doing this work
 
 Exit condition:
 
-- export, passport, and status tell the same seam portability story
+- the read-side public surfaces tell the same bounded M32 story as the proof
+  artifacts
 
-### Step 5 - Tighten seam validation wording only where clarity is missing
+### Step 5 - Close the public wording and milestone sequencing
 
-Goal: keep validator policy simple and explicit.
-
-Files:
-
-- `spec-core/src/validator.rs`
-
-Required work:
-
-- retain hard errors for illegal shared-surface seam escape hatches
-- update wording only if it helps distinguish:
-  - invalid shared-surface authored shape
-  - valid backend-specific detail that later contaminates portability claims
-
-Exit condition:
-
-- validator errors still guard the authored boundary without pretending to be
-  the full portability decision engine
-
-### Step 6 - Rewrite the public roadmap and close out terminology
-
-Goal: make the public doc say what the code now actually means.
+Goal: make the roadmap say what the code now actually means.
 
 Files:
 
@@ -537,130 +534,167 @@ Files:
 
 Required work:
 
-- rewrite the roadmap so it uses explicit `M31` / `M32` sequencing
-- describe M31 as shared-core extraction plus escape-hatch containment
-- describe M32 as the next executable-truth question, not a retroactive part of
-  M31
-- keep `PLAN.md`, the roadmap, and the landed code on the same terms, with
-  `PLAN.md` treated as authority during execution rather than a worker-owned
-  edit surface
+- describe M31 as the landed boundary extraction prerequisite
+- describe M32 as the first bounded second-language promotion path
+- avoid any broad "TypeScript is now supported" claim
+- align roadmap wording with the actual monotone-up pilot contract and
+  comparator policy
 
 Exit condition:
 
-- the roadmap and the code tell the same story
+- the roadmap, the plan, and the landed code use the same milestone language
 
 ## Code Path Diagram
 
 ```text
-[1] Seam authored source
-    data.fields / sum.variants / constructors / methods
+[1] Monotone-up committed packet
+    semantic-families/function.arithmetic_leaf.monotone_up.v1/**
         |
-        +-- invalid top-level contract/deps/imports/body? --> validator hard error
+        +-- family smoke
+        |      |
+        |      +-- exact scaffold contract still matches
+        |      `-- additive body.typescript remains committed truth
         |
-        `-- valid seam with optional Rust-specific details
+        +-- family prove (rust)
+        |
+        +-- family certify (rust)
+        |
+        +-- family prove (typescript)
+        |
+        `-- family certify (typescript)
+                |
+                +-- report.rs writes target-language-aware certify/prove artifacts
+                +-- promotion_artifacts.rs validates/records target-language-aware execution truth
                 |
                 v
-[2] Portability contract
-    portability.rs
-        |
-        +-- collect markers
-        +-- compute backend-execution digest
-        +-- evaluate current proof surfaces
-        +-- evaluate escape-hatch gate
-        +-- summarize contamination state
-                |
-                v
-[3] Read-side projection
-    passport.rs
+[2] Public read-side surfaces
     semantic_review.rs
+    passport.rs
     export.rs
-    spec-cli/src/commands.rs
+    spec status / spec-cli/src/commands.rs
         |
-        +-- freshness split preserved
-        +-- gate-open -> incomplete only if base row was valid
-        +-- stale beats incomplete
-        +-- semantic-review meaning-preserved/leaked stays aligned
+        +-- authored body.typescript remains visible
+        +-- no false broad-support claim is introduced
+        `-- monotone-up pilot truth stays aligned across surfaces
+
+[3] Comparator pressure
+    wrapper_pipeline suites stay green
+        |
+        `-- proves the shared kernel was not broken while landing the bounded pilot
 ```
 
 Every branch above needs tests.
 
 ## Test and Proof Plan
 
-100% of the new portability codepaths must be covered. This milestone is easy
-to fake with one green compile. That is not good enough.
+100% of the new M32 codepaths must be covered. This milestone is easy to fake
+with one green TypeScript command and a vague closeout note. That is not good
+enough.
 
 ### Code path coverage
 
 ```text
-PORTABILITY CORE
+XTASK TARGET-LANGUAGE TRUTH
 ===========================
-[+] spec-core/src/portability.rs
-    ├── marker collection matches legacy behavior
-    ├── backend-execution digest stays stable for authored-only seam edits
-    ├── backend-execution digest changes for backend-only seam edits
-    ├── helper/example lowerings stay non-contaminating
-    ├── domain lowerings stay contaminating
-    └── derives stay backend-only and health-neutral
+[+] xtask/src/family/prove.rs
+    ├── [GAP] target-language lane recorded explicitly in prove output/report path
+    ├── [TEST] unsupported family + typescript still rejected
+    └── [TEST] rust default behavior unchanged when flag omitted
 
-PASSPORT PROJECTION
-===========================
-[+] spec-core/src/passport.rs
-    ├── preserve mode keeps truthful seam projection when compatibility still matches
-    ├── stale backend execution drops freshness correctly
-    ├── open gate demotes otherwise-valid seam rows only
-    └── projected fields match portability contract output
+[+] xtask/src/family/certify.rs
+    ├── [GAP] certify attempt/certification artifacts record target language
+    ├── [TEST] rust lane still certifies normally
+    └── [TEST] typescript lane propagates prove/routing failures truthfully
 
-SEMANTIC REVIEW
-===========================
+[+] xtask/src/family/promotion_artifacts.rs
+    ├── [GAP] execution artifact currently rust-only
+    ├── [TEST] validator accepts truthful typescript execution artifact
+    └── [TEST] legacy rust artifacts still validate
+
+PACKET / HARNESS PILOT
+======================
+[+] xtask/src/family/harness.rs + semantic-families/function.arithmetic_leaf.monotone_up.v1/**
+    ├── [TEST] family smoke still enforces the committed monotone-up scaffold
+    ├── [TEST] committed packet keeps additive body.typescript in all buckets
+    └── [TEST] prove/certify suite ownership remains locked
+
+READ-SIDE TRUTH
+===============
 [+] spec-core/src/semantic_review.rs
-    ├── supported sum/data aligned still pass
-    ├── helper-only markers -> backend_only_meaning_preserved
-    ├── domain lowering -> backend_only_semantics_leaked
-    └── supported/unsupported function truth unchanged
+    ├── [TEST] authored body.typescript still appears in semantic citations
+    ├── [TEST] monotone-up supported truth remains supported
+    └── [TEST] wrapper-pipeline regression suites stay green
 
-READ-SIDE SURFACES
-===========================
-[+] spec-core/src/export.rs
-    ├── exported passports recompute seam projection truthfully
-    └── stale/open-gate seam projections do not preserve false green state
+[+] spec-core/src/passport.rs / export.rs / spec-cli/src/commands.rs
+    ├── [TEST] passport, export, and status agree on the pilot fixture set
+    ├── [TEST] read-side truth does not imply broad target-language support
+    └── [TEST] target-specific residue stays visible when present
 
-[+] spec-cli/src/commands.rs + spec-cli/tests/cli.rs
-    ├── spec status reflects gate-open -> incomplete
-    ├── stale beats incomplete
-    ├── failing/invalid beats portability demotion
-    └── export/status/passport agree for the same fixture set
+REGRESSION PRESSURE
+===================
+[+] spec-cli/tests/m14_regressions.rs
+    ├── [TEST] monotone_up_truth_surface_* stays green
+    ├── [TEST] monotone_up_corpus_* stays green
+    ├── [TEST] monotone_up_regression_* stays green
+    └── [TEST] wrapper-pipeline regressions stay green
+```
+
+### User-flow coverage
+
+```text
+PROMOTION FLOW
+==============
+[+] Maintainer runs monotone-up smoke/prove/certify
+    ├── [TEST] Rust lane still works without any flag
+    ├── [TEST] TypeScript lane works with --target-language typescript
+    └── [GAP] Artifact outputs distinguish which lane actually ran
+
+READ-SIDE FLOW
+==============
+[+] User inspects the repo after the pilot
+    ├── [TEST] passport still surfaces the same monotone-up semantic truth
+    ├── [TEST] spec status still reports the same truth
+    ├── [TEST] spec export still reports the same truth
+    └── [GAP] closeout wording must not overclaim broad TypeScript support
+
+COMPARATOR FLOW
+===============
+[+] Shared-kernel regression check
+    ├── [TEST] wrapper pipeline suites remain green
+    └── [TEST] monotone-up addition did not shadow or weaken existing family routing
 ```
 
 ### Required regression tests
 
 Add or preserve tests proving:
 
-- authored-only seam edits do not change backend-execution digest
-- backend-only seam edits do change backend-execution digest
-- helper/example methods do not silently flip into domain-lowering contamination
-- domain-lowering seams remain visibly contaminating in semantic review
-- open escape-hatch gate demotes only otherwise-valid units
-- stale seam units remain stale even when the gate is also open
-- export-side passport enrichment matches live status projection
-- supported-function and unsupported-function truth surfaces do not regress
-  while seam portability logic is extracted
+- `prove` and `certify` keep Rust as the default lane when no target-language
+  flag is passed
+- `prove` and `certify` artifacts record `typescript` truthfully when that lane
+  is selected
+- promotion-artifact validation accepts truthful TypeScript execution artifacts
+- monotone-up smoke still enforces the committed additive TypeScript scaffold
+- monotone-up semantic-review tests still cite authored `body.typescript`
+- passport, export, and status agree on the monotone-up pilot fixtures
+- wrapper-pipeline regression suites stay green as comparator pressure
+- unsupported families still reject `--target-language typescript`
 
 ### Failure modes by codepath
 
 | Codepath | Realistic production failure | Test required | Error handling / visible truth |
 |---|---|---|---|
-| Portability marker projection | Helper-only lowering gets misclassified as domain contamination | Yes, unit test in `portability.rs` or extracted helper tests | Must remain visible but health-neutral unless another semantic problem exists |
-| Backend-execution digest | Authored-only seam edit incorrectly flips backend freshness | Yes, regression test | Otherwise status/export show fake stale noise |
-| Passport projection | Preserve mode keeps stale seam portability claims | Yes, passport projection test | Must drop stale truth instead of preserving false green state |
-| Escape-hatch gate | Open gate demotes already-stale row to incomplete | Yes, CLI/status regression | `stale` must beat `incomplete` |
-| Semantic review | Supported seam review re-derives markers differently from passport/status | Yes, cross-surface regression | Must consume the shared contract so verdict and health stay aligned |
-| Export enrichment | Export shows stale or mismatched seam truth compared to status | Yes, export regression | Export/passport/status must agree on the same fixture set |
-| Validator wording | Users cannot distinguish invalid authored shape from valid-but-contaminating backend detail | Yes, validation assertion if wording changes | Error messaging must stay explicit and not overclaim |
-| Roadmap rewrite | Public docs still say M28/M29 while code ships M31 semantics | Yes, closeout review | Closeout must treat roadmap rewrite as part of done |
+| `prove` target-language plumbing | TypeScript lane silently writes an artifact that still claims `rust` | Yes, xtask unit/integration test | Artifact must show the real lane |
+| `certify` target-language plumbing | Rust and TypeScript certify attempts overwrite or blur each other | Yes, xtask report/artifact test | Reports must distinguish lanes explicitly |
+| Promotion artifact validation | New truthful TypeScript artifact shape is rejected as invalid | Yes, validator regression | Schema must accept the new honest shape |
+| Monotone-up harness contract | Packet drifts away from smoke expectations while still compiling | Yes, smoke regression | `family smoke` must catch scaffold drift |
+| Semantic review | Authored `body.typescript` stops appearing in citations | Yes, semantic-review regression | Truth surface must stay explicit |
+| Passport/export/status | One surface implies broad target-language support while the others stay bounded | Yes, cross-surface regression | Surfaces must agree on the same bounded claim |
+| Wrapper comparator | Shared-kernel change breaks wrapper pipeline while monotone-up stays green | Yes, existing regression suites | Wrapper pressure must remain visible |
+| Roadmap wording | Docs claim TypeScript support broadly after one bounded pilot | Yes, closeout review | Docs must stay narrow and truthful |
 
 Critical gap rule:
 
-If any path above lacks both a regression test and a truthful read-side surface,
+If any path above lacks both a regression test and a truthful public surface,
 the milestone is not done.
 
 ### Commands to run
@@ -668,90 +702,96 @@ the milestone is not done.
 Run at minimum:
 
 ```bash
-cargo test -p spec-core backend_execution
-cargo test -p spec-core escape_hatch
-cargo test -p spec-core passport
-cargo test -p spec-core semantic_review
-cargo test -p spec-core export
-cargo test -p spec-cli --test cli
+cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
+cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo test -p xtask monotone_up
+cargo test -p spec-core monotone_up_
+cargo test -p spec-core wrapper_pipeline_
+cargo test -p spec-cli --test cli monotone_up_
+cargo test -p spec-cli --test cli wrapper_pipeline_
 cargo test
 ```
 
-A narrower loop is fine during implementation. Done still requires full
-workspace `cargo test`.
+The narrow loop can be smaller while implementing. Done still requires the full
+set above plus workspace `cargo test`.
 
 ## Performance Review
 
-There is no meaningful runtime-performance risk in M31. This is a correctness
-and truth-surface alignment milestone.
+There is no meaningful runtime hot-path risk in M32. This is a proof-integrity
+and truth-surface milestone.
 
-The real performance risk is engineering performance:
+The real performance risks are engineering-performance risks:
 
-- duplicating portability logic in multiple files creates slow, error-prone
-  follow-on work
-- stale truth surfaces create false-green debugging loops
-- conflating authored freshness with backend-execution freshness turns every
-  future portability milestone into archaeology
+- duplicating target-language truth in both reports and read-side surfaces
+- adding a second pilot family "for confidence" and doubling review scope
+- inventing a generic multi-language abstraction before the repo has even proven
+  one honest second-language lane
 
-Recommendation: optimize for explicit single ownership, not for shaving a few
-lines off the diff.
+Recommendation: be boring by default.
+
+Make the current bounded path explicit. Do not spend an innovation token on a
+premature general multi-language framework.
 
 ## Distribution Surface
 
-M31 introduces no new binary, package, or container.
+M32 introduces no new binary, package, or container.
 
 Its distribution surface is repo truth:
 
-- the shared portability contract in `spec-core`
-- seam portability projection in passport/export/status/read-side health
-- semantic-review behavior for supported seam surfaces
-- the rewritten roadmap doc
+- the monotone-up packet and harness
+- target-language-aware prove/certify artifacts
+- passport, export, status, and semantic-review truth on the same pilot
+- the roadmap and plan closeout
 
-Code without those public truth surfaces is not a real M31 ship.
+Code without those truth surfaces is not a real M32 ship.
 
 ## Worktree Parallelization Strategy
 
-This plan has real parallelization opportunity, but only after the portability
-contract shape is locked.
+This plan has real parallelization opportunity, but only after the target-language
+artifact shape is frozen.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| A. Portability contract extraction | `spec-core/src/` portability, backend execution, escape hatch, lib exports | - |
-| B. Passport + semantic-review integration | `spec-core/src/` passport, semantic review | A |
-| C. Export + status/read-side integration | `spec-core/src/` export, `spec-cli/src/` commands, `spec-cli/tests/` | A |
-| D. Roadmap rewrite + closeout | `docs/` | A, then final terminology from B/C |
+| A. Target-language artifact foundation | `xtask/src/`, especially prove/certify/report/promotion-artifacts | - |
+| B. Monotone-up packet + harness lock-in | `xtask/src/family/`, `semantic-families/` | A |
+| C. Read-side truth alignment | `spec-core/src/`, `spec-cli/src/`, `spec-cli/tests/` | A |
+| D. Roadmap + packet-doc closeout | `docs/`, `semantic-families/README.md` | B, C |
 
 ### Parallel lanes
 
 - Lane A: `A`
-  Sequential foundation lane. No split before this lands.
+  Sequential foundation lane. Freeze artifact/report truth first.
 - Lane B: `B`
-  Runs after Lane A. Owns passport and semantic-review integration.
+  Runs after Lane A. Owns the monotone-up packet and harness contract.
 - Lane C: `C`
-  Runs after Lane A in parallel with Lane B. Owns export/status/CLI truth
-  surfaces.
+  Runs after Lane A in parallel with Lane B. Owns passport/export/status and
+  semantic-review truth alignment.
 - Lane D: `D`
-  Runs after B + C. Docs last so they describe the actual landed contract.
+  Runs after B + C. Docs and closeout last so they describe the actual landed
+  implementation.
 
 ### Execution order
 
 Launch Lane A first.
 
-After A is merged or otherwise stabilized, launch Lane B and Lane C in parallel
-worktrees.
+After Lane A is merged or otherwise stabilized, launch Lane B and Lane C in
+parallel worktrees.
 
 Merge B + C, then do Lane D last.
 
 ### Conflict flags
 
-- Lanes B and C both depend on the final API shape from
-  `spec-core/src/portability.rs`. Freeze that API in Lane A before splitting.
-- Passport ownership belongs to Lane B. Lane C may consume projected truth but
-  should not take opportunistic ownership of `spec-core/src/passport.rs`.
-- If the contract shape is still changing, do **not** split into worktrees yet.
-  Sequential execution is cheaper than merge-fighting a moving interface.
+- Lanes B and C both depend on the final target-language artifact shape from
+  Lane A. Freeze that shape before splitting.
+- `xtask/src/lib.rs` belongs to Lane A. Do not let Lane B or Lane C take
+  opportunistic ownership of the CLI parsing layer.
+- `semantic-families/README.md` belongs to Lane D unless a packet-local doc
+  change is compile- or review-forced earlier.
 
 If the work is not split into worktrees, execute sequentially in the same
 order:
@@ -763,18 +803,18 @@ A -> B -> C -> D
 ## Completion Summary
 
 - Step 0: Scope Challenge
-  Accepted as-is, because the minimum honest surface already spans multiple
-  read-side truth consumers.
+  Accepted as-is, because the minimum honest surface already spans proof
+  artifacts plus read-side truth surfaces.
 - Architecture Review
-  One dedicated seam portability contract module with existing helpers reused
-  behind it.
+  One bounded monotone-up pilot, one artifact-truth foundation, one read-side
+  truth alignment pass.
 - Code Quality Review
-  Centralize ownership, do not rewrite working helpers for style.
+  Reuse the existing CLI, harness, packet, and truth surfaces. Extend them
+  explicitly rather than inventing a new framework.
 - Test Review
-  Explicit portability codepath diagram plus mandatory regressions above.
+  Explicit second-language coverage diagram plus mandatory regressions above.
 - Performance Review
-  No runtime bottleneck. Correctness and truth-surface alignment are the real
-  risks.
+  No runtime bottleneck. Truth drift and over-abstraction are the real risks.
 - NOT in scope
   Written.
 - What already exists
@@ -788,7 +828,9 @@ A -> B -> C -> D
 
 ## Implementation Guardrail
 
-If implementation discovers that the current seam portability story cannot be
-made truthful without adding second-language executable semantics, stop.
+If implementation discovers that the monotone-up pilot cannot be made truthful
+without widening target-language execution semantics for seam kinds, molecule
+tests, or a second family, stop.
 
-That is not "small spillover." That is M32 trying to leak backward into M31.
+That is not "small spillover." That is M33-or-later work trying to leak into a
+bounded M32 milestone.
