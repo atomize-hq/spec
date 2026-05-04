@@ -1,97 +1,102 @@
-# M30 Orchestration Plan
+# M31 Orchestration Plan
 
-Status: **authoritative execution contract for the full M30 run**
+Status: **authoritative execution contract for the split-worktree M31 run**
 Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**
 Live branch: **`feat/corpus-expansion`**
 Review base: **`main`**
 Last rewritten: **2026-05-04**
-Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof`**
-Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m30-wrapper-second-family-proof`**
-Locked packet root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/function.wrapper.pipeline.v1`**
+Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction`**
+Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m31-shared-core-extraction`**
 
 ## Summary
 
-- This run is for **M30** only. `PLAN.md` is the milestone authority and this file is the authoritative orchestration contract that carries the run from kickoff through final closeout.
-- The parent agent remains the sole integrator, sole freeze authority, sole stale-lane invalidator, sole push authority, and sole final verifier.
-- Work starts with a parent-owned baseline capture and orchestration freeze, then `Lane A` lands the wrapper packet truth plus scaffold/smoke alignment before any parallel worker starts.
+- This run is for **M31 shared-core extraction and escape-hatch containment** only.
+- `PLAN.md` remains the milestone authority. This file becomes authoritative only if the parent agent actually chooses the split-worktree path described in `PLAN.md`.
+- The parent agent is the sole integrator, sole freeze authority, sole stale-lane invalidator, sole push authority, and sole final verifier.
+- Work starts with a parent-owned baseline capture and orchestration freeze.
+- The parent agent keeps the critical path local: baseline, authority freeze, `Lane A`, all merge/freeze checkpoints, final verification, push/observe, and closeout are parent-owned.
+- `Lane A` is the sequential foundation lane and stays on the parent-critical path. No parallel worker launches before `Lane A` lands and its portability API is frozen.
 - After `Lane A` is merged and frozen, exactly two worker lanes may run in parallel:
-  - `Lane B` = wrapper semantic-review assertion, wrapper truth-surface suite, copied-fixture corpus/regression proof, and any required wrapper harness membership updates
-  - `Lane C` = explicit target-language allowlist widening to exactly two families plus the dedicated `wrapper_pipeline_pilot` CI job while preserving `monotone_up_pilot`
-- Maximum worker concurrency is `2`. Recommended worker profile is `GPT-5.4` with `high` reasoning for both lanes.
-- The implementation surface stays bounded to the M30 closed surface in `PLAN.md`. No repo-wide TypeScript support, no new packet root, no `.test.spec` widening, and no hidden family-specific routing are allowed.
-- Parent-owned run-state under `RUN_ROOT` is the source of truth for freezes, launches, merges, verification, push observation, and restart. Worker chat history is not part of execution truth.
+  - `Lane B` = passport projection plus supported seam semantic-review integration
+  - `Lane C` = export/status/CLI truth-surface integration
+- After `Lane B` and `Lane C` are merged and re-verified, `Lane D` may run last as one bounded worker lane for validator wording and roadmap closeout.
+- Recommended worker profile for `Lane B`, `Lane C`, and `Lane D` is `GPT-5.4` with `reasoning_effort=high`.
+- Maximum worker concurrency is `2`.
+- The implementation surface stays bounded to the M31 closed surface in `PLAN.md`. No M30 wrapper-family work, no second-language execution semantics, no function portability expansion, and no repo-wide target-language policy widening are allowed.
+- Parent-owned run-state under `RUN_ROOT` is the only execution truth. Worker memory and stale worktree copies are not.
 
 ## Hard Guards
 
-- `PLAN.md` wins over this document, worker summaries, stale worktrees, and run-state notes if they disagree.
+- `PLAN.md` wins over this document, worker summaries, stale worktree files, and run-state notes if they disagree.
 - `ORCH_PLAN.md` is parent-owned only. Workers do not edit it.
-- The parent does not integrate on the live checkout. All merges and final verification happen in `ws/m30-int`.
-- The closed implementation surface for M30 is:
-  - `semantic-families/function.wrapper.pipeline.v1/**`
+- The parent does not integrate on the live checkout. All merges and final verification happen in `ws/m31-int`.
+- The closed implementation surface for M31 is:
+  - `spec-core/src/portability.rs`
+  - `spec-core/src/backend_execution.rs`
+  - `spec-core/src/escape_hatch.rs`
+  - `spec-core/src/passport.rs`
   - `spec-core/src/semantic_review.rs`
+  - `spec-core/src/validator.rs`
+  - `spec-core/src/export.rs`
+  - `spec-core/src/lib.rs`
+  - `spec-cli/src/commands.rs`
   - `spec-cli/tests/cli.rs`
-  - `spec-cli/tests/m14_regressions.rs`
-  - `xtask/src/family/prove.rs`
-  - `xtask/src/family/certify.rs`
-  - `xtask/src/family/harness.rs`
-  - `xtask/src/family/scaffold.rs`
-  - `xtask/src/lib.rs`
-  - `.github/workflows/ci.yml`
-  - `PLAN.md` is authority only and is not edited during execution
-- Allowed mechanical spillover is tightly bounded to compile or expectation fallout directly caused by the primary surface above.
-  - Likely spillover sites, only if forced:
-    - `spec-core/src/types.rs`
-    - `spec-core/src/generator.rs`
-    - `spec-core/src/passport.rs`
-  - Any semantic broadening outside the primary surface blocks the run until authority is rewritten.
-- `semantic-families/function.wrapper.pipeline.v1/` remains the only authoritative packet root for the second proof.
-- Committed wrapper packet bytes, not tests, author TypeScript truth.
-- The explicit allowlist may contain exactly two promoted families in M30:
-  - `function.arithmetic_leaf.monotone_up.v1`
-  - `function.wrapper.pipeline.v1`
-- `family prove` and `family certify` must keep the existing harness, suite slugs, and artifact paths. No TypeScript-specific suite namespace and no new artifact tree are allowed.
-- CI must keep failure attribution family-local: `test`, `monotone_up_pilot`, and `wrapper_pipeline_pilot` remain distinct.
+  - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+- Allowed mechanical spillover is compile- or fixture-forced only:
+  - `spec-core/src/types.rs`
+  - `spec-core/src/molecule_evidence.rs`
+  - `spec-core/src/generator.rs`
+  - `spec-core/src/graph.rs`
+  - `spec-core/src/schema/unit.spec.json`
+- `PLAN.md` is authority-only during execution. It is read for lane prompts and verification, not treated as a worker-owned edit surface.
+- Any semantic expansion outside that surface blocks the run until authority is rewritten.
+- `spec-core/src/portability.rs` becomes the only allowed composition point for seam portability truth.
+- `passport.rs`, `semantic_review.rs`, `export.rs`, and `spec-cli/src/commands.rs` may consume the shared projection, but they may not invent fresh portability logic.
+- M31 is seam-only. `kind:function` portability policy, second-language execution truth, packet promotion, and CI lane redesign are out of scope.
 - Stop immediately if any lane requires:
-  - repo-wide `spec build/test --target-language typescript`
-  - widening TypeScript support beyond promoted `kind:function` families
-  - `.test.spec` TypeScript support
-  - `kind:data` or `kind:sum` TypeScript support
-  - a new packet root
-  - runtime mutation helpers that synthesize missing wrapper TypeScript bodies
+  - new portability marker classes
+  - portability semantics for `kind:function`
+  - TypeScript executable semantic review
+  - proof-policy changes beyond the current seam `atom` and `molecule` surfaces
+  - a new read-side public JSON field without first proving the existing public fields are insufficient
 
 ## Worktree Layout
 
 Canonical worktrees:
 
 - integration
-  - branch: `ws/m30-int`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m30-wrapper-second-family-proof/int`
-- `Lane A`
-  - branch: `ws/m30-lane-a`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m30-wrapper-second-family-proof/lane-a`
-- `Lane B`
-  - branch: `ws/m30-lane-b`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m30-wrapper-second-family-proof/lane-b`
-- `Lane C`
-  - branch: `ws/m30-lane-c`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m30-wrapper-second-family-proof/lane-c`
+  - branch: `ws/m31-int`
+  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m31-shared-core-extraction/int`
+- `Lane A` portability foundation
+  - branch: `ws/m31-lane-a-portability-foundation`
+  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m31-shared-core-extraction/lane-a-portability-foundation`
+- `Lane B` passport + semantic-review integration
+  - branch: `ws/m31-lane-b-passport-semantic`
+  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m31-shared-core-extraction/lane-b-passport-semantic`
+- `Lane C` export + status integration
+  - branch: `ws/m31-lane-c-export-status`
+  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m31-shared-core-extraction/lane-c-export-status`
+- `Lane D` validator + roadmap closeout
+  - branch: `ws/m31-lane-d-validator-roadmap`
+  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m31-shared-core-extraction/lane-d-validator-roadmap`
 
 Creation rules:
 
-- The parent captures baseline state from the live checkout on `feat/corpus-expansion`, then creates `ws/m30-int` from the current live SHA recorded in `baseline.json`.
-- `Lane A` is forked from `ws/m30-int` after the orchestration freeze is written.
+- The parent captures baseline state from the live checkout on `feat/corpus-expansion`, then creates `ws/m31-int` from the exact live SHA recorded in `baseline.json`.
+- `Lane A` is forked from `ws/m31-int` after the orchestration freeze is written.
 - `Lane B` and `Lane C` are both forked from the exact post-`Lane A` SHA recorded in `lane-a-freeze.json`.
+- `Lane D` is forked from the exact post-merge SHA recorded in `post-bc-freeze.json`.
 - No worker is forked from another worker branch.
 - If any named branch or worktree already exists and points at stale or conflicting state, the parent removes and recreates it before reuse and records that in `session-log.md`.
-- A stale lane is discarded and recreated from the newest relevant freeze SHA. The parent never hand-forwards a stale worker branch.
+- A stale lane is discarded and recreated from the newest relevant freeze SHA. The parent does not hand-forward stale worker branches.
 
 ## Canonical Run-State
 
 Parent-owned orchestration truth lives under:
 
 - `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof`
-- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m30-wrapper-second-family-proof`
+- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction`
+- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m31-shared-core-extraction`
 
 Canonical parent-owned files:
 
@@ -99,9 +104,9 @@ Canonical parent-owned files:
   - live branch name
   - live checkout SHA
   - live dirty-state summary
-  - overlap check against M30-owned paths
+  - overlap check against the M31-owned surface
 - `authority-freeze.json`
-  - milestone id `M30`
+  - milestone id `M31`
   - authority paths
   - worker model recommendation
   - concurrency cap
@@ -126,13 +131,13 @@ Canonical parent-owned files:
   - push and CI observation notes
 - `lane-a-freeze.json`
   - exact post-`Lane A` commit
-  - locked packet root
-  - locked 12-spec wrapper truth matrix
-  - frozen starter-contract expectations
+  - frozen `portability.rs` API surface
+  - frozen allowed helper callsites
   - exact acceptance commands for `Lane B` and `Lane C`
 - `lane-b-launch.md`
   - reproducible launch packet for `Lane B`
-  - exact prompt basis excerpt references
+  - exact `PLAN.md` excerpt references
+  - exact `ORCH_PLAN.md` excerpt references
   - owned paths
   - forbidden paths
   - exact acceptance commands
@@ -140,7 +145,21 @@ Canonical parent-owned files:
   - freeze record path and frozen SHA
 - `lane-c-launch.md`
   - reproducible launch packet for `Lane C`
-  - exact prompt basis excerpt references
+  - exact `PLAN.md` excerpt references
+  - exact `ORCH_PLAN.md` excerpt references
+  - owned paths
+  - forbidden paths
+  - exact acceptance commands
+  - applicable hard guards
+  - freeze record path and frozen SHA
+- `post-bc-freeze.json`
+  - exact post-merge commit after `Lane B` and `Lane C`
+  - final terminology decisions for `Lane D`
+  - exact `Lane D` acceptance commands
+- `lane-d-launch.md`
+  - reproducible launch packet for `Lane D`
+  - exact `PLAN.md` excerpt references
+  - exact `ORCH_PLAN.md` excerpt references
   - owned paths
   - forbidden paths
   - exact acceptance commands
@@ -165,32 +184,31 @@ Canonical parent-owned files:
   - run id or URL
   - observed branch
   - observed SHA
-  - workspace lane result
-  - `monotone_up_pilot` result
-  - `wrapper_pipeline_pilot` result
+  - workspace result
 - `blocked.json`
   - blocking task
   - blocking evidence
   - required next decision
 - `closeout.md`
   - contract summary
-  - containment summary
-  - two-family proof summary
-  - CI summary
+  - portability boundary summary
+  - truth-surface alignment summary
+  - roadmap summary
   - final verdict
 
 Per-task sentinel directories:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-00-baseline/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-01-authority-freeze/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-a-packet-scaffold/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-02-freeze-post-lane-a/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-b-truth-surfaces/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-c-gate-and-ci/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-03-merge-parallel-lanes/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-04-final-verify/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-05-push-observe/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m30_wrapper_second_family_proof/task-m30-06-closeout/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-00-baseline/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-01-authority-freeze/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-a-portability-foundation/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-02-freeze-post-lane-a/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-b-passport-semantic/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-c-export-status/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-03-freeze-post-bc/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-d-validator-roadmap/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-04-final-verify/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-05-push-observe/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m31_shared_core_extraction/task-m31-06-closeout/`
 
 Each sentinel directory contains:
 
@@ -201,368 +219,299 @@ Each sentinel directory contains:
 ## Task Graph
 
 ```text
-task/m30-00-baseline
-  -> task/m30-01-authority-freeze
-      -> task/m30-a-packet-scaffold
-          -> task/m30-02-freeze-post-lane-a
-task/m30-02-freeze-post-lane-a
-  -> task/m30-b-truth-surfaces
-  -> task/m30-c-gate-and-ci
-task/m30-b-truth-surfaces
-  -> task/m30-03-merge-parallel-lanes
-task/m30-c-gate-and-ci
-  -> task/m30-03-merge-parallel-lanes
-task/m30-03-merge-parallel-lanes
-  -> task/m30-04-final-verify
-      -> task/m30-05-push-observe
-          -> task/m30-06-closeout
+task/m31-00-baseline
+  -> task/m31-01-authority-freeze
+      -> task/m31-a-portability-foundation
+          -> task/m31-02-freeze-post-lane-a
+task/m31-02-freeze-post-lane-a
+  -> task/m31-b-passport-semantic
+  -> task/m31-c-export-status
+task/m31-b-passport-semantic
+  -> task/m31-03-freeze-post-bc
+task/m31-c-export-status
+  -> task/m31-03-freeze-post-bc
+task/m31-03-freeze-post-bc
+  -> task/m31-d-validator-roadmap
+      -> task/m31-04-final-verify
+          -> task/m31-05-push-observe
+              -> task/m31-06-closeout
 ```
 
 Execution meaning:
 
-1. Parent captures live branch and overlap facts.
+1. Parent captures live branch, live SHA, and overlap facts.
 2. Parent freezes orchestration authority and creates the integration worktree.
-3. `Lane A` lands the wrapper packet additive `body.typescript` truth across all 12 unit specs and aligns scaffold/smoke expectations.
-4. Parent merges `Lane A`, writes `lane-a-freeze.json`, and forks `Lane B` and `Lane C` from that exact frozen SHA.
+3. `Lane A` lands the portability contract module, helper visibility adjustments, and the frozen API shape required for all downstream consumers.
+4. Parent merges `Lane A`, reruns its acceptance commands on merged state, writes `lane-a-freeze.json`, and forks `Lane B` and `Lane C` from that exact frozen SHA.
 5. `Lane B` and `Lane C` run in parallel with disjoint ownership.
-6. Parent merges both parallel lanes back into `ws/m30-int`, reruns their acceptance commands on merged state, then runs the full merged-state verification floor.
-7. Parent pushes, observes CI on the exact pushed SHA, and writes closeout with one verdict.
-
-## Command Contracts
-
-### Parent baseline and orchestration freeze
-
-Owned paths:
-
-- `ORCH_PLAN.md`
-- `RUN_ROOT/**`
-
-Required commands:
-
-```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse --abbrev-ref HEAD
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec status --short
-```
-
-Parent must deliver:
-
-- baseline recorded from `feat/corpus-expansion`
-- overlap check recorded before any worktree launch
-- `authority-freeze.json`, `tasks.json`, and `ORCH_PLAN.md` agreeing on lane order, worker ownership, freezes, and blockers
-
-### Lane A contract: wrapper packet truth + scaffold alignment
-
-Owned paths:
-
-- `semantic-families/function.wrapper.pipeline.v1/**`
-- `xtask/src/family/scaffold.rs`
-- `xtask/src/lib.rs`
-
-Required edits:
-
-- add additive `body.typescript` to all 12 wrapper packet unit specs:
-  - `pricing_discount_leaf_aligned.unit.spec`
-  - `pricing_tax_leaf_aligned.unit.spec`
-  - `pricing_total_wrapper_aligned.unit.spec`
-  - `pricing_discount_leaf_drift.unit.spec`
-  - `pricing_tax_leaf_drift.unit.spec`
-  - `pricing_total_wrapper_drift.unit.spec`
-  - `pricing_discount_leaf_under_specified.unit.spec`
-  - `pricing_tax_leaf_under_specified.unit.spec`
-  - `pricing_total_wrapper_under_specified.unit.spec`
-  - `pricing_discount_leaf_unsupported_near_miss.unit.spec`
-  - `pricing_tax_leaf_unsupported_near_miss.unit.spec`
-  - `pricing_total_wrapper_unsupported_near_miss.unit.spec`
-- keep each TypeScript body bucket-faithful to that bucket's Rust body
-- keep wrapper leaf units truthful packet-local deps of wrapper units
-- align scaffold starter generation with the committed wrapper packet contract
-- align wrapper smoke-contract expectations with the committed starter contract
-
-Required acceptance commands:
-
-```bash
-cargo test -p xtask family_smoke_accepts_committed_wrapper_pipeline_scaffold_surfaces -- --color never
-cargo xtask family smoke function.wrapper.pipeline.v1
-```
-
-Lane A must deliver:
-
-- committed wrapper packet bytes carry truthful additive TypeScript across `aligned`, `drift`, `under_specified`, and `unsupported_near_miss`
-- no test-time helper is required to inject missing wrapper TypeScript bodies
-- the wrapper starter contract is no longer Rust-only if the committed packet is not
-
-### Lane B contract: wrapper semantic review + truth surfaces + copied-fixture proof
-
-Owned paths:
-
-- `spec-core/src/semantic_review.rs`
-- `spec-cli/tests/cli.rs`
-- `spec-cli/tests/m14_regressions.rs`
-- `xtask/src/family/harness.rs`
-
-Required edits:
-
-- add a wrapper semantic-review assertion parallel to the monotone-up authored-TypeScript assertion and ensure it cites `body.typescript`
-- keep `wrapper_pipeline_classifier_*` green
-- keep wrapper truth-surface coverage green:
-  - `wrapper_pipeline_truth_surface_command_matrix_preserves_until_spec_test_refresh`
-  - `wrapper_pipeline_truth_surface_stale_status_and_export_preserve_last_proven_review`
-  - `wrapper_pipeline_truth_surface_unsupported_near_miss_command_matrix_stays_neutral`
-- extend copied-wrapper fixture coverage so corpus and regression proof read committed bytes only
-- update wrapper harness suite membership only if new wrapper test names make that necessary
-
-Required acceptance commands:
-
-```bash
-cargo test -p spec-core --lib wrapper_pipeline_ -- --color never
-cargo test -p spec-cli --test cli wrapper_pipeline_truth_surface_ -- --color never
-cargo test -p spec-cli --test m14_regressions wrapper_pipeline_corpus_ -- --color never
-cargo test -p spec-cli --test m14_regressions wrapper_pipeline_regression_ -- --color never
-cargo test -p spec-core --lib monotone_up_classifier_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_corpus_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_regression_ -- --color never
-```
-
-Lane B must deliver:
-
-- wrapper authored TypeScript is proven visible to semantic review through the shared authored packet surface
-- wrapper truth-surface status/export behavior remains honest
-- wrapper copied-fixture regressions stay green on committed bytes
-- the existing monotone-up TypeScript proof remains green on the shared proof surfaces Lane B touches
-
-### Lane C contract: two-family allowlist gate + dedicated CI pilot
-
-Owned paths:
-
-- `xtask/src/family/prove.rs`
-- `xtask/src/family/certify.rs`
-- `.github/workflows/ci.yml`
-
-Required edits:
-
-- widen `validate_target_language` only far enough to accept:
-  - `function.arithmetic_leaf.monotone_up.v1`
-  - `function.wrapper.pipeline.v1`
-- preserve rejection behavior for every other family
-- keep prove/certify suite names, report names, and artifact paths unchanged
-- add a dedicated `wrapper_pipeline_pilot` job
-- keep `monotone_up_pilot` as a separate job
-- update downstream release jobs that currently depend on `[test, monotone_up_pilot]` so they also depend on `wrapper_pipeline_pilot`
-
-Required acceptance commands:
-
-```bash
-cargo xtask family prove function.wrapper.pipeline.v1
-cargo xtask family certify function.wrapper.pipeline.v1
-cargo xtask family prove function.wrapper.pipeline.v1 --target-language typescript
-cargo xtask family certify function.wrapper.pipeline.v1 --target-language typescript
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-```
-
-Required structural acceptance:
-
-- `.github/workflows/ci.yml` is the only workflow file touched
-- `wrapper_pipeline_pilot` exists as a distinct job from `monotone_up_pilot`
-- the wrapper pilot encodes exactly:
-  - `cargo test -p spec-core --lib wrapper_pipeline_ -- --color never`
-  - `cargo test -p spec-cli --test cli wrapper_pipeline_truth_surface_ -- --color never`
-  - `cargo test -p spec-cli --test m14_regressions wrapper_pipeline_corpus_ -- --color never`
-  - `cargo xtask family prove function.wrapper.pipeline.v1`
-  - `cargo xtask family prove function.wrapper.pipeline.v1 --target-language typescript`
-  - `cargo xtask family certify function.wrapper.pipeline.v1`
-  - `cargo xtask family certify function.wrapper.pipeline.v1 --target-language typescript`
-- release gating depends on `test`, `monotone_up_pilot`, and `wrapper_pipeline_pilot`
-
-Lane C must deliver:
-
-- TypeScript proof is widened to exactly two promoted function families and nothing more
-- wrapper public CI proof is separate and attributable
-- the existing monotone-up pilot remains distinct and preserved
+6. Parent merges `Lane B`, reruns its acceptance commands, then merges `Lane C`, reruns its acceptance commands, and writes `post-bc-freeze.json`.
+7. `Lane D` lands validator wording and roadmap sequencing after the read-side contract is stable, using `PLAN.md` as fixed terminology authority.
+8. Parent merges `Lane D`, runs the full merged-state verification floor, pushes, observes CI on the exact pushed SHA, and writes closeout.
 
 ## Workstream Plan
 
 ### WS-0 Baseline capture - parent only
 
-#### `task/m30-00-baseline`
+#### `task/m31-00-baseline`
 
 Required parent actions:
 
 1. Confirm the live branch is still `feat/corpus-expansion`.
-2. Record the live SHA, dirty state, and overlap with M30-owned paths.
-3. Stop immediately if unresolved dirty overlap exists inside the closed implementation surface.
+2. Record the live SHA, dirty state, and overlap with the M31 closed surface.
+3. Stop immediately if unresolved dirty overlap exists inside the M31-owned surface.
 
 Acceptance:
 
-- `baseline.json` exists
-- overlap is either empty or explicitly blocked
-- the live SHA used to seed `ws/m30-int` is recorded
+- `baseline.json` exists.
+- overlap is either empty or explicitly blocked.
+- the live SHA used to seed `ws/m31-int` is recorded.
 
 ### WS-1 Orchestration freeze - parent only
 
-#### `task/m30-01-authority-freeze`
+#### `task/m31-01-authority-freeze`
 
 Required parent actions:
 
-1. Rewrite `ORCH_PLAN.md` to current M30 truth.
+1. Rewrite `ORCH_PLAN.md` to current M31 truth.
 2. Write `authority-freeze.json`.
 3. Write `tasks.json`.
-4. Create `ws/m30-int` from the recorded live SHA.
-5. Fork `ws/m30-lane-a` from `ws/m30-int`.
+4. Create `ws/m31-int` from the recorded live SHA.
+5. Fork `ws/m31-lane-a-portability-foundation` from `ws/m31-int`.
 
 Acceptance:
 
-- no worker launches before `authority-freeze.json`
-- `ORCH_PLAN.md`, `authority-freeze.json`, and `tasks.json` agree on lane order and hard guards
+- no worker launches before `authority-freeze.json`.
+- `ORCH_PLAN.md`, `authority-freeze.json`, and `tasks.json` agree on lane order, hard guards, and freeze semantics.
 
-### WS-2 Wrapper packet truth and starter alignment - worker
+### WS-2 Portability contract foundation - parent only
 
-#### `task/m30-a-packet-scaffold` on `ws/m30-lane-a`
+#### `task/m31-a-portability-foundation` on `ws/m31-lane-a-portability-foundation`
 
-Worker mission:
+Parent mission:
 
-- make the committed wrapper packet bytes truthful first, then align scaffold and smoke contracts to that truth
+- create `spec-core/src/portability.rs` as the sole seam portability composition point, freeze its API, and keep `backend_execution.rs` plus `escape_hatch.rs` as reusable helpers rather than read-side orchestrators.
 
-Worker must not do:
+Parent-owned paths:
 
-- edit `spec-core/**`
-- edit `spec-cli/tests/**`
-- edit `xtask/src/family/prove.rs`
-- edit `xtask/src/family/certify.rs`
-- edit `.github/workflows/ci.yml`
+- `spec-core/src/portability.rs`
+- `spec-core/src/lib.rs`
+- `spec-core/src/backend_execution.rs`
+- `spec-core/src/escape_hatch.rs`
 
-Acceptance:
+Allowed mechanical spillover only if compile-forced:
 
-- all `Lane A` acceptance commands pass
-- changed files stay inside `Lane A` ownership
-- the 12-spec wrapper matrix is complete before the lane is considered done
+- `spec-core/src/types.rs`
 
-### WS-3 Parent merge and post-packet freeze - parent only
+Required acceptance commands:
 
-#### `task/m30-02-freeze-post-lane-a`
+```bash
+cargo test -p spec-core portability -- --color never
+cargo test -p spec-core backend_execution -- --color never
+cargo test -p spec-core escape_hatch -- --color never
+```
+
+Lane A must deliver before any worker launch:
+
+- one canonical portability module with frozen projection types and helper entrypoints.
+- helper classification and digest behavior unchanged unless intentionally routed through the new contract.
+- enough API stability that `Lane B` and `Lane C` can proceed without further `portability.rs` churn.
+
+### WS-3 Parent merge and post-foundation freeze - parent only
+
+#### `task/m31-02-freeze-post-lane-a`
 
 Strict merge order:
 
-1. merge `ws/m30-lane-a` into `ws/m30-int`
+1. merge `ws/m31-lane-a-portability-foundation` into `ws/m31-int`
 2. rerun the `Lane A` acceptance commands from merged state
 3. write `lane-a-freeze.json`
 4. write `lane-b-launch.md` and `lane-c-launch.md`
-5. fork `ws/m30-lane-b` and `ws/m30-lane-c` from the recorded frozen SHA
+5. fork `ws/m31-lane-b-passport-semantic` and `ws/m31-lane-c-export-status` from the recorded frozen SHA
 
 Parent may resolve only:
 
 - straightforward import ordering
 - mechanical context drift
-- adjacent test insertion conflicts that do not change meaning
+- compile-local visibility adjustments that do not change the frozen portability API
 
 Parent must bounce work back to the owning lane for:
 
-- incomplete or inconsistent wrapper packet TypeScript truth
-- disagreement about bucket-faithful TypeScript bodies
-- disagreement about wrapper starter contract truth
-- any attempt to synthesize wrapper TypeScript at test runtime
+- any unfinished or unstable `portability.rs` API
+- any attempt to let downstream consumers recompose portability truth privately
+- any new marker taxonomy or scope expansion beyond seam kinds
 
 Acceptance:
 
-- `Lane A` is merged and re-verified from integration state
-- `lane-a-freeze.json` exists
-- `lane-b-launch.md` and `lane-c-launch.md` exist
-- `Lane B` and `Lane C` both start from the same frozen SHA
+- `Lane A` is merged and re-verified from integration state.
+- `lane-a-freeze.json` exists.
+- `lane-b-launch.md` and `lane-c-launch.md` exist.
+- `Lane B` and `Lane C` both start from the same frozen SHA.
 
-### WS-4 Parallel proof lanes - workers, concurrency cap 2
+### WS-4 Parallel read-side integration lanes - workers, concurrency cap 2
 
-#### `task/m30-b-truth-surfaces` on `ws/m30-lane-b`
+#### `task/m31-b-passport-semantic` on `ws/m31-lane-b-passport-semantic`
 
 Worker mission:
 
-- prove the shared semantic-review and read-side surfaces consume wrapper TypeScript honestly using committed wrapper bytes
+- make passport projection the reference implementation for seam portability truth and make supported seam semantic review consume that shared contract instead of re-deriving portability privately.
+
+Owned paths:
+
+- `spec-core/src/passport.rs`
+- `spec-core/src/semantic_review.rs`
 
 Worker must not do:
 
-- edit packet files
-- edit `xtask/src/family/prove.rs`
-- edit `xtask/src/family/certify.rs`
-- edit `.github/workflows/ci.yml`
-- add new runtime fixture mutation helpers for wrapper proof
+- edit `spec-core/src/portability.rs`
+- edit `spec-core/src/export.rs`
+- edit `spec-core/src/validator.rs`
+- edit `spec-cli/src/**`
+- edit `docs/**`
+- edit `PLAN.md`
 
-Acceptance:
+Required acceptance commands:
 
-- all `Lane B` acceptance commands pass
-- changed files stay inside `Lane B` ownership
-- wrapper proof stays grounded in committed packet bytes
+```bash
+cargo test -p spec-core passport -- --color never
+cargo test -p spec-core semantic_review -- --color never
+```
 
-#### `task/m30-c-gate-and-ci` on `ws/m30-lane-c`
+Lane B must deliver:
+
+- passport write and read paths consume one seam portability projection.
+- `markers`, `proof_coverage`, `escape_hatch_gate`, and `freshness.backend_execution_status` stay truthful through the shared contract.
+- supported seam semantic-review verdicts remain aligned, under-specified, backend-only meaning preserved, or backend-only semantics leaked based on shared portability inputs.
+- supported-function and unsupported-function truth remain unchanged outside compile-local fallout.
+
+#### `task/m31-c-export-status` on `ws/m31-lane-c-export-status`
 
 Worker mission:
 
-- widen the family prove gate to exactly two families and expose the wrapper proof as a distinct CI signal
+- make export, status, and CLI health surfaces consume the same shared seam portability truth without taking ownership of passport or semantic-review internals.
+
+Owned paths:
+
+- `spec-core/src/export.rs`
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+
+Allowed mechanical spillover only if compile- or fixture-forced:
+
+- `spec-core/src/molecule_evidence.rs`
+- `spec-core/src/generator.rs`
+- `spec-core/src/graph.rs`
+- `spec-core/src/schema/unit.spec.json`
 
 Worker must not do:
 
-- edit packet files
-- edit `spec-core/**`
-- edit `spec-cli/tests/**`
-- edit `xtask/src/family/harness.rs`
-- introduce a TypeScript-specific artifact namespace
+- edit `spec-core/src/portability.rs`
+- edit `spec-core/src/passport.rs`
+- edit `spec-core/src/semantic_review.rs`
+- edit `spec-core/src/validator.rs`
+- edit `docs/**`
+- edit `PLAN.md`
 
-Acceptance:
+Required acceptance commands:
 
-- all `Lane C` acceptance commands pass
-- required structural acceptance for `.github/workflows/ci.yml` is satisfied
-- changed files stay inside `Lane C` ownership
+```bash
+cargo test -p spec-core export -- --color never
+cargo test -p spec-cli --test cli -- --color never
+cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- export examples/ecommerce --format json
+```
 
-### WS-5 Parent merge of parallel lanes - parent only
+Lane C must deliver:
 
-#### `task/m30-03-merge-parallel-lanes`
+- export-side passport enrichment routes through the shared projection.
+- `spec status` preserves the current demotion sinks while consuming shared truth.
+- `valid -> incomplete` demotion remains gate-only; `stale`, `failing`, and `invalid` still win when already present.
+- export, passport, and status agree on the same seam fixture set after merge.
+
+### WS-5 Parent merge of parallel lanes and post-BC freeze - parent only
+
+#### `task/m31-03-freeze-post-bc`
 
 Strict merge order:
 
-1. merge `ws/m30-lane-b` into `ws/m30-int`
+1. merge `ws/m31-lane-b-passport-semantic` into `ws/m31-int`
 2. rerun the `Lane B` acceptance commands from merged state
-3. merge `ws/m30-lane-c` into `ws/m30-int`
+3. merge `ws/m31-lane-c-export-status` into `ws/m31-int`
 4. rerun the `Lane C` acceptance commands from merged state
 5. if merge fallout appears, resolve only syntax-level or context-level drift and record it in `merge-log.md`
+6. write `post-bc-freeze.json`
+7. write `lane-d-launch.md`
+8. fork `ws/m31-lane-d-validator-roadmap` from the recorded frozen SHA
 
 Parent must bounce work back to the owning lane for:
 
-- disagreement about wrapper harness membership versus wrapper test reality
-- disagreement about the exact two-family allowlist
-- disagreement about CI job boundaries or release-gating dependencies
-- any broadened TypeScript surface beyond the M30 contract
+- disagreement about the meaning of projected passport truth versus export/status truth
+- any attempt by `Lane C` to claim passport or semantic-review ownership
+- any portability API changes that should have been frozen in `Lane A`
+- any semantic broadening beyond seam portability containment
 
 Acceptance:
 
-- `Lane B` and `Lane C` are merged and re-verified from integration state
-- `merge-log.md` records merge SHAs, conflicts, and any stale-lane decisions
+- `Lane B` and `Lane C` are merged and re-verified from integration state.
+- `merge-log.md` records merge SHAs, conflicts, and stale-lane decisions.
+- `post-bc-freeze.json` exists.
 
-### WS-6 Final verification - parent only
+### WS-6 Validator wording and roadmap closeout - worker
 
-#### `task/m30-04-final-verify`
+#### `task/m31-d-validator-roadmap` on `ws/m31-lane-d-validator-roadmap`
 
-The parent must run this exact merged-state verification sequence from `ws/m30-int` before calling M30 done:
+Worker mission:
+
+- land validator wording only where clarity is missing and rewrite the roadmap so the public narrative matches the landed M31 contract already locked in `PLAN.md`.
+
+Owned paths:
+
+- `spec-core/src/validator.rs`
+- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+
+Worker must not do:
+
+- edit `spec-core/src/portability.rs`
+- edit `spec-core/src/passport.rs`
+- edit `spec-core/src/semantic_review.rs`
+- edit `spec-core/src/export.rs`
+- edit `spec-cli/src/**`
+- edit `PLAN.md`
+
+Required acceptance commands:
+
+```bash
+cargo test -p spec-core validator -- --color never
+rg -n "M31|M32" /Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/ai_promotion_and_multilanguage_milestones_v0.1.md /Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md
+! rg -n "M28|M29" /Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/ai_promotion_and_multilanguage_milestones_v0.1.md /Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md
+```
+
+Lane D must deliver:
+
+- validator wording distinguishes invalid authored seam shape from valid-but-contaminating backend-specific detail without pretending validation is the full portability decision engine.
+- roadmap text says `M31` then `M32`.
+- roadmap terminology aligns to the already-authoritative `PLAN.md` and landed code.
+
+### WS-7 Final verification - parent only
+
+#### `task/m31-04-final-verify`
+
+The parent must run this exact merged-state verification sequence from `ws/m31-int` before calling M31 done:
 
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test -p spec-core backend_execution -- --color never
+cargo test -p spec-core escape_hatch -- --color never
+cargo test -p spec-core passport -- --color never
+cargo test -p spec-core semantic_review -- --color never
+cargo test -p spec-core export -- --color never
+cargo test -p spec-core validator -- --color never
+cargo test -p spec-cli --test cli -- --color never
+cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- export examples/ecommerce --format json
+rg -n "M31|M32" docs/ai_promotion_and_multilanguage_milestones_v0.1.md PLAN.md
+! rg -n "M28|M29" docs/ai_promotion_and_multilanguage_milestones_v0.1.md PLAN.md
 cargo test --workspace
-cargo run -p spec-cli -- generate examples/ecommerce/units --output examples/ecommerce/src/generated
-cargo check --manifest-path examples/ecommerce/Cargo.toml
-cargo test -p xtask family_smoke_accepts_committed_wrapper_pipeline_scaffold_surfaces -- --color never
-cargo test -p spec-core --lib wrapper_pipeline_ -- --color never
-cargo test -p spec-cli --test cli wrapper_pipeline_truth_surface_ -- --color never
-cargo test -p spec-cli --test m14_regressions wrapper_pipeline_corpus_ -- --color never
-cargo test -p spec-cli --test m14_regressions wrapper_pipeline_regression_ -- --color never
-cargo test -p spec-core --lib monotone_up_classifier_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_corpus_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_regression_ -- --color never
-cargo xtask family smoke function.wrapper.pipeline.v1
-cargo xtask family prove function.wrapper.pipeline.v1
-cargo xtask family certify function.wrapper.pipeline.v1
-cargo xtask family prove function.wrapper.pipeline.v1 --target-language typescript
-cargo xtask family certify function.wrapper.pipeline.v1 --target-language typescript
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
 ```
 
 Rules:
@@ -571,44 +520,43 @@ Rules:
 - do not substitute broader or different commands for the sequence above
 - if any command fails, stop the run and write `blocked.json`
 
-### WS-7 Push and CI observation - parent only
+### WS-8 Push and CI observation - parent only
 
-#### `task/m30-05-push-observe`
+#### `task/m31-05-push-observe`
 
 Required parent actions:
 
 1. push the final integration branch or designated final candidate branch
 2. record remote, branch, SHA, and timestamp in `push-record.json`
 3. observe the CI run triggered by that exact pushed SHA
-4. record workflow name, run id or URL, observed SHA, and lane results in `ci-observation.json`
+4. record workflow name, run id or URL, observed SHA, and workspace result in `ci-observation.json`
 
 Acceptance:
 
 - push succeeded
 - CI ran on the exact pushed SHA
-- ordinary workspace lane is green
-- `monotone_up_pilot` is green
-- `wrapper_pipeline_pilot` is green
+- workspace CI is green
 
-### WS-8 Closeout - parent only
+### WS-9 Closeout - parent only
 
-#### `task/m30-06-closeout`
+#### `task/m31-06-closeout`
 
 Closeout must write `closeout.md` and answer plainly:
 
-1. Did one shared authored TypeScript contract survive on two promoted `kind:function` families?
-2. Did ordinary CI, `monotone_up_pilot`, and `wrapper_pipeline_pilot` all pass on the pushed SHA?
-3. Did wrapper proof reuse the existing family registry, packet root, harness, and artifact paths?
-4. What exact question is still unanswered after M30?
+1. Did `spec-core/src/portability.rs` become the sole seam portability composition point?
+2. Do passport, semantic review, export, and status now tell one aligned seam portability story?
+3. Do stale precedence and open-gate demotion still behave exactly as promised?
+4. Does the public roadmap now say `M31` then `M32` and describe the same boundary the code ships?
+5. What exact executable-truth question remains deferred to M32?
 
 Allowed closeout verdicts:
 
 - `EXPAND`
-  - the second-family proof passed cleanly and the repo is ready to consider the next bounded TypeScript question
+  - M31 landed cleanly and the repo is ready to take the next executable portability question as a separate M32 milestone
 - `NARROW`
-  - the wrapper proof worked, but one additional bounded follow-on is still required before broader expansion is honest
+  - the shared-core extraction landed, but one bounded follow-on inside the seam portability story still has to close before M32 is honest
 - `STOP`
-  - the second proof required a new packet root, repo-wide target-language support, hidden family-specific routing, or failed the verification floor
+  - the run needed scope expansion beyond seam containment, broke cross-surface truth alignment, or failed the verification floor
 
 ## Worker Return Contract
 
@@ -672,43 +620,15 @@ Parent-owned information that is offloaded to run-state and must be read from fi
 - CI observations
 - closeout evidence
 
-## Conflict Policy
-
-- The parent does not invent a hybrid milestone contract during merge.
-- If a worker result conflicts with `PLAN.md` or the relevant freeze record, the parent must do exactly one of:
-  - reject the lane and relaunch from the latest freeze
-  - apply the already-frozen authority literally if the lane drifted
-  - block the run if the conflict exposes real authority drift
-- Parent-resolved merge mechanics are limited to syntax-level or context-level drift.
-- Any conflict that changes packet truth, starter truth, harness ownership, allowlist scope, CI job boundaries, or command contracts is a bounce-back, not a creative merge.
-
-## Stale-Lane Invalidation
-
-Automatic invalidation rules:
-
-- If the wrapper packet file set, bucket names, or starter-contract expectations change after `Lane B` or `Lane C` is forked, both lanes are stale.
-- If the exact acceptance command floor for `Lane B` or `Lane C` changes after the lane is forked, that lane is stale.
-- If a post-fork parent decision changes the exact two-family allowlist or the required CI job contract, `Lane C` is stale.
-- `Lane C` is not stale merely because `Lane B` lands first; it becomes stale only if the parent changes the frozen CI or prove/certify contract that `Lane C` was launched against.
-
-Invalidation action:
-
-- discard the stale lane
-- recreate the branch and worktree from the newest freeze SHA
-- relaunch with the new prompt basis
-
-The parent does not hand-patch stale worker branches.
-
 ## Blocker Protocol
 
 Workers must stop and return a blocker when:
 
 - they need a file outside owned paths
-- they need to widen TypeScript support beyond the M30 closed surface
-- they need to synthesize wrapper TypeScript truth at test runtime
-- they cannot preserve the exact two-family allowlist
-- they cannot preserve distinct `monotone_up_pilot` and `wrapper_pipeline_pilot` jobs
+- they need to widen the implementation surface beyond the M31 closed surface
+- they need to change the frozen `portability.rs` API after `Lane A` freeze
 - they cannot satisfy acceptance commands with concrete evidence
+- they find overlapping external edits inside their owned surface after launch
 
 Worker blocker response:
 
@@ -734,7 +654,7 @@ Parent blocker response:
 - Worker authority does not come from:
   - stale plan snapshots inside seeded worktrees
   - prior worker chat history
-  - inferred milestone scope beyond M30
+  - inferred milestone scope beyond M31
 - If a seeded worktree copy of `PLAN.md` or `ORCH_PLAN.md` disagrees with the parent prompt or freeze records, the seeded copy is ignored.
 - Worker prompts must include only:
   - owned paths
@@ -745,7 +665,7 @@ Parent blocker response:
   - frozen launch SHA
   - applicable hard guards
 
-## Acceptance Gates
+## Tests And Acceptance
 
 ### Gate 0: baseline gate
 
@@ -753,15 +673,15 @@ Required:
 
 - `baseline.json` exists
 - live branch is `feat/corpus-expansion`
-- no unresolved dirty overlap exists inside the M30-owned surface
+- no unresolved dirty overlap exists inside the M31-owned surface
 
 ### Gate 1: post-`Lane A` freeze gate
 
 Required:
 
-- `Lane A` is merged and re-verified on `ws/m30-int`
+- `Lane A` is merged and re-verified on `ws/m31-int`
 - `lane-a-freeze.json` exists
-- the locked wrapper matrix covers all 12 unit specs across `aligned`, `drift`, `under_specified`, and `unsupported_near_miss`
+- the frozen `portability.rs` API is recorded
 - `lane-b-launch.md` and `lane-c-launch.md` exist and point at the same frozen SHA
 - `Lane B` and `Lane C` both fork from the same recorded SHA
 
@@ -771,75 +691,40 @@ Required:
 
 - `Lane B` acceptance commands pass on merged integration state
 - `Lane C` acceptance commands pass on merged integration state
-- no broadened TypeScript surface escaped the exact two-family allowlist and bounded CI contract
+- no downstream consumer reintroduced private portability logic
 
-### Gate 3: final verification gate
+### Gate 3: post-BC freeze gate
+
+Required:
+
+- `post-bc-freeze.json` exists
+- terminology needed by `Lane D` is frozen
+- `Lane D` forks from the exact post-BC frozen SHA
+
+### Gate 4: final verification gate
 
 Required:
 
 - the exact merged-state verification sequence passes
 - `proof-log.json` records every command and exit code
-- wrapper Rust and TypeScript family prove/certify both pass
-- monotone-up TypeScript prove/certify still passes unchanged
-
-### Gate 4: pushed-SHA CI observation gate
-
-Required:
-
-- push succeeded
-- `push-record.json` records the exact pushed SHA
-- `ci-observation.json` records that same SHA
-- `test`, `monotone_up_pilot`, and `wrapper_pipeline_pilot` are all green
-
-### Gate 5: closeout gate
-
-Required:
-
-- `closeout.md` exists
-- closeout answers the four M30 questions in this document
-- verdict is exactly one of `EXPAND`, `NARROW`, or `STOP`
-
-## Tests And Acceptance
-
-Operator-facing end-state expectations:
-
-- Packet truth
-  - all 12 wrapper packet unit specs under `semantic-families/function.wrapper.pipeline.v1/**` carry additive `body.typescript`
-  - the four required buckets remain complete and truthful: `aligned`, `drift`, `under_specified`, `unsupported_near_miss`
-  - wrapper leaf packet units remain truthful packet-local dependencies of wrapper units
-- Scaffold and smoke honesty
-  - scaffold output no longer describes wrapper starters as Rust-only if the committed packet carries TypeScript truth
-  - `cargo test -p xtask family_smoke_accepts_committed_wrapper_pipeline_scaffold_surfaces -- --color never`
-  - `cargo xtask family smoke function.wrapper.pipeline.v1`
-- Semantic-review and read-side proof coverage
-  - wrapper semantic-review assertions prove authored `body.typescript` is read through the shared packet surface
-  - wrapper truth-surface coverage remains green for command-matrix, stale-status/export, and unsupported near-miss neutrality
-  - wrapper copied-fixture corpus and regression suites stay green on committed bytes only
-  - monotone-up proof surfaces touched by M30 remain green
-- Two-family allowlist behavior
-  - `--target-language typescript` is accepted for exactly:
-    - `function.arithmetic_leaf.monotone_up.v1`
-    - `function.wrapper.pipeline.v1`
-  - all other families still fail fast on that flag
-  - prove/certify suite names, artifact paths, and report paths remain unchanged
-- CI separation and release gating
-  - `test`, `monotone_up_pilot`, and `wrapper_pipeline_pilot` are distinct CI jobs
-  - `wrapper_pipeline_pilot` runs the exact wrapper proof commands frozen in this contract
-  - downstream release gating depends on all three required jobs
-- Workspace boundary and bounded scope
-  - no repo-wide TypeScript build/test support is added
-  - no `.test.spec`, `kind:data`, or `kind:sum` widening is introduced
-  - no new packet root or TypeScript-specific artifact namespace is introduced
-  - any spillover remains mechanical and inside the bounded M30 surface
-- Run-state and audit completeness
-  - `baseline.json`, `authority-freeze.json`, `tasks.json`, `lane-a-freeze.json`, `lane-b-launch.md`, `lane-c-launch.md`, `merge-log.md`, `proof-log.json`, `push-record.json`, `ci-observation.json`, and `closeout.md` exist by the end of a successful run
-  - a parent can relaunch `Lane B` or `Lane C` from run-state artifacts alone without consulting worker chat history
+- the final merged diff stays inside the M31 closed surface plus compile-forced spillover
 
 ## Assumptions
 
-- The live implementation branch for this run remains `feat/corpus-expansion`.
-- The parent can create separate worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m30-wrapper-second-family-proof`.
-- The wrapper smoke-contract test name in `PLAN.md` is authoritative for M30:
-  - `family_smoke_accepts_committed_wrapper_pipeline_scaffold_surfaces`
-- If the CI workflow has multiple downstream release jobs, `Lane C` may update each affected `needs` list inside `.github/workflows/ci.yml`, but it may not otherwise redesign workflow topology.
-- If final verification exposes only mechanical merge fallout, the parent may fix that directly on `ws/m30-int`; any semantic change still belongs back in the owning lane.
+- The live branch at kickoff remains `feat/corpus-expansion`.
+- No unrelated external edits overlap the M31-owned surface after baseline without forcing a parent re-baseline.
+- `Lane A` can freeze a stable portability API that `Lane B` and `Lane C` can consume without reopening ownership.
+- Canonical seam fixtures under `examples/ecommerce` remain the main proof bed for status and export checks.
+- No new workflow topology is required for M31 beyond observing the normal pushed CI result.
+
+## Approval, Freeze, And Restart Rules
+
+- No worker launches before the parent writes `authority-freeze.json`.
+- `Lane B` and `Lane C` may launch only after `lane-a-freeze.json` exists.
+- `Lane D` may launch only after `post-bc-freeze.json` exists.
+- The parent may resolve only syntax-level or context-level merge drift. Semantic conflicts go back to the owning lane.
+- If `Lane A` changes the frozen `portability.rs` API after `Lane B` or `Lane C` is forked, both lanes are stale and must be recreated from the new freeze.
+- If `Lane B` changes any contract that `Lane C` was explicitly launched to consume, `Lane C` is stale and must be recreated from the newest freeze.
+- If overlapping third-party edits land anywhere inside the closed surface after a lane is forked, the parent records the overlap, invalidates the affected lanes, and relaunches from the newest relevant freeze.
+- The parent does not hand-patch stale worker branches.
+- Any request to widen scope beyond seam containment, change the closed surface, or redefine the M31/M32 boundary blocks the run until the authority plan is rewritten.
