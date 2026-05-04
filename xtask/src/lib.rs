@@ -805,10 +805,7 @@ mod tests {
         assert!(drift.contains("return pricing_discount_leaf_drift(taxed, discount_rate);"));
 
         let under_specified = fs::read_to_string(paths.root.join("fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec")).unwrap();
-        assert!(
-            under_specified
-                .contains("why: Adjust the checkout total using the current pricing inputs.")
-        );
+        assert!(under_specified.contains("why: todo"));
         assert!(under_specified.contains("typescript: |"));
 
         let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec")).unwrap();

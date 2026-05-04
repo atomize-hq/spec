@@ -404,7 +404,7 @@ fn wrapper_pipeline_total_wrapper_starter(
             ),
         ),
         "under_specified" => (
-            "Adjust the checkout total using the current pricing inputs.",
+            "todo",
             format!(
                 "{{\n        let discounted = pricing_discount_leaf_{bucket_suffix}(subtotal, discount_rate);\n        pricing_tax_leaf_{bucket_suffix}(discounted, tax_rate)\n    }}"
             ),
