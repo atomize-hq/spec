@@ -14,6 +14,10 @@ body:
     {
         value
     }
+  typescript: |
+    {
+        return value;
+    }
 local_tests:
   - id: round_unsupported_near_miss_identity
     expect: round(Decimal::new(1001, 2)) == Decimal::new(1001, 2)

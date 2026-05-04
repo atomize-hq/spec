@@ -1,6 +1,6 @@
 mod family;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use family::{
     certify, coverage, inventory, promotion_artifacts, prove, recommend, scaffold, smoke,
 };
@@ -101,10 +101,20 @@ enum FamilyCommand {
     },
     Prove {
         family: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
     },
     Certify {
         family: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum FamilyTargetLanguage {
+    Rust,
+    Typescript,
 }
 
 pub fn run() -> i32 {
@@ -152,8 +162,14 @@ where
                 promotion_artifacts::run_validate_artifact(workspace_root, &path)
             }
             FamilyCommand::Smoke { family } => smoke::run(workspace_root, &family),
-            FamilyCommand::Prove { family } => prove::run(workspace_root, &family),
-            FamilyCommand::Certify { family } => certify::run(workspace_root, &family),
+            FamilyCommand::Prove {
+                family,
+                target_language,
+            } => prove::run(workspace_root, &family, target_language),
+            FamilyCommand::Certify {
+                family,
+                target_language,
+            } => certify::run(workspace_root, &family, target_language),
         },
     }
 }
@@ -164,27 +180,27 @@ mod tests {
     use crate::family::{
         certify,
         harness::{
-            family_harness, family_harness_in, registered_harnesses_in_routing_order_from,
-            require_family_harness_in, validate_suite_ownership, FamilyHarness, LockedManifestArgs,
-            LockedManifestRouting, LockedManifestShape, ProveSuiteDefinition, ScaffoldDefinition,
-            SmokeContract, StarterCaseDefinition, StarterTemplate, CHAIN3_CERTIFY_SUITES,
-            CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES, CHAIN3_SUITE_SLUG,
-            MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES, MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW,
-            MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE, MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES,
-            MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG, MONOTONE_UP_CERTIFY_SUITES,
-            MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE, MONOTONE_UP_PROVE_SUITES,
-            MONOTONE_UP_SUITE_SLUG, TERMINAL_UNSUPPORTED_CATCH_ALL,
-            WRAPPER_PIPELINE_CERTIFY_SUITES, WRAPPER_PIPELINE_MUST_NOT_SHADOW,
-            WRAPPER_PIPELINE_PRECEDENCE, WRAPPER_PIPELINE_PROVE_SUITES,
-            WRAPPER_PIPELINE_SUITE_SLUG,
+            CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
+            CHAIN3_SUITE_SLUG, FamilyHarness, LockedManifestArgs, LockedManifestRouting,
+            LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
+            MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
+            MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
+            MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
+            MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
+            ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
+            TERMINAL_UNSUPPORTED_CATCH_ALL, WRAPPER_PIPELINE_CERTIFY_SUITES,
+            WRAPPER_PIPELINE_MUST_NOT_SHADOW, WRAPPER_PIPELINE_PRECEDENCE,
+            WRAPPER_PIPELINE_PROVE_SUITES, WRAPPER_PIPELINE_SUITE_SLUG, family_harness,
+            family_harness_in, registered_harnesses_in_routing_order_from,
+            require_family_harness_in, validate_suite_ownership,
         },
         inventory,
         layout::validate_packet_layout,
-        manifest::parse_manifest_file,
         manifest::Routing,
+        manifest::parse_manifest_file,
         paths::{
-            FamilyId, PacketPaths, FAMILY_COVERAGE_LATEST_PATH,
-            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, REQUIRED_BUCKETS,
+            FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId,
+            PacketPaths, REQUIRED_BUCKETS,
         },
         promotion_artifacts::{
             ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CandidateStatus,
@@ -192,26 +208,26 @@ mod tests {
             FamilyRecommendationAnalysisArtifact, FamilyRecommendationArtifact, GateStatus,
             GateSummary, HoldReason, MachineEvidence, MachineEvidenceKind, NextStepDetail,
             NextStepStatus, PromotionApprovals, PromotionArtifactKind, PromotionBlockerArtifact,
-            PromotionExecutionArtifact, PromotionReadiness, RankedCandidate,
-            RecommendationCandidateEntry, RecommendationConfidence, RecommendationDifficulty,
-            RecommendationLeverage, RecommendationStatus, TargetLanguage, UnsupportedClusterEntry,
-            RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            PromotionExecutionArtifact, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            RankedCandidate, RecommendationCandidateEntry, RecommendationConfidence,
+            RecommendationDifficulty, RecommendationLeverage, RecommendationStatus, TargetLanguage,
+            UnsupportedClusterEntry,
         },
         prove, recommend,
         report::{
-            certification_report_path, run_suite, CommandOutput, CommandRunner, PassFail,
-            SuiteDefinition, CERTIFY_ARTIFACT_NAME, PROVE_ARTIFACT_NAME,
+            CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME, PassFail,
+            SuiteDefinition, certification_report_path, run_suite,
         },
         routing::{
-            locked_manifest_routing_in, locked_routing_order_with_terminal,
-            locked_routing_order_with_terminal_from, routing_diagnostics_in, ManifestRoutingIssue,
-            RegistryRoutingIssue,
+            ManifestRoutingIssue, RegistryRoutingIssue, locked_manifest_routing_in,
+            locked_routing_order_with_terminal, locked_routing_order_with_terminal_from,
+            routing_diagnostics_in,
         },
         scaffold, smoke,
     };
     use spec_core::loader::load_file;
     use spec_core::semantic_review::{
-        evaluate_semantic_review, SemanticSupportStatus, UnsupportedFunctionReasonCode,
+        SemanticSupportStatus, UnsupportedFunctionReasonCode, evaluate_semantic_review,
     };
     use spec_core::validator::validate_full;
     use std::cell::RefCell;
@@ -585,6 +601,12 @@ mod tests {
                 unit_path.display()
             );
             assert_candidate_lists_path_once(&candidate, case.path);
+            let authored = fs::read_to_string(&unit_path).unwrap();
+            assert!(
+                authored.contains("  typescript: |"),
+                "missing additive typescript body in `{}`",
+                unit_path.display()
+            );
         }
 
         let aligned = fs::read_to_string(
@@ -599,9 +621,13 @@ mod tests {
         assert!(aligned.contains("deps:\n  - money/round"));
         assert!(aligned.contains("let taxed = subtotal + subtotal * rate;"));
         assert!(aligned.contains("round(taxed)"));
+        assert!(aligned.contains("typescript: |"));
+        assert!(aligned.contains("const taxed = subtotal + subtotal * rate;"));
+        assert!(aligned.contains("return round(taxed);"));
 
         let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec")).unwrap();
         assert!(unsupported.contains("if rate == Decimal::ZERO"));
+        assert!(unsupported.contains("if (rate === Decimal.ZERO)"));
         assert!(!candidate.contains("TODO: replace"));
     }
 
@@ -634,7 +660,7 @@ mod tests {
         let aligned = fs::read_to_string(&aligned_path).unwrap();
         write_string(
             &aligned_path,
-            &aligned.replacen("subtotal: Decimal", "amount: Decimal", 1),
+            &aligned.replacen("typescript: |", "javascript: |", 1),
         );
 
         let failures = smoke::collect_smoke_failures(
@@ -645,8 +671,7 @@ mod tests {
         .unwrap();
 
         assert!(failures.iter().any(|message| {
-            message.contains("scaffolded smoke-contract file")
-                && message.contains("subtotal: Decimal")
+            message.contains("scaffolded smoke-contract file") && message.contains("typescript: |")
         }));
     }
 
@@ -773,8 +798,10 @@ mod tests {
         assert!(drift.contains("pricing_discount_leaf_drift(taxed, discount_rate)"));
 
         let under_specified = fs::read_to_string(paths.root.join("fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec")).unwrap();
-        assert!(under_specified
-            .contains("why: Adjust the checkout total using the current pricing inputs."));
+        assert!(
+            under_specified
+                .contains("why: Adjust the checkout total using the current pricing inputs.")
+        );
 
         let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec")).unwrap();
         assert!(unsupported.contains("tax_rate.max(Decimal::ZERO)"));
@@ -945,6 +972,16 @@ mod tests {
             harness.scaffold.smoke.scaffold_file_contracts[0].path,
             "fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec"
         );
+        assert!(
+            harness.scaffold.smoke.scaffold_file_contracts[0]
+                .required_contents
+                .contains(&"typescript: |")
+        );
+        assert!(
+            harness.scaffold.smoke.scaffold_file_contracts[0]
+                .required_contents
+                .contains(&"return round(taxed);")
+        );
         assert_eq!(harness.suite_slug, MONOTONE_UP_SUITE_SLUG);
     }
 
@@ -1036,6 +1073,33 @@ mod tests {
                         && message.contains("xtask/src/family/harness.rs")),
                 "unexpected error variant for `{family}`"
             );
+        }
+    }
+
+    #[test]
+    fn family_prove_cli_accepts_target_language_flag() {
+        let cli = Cli::try_parse_from([
+            "xtask",
+            "family",
+            "prove",
+            "function.arithmetic_leaf.monotone_up.v1",
+            "--target-language",
+            "typescript",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Family(FamilyArgs {
+                command:
+                    FamilyCommand::Prove {
+                        family,
+                        target_language,
+                    },
+            }) => {
+                assert_eq!(family, "function.arithmetic_leaf.monotone_up.v1");
+                assert_eq!(target_language, FamilyTargetLanguage::Typescript);
+            }
+            other => panic!("unexpected command shape: {other:?}"),
         }
     }
 
@@ -1214,16 +1278,18 @@ mod tests {
 
         let diagnostics = routing_diagnostics_in(&registry, &alpha, &routing);
 
-        assert!(diagnostics
-            .registry
-            .issues
-            .contains(&RegistryRoutingIssue::DuplicatePrecedence {
-                precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
-                families: vec![
-                    "function.wrapper.pipeline.beta.v1".to_string(),
-                    "function.wrapper.pipeline.alpha.v1".to_string(),
-                ],
-            }));
+        assert!(
+            diagnostics
+                .registry
+                .issues
+                .contains(&RegistryRoutingIssue::DuplicatePrecedence {
+                    precedence: SYNTHETIC_ALPHA_HARNESS.routing.precedence,
+                    families: vec![
+                        "function.wrapper.pipeline.beta.v1".to_string(),
+                        "function.wrapper.pipeline.alpha.v1".to_string(),
+                    ],
+                })
+        );
     }
 
     #[test]
@@ -1397,10 +1463,12 @@ mod tests {
         let code = run_from(temp_dir.path(), ["xtask", "family", "new", "../bad"]);
 
         assert_eq!(code, 2);
-        assert!(fs::read_dir(temp_dir.path().join("semantic-families"))
-            .unwrap()
-            .next()
-            .is_none());
+        assert!(
+            fs::read_dir(temp_dir.path().join("semantic-families"))
+                .unwrap()
+                .next()
+                .is_none()
+        );
     }
 
     #[test]
@@ -1754,7 +1822,13 @@ gate_d = true
             normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
         ]);
 
-        prove::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+        prove::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap();
 
         let report_path = paths.artifacts.join(PROVE_ARTIFACT_NAME);
         let report = read_report(&report_path);
@@ -1794,8 +1868,13 @@ gate_d = true
             suite_outputs[failing_index] = String::new();
 
             let runner = prove_runner_with_suite_outputs(&suite_outputs);
-            let error =
-                prove::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+            let error = prove::run_with_runner(
+                temp_dir.path(),
+                family.as_str(),
+                FamilyTargetLanguage::Rust,
+                &runner,
+            )
+            .unwrap_err();
             assert!(matches!(error, XtaskError::ProveSuiteFailure(_)));
 
             let report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
@@ -1825,7 +1904,13 @@ gate_d = true
 
         let runner = success_certify_runner();
 
-        certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+        certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap();
 
         let certification_report = certification_report_path(&paths);
         let report = read_report(&certification_report);
@@ -1870,7 +1955,13 @@ gate_d = true
 
         let runner = success_certify_runner();
 
-        certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+        certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap();
 
         let prove_report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
         assert_eq!(prove_report["schema_version"], 3);
@@ -1929,8 +2020,13 @@ gate_d = true
         write_string(&cert_report_path, "{\"previous\":true}\n");
 
         let runner = success_certify_runner();
-        let error =
-            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+        let error = certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
                 if message.contains("manifest-local routing mismatch")
@@ -1971,8 +2067,13 @@ gate_d = true
         write_string(&cert_report_path, "{\"previous\":true}\n");
 
         let runner = success_certify_runner();
-        let error =
-            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+        let error = certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
                 if message.contains("manifest-local routing mismatch")
@@ -2015,9 +2116,14 @@ gate_d = true
         write_string(&cert_report_path, "{\"previous\":true}\n");
 
         let runner = success_certify_runner();
-        let error =
-            certify::run_with_runner_in(&registry, temp_dir.path(), family.as_str(), &runner)
-                .unwrap_err();
+        let error = certify::run_with_runner_in(
+            &registry,
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
                 if message.contains("registry-global routing incoherence")
@@ -2059,9 +2165,14 @@ gate_d = true
         write_string(&cert_report_path, "{\"previous\":true}\n");
 
         let runner = success_certify_runner();
-        let error =
-            certify::run_with_runner_in(&registry, temp_dir.path(), family.as_str(), &runner)
-                .unwrap_err();
+        let error = certify::run_with_runner_in(
+            &registry,
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
                 if message.contains("manifest-local routing mismatch")
@@ -2092,7 +2203,13 @@ gate_d = true
         seed_suite_sources(temp_dir.path(), true);
 
         let success_runner = success_certify_runner();
-        certify::run_with_runner(temp_dir.path(), family.as_str(), &success_runner).unwrap();
+        certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &success_runner,
+        )
+        .unwrap();
 
         let cert_report_path = certification_report_path(&paths);
         let previous_bytes = fs::read(&cert_report_path).unwrap();
@@ -2110,8 +2227,13 @@ gate_d = true
             "2026-04-27T18:20:00Z\n",
         );
 
-        let error = certify::run_with_runner(temp_dir.path(), family.as_str(), &failing_runner)
-            .unwrap_err();
+        let error = certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &failing_runner,
+        )
+        .unwrap_err();
         assert!(matches!(error, XtaskError::CertifySuiteFailure(_)));
         assert_eq!(fs::read(&cert_report_path).unwrap(), previous_bytes);
         let attempts_after = attempt_reports(&paths);
@@ -2127,11 +2249,13 @@ gate_d = true
         assert_eq!(failed_attempt["phase_status"], "fail");
         assert_eq!(failed_attempt["overall_status"], "fail");
         assert_report_status_invariants(&failed_attempt);
-        assert!(!paths
-            .artifacts
-            .join(CERTIFY_ARTIFACT_NAME)
-            .with_extension("tmp")
-            .exists());
+        assert!(
+            !paths
+                .artifacts
+                .join(CERTIFY_ARTIFACT_NAME)
+                .with_extension("tmp")
+                .exists()
+        );
     }
 
     #[test]
@@ -2398,7 +2522,7 @@ gate_d = true
                         expected_leverage: "Already promoted and therefore informational only."
                             .to_string(),
                         expected_risks: vec![
-                            "Not approval-eligible from this artifact.".to_string()
+                            "Not approval-eligible from this artifact.".to_string(),
                         ],
                     },
                 ],
@@ -2419,8 +2543,8 @@ gate_d = true
     }
 
     #[test]
-    fn artifact_schema_rejects_recommendation_when_inventory_hash_is_recomputed_from_different_bytes(
-    ) {
+    fn artifact_schema_rejects_recommendation_when_inventory_hash_is_recomputed_from_different_bytes()
+     {
         let temp_dir = workspace_root();
         seed_inventory_repo_truth(temp_dir.path());
 
@@ -2444,7 +2568,7 @@ gate_d = true
                     evidence: vec!["spec-core/src/semantic_review.rs".to_string()],
                     expected_leverage: "Two-step wrapper promotion target.".to_string(),
                     expected_risks: vec![
-                        "Inventory hash mismatch should fail validation.".to_string()
+                        "Inventory hash mismatch should fail validation.".to_string(),
                     ],
                 }],
             },
@@ -2616,8 +2740,8 @@ gate_d = true
     }
 
     #[test]
-    fn artifact_schema_rejects_ranked_recommendation_analysis_when_first_candidate_is_ready_with_low_confidence(
-    ) {
+    fn artifact_schema_rejects_ranked_recommendation_analysis_when_first_candidate_is_ready_with_low_confidence()
+     {
         let temp_dir = workspace_root();
         let (coverage_path, coverage_sha256) =
             seed_recommendation_analysis_coverage(temp_dir.path());
@@ -3108,8 +3232,8 @@ gate_d = true
     }
 
     #[test]
-    fn recommendation_policy_returns_insufficient_real_corpus_when_discoverable_candidates_have_zero_real_hits(
-    ) {
+    fn recommendation_policy_returns_insufficient_real_corpus_when_discoverable_candidates_have_zero_real_hits()
+     {
         let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
             "zero-real-held-cluster",
             UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
@@ -3142,8 +3266,8 @@ gate_d = true
     }
 
     #[test]
-    fn recommendation_policy_returns_no_strong_candidate_when_discoverable_candidates_are_held_with_real_pressure(
-    ) {
+    fn recommendation_policy_returns_no_strong_candidate_when_discoverable_candidates_are_held_with_real_pressure()
+     {
         let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
             "held-real-pressure-cluster",
             UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
@@ -3296,8 +3420,8 @@ gate_d = true
     }
 
     #[test]
-    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held(
-    ) {
+    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held()
+     {
         let temp_dir = workspace_root();
         seed_locked_recommendation_workspace(temp_dir.path());
 

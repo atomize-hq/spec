@@ -1171,6 +1171,7 @@ mod tests {
             imports: imports.into_iter().map(str::to_string).collect(),
             body: Body {
                 rust: "{ }".to_string(),
+                typescript: None,
             },
             local_tests: vec![],
             links: None,
@@ -1199,6 +1200,7 @@ mod tests {
                 .collect(),
             body: Body {
                 rust: body.to_string(),
+                typescript: None,
             },
             local_tests: vec![],
             links: None,
@@ -1355,6 +1357,25 @@ mod tests {
     }
 
     #[test]
+    fn generate_code_ignores_authored_typescript_body() {
+        let spec = ResolvedSpec {
+            body_typescript: Some("return 0;".to_string()),
+            ..test_spec_with(
+                vec![],
+                vec!["rust_decimal::Decimal"],
+                "{\n    Decimal::ZERO\n}",
+            )
+        };
+
+        let code = generate_code(&spec).unwrap();
+        assert_eq!(
+            code,
+            "use rust_decimal::Decimal;\n\npub fn apply_discount() {\n    Decimal::ZERO\n}\n"
+        );
+        assert!(!code.contains("return 0;"));
+    }
+
+    #[test]
     fn test_generate_code_prepends_use_statements() {
         let spec = test_spec(
             vec!["money/round", "utils/math/normalize"],
@@ -1462,6 +1483,7 @@ mod tests {
             imports: vec![],
             body: Body {
                 rust: "{\n    round(value)\n}".to_string(),
+                typescript: None,
             },
             local_tests: vec![],
             links: None,

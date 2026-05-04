@@ -1,6 +1,4 @@
-use crate::backend_execution::{
-    is_helper_or_example_method, summarize_backend_execution_markers,
-};
+use crate::backend_execution::{is_helper_or_example_method, summarize_backend_execution_markers};
 use crate::generator::{lower_data_seam, lower_sum_seam};
 use crate::normalizer::normalize_unit;
 use crate::types::{
@@ -315,6 +313,8 @@ pub struct SemanticAuthoredFunctionPacket {
     pub returns: Option<String>,
     pub invariants: Vec<String>,
     pub deps: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_typescript: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1951,6 +1951,7 @@ fn build_authored_function_packet(spec: &LoadedSpec) -> Option<SemanticAuthoredF
             .map(|contract| contract.invariants.clone())
             .unwrap_or_default(),
         deps: function.deps,
+        body_typescript: function.body_typescript.map(|body| body.trim().to_string()),
     })
 }
 
@@ -2185,6 +2186,12 @@ fn authored_function_citations(authored: &SemanticAuthoredFunctionPacket) -> Vec
         citations.push(SemanticCitation {
             path: "deps".to_string(),
             summary: format!("{} declared dep(s)", authored.deps.len()),
+        });
+    }
+    if authored.body_typescript.is_some() {
+        citations.push(SemanticCitation {
+            path: "body.typescript".to_string(),
+            summary: "authored TypeScript body present".to_string(),
         });
     }
 
@@ -4168,6 +4175,7 @@ mod tests {
                 imports: vec!["rust_decimal::Decimal".to_string()],
                 body: Body {
                     rust: body.to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -5600,6 +5608,30 @@ mod tests {
         assert_eq!(
             review.evaluator_scope,
             EvaluatorScope::SupportedFunctionSurface
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_reads_authored_typescript_without_spec_version_sentinel() {
+        let mut spec = apply_tax_function_spec();
+        spec.spec.spec_version = None;
+        spec.spec.body.typescript =
+            Some("return round(subtotal.add(subtotal.mul(rate)));".to_string());
+
+        let authored = build_authored_function_packet(&spec).unwrap();
+        assert_eq!(
+            authored.body_typescript.as_deref(),
+            Some("return round(subtotal.add(subtotal.mul(rate)));")
+        );
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert!(
+            review
+                .authored_surfaces
+                .iter()
+                .any(|citation| citation.path == "body.typescript"),
+            "{review:?}"
         );
     }
 

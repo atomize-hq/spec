@@ -9,13 +9,6 @@ use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_esca
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
 use crate::molecule_evidence::MoleculeEvidence;
-use crate::{
-    AUTHORED_SPEC_VERSION, Result, SpecError,
-    backend_execution::{
-        BackendExecutionMarkerKind, collect_backend_execution_markers,
-        compute_backend_execution_digest as compute_backend_execution_digest_from_boundary,
-    },
-};
 use crate::semantic_review::SemanticProjectionMode;
 use crate::semantic_review::{
     SemanticReview, SemanticReviewContext, project_semantic_review_with_context,
@@ -23,6 +16,13 @@ use crate::semantic_review::{
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
+};
+use crate::{
+    AUTHORED_SPEC_VERSION, Result, SpecError,
+    backend_execution::{
+        BackendExecutionMarkerKind, collect_backend_execution_markers,
+        compute_backend_execution_digest as compute_backend_execution_digest_from_boundary,
+    },
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -1085,6 +1085,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: "{ 42 }".to_string(),
+                    typescript: None,
                 },
                 local_tests: local_tests
                     .into_iter()
@@ -1256,6 +1257,7 @@ mod tests {
     round((subtotal - subtotal * rate).max(Decimal::ZERO))
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -1295,6 +1297,7 @@ mod tests {
     round(subtotal + subtotal * rate)
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -1343,6 +1346,7 @@ mod tests {
     apply_tax(discounted, tax_rate)
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -1504,6 +1508,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: Some("0.3.0".to_string()),
             },

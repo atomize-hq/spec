@@ -121,6 +121,7 @@ mod tests {
             imports: vec![],
             body: Body {
                 rust: "pub fn apply_discount() {}".to_string(),
+                typescript: None,
             },
             local_tests: vec![],
             links: None,

@@ -229,6 +229,9 @@ const MONOTONE_UP_SMOKE_FILE_CONTRACTS: [SmokeFileContract; 1] = [SmokeFileContr
         "deps:\n  - money/round",
         "let taxed = subtotal + subtotal * rate;",
         "round(taxed)",
+        "typescript: |",
+        "const taxed = subtotal + subtotal * rate;",
+        "return round(taxed);",
     ],
     forbidden_contents: &[],
 }];
@@ -553,7 +556,11 @@ pub(crate) const MONOTONE_UP_PROVE_SUITES: [SuiteDefinition; 3] = [
         ],
         expected_tests: &[
             "semantic_review::tests::monotone_up_classifier_aligned_fixture_routes_to_promoted_leaf",
+            "semantic_review::tests::monotone_up_classifier_cross_library_canonical_example_routes_to_promoted_leaf_without_invariants",
+            "semantic_review::tests::monotone_up_classifier_cross_library_control_flow_near_miss_stays_unsupported",
             "semantic_review::tests::monotone_up_classifier_drift_fixture_reports_semantic_drift",
+            "semantic_review::tests::monotone_up_classifier_helper_then_clamp_routes_to_promoted_leaf",
+            "semantic_review::tests::monotone_up_classifier_reads_authored_typescript_without_spec_version_sentinel",
             "semantic_review::tests::monotone_up_classifier_under_specified_fixture_reports_vague_truth",
             "semantic_review::tests::monotone_up_classifier_unsupported_near_miss_stays_unsupported",
         ],
