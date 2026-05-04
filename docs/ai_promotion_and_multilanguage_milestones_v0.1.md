@@ -16,8 +16,8 @@ milestones:
 - `M26` — landed
 - `M27` — landed
 - `M27.5` — next
-- `M28` — after recommendation-quality hardening
-- `M29` — likely follow-on, not locked yet
+- `M31` — after recommendation-quality hardening
+- `M32` — likely follow-on, not locked yet
 
 The shared premise remains the same:
 
@@ -222,41 +222,39 @@ in a small corpus."
 - that the next family is definitely known already
 - that shared-core extraction should start immediately afterward
 
-### M28 — Shared-Core Extraction + Escape-Hatch Containment
+### M31 — Shared-Core Extraction + Escape-Hatch Containment
 **Status:** After M27.5
 
 **Why this is the next milestone now**
 
-The gap is clearer than it was when this document was first written.
+The next blocker is still architectural, but the code has narrowed it more
+precisely than this roadmap originally did.
 
 If M27 and M27.5 land honestly, the repo should know both:
 
 - which unsupported function pressure is real
 - whether the recommendation surface is strong enough to trust
 
-But that still does **not** mean it should immediately jump to a second
-language.
+That still does **not** justify treating second-language execution as already in
+scope.
 
-The next blocker is architectural:
+M31 is the seam-only milestone that has to land first:
 
-- how much of the family kernel is genuinely shared
-- where Rust-specific lowering or escape-hatch details still leak into the core
-- what review gate must exist before backend-specific escape hatches are allowed
-  to participate in portability claims
-
-That is now a named milestone, not a hand-wave.
+- extract the shared core so the seam portability boundary is explicit
+- contain Rust-specific lowering and escape-hatch detail instead of letting it
+  blur into shared authored shape
+- keep the read-side truth honest about when backend-specific detail contaminates
+  portability claims
 
 **What it needs to land on**
 
-- The family-promotion core is explicitly split into:
-  - shared family semantics and ranking logic
-  - target-language lowering details
-  - approval / artifact / proof workflow that should remain target-agnostic
-- The repo defines the escape-hatch review gate before second-language work:
-  - what qualifies as an allowed escape hatch
-  - what tests and evidence an escape hatch must carry
-  - what conditions must hold before a Rust-specific lowering detail is treated
-    as contained instead of contagious
+- The seam portability contract is explicit enough that shared-core extraction is
+  a real code boundary, not a slogan.
+- Illegal shared-surface authored shapes stay hard validation errors.
+- Allowed backend-specific seam detail remains valid authored input, but it is
+  not automatically treated as portability-safe.
+- Escape-hatch containment is defined before second-language work tries to reuse
+  the same proof surfaces.
 - The canonical example and corpus inputs are treated as compatibility surfaces,
   not demo garnish, when the shared-core boundary changes.
 
@@ -264,31 +262,34 @@ That is now a named milestone, not a hand-wave.
 
 - The repo is no longer pretending that "Rust-first" automatically means
   "language-portable."
-- The team has identified which parts of the promotion system are genuinely
-  reusable and which parts are target-specific debt that must stay boxed.
-- Second-language work would have a real safety rail instead of cargo-cult
-  portability language.
+- The team has identified which seam surfaces are shared truth and which
+  backend-specific details must stay contained.
+- Second-language work would start from an honest shared-core boundary rather
+  than cargo-cult portability language.
 
 **What this does not prove**
 
 - That a second language already works
-- That broad shared semantics have been re-proved outside Rust
-- That every escape hatch is now elegant
+- That function portability is solved
+- That M32 has already been earned
 
-### M29 — Potential Second-Language Promotion Pilot
+### M32 — Executable-Truth Question For Second-Language Promotion
 **Status:** Likely follow-on, not locked
 
-If M27 and M28 land cleanly, the most plausible M29 remains a second-language
-pilot, but it should be treated as conditional, not ceremonial.
+If M27.5 and M31 land cleanly, the next milestone becomes an executable-truth
+question rather than a retroactive part of M31.
+
+M32 is where the repo can ask, with live proof surfaces rather than aspiration,
+whether one honest second-language promotion path actually works.
 
 **Likely shape**
 
-- Re-prove a small set of already-understood family shapes in a second target
+- Re-prove a small set of already-understood shapes in a second target
   language.
 - Keep packet lifecycle, artifact contracts, approval surfaces, and proof-gate
   semantics as shared as possible.
-- Use the pilot to expose which assumptions still remain Rust-specific even after
-  M28 containment work.
+- Use the pilot to expose which assumptions still remain target-specific after
+  M31 containment work.
 
 **What it would need to land on**
 
@@ -297,12 +298,12 @@ pilot, but it should be treated as conditional, not ceremonial.
 - The resulting proof surfaces show:
   - what semantics are genuinely shared
   - what target-specific lowering assumptions still remain
-  - whether the M28 escape-hatch boundary actually held
+  - whether the M31 escape-hatch boundary actually held
 
 **What it would prove**
 
-- The system is starting to become a language-portable semantic family platform,
-  not just a Rust promotion rig.
+- The system is starting to answer the executable-truth question for
+  second-language promotion instead of merely describing the boundary in prose.
 
 **What it would still not prove**
 
@@ -316,15 +317,15 @@ pilot, but it should be treated as conditional, not ceremonial.
 2. `M27` second, because next-family choice should become evidence-driven.
 3. `M27.5` third, because evidence-driven is not the same thing as
    recommendation-quality good enough for roadmap steering.
-4. `M28` next, because second-language work without shared-core extraction and
+4. `M31` next, because second-language work without shared-core extraction and
    escape-hatch containment would be fake confidence.
-5. `M29` only after M27.5 and M28 narrow the portability seam enough to run one
+5. `M32` only after M27.5 and M31 narrow the portability seam enough to run one
    honest second-language pilot.
 
 ## One-Line Summary
 
 `M26` made family promotion AI-operable, `M27` made next-family choice
-evidence-driven, `M27.5` hardens recommendation quality, `M28` should isolate
-the shared core from Rust-specific escape hatches, and `M29` is the likely
+evidence-driven, `M27.5` hardens recommendation quality, `M31` isolates
+the shared core from Rust-specific escape hatches, and `M32` is the likely
 point where the repo can attempt one honest
 second-language promotion pilot.

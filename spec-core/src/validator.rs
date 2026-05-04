@@ -494,17 +494,17 @@ fn validate_data_escape_hatches(spec: &LoadedSpec) -> Result<()> {
     if !spec.spec.imports.is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:data must not use top-level imports; Rust-specific escape hatches are limited to methods[].lowering.rust.body and backends.rust.derives",
+            "kind:data must not use top-level imports; that is an invalid shared-surface authored shape. Rust-specific details are only authored in methods[].lowering.rust.body and backends.rust.derives, and any portability contamination is decided later",
         ));
     }
     reject_top_level_typescript_body(
         spec,
-        "kind:data must not declare top-level body.typescript; shared seam behavior belongs in methods[].lowering.rust.body",
+        "kind:data must not declare top-level body.typescript; that is an invalid shared-surface authored shape, not a portability verdict",
     )?;
     if !spec.spec.body.rust.trim().is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:data must leave body.rust empty; shared seam behavior belongs in methods[].lowering.rust.body",
+            "kind:data must leave top-level body.rust empty; that authored slot is outside the shared seam surface. Rust-specific lowering belongs in methods[].lowering.rust.body, and portability consequences are decided later",
         ));
     }
 
@@ -527,17 +527,17 @@ fn validate_sum_escape_hatches(spec: &LoadedSpec) -> Result<()> {
     if !spec.spec.imports.is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:sum must not use top-level imports; Rust-specific escape hatches are limited to methods[].lowering.rust.body and backends.rust.derives",
+            "kind:sum must not use top-level imports; that is an invalid shared-surface authored shape. Rust-specific details are only authored in methods[].lowering.rust.body and backends.rust.derives, and any portability contamination is decided later",
         ));
     }
     reject_top_level_typescript_body(
         spec,
-        "kind:sum must not declare top-level body.typescript; shared seam behavior belongs in methods[].lowering.rust.body",
+        "kind:sum must not declare top-level body.typescript; that is an invalid shared-surface authored shape, not a portability verdict",
     )?;
     if !spec.spec.body.rust.trim().is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:sum must leave body.rust empty; shared seam behavior belongs in methods[].lowering.rust.body",
+            "kind:sum must leave top-level body.rust empty; that authored slot is outside the shared seam surface. Rust-specific lowering belongs in methods[].lowering.rust.body, and portability consequences are decided later",
         ));
     }
     if spec.spec.extensions.data.is_some() {
@@ -2583,7 +2583,7 @@ local_tests:
 
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
-            err.contains("kind:data must leave body.rust empty"),
+            err.contains("kind:data must leave top-level body.rust empty"),
             "{err}"
         );
     }
