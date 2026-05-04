@@ -1,47 +1,51 @@
 use crate::config::{
-    ResolvedLibrary, WorkspaceConfigError, WorkspaceContext, load_workspace_context,
-    read_workspace_config_file, repo_root_for, rewrite_workspace_config_relative_paths,
+    load_workspace_context, read_workspace_config_file, repo_root_for,
+    rewrite_workspace_config_relative_paths, ResolvedLibrary, WorkspaceConfigError,
+    WorkspaceContext,
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
 use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
 use spec_core::export::{build_export_bundle, build_plan_export_bundle};
 use spec_core::generator::{
-    GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
+    clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
     generate_unit_code_with_options, safe_output_path_with_project_root, write_generated_file,
+    GenerateOptions,
 };
-use spec_core::graph::{ProjectedUnitRef, project_unit, top_level_deps};
+use spec_core::graph::{project_unit, top_level_deps, ProjectedUnitRef};
 use spec_core::loader::{
-    DirectoryLoadReport, discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec,
-    load_directory_report, load_directory_report_bounded, load_file, load_molecule_test_directory,
+    discover_library_roots_bounded, is_molecule_test_spec, is_unit_spec, load_directory_report,
+    load_directory_report_bounded, load_file, load_molecule_test_directory,
     load_molecule_test_directory_report, load_molecule_test_directory_report_bounded,
-    load_molecule_test_file, load_plan_file,
+    load_molecule_test_file, load_plan_file, DirectoryLoadReport,
 };
 use spec_core::molecule_evidence::{
-    MoleculeEvidence, MoleculeEvidenceStatus, build_molecule_evidence,
-    ensure_gitignore_entry as ensure_molecule_evidence_gitignore_entry,
+    build_molecule_evidence, ensure_gitignore_entry as ensure_molecule_evidence_gitignore_entry,
     molecule_evidence_is_current_pass, molecule_evidence_is_stale, read_molecule_evidence,
-    write_molecule_evidence,
+    write_molecule_evidence, MoleculeEvidence, MoleculeEvidenceStatus,
 };
 use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
-    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
-    PassportProjectionContext, PassportTestResult, apply_projected_passport_truth,
-    build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
-    compute_contract_hash, ensure_gitignore_entry, project_passport_truth_with_context,
-    read_passport, rfc3339_now, write_passport,
+    apply_projected_passport_truth, build_passport_preserving_proof_state_with_context,
+    build_passport_with_evidence, compute_contract_hash, ensure_gitignore_entry,
+    project_passport_truth_with_context, read_passport, rfc3339_now, write_passport,
+    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker, PassportMarkerId,
+    PassportProjectionContext, PassportTestResult,
 };
 use spec_core::pipeline::{
-    ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
-    parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
+    cargo_available, output_module_prefix, parse_cargo_test_output, run_cargo_build,
+    run_cargo_test, workspace_root_for, zero_tests_ran, ParsedCargoTestResult, Verbosity,
 };
 use spec_core::plan::{
-    PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
+    build_plan_report, PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact,
+};
+use spec_core::portability::{
+    project_portability_truth, PortabilityMarkerKind, PortabilityProjectionContext,
 };
 use spec_core::semantic_review::{
-    SemanticHealthEffect, SemanticProjectionMode, SemanticReview, SemanticReviewContext,
-    semantic_health_effect, semantic_review_summary,
+    semantic_health_effect, semantic_review_summary, SemanticHealthEffect, SemanticProjectionMode,
+    SemanticReview, SemanticReviewContext,
 };
 #[cfg(test)]
 use spec_core::types::ResolvedSpec;
@@ -49,10 +53,10 @@ use spec_core::types::{
     DepRef, LoadedMoleculeTest, LoadedSpec, NormalizedUnit, QualifiedUnitRef, ResolvedMoleculeTest,
 };
 use spec_core::validator::{
-    QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
-    validate_molecule_test_covers, validate_molecule_test_semantic,
-    validate_no_duplicate_molecule_test_ids, validate_no_duplicate_qualified_ids,
-    validate_qualified_deps_exist_with_options,
+    check_spec_versions, validate_full_with_options, validate_molecule_test_covers,
+    validate_molecule_test_semantic, validate_no_duplicate_molecule_test_ids,
+    validate_no_duplicate_qualified_ids, validate_qualified_deps_exist_with_options,
+    QualifiedLoadedSpec, ValidationOptions,
 };
 #[cfg(test)]
 use spec_core::validator::{validate_deps_exist_with_options, validate_no_duplicate_ids};
@@ -435,7 +439,7 @@ impl Command {
                     &context,
                 )
             }
-            Self::Export(args) => export_command(&args.path, args.output.as_deref()),
+            Self::Export(args) => export_command(&args.path, args.output.as_deref(), args.format),
             Self::Plan(args) => match args.command {
                 PlanCommand::Validate(args) => plan_validate_command(&args.path, args.format),
                 PlanCommand::Export(args) => {
@@ -543,6 +547,8 @@ pub struct ExportArgs {
     pub path: PathBuf,
     #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
     pub output: Option<PathBuf>,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+    pub format: OutputFormat,
 }
 
 #[derive(Args, Debug)]
@@ -859,6 +865,27 @@ fn apply_semantic_review_to_health(
             health
         }
     }
+}
+
+fn passport_markers_from_portability(
+    portability: Option<&spec_core::portability::PortabilityProjection>,
+) -> Option<Vec<PassportMarker>> {
+    let markers = portability?
+        .markers
+        .iter()
+        .map(|marker| PassportMarker {
+            id: match marker.kind {
+                PortabilityMarkerKind::DomainLowering
+                | PortabilityMarkerKind::ProofHelperLowering => {
+                    PassportMarkerId::MethodLoweringRustBody
+                }
+                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
+            },
+            path: marker.path.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    (!markers.is_empty()).then_some(markers)
 }
 
 fn freshness_stale_reason(freshness: Option<&PassportFreshness>) -> Option<String> {
@@ -1275,6 +1302,11 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             specs_by_id: &specs_by_id,
             semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
+        let portability_context = PortabilityProjectionContext {
+            molecule_tests: &molecule_report.tests,
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
 
         let mut units = Vec::with_capacity(validation_specs.root_specs.len());
         for spec in &validation_specs.root_specs {
@@ -1298,9 +1330,11 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 &semantic_review_context,
             );
             let freshness = projected_truth.freshness.clone();
-            let markers = projected_truth.markers.clone();
-            let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
             let semantic_review = projected_truth.semantic_review.clone();
+            let portability =
+                project_portability_truth(spec, passport.as_ref(), &portability_context);
+            let markers = passport_markers_from_portability(portability.as_ref());
+            let escape_hatch_gate = portability.and_then(|projection| projection.escape_hatch_gate);
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
@@ -1469,7 +1503,11 @@ fn suppress_cross_library_dep_not_found_for_failed_imports(
         .collect()
 }
 
-fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
+fn export_command(path: &Path, output: Option<&Path>, format: OutputFormat) -> Result<()> {
+    if format != OutputFormat::Json {
+        bail!("spec export only supports --format json");
+    }
+
     let context = load_workspace_context(path)?;
     let mut validation_specs = collect_validation_specs(path, &context)?;
     let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
@@ -4949,7 +4987,11 @@ fn count_unique_files(errors: &DiagnosticMap) -> usize {
 }
 
 fn pluralize(count: usize) -> &'static str {
-    if count == 1 { "" } else { "s" }
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
 }
 
 #[cfg(test)]

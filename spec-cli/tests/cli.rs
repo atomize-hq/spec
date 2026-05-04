@@ -1,18 +1,18 @@
 use serde_json::Value;
-use spec_core::AUTHORED_SPEC_VERSION;
 use spec_core::loader::{load_file, load_molecule_test_file};
 use spec_core::molecule_evidence::{
-    MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
+    build_molecule_evidence, write_molecule_evidence, MoleculeEvidenceStatus,
 };
 use spec_core::passport::{
-    PassportEvidence, PassportProjectionContext, PassportTestResult,
     apply_projected_passport_truth, build_passport_with_evidence, compute_contract_hash,
     project_passport_truth, read_passport as read_passport_record, write_passport,
+    PassportEvidence, PassportProjectionContext, PassportTestResult,
 };
 use spec_core::semantic_review::{
     EvaluatorScope, SemanticProjectionMode, SemanticReasonCode, SemanticReview,
     SemanticSupportStatus, SemanticVerdict, UnsupportedFunctionReasonCode,
 };
+use spec_core::AUTHORED_SPEC_VERSION;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
@@ -5191,6 +5191,60 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
             .all(|test| test["status"] == "untested"),
         "{json}"
     );
+}
+
+#[test]
+fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    let passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let mut seeded_passport = read_passport_json(&passport_path);
+    seeded_passport["escape_hatch_gate"] = serde_json::json!({
+        "status": "open",
+        "required_surfaces": ["atom", "molecule"],
+        "present_surfaces": ["atom"],
+        "missing_surfaces": ["molecule"],
+        "reason": "missing required escape-hatch proof: molecule"
+    });
+    fs::write(
+        &passport_path,
+        serde_json::to_string_pretty(&seeded_passport).unwrap(),
+    )
+    .unwrap();
+
+    let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert_output_success(
+        "status should ignore stale checked-in gate claims and stay green",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let status_unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .unwrap();
+    assert_eq!(status_unit["status"], "valid", "{status_json}");
+    assert_eq!(
+        status_unit["escape_hatch_gate"]["status"], "closed",
+        "{status_json}"
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
+    assert_output_success(
+        "export should ignore stale checked-in gate claims",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .unwrap();
+
+    assert_eq!(
+        exported_passport["escape_hatch_gate"],
+        status_unit["escape_hatch_gate"]
+    );
+    assert_eq!(exported_passport["escape_hatch_gate"]["status"], "closed");
 }
 
 #[test]
