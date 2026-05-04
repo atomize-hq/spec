@@ -207,12 +207,15 @@ fn validate_target_language(
     match target_language {
         FamilyTargetLanguage::Rust => Ok(()),
         FamilyTargetLanguage::Typescript
-            if family.as_str() == "function.arithmetic_leaf.monotone_up.v1" =>
+            if matches!(
+                family.as_str(),
+                "function.arithmetic_leaf.monotone_up.v1" | "function.wrapper.pipeline.v1"
+            ) =>
         {
             Ok(())
         }
         FamilyTargetLanguage::Typescript => Err(XtaskError::InvalidInput(format!(
-            "{command} supports --target-language typescript only for function.arithmetic_leaf.monotone_up.v1"
+            "{command} supports --target-language typescript only for function.arithmetic_leaf.monotone_up.v1 and function.wrapper.pipeline.v1"
         ))),
     }
 }
