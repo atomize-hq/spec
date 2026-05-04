@@ -5,10 +5,14 @@
 //! `.unit.spec` source file. Passports are derived artifacts (gitignored) and
 //! are written atomically only after all generation succeeds.
 
-use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_escape_hatch_gate};
+use crate::escape_hatch::EscapeHatchGate;
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
 use crate::molecule_evidence::MoleculeEvidence;
+use crate::portability::{
+    PortabilityMarker, PortabilityMarkerKind, PortabilityProjection, PortabilityProjectionContext,
+    collect_portability_markers, compute_portability_backend_digest, project_portability_truth,
+};
 use crate::semantic_review::SemanticProjectionMode;
 use crate::semantic_review::{
     SemanticReview, SemanticReviewContext, project_semantic_review_with_context,
@@ -17,13 +21,7 @@ use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
 };
-use crate::{
-    AUTHORED_SPEC_VERSION, Result, SpecError,
-    backend_execution::{
-        BackendExecutionMarkerKind, collect_backend_execution_markers,
-        compute_backend_execution_digest as compute_backend_execution_digest_from_boundary,
-    },
-};
+use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -496,28 +494,12 @@ pub fn compute_authored_truth_digest(spec: &LoadedSpec) -> Option<String> {
 
 /// Compute the backend-only execution digest for seam escape hatches.
 pub fn compute_backend_execution_digest(spec: &LoadedSpec) -> Option<String> {
-    compute_backend_execution_digest_from_boundary(spec).map(|digest| format!("sha256:{digest}"))
+    compute_portability_backend_digest(spec)
 }
 
 /// Compute explicit backend-only markers for seam units.
 pub fn compute_passport_markers(spec: &LoadedSpec) -> Option<Vec<PassportMarker>> {
-    let markers = collect_backend_execution_markers(spec)
-        .into_iter()
-        .map(|marker| PassportMarker {
-            id: match marker.kind {
-                BackendExecutionMarkerKind::DomainLowering
-                | BackendExecutionMarkerKind::ProofHelperLowering => {
-                    PassportMarkerId::MethodLoweringRustBody
-                }
-                BackendExecutionMarkerKind::BackendRustDerives => {
-                    PassportMarkerId::BackendRustDerives
-                }
-            },
-            path: marker.path,
-        })
-        .collect::<Vec<_>>();
-
-    (!markers.is_empty()).then_some(markers)
+    passport_markers_from_portability_markers(collect_portability_markers(spec))
 }
 
 /// Default proof-coverage hook for seam-localized review metadata.
@@ -607,18 +589,23 @@ pub fn project_passport_truth_with_context(
     context: &PassportProjectionContext<'_>,
     semantic_review_context: &SemanticReviewContext<'_>,
 ) -> ProjectedPassportTruth {
+    let portability_context = PortabilityProjectionContext {
+        molecule_tests: context.molecule_tests,
+        molecule_evidence_by_id: context.molecule_evidence_by_id,
+        specs_by_id: context.specs_by_id,
+    };
+    let portability_projection = project_portability_truth(spec, passport, &portability_context);
     let freshness = resolve_passport_freshness(spec, passport);
     ProjectedPassportTruth {
         freshness: freshness.clone(),
-        markers: compute_passport_markers(spec),
-        proof_coverage: project_passport_proof_coverage(spec, passport, context),
-        escape_hatch_gate: evaluate_escape_hatch_gate(
+        markers: projected_passport_markers(portability_projection.as_ref())
+            .or_else(|| compute_passport_markers(spec)),
+        proof_coverage: project_passport_proof_coverage_from_portability(
             spec,
-            passport,
-            context.molecule_tests,
-            context.molecule_evidence_by_id,
-            context.specs_by_id,
+            portability_projection.as_ref(),
         ),
+        escape_hatch_gate: portability_projection
+            .and_then(|projection| projection.escape_hatch_gate),
         semantic_review: project_passport_semantic_review_with_context(
             spec,
             passport.and_then(|passport| passport.semantic_review.as_ref()),
@@ -798,6 +785,49 @@ fn project_passport_proof_coverage(
     passport: Option<&Passport>,
     context: &PassportProjectionContext<'_>,
 ) -> Option<Vec<PassportProofCoverage>> {
+    let portability_context = PortabilityProjectionContext {
+        molecule_tests: context.molecule_tests,
+        molecule_evidence_by_id: context.molecule_evidence_by_id,
+        specs_by_id: context.specs_by_id,
+    };
+    let portability_projection = project_portability_truth(spec, passport, &portability_context);
+    project_passport_proof_coverage_from_portability(spec, portability_projection.as_ref())
+}
+
+fn projected_passport_markers(
+    portability_projection: Option<&PortabilityProjection>,
+) -> Option<Vec<PassportMarker>> {
+    passport_markers_from_portability_markers(
+        portability_projection
+            .map(|projection| projection.markers.clone())
+            .unwrap_or_default(),
+    )
+}
+
+fn passport_markers_from_portability_markers(
+    markers: Vec<PortabilityMarker>,
+) -> Option<Vec<PassportMarker>> {
+    let markers = markers
+        .into_iter()
+        .map(|marker| PassportMarker {
+            id: match marker.kind {
+                PortabilityMarkerKind::DomainLowering
+                | PortabilityMarkerKind::ProofHelperLowering => {
+                    PassportMarkerId::MethodLoweringRustBody
+                }
+                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
+            },
+            path: marker.path,
+        })
+        .collect::<Vec<_>>();
+
+    (!markers.is_empty()).then_some(markers)
+}
+
+fn project_passport_proof_coverage_from_portability(
+    spec: &LoadedSpec,
+    portability_projection: Option<&PortabilityProjection>,
+) -> Option<Vec<PassportProofCoverage>> {
     let definitions = canonical_proof_coverage_definitions(spec)?;
     let authored_local_test_ids = spec
         .spec
@@ -805,13 +835,14 @@ fn project_passport_proof_coverage(
         .iter()
         .map(|test| test.id.as_str())
         .collect::<std::collections::BTreeSet<_>>();
-    let current_surfaces = current_proof_surfaces(
-        spec,
-        passport,
-        context.molecule_tests,
-        context.molecule_evidence_by_id,
-        context.specs_by_id,
-    );
+    let (atom, molecule) = portability_projection
+        .map(|projection| {
+            (
+                projection.proof_surfaces.atom,
+                projection.proof_surfaces.molecule,
+            )
+        })
+        .unwrap_or_default();
 
     Some(
         definitions
@@ -821,8 +852,8 @@ fn project_passport_proof_coverage(
                 surfaces: normalize_proof_surfaces(branch_proof_surfaces(
                     definition,
                     &authored_local_test_ids,
-                    current_surfaces.atom,
-                    current_surfaces.molecule,
+                    atom,
+                    molecule,
                 )),
             })
             .collect(),
