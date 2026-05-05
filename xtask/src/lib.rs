@@ -292,14 +292,16 @@ mod tests {
         },
         promotion_artifacts::{
             ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CandidateStatus,
-            CommandRecord, ConfidenceLevel, DifficultyTier, FamilyCoverageArtifact,
+            CommandRecord, ConfidenceLevel, DecisionReason, DecisionStatus, DecisionSummary,
+            DifficultyTier, EvidenceState, EvidenceSummary, FamilyCoverageArtifact,
             FamilyRecommendationAnalysisArtifact, FamilyRecommendationArtifact, GateStatus,
             GateSummary, HoldReason, MachineEvidence, MachineEvidenceKind, NextStepDetail,
-            NextStepStatus, PromotionApprovals, PromotionArtifactKind, PromotionBlockerArtifact,
-            PromotionExecutionArtifact, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            NextStepStatus, PromotionApprovals, PromotionArtifactKind,
+            PromotionBlockerArtifact, PromotionExecutionArtifact, PromotionReadiness,
+            RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RECOMMENDATION_SCHEMA_VERSION,
             RankedCandidate, RecommendationCandidateEntry, RecommendationConfidence,
-            RecommendationDifficulty, RecommendationLeverage, RecommendationStatus, TargetLanguage,
-            UnsupportedClusterEntry,
+            RecommendationDelta, RecommendationDifficulty, RecommendationLeverage,
+            RecommendationStatus, TargetLanguage, UnsupportedClusterEntry,
         },
         prove, recommend,
         report::{
@@ -1212,6 +1214,7 @@ mod tests {
     fn family_refresh_promotion_recommendation_writes_family_scoped_typescript_artifact() {
         let temp_dir = workspace_root();
         seed_inventory_repo_truth(temp_dir.path());
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
         write_string(
             &temp_dir
                 .path()
@@ -1241,6 +1244,12 @@ mod tests {
             artifact["ranked_candidates"][0]["family"],
             "function.arithmetic_leaf.monotone_up.v1"
         );
+        assert_eq!(
+            artifact["analysis_basis_path"],
+            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH
+        );
+        assert_eq!(artifact["analysis_basis_sha256"], analysis_basis_sha256);
+        assert_eq!(artifact["decision_status"], "not_recommended");
 
         let validate_code = run_from(
             temp_dir.path(),
@@ -2645,14 +2654,10 @@ gate_d = true
 
         write_json_file(
             &recommendation_path,
-            &FamilyRecommendationArtifact {
-                schema_version: 1,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendation,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
-                inventory_path: inventory_path.clone(),
-                inventory_sha256: inventory::inventory_sha256_hex(&inventory_bytes),
-                target_language: TargetLanguage::Rust,
-                ranked_candidates: vec![
+            &family_recommendation_artifact_fixture(
+                inventory_path.clone(),
+                inventory::inventory_sha256_hex(&inventory_bytes),
+                vec![
                     RankedCandidate {
                         family: "function.wrapper.pipeline.v1".to_string(),
                         evidence: vec![
@@ -2677,7 +2682,7 @@ gate_d = true
                         ],
                     },
                 ],
-            },
+            ),
         );
 
         let code = run_from(
@@ -2707,14 +2712,10 @@ gate_d = true
 
         write_json_file(
             &recommendation_path,
-            &FamilyRecommendationArtifact {
-                schema_version: 1,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendation,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &family_recommendation_artifact_fixture(
                 inventory_path,
-                inventory_sha256: "deadbeef".to_string(),
-                target_language: TargetLanguage::Rust,
-                ranked_candidates: vec![RankedCandidate {
+                "deadbeef".to_string(),
+                vec![RankedCandidate {
                     family: "function.wrapper.pipeline.v1".to_string(),
                     evidence: vec!["spec-core/src/semantic_review.rs".to_string()],
                     expected_leverage: "Two-step wrapper promotion target.".to_string(),
@@ -2722,7 +2723,7 @@ gate_d = true
                         "Inventory hash mismatch should fail validation.".to_string(),
                     ],
                 }],
-            },
+            ),
         );
 
         let code = run_from(
@@ -2749,18 +2750,15 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::Ranked,
-                ranked_candidates: vec![valid_recommendation_candidate(
+                RecommendationStatus::Ranked,
+                vec![valid_recommendation_candidate(
                     PromotionReadiness::Ready,
                     Vec::new(),
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -2787,18 +2785,15 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::NoStrongCandidate,
-                ranked_candidates: vec![valid_recommendation_candidate(
+                RecommendationStatus::NoStrongCandidate,
+                vec![valid_recommendation_candidate(
                     PromotionReadiness::Ready,
                     vec![HoldReason::ThinRealExampleSupport],
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -2825,18 +2820,15 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::NoStrongCandidate,
-                ranked_candidates: vec![valid_recommendation_candidate(
+                RecommendationStatus::NoStrongCandidate,
+                vec![valid_recommendation_candidate(
                     PromotionReadiness::Hold,
                     Vec::new(),
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -2863,18 +2855,15 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::Ranked,
-                ranked_candidates: vec![valid_recommendation_candidate(
+                RecommendationStatus::Ranked,
+                vec![valid_recommendation_candidate(
                     PromotionReadiness::Hold,
                     vec![HoldReason::UnknownOverlapFamily],
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -2902,21 +2891,18 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::Ranked,
-                ranked_candidates: vec![recommendation_candidate_with_confidence_level(
+                RecommendationStatus::Ranked,
+                vec![recommendation_candidate_with_confidence_level(
                     PromotionReadiness::Ready,
                     Vec::new(),
                     2,
                     3,
                     ConfidenceLevel::Low,
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -2943,14 +2929,11 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::InsufficientRealCorpus,
-                ranked_candidates: vec![recommendation_candidate_with_real_example_hits(
+                RecommendationStatus::InsufficientRealCorpus,
+                vec![recommendation_candidate_with_real_example_hits(
                     PromotionReadiness::Hold,
                     vec![
                         HoldReason::ThinRealExampleSupport,
@@ -2959,7 +2942,7 @@ gate_d = true
                     0,
                     1,
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -2986,20 +2969,17 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::InsufficientRealCorpus,
-                ranked_candidates: vec![recommendation_candidate_with_real_example_hits(
+                RecommendationStatus::InsufficientRealCorpus,
+                vec![recommendation_candidate_with_real_example_hits(
                     PromotionReadiness::Hold,
                     vec![HoldReason::ThinRealExampleSupport],
                     1,
                     2,
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -3026,14 +3006,11 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::NoStrongCandidate,
-                ranked_candidates: vec![recommendation_candidate_with_real_example_hits(
+                RecommendationStatus::NoStrongCandidate,
+                vec![recommendation_candidate_with_real_example_hits(
                     PromotionReadiness::Hold,
                     vec![
                         HoldReason::ThinRealExampleSupport,
@@ -3042,7 +3019,7 @@ gate_d = true
                     0,
                     1,
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -3069,18 +3046,15 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::InsufficientRealCorpus,
-                ranked_candidates: vec![valid_recommendation_candidate(
+                RecommendationStatus::InsufficientRealCorpus,
+                vec![valid_recommendation_candidate(
                     PromotionReadiness::Ready,
                     Vec::new(),
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -3107,18 +3081,15 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::NoStrongCandidate,
-                ranked_candidates: vec![valid_recommendation_candidate(
+                RecommendationStatus::NoStrongCandidate,
+                vec![valid_recommendation_candidate(
                     PromotionReadiness::Ready,
                     Vec::new(),
                 )],
-            },
+            ),
         );
 
         let code = run_from(
@@ -3149,15 +3120,12 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::NoStrongCandidate,
-                ranked_candidates: vec![candidate],
-            },
+                RecommendationStatus::NoStrongCandidate,
+                vec![candidate],
+            ),
         );
 
         let code = run_from(
@@ -3191,15 +3159,12 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::NoStrongCandidate,
-                ranked_candidates: vec![candidate],
-            },
+                RecommendationStatus::NoStrongCandidate,
+                vec![candidate],
+            ),
         );
 
         let code = run_from(
@@ -3226,21 +3191,18 @@ gate_d = true
 
         write_json_file(
             &analysis_path,
-            &FamilyRecommendationAnalysisArtifact {
-                schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &analysis_artifact_fixture(
                 coverage_path,
                 coverage_sha256,
-                recommendation_status: RecommendationStatus::Ranked,
-                ranked_candidates: vec![
+                RecommendationStatus::Ranked,
+                vec![
                     valid_recommendation_candidate(PromotionReadiness::Ready, Vec::new()),
                     valid_recommendation_candidate(
                         PromotionReadiness::Hold,
                         vec![HoldReason::HelperSurfaceNotPromotable],
                     ),
                 ],
-            },
+            ),
         );
 
         let code = run_from(
@@ -3445,6 +3407,14 @@ gate_d = true
             artifact.ranked_candidates[0].next_step_detail,
             NextStepDetail::TargetedEvidenceGap
         );
+        assert_eq!(
+            artifact.decision_summary.decision_status,
+            DecisionStatus::BlockedForNow
+        );
+        assert_eq!(
+            artifact.evidence_summary.missing_evidence,
+            vec![EvidenceState::ThinRealExampleSupport]
+        );
     }
 
     #[test]
@@ -3471,6 +3441,14 @@ gate_d = true
             candidate.next_step_detail,
             NextStepDetail::HelperSurfaceNotPromotable
         );
+        assert_eq!(
+            artifact.decision_summary.decision_status,
+            DecisionStatus::NotRecommended
+        );
+        assert_eq!(
+            artifact.decision_summary.open_blockers,
+            vec![DecisionReason::HelperSurfaceNotPromotable]
+        );
     }
 
     #[test]
@@ -3496,6 +3474,12 @@ gate_d = true
             NextStepDetail::ReadyForPromotion
         );
         assert_eq!(candidate.confidence.level, ConfidenceLevel::High);
+        assert_eq!(
+            artifact.decision_summary.decision_status,
+            DecisionStatus::Recommended
+        );
+        assert!(artifact.evidence_summary.missing_evidence.is_empty());
+        assert!(artifact.evidence_summary.stale_evidence.is_empty());
     }
 
     #[test]
@@ -3676,6 +3660,7 @@ gate_d = true
     fn artifact_schema_accepts_execution_report_with_real_proof_artifact_paths() {
         let temp_dir = workspace_root();
         seed_inventory_repo_truth(temp_dir.path());
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
 
         let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
         let recommendation_path = seed_valid_recommendation_artifact(temp_dir.path(), run_id);
@@ -3693,13 +3678,18 @@ gate_d = true
         write_json_file(
             &report_path,
             &PromotionExecutionArtifact {
-                schema_version: 1,
+                schema_version: 2,
                 artifact_kind: PromotionArtifactKind::PromotionExecution,
                 run_id: run_id.to_string(),
                 family: "function.wrapper.pipeline.v1".to_string(),
                 target_language: TargetLanguage::Rust,
                 status: promotion_artifacts::ExecutionStatus::Green,
                 recommendation_path,
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                decision_status_at_start: DecisionStatus::NotRecommended,
+                open_blockers_at_start: vec![DecisionReason::HelperSurfaceNotPromotable],
+                missing_or_stale_evidence_at_start: Vec::new(),
                 approvals: PromotionApprovals {
                     target_family: ApprovalRecord {
                         status: ApprovalStatus::Approved,
@@ -3760,6 +3750,7 @@ gate_d = true
     fn artifact_schema_rejects_execution_report_when_proof_artifact_path_is_missing() {
         let temp_dir = workspace_root();
         seed_inventory_repo_truth(temp_dir.path());
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
 
         let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
         let recommendation_path = seed_valid_recommendation_artifact(temp_dir.path(), run_id);
@@ -3769,13 +3760,18 @@ gate_d = true
         write_json_file(
             &report_path,
             &PromotionExecutionArtifact {
-                schema_version: 1,
+                schema_version: 2,
                 artifact_kind: PromotionArtifactKind::PromotionExecution,
                 run_id: run_id.to_string(),
                 family: "function.wrapper.pipeline.v1".to_string(),
                 target_language: TargetLanguage::Rust,
                 status: promotion_artifacts::ExecutionStatus::Green,
                 recommendation_path,
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                decision_status_at_start: DecisionStatus::NotRecommended,
+                open_blockers_at_start: vec![DecisionReason::HelperSurfaceNotPromotable],
+                missing_or_stale_evidence_at_start: Vec::new(),
                 approvals: PromotionApprovals {
                     target_family: ApprovalRecord {
                         status: ApprovalStatus::Approved,
@@ -3832,6 +3828,7 @@ gate_d = true
     fn artifact_schema_accepts_blocker_report_with_locked_vocabulary() {
         let temp_dir = workspace_root();
         seed_inventory_repo_truth(temp_dir.path());
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
 
         let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
         let inventory_path = write_inventory_snapshot(temp_dir.path(), run_id);
@@ -3841,11 +3838,16 @@ gate_d = true
         write_json_file(
             &report_path,
             &PromotionBlockerArtifact {
-                schema_version: 1,
+                schema_version: 2,
                 artifact_kind: PromotionArtifactKind::PromotionBlocker,
                 run_id: run_id.to_string(),
                 family: "function.wrapper.pipeline.v1".to_string(),
                 target_language: TargetLanguage::Rust,
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                decision_status_at_start: DecisionStatus::NotRecommended,
+                open_blockers_at_start: vec![DecisionReason::HelperSurfaceNotPromotable],
+                missing_or_stale_evidence_at_start: Vec::new(),
                 blocking_step: BlockingStep::Certify,
                 blocker_kind: BlockerKind::CertifyRoutingConflict,
                 summary: "Registry routing order still conflicts with the promoted wrapper family."
@@ -4077,14 +4079,10 @@ gate_d = true
             .join(".semantic-family-artifacts/family-promotion/recommendation.latest.json");
         write_json_file(
             &recommendation_path,
-            &FamilyRecommendationArtifact {
-                schema_version: 1,
-                artifact_kind: PromotionArtifactKind::FamilyRecommendation,
-                generated_at: "2026-04-29T15:45:00Z".to_string(),
+            &family_recommendation_artifact_fixture(
                 inventory_path,
-                inventory_sha256: inventory::inventory_sha256_hex(&inventory_bytes),
-                target_language: TargetLanguage::Rust,
-                ranked_candidates: vec![RankedCandidate {
+                inventory::inventory_sha256_hex(&inventory_bytes),
+                vec![RankedCandidate {
                     family: "function.wrapper.pipeline.v1".to_string(),
                     evidence: vec![
                         "spec-core/src/semantic_review.rs".to_string(),
@@ -4096,7 +4094,7 @@ gate_d = true
                         "Routing order must remain between chain3 and the leaves.".to_string(),
                     ],
                 }],
-            },
+            ),
         );
         ".semantic-family-artifacts/family-promotion/recommendation.latest.json".to_string()
     }
@@ -4112,6 +4110,193 @@ gate_d = true
             coverage_path,
             inventory::inventory_sha256_hex(&coverage_bytes),
         )
+    }
+
+    fn analysis_artifact_fixture(
+        coverage_path: String,
+        coverage_sha256: String,
+        recommendation_status: RecommendationStatus,
+        ranked_candidates: Vec<RecommendationCandidateEntry>,
+    ) -> FamilyRecommendationAnalysisArtifact {
+        let missing_evidence = ranked_candidates
+            .first()
+            .map(missing_evidence_for_candidate)
+            .unwrap_or_default();
+        let stale_evidence = Vec::new();
+        let warnings = ranked_candidates
+            .first()
+            .map(warnings_for_candidate)
+            .unwrap_or_default();
+        let decision_status =
+            decision_status_for_fixture(recommendation_status, ranked_candidates.first(), &missing_evidence, &stale_evidence);
+        FamilyRecommendationAnalysisArtifact {
+            schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
+            generated_at: "2026-04-29T15:45:00Z".to_string(),
+            coverage_path,
+            coverage_sha256,
+            recommendation_status,
+            ranked_candidates: ranked_candidates.clone(),
+            decision_summary: DecisionSummary {
+                decision_status,
+                top_candidate_id: ranked_candidates
+                    .first()
+                    .map(|candidate| candidate.candidate_id.clone()),
+                open_blockers: ranked_candidates
+                    .first()
+                    .map(open_blockers_for_candidate)
+                    .unwrap_or_default(),
+                warnings: warnings.clone(),
+                summary: "Fixture decision summary.".to_string(),
+            },
+            evidence_summary: EvidenceSummary {
+                missing_evidence,
+                stale_evidence,
+                warnings,
+                summary: "Fixture evidence summary.".to_string(),
+            },
+            delta_from_previous: RecommendationDelta::no_previous_artifact(),
+        }
+    }
+
+    fn family_recommendation_artifact_fixture(
+        inventory_path: String,
+        inventory_sha256: String,
+        ranked_candidates: Vec<RankedCandidate>,
+    ) -> FamilyRecommendationArtifact {
+        FamilyRecommendationArtifact {
+            schema_version: RECOMMENDATION_SCHEMA_VERSION,
+            artifact_kind: PromotionArtifactKind::FamilyRecommendation,
+            generated_at: "2026-04-29T15:45:00Z".to_string(),
+            inventory_path,
+            inventory_sha256,
+            target_language: TargetLanguage::Rust,
+            ranked_candidates,
+            analysis_basis_path: None,
+            analysis_basis_sha256: None,
+            decision_status: None,
+            open_blockers: None,
+            missing_or_stale_evidence: None,
+        }
+    }
+
+    fn seed_valid_analysis_basis_artifact(workspace_root: &Path) -> String {
+        let (coverage_path, coverage_sha256) = seed_recommendation_analysis_coverage(workspace_root);
+        let analysis = analysis_artifact_fixture(
+            coverage_path,
+            coverage_sha256,
+            RecommendationStatus::NoStrongCandidate,
+            vec![helper_surface_candidate_fixture()],
+        );
+        let path = workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+        write_json_file(&path, &analysis);
+        let bytes = fs::read(&path).unwrap();
+        inventory::inventory_sha256_hex(&bytes)
+    }
+
+    fn helper_surface_candidate_fixture() -> RecommendationCandidateEntry {
+        RecommendationCandidateEntry {
+            candidate_id: "z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0"
+                .to_string(),
+            cluster_ids: vec!["unsupported_function_surface-e40675da6fa0".to_string()],
+            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            overlap_family: "unknown".to_string(),
+            promotion_readiness: PromotionReadiness::Hold,
+            hold_reasons: vec![HoldReason::HelperSurfaceNotPromotable],
+            next_step_status: NextStepStatus::DurableHold,
+            next_step_detail: NextStepDetail::HelperSurfaceNotPromotable,
+            leverage: RecommendationLeverage {
+                real_example_hits: 2,
+                promotion_relevant_regression_hits: 1,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 3,
+            },
+            difficulty: RecommendationDifficulty {
+                tier: DifficultyTier::Hard,
+                why: "helper surface fixture".to_string(),
+            },
+            confidence: RecommendationConfidence {
+                level: ConfidenceLevel::Low,
+                why: "helper surface fixture".to_string(),
+            },
+            rationale: "fixture".to_string(),
+        }
+    }
+
+    fn open_blockers_for_candidate(candidate: &RecommendationCandidateEntry) -> Vec<DecisionReason> {
+        let mut blockers = Vec::new();
+        for hold_reason in &candidate.hold_reasons {
+            let reason = match hold_reason {
+                HoldReason::UnknownOverlapFamily => DecisionReason::UnknownOverlapFamily,
+                HoldReason::HardDifficulty => DecisionReason::HardDifficulty,
+                HoldReason::ThinRealExampleSupport => DecisionReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport => DecisionReason::ThinRegressionSupport,
+                HoldReason::HelperSurfaceNotPromotable => DecisionReason::HelperSurfaceNotPromotable,
+            };
+            if !blockers.contains(&reason) {
+                blockers.push(reason);
+            }
+        }
+        blockers
+    }
+
+    fn missing_evidence_for_candidate(candidate: &RecommendationCandidateEntry) -> Vec<EvidenceState> {
+        let mut missing = Vec::new();
+        for hold_reason in &candidate.hold_reasons {
+            let Some(state) = (match hold_reason {
+                HoldReason::ThinRealExampleSupport => Some(EvidenceState::ThinRealExampleSupport),
+                HoldReason::ThinRegressionSupport => Some(EvidenceState::ThinRegressionSupport),
+                HoldReason::UnknownOverlapFamily
+                | HoldReason::HardDifficulty
+                | HoldReason::HelperSurfaceNotPromotable => None,
+            }) else {
+                continue;
+            };
+            if !missing.contains(&state) {
+                missing.push(state);
+            }
+        }
+        missing
+    }
+
+    fn warnings_for_candidate(candidate: &RecommendationCandidateEntry) -> Vec<DecisionReason> {
+        if candidate.leverage.promotion_relevant_regression_hits > 0 {
+            vec![DecisionReason::RegressionWarning]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn decision_status_for_fixture(
+        recommendation_status: RecommendationStatus,
+        top_candidate: Option<&RecommendationCandidateEntry>,
+        missing_evidence: &[EvidenceState],
+        stale_evidence: &[EvidenceState],
+    ) -> DecisionStatus {
+        let has_evidence_gaps = !missing_evidence.is_empty() || !stale_evidence.is_empty();
+        match top_candidate {
+            Some(candidate)
+                if candidate.promotion_readiness == PromotionReadiness::Ready
+                    && matches!(
+                        candidate.confidence.level,
+                        ConfidenceLevel::Medium | ConfidenceLevel::High
+                    )
+                    && !has_evidence_gaps =>
+            {
+                DecisionStatus::Recommended
+            }
+            Some(candidate)
+                if candidate.next_step_status == NextStepStatus::DurableHold
+                    && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable =>
+            {
+                DecisionStatus::NotRecommended
+            }
+            Some(_) if recommendation_status == RecommendationStatus::InsufficientRealCorpus => {
+                DecisionStatus::NotRecommended
+            }
+            Some(_) => DecisionStatus::BlockedForNow,
+            None => DecisionStatus::NotRecommended,
+        }
     }
 
     fn valid_recommendation_candidate(

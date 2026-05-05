@@ -8,15 +8,17 @@ use crate::family::paths::{
     FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically,
 };
 use crate::family::promotion_artifacts::{
-    CandidateStatus, ConfidenceLevel, DifficultyTier, FamilyCoverageArtifact,
+    CandidateStatus, ConfidenceLevel, DecisionReason, DecisionStatus, DecisionSummary,
+    DifficultyTier, EvidenceState, EvidenceSummary, FamilyCoverageArtifact,
     FamilyRecommendationAnalysisArtifact, HoldReason, NextStepDetail, NextStepStatus,
     PromotionArtifactKind, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-    RecommendationCandidateEntry, RecommendationConfidence, RecommendationDifficulty,
-    RecommendationLeverage, RecommendationStatus, UnsupportedClusterEntry,
-    candidate_qualifies_for_ranked_status,
+    RecommendationCandidateEntry, RecommendationConfidence, RecommendationDelta,
+    RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
+    UnsupportedClusterEntry, candidate_qualifies_for_ranked_status,
 };
 use serde::Deserialize;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
+use std::collections::BTreeSet;
 use std::cmp::Ordering;
 use std::fs;
 use std::io::{self, Write};
@@ -67,6 +69,8 @@ pub(crate) fn build_recommendation_analysis_artifact(
         .collect::<Vec<_>>();
     ranked_candidates.sort_by(compare_candidates);
     let recommendation_status = recommendation_status_for(&ranked_candidates);
+    let evidence_summary = evidence_summary_for(&ranked_candidates);
+    let decision_summary = decision_summary_for(recommendation_status, &ranked_candidates);
 
     FamilyRecommendationAnalysisArtifact {
         schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
@@ -76,6 +80,9 @@ pub(crate) fn build_recommendation_analysis_artifact(
         coverage_sha256,
         recommendation_status,
         ranked_candidates,
+        decision_summary,
+        evidence_summary,
+        delta_from_previous: RecommendationDelta::no_previous_artifact(),
     }
 }
 
@@ -99,16 +106,19 @@ fn effective_coverage_for_recommend(
 
 fn effective_recommendation_bytes(
     workspace_root: &Path,
-    artifact: FamilyRecommendationAnalysisArtifact,
+    mut artifact: FamilyRecommendationAnalysisArtifact,
 ) -> Result<Vec<u8>, XtaskError> {
-    let latest_bytes = render_json_bytes(&artifact)?;
     let latest_path = FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH;
-    if let Some((existing, existing_bytes)) = load_existing_recommendation_artifact(workspace_root)
-        && normalized_recommendation_for_determinism(&existing)
+    let existing = load_existing_recommendation_artifact(workspace_root);
+    if let Some((existing_artifact, existing_bytes)) = &existing
+        && normalized_recommendation_for_determinism(existing_artifact)
             == normalized_recommendation_for_determinism(&artifact)
     {
-        return Ok(existing_bytes);
+        return Ok(existing_bytes.clone());
     }
+    artifact.delta_from_previous =
+        delta_from_previous(existing.as_ref().map(|(artifact, _)| artifact), &artifact);
+    let latest_bytes = render_json_bytes(&artifact)?;
     write_bytes_atomically(&workspace_root.join(latest_path), &latest_bytes)?;
     Ok(latest_bytes)
 }
@@ -138,7 +148,311 @@ fn normalized_recommendation_for_determinism(
 ) -> FamilyRecommendationAnalysisArtifact {
     let mut normalized = artifact.clone();
     normalized.generated_at.clear();
+    normalized.delta_from_previous = RecommendationDelta::normalized_placeholder();
     normalized
+}
+
+fn decision_summary_for(
+    recommendation_status: RecommendationStatus,
+    ranked_candidates: &[RecommendationCandidateEntry],
+) -> DecisionSummary {
+    let top_candidate = ranked_candidates.first();
+    let open_blockers = blockers_for(top_candidate);
+    let warnings = warnings_for(top_candidate);
+    let evidence_summary = evidence_summary_for(ranked_candidates);
+    let decision_status =
+        decision_status_for(recommendation_status, top_candidate, &evidence_summary);
+    let summary = match (decision_status, top_candidate) {
+        (DecisionStatus::Recommended, Some(candidate)) => format!(
+            "Recommend promoting `{}` now; no missing or stale evidence is recorded.",
+            candidate.candidate_id
+        ),
+        (DecisionStatus::BlockedForNow, Some(candidate)) => format!(
+            "Do not promote `{}` yet; blockers `{}` and the current evidence state keep it held.",
+            candidate.candidate_id,
+            join_blockers(&open_blockers)
+        ),
+        (DecisionStatus::NotRecommended, Some(candidate))
+            if candidate.next_step_status == NextStepStatus::DurableHold =>
+        {
+            format!(
+                "Do not treat `{}` as the next family move; `{}` remains visible but helper surfaces are not promotable.",
+                candidate.candidate_id,
+                join_blockers(&open_blockers)
+            )
+        }
+        (DecisionStatus::NotRecommended, Some(candidate)) => format!(
+            "The current surface does not justify promoting `{}` as the next family move.",
+            candidate.candidate_id
+        ),
+        (DecisionStatus::NotRecommended, None) => {
+            "No plausible next-family action is recommended from the current analysis surface."
+                .to_string()
+        }
+        (DecisionStatus::BlockedForNow, None) | (DecisionStatus::Recommended, None) => {
+            "Decision summary could not identify a top candidate.".to_string()
+        }
+    };
+
+    DecisionSummary {
+        decision_status,
+        top_candidate_id: top_candidate.map(|candidate| candidate.candidate_id.clone()),
+        open_blockers,
+        warnings,
+        summary,
+    }
+}
+
+fn evidence_summary_for(ranked_candidates: &[RecommendationCandidateEntry]) -> EvidenceSummary {
+    let top_candidate = ranked_candidates.first();
+    let missing_evidence = missing_evidence_for(top_candidate);
+    let stale_evidence = Vec::new();
+    let warnings = warnings_for(top_candidate);
+    let summary = if top_candidate.is_none() {
+        "No candidate-specific evidence obligations are recorded.".to_string()
+    } else if missing_evidence.is_empty() && stale_evidence.is_empty() {
+        "No missing or stale evidence is recorded.".to_string()
+    } else {
+        format!(
+            "Missing evidence `{}`; stale evidence `{}`.",
+            join_evidence(&missing_evidence),
+            join_evidence(&stale_evidence)
+        )
+    };
+
+    EvidenceSummary {
+        missing_evidence,
+        stale_evidence,
+        warnings,
+        summary,
+    }
+}
+
+fn delta_from_previous(
+    previous: Option<&FamilyRecommendationAnalysisArtifact>,
+    current: &FamilyRecommendationAnalysisArtifact,
+) -> RecommendationDelta {
+    let Some(previous) = previous else {
+        return RecommendationDelta::no_previous_artifact();
+    };
+
+    let current_reasons = current
+        .decision_summary
+        .open_blockers
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let previous_reasons = previous
+        .decision_summary
+        .open_blockers
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let reasons_added = current_reasons
+        .difference(&previous_reasons)
+        .copied()
+        .collect::<Vec<_>>();
+    let reasons_cleared = previous_reasons
+        .difference(&current_reasons)
+        .copied()
+        .collect::<Vec<_>>();
+    let evidence_changes = evidence_changes(previous, current);
+    let decision_changed =
+        current.decision_summary.decision_status != previous.decision_summary.decision_status;
+    let top_candidate_changed =
+        current.decision_summary.top_candidate_id != previous.decision_summary.top_candidate_id;
+    let summary = if !decision_changed
+        && !top_candidate_changed
+        && reasons_added.is_empty()
+        && reasons_cleared.is_empty()
+        && evidence_changes.is_empty()
+    {
+        "Decision surface unchanged from the previous validated analysis artifact.".to_string()
+    } else {
+        format!(
+            "Decision delta: decision_changed={}, top_candidate_changed={}, reasons_added={}, reasons_cleared={}, evidence_changes={}.",
+            decision_changed,
+            top_candidate_changed,
+            join_blockers(&reasons_added),
+            join_blockers(&reasons_cleared),
+            if evidence_changes.is_empty() {
+                "none".to_string()
+            } else {
+                evidence_changes.join(", ")
+            }
+        )
+    };
+
+    RecommendationDelta {
+        previous_generated_at: Some(previous.generated_at.clone()),
+        previous_decision_status: Some(previous.decision_summary.decision_status),
+        previous_recommendation_status: Some(previous.recommendation_status),
+        decision_changed,
+        top_candidate_changed,
+        reasons_added,
+        reasons_cleared,
+        evidence_changes,
+        summary,
+    }
+}
+
+fn evidence_changes(
+    previous: &FamilyRecommendationAnalysisArtifact,
+    current: &FamilyRecommendationAnalysisArtifact,
+) -> Vec<String> {
+    let mut changes = Vec::new();
+    for change in diff_evidence(
+        "missing_evidence",
+        &previous.evidence_summary.missing_evidence,
+        &current.evidence_summary.missing_evidence,
+    ) {
+        changes.push(change);
+    }
+    for change in diff_evidence(
+        "stale_evidence",
+        &previous.evidence_summary.stale_evidence,
+        &current.evidence_summary.stale_evidence,
+    ) {
+        changes.push(change);
+    }
+    changes
+}
+
+fn diff_evidence(kind: &str, previous: &[EvidenceState], current: &[EvidenceState]) -> Vec<String> {
+    let previous = previous.iter().copied().collect::<BTreeSet<_>>();
+    let current = current.iter().copied().collect::<BTreeSet<_>>();
+    let mut changes = current
+        .difference(&previous)
+        .map(|value| format!("{kind}:+{}", evidence_state_name(*value)))
+        .collect::<Vec<_>>();
+    changes.extend(
+        previous
+            .difference(&current)
+            .map(|value| format!("{kind}:-{}", evidence_state_name(*value))),
+    );
+    changes
+}
+
+fn decision_status_for(
+    recommendation_status: RecommendationStatus,
+    top_candidate: Option<&RecommendationCandidateEntry>,
+    evidence_summary: &EvidenceSummary,
+) -> DecisionStatus {
+    let has_evidence_gaps =
+        !evidence_summary.missing_evidence.is_empty() || !evidence_summary.stale_evidence.is_empty();
+    match top_candidate {
+        Some(candidate)
+            if candidate.promotion_readiness == PromotionReadiness::Ready
+                && matches!(
+                    candidate.confidence.level,
+                    ConfidenceLevel::Medium | ConfidenceLevel::High
+                )
+                && !has_evidence_gaps =>
+        {
+            DecisionStatus::Recommended
+        }
+        Some(candidate)
+            if candidate.next_step_status == NextStepStatus::DurableHold
+                && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable =>
+        {
+            DecisionStatus::NotRecommended
+        }
+        Some(_) if recommendation_status == RecommendationStatus::InsufficientRealCorpus => {
+            DecisionStatus::NotRecommended
+        }
+        Some(_) => DecisionStatus::BlockedForNow,
+        None => DecisionStatus::NotRecommended,
+    }
+}
+
+fn blockers_for(candidate: Option<&RecommendationCandidateEntry>) -> Vec<DecisionReason> {
+    let mut blockers = Vec::new();
+    for hold_reason in candidate
+        .map(|candidate| candidate.hold_reasons.as_slice())
+        .unwrap_or(&[])
+    {
+        let reason = match hold_reason {
+            HoldReason::UnknownOverlapFamily => DecisionReason::UnknownOverlapFamily,
+            HoldReason::HardDifficulty => DecisionReason::HardDifficulty,
+            HoldReason::ThinRealExampleSupport => DecisionReason::ThinRealExampleSupport,
+            HoldReason::ThinRegressionSupport => DecisionReason::ThinRegressionSupport,
+            HoldReason::HelperSurfaceNotPromotable => DecisionReason::HelperSurfaceNotPromotable,
+        };
+        if !blockers.contains(&reason) {
+            blockers.push(reason);
+        }
+    }
+    blockers
+}
+
+fn missing_evidence_for(candidate: Option<&RecommendationCandidateEntry>) -> Vec<EvidenceState> {
+    let mut missing = Vec::new();
+    for hold_reason in candidate
+        .map(|candidate| candidate.hold_reasons.as_slice())
+        .unwrap_or(&[])
+    {
+        let Some(state) = (match hold_reason {
+            HoldReason::ThinRealExampleSupport => Some(EvidenceState::ThinRealExampleSupport),
+            HoldReason::ThinRegressionSupport => Some(EvidenceState::ThinRegressionSupport),
+            HoldReason::UnknownOverlapFamily
+            | HoldReason::HardDifficulty
+            | HoldReason::HelperSurfaceNotPromotable => None,
+        }) else {
+            continue;
+        };
+        if !missing.contains(&state) {
+            missing.push(state);
+        }
+    }
+    missing
+}
+
+fn warnings_for(candidate: Option<&RecommendationCandidateEntry>) -> Vec<DecisionReason> {
+    if candidate.is_some_and(|candidate| candidate.leverage.promotion_relevant_regression_hits > 0)
+    {
+        vec![DecisionReason::RegressionWarning]
+    } else {
+        Vec::new()
+    }
+}
+
+fn join_blockers(blockers: &[DecisionReason]) -> String {
+    if blockers.is_empty() {
+        "none".to_string()
+    } else {
+        blockers
+            .iter()
+            .map(|reason| match reason {
+                DecisionReason::UnknownOverlapFamily => "unknown_overlap_family",
+                DecisionReason::HardDifficulty => "hard_difficulty",
+                DecisionReason::ThinRealExampleSupport => "thin_real_example_support",
+                DecisionReason::ThinRegressionSupport => "thin_regression_support",
+                DecisionReason::HelperSurfaceNotPromotable => "helper_surface_not_promotable",
+                DecisionReason::RegressionWarning => "regression_warning",
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn join_evidence(evidence: &[EvidenceState]) -> String {
+    if evidence.is_empty() {
+        "none".to_string()
+    } else {
+        evidence
+            .iter()
+            .map(|state| evidence_state_name(*state))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn evidence_state_name(state: EvidenceState) -> &'static str {
+    match state {
+        EvidenceState::ThinRealExampleSupport => "thin_real_example_support",
+        EvidenceState::ThinRegressionSupport => "thin_regression_support",
+        EvidenceState::StaleEvidence => "stale_evidence",
+    }
 }
 
 #[derive(Debug, Clone)]

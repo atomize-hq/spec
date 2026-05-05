@@ -19,10 +19,11 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 pub(crate) const RECOMMENDATION_SCHEMA_VERSION: u64 = 1;
+pub(crate) const FAMILY_RECOMMENDATION_SCHEMA_VERSION: u64 = 2;
 pub(crate) const COVERAGE_SCHEMA_VERSION: u64 = 1;
-pub(crate) const RECOMMENDATION_ANALYSIS_SCHEMA_VERSION: u64 = 3;
-const PROMOTION_EXECUTION_SCHEMA_VERSION: u64 = 1;
-const PROMOTION_BLOCKER_SCHEMA_VERSION: u64 = 1;
+pub(crate) const RECOMMENDATION_ANALYSIS_SCHEMA_VERSION: u64 = 4;
+const PROMOTION_EXECUTION_SCHEMA_VERSION: u64 = 2;
+const PROMOTION_BLOCKER_SCHEMA_VERSION: u64 = 2;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -129,6 +130,33 @@ pub(crate) enum RecommendationStatus {
     InsufficientRealCorpus,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DecisionStatus {
+    Recommended,
+    BlockedForNow,
+    NotRecommended,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DecisionReason {
+    UnknownOverlapFamily,
+    HardDifficulty,
+    ThinRealExampleSupport,
+    ThinRegressionSupport,
+    HelperSurfaceNotPromotable,
+    RegressionWarning,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum EvidenceState {
+    ThinRealExampleSupport,
+    ThinRegressionSupport,
+    StaleEvidence,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum DifficultyTier {
@@ -188,6 +216,16 @@ pub(crate) struct FamilyRecommendationArtifact {
     pub inventory_sha256: String,
     pub target_language: TargetLanguage,
     pub ranked_candidates: Vec<RankedCandidate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub analysis_basis_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub analysis_basis_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision_status: Option<DecisionStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_blockers: Option<Vec<DecisionReason>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missing_or_stale_evidence: Option<Vec<EvidenceState>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -209,6 +247,11 @@ pub(crate) struct PromotionExecutionArtifact {
     pub target_language: TargetLanguage,
     pub status: ExecutionStatus,
     pub recommendation_path: String,
+    pub analysis_basis_path: String,
+    pub analysis_basis_sha256: String,
+    pub decision_status_at_start: DecisionStatus,
+    pub open_blockers_at_start: Vec<DecisionReason>,
+    pub missing_or_stale_evidence_at_start: Vec<EvidenceState>,
     pub approvals: PromotionApprovals,
     pub files_changed: Vec<String>,
     pub commands: Vec<CommandRecord>,
@@ -258,6 +301,11 @@ pub(crate) struct PromotionBlockerArtifact {
     pub run_id: String,
     pub family: String,
     pub target_language: TargetLanguage,
+    pub analysis_basis_path: String,
+    pub analysis_basis_sha256: String,
+    pub decision_status_at_start: DecisionStatus,
+    pub open_blockers_at_start: Vec<DecisionReason>,
+    pub missing_or_stale_evidence_at_start: Vec<EvidenceState>,
     pub blocking_step: BlockingStep,
     pub blocker_kind: BlockerKind,
     pub summary: String,
@@ -357,6 +405,42 @@ pub(crate) struct FamilyRecommendationAnalysisArtifact {
     pub coverage_sha256: String,
     pub recommendation_status: RecommendationStatus,
     pub ranked_candidates: Vec<RecommendationCandidateEntry>,
+    pub decision_summary: DecisionSummary,
+    pub evidence_summary: EvidenceSummary,
+    pub delta_from_previous: RecommendationDelta,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DecisionSummary {
+    pub decision_status: DecisionStatus,
+    pub top_candidate_id: Option<String>,
+    pub open_blockers: Vec<DecisionReason>,
+    pub warnings: Vec<DecisionReason>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct EvidenceSummary {
+    pub missing_evidence: Vec<EvidenceState>,
+    pub stale_evidence: Vec<EvidenceState>,
+    pub warnings: Vec<DecisionReason>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RecommendationDelta {
+    pub previous_generated_at: Option<String>,
+    pub previous_decision_status: Option<DecisionStatus>,
+    pub previous_recommendation_status: Option<RecommendationStatus>,
+    pub decision_changed: bool,
+    pub top_candidate_changed: bool,
+    pub reasons_added: Vec<DecisionReason>,
+    pub reasons_cleared: Vec<DecisionReason>,
+    pub evidence_changes: Vec<String>,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -420,6 +504,7 @@ pub(crate) fn run_refresh_recommendation(
         target_language,
         "family refresh-promotion-recommendation",
     )?;
+    let (analysis_basis, analysis_basis_sha256) = load_analysis_basis_artifact(workspace_root)?;
 
     let generated_at = current_timestamp_rfc3339()?;
     let run_id = format_run_id(&generated_at, family.as_str())?;
@@ -428,13 +513,18 @@ pub(crate) fn run_refresh_recommendation(
     write_bytes_atomically(&workspace_root.join(&inventory_path), &inventory_bytes)?;
 
     let artifact = FamilyRecommendationArtifact {
-        schema_version: RECOMMENDATION_SCHEMA_VERSION,
+        schema_version: FAMILY_RECOMMENDATION_SCHEMA_VERSION,
         artifact_kind: PromotionArtifactKind::FamilyRecommendation,
         generated_at,
         inventory_path: normalize_path(&inventory_path),
         inventory_sha256: inventory_sha256_hex(&inventory_bytes),
         target_language: TargetLanguage::from_family_target_language(target_language),
         ranked_candidates: vec![ranked_candidate_for_family(&family)?],
+        analysis_basis_path: Some(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string()),
+        analysis_basis_sha256: Some(analysis_basis_sha256),
+        decision_status: Some(analysis_basis.decision_summary.decision_status),
+        open_blockers: Some(analysis_basis.decision_summary.open_blockers.clone()),
+        missing_or_stale_evidence: Some(missing_or_stale_evidence(&analysis_basis)),
     };
     let path = family_recommendation_latest_path(&family);
     let bytes = serde_json::to_vec_pretty(&artifact).map_err(|error| {
@@ -472,6 +562,7 @@ pub(crate) fn run_emit_promotion_execution(
     let files_changed = git_diff_name_only(workspace_root, diff_base)?;
     let timestamp = current_timestamp_rfc3339()?;
     let target = TargetLanguage::from_family_target_language(target_language);
+    let (analysis_basis, analysis_basis_sha256) = load_analysis_basis_artifact(workspace_root)?;
     let artifact = PromotionExecutionArtifact {
         schema_version: PROMOTION_EXECUTION_SCHEMA_VERSION,
         artifact_kind: PromotionArtifactKind::PromotionExecution,
@@ -480,6 +571,11 @@ pub(crate) fn run_emit_promotion_execution(
         target_language: target,
         status: ExecutionStatus::Green,
         recommendation_path: recommendation_path.to_string(),
+        analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+        analysis_basis_sha256,
+        decision_status_at_start: analysis_basis.decision_summary.decision_status,
+        open_blockers_at_start: analysis_basis.decision_summary.open_blockers.clone(),
+        missing_or_stale_evidence_at_start: missing_or_stale_evidence(&analysis_basis),
         approvals: PromotionApprovals {
             target_family: ApprovalRecord {
                 status: ApprovalStatus::Approved,
@@ -542,6 +638,7 @@ pub(crate) fn run_emit_promotion_blocker(
             family.as_str()
         )));
     }
+    let (analysis_basis, analysis_basis_sha256) = load_analysis_basis_artifact(workspace_root)?;
 
     let artifact = PromotionBlockerArtifact {
         schema_version: PROMOTION_BLOCKER_SCHEMA_VERSION,
@@ -549,6 +646,11 @@ pub(crate) fn run_emit_promotion_blocker(
         run_id: run_id.to_string(),
         family: family.as_str().to_string(),
         target_language: TargetLanguage::from_family_target_language(target_language),
+        analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+        analysis_basis_sha256,
+        decision_status_at_start: analysis_basis.decision_summary.decision_status,
+        open_blockers_at_start: analysis_basis.decision_summary.open_blockers.clone(),
+        missing_or_stale_evidence_at_start: missing_or_stale_evidence(&analysis_basis),
         blocking_step,
         blocker_kind,
         summary: summary.to_string(),
@@ -639,10 +741,15 @@ pub(crate) fn run_validate_artifact(
 
 impl FamilyRecommendationArtifact {
     fn validate(&self, workspace_root: &Path, path_family: Option<&str>) -> Result<(), XtaskError> {
-        if self.schema_version != RECOMMENDATION_SCHEMA_VERSION {
+        let expected_schema = if path_family.is_some() {
+            FAMILY_RECOMMENDATION_SCHEMA_VERSION
+        } else {
+            RECOMMENDATION_SCHEMA_VERSION
+        };
+        if self.schema_version != expected_schema {
             return Err(XtaskError::InvalidInput(format!(
-                "recommendation schema_version must be {RECOMMENDATION_SCHEMA_VERSION}, found {}",
-                self.schema_version
+                "recommendation schema_version must be {expected_schema}, found {}",
+                self.schema_version,
             )));
         }
         if self.artifact_kind != PromotionArtifactKind::FamilyRecommendation {
@@ -732,6 +839,68 @@ impl FamilyRecommendationArtifact {
                     self.ranked_candidates[0].family
                 )));
             }
+            let analysis_basis_path = self.analysis_basis_path.as_deref().ok_or_else(|| {
+                XtaskError::InvalidInput(
+                    "family-scoped recommendation must include analysis_basis_path".to_string(),
+                )
+            })?;
+            let analysis_basis_sha256 =
+                self.analysis_basis_sha256.as_deref().ok_or_else(|| {
+                    XtaskError::InvalidInput(
+                        "family-scoped recommendation must include analysis_basis_sha256"
+                            .to_string(),
+                    )
+                })?;
+            let decision_status = self.decision_status.ok_or_else(|| {
+                XtaskError::InvalidInput(
+                    "family-scoped recommendation must include decision_status".to_string(),
+                )
+            })?;
+            let open_blockers = self.open_blockers.as_ref().ok_or_else(|| {
+                XtaskError::InvalidInput(
+                    "family-scoped recommendation must include open_blockers".to_string(),
+                )
+            })?;
+            let basis_missing_or_stale_evidence =
+                self.missing_or_stale_evidence.as_ref().ok_or_else(|| {
+                    XtaskError::InvalidInput(
+                        "family-scoped recommendation must include missing_or_stale_evidence"
+                            .to_string(),
+                    )
+                })?;
+            let analysis_basis = validate_analysis_basis_reference(
+                workspace_root,
+                analysis_basis_path,
+                analysis_basis_sha256,
+                "family-scoped recommendation",
+            )?;
+            if decision_status != analysis_basis.decision_summary.decision_status {
+                return Err(XtaskError::InvalidInput(
+                    "family-scoped recommendation decision_status must match the analysis basis"
+                        .to_string(),
+                ));
+            }
+            if *open_blockers != analysis_basis.decision_summary.open_blockers {
+                return Err(XtaskError::InvalidInput(
+                    "family-scoped recommendation open_blockers must match the analysis basis"
+                        .to_string(),
+                ));
+            }
+            if *basis_missing_or_stale_evidence != missing_or_stale_evidence(&analysis_basis) {
+                return Err(XtaskError::InvalidInput(
+                    "family-scoped recommendation missing_or_stale_evidence must match the analysis basis".to_string(),
+                ));
+            }
+        } else if self.analysis_basis_path.is_some()
+            || self.analysis_basis_sha256.is_some()
+            || self.decision_status.is_some()
+            || self.open_blockers.is_some()
+            || self.missing_or_stale_evidence.is_some()
+        {
+            return Err(XtaskError::InvalidInput(
+                "global recommendation artifacts must not include M33 analysis-basis fields"
+                    .to_string(),
+            ));
         }
 
         Ok(())
@@ -817,6 +986,9 @@ impl FamilyRecommendationAnalysisArtifact {
         for candidate in &self.ranked_candidates {
             candidate.validate()?;
         }
+        self.decision_summary.validate()?;
+        self.evidence_summary.validate()?;
+        self.delta_from_previous.validate()?;
         let any_ready = self
             .ranked_candidates
             .iter()
@@ -885,6 +1057,58 @@ impl FamilyRecommendationAnalysisArtifact {
                 }
             }
         }
+        let expected_open_blockers = expected_open_blockers(self.ranked_candidates.first());
+        if self.decision_summary.open_blockers != expected_open_blockers {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis decision_summary.open_blockers must match the first candidate hold reasons".to_string(),
+            ));
+        }
+        let expected_missing_evidence = expected_missing_evidence(self.ranked_candidates.first());
+        if self.evidence_summary.missing_evidence != expected_missing_evidence {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis evidence_summary.missing_evidence must match the first candidate evidence gaps".to_string(),
+            ));
+        }
+        if !self.evidence_summary.stale_evidence.is_empty()
+            && !self
+                .evidence_summary
+                .stale_evidence
+                .iter()
+                .all(|state| *state == EvidenceState::StaleEvidence)
+        {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis evidence_summary.stale_evidence may only contain `stale_evidence` entries".to_string(),
+            ));
+        }
+        let expected_warnings = expected_warnings(self.ranked_candidates.first());
+        if self.decision_summary.warnings != expected_warnings
+            || self.evidence_summary.warnings != expected_warnings
+        {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis warnings must match the derived regression warning set"
+                    .to_string(),
+            ));
+        }
+        let expected_decision_status = expected_decision_status(
+            self.recommendation_status,
+            self.ranked_candidates.first(),
+            &self.evidence_summary,
+        );
+        if self.decision_summary.decision_status != expected_decision_status {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis decision_summary.decision_status does not match the ranked candidate and evidence state".to_string(),
+            ));
+        }
+        if self.decision_summary.top_candidate_id
+            != self
+                .ranked_candidates
+                .first()
+                .map(|candidate| candidate.candidate_id.clone())
+        {
+            return Err(XtaskError::InvalidInput(
+                "recommendation analysis decision_summary.top_candidate_id must match the first ranked candidate".to_string(),
+            ));
+        }
         Ok(())
     }
 }
@@ -913,6 +1137,29 @@ impl PromotionExecutionArtifact {
             self.target_language,
             "promotion execution target_language",
         )?;
+        let analysis_basis = validate_analysis_basis_reference(
+            workspace_root,
+            &self.analysis_basis_path,
+            &self.analysis_basis_sha256,
+            "promotion execution",
+        )?;
+        if self.decision_status_at_start != analysis_basis.decision_summary.decision_status {
+            return Err(XtaskError::InvalidInput(
+                "promotion execution decision_status_at_start must match the analysis basis"
+                    .to_string(),
+            ));
+        }
+        if self.open_blockers_at_start != analysis_basis.decision_summary.open_blockers {
+            return Err(XtaskError::InvalidInput(
+                "promotion execution open_blockers_at_start must match the analysis basis"
+                    .to_string(),
+            ));
+        }
+        if self.missing_or_stale_evidence_at_start != missing_or_stale_evidence(&analysis_basis) {
+            return Err(XtaskError::InvalidInput(
+                "promotion execution missing_or_stale_evidence_at_start must match the analysis basis".to_string(),
+            ));
+        }
 
         let recommendation_path = validate_existing_repo_relative_path(
             workspace_root,
@@ -1035,6 +1282,30 @@ impl PromotionBlockerArtifact {
             self.target_language,
             "blocker report target_language",
         )?;
+        let analysis_basis = validate_analysis_basis_reference(
+            workspace_root,
+            &self.analysis_basis_path,
+            &self.analysis_basis_sha256,
+            "blocker report",
+        )?;
+        if self.decision_status_at_start != analysis_basis.decision_summary.decision_status {
+            return Err(XtaskError::InvalidInput(
+                "blocker report decision_status_at_start must match the analysis basis"
+                    .to_string(),
+            ));
+        }
+        if self.open_blockers_at_start != analysis_basis.decision_summary.open_blockers {
+            return Err(XtaskError::InvalidInput(
+                "blocker report open_blockers_at_start must match the analysis basis"
+                    .to_string(),
+            ));
+        }
+        if self.missing_or_stale_evidence_at_start != missing_or_stale_evidence(&analysis_basis) {
+            return Err(XtaskError::InvalidInput(
+                "blocker report missing_or_stale_evidence_at_start must match the analysis basis"
+                    .to_string(),
+            ));
+        }
         if self.summary.trim().is_empty() || self.summary.contains('\n') {
             return Err(XtaskError::InvalidInput(
                 "blocker report summary must be a single non-empty line".to_string(),
@@ -1063,6 +1334,98 @@ impl PromotionBlockerArtifact {
             if action.trim().is_empty() || action.contains('\n') {
                 return Err(XtaskError::InvalidInput(
                     "blocker report safe_next_actions[] must contain single-line entries"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl DecisionSummary {
+    fn validate(&self) -> Result<(), XtaskError> {
+        for warning in &self.warnings {
+            if *warning != DecisionReason::RegressionWarning {
+                return Err(XtaskError::InvalidInput(
+                    "decision_summary.warnings may only contain `regression_warning`"
+                        .to_string(),
+                ));
+            }
+        }
+        if self.summary.trim().is_empty() || self.summary.contains('\n') {
+            return Err(XtaskError::InvalidInput(
+                "decision_summary.summary must be a single non-empty line".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl EvidenceSummary {
+    fn validate(&self) -> Result<(), XtaskError> {
+        for warning in &self.warnings {
+            if *warning != DecisionReason::RegressionWarning {
+                return Err(XtaskError::InvalidInput(
+                    "evidence_summary.warnings may only contain `regression_warning`"
+                        .to_string(),
+                ));
+            }
+        }
+        if self.summary.trim().is_empty() || self.summary.contains('\n') {
+            return Err(XtaskError::InvalidInput(
+                "evidence_summary.summary must be a single non-empty line".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl RecommendationDelta {
+    pub(crate) fn no_previous_artifact() -> Self {
+        Self {
+            previous_generated_at: None,
+            previous_decision_status: None,
+            previous_recommendation_status: None,
+            decision_changed: false,
+            top_candidate_changed: false,
+            reasons_added: Vec::new(),
+            reasons_cleared: Vec::new(),
+            evidence_changes: Vec::new(),
+            summary: "No previous validated analysis artifact existed at this path.".to_string(),
+        }
+    }
+
+    pub(crate) fn normalized_placeholder() -> Self {
+        Self {
+            previous_generated_at: None,
+            previous_decision_status: None,
+            previous_recommendation_status: None,
+            decision_changed: false,
+            top_candidate_changed: false,
+            reasons_added: Vec::new(),
+            reasons_cleared: Vec::new(),
+            evidence_changes: Vec::new(),
+            summary: String::new(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), XtaskError> {
+        if let Some(previous_generated_at) = &self.previous_generated_at
+            && !looks_like_utc_timestamp(previous_generated_at)
+        {
+            return Err(XtaskError::InvalidInput(
+                "delta_from_previous.previous_generated_at must be a UTC RFC3339 timestamp when present".to_string(),
+            ));
+        }
+        if self.summary.trim().is_empty() || self.summary.contains('\n') {
+            return Err(XtaskError::InvalidInput(
+                "delta_from_previous.summary must be a single non-empty line".to_string(),
+            ));
+        }
+        for change in &self.evidence_changes {
+            if change.trim().is_empty() || change.contains('\n') {
+                return Err(XtaskError::InvalidInput(
+                    "delta_from_previous.evidence_changes[] must contain single-line entries"
                         .to_string(),
                 ));
             }
@@ -1419,6 +1782,145 @@ fn validate_sha_bound_path(
         )));
     }
     Ok(())
+}
+
+fn load_analysis_basis_artifact(
+    workspace_root: &Path,
+) -> Result<(FamilyRecommendationAnalysisArtifact, String), XtaskError> {
+    let path = workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+    let bytes = fs::read(&path).map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to read analysis basis `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    let artifact: FamilyRecommendationAnalysisArtifact =
+        serde_json::from_slice(&bytes).map_err(deserialize_error(&path))?;
+    artifact.validate(workspace_root)?;
+    Ok((artifact, inventory_sha256_hex(&bytes)))
+}
+
+fn validate_analysis_basis_reference(
+    workspace_root: &Path,
+    analysis_basis_path: &str,
+    analysis_basis_sha256: &str,
+    field_prefix: &str,
+) -> Result<FamilyRecommendationAnalysisArtifact, XtaskError> {
+    validate_sha_bound_path(
+        workspace_root,
+        analysis_basis_path,
+        FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+        analysis_basis_sha256,
+        &format!("{field_prefix} analysis_basis_path"),
+    )?;
+    let path = workspace_root.join(analysis_basis_path);
+    let bytes = fs::read(&path).map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to read analysis basis `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    let artifact: FamilyRecommendationAnalysisArtifact =
+        serde_json::from_slice(&bytes).map_err(deserialize_error(&path))?;
+    artifact.validate(workspace_root)?;
+    Ok(artifact)
+}
+
+fn expected_open_blockers(
+    candidate: Option<&RecommendationCandidateEntry>,
+) -> Vec<DecisionReason> {
+    let mut blockers = Vec::new();
+    for hold_reason in candidate
+        .map(|candidate| candidate.hold_reasons.as_slice())
+        .unwrap_or(&[])
+    {
+        let reason = match hold_reason {
+            HoldReason::UnknownOverlapFamily => DecisionReason::UnknownOverlapFamily,
+            HoldReason::HardDifficulty => DecisionReason::HardDifficulty,
+            HoldReason::ThinRealExampleSupport => DecisionReason::ThinRealExampleSupport,
+            HoldReason::ThinRegressionSupport => DecisionReason::ThinRegressionSupport,
+            HoldReason::HelperSurfaceNotPromotable => DecisionReason::HelperSurfaceNotPromotable,
+        };
+        if !blockers.contains(&reason) {
+            blockers.push(reason);
+        }
+    }
+    blockers
+}
+
+fn expected_missing_evidence(candidate: Option<&RecommendationCandidateEntry>) -> Vec<EvidenceState> {
+    let mut missing = Vec::new();
+    for hold_reason in candidate
+        .map(|candidate| candidate.hold_reasons.as_slice())
+        .unwrap_or(&[])
+    {
+        let Some(state) = (match hold_reason {
+            HoldReason::ThinRealExampleSupport => Some(EvidenceState::ThinRealExampleSupport),
+            HoldReason::ThinRegressionSupport => Some(EvidenceState::ThinRegressionSupport),
+            HoldReason::UnknownOverlapFamily
+            | HoldReason::HardDifficulty
+            | HoldReason::HelperSurfaceNotPromotable => None,
+        }) else {
+            continue;
+        };
+        if !missing.contains(&state) {
+            missing.push(state);
+        }
+    }
+    missing
+}
+
+fn expected_warnings(candidate: Option<&RecommendationCandidateEntry>) -> Vec<DecisionReason> {
+    if candidate.is_some_and(|candidate| candidate.leverage.promotion_relevant_regression_hits > 0)
+    {
+        vec![DecisionReason::RegressionWarning]
+    } else {
+        Vec::new()
+    }
+}
+
+fn expected_decision_status(
+    recommendation_status: RecommendationStatus,
+    candidate: Option<&RecommendationCandidateEntry>,
+    evidence_summary: &EvidenceSummary,
+) -> DecisionStatus {
+    let has_evidence_gaps =
+        !evidence_summary.missing_evidence.is_empty() || !evidence_summary.stale_evidence.is_empty();
+    match candidate {
+        Some(candidate)
+            if candidate.promotion_readiness == PromotionReadiness::Ready
+                && matches!(
+                    candidate.confidence.level,
+                    ConfidenceLevel::Medium | ConfidenceLevel::High
+                )
+                && !has_evidence_gaps =>
+        {
+            DecisionStatus::Recommended
+        }
+        Some(candidate)
+            if candidate.next_step_status == NextStepStatus::DurableHold
+                && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable =>
+        {
+            DecisionStatus::NotRecommended
+        }
+        Some(_) if recommendation_status == RecommendationStatus::InsufficientRealCorpus => {
+            DecisionStatus::NotRecommended
+        }
+        Some(_) => DecisionStatus::BlockedForNow,
+        None => DecisionStatus::NotRecommended,
+    }
+}
+
+fn missing_or_stale_evidence(
+    artifact: &FamilyRecommendationAnalysisArtifact,
+) -> Vec<EvidenceState> {
+    let mut combined = artifact.evidence_summary.missing_evidence.clone();
+    for stale in &artifact.evidence_summary.stale_evidence {
+        if !combined.contains(stale) {
+            combined.push(*stale);
+        }
+    }
+    combined
 }
 
 fn validate_overlap_family(value: &str) -> Result<(), XtaskError> {
