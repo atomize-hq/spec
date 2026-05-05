@@ -354,6 +354,13 @@ classification, while `corpus-program-decision.latest.json` remains the
 operator-action output that tells maintainers to stop, spend, or pivot without
 claiming broader implementation scope.
 
+M36 preserves that frozen M35 wedge. One shared classifier surface remains the
+only helper follow-on contract owner, so
+`helper_surface_not_promotable` still feeds
+`durable_non_promotable_helper_surface`, which still yields
+`pivot_to_architecture_shared_core_follow_on` plus
+`author_architecture_follow_on_plan`. Corpus run `1` remains unspent.
+
 The operational guidance is therefore:
 
 - do **not** commit to a long 5-10 milestone corpus roadmap
@@ -376,3 +383,5 @@ unspent, and the explicit M34 next step is
 `pivot_to_architecture_shared_core_follow_on`, not silent corpus continuation.
 That frozen M35 wording does not promote a new family, spend corpus run `1`, or
 move the helper-surface classification out of the shared classifier path.
+
+When reviewing the read-side outputs for that frozen wedge, raw latest-artifact SHA is not semantic identity, and normalized semantic fingerprints are the proof surface. M36 keeps the semantic contract anchored on normalized meaning rather than byte-for-byte churn in `*.latest.json`.

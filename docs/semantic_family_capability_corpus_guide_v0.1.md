@@ -188,6 +188,15 @@ frozen vocabulary, `recommendation.latest.json` remains the analysis input
 truth, while `corpus-program-decision.latest.json` remains the bounded
 operator-action output.
 
+M36 preserves that frozen M35 wedge rather than widening it. One shared
+classifier surface remains the only helper follow-on contract owner, so the
+same `helper_surface_not_promotable` input still drives the same
+`durable_non_promotable_helper_surface` basis and the same
+`pivot_to_architecture_shared_core_follow_on` plus
+`author_architecture_follow_on_plan` follow-on contract.
+
+That also means read-side artifact churn must be interpreted semantically: raw latest-artifact SHA is not semantic identity, and normalized semantic fingerprints are the proof surface.
+
 These artifacts interpret the corpus. They do not define the semantic graph.
 
 ---
@@ -339,6 +348,9 @@ That means:
   visibility
 - the non-promotability call belongs to the shared classifier path, not a
   widened family-packet or generic decision layer
+- M36 preserves the frozen M35 wedge, so that single shared classifier owner
+  still controls the helper follow-on contract instead of a corpus-budget or
+  packet-local shortcut
 
 So if you add more examples of that same unsupported shape, you may increase:
 

@@ -117,6 +117,17 @@ analysis artifact remains the input truth for that classification, while
 `corpus-program-decision.latest.json` remains the bounded operator-action
 output that records what to do next with that input.
 
+M36 preserves that frozen M35 wedge exactly. One shared classifier surface is
+still the only helper follow-on contract owner for this lane, so
+`helper_surface_not_promotable`,
+`durable_non_promotable_helper_surface`,
+`pivot_to_architecture_shared_core_follow_on`, and
+`author_architecture_follow_on_plan` stay coupled without implying that corpus
+run `1` was spent or that the helper surface became promotable.
+
+Maintainers should also treat artifact identity semantically, not bytewise:
+raw latest-artifact SHA is not semantic identity, and normalized semantic fingerprints are the proof surface.
+
 ### Corpus Source Kinds
 
 The Rust function corpus uses explicit source kinds:
