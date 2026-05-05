@@ -110,6 +110,13 @@ For the current live helper-surface wedge, the emitted M34 decision is
 That means corpus run `1` remains unspent. It does not mean M34 implemented the
 shared-core follow-on.
 
+At the frozen M35 boundary, the helper-surface pressure is still real, but the
+non-promotability classification is owned by one shared classifier surface, not
+by a widened packet-local or `spec`-core decision path. The recommendation
+analysis artifact remains the input truth for that classification, while
+`corpus-program-decision.latest.json` remains the bounded operator-action
+output that records what to do next with that input.
+
 ### Corpus Source Kinds
 
 The Rust function corpus uses explicit source kinds:
