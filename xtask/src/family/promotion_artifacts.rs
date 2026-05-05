@@ -2,10 +2,9 @@ use crate::FamilyTargetLanguage;
 use crate::XtaskError;
 use crate::family::coverage::current_timestamp_rfc3339;
 use crate::family::decision_kernel::{
-    basis_snapshot_requires_helper_surface_follow_on, corpus_program_basis_snapshot,
+    corpus_program_basis_snapshot, derive_corpus_program_decision_contract,
 };
 use crate::family::helper_surface::{
-    decision_matches_helper_surface_follow_on_tuple, decision_uses_helper_surface_follow_on_tuple,
     recommendation_matches_helper_surface_durable_hold_tuple,
     recommendation_uses_helper_surface_durable_hold_tuple,
 };
@@ -1230,21 +1229,15 @@ impl CorpusProgramDecisionArtifact {
                 "corpus-program decision basis_snapshot must exactly match the validated analysis basis".to_string(),
             ));
         }
-
-        let basis_requires_helper_surface_follow_on =
-            basis_snapshot_requires_helper_surface_follow_on(&self.basis_snapshot);
-        let artifact_uses_helper_surface_follow_on =
-            decision_uses_helper_surface_follow_on_tuple(self);
-        if basis_requires_helper_surface_follow_on != artifact_uses_helper_surface_follow_on {
-            return Err(XtaskError::InvalidInput(
-                "corpus-program decision helper-surface follow-on tuple must stay aligned with the validated analysis basis".to_string(),
-            ));
-        }
-        if artifact_uses_helper_surface_follow_on
-            && !decision_matches_helper_surface_follow_on_tuple(self)
+        let expected_decision = derive_corpus_program_decision_contract(&analysis_basis)?;
+        if self.decision_action != expected_decision.decision_action
+            || self.decision_basis_code != expected_decision.decision_basis_code
+            || self.pivot_target_class != expected_decision.pivot_target_class
+            || self.required_next_action != expected_decision.required_next_action
+            || self.summary != expected_decision.summary
         {
             return Err(XtaskError::InvalidInput(
-                "corpus-program decision helper-surface follow-on tuple must use the frozen action, basis code, pivot target, and next action".to_string(),
+                "corpus-program decision semantic fields must exactly match the kernel-derived decision contract for the validated analysis basis".to_string(),
             ));
         }
 
