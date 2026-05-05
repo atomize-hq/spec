@@ -26,8 +26,9 @@ output consistently.
 The current truthful output says:
 
 - `function_coverage = 28 / 17 / 0 / 11`
-- `recommendation_analysis_schema_version = 3`
+- `recommendation_analysis_schema_version = 4`
 - `recommendation_status = "no_strong_candidate"`
+- `decision_status = "not_recommended"`
 - the arithmetic-ready cluster no longer survives as a ranked next-step driver
 - `money/round` remains visible through
   `unsupported_function_surface-e40675da6fa0`
@@ -339,6 +340,9 @@ As of the `M27.9` stop-state closeout, the recommendation is:
 The current evidence no longer supports "one more corpus run by default."
 It also no longer supports steering from the retired arithmetic-ready story.
 The truthful closeout state is `28 / 17 / 0 / 11` with
-`recommendation_status = "no_strong_candidate"`, while `money/round` remains
-visible under `helper_surface_not_promotable` plus `durable_hold` and corpus
-run `1` remains unspent and unauthorized by default.
+`recommendation_status = "no_strong_candidate"` and
+`decision_status = "not_recommended"`, while `money/round` remains visible
+under `helper_surface_not_promotable`. In the M33 vocabulary, a plausible
+future candidate with evidence gaps would read `blocked_for_now`, while a truly
+promotion-worthy candidate would read `recommended`. Corpus run `1` remains
+unspent and unauthorized by default.

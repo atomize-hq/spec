@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **M33 recommendation decision artifacts are now maintainer-facing** — `analysis/recommendation.latest.json` now carries explicit `recommended`, `blocked_for_now`, and `not_recommended` verdicts plus evidence and delta state, while the bounded second-language path remains the existing `function.arithmetic_leaf.monotone_up.v1` pilot and nothing broader.
+
 ## 0.13.1 - 2026-04-29
 
 ### Added

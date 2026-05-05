@@ -72,6 +72,22 @@ Held candidates are not errors. A candidate may remain visible in the output
 with `promotion_readiness = "hold"` so maintainers can see where pressure is
 forming without over-claiming that the next family is promotion-ready.
 
+M33 keeps `recommendation_status` as that compatibility layer and adds a
+maintainer-facing decision verdict in
+`.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`:
+
+- `recommended` means the current top candidate is promotion-worthy now.
+- `blocked_for_now` means a plausible candidate exists, but blocker reasons or
+  missing/stale evidence still hold it back.
+- `not_recommended` means the visible pressure is real but should not drive the
+  next family decision.
+
+The current `money/round` helper-surface wedge is the narrow example of that
+last state: it stays visible, but the M33 decision surface records it as
+`not_recommended` under `helper_surface_not_promotable`. That does not widen
+the bounded second-language claim beyond
+`function.arithmetic_leaf.monotone_up.v1`.
+
 ### Corpus Source Kinds
 
 The Rust function corpus uses explicit source kinds:

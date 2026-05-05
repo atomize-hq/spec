@@ -152,6 +152,13 @@ These are read-side analysis outputs built over the corpus.
 - `recommendation.latest.json` says what next family, if any, looks worthy of
   promotion under the current rules
 
+Under the M33 decision surface, that same
+`recommendation.latest.json` artifact also carries a top-level decision verdict:
+
+- `recommended`
+- `blocked_for_now`
+- `not_recommended`
+
 These artifacts interpret the corpus. They do not define the semantic graph.
 
 ---
@@ -293,11 +300,14 @@ Current repo truth says the `money/round` cluster is:
 - rankable
 - real enough to matter
 - still `overlap_family = "unknown"`
+- `decision_status = "not_recommended"`
 
 That means:
 
 - corpus pressure is real
 - capability is still missing
+- the current blocker is `helper_surface_not_promotable`, not lack of
+  visibility
 
 So if you add more examples of that same unsupported shape, you may increase:
 
@@ -311,6 +321,10 @@ But you do **not** necessarily increase:
 
 That is why more corpus can produce **louder uncertainty** instead of
 **better understanding**.
+
+In M33 terms, this is exactly the difference between `blocked_for_now` and
+`not_recommended`: `money/round` is not the next family move even though the
+pressure is still visible.
 
 ---
 

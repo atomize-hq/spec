@@ -324,10 +324,28 @@ M32 proves one bounded second-language promotion path for
    `function.arithmetic_leaf.monotone_up.v1` second-language pilot and not a
    broader portability claim.
 
+## M33 — Recommendation-Quality Promotion Decisions
+**Status:** In progress, bounded
+
+M33 does not promote a new family and does not widen the bounded
+second-language claim. It hardens the decision surface at
+`.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+so maintainers can distinguish:
+
+- `recommended`
+- `blocked_for_now`
+- `not_recommended`
+
+The current truthful wedge for `money/round` is `not_recommended`: the cluster
+is visible, but `helper_surface_not_promotable` keeps it from being the next
+family move. The bounded second-language proof remains the existing
+`function.arithmetic_leaf.monotone_up.v1` path and nothing broader.
+
 ## One-Line Summary
 
 `M26` made family promotion AI-operable, `M27` made next-family choice
 evidence-driven, `M27.5` hardens recommendation quality, `M31` isolates
 the shared core from Rust-specific escape hatches, and `M32` proves one bounded
 second-language promotion path for `function.arithmetic_leaf.monotone_up.v1`
-while keeping broader portability claims out of scope.
+while keeping broader portability claims out of scope; `M33` makes the
+maintainer-facing recommendation verdict explicit without widening that proof.
