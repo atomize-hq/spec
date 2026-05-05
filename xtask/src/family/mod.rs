@@ -1,5 +1,6 @@
 pub mod certify;
 pub mod coverage;
+pub mod decision_kernel;
 pub mod harness;
 pub mod helper_surface;
 pub mod inventory;

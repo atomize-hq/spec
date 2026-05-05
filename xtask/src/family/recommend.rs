@@ -3,11 +3,10 @@ use crate::family::coverage::{
     CoverageRunOutput, collect_latest, current_timestamp_rfc3339,
     normalized_coverage_proof_fingerprint, render_json_bytes, write_latest,
 };
+use crate::family::decision_kernel::corpus_program_basis_snapshot;
 use crate::family::helper_surface::{
-    HelperSurfaceDisposition, HelperSurfaceSignal,
-    basis_snapshot_requires_helper_surface_follow_on, classify_helper_surface,
-    durable_non_promotable_helper_surface_candidate_tuple, helper_surface_follow_on_decision_tuple,
-    recommendation_matches_helper_surface_durable_hold_tuple,
+    HelperSurfaceDisposition, HelperSurfaceSignal, classify_helper_surface,
+    durable_non_promotable_helper_surface_candidate_tuple,
 };
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
@@ -16,23 +15,24 @@ use crate::family::paths::{
 };
 use crate::family::promotion_artifacts::{
     CORPUS_PROGRAM_DECISION_SCHEMA_VERSION, CandidateStatus, ConfidenceLevel,
-    CorpusProgramBasisSnapshot, CorpusProgramDecisionAction, CorpusProgramDecisionArtifact,
-    CorpusProgramDecisionBasisCode, DecisionReason, DecisionStatus, DecisionSummary,
-    DifficultyTier, EvidenceState, EvidenceSummary, FamilyCoverageArtifact,
-    FamilyRecommendationAnalysisArtifact, HoldReason, NextStepDetail, NextStepStatus,
-    PivotTargetClass, PromotionArtifactKind, PromotionReadiness,
+    CorpusProgramDecisionArtifact, DecisionReason, DecisionStatus, DecisionSummary, DifficultyTier,
+    EvidenceState, EvidenceSummary, FamilyCoverageArtifact, FamilyRecommendationAnalysisArtifact,
+    HoldReason, NextStepDetail, NextStepStatus, PromotionArtifactKind, PromotionReadiness,
     RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RecommendationCandidateEntry, RecommendationConfidence,
     RecommendationDelta, RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
-    RequiredNextAction, UnsupportedClusterEntry, candidate_qualifies_for_ranked_status,
-    corpus_program_basis_snapshot,
+    UnsupportedClusterEntry, candidate_qualifies_for_ranked_status,
 };
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
+
+pub(crate) use crate::family::decision_kernel::{
+    derive_corpus_program_decision_contract, normalized_corpus_program_decision_proof_fingerprint,
+    normalized_recommendation_proof_fingerprint,
+};
 
 pub(crate) fn run(workspace_root: &Path, format: &str) -> Result<(), XtaskError> {
     let mut stdout = io::stdout().lock();
@@ -131,98 +131,6 @@ pub(crate) fn build_recommendation_analysis_artifact(
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DerivedCorpusProgramDecision {
-    pub decision_action: CorpusProgramDecisionAction,
-    pub decision_basis_code: CorpusProgramDecisionBasisCode,
-    pub pivot_target_class: Option<PivotTargetClass>,
-    pub required_next_action: RequiredNextAction,
-    pub summary: String,
-}
-
-pub(crate) fn derive_corpus_program_decision_contract(
-    basis: &FamilyRecommendationAnalysisArtifact,
-) -> Result<DerivedCorpusProgramDecision, XtaskError> {
-    let snapshot = corpus_program_basis_snapshot(basis);
-    let top_candidate = basis.ranked_candidates.first();
-
-    if snapshot.decision_status == DecisionStatus::Recommended {
-        return Ok(DerivedCorpusProgramDecision {
-            decision_action: CorpusProgramDecisionAction::PivotToFamilyPromotionRun,
-            decision_basis_code: CorpusProgramDecisionBasisCode::PromotionReadyCandidate,
-            pivot_target_class: Some(PivotTargetClass::FamilyPromotionRun),
-            required_next_action: RequiredNextAction::AuthorFamilyPromotionPlan,
-            summary: format!(
-                "Recommendation basis is `recommended`, so corpus run 1 stays unspent and the repo should pivot to a bounded family-promotion run for `{}`.",
-                snapshot
-                    .top_candidate_id
-                    .as_deref()
-                    .unwrap_or("the current top candidate")
-            ),
-        });
-    }
-
-    if snapshot.decision_status == DecisionStatus::BlockedForNow
-        && (!snapshot.missing_evidence.is_empty() || !snapshot.stale_evidence.is_empty())
-    {
-        return Ok(DerivedCorpusProgramDecision {
-            decision_action: CorpusProgramDecisionAction::SpendCorpusRun1,
-            decision_basis_code: CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence,
-            pivot_target_class: None,
-            required_next_action: RequiredNextAction::AuthorCorpusExpansionPlan,
-            summary: format!(
-                "Recommendation basis is blocked by missing or stale evidence for `{}`, so corpus run 1 should be spent on bounded corpus expansion rather than a promotion run.",
-                snapshot
-                    .top_candidate_id
-                    .as_deref()
-                    .unwrap_or("the current top candidate")
-            ),
-        });
-    }
-
-    if top_candidate
-        .zip(helper_surface_disposition_for_basis_candidate(basis))
-        .is_some_and(|(candidate, disposition)| {
-            disposition == HelperSurfaceDisposition::DurableNonPromotableHelperSurface
-                && recommendation_matches_helper_surface_durable_hold_tuple(candidate)
-        })
-        && basis_snapshot_requires_helper_surface_follow_on(&snapshot)
-    {
-        let follow_on = helper_surface_follow_on_decision_tuple();
-        return Ok(DerivedCorpusProgramDecision {
-            decision_action: follow_on.decision_action,
-            decision_basis_code: follow_on.decision_basis_code,
-            pivot_target_class: Some(follow_on.pivot_target_class),
-            required_next_action: follow_on.required_next_action,
-            summary: format!(
-                "Recommendation basis holds `{}` as a durable non-promotable helper surface, so corpus run 1 stays unspent and the repo should pivot to an architecture shared-core follow-on plan.",
-                snapshot
-                    .top_candidate_id
-                    .as_deref()
-                    .unwrap_or("the current top candidate")
-            ),
-        });
-    }
-
-    if snapshot.decision_status == DecisionStatus::BlockedForNow {
-        return Ok(DerivedCorpusProgramDecision {
-            decision_action: CorpusProgramDecisionAction::PivotToRecommendationPolicyRun,
-            decision_basis_code: CorpusProgramDecisionBasisCode::PolicyInterpretationBlocker,
-            pivot_target_class: Some(PivotTargetClass::RecommendationPolicyRun),
-            required_next_action: RequiredNextAction::AuthorRecommendationPolicyPlan,
-            summary: "Recommendation basis is blocked without a bounded evidence-spend path, so the repo should pivot to a recommendation-policy follow-on before spending corpus run 1.".to_string(),
-        });
-    }
-
-    Ok(DerivedCorpusProgramDecision {
-        decision_action: CorpusProgramDecisionAction::Stop,
-        decision_basis_code: CorpusProgramDecisionBasisCode::NoActionableCandidate,
-        pivot_target_class: None,
-        required_next_action: RequiredNextAction::RecordStopWithoutNewMilestone,
-        summary: "Recommendation basis exposes no actionable next family move, so corpus run 1 remains unspent and no new milestone is authorized from this basis.".to_string(),
-    })
-}
-
 pub(crate) fn build_corpus_program_decision_artifact(
     generated_at: String,
     analysis_basis_sha256: String,
@@ -235,14 +143,7 @@ pub(crate) fn build_corpus_program_decision_artifact(
         generated_at,
         analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
         analysis_basis_sha256,
-        basis_snapshot: CorpusProgramBasisSnapshot {
-            recommendation_status: basis.recommendation_status,
-            decision_status: basis.decision_summary.decision_status,
-            top_candidate_id: basis.decision_summary.top_candidate_id.clone(),
-            open_blockers: basis.decision_summary.open_blockers.clone(),
-            missing_evidence: basis.evidence_summary.missing_evidence.clone(),
-            stale_evidence: basis.evidence_summary.stale_evidence.clone(),
-        },
+        basis_snapshot: corpus_program_basis_snapshot(basis),
         decision_action: derived.decision_action,
         decision_basis_code: derived.decision_basis_code,
         pivot_target_class: derived.pivot_target_class,
@@ -355,39 +256,6 @@ fn load_existing_corpus_program_decision_artifact(
     let artifact: CorpusProgramDecisionArtifact = serde_json::from_slice(&bytes).ok()?;
     artifact.validate(workspace_root).ok()?;
     Some((artifact, bytes))
-}
-
-fn normalized_recommendation_for_determinism(
-    artifact: &FamilyRecommendationAnalysisArtifact,
-) -> FamilyRecommendationAnalysisArtifact {
-    let mut normalized = artifact.clone();
-    normalized.generated_at.clear();
-    normalized.delta_from_previous = RecommendationDelta::normalized_placeholder();
-    normalized
-}
-
-pub(crate) fn normalized_recommendation_proof_fingerprint(
-    artifact: &FamilyRecommendationAnalysisArtifact,
-) -> Result<String, XtaskError> {
-    let normalized = normalized_recommendation_for_determinism(artifact);
-    let bytes = render_json_bytes(&normalized)?;
-    Ok(inventory_sha256_hex(&bytes))
-}
-
-fn normalized_corpus_program_decision_for_determinism(
-    artifact: &CorpusProgramDecisionArtifact,
-) -> CorpusProgramDecisionArtifact {
-    let mut normalized = artifact.clone();
-    normalized.generated_at.clear();
-    normalized
-}
-
-pub(crate) fn normalized_corpus_program_decision_proof_fingerprint(
-    artifact: &CorpusProgramDecisionArtifact,
-) -> Result<String, XtaskError> {
-    let normalized = normalized_corpus_program_decision_for_determinism(artifact);
-    let bytes = render_json_bytes(&normalized)?;
-    Ok(inventory_sha256_hex(&bytes))
 }
 
 fn decision_summary_for(
@@ -937,57 +805,6 @@ fn helper_surface_disposition_for_discovery(
         real_example_hits: discovery.leverage.real_example_hits,
         shape_fingerprint: discovery.shape_fingerprint.as_str(),
     })
-}
-
-fn helper_surface_disposition_for_cluster(
-    cluster: &UnsupportedClusterEntry,
-) -> Option<HelperSurfaceDisposition> {
-    classify_helper_surface(&HelperSurfaceSignal {
-        primary_reason_code: cluster.reason_code,
-        overlap_family: cluster.overlap_family.as_str(),
-        real_example_hits: cluster.real_example_hits,
-        shape_fingerprint: cluster.shape_fingerprint.as_str(),
-    })
-}
-
-fn helper_surface_disposition_for_basis_candidate(
-    basis: &FamilyRecommendationAnalysisArtifact,
-) -> Option<HelperSurfaceDisposition> {
-    let top_candidate = basis.ranked_candidates.first()?;
-    if let Some(disposition) = helper_surface_disposition_from_coverage_basis(basis, top_candidate)
-    {
-        return Some(disposition);
-    }
-    if top_candidate.primary_reason_code
-        != UnsupportedFunctionReasonCode::UnsupportedFunctionSurface
-        || top_candidate.overlap_family != "unknown"
-        || top_candidate.leverage.real_example_hits == 0
-    {
-        return None;
-    }
-    if recommendation_matches_helper_surface_durable_hold_tuple(top_candidate) {
-        Some(HelperSurfaceDisposition::DurableNonPromotableHelperSurface)
-    } else {
-        None
-    }
-}
-
-fn helper_surface_disposition_from_coverage_basis(
-    basis: &FamilyRecommendationAnalysisArtifact,
-    candidate: &RecommendationCandidateEntry,
-) -> Option<HelperSurfaceDisposition> {
-    let cwd = env::current_dir().ok()?;
-    let coverage_path = cwd.join(&basis.coverage_path);
-    let coverage_bytes = fs::read(coverage_path).ok()?;
-    if inventory_sha256_hex(&coverage_bytes) != basis.coverage_sha256 {
-        return None;
-    }
-    let coverage: FamilyCoverageArtifact = serde_json::from_slice(&coverage_bytes).ok()?;
-    coverage
-        .unsupported_clusters
-        .iter()
-        .find(|cluster| candidate.cluster_ids.contains(&cluster.cluster_id))
-        .and_then(helper_surface_disposition_for_cluster)
 }
 
 pub(crate) fn recommendation_status_for(

@@ -1,8 +1,10 @@
 use crate::FamilyTargetLanguage;
 use crate::XtaskError;
 use crate::family::coverage::current_timestamp_rfc3339;
+use crate::family::decision_kernel::{
+    basis_snapshot_requires_helper_surface_follow_on, corpus_program_basis_snapshot,
+};
 use crate::family::helper_surface::{
-    basis_snapshot_requires_helper_surface_follow_on,
     decision_matches_helper_surface_follow_on_tuple, decision_uses_helper_surface_follow_on_tuple,
     recommendation_matches_helper_surface_durable_hold_tuple,
     recommendation_uses_helper_surface_durable_hold_tuple,
@@ -1906,19 +1908,6 @@ fn load_analysis_basis_artifact(
         serde_json::from_slice(&bytes).map_err(deserialize_error(&path))?;
     artifact.validate(workspace_root)?;
     Ok((artifact, inventory_sha256_hex(&bytes)))
-}
-
-pub(crate) fn corpus_program_basis_snapshot(
-    artifact: &FamilyRecommendationAnalysisArtifact,
-) -> CorpusProgramBasisSnapshot {
-    CorpusProgramBasisSnapshot {
-        recommendation_status: artifact.recommendation_status,
-        decision_status: artifact.decision_summary.decision_status,
-        top_candidate_id: artifact.decision_summary.top_candidate_id.clone(),
-        open_blockers: artifact.decision_summary.open_blockers.clone(),
-        missing_evidence: artifact.evidence_summary.missing_evidence.clone(),
-        stale_evidence: artifact.evidence_summary.stale_evidence.clone(),
-    }
 }
 
 fn validate_analysis_basis_reference(
