@@ -1,103 +1,85 @@
-# M34 - Stop-Spend-Pivot Decision Contract
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-autoplan-restore-20260505-112225.md -->
+
+# M35 - Architecture Shared-Core Follow-On
 
 Status: **authoritative implementation plan**  
 Base branch: **main**  
 Working branch: **feat/corpus-expansion**  
 Last rewritten: **2026-05-05**  
-Supersedes: **M33 - Recommendation-Quality Promotion Decisions**  
-Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260504-233336.md`**  
+Supersedes: **M34 - Stop-Spend-Pivot Decision Contract**  
+Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260505-110352.md`**  
 Related roadmap: **`docs/ai_promotion_and_multilanguage_milestones_v0.1.md`**  
 Program tracker: **`docs/recommendation_corpus_expansion_program_v0.1.md`**  
 Capability guide: **`docs/semantic_family_capability_corpus_guide_v0.1.md`**  
-Live analysis basis: **`.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`**  
-Execution note: **Do not create `ORCH_PLAN.md` up front. This is one bounded `xtask` + docs milestone. Split work only after the schema and command names are frozen.**  
-Foundation precondition: **Start from commit `e7df8cbccfec0d7359d58d32ef17eaacd5a10946` or a direct descendant that preserves the closed M33 truth surface.**
+Reality-alignment prerequisite: **land validated M34 commit `df15e3e392be30a13b10f028eb19e4286c931523` from `ws/m34-int` onto this branch before any M35-only edits**  
+Execution note: **do not create a new crate, a new artifact family, or a generic decision engine. This milestone extracts one bounded shared truth inside the existing `xtask` family layer.**
 
 ## Objective
 
-Turn the current truthful M33 output into one explicit machine-readable next-step
-decision.
+Turn the current helper-surface special case into one explicit shared-core
+classification that both recommendation analysis and corpus-program decision
+derivation consume.
 
-After M34, a maintainer or agent should be able to answer one operational
-question without re-reading the corpus tracker, design doc, or chat history:
+After M35, the repo should still reach the same live wedge conclusion:
 
-> Should the repo spend corpus run `1`, keep it unspent, or pivot away from
-> corpus work now?
+- do **not** spend corpus run `1`
+- do **not** promote a new family
+- do pivot to `author_architecture_follow_on_plan`
 
-That answer must be emitted as a bounded artifact, not left as prose inference.
+But it must reach that conclusion through one named reusable truth surface
+instead of embedding the helper-surface rule separately in family-local policy
+code.
 
 ## Decision
 
-M34 ships as a **bounded sibling decision artifact** under the existing family
-analysis tree:
+M35 ships as a **bounded shared-core extraction inside `xtask/src/family/`**.
 
-- path:
-  `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-- producer command:
-  `cargo xtask family corpus-decision --format json`
-- input:
-  `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+The implementation has two phases:
+
+1. **Reality alignment**
+   Bring the validated M34 command and artifact contract from `ws/m34-int`
+   onto `feat/corpus-expansion` unchanged in behavior.
+
+2. **Shared-core extraction**
+   Extract a single helper-surface classification module that answers:
+
+   > Is this visible unsupported-function pressure a durable,
+   > non-promotable helper surface?
+
+   That classification becomes the shared truth consumed by:
+
+   - recommendation derivation in `xtask/src/family/recommend.rs`
+   - corpus-program decision derivation in the M34 command path
+   - bounded invariant tests that prove both consumers stay aligned
 
 This is the smallest complete move.
 
-Do not reopen recommendation policy. Do not parse markdown program trackers at
-runtime. Do not widen into corpus accounting, family promotion execution, or
-shared-core implementation.
-
-M34 consumes the fixed M33 analysis artifact, derives one bounded next-step
-decision, validates it, writes it deterministically, and documents what that
-decision means.
-
 ## Problem Statement
 
-M33 closed the recommendation-honesty problem.
+The repo already knows something important:
 
-The live branch now truthfully says:
+- the visible unsupported pressure is real
+- the blocker is not missing evidence
+- the current shape is a helper surface, not the next promotable family
 
-- `recommendation_status = "no_strong_candidate"`
-- `decision_summary.decision_status = "not_recommended"`
-- top visible pressure is
-  `unsupported_function_surface-e40675da6fa0`
-- durable blocker is `helper_surface_not_promotable`
-- `missing_evidence = []`
-- `stale_evidence = []`
+Today that truth is not owned cleanly.
 
-That is good output, but it still leaves one repo-level operator question
-unresolved:
+The helper-surface rule currently exists as inline recommendation logic in
+`xtask/src/family/recommend.rs`, plus schema-level tuple invariants in
+`xtask/src/family/promotion_artifacts.rs`, plus doc prose that explains what the
+verdict means. That is enough to describe the result, but not enough to make the
+reason reusable.
 
-- spend corpus run `1`
-- keep it unspent
-- pivot away from corpus work
+The branch split makes the problem worse. The validated M34 outcome exists on
+`ws/m34-int` at `df15e3e392be30a13b10f028eb19e4286c931523`, but the working
+branch does not yet contain:
 
-Right now the repo can say "not this family." It still cannot say "therefore do
-this next" in a machine-readable, bounded, deterministic way.
+- `cargo xtask family corpus-decision --format json`
+- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
 
-That is the whole M34 gap.
-
-## Live Basis
-
-The current branch basis is fixed and must remain the canonical wedge during
-implementation:
-
-```json
-{
-  "recommendation_status": "no_strong_candidate",
-  "decision_status": "not_recommended",
-  "top_candidate_id": "z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0",
-  "open_blockers": ["helper_surface_not_promotable"],
-  "missing_evidence": [],
-  "stale_evidence": []
-}
-```
-
-The expected live M34 output for that basis is:
-
-- `decision_action = "pivot_to_architecture_shared_core_follow_on"`
-- `decision_basis_code = "durable_non_promotable_helper_surface"`
-- `required_next_action = "author_architecture_follow_on_plan"`
-
-This is deliberate. The current blocker is not missing corpus. It is that the
-visible helper-surface pressure is real but not promotable.
+So M35 cannot treat M34 as ambient background truth. It must first make the
+working branch real, then extract the bounded shared-core concept on top of that
+real surface.
 
 ## Step 0 - Scope Challenge
 
@@ -105,316 +87,224 @@ visible helper-surface pressure is real but not promotable.
 
 | Sub-problem | Existing code or artifact | Reuse decision |
 |---|---|---|
-| Coverage truth | `xtask/src/family/coverage.rs` and `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json` | Reuse unchanged. M34 does not rescan the corpus itself. |
-| Recommendation analysis truth | `xtask/src/family/recommend.rs` and `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json` | Reuse as the fixed input surface. M34 consumes this artifact instead of recomputing policy inside a new subsystem. |
-| Artifact schema + validation | `xtask/src/family/promotion_artifacts.rs` | Extend with one new artifact kind, one new schema, and one new validation path. Do not create a second validator stack. |
-| Artifact paths + atomic writes | `xtask/src/family/paths.rs` and `write_bytes_atomically(...)` | Reuse directly. The new decision artifact lives under the existing `analysis/` directory. |
-| CLI command dispatch | `xtask/src/lib.rs` | Extend with one new `family corpus-decision` command. Do not add a separate binary. |
-| Maintainer-facing truth surfaces | `semantic-families/README.md`, `docs/recommendation_corpus_expansion_program_v0.1.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md` | Update wording so the repo explains stop vs spend vs pivot without reopening M33 semantics. |
+| Runtime-supported family inventory | `xtask/src/family/inventory.rs`, `xtask/src/family/harness.rs`, `xtask/src/family/routing.rs` | Reuse unchanged. M35 is not an inventory milestone. |
+| Corpus coverage projection | `xtask/src/family/coverage.rs` and `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json` | Reuse unchanged. M35 must not rescan or reinterpret the corpus outside existing coverage flow. |
+| Recommendation analysis | `xtask/src/family/recommend.rs` and `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json` | Reuse as the current consumer that still owns discovery inputs. Replace only the helper-surface special case with shared classification. |
+| Recommendation/read-side schemas | `xtask/src/family/promotion_artifacts.rs` | Reuse for artifact structs and tuple validation. Do not move artifact ownership elsewhere. |
+| Artifact paths and atomic writes | `xtask/src/family/paths.rs` and `write_bytes_atomically(...)` | Reuse directly. M35 should not invent a new artifact root. |
+| M34 command surface | validated commit `df15e3e392be30a13b10f028eb19e4286c931523` on `ws/m34-int` | Reuse by landing it first, not by re-implementing M34 from scratch inside M35. |
+| Prior shared projection pattern | `spec-core/src/portability.rs` | Reuse as a design pattern only: one projection module, multiple consumers, shared tests. Do **not** move helper-surface truth into `spec-core`. |
+| Maintainer-facing docs | `semantic-families/README.md`, `docs/recommendation_corpus_expansion_program_v0.1.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md` | Update wording only where M35 changes the explanation of where helper-surface truth lives. |
 
 ### Minimum change set
 
 The minimum complete implementation is:
 
-1. add one new analysis artifact path constant
-2. add one new artifact schema + validator
-3. add one new CLI command that loads the existing recommendation analysis and
-   emits the bounded decision contract
-4. add tests for the live wedge and the contradictory-state guards
-5. update the maintainer docs that describe recommendation and corpus-program
-   outcomes
+1. land exact M34 commit `df15e3e392be30a13b10f028eb19e4286c931523` or a
+   byte-equivalent merge result onto `feat/corpus-expansion`
+2. add one new shared module under `xtask/src/family/` for helper-surface
+   classification
+3. rewire `recommend.rs` to use that shared classifier instead of inline helper
+   surface shape logic
+4. rewire the landed M34 corpus-decision path to use the same classifier for the
+   `durable_non_promotable_helper_surface` basis
+5. add cross-consumer regression tests proving both consumers stay aligned on
+   the live wedge and on non-helper counterexamples
+6. update the three maintainer docs so the repo explains the extracted truth
+   honestly
 
 Anything beyond that is scope leak.
 
 ### Complexity check
 
-This milestone should stay within roughly these touched areas:
+This milestone should stay inside roughly these touched areas:
 
-- `xtask/src/lib.rs`
-- `xtask/src/family/paths.rs`
-- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/mod.rs`
+- `xtask/src/family/helper_surface.rs` (new)
 - `xtask/src/family/recommend.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/paths.rs` only if the landed M34 merge requires it
+- `xtask/src/lib.rs`
 - `semantic-families/README.md`
 - `docs/recommendation_corpus_expansion_program_v0.1.md`
 - `docs/semantic_family_capability_corpus_guide_v0.1.md`
 - `PLAN.md`
 
-That is already a real but bounded diff. Do not add:
-
-- a markdown parser for the program tracker
-- a new runtime crate
-- a new artifact directory outside `analysis/`
-- a new command family outside `xtask family`
+That is a real diff, but still one bounded lane. The smell threshold is crossed
+only because M35 must first import the already-validated M34 surface. That is
+acceptable. Adding a second new module, a new crate, or new runtime storage is
+not.
 
 ### Search check
 
-This is a Layer 1 extension of the repo's existing artifact pipeline.
+**[Layer 1]** Reuse the existing `xtask` artifact pipeline, the existing M33
+recommendation analysis, and the existing M34 command contract from
+`ws/m34-int`.
 
-No new framework, concurrency model, storage layer, or distribution path is
-introduced. The right move is to extend the current `xtask` artifact contract,
-not to invent a second decision system.
+**[Layer 1]** Reuse the repo's existing shared-projection pattern from
+`spec-core/src/portability.rs`: one bounded module, explicit projection type,
+multiple read-side consumers, cross-consumer tests.
+
+**[EUREKA]** Do **not** extract this into `spec-core`.
+
+That sounds "more shared" on paper, but it is the wrong layer. Helper-surface
+non-promotability is not authored spec truth. It is family-analysis policy over
+existing promotion artifacts. Pushing it into `spec-core` would spend an
+innovation token to make the layering less honest.
+
+### TODOS cross-reference
+
+No open item in `TODOS.md` blocks M35 directly.
+
+Relevant nearby backlog items already reinforce the same boundary:
+
+- avoid widening milestone scope when a narrower truth surface exists
+- prefer explicit projection modules over scattered recomposition
+- keep generated analysis/read-side surfaces deterministic
+
+M35 should add new TODOs only if it deliberately defers broader decision-engine
+work or future helper-surface generalization.
 
 ### Completeness check
 
-A prose-only closeout is not enough.
+A prose-only explanation is not enough.
 
 The complete bounded version is:
 
-- machine-readable artifact
-- validator coverage
-- deterministic write behavior
-- docs aligned to the same vocabulary
-- live wedge proof
+- M34 is actually present on the working branch
+- helper-surface classification has one code owner
+- recommendation derivation and corpus-decision derivation both call that owner
+- shared regression tests prove they do not drift apart
+- docs explain the new boundary accurately
 
 That is the lake. Boil it.
 
 ### Distribution check
 
-No new package, binary, service, or CI lane is required.
+No new package, binary, container image, or release pipeline is required.
 
-The output is one additional repo-local JSON artifact layered onto the current
-analysis flow.
+The deliverable is internal repo architecture truth layered onto the existing
+`cargo xtask family ...` command family.
 
 ## Locked Decisions
 
-### 1. M33 recommendation analysis is fixed input
+### 1. M35 starts by landing the validated M34 result
 
-M34 reads the already-written recommendation analysis artifact.
+Do not rebuild M34 by memory.
 
-Do not rerun coverage or recommendation inside the decision command. The point
-is to consume fixed truth, not silently recompute it.
+First bring commit `df15e3e392be30a13b10f028eb19e4286c931523` from
+`ws/m34-int` onto `feat/corpus-expansion`, then build M35 on top of that exact
+surface.
 
-### 2. The decision contract is a sibling artifact, not an M33 schema rewrite
+### 2. Shared-core extraction stays in `xtask/src/family/`
 
-Write the new contract to:
+The extraction belongs beside the recommendation and decision consumers that use
+it now.
 
-- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+Do not:
 
-Do not widen `recommendation.latest.json` into a second semantic domain. That
-artifact remains the recommendation-analysis surface. M34 consumes it and emits
-the next-step decision beside it.
+- move it to `spec-core`
+- create a new crate
+- invent a repo-wide "decision engine"
 
-### 3. The command surface is one new read-side command
+### 3. The extracted truth is one bounded classification
 
-Add:
+M35 extracts exactly one concept:
 
-```bash
-cargo xtask family corpus-decision --format json
-```
-
-Rules:
-
-- only `--format json` is supported
-- it loads the current recommendation-analysis artifact
-- it validates the basis before deriving a decision
-- it writes the new `corpus-program-decision.latest.json` artifact
-
-### 4. Decision vocabulary is explicit and bounded
-
-`decision_action` may be exactly one of:
-
-- `stop`
-- `spend_corpus_run_1`
-- `pivot_to_family_promotion_run`
-- `pivot_to_recommendation_policy_run`
-- `pivot_to_architecture_shared_core_follow_on`
-
-Do not allow arbitrary strings.
-
-### 5. Decision basis vocabulary is explicit and bounded
-
-`decision_basis_code` may be exactly one of:
-
-- `promotion_ready_candidate`
-- `plausible_candidate_missing_evidence`
 - `durable_non_promotable_helper_surface`
-- `no_actionable_candidate`
-- `policy_interpretation_blocker`
 
-These are the machine-readable reasons for the action.
+It does **not** extract:
 
-### 6. Required next action is explicit and bounded
+- a generalized family recommendation framework
+- all future corpus-spend logic
+- all future promotion-policy routing
 
-`required_next_action` may be exactly one of:
+### 4. Recommendation owns discovery inputs, shared core owns classification
 
-- `record_stop_without_new_milestone`
-- `author_corpus_expansion_plan`
-- `author_family_promotion_plan`
-- `author_recommendation_policy_plan`
-- `author_architecture_follow_on_plan`
+`recommend.rs` still owns candidate discovery inputs such as:
 
-Do not store free-form workflow prose as the only operational field.
+- overlap family
+- leverage counts
+- shape fingerprint
+- primary reason code
 
-### 7. Rejected alternatives are required but kept small
+The shared module owns only the helper-surface classification decision over that
+input.
 
-The artifact must include a bounded `rejected_alternatives` array covering the
-two top-level branches not chosen.
+### 5. Corpus decision owns action mapping
 
-Each entry includes:
+The shared module should say:
 
-- `action`
-- `reason_code`
-- `summary`
+- this candidate is, or is not, a durable non-promotable helper surface
 
-This keeps agent handoff honest without turning the contract into an essay.
+The corpus-decision command should translate that classification into M34's
+action vocabulary:
 
-### 8. Pivot targets stay milestone-class level, not milestone-id level
+- `decision_action = "pivot_to_architecture_shared_core_follow_on"`
+- `decision_basis_code = "durable_non_promotable_helper_surface"`
+- `required_next_action = "author_architecture_follow_on_plan"`
 
-M34 names the next **class** of milestone, not a future milestone number.
+Do not bury workflow action strings inside the shared classifier itself.
 
-Use:
+### 6. Artifact validators validate tuple consistency, not independent semantics
 
-- `family_promotion_run`
-- `recommendation_policy_run`
-- `architecture_shared_core_follow_on`
+`promotion_artifacts.rs` should keep validating bounded field consistency:
 
-Do not hard-code a roadmap number in the artifact itself.
+- durable hold tuple stays durable hold
+- helper-surface decision tuple stays aligned
 
-### 9. Stop has exact semantics
+It should not become a second semantic classifier that re-derives the helper
+shape from raw fields independently of the shared module.
 
-`stop` means:
+### 7. No new public artifact family is required
 
-- keep corpus run `1` unspent
-- do not authorize another corpus-expansion milestone
-- do not automatically authorize a pivot milestone either
-- record the hold state as the current truthful endpoint
+M35 can prove the extraction is real by consumer rewiring and tests.
 
-This is different from pivot.
+Do not add a new standalone `helper-surface.latest.json` artifact unless the
+implementation proves there is no smaller honest move.
 
-### 10. Spend has exact semantics
+## Proposed Shared-Core Shape
 
-`spend_corpus_run_1` means:
+Add one new module:
 
-- the repo has a plausible candidate
-- the missing information is still evidence-shaped
-- one more explicitly scoped corpus run is justified
+- `xtask/src/family/helper_surface.rs`
 
-It does **not** mean "corpus forever."
+That module owns:
 
-### 11. Live wedge mapping is frozen
+- a small normalized input struct for helper-surface classification
+- one explicit classification enum
+- one classifier function
+- adapters or constructors needed by the existing consumers
 
-For the current basis:
+Target shape:
 
-- `decision_status = "not_recommended"`
-- only blocker is `helper_surface_not_promotable`
-- missing/stale evidence are both empty
-
-the emitted action must be:
-
-- `pivot_to_architecture_shared_core_follow_on`
-
-If implementation cannot produce that deterministically, the milestone is not
-done.
-
-### 12. Docs must not over-claim
-
-Every updated doc must keep these boundaries explicit:
-
-- the repo is emitting a next-step decision contract
-- that contract consumes M33 truth
-- M34 does not spend corpus run `1` by default
-- M34 does not promote a new family
-- M34 does not implement shared-core follow-on work
-
-## Artifact Contract
-
-### Artifact path
-
-```text
-.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-```
-
-### Artifact kind and schema
-
-Add one new artifact kind:
-
-- `corpus_program_decision`
-
-Add one new schema version:
-
-- `CORPUS_PROGRAM_DECISION_SCHEMA_VERSION = 1`
-
-### Canonical JSON shape
-
-```json
-{
-  "schema_version": 1,
-  "artifact_kind": "corpus_program_decision",
-  "generated_at": "2026-05-05T03:00:00Z",
-  "analysis_basis_path": ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json",
-  "analysis_basis_sha256": "sha256...",
-  "basis_snapshot": {
-    "recommendation_status": "no_strong_candidate",
-    "decision_status": "not_recommended",
-    "top_candidate_id": "z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0",
-    "open_blockers": ["helper_surface_not_promotable"],
-    "missing_evidence": [],
-    "stale_evidence": [],
-    "warnings": ["regression_warning"]
-  },
-  "decision_action": "pivot_to_architecture_shared_core_follow_on",
-  "decision_basis_code": "durable_non_promotable_helper_surface",
-  "pivot_target_class": "architecture_shared_core_follow_on",
-  "required_next_action": "author_architecture_follow_on_plan",
-  "summary": "Corpus run 1 should remain unspent; the current visible pressure is durable helper-surface hold, so the next move is an architecture follow-on plan rather than more corpus.",
-  "rejected_alternatives": [
-    {
-      "action": "stop",
-      "reason_code": "no_actionable_candidate",
-      "summary": "Reject stop because the repo does have a clear next class of work."
-    },
-    {
-      "action": "spend_corpus_run_1",
-      "reason_code": "plausible_candidate_missing_evidence",
-      "summary": "Reject spend because the current blocker is not missing corpus evidence."
-    }
-  ]
+```rust
+pub(crate) enum HelperSurfaceDisposition {
+    DurableNonPromotable,
 }
+
+pub(crate) struct HelperSurfaceSignal {
+    pub primary_reason_code: UnsupportedFunctionReasonCode,
+    pub overlap_family: String,
+    pub real_example_hits: usize,
+    pub shape_fingerprint: String,
+}
+
+pub(crate) fn classify_helper_surface(
+    signal: &HelperSurfaceSignal,
+) -> Option<HelperSurfaceDisposition>;
 ```
 
-### Validation invariants
+Design rules:
 
-The validator must reject:
+1. The classifier is explicit and wedge-specific.
+2. The classifier returns `None` for all non-helper cases.
+3. The classifier does not emit corpus actions or recommendation statuses.
+4. The classifier is pure and testable with fixture-sized inputs.
 
-1. missing or invalid `analysis_basis_path`
-2. missing or mismatched `analysis_basis_sha256`
-3. unknown `decision_action`, `decision_basis_code`, `required_next_action`, or
-   `pivot_target_class`
-4. `spend_corpus_run_1` when the basis has:
-   - `decision_status != "blocked_for_now"`, or
-   - empty `missing_evidence` and empty `stale_evidence`
-5. `pivot_to_family_promotion_run` unless the basis supports a promotion-ready
-   next move
-6. `pivot_to_architecture_shared_core_follow_on` unless the basis is
-   non-corpus-shaped and the visible blocker is not an evidence gap
-7. `stop` when a more specific pivot or spend action is already justified by the
-   basis
-8. missing `rejected_alternatives`
-9. duplicate or contradictory rejected alternatives
-10. a `pivot_target_class` field on non-pivot actions
+This is engineered enough. One module. One enum. One signal type. No framework.
 
-## Decision Derivation Rules
-
-Apply these rules in order. The first matching rule wins.
-
-| Basis condition | Emitted action | Basis code | Required next action |
-|---|---|---|---|
-| `decision_status = recommended` | `pivot_to_family_promotion_run` | `promotion_ready_candidate` | `author_family_promotion_plan` |
-| `decision_status = blocked_for_now` and the basis carries missing/stale evidence or a targeted evidence gap | `spend_corpus_run_1` | `plausible_candidate_missing_evidence` | `author_corpus_expansion_plan` |
-| `decision_status = not_recommended`, the blocker is `helper_surface_not_promotable`, and missing/stale evidence are both empty | `pivot_to_architecture_shared_core_follow_on` | `durable_non_promotable_helper_surface` | `author_architecture_follow_on_plan` |
-| `decision_status = not_recommended`, the blocker is recommendation/policy interpretation rather than evidence or architecture | `pivot_to_recommendation_policy_run` | `policy_interpretation_blocker` | `author_recommendation_policy_plan` |
-| no candidate-specific action is justified | `stop` | `no_actionable_candidate` | `record_stop_without_new_milestone` |
-
-This mapping is intentionally small.
-
-If future repo truth requires a new branch, that is a new milestone. Do not
-smuggle it into M34.
-
-## Architecture Review
-
-### System shape
-
-M34 is a read-side analysis extension. No write-path semantic truth changes.
+## Target Architecture
 
 ```text
 semantic-families/corpus/rust-function.toml
@@ -423,408 +313,410 @@ semantic-families/corpus/rust-function.toml
 cargo xtask family coverage --format json
         |
         v
-analysis/coverage.latest.json
+coverage.latest.json
         |
         v
-cargo xtask family recommend --format json
-        |
-        v
-analysis/recommendation.latest.json
-        |
-        v
-cargo xtask family corpus-decision --format json
-        |
-        v
-analysis/corpus-program-decision.latest.json
+recommend.rs
+  ├─ candidate discovery
+  ├─ leverage + overlap computation
+  ├─ helper_surface::classify_helper_surface(...)
+  └─ recommendation.latest.json
+                |
+                v
+      cargo xtask family corpus-decision --format json
+                |
+                ├─ load recommendation artifact
+                ├─ map top candidate -> HelperSurfaceSignal
+                ├─ helper_surface::classify_helper_surface(...)
+                └─ corpus-program-decision.latest.json
+
+promotion_artifacts.rs
+  ├─ validates recommendation tuple consistency
+  └─ validates corpus-decision tuple consistency
+
+docs/
+  └─ explain that helper-surface non-promotability now has one code owner
 ```
 
-### Code ownership and module boundaries
+### Why this boundary is right
 
-```text
-xtask/src/lib.rs
-    CLI dispatch only
-        |
-        v
-xtask/src/family/recommend.rs
-    load validated recommendation basis
-    derive bounded corpus-program decision
-        |
-        v
-xtask/src/family/promotion_artifacts.rs
-    schema types
-    validate-artifact support
-        |
-        v
-xtask/src/family/paths.rs
-    artifact path constant
-    atomic write helpers
-```
+- `coverage.rs` still owns observation truth
+- `recommend.rs` still owns recommendation assembly
+- M34 command still owns operator action mapping
+- the shared module owns only the helper-surface classification
 
-### Realistic production failure scenarios
-
-1. The basis artifact is stale, missing, or manually edited into contradiction.
-   M34 must fail validation before writing a decision artifact.
-2. The basis says `blocked_for_now` but missing/stale evidence arrays are empty.
-   M34 must reject `spend_corpus_run_1` rather than silently guessing.
-3. The live helper-surface wedge regresses back to a corpus-shaped gap.
-   M34 must emit the new truthful action, not preserve the old one.
-4. The docs drift and start claiming that pivot means M34 implements the follow-on.
-   Docs must explicitly say M34 names the next class of work, not the work
-   itself.
+That is the architectural seam M35 exists to create.
 
 ## Implementation Plan
 
-### Step 1 - Freeze vocabulary, path, and live wedge
+### Phase 1 - Reality alignment
 
-Touch:
+1. Bring `df15e3e392be30a13b10f028eb19e4286c931523` from `ws/m34-int` onto
+   `feat/corpus-expansion`.
+2. Verify the branch now contains:
+   - `cargo xtask family corpus-decision --format json`
+   - `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+   - the exact M34 action vocabulary and docs
+3. Freeze behavior. Do not change M34 semantics during the import.
 
-- `PLAN.md`
+Exit gate:
 
-Lock:
+- M34 command exists on this branch
+- the live wedge still emits the validated M34 decision
 
-- artifact path
-- command name
-- action vocabulary
-- basis-code vocabulary
-- required-next-action vocabulary
-- live expected output
+### Phase 2 - Extract helper-surface shared core
 
-This step is complete when there is no remaining ambiguity about the JSON shape
-or the live wedge outcome.
+1. Add `xtask/src/family/helper_surface.rs`.
+2. Move the current helper-surface shape predicate out of `recommend.rs` and
+   into the new module.
+3. Keep the rule byte-for-byte equivalent in meaning:
+   - `UnsupportedFunctionReasonCode::UnsupportedFunctionSurface`
+   - `overlap_family == "unknown"`
+   - `real_example_hits > 0`
+   - the current helper/no-deps fingerprint shape
+4. Export the module from `xtask/src/family/mod.rs`.
 
-### Step 2 - Add the artifact schema and validator
+Exit gate:
 
-Touch:
+- there is exactly one code owner for helper-surface classification
+- `recommend.rs` no longer contains an inline helper-shape classifier
 
-- `xtask/src/family/paths.rs`
-- `xtask/src/family/promotion_artifacts.rs`
+### Phase 3 - Rewire consumers
 
-Required changes:
+#### Recommendation consumer
 
-1. add the artifact path constant
-2. add `PromotionArtifactKind::CorpusProgramDecision`
-3. add the schema version constant
-4. add the serde struct(s) for the new artifact
-5. add `validate(...)` for the new artifact
-6. extend artifact-path classification so `family validate-artifact` knows the
-   new path
+Rewire `recommend.rs` so the durable-hold path is driven by the shared
+classifier result, not by an in-file predicate.
 
-Do not add a second validation entrypoint.
+The outward recommendation artifact should remain unchanged:
 
-### Step 3 - Add the decision builder command
+- durable helper surfaces still land in
+  `next_step_status = durable_hold`
+- `next_step_detail = helper_surface_not_promotable`
+- `hold_reasons` still include `helper_surface_not_promotable`
 
-Touch:
+#### Corpus-decision consumer
 
-- `xtask/src/lib.rs`
-- `xtask/src/family/recommend.rs`
+Rewire the landed M34 command path so the helper-surface pivot basis is produced
+from the same classifier.
 
-Required changes:
+The outward corpus-program decision artifact should remain unchanged for the
+live wedge:
 
-1. add `FamilyCommand::CorpusDecision`
-2. accept only `--format json`
-3. load the current recommendation-analysis artifact from disk
-4. validate the basis artifact before deriving the decision
-5. derive the bounded decision contract from the rules table above
-6. write the latest artifact atomically
-7. preserve deterministic bytes when the basis is unchanged
+- `decision_action = pivot_to_architecture_shared_core_follow_on`
+- `decision_basis_code = durable_non_promotable_helper_surface`
+- `required_next_action = author_architecture_follow_on_plan`
 
-Keep the implementation in the current family-analysis code path. Do not create
-an orchestration subsystem.
+Exit gate:
 
-### Step 4 - Prove the live wedge and the contradictory-state guards
+- both consumers call the same shared helper-surface classifier
+- neither consumer re-implements the helper-surface rule locally
 
-Touch:
+### Phase 4 - Docs, verification, and closeout
 
-- `xtask/src/lib.rs`
-- optionally small helper additions in existing `xtask` test support only if
-  required
+1. Update `semantic-families/README.md` to explain that helper-surface pressure
+   is real, but non-promotability is now produced from one shared analysis
+   boundary.
+2. Update `docs/recommendation_corpus_expansion_program_v0.1.md` to distinguish:
+   - recommendation analysis as input truth
+   - shared helper-surface classification as the architectural hinge
+   - corpus-decision as operator-action output
+3. Update `docs/semantic_family_capability_corpus_guide_v0.1.md` so maintainers
+   understand why more corpus does not change this wedge by itself.
+4. Update `PLAN.md` completion notes only after all verification commands pass.
 
-Required tests:
+## Code Quality Rules
 
-1. live helper-surface wedge emits
-   `pivot_to_architecture_shared_core_follow_on`
-2. promotion-ready basis emits `pivot_to_family_promotion_run`
-3. evidence-gap basis emits `spend_corpus_run_1`
-4. empty/no-action basis emits `stop`
-5. contradictory action/basis combinations are rejected by validation
-6. repeated command runs write byte-identical output when the basis is unchanged
-7. non-JSON format is rejected with the current CLI style
+### DRY rule
 
-### Step 5 - Sync the maintainer docs
+There must be one helper-surface classifier.
 
-Touch:
+Reject any implementation that leaves:
 
-- `semantic-families/README.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- one version in `recommend.rs`
+- a second version in the corpus-decision path
+- a third version in validators
 
-Required wording updates:
-
-1. recommendation analysis remains the M33 truth input
-2. corpus-program decision is the M34 next-step output
-3. stop vs spend vs pivot meanings are explicit
-4. the current live wedge keeps corpus run `1` unspent and points to an
-   architecture follow-on class
-5. M34 does not claim that the follow-on has already been implemented
-
-## Code Quality Review
-
-### DRY guardrails
-
-Do not duplicate:
-
-- artifact path normalization logic
-- artifact validation entrypoints
-- recommendation-basis loading
-- atomic write behavior
-
-If the new decision artifact needs "latest artifact load + deterministic bytes"
-behavior, reuse the current patterns from `recommend.rs` rather than inventing a
-parallel helper stack.
+That is exactly the architecture debt M35 is supposed to remove.
 
 ### Explicit over clever
 
+Do not introduce:
+
+- trait-based classifier registries
+- macro-generated decision tables
+- generic policy pipelines
+
+Use named structs and `match` blocks. A tired maintainer should read the module
+in 30 seconds.
+
+### Minimal diff
+
 Prefer:
 
-- one small derivation function with a rules table feel
-- one bounded validator
-- one artifact struct
+- one new module
+- local rewiring in existing files
+- tests beside the current `xtask` test surface
 
-Avoid:
-
-- dynamic rule engines
-- stringly typed free-form pivot targets
-- doc parsing at runtime
-- implicit inference from absent fields alone
-
-### Engineered enough
-
-The right level of engineering here is:
-
-- schema-backed
-- validator-backed
-- deterministic
-- test-covered
-
-The wrong level is:
-
-- new crate
-- new registry
-- generic workflow DSL
-- program tracker parser
+Do not turn M35 into a test-harness rewrite or a command-layout refactor.
 
 ## Test Review
 
 ### Test framework
 
-This repo already uses Rust tests in `xtask/src/lib.rs` and related modules.
-That remains the primary lock surface.
+This repo is Rust-first. M35 verification stays in the existing Cargo/xtask test
+surface:
+
+- `cargo test -p xtask ...`
+- targeted artifact-generation commands under `cargo xtask family ...`
+
+No new test framework is needed.
 
 ### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
+[+] xtask/src/family/helper_surface.rs
+    |
+    ├── [REQ TEST] classify helper surface wedge -> DurableNonPromotable
+    ├── [REQ TEST] non-helper fingerprint -> None
+    ├── [REQ TEST] overlap family known -> None
+    └── [REQ TEST] zero real-example hits -> None
+
+[+] xtask/src/family/recommend.rs
+    |
+    ├── [REQ TEST] shared classifier hit -> durable_hold tuple
+    ├── [REQ TEST] targeted evidence gap path still emits targeted_evidence_gap
+    └── [REQ TEST] ready promotion path remains unchanged
+
 [+] cargo xtask family corpus-decision --format json
     |
-    +- load recommendation basis artifact
-    |  +- [REQ TEST] missing file -> command fails
-    |  +- [REQ TEST] invalid schema -> command fails
-    |  +- [REQ TEST] mismatched sha/path -> validator fails
+    ├── [REQ TEST] durable helper-surface wedge -> architecture pivot decision
+    ├── [REQ TEST] evidence-gap wedge -> spend_corpus_run_1
+    ├── [REQ TEST] promotion-ready wedge -> family-promotion action
+    ├── [REQ TEST] contradictory recommendation tuple -> hard error
+    └── [REQ TEST] missing recommendation artifact -> hard error
+
+[+] promotion_artifacts.rs validators
     |
-    +- derive decision contract
-    |  +- [REQ TEST] recommended -> pivot_to_family_promotion_run
-    |  +- [REQ TEST] blocked_for_now + evidence gap -> spend_corpus_run_1
-    |  +- [REQ TEST] not_recommended + helper_surface_not_promotable + no evidence gaps
-    |  |              -> pivot_to_architecture_shared_core_follow_on
-    |  +- [REQ TEST] no actionable candidate -> stop
-    |  +- [REQ TEST] policy-shaped blocker -> pivot_to_recommendation_policy_run
-    |
-    +- validate decision contract
-    |  +- [REQ TEST] spend without evidence gap -> reject
-    |  +- [REQ TEST] pivot without pivot_target_class -> reject
-    |  +- [REQ TEST] stop when a stronger action is justified -> reject
-    |  +- [REQ TEST] missing rejected_alternatives -> reject
-    |
-    +- write latest artifact
-       +- [REQ TEST] first run writes artifact
-       +- [REQ TEST] second identical run writes byte-identical output
+    ├── [REQ TEST] durable_hold recommendation tuple validates
+    ├── [REQ TEST] helper-surface tuple with wrong next_step_status rejects
+    └── [REQ TEST] corpus-decision durable_non_promotable basis tuple validates
 ```
 
-### Maintainer flow coverage
+### User flow coverage
 
 ```text
-MAINTAINER FLOW COVERAGE
+USER FLOW COVERAGE
 ===========================
-[+] Truthful stop/spend/pivot workflow
+[+] Maintainer reads the live wedge
     |
-    +- cargo xtask family coverage --format json
-    +- cargo xtask family recommend --format json
-    +- cargo xtask family corpus-decision --format json
-    +- cargo xtask family validate-artifact \
-         .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-    +- cargo xtask family validate-artifact \
-         .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+    ├── [REQ TEST] coverage -> recommend -> corpus-decision stays deterministic
+    └── [REQ TEST] decision artifact bytes stay stable on repeat run
+
+[+] Maintainer asks "should we spend corpus run 1?"
+    |
+    ├── [REQ TEST] answer is pivot_to_architecture_shared_core_follow_on
+    └── [REQ TEST] docs match the emitted decision vocabulary
+
+[+] Maintainer encounters malformed or contradictory state
+    |
+    ├── [REQ TEST] corpus-decision refuses silent fallback
+    └── [REQ TEST] error points at recommendation tuple inconsistency
 ```
 
 ### Regression rule
 
-The highest-priority regression test is the live wedge:
+M35 is partly a regression-protection milestone.
 
-- current basis:
-  `no_strong_candidate` + `not_recommended` +
-  `helper_surface_not_promotable` + no missing/stale evidence
-- expected output:
-  `pivot_to_architecture_shared_core_follow_on`
+The highest-priority regression to guard is:
 
-If that regresses, M34 has failed the exact problem it is supposed to solve.
+- recommendation and corpus-decision both used to agree on the live helper
+  wedge after M34
+- after extraction, they must still agree
 
-### Exact test additions
+If an extraction changes the emitted live wedge outcome, that is a blocking
+regression and requires a regression test before merge.
 
-Add or extend tests so they prove:
+### Required tests to add
 
-1. command dispatch recognizes `family corpus-decision`
-2. the new artifact validates on the happy path
-3. invalid combinations are rejected at `validate-artifact`
-4. current branch truth emits the expected pivot output
-5. deterministic re-run behavior matches the repo's existing analysis commands
+1. Shared-classifier unit tests in the new helper module covering:
+   - exact live helper wedge
+   - each non-helper counterexample
+2. Recommendation regression tests proving the same fixture still yields:
+   - durable hold
+   - `helper_surface_not_promotable`
+3. Corpus-decision regression tests proving the same fixture still yields:
+   - architecture pivot
+   - `durable_non_promotable_helper_surface`
+4. Cross-consumer consistency test:
+   - one shared fixture
+   - recommendation emits durable hold
+   - corpus-decision emits architecture pivot
+5. Contradictory-state tests:
+   - tuple says durable hold but helper classifier returns `None`
+   - command must error, not guess
 
-## Failure Modes
+## Failure Modes Registry
 
-| Codepath | Production failure | Test required? | Error handling required? | User-visible outcome |
-|---|---|---:|---:|---|
-| Load basis artifact | basis file missing or unreadable | Yes | Yes | CLI exits non-zero with bounded error, no decision artifact written |
-| Validate basis snapshot | basis schema drift or manual corruption | Yes | Yes | CLI refuses to guess and points at invalid input |
-| Derive spend action | evidence-gap inference fires when there is no evidence gap | Yes | Yes | rejected as contradictory state, not silent spend authorization |
-| Derive pivot action | helper-surface durable hold incorrectly maps to `stop` | Yes | Yes | regression test catches wrong next-step output |
-| Validate written artifact | pivot target absent or unknown | Yes | Yes | `validate-artifact` fails on the decision artifact |
-| Docs sync | docs imply M34 implemented the follow-on work | Yes, via targeted grep or review pass | Yes | maintainer confusion; block merge until wording is corrected |
+| Codepath | Realistic failure | Test coverage required | Error handling required | User-visible outcome |
+|---|---|---|---|---|
+| M34 merge skipped | M35 compiles against a branch that does not have `family corpus-decision` at all | yes | yes, fail at opening gate | explicit blocker, not silent fallback |
+| Shared classifier drift | recommendation says durable hold but corpus-decision chooses a different basis | yes | yes | explicit failing test before merge |
+| Fingerprint parse failure | helper-shaped candidate stops classifying because serialized fingerprint shape changed | yes | yes | explicit non-classification plus failing regression if live wedge changes |
+| Validator mismatch | emitted tuple no longer matches schema invariants | yes | yes | hard validation error |
+| Doc drift | docs tell maintainers to spend corpus run `1` while command says pivot | yes | yes, grep-based doc assertions | visible inconsistency blocked before merge |
 
-### Critical gap rule
+Critical gap rule:
 
-Any branch that:
-
-- emits a decision action,
-- has no validation,
-- and can silently authorize the wrong next milestone
-
-is a critical gap.
-
-M34 closes that gap only if the live wedge and contradictory states are both
-locked by tests.
+If any helper-surface failure mode has no test **and** no hard error path,
+M35 is incomplete.
 
 ## Performance Review
 
-M34 is cheap if it stays read-side only.
+M35 should stay read-side and cheap.
 
-Performance rules:
+Rules:
 
-1. do not rescan the corpus inside `family corpus-decision`
-2. do not rerun recommendation logic from raw sources
-3. read one basis artifact, derive one decision, write one artifact
-4. preserve deterministic latest-byte behavior to avoid unnecessary churn
+1. `family corpus-decision` must continue reading the existing recommendation
+   artifact. It must not rerun coverage or recommendation analysis internally.
+2. The shared classifier must be pure and in-memory. No filesystem access.
+3. Shape-fingerprint parsing remains tiny. This is not a throughput bottleneck.
+4. Deterministic artifact reuse remains intact. Repeated runs on unchanged input
+   should preserve byte-identical outputs where current infrastructure already
+   guarantees that.
 
-Expected cost is one JSON read, one validation pass, one decision derivation,
-and one JSON write. Anything slower means the scope drifted.
+There is no legitimate reason for M35 to change runtime complexity class.
 
-## NOT in Scope
+## What Already Exists
 
-The following work was considered and is explicitly deferred:
+The plan intentionally reuses the repo's existing truth surfaces:
 
-- Spending corpus run `1`
-  Reason: M34 decides whether that run is justified. It does not perform the run.
-- Recommendation-policy redesign
-  Reason: M33 already closed recommendation honesty; M34 consumes that output.
-- Family promotion execution changes
-  Reason: pivot naming is in scope, promotion execution mechanics are not.
-- Corpus manifest or leverage-accounting changes
-  Reason: that is evidence policy work, not next-step contract work.
-- Shared-core follow-on implementation
-  Reason: M34 may point to that class of work, but it does not start it.
-- Runtime parsing of `docs/recommendation_corpus_expansion_program_v0.1.md`
-  Reason: markdown is the human ledger, not the machine input surface.
-- New artifact trees outside `analysis/`
-  Reason: M34 stays inside the current family-analysis contract.
+- `xtask/src/family/recommend.rs` already identifies the helper-surface wedge
+- `xtask/src/family/promotion_artifacts.rs` already encodes the durable-hold
+  tuple vocabulary
+- `ws/m34-int` already contains the validated corpus-decision command contract
+- `spec-core/src/portability.rs` already demonstrates the repo's preferred
+  shared-projection pattern
+
+M35 succeeds by making these surfaces line up, not by replacing them.
+
+## NOT in scope
+
+- spending corpus run `1`
+- promoting a new family
+- redesigning the full recommendation engine
+- moving family-analysis policy into `spec-core`
+- creating a new shared crate
+- introducing a new artifact family just to prove sharing exists
+- changing inventory, coverage, prove, certify, or routing behavior outside the
+  bounded helper-surface wedge
+- broad doc rewrites unrelated to helper-surface non-promotability
+
+## Verification Commands
+
+Run these in merged M35 state:
+
+```bash
+cargo test -p xtask helper_surface -- --color never
+cargo test -p xtask corpus_decision -- --color never
+cargo test -p xtask recommend -- --color never
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
+```
+
+Then assert the live wedge still says:
+
+```bash
+jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+```
+
+And confirm docs stay aligned:
+
+```bash
+rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|author_architecture_follow_on_plan|corpus run `1`' \
+  semantic-families/README.md \
+  docs/recommendation_corpus_expansion_program_v0.1.md \
+  docs/semantic_family_capability_corpus_guide_v0.1.md
+```
 
 ## Worktree Parallelization Strategy
 
-Parallelism exists, but it is limited.
-
-All executable logic clusters under `xtask/src/family/`, so the code lane is
-mostly sequential. The only clean peel-off lane is docs, and only after the
-schema and vocabulary are frozen.
+This plan has one real dependency wall and then two bounded parallel lanes.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Freeze contract vocabulary and path | `PLAN.md` | — |
-| Add artifact schema and validator | `xtask/src/family/`, `xtask/src/lib.rs` | Freeze contract vocabulary and path |
-| Add command derivation and deterministic write path | `xtask/src/family/`, `xtask/src/lib.rs` | Add artifact schema and validator |
-| Add live-wedge and contradiction tests | `xtask/src/family/`, `xtask/src/lib.rs` | Add command derivation and deterministic write path |
-| Sync maintainer docs | `docs/`, `semantic-families/` | Freeze contract vocabulary and path |
+| Reality alignment | `xtask/src/`, `semantic-families/`, `docs/` | — |
+| Shared classifier extraction | `xtask/src/family/` | Reality alignment |
+| Corpus-decision consumer rewiring + tests | `xtask/src/`, `xtask/src/family/` | Reality alignment, shared classifier extraction |
+| Docs alignment | `semantic-families/`, `docs/` | Reality alignment |
 
 ### Parallel lanes
 
-- Lane A: freeze contract -> schema/validator -> command derivation -> tests
-  (sequential, shared `xtask/src/family/`)
-- Lane B: docs sync
-  (independent after schema freeze, touches `docs/` and `semantic-families/`)
+Lane A: reality alignment → shared classifier extraction → corpus-decision rewiring  
+Lane B: docs alignment (starts after reality alignment, independent of code until final wording freeze)
+
+Sequential note:
+
+- Lane A is sequential because `xtask/src/lib.rs` and `xtask/src/family/` are
+  the primary codepath and test surface.
+- Lane B can run in parallel once M34 vocabulary is present on branch and the
+  shared classifier name is frozen.
 
 ### Execution order
 
-1. Do the contract freeze first.
-2. Launch Lane A and Lane B in parallel only after the JSON shape, path, and
-   vocabulary are locked.
-3. Merge Lane B after Lane A passes if doc text needs final command-output
-   wording polish.
+1. Launch **Reality alignment** first. No parallelism yet.
+2. After M34 is landed and the shared classifier name is frozen, launch:
+   - **Lane A** shared classifier extraction
+   - **Lane B** docs alignment
+3. Merge Lane B into the parent only after Lane A's field names and vocabulary
+   are final.
+4. Run final corpus-decision rewiring tests and verification sequentially on the
+   parent branch.
 
 ### Conflict flags
 
-- Do **not** split Lane A into multiple code worktrees. Everything meaningful
-  shares `xtask/src/family/` and `xtask/src/lib.rs`.
-- Lane B should avoid editing `PLAN.md` after Lane A starts. Treat this plan as
-  frozen once implementation begins.
+- `xtask/src/lib.rs` is a conflict magnet. Keep all command-dispatch and major
+  xtask regression tests in one lane.
+- `xtask/src/family/recommend.rs` and the new helper module must stay in the
+  same lane. Splitting them would create merge churn for no benefit.
+- Docs can run in parallel, but only after the names
+  `durable_non_promotable_helper_surface` and
+  `author_architecture_follow_on_plan` are frozen.
 
-## Acceptance Commands
+## Completion Summary
 
-Run these commands against the live branch:
+- Step 0: Scope Challenge — scope accepted as bounded shared-core extraction
+- Architecture Review: one new module, no new crate, M34 land-first dependency
+- Code Quality Review: one DRY mandate, one code owner for helper-surface truth
+- Test Review: coverage diagram produced, shared-consumer regression suite
+  required
+- Performance Review: no new complexity class, no corpus rescan allowed
+- NOT in scope: written
+- What already exists: written
+- Failure modes: explicit critical-gap rule defined
+- Parallelization: 2 lanes after 1 sequential opening gate
+- Lake Score: choose the complete version, land M34 + extract shared truth +
+  prove cross-consumer alignment
 
-```bash
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-cargo test -p xtask corpus_decision
-cargo test -p xtask recommendation_policy_durable_holds_helper_surface_candidate
-```
+## Done when
 
-If the repo's test names differ once implementation lands, keep the same proof
-intent:
-
-- command dispatch test
-- live helper-surface wedge test
-- contradictory-state validation test
-- deterministic re-run test
-
-## Done Means
-
-M34 is complete only when all of the following are true:
-
-1. `cargo xtask family corpus-decision --format json` writes
-   `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-2. the new artifact validates through the existing `family validate-artifact`
-   surface
-3. the current live basis emits
-   `pivot_to_architecture_shared_core_follow_on`
-4. `recommended`, `blocked_for_now`, helper-surface durable hold, and stop
-   outcomes are all covered by tests
-5. contradictory action/basis combinations are rejected by validation
-6. re-running the command on unchanged basis input preserves deterministic bytes
-7. docs explain stop vs spend vs pivot using the same exact vocabulary as the
-   JSON artifact
-8. the diff does not widen into corpus execution, policy redesign, family
-   promotion execution, or shared-core implementation
-
-That is the full M34 claim.
+1. `feat/corpus-expansion` contains the validated M34 command and artifact
+   surface.
+2. The repo has exactly one helper-surface classifier under
+   `xtask/src/family/`.
+3. Recommendation derivation and corpus-decision derivation both use that
+   classifier.
+4. The live wedge still deterministically yields the M34 architecture-pivot
+   outcome.
+5. No new artifact family, crate, or generalized decision framework was added.
+6. Tests and docs prove the extraction is real and non-regressive.
