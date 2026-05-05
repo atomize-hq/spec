@@ -1,6 +1,7 @@
 pub mod certify;
 pub mod coverage;
 pub mod harness;
+pub mod helper_surface;
 pub mod inventory;
 pub mod layout;
 pub mod manifest;
