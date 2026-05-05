@@ -1223,16 +1223,20 @@ impl CorpusProgramDecisionArtifact {
             ));
         }
 
-        let expected =
-            crate::family::recommend::derive_corpus_program_decision_contract(&analysis_basis)?;
-        if self.decision_action != expected.decision_action
-            || self.decision_basis_code != expected.decision_basis_code
-            || self.pivot_target_class != expected.pivot_target_class
-            || self.required_next_action != expected.required_next_action
-            || self.summary != expected.summary
+        let basis_requires_helper_surface_follow_on =
+            basis_snapshot_requires_helper_surface_follow_on(&self.basis_snapshot);
+        let artifact_uses_helper_surface_follow_on =
+            decision_uses_helper_surface_follow_on_tuple(self);
+        if basis_requires_helper_surface_follow_on != artifact_uses_helper_surface_follow_on {
+            return Err(XtaskError::InvalidInput(
+                "corpus-program decision helper-surface follow-on tuple must stay aligned with the validated analysis basis".to_string(),
+            ));
+        }
+        if artifact_uses_helper_surface_follow_on
+            && !decision_matches_helper_surface_follow_on_tuple(self)
         {
             return Err(XtaskError::InvalidInput(
-                "corpus-program decision action, basis code, pivot target, next action, and summary must match the validated analysis basis".to_string(),
+                "corpus-program decision helper-surface follow-on tuple must use the frozen action, basis code, pivot target, and next action".to_string(),
             ));
         }
 
@@ -1693,40 +1697,11 @@ impl RecommendationCandidateEntry {
                 }
             }
         }
-        if self.next_step_status == NextStepStatus::DurableHold {
-            if self.promotion_readiness != PromotionReadiness::Hold {
-                return Err(XtaskError::InvalidInput(
-                    "recommendation candidates with next_step_status `durable_hold` must have promotion_readiness `hold`".to_string(),
-                ));
-            }
-            if !self
-                .hold_reasons
-                .contains(&HoldReason::HelperSurfaceNotPromotable)
-            {
-                return Err(XtaskError::InvalidInput(
-                    "recommendation candidates with next_step_status `durable_hold` must include hold_reason `helper_surface_not_promotable`".to_string(),
-                ));
-            }
-            if self.next_step_detail != NextStepDetail::HelperSurfaceNotPromotable {
-                return Err(XtaskError::InvalidInput(
-                    "recommendation candidates with next_step_status `durable_hold` must use next_step_detail `helper_surface_not_promotable`".to_string(),
-                ));
-            }
-        }
-        if self
-            .hold_reasons
-            .contains(&HoldReason::HelperSurfaceNotPromotable)
-            && self.next_step_status != NextStepStatus::DurableHold
+        if recommendation_uses_helper_surface_durable_hold_tuple(self)
+            && !recommendation_matches_helper_surface_durable_hold_tuple(self)
         {
             return Err(XtaskError::InvalidInput(
-                "recommendation candidates with hold_reason `helper_surface_not_promotable` must use next_step_status `durable_hold`".to_string(),
-            ));
-        }
-        if self.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
-            && self.next_step_status != NextStepStatus::DurableHold
-        {
-            return Err(XtaskError::InvalidInput(
-                "recommendation candidates with next_step_detail `helper_surface_not_promotable` must use next_step_status `durable_hold`".to_string(),
+                "recommendation candidates using the helper-surface durable-hold tuple must keep `promotion_readiness`, `hold_reasons`, `next_step_status`, and `next_step_detail` aligned to the frozen helper-surface contract".to_string(),
             ));
         }
         validate_overlap_family(&self.overlap_family)?;
@@ -1964,6 +1939,52 @@ fn validate_analysis_basis_reference(
         serde_json::from_slice(&bytes).map_err(deserialize_error(&path))?;
     artifact.validate(workspace_root)?;
     Ok(artifact)
+}
+
+fn recommendation_uses_helper_surface_durable_hold_tuple(
+    candidate: &RecommendationCandidateEntry,
+) -> bool {
+    candidate
+        .hold_reasons
+        .contains(&HoldReason::HelperSurfaceNotPromotable)
+        || candidate.next_step_status == NextStepStatus::DurableHold
+        || candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
+}
+
+fn recommendation_matches_helper_surface_durable_hold_tuple(
+    candidate: &RecommendationCandidateEntry,
+) -> bool {
+    candidate.promotion_readiness == PromotionReadiness::Hold
+        && candidate
+            .hold_reasons
+            .contains(&HoldReason::HelperSurfaceNotPromotable)
+        && candidate.next_step_status == NextStepStatus::DurableHold
+        && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
+}
+
+fn basis_snapshot_requires_helper_surface_follow_on(snapshot: &CorpusProgramBasisSnapshot) -> bool {
+    snapshot.decision_status == DecisionStatus::NotRecommended
+        && snapshot.open_blockers == vec![DecisionReason::HelperSurfaceNotPromotable]
+        && snapshot.missing_evidence.is_empty()
+        && snapshot.stale_evidence.is_empty()
+}
+
+fn decision_uses_helper_surface_follow_on_tuple(artifact: &CorpusProgramDecisionArtifact) -> bool {
+    artifact.decision_action == CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
+        || artifact.decision_basis_code
+            == CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
+        || artifact.pivot_target_class == Some(PivotTargetClass::ArchitectureSharedCoreFollowOn)
+        || artifact.required_next_action == RequiredNextAction::AuthorArchitectureFollowOnPlan
+}
+
+fn decision_matches_helper_surface_follow_on_tuple(
+    artifact: &CorpusProgramDecisionArtifact,
+) -> bool {
+    artifact.decision_action == CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
+        && artifact.decision_basis_code
+            == CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
+        && artifact.pivot_target_class == Some(PivotTargetClass::ArchitectureSharedCoreFollowOn)
+        && artifact.required_next_action == RequiredNextAction::AuthorArchitectureFollowOnPlan
 }
 
 fn expected_open_blockers(candidate: Option<&RecommendationCandidateEntry>) -> Vec<DecisionReason> {
