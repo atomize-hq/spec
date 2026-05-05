@@ -1,8 +1,7 @@
 use crate::family::promotion_artifacts::{
     CorpusProgramBasisSnapshot, CorpusProgramDecisionAction, CorpusProgramDecisionArtifact,
-    CorpusProgramDecisionBasisCode, DecisionReason, HoldReason, NextStepDetail,
-    NextStepStatus, PivotTargetClass, PromotionReadiness, RecommendationCandidateEntry,
-    RequiredNextAction,
+    CorpusProgramDecisionBasisCode, DecisionReason, HoldReason, NextStepDetail, NextStepStatus,
+    PivotTargetClass, PromotionReadiness, RecommendationCandidateEntry, RequiredNextAction,
 };
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 
@@ -63,7 +62,8 @@ pub(crate) fn classify_helper_surface(
     Some(HelperSurfaceDisposition::DurableNonPromotableHelperSurface)
 }
 
-pub(crate) fn durable_non_promotable_helper_surface_candidate_tuple() -> HelperSurfaceCandidateTuple {
+pub(crate) fn durable_non_promotable_helper_surface_candidate_tuple() -> HelperSurfaceCandidateTuple
+{
     HelperSurfaceCandidateTuple {
         promotion_readiness: PromotionReadiness::Hold,
         hold_reason: HoldReason::HelperSurfaceNotPromotable,
@@ -264,8 +264,7 @@ mod tests {
                 stale_evidence: Vec::new(),
             },
             decision_action: CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn,
-            decision_basis_code:
-                CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface,
+            decision_basis_code: CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface,
             pivot_target_class: Some(PivotTargetClass::ArchitectureSharedCoreFollowOn),
             required_next_action: RequiredNextAction::AuthorArchitectureFollowOnPlan,
             summary: "fixture".to_string(),

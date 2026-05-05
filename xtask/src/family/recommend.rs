@@ -4,9 +4,9 @@ use crate::family::coverage::{
     normalized_coverage_proof_fingerprint, render_json_bytes, write_latest,
 };
 use crate::family::helper_surface::{
-    HelperSurfaceDisposition, HelperSurfaceSignal, basis_snapshot_requires_helper_surface_follow_on,
-    classify_helper_surface, durable_non_promotable_helper_surface_candidate_tuple,
-    helper_surface_follow_on_decision_tuple,
+    HelperSurfaceDisposition, HelperSurfaceSignal,
+    basis_snapshot_requires_helper_surface_follow_on, classify_helper_surface,
+    durable_non_promotable_helper_surface_candidate_tuple, helper_surface_follow_on_decision_tuple,
     recommendation_matches_helper_surface_durable_hold_tuple,
 };
 use crate::family::inventory::inventory_sha256_hex;

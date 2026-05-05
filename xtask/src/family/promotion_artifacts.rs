@@ -3,8 +3,7 @@ use crate::XtaskError;
 use crate::family::coverage::current_timestamp_rfc3339;
 use crate::family::helper_surface::{
     basis_snapshot_requires_helper_surface_follow_on,
-    decision_matches_helper_surface_follow_on_tuple,
-    decision_uses_helper_surface_follow_on_tuple,
+    decision_matches_helper_surface_follow_on_tuple, decision_uses_helper_surface_follow_on_tuple,
     recommendation_matches_helper_surface_durable_hold_tuple,
     recommendation_uses_helper_surface_durable_hold_tuple,
 };
