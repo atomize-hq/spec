@@ -1,820 +1,842 @@
-# M32 - One Bounded Second-Language Promotion Path
+# M33 - Recommendation-Quality Promotion Decisions
 
-Status: **authoritative implementation plan**
-Base branch: **main**
-Working branch: **feat/corpus-expansion**
-Last rewritten: **2026-05-04**
-Supersedes: **M31 - Shared-Core Extraction And Escape-Hatch Containment**
-Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260504-143928.md`**
-Related roadmap: **`docs/ai_promotion_and_multilanguage_milestones_v0.1.md`**
-Execution note: **Do not create `ORCH_PLAN.md` up front. Create it only if the post-foundation lanes below are actually split into separate worktrees.**
-Foundation precondition: **Start from `ws/m31-int` at `945284ea7ab6bf788d7202ff674b81581afd47c6` or a merged equivalent before doing any M32 implementation work.**
+Status: **authoritative implementation plan**  
+Base branch: **main**  
+Working branch: **feat/corpus-expansion**  
+Last rewritten: **2026-05-04**  
+Supersedes: **M32 - One Bounded Second-Language Promotion Path**  
+Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260504-201833.md`**  
+Related roadmap: **`docs/ai_promotion_and_multilanguage_milestones_v0.1.md`**  
+Program tracker: **`docs/recommendation_corpus_expansion_program_v0.1.md`**  
+Capability guide: **`docs/semantic_family_capability_corpus_guide_v0.1.md`**  
+Execution note: **Do not create `ORCH_PLAN.md` up front. Split into worktrees only if the schema contract is frozen and there is still enough isolated docs/test work to justify it.**  
+Foundation precondition: **Start from publish SHA `6a1051b601487710d631031171cfde92810f1581` or a direct descendant that still preserves the closed M32 artifact truth.**
 
 ## Objective
 
-Make the repository able to say one precise, enforceable thing:
+Make the repo able to emit recommendation artifacts that carry the promotion
+decision argument, not just cluster visibility.
 
-> one existing promoted family can complete the full promotion proof path in a
-> second-language lane, and the repo can describe that result honestly on the
-> same public truth surfaces it already asks users to trust.
+After M33, a maintainer should be able to open the current recommendation
+artifact and answer five questions without stitching together chat context or
+adjacent proof files:
 
-This is the full M32 claim.
+1. Is a family recommended right now?
+2. If not, is it blocked for now or simply not the next move?
+3. What exact evidence is present, missing, or stale?
+4. What specifically blocks promotion?
+5. What changed since the last truthful recommendation?
 
-M32 is not broad TypeScript support.
-
-M32 is one bounded proof:
-
-- one already-known function family
-- one second-language lane
-- one set of promotion artifacts
-- one set of read-side truth surfaces
-- one explicit closeout of what remained shared versus target-specific
+That is the full M33 claim.
 
 ## Decision
 
-M32 ships as a single-family pilot centered on
-`function.arithmetic_leaf.monotone_up.v1`.
+M33 ships as a bounded recommendation-quality hardening pass over the existing
+analysis and family-promotion artifact chain.
 
 That means:
 
-1. `function.arithmetic_leaf.monotone_up.v1` is the only family that must pass
-   the full M32 pilot contract.
-2. `function.wrapper.pipeline.v1` stays as regression pressure only. Its
-   existing suites must stay green, but it is not a second certification target
-   for this milestone.
-3. Acceptance requires both:
-   - the existing Rust-default `prove` and `certify` path staying green
-   - the bounded TypeScript `prove` and `certify` path going green on the same
-     family
-4. M32 reuses the M31 portability boundary. It does not reopen seam portability
-   semantics or invent cross-language truth for `kind:data`, `kind:sum`, or
-   `.test.spec`.
+1. The main user surface is still the existing artifact tree under
+   `.semantic-family-artifacts/family-promotion/`.
+2. The primary visible payoff is a better
+   `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`,
+   not a new family or a new proof lane.
+3. M33 reuses the current M27/M32 coverage, ranking, validation, and promotion
+   artifact codepaths. It extends them explicitly instead of creating a new
+   policy subsystem.
+4. M33 keeps bounded second-language honesty. No artifact may imply repo-wide
+   multi-language readiness because M32 only proved one bounded lane for
+   `function.arithmetic_leaf.monotone_up.v1`.
 
 ## Problem Statement
 
-The repo already has important pieces of the second-language story:
+M32 is closed. Good.
 
-- `xtask` exposes `--target-language` on `family prove` and `family certify`
-- `xtask/src/family/prove.rs` already allows `typescript` for
-  `function.arithmetic_leaf.monotone_up.v1` and `function.wrapper.pipeline.v1`
-- `semantic-families/function.arithmetic_leaf.monotone_up.v1/` already carries
-  additive `body.typescript` fixtures
-- `spec-core/src/semantic_review.rs` already reads authored `body.typescript`
-  when building semantic-review truth
-- `spec-core/src/passport.rs`, `spec-core/src/export.rs`, and
-  `spec-cli/src/commands.rs` already project public read-side truth
+The repo now has a real bounded second-language proof path, and the current
+analysis artifact is mechanically honest. But it is still too thin as a
+decision surface.
 
-Good. That means the repo is not starting from zero.
+Today the current analysis artifact says:
 
-But the path is still incomplete and partly misleading:
+- path:
+  `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+- `schema_version = 3`
+- `recommendation_status = "no_strong_candidate"`
+- one visible candidate:
+  `unsupported_function_surface-e40675da6fa0`
+- that candidate is a durable hold centered on `money/round`
+- the current explanation is spread across:
+  `promotion_readiness`, `hold_reasons`, `next_step_status`,
+  `next_step_detail`, leverage counts, and implicit knowledge of why helper
+  surfaces are not promotable
 
-- promotion execution artifacts still hard-code `target_language = rust` in
-  `xtask/src/family/promotion_artifacts.rs`
-- there is no frozen parent-usable runtime command surface yet for emitting
-  `promotion.execution.json` or `blocker.report.json`
-- certification reports do not record which target-language lane produced the
-  artifact
-- the current promotion-artifact chain can still point at a stale
-  `recommendation.latest.json` that does not describe the monotone-up pilot
-- the plan does not currently lock whether Rust-default proof must remain green
-  while TypeScript proof is added
-- there is no single milestone contract that says which read-side surfaces must
-  agree on the same second-language pilot result
-- the current branch still points at pre-closeout M31 planning rather than an
-  M32 authority document
+That output is truthful, but it still makes the maintainer do too much
+interpretation work.
 
-That is exactly the kind of half-true state that produces fake confidence.
+The missing value is not more proof plumbing. The missing value is a cleaner
+judgment surface:
+
+- recommended
+- blocked for now
+- not recommended
+- why
+- what evidence is stale or missing
+- what changed since the last run
+
+That is the gap M33 closes.
 
 ## Locked Decisions
 
-These decisions remove the remaining ambiguity. They are part of the milestone
-contract, not suggestions.
+### 1. M32 is treated as earned
 
-### 1. M31 is a hard prerequisite
+Do not spend M33 budget re-proving the same bounded TypeScript lane with new
+milestone prose.
 
-No M32 implementation begins on stale pre-M31 state.
+M33 starts from the closed M32 state and improves the decision artifacts built
+on top of it.
 
-Start from:
+### 2. Recommendation quality is the product surface
 
-- `ws/m31-int` at `945284ea7ab6bf788d7202ff674b81581afd47c6`, or
-- a merged equivalent that already contains the M31 portability contract
+The primary M33 output is better recommendation and family-promotion artifact
+truth.
 
-If that precondition is not met, stop and re-anchor before doing anything else.
+Do not widen into:
 
-### 2. One primary family only
+- a new promoted family
+- corpus-expansion run `1`
+- generic policy or approval workflow machinery
+- broad TypeScript support claims
+- `spec-core` semantic-family runtime expansion
 
-`function.arithmetic_leaf.monotone_up.v1` is the only primary M32 packet.
+### 3. Keep the current analysis artifact path
 
-Do not add:
+The current maintainer entrypoint stays:
 
-- a new third family
-- a second primary pilot family
-- a cross-family promotion milestone
+- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
 
-### 3. Rust-default and TypeScript lanes are both required
+M33 makes that artifact more useful. It does not hide the new truth in a new
+parallel artifact family.
 
-M32 is only complete when the monotone-up family passes:
+### 4. Delta lives inside the primary analysis artifact
 
-- `cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1`
-- `cargo xtask family prove function.arithmetic_leaf.monotone_up.v1`
-- `cargo xtask family certify function.arithmetic_leaf.monotone_up.v1`
-- `cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
-- `cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript`
+The current recommendation artifact is the thing maintainers already inspect.
+That is where the change summary belongs.
 
-This is the complete version and the cost delta is tiny compared to the value
-of proving the second-language lane did not quietly regress the original one.
+Do not add a separate sibling delta artifact unless implementation proves the
+embedded form is impossible to keep deterministic.
 
-### 4. Wrapper pipeline is comparator pressure, not a second pilot
+### 5. Preserve the current ranking view as a compatibility layer
 
-`function.wrapper.pipeline.v1` remains a required regression surface in tests.
+`recommendation_status` stays in the analysis artifact as the existing
+machine-facing ranking summary.
 
-It is not required to pass a second M32 certify lane. Its job is to catch
-shared-kernel regressions, not to widen the milestone.
+M33 adds a new maintainer-facing decision layer on top of it rather than
+replacing the field outright. This keeps the diff smaller and avoids breaking
+consumers that only understand the M27/M32 vocabulary.
 
-### 5. Public truth must stay on existing surfaces first
+### 6. Decision vocabulary is explicit and bounded
 
-Default stance: reuse the repo's existing public truth surfaces and make them
-target-language-aware where needed:
+M33 introduces one new top-level decision verdict:
 
-- promotion execution artifacts
-- certification reports
-- passport
-- `spec status`
-- `spec export`
-- semantic-review summaries and citations
+- `recommended`
+- `blocked_for_now`
+- `not_recommended`
 
-Add a new public surface only if a concrete truth gap remains after the reused
-surfaces are made honest.
+And it uses a bounded blocker/evidence vocabulary derived from existing truth:
 
-### 6. Artifact truth must stop pretending everything is Rust
+- `unknown_overlap_family`
+- `hard_difficulty`
+- `thin_real_example_support`
+- `thin_regression_support`
+- `helper_surface_not_promotable`
+- `missing_evidence`
+- `stale_evidence`
+- `regression_warning`
 
-If an artifact participates in M32 closeout, it must record the actual
-target-language lane.
+Do not turn this into a generic rules engine with arbitrary human-authored
+policies.
 
-At minimum, the M32 implementation must make target language explicit in:
+### 7. Family-scoped promotion artifacts must carry the same basis
 
-- prove/certify reports
-- the monotone-up promotion recommendation artifact used by closeout
-- promotion execution artifacts
-- artifact validation rules
+The family-scoped artifact chain under
+`.semantic-family-artifacts/family-promotion/<family>/...` must reference the
+analysis basis that justified the action:
 
-### 7. Read-side truth is part of acceptance, not follow-up polish
+- which analysis artifact was used
+- what its verdict was
+- which blockers were already open
+- whether any evidence was stale or missing at emission time
 
-The same pilot path must leave honest truth on:
+Execution and blocker artifacts do not recompute recommendation policy. They
+carry forward the chosen basis honestly.
 
-- passport output
-- `spec status`
-- `spec export`
-- semantic-review summaries and citations
+### 8. Coverage accounting is not being redesigned
 
-If the commands go green but the read-side story is still vague or stale, M32
-is not done.
+M33 reuses the current coverage artifact and unsupported-cluster projection.
 
-### 8. Scope stays function-only
+Do not change corpus manifest policy, source-kind leverage rules, or cluster
+discovery as side work unless implementation proves a blocker in the existing
+inputs.
 
-M32 does not widen support for:
+### 9. Wrapper regression pressure stays indirect
 
-- `kind:data`
-- `kind:sum`
-- `.test.spec` target-language execution
-- general target-language lowering policy outside the chosen function family
+Wrapper-pipeline pressure remains recommendation input, not a special
+top-level promotion policy.
 
-### 9. The closeout must distinguish shared versus target-specific residue
+If wrapper regressions matter for a recommendation, they should appear through
+existing leverage and evidence fields plus a bounded `regression_warning`, not
+through a custom wrapper-only policy lane.
 
-The repo must exit M32 able to state, with evidence:
+### 10. Docs must stay narrow about second-language support
 
-- what remained genuinely shared
-- what stayed target-specific
-- whether the M31 containment boundary held under the pilot
+Every updated doc must keep the M32 boundary explicit:
 
-That summary belongs in repo truth, not hidden maintainer context.
+- one bounded second-language pilot exists
+- recommendation artifacts may discuss that proof
+- no M33 artifact may imply broad repo-wide target-language readiness
 
 ## Done Means
 
-M32 is complete only when all of the following are true:
+M33 is complete only when all of the following are true:
 
-1. the branch or integration target already includes the validated M31 boundary
-2. `function.arithmetic_leaf.monotone_up.v1` passes `smoke`, Rust `prove`,
-   Rust `certify`, TypeScript `prove`, and TypeScript `certify`
-3. prove/certify artifacts and validation logic no longer hard-code
-   `target_language = rust` for M32-relevant outputs
-4. the monotone-up pilot still keeps existing wrapper-pipeline regression suites
-   green
-5. public read-side truth surfaces stay honest for the same pilot path:
-   passport, status, export, semantic-review summaries
-6. the repo can explain what stayed shared versus what remained
-   target-specific without relying on chat-only interpretation
-7. no new family, no new broad TypeScript support claim, and no seam-kind
-   widening was needed to land the milestone
-8. the roadmap and this plan describe the same `M31 -> M32` sequence
-9. the tests prove the second-language lane rather than only compiling through
-   the flag plumbing
-10. the plan's parallelization and failure-mode sections still match the actual
-    landed implementation shape
+1. the analysis artifact still validates at its existing path and now includes
+   a top-level decision summary, explicit evidence state, and delta from the
+   last truthful artifact
+2. the current `money/round` helper-surface path becomes easier to explain from
+   the artifact alone, without extra maintainer interpretation
+3. the analysis artifact can distinguish:
+   - recommended
+   - blocked for now
+   - not recommended
+4. missing evidence and stale evidence are explicit fields, not implied through
+   absent counts or adjacent artifact inspection
+5. family-scoped recommendation artifacts carry forward the analysis basis and
+   remain honest about bounded support
+6. promotion execution and blocker artifacts can point back to the decision
+   basis that started the run
+7. validators reject contradictory combinations such as:
+   - `decision_status = "recommended"` while the first candidate is still held
+   - stale evidence omitted from a blocked recommendation
+   - family-scoped artifacts that disagree with their analysis basis
+8. docs explain the new vocabulary and the current truthful wedge without
+   over-claiming broader capability
+9. the implementation is proven on one real current path, not only on synthetic
+   fixture-only cases
 
 ## NOT in Scope
 
 The following work was considered and is explicitly deferred:
 
-- Broad repo-wide "TypeScript is supported" messaging
-  Reason: M32 proves one bounded family path only.
-- A new third function family
-  Reason: that changes both the package and the belt at the same time.
-- `kind:data` or `kind:sum` second-language execution semantics
-  Reason: that would reopen M31 and widen the ontology too early.
-- `.test.spec` target-language execution
-  Reason: molecule tests remain Rust-only in current validator policy.
-- A replacement for `xtask` proof commands
-  Reason: `smoke`, `prove`, and `certify` are already the deterministic kernel.
-- A new standalone public CLI command for target-language closeout
-  Reason: existing read-side and artifact surfaces should carry the truth first.
-- Recommendation-engine target-language expansion
-  Reason: M27/M27.5 artifacts are still intentionally Rust-scoped today.
-- A second certify lane for `function.wrapper.pipeline.v1`
-  Reason: useful pressure, wrong milestone.
+- Promoting a new family packet
+  Reason: M33 improves the decision surface, not the supported-family set.
+- Spending corpus-expansion run `1`
+  Reason: the current program tracker explicitly says each run needs its own
+  contract, and M33 is not a corpus-growth run.
+- Changing source-kind leverage rules
+  Reason: that is coverage policy work, not decision-surface work.
+- Broad repo-wide TypeScript support messaging
+  Reason: M32 proved one bounded family lane only.
+- Starting seam-kind target-language work
+  Reason: that would reopen the M31/M32 boundary and is a different milestone.
+- Approval workflow machinery, overrides, or RBAC
+  Reason: that is policy-system work, not bounded recommendation-quality work.
+- Rewriting `xtask` command names
+  Reason: the current command surface already exists and should be reused.
+- `spec-core` reviewer capability changes
+  Reason: M33 consumes current runtime truth; it does not expand supported
+  semantic families.
 
 ## What Already Exists
 
-| Sub-problem | Existing code | Reuse decision |
+| Sub-problem | Existing code or artifact | Reuse decision |
 |---|---|---|
-| CLI target-language flag | `xtask/src/lib.rs` defines `FamilyTargetLanguage::{Rust, Typescript}` and threads it into `family prove` and `family certify` | Reuse the existing flag surface. Do not invent a second CLI entrypoint. |
-| Bounded TypeScript gate admission | `xtask/src/family/prove.rs` already allows `typescript` only for `function.arithmetic_leaf.monotone_up.v1` and `function.wrapper.pipeline.v1` | Reuse the existing admission rule and tighten the proof/reporting around it. |
-| Certify flow reuse of prove | `xtask/src/family/certify.rs` already runs `prove::execute_in(...)` and layers gate D routing checks on top | Reuse the same kernel. Do not fork a second certify implementation for TypeScript. |
-| Locked monotone-up harness | `xtask/src/family/harness.rs` already defines monotone-up smoke contracts, prove suites, certify suites, routing precedence, and regression suite names | Reuse as the pilot harness surface. Extend only where M32 truth requires it. |
-| Committed pilot packet | `semantic-families/function.arithmetic_leaf.monotone_up.v1/` already exists with additive `body.typescript` starter fixtures in all four buckets | Reuse the packet instead of creating a fresh family. |
-| Semantic-review authored TypeScript visibility | `spec-core/src/semantic_review.rs` already reads authored `body.typescript` and cites it in monotone-up and wrapper-family tests | Reuse this as the read-side truth foundation, not as proof that the full lane is already done. |
-| Passport truth surface | `spec-core/src/passport.rs` already projects freshness, markers, proof state, and semantic review into the public passport | Reuse the passport path as one of the required M32 honesty surfaces. |
-| Export truth surface | `spec-core/src/export.rs` already enriches passports for export and projects current semantic truth | Reuse and keep it aligned with passport/status. |
-| Status truth surface | `spec-cli/src/commands.rs` already emits structured `spec status` health including freshness and semantic review | Reuse as the live health/read-side surface. |
-| Monotone-up regression fixtures | `spec-cli/tests/m14_regressions.rs` already contains monotone-up truth-surface and corpus regressions with additive TypeScript bodies | Reuse as the main spec-cli regression bed rather than creating a new test fixture universe. |
-| Promotion artifact framework | `xtask/src/family/promotion_artifacts.rs` already owns execution and blocker artifact schemas | Reuse, but extend it so M32 artifacts can tell the truth about target language instead of forcing `rust`. |
+| Coverage and unsupported-cluster truth | `xtask/src/family/coverage.rs` plus `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json` | Reuse as the evidence input. Do not invent a second coverage pipeline. |
+| Recommendation ranking and hold logic | `xtask/src/family/recommend.rs` | Reuse the current ranking kernel and extend it with an explicit decision layer plus delta logic. |
+| Artifact schemas and validation | `xtask/src/family/promotion_artifacts.rs` | Reuse the existing serde models and path-aware validators. Extend them explicitly. |
+| Artifact paths and deterministic writes | `xtask/src/family/paths.rs` and `write_bytes_atomically` | Reuse the existing artifact tree and deterministic write behavior. |
+| Family-scoped recommendation emission | `run_refresh_recommendation(...)` in `xtask/src/family/promotion_artifacts.rs` | Reuse, but make it analysis-basis-aware instead of acting like an isolated thin packet. |
+| Promotion execution and blocker emission | `run_emit_promotion_execution(...)` and `run_emit_promotion_blocker(...)` in `xtask/src/family/promotion_artifacts.rs` | Reuse, but thread through decision-basis truth. |
+| CLI and schema regression bed | `xtask/src/lib.rs` tests around `validate-artifact`, recommendation analysis, promotion execution, and blocker reports | Reuse as the main lock-test surface. Add M33 fixtures there rather than creating a second test universe. |
+| Maintainer explanation surface | `semantic-families/README.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md`, and `docs/recommendation_corpus_expansion_program_v0.1.md` | Reuse as the human-facing truth surface. Update wording to match the new artifact vocabulary exactly. |
+| Live truthful wedge | current `recommendation.latest.json` durable hold for `unsupported_function_surface-e40675da6fa0` | Use this as the canonical M33 example. If the new artifact cannot explain this path well, M33 is not done. |
 
 ## Step 0 - Scope Challenge
 
-This milestone touches more than 8 files. Normally that is a smell.
+This plan likely touches more than 8 files.
 
-Here it is justified because the gap is cross-surface truth:
+Normally that is a smell. Here it is justified because the missing value is
+cross-artifact decision truth, and that truth already spans:
 
-- the proof kernel already accepts the flag
-- the committed family packet already contains additive TypeScript bodies
-- the read-side surfaces already expose semantic truth
-- the artifact layer still says "rust"
+- recommendation analysis schema
+- family-scoped recommendation schema
+- promotion execution schema
+- blocker schema
+- validators
+- CLI regression tests
+- maintainer docs
 
-Reducing below that surface would leave one of these stories false:
+The minimum honest M33 change is:
 
-- the proof commands
-- the proof artifacts
-- the read-side truth surfaces
-- the public roadmap
+1. keep current coverage and ranking discovery intact
+2. add an explicit decision layer to the analysis artifact
+3. make missing and stale evidence first-class fields
+4. embed a deterministic delta from the last truthful analysis artifact
+5. thread the decision basis through downstream family-promotion artifacts
+6. update validators and docs so the new story is enforceable
 
-The minimum honest implementation surface is:
+Anything smaller is just better prose around the same thin output.
 
-- the existing `xtask` prove/certify/report/artifact path
-- the existing monotone-up packet and harness
-- the existing read-side truth surfaces
-- the roadmap and this plan
+### Complexity check
 
-Anything smaller is a partial patch that still leaves the repo flattering
-itself.
+This is a multi-file change, but it does **not** justify a new subsystem.
 
-## Closed Implementation Surface
+The right implementation is boring:
 
-### Primary modules
+- extend current serde structs
+- extend current validators
+- extend current recommend projection
+- update the existing CLI regression bed
+- update the current docs
 
-- `xtask/src/lib.rs`
-- `xtask/src/family/prove.rs`
-- `xtask/src/family/certify.rs`
-- `xtask/src/family/report.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/harness.rs`
-- `spec-core/src/semantic_review.rs`
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/cli.rs`
-- `spec-cli/tests/m14_regressions.rs`
-- `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
-- `semantic-families/README.md`
-- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-- `PLAN.md`
+No new service, no database, no new command family.
 
-### Allowed mechanical spillover
+### Search check
 
-Only if compile- or fixture-forced:
+This is a Layer 1 change.
 
-- `xtask/src/family/paths.rs`
-- `xtask/src/family/routing.rs`
-- `spec-core/src/types.rs`
-- `spec-core/src/lib.rs`
-- `spec-core/src/validator.rs`
+The repo already has the exact building blocks it needs:
 
-If implementation needs broader semantics outside this surface, stop and rewrite
-the plan before continuing.
+- existing artifact paths
+- existing validator model
+- existing deterministic file writes
+- existing recommendation projection
+- existing family-promotion artifact chain
 
-## Architecture
+Do not roll a custom comparison store or approval-state side channel when the
+repo already has a path-stable artifact tree.
 
-### Current shape
+### TODOS cross-reference
+
+`docs/recommendation_corpus_expansion_program_v0.1.md` explicitly says each run
+needs its own high-rigor plan and that the open question is whether more
+evidence is needed or the blocker is now recommendation interpretation.
+
+M33 answers the interpretation side of that question.
+
+### Completeness check
+
+The shortcut version would be:
+
+- rename a few statuses
+- add nicer prose to the README
+
+That is not enough.
+
+The complete version is still cheap here:
+
+- schema truth
+- validator truth
+- delta truth
+- downstream artifact truth
+- docs truth
+- regression coverage
+
+Do the complete version.
+
+### Distribution check
+
+M33 introduces no new binary, package, or service.
+
+Its distribution surface is the existing artifact tree plus repo docs.
+
+That means the implementation is only real if a maintainer can consume the new
+decision quality through the current workflow, not by learning a side system.
+
+## Architecture Review
+
+### Chosen artifact model
+
+M33 keeps the current artifact paths and makes the data model more explicit.
+
+#### 1. Analysis artifact
+
+Path stays:
+
+- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+
+Current shape:
+
+- `schema_version = 3`
+- ranking-oriented view only
+
+M33 change:
+
+- bump to `schema_version = 4`
+- keep existing ranking fields
+- add a top-level `decision_summary`
+- add a top-level `evidence_summary`
+- add a top-level `delta_from_previous`
+
+#### 2. Family-scoped recommendation artifact
+
+Path stays:
+
+- `.semantic-family-artifacts/family-promotion/<family>/recommendation.latest.json`
+
+Current shape:
+
+- thin family-scoped recommendation packet with inventory basis
+
+M33 change:
+
+- bump to `schema_version = 2`
+- add `analysis_basis_path`
+- add `analysis_basis_sha256`
+- add `decision_status`
+- add carried blocker/evidence fields from the chosen analysis basis
+
+#### 3. Promotion execution and blocker artifacts
+
+Paths stay:
+
+- `.semantic-family-artifacts/family-promotion/<family>/<run-id>/promotion.execution.json`
+- `.semantic-family-artifacts/family-promotion/<family>/<run-id>/blocker.report.json`
+
+Current shape:
+
+- execution-step truth only
+
+M33 change:
+
+- bump both to `schema_version = 2`
+- add `analysis_basis_path`
+- add `analysis_basis_sha256`
+- add `decision_status_at_start`
+- add `open_blockers_at_start`
+- add `missing_or_stale_evidence_at_start`
+
+These artifacts do not become a policy engine. They only preserve the decision
+basis that justified the run.
+
+### Decision vocabulary contract
+
+The new decision layer is:
+
+- `recommended`
+  The current first candidate is promotion-worthy now.
+- `blocked_for_now`
+  A plausible target exists, but missing or stale evidence or explicit blockers
+  prevent recommending promotion yet.
+- `not_recommended`
+  The current visible pressure should not drive the next family decision, even
+  if the cluster remains visible.
+
+Exact rules:
+
+1. `recommended` requires:
+   - first candidate `promotion_readiness = ready`
+   - `confidence.level` is `medium` or `high`
+   - no required evidence is stale or missing
+2. `blocked_for_now` applies when:
+   - there is a plausible candidate, and
+   - the recommendation is being held by blocker reasons or freshness gaps
+3. `not_recommended` applies when:
+   - there is no plausible next-family action, or
+   - the visible candidate is a durable helper-surface hold like the current
+     `money/round` path
+
+### Evidence model
+
+M33 splits decision blockers from evidence state.
+
+That means:
+
+- blocker reasons explain **why the decision is held**
+- evidence state explains **what proof is present, missing, or stale**
+- warnings explain **what still deserves caution even if the verdict is usable**
+
+The artifact should not force the reader to infer freshness from missing paths or
+silent count changes.
+
+### Change-awareness contract
+
+Delta is computed against the last validated analysis artifact at the same path.
+
+`delta_from_previous` must include at minimum:
+
+- `previous_generated_at`
+- `previous_decision_status`
+- `previous_recommendation_status`
+- `decision_changed`
+- `top_candidate_changed`
+- `reasons_added[]`
+- `reasons_cleared[]`
+- `evidence_changes[]`
+- one single-line human-readable summary
+
+If there is no prior artifact, the delta block must say that explicitly instead
+of fabricating a baseline.
+
+### Architecture ASCII diagram
 
 ```text
-committed family packet
-        |
-        +--> family smoke
-        |
-        +--> family prove/certify
-              |
-              +--> accepts --target-language typescript for 2 families
-              |
-              `--> writes reports/artifacts that still assume rust-first truth
-
-spec-core / spec-cli read-side surfaces
-passport -> export -> status -> semantic review summaries
-        |
-        `--> already expose public truth, but not yet locked to one M32 pilot contract
-```
-
-### Target shape
-
-```text
-M31-integrated repo base
+CORPUS + CURRENT REPO TRUTH
+===========================
+semantic-families/corpus/rust-function.toml
+        +
+coverage.rs
         |
         v
-monotone-up committed packet + locked harness
+coverage.latest.json
         |
-        +--> smoke contract stays stable
+        v
+recommend.rs
         |
-        +--> Rust prove/certify lane stays green
+        +--> ranked_candidates[]            (existing ranking view)
+        +--> decision_summary              (new M33 verdict)
+        +--> evidence_summary              (new M33 evidence state)
+        +--> delta_from_previous           (new M33 change view)
         |
-        `--> TypeScript prove/certify lane goes green
+        v
+analysis/recommendation.latest.json
+        |
+        +--> refresh-promotion-recommendation
+        |       |
+        |       v
+        |   <family>/recommendation.latest.json
+        |
+        +--> emit-promotion-execution / emit-promotion-blocker
                 |
-                +--> target-language-aware report + execution artifacts
-                +--> explicit shared-vs-target-specific closeout notes
-                |
-                +-----------+--------------+--------------+
-                            v              v              v
-                        passport         spec export    spec status
-                            \              |              /
-                             \             |             /
-                              `------ semantic review --'
+                v
+        promotion.execution.json / blocker.report.json
 ```
-
-The important change is not just "TypeScript commands pass."
-
-The important change is that the same bounded pilot can be read honestly from
-both the proof artifacts and the public truth surfaces.
-
-## Pilot Contract
-
-M32 owns one bounded second-language contract.
-
-### Primary pilot
-
-- family: `function.arithmetic_leaf.monotone_up.v1`
-- target language: `typescript`
-- baseline lane: `rust`
-- smoke lane: scaffold contract only, no target-language flag
-
-### Comparator pressure
-
-- keep wrapper-pipeline suites green in `spec-core` and `spec-cli`
-- do not add a second full certify requirement for wrapper-pipeline
-
-### Artifact contract
-
-The prove/certify path must emit target-language-aware machine truth.
-
-The exact Rust type names may differ, but the ownership boundary cannot:
-
-- `CertificationReport` must record the target-language lane
-- the promotion chain must refresh a monotone-up recommendation artifact before
-  emitting closeout artifacts
-- promotion execution artifacts must record the target language
-- artifact validation must accept the new truthful shape
-- closeout notes must distinguish shared semantics from target-specific residue
-
-## Read-Side Truth Rules
-
-These rules are locked.
-
-### Packet and harness truth
-
-- `family smoke` remains the scaffold contract for the committed monotone-up
-  packet
-- additive `body.typescript` stays part of the committed packet truth
-- the TypeScript lane must not require packet-local cheats hidden outside the
-  packet, harness, or deterministic proof kernel
-
-### Rust baseline truth
-
-- the existing Rust-default monotone-up `prove` and `certify` path must stay
-  green
-- M32 is not allowed to break the original lane in order to make the
-  second-language lane look green
-
-### Semantic-review truth
-
-- `spec-core/src/semantic_review.rs` must continue to cite authored
-  `body.typescript` honestly
-- existing supported-function and unsupported-function verdict vocabulary stays
-  unchanged unless a compile-local fix is forced
-
-### Passport, export, and status truth
-
-- the same monotone-up pilot path must project coherently through passport,
-  export, and status
-- these surfaces must not imply broad repo-wide TypeScript execution support
-- if a lane stays target-specific or requires bounded exceptions, that truth
-  must remain visible rather than smoothed over
 
 ## Implementation Plan
 
-### Step 1 - Re-anchor on the validated M31 base and freeze the M32 pilot contract
+### Step 1 - Freeze the decision schema contract
 
-Goal: start from a truthful baseline and remove branch-history ambiguity.
+Primary files:
 
-Files:
-
-- `PLAN.md`
-- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-
-Required work:
-
-- confirm the working implementation base already includes `ws/m31-int` or
-  merge it first
-- replace the stale M31 authority plan with this M32 authority plan
-- lock the primary pilot family, acceptance commands, comparator policy, and
-  stop conditions before touching code
-
-Exit condition:
-
-- there is one unambiguous M32 authority document and it matches the design doc
-
-### Step 2 - Make prove/certify/report/artifact truth target-language-aware
-
-Goal: stop the proof artifact layer from pretending the pilot is Rust-only.
-
-Files:
-
-- `xtask/src/lib.rs`
-- `xtask/src/family/prove.rs`
-- `xtask/src/family/certify.rs`
-- `xtask/src/family/report.rs`
 - `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/paths.rs`
 
-Required work:
+Work:
 
-- preserve the current CLI target-language flag shape
-- thread the chosen target language into prove/certify reporting
-- update report and promotion-artifact schemas so M32-relevant outputs can say
-  `typescript` truthfully
-- update artifact validation to accept the new truthful schema
-- keep Rust-default behavior unchanged when the flag is omitted
+1. Add the new decision/evidence/delta structs and enums.
+2. Bump schema versions exactly where M33 changes artifact meaning.
+3. Extend validators so contradictory combinations fail fast.
+4. Keep `recommendation_status` as a compatibility field in the analysis
+   artifact.
+5. Keep all artifact paths unchanged.
 
-Exit condition:
+Acceptance for Step 1:
 
-- the prove/certify path can produce machine-readable artifacts that explicitly
-  identify the Rust lane versus the TypeScript lane
+- every changed artifact type has a validator that enforces the M33 rules
+- no artifact path changes
+- old contradictions now fail in tests instead of relying on maintainer judgment
 
-### Step 3 - Lock the monotone-up pilot packet and harness around the M32 contract
+### Step 2 - Build the M33 decision projection in `recommend.rs`
 
-Goal: make the chosen family the authoritative bounded pilot, not just a loose
-  example.
+Primary files:
 
-Files:
+- `xtask/src/family/recommend.rs`
 
-- `xtask/src/family/harness.rs`
-- `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
+Work:
 
-Required work:
+1. Derive the new `decision_status` from the existing candidate ranking,
+   readiness, confidence, and durable-hold logic.
+2. Project blocker reasons separately from evidence state.
+3. Load the previous validated analysis artifact if it exists.
+4. Compute `delta_from_previous` deterministically.
+5. Keep deterministic byte reuse when the normalized logical output has not
+   changed.
 
-- keep the committed monotone-up scaffold truth aligned with `family smoke`
-- ensure the prove/certify suites named in the harness still describe the pilot
-  accurately once target-language reporting becomes explicit
-- keep the packet-local TypeScript bodies additive and truthful
-- leave public packet wording to the final docs-closeout lane so packet docs
-  describe the landed pilot rather than an intermediate assumption
+Acceptance for Step 2:
 
-Exit condition:
+- the current `money/round` durable-hold path renders as
+  `decision_status = "not_recommended"` with explicit explanation
+- a held but still plausible candidate path can render
+  `decision_status = "blocked_for_now"`
+- unchanged logical output still reuses prior bytes where the existing
+  determinism contract allows it
 
-- the committed packet, harness, and smoke contract still agree on the same
-  monotone-up pilot story
+### Step 3 - Thread the decision basis through downstream artifacts
 
-### Step 4 - Re-prove the read-side truth surfaces against the same pilot
+Primary files:
 
-Goal: make public repo truth match the proof artifact story.
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/lib.rs`
 
-Files:
+Work:
 
-- `spec-core/src/semantic_review.rs`
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/cli.rs`
-- `spec-cli/tests/m14_regressions.rs`
+1. Update `refresh-promotion-recommendation` so the family-scoped artifact
+   records which analysis artifact justified the chosen family and what that
+   basis said.
+2. Update execution and blocker artifact emission so they carry the same basis.
+3. Ensure downstream validators reject family-scoped artifacts that disagree
+   with the referenced analysis basis.
+4. Keep target-language truth explicit so M32 honesty is preserved.
 
-Required work:
+Acceptance for Step 3:
 
-- preserve monotone-up authored TypeScript visibility in semantic review
-- prove that passport, export, and status stay aligned for the pilot fixtures
-- verify that the repo can surface target-specific residue honestly instead of
-  implying broad support
-- keep wrapper-pipeline regression surfaces green while doing this work
+- family-scoped recommendation artifacts cite the analysis basis directly
+- execution and blocker artifacts preserve that basis without recomputing policy
+- no downstream artifact implies repo-wide multi-language readiness
 
-Exit condition:
+### Step 4 - Lock the docs and canonical wedge
 
-- the read-side public surfaces tell the same bounded M32 story as the proof
-  artifacts
+Primary files:
 
-### Step 5 - Close the public wording and milestone sequencing
-
-Goal: make the roadmap say what the code now actually means.
-
-Files:
-
+- `semantic-families/README.md`
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
 - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+- `CHANGELOG.md`
 
-Required work:
+Work:
 
-- describe M31 as the landed boundary extraction prerequisite
-- describe M32 as the first bounded second-language promotion path
-- avoid any broad "TypeScript is now supported" claim
-- align roadmap wording with the actual monotone-up pilot contract and
-  comparator policy
+1. Teach the new M33 decision vocabulary exactly once and reuse the same wording
+   everywhere.
+2. Document the current truthful wedge:
+   the helper-surface `money/round` path is visible but not the next family.
+3. Explain how `recommended`, `blocked_for_now`, and `not_recommended` differ.
+4. Keep the M32 bounded second-language claim narrow and explicit.
 
-Exit condition:
+Acceptance for Step 4:
 
-- the roadmap, the plan, and the landed code use the same milestone language
+- a maintainer reading the docs sees the same vocabulary the artifacts emit
+- docs and artifacts describe the same current wedge
+- no doc widens M32 into broad TypeScript readiness
 
-## Code Path Diagram
+## Code Quality Review
 
-```text
-[1] Monotone-up committed packet
-    semantic-families/function.arithmetic_leaf.monotone_up.v1/**
-        |
-        +-- family smoke
-        |      |
-        |      +-- exact scaffold contract still matches
-        |      `-- additive body.typescript remains committed truth
-        |
-        +-- family prove (rust)
-        |
-        +-- family certify (rust)
-        |
-        +-- family prove (typescript)
-        |
-        `-- family certify (typescript)
-                |
-                +-- report.rs writes target-language-aware certify/prove artifacts
-                +-- promotion_artifacts.rs validates/records target-language-aware execution truth
-                |
-                v
-[2] Public read-side surfaces
-    semantic_review.rs
-    passport.rs
-    export.rs
-    spec status / spec-cli/src/commands.rs
-        |
-        +-- authored body.typescript remains visible
-        +-- no false broad-support claim is introduced
-        `-- monotone-up pilot truth stays aligned across surfaces
+The biggest code-quality risk here is not under-engineering. It is semantic
+duplication.
 
-[3] Comparator pressure
-    wrapper_pipeline suites stay green
-        |
-        `-- proves the shared kernel was not broken while landing the bounded pilot
-```
+If the M33 decision rules are implemented twice, once in `recommend.rs` and once
+again inside downstream emission code, the artifact chain will drift.
 
-Every branch above needs tests.
+So the quality bar is:
 
-## Test and Proof Plan
+1. one source of decision truth in the analysis projection
+2. downstream artifacts only carry forward that truth
+3. validators enforce consistency instead of each writer inventing its own rules
 
-100% of the new M32 codepaths must be covered. This milestone is easy to fake
-with one green TypeScript command and a vague closeout note. That is not good
-enough.
+This is a minimal-diff plan.
+
+Do not introduce:
+
+- a new policy module tree
+- free-form JSON extension maps
+- artifact-specific copies of the same decision rules
+
+## Test Review
+
+100% branch coverage for the new decision states is required.
 
 ### Code path coverage
 
 ```text
-XTASK TARGET-LANGUAGE TRUTH
-===========================
-[+] xtask/src/family/prove.rs
-    ├── [GAP] target-language lane recorded explicitly in prove output/report path
-    ├── [TEST] unsupported family + typescript still rejected
-    └── [TEST] rust default behavior unchanged when flag omitted
+ANALYSIS ARTIFACT
+=================
+[+] xtask/src/family/recommend.rs
+    ├── [ADD] emits `decision_status = recommended`
+    ├── [ADD] emits `decision_status = blocked_for_now`
+    ├── [ADD] emits `decision_status = not_recommended`
+    ├── [ADD] computes `delta_from_previous` when prior artifact exists
+    ├── [ADD] emits explicit "no previous artifact" delta when baseline absent
+    └── [ADD] preserves deterministic output when logical recommendation is unchanged
 
-[+] xtask/src/family/certify.rs
-    ├── [GAP] certify attempt/certification artifacts record target language
-    ├── [TEST] rust lane still certifies normally
-    └── [TEST] typescript lane propagates prove/routing failures truthfully
-
-[+] xtask/src/family/promotion_artifacts.rs
-    ├── [GAP] execution artifact currently rust-only
-    ├── [TEST] validator accepts truthful typescript execution artifact
-    └── [TEST] legacy rust artifacts still validate
-
-PACKET / HARNESS PILOT
-======================
-[+] xtask/src/family/harness.rs + semantic-families/function.arithmetic_leaf.monotone_up.v1/**
-    ├── [TEST] family smoke still enforces the committed monotone-up scaffold
-    ├── [TEST] committed packet keeps additive body.typescript in all buckets
-    └── [TEST] prove/certify suite ownership remains locked
-
-READ-SIDE TRUTH
-===============
-[+] spec-core/src/semantic_review.rs
-    ├── [TEST] authored body.typescript still appears in semantic citations
-    ├── [TEST] monotone-up supported truth remains supported
-    └── [TEST] wrapper-pipeline regression suites stay green
-
-[+] spec-core/src/passport.rs / export.rs / spec-cli/src/commands.rs
-    ├── [TEST] passport, export, and status agree on the pilot fixture set
-    ├── [TEST] read-side truth does not imply broad target-language support
-    └── [TEST] target-specific residue stays visible when present
-
-REGRESSION PRESSURE
+ARTIFACT VALIDATION
 ===================
-[+] spec-cli/tests/m14_regressions.rs
-    ├── [TEST] monotone_up_truth_surface_* stays green
-    ├── [TEST] monotone_up_corpus_* stays green
-    ├── [TEST] monotone_up_regression_* stays green
-    └── [TEST] wrapper-pipeline regressions stay green
+[+] xtask/src/family/promotion_artifacts.rs
+    ├── [ADD] rejects `recommended` when first candidate is still held
+    ├── [ADD] rejects blocked recommendations that omit required blocker or evidence state
+    ├── [ADD] rejects family-scoped recommendation artifacts with mismatched analysis basis
+    ├── [ADD] rejects execution/blocker artifacts missing carried decision-basis fields
+    └── [ADD] accepts truthful M33 artifacts on existing paths
+
+DOWNSTREAM EMISSION
+===================
+[+] xtask/src/family/promotion_artifacts.rs
+    ├── [ADD] family-scoped recommendation copies analysis-basis verdict
+    ├── [ADD] promotion execution carries analysis basis without widening support claims
+    └── [ADD] blocker artifact preserves open blockers and stale/missing evidence
 ```
 
 ### User-flow coverage
 
 ```text
-PROMOTION FLOW
-==============
-[+] Maintainer runs monotone-up smoke/prove/certify
-    ├── [TEST] Rust lane still works without any flag
-    ├── [TEST] TypeScript lane works with --target-language typescript
-    └── [GAP] Artifact outputs distinguish which lane actually ran
+MAINTAINER DECISION FLOW
+========================
+[+] Current analysis artifact
+    ├── [ADD] current `money/round` durable-hold path reads as `not_recommended`
+    ├── [ADD] candidate-with-gaps path reads as `blocked_for_now`
+    └── [ADD] truly promotion-ready path reads as `recommended`
 
-READ-SIDE FLOW
-==============
-[+] User inspects the repo after the pilot
-    ├── [TEST] passport still surfaces the same monotone-up semantic truth
-    ├── [TEST] spec status still reports the same truth
-    ├── [TEST] spec export still reports the same truth
-    └── [GAP] closeout wording must not overclaim broad TypeScript support
+CHANGE AWARENESS
+================
+[+] Re-run recommendation after evidence changes
+    ├── [ADD] status flip is visible in `delta_from_previous`
+    ├── [ADD] blocker reasons added/cleared are visible
+    └── [ADD] stale evidence is called out explicitly
 
-COMPARATOR FLOW
+PROMOTION CHAIN
 ===============
-[+] Shared-kernel regression check
-    ├── [TEST] wrapper pipeline suites remain green
-    └── [TEST] monotone-up addition did not shadow or weaken existing family routing
+[+] Maintainer picks a family and starts a promotion run
+    ├── [ADD] family-scoped recommendation cites the analysis basis
+    ├── [ADD] execution artifact preserves starting verdict
+    └── [ADD] blocker artifact preserves starting blockers instead of forcing re-interpretation
 ```
 
 ### Required regression tests
 
 Add or preserve tests proving:
 
-- `prove` and `certify` keep Rust as the default lane when no target-language
-  flag is passed
-- `prove` and `certify` artifacts record `typescript` truthfully when that lane
-  is selected
-- promotion-artifact validation accepts truthful TypeScript execution artifacts
-- monotone-up smoke still enforces the committed additive TypeScript scaffold
-- monotone-up semantic-review tests still cite authored `body.typescript`
-- passport, export, and status agree on the monotone-up pilot fixtures
-- wrapper-pipeline regression suites stay green as comparator pressure
-- unsupported families still reject `--target-language typescript`
+- the analysis artifact can render all three new decision verdicts
+- the current `money/round` helper-surface wedge is `not_recommended`, not a
+  vague held recommendation
+- missing evidence and stale evidence are explicit fields, not inferred
+- `delta_from_previous` is accurate when:
+  - there is no prior artifact
+  - only blockers change
+  - the top candidate changes
+  - the top-level decision changes
+- family-scoped recommendation artifacts reject mismatched analysis-basis paths
+  or hashes
+- execution and blocker artifacts preserve the analysis basis fields
+- existing path validation rules still hold
+- bounded M32 target-language truth is preserved in downstream artifacts
 
 ### Failure modes by codepath
 
-| Codepath | Realistic production failure | Test required | Error handling / visible truth |
+| Codepath | Realistic failure | Test required | Error handling / visible truth |
 |---|---|---|---|
-| `prove` target-language plumbing | TypeScript lane silently writes an artifact that still claims `rust` | Yes, xtask unit/integration test | Artifact must show the real lane |
-| `certify` target-language plumbing | Rust and TypeScript certify attempts overwrite or blur each other | Yes, xtask report/artifact test | Reports must distinguish lanes explicitly |
-| Promotion artifact validation | New truthful TypeScript artifact shape is rejected as invalid | Yes, validator regression | Schema must accept the new honest shape |
-| Monotone-up harness contract | Packet drifts away from smoke expectations while still compiling | Yes, smoke regression | `family smoke` must catch scaffold drift |
-| Semantic review | Authored `body.typescript` stops appearing in citations | Yes, semantic-review regression | Truth surface must stay explicit |
-| Passport/export/status | One surface implies broad target-language support while the others stay bounded | Yes, cross-surface regression | Surfaces must agree on the same bounded claim |
-| Wrapper comparator | Shared-kernel change breaks wrapper pipeline while monotone-up stays green | Yes, existing regression suites | Wrapper pressure must remain visible |
-| Roadmap wording | Docs claim TypeScript support broadly after one bounded pilot | Yes, closeout review | Docs must stay narrow and truthful |
+| Analysis projection | Artifact says `recommended` while the first candidate is still held | Yes | Validator must reject the artifact |
+| Delta projection | Artifact claims "no change" even though blocker reasons changed | Yes | `delta_from_previous` must diff reason sets deterministically |
+| Freshness handling | Recommendation uses stale basis but does not say so | Yes | `evidence_summary` must carry `stale_evidence` explicitly |
+| Family-scoped recommendation emission | Chosen family artifact silently diverges from the analysis basis | Yes | Validator must compare basis path/hash and fail |
+| Promotion execution emission | Execution artifact loses the starting blocker context | Yes | Artifact must carry the open blockers and evidence state at start |
+| Blocker emission | Blocker report explains runtime failure but not pre-existing recommendation blockers | Yes | Artifact must preserve the decision basis and unresolved blockers |
+| Docs | README or roadmap implies broad TypeScript readiness | Yes | Review plus doc update must keep the M32 boundary explicit |
 
 Critical gap rule:
 
-If any path above lacks both a regression test and a truthful public surface,
-the milestone is not done.
+If any new decision path lacks both a regression test and an explicit visible
+truth field, M33 is not done.
 
 ### Commands to run
 
 Run at minimum:
 
 ```bash
-cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo test -p xtask monotone_up
-cargo test -p spec-core monotone_up_
-cargo test -p spec-core wrapper_pipeline_
-cargo test -p spec-cli --test cli monotone_up_
-cargo test -p spec-cli --test cli wrapper_pipeline_
-cargo test
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo test -p xtask family_refresh_promotion_recommendation
+cargo test -p xtask artifact_schema_
+cargo test -p xtask recommendation_
+cargo test -p xtask
 ```
 
 The narrow loop can be smaller while implementing. Done still requires the full
-set above plus workspace `cargo test`.
+artifact validation loop plus the relevant `xtask` regression bed.
 
 ## Performance Review
 
-There is no meaningful runtime hot-path risk in M32. This is a proof-integrity
-and truth-surface milestone.
+There is no meaningful runtime hot-path risk in M33.
 
-The real performance risks are engineering-performance risks:
+The real risks are engineering-performance risks:
 
-- duplicating target-language truth in both reports and read-side surfaces
-- adding a second pilot family "for confidence" and doubling review scope
-- inventing a generic multi-language abstraction before the repo has even proven
-  one honest second-language lane
+- recomputing decision policy in multiple places
+- adding unstable delta output that defeats deterministic writes
+- forcing maintainers to read more artifacts, not fewer
 
-Recommendation: be boring by default.
+Keep the implementation boring:
 
-Make the current bounded path explicit. Do not spend an innovation token on a
-premature general multi-language framework.
+- one extra validated read of the previous analysis artifact
+- one projection pass
+- one set of validators
+
+Do not turn M33 into a stateful history system.
 
 ## Distribution Surface
 
-M32 introduces no new binary, package, or container.
+M33 introduces no new binary, package, container, or service.
 
-Its distribution surface is repo truth:
+Its distribution surface is:
 
-- the monotone-up packet and harness
-- target-language-aware prove/certify artifacts
-- passport, export, status, and semantic-review truth on the same pilot
-- the roadmap and plan closeout
+- the current analysis artifact
+- the family-scoped promotion artifacts
+- the validator contract
+- the maintainer docs
 
-Code without those truth surfaces is not a real M32 ship.
+If a maintainer still needs hidden chat context to explain the current
+recommendation after M33 lands, then M33 did not actually ship.
 
 ## Worktree Parallelization Strategy
 
-This plan has real parallelization opportunity, but only after the target-language
-artifact shape is frozen.
+This plan has a narrow parallelization window, but the core code changes stay
+mostly sequential because they share the same artifact contract.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| A. Target-language artifact foundation | `xtask/src/`, especially prove/certify/report/promotion-artifacts | - |
-| B. Monotone-up packet + harness lock-in | `xtask/src/family/`, `semantic-families/` | A |
-| C. Read-side truth alignment | `spec-core/src/`, `spec-cli/src/`, `spec-cli/tests/` | A |
-| D. Roadmap + packet-doc closeout | `docs/`, `semantic-families/README.md` | B, C |
+| A. Schema and validator freeze | `xtask/src/family/promotion_artifacts.rs`, `xtask/src/family/paths.rs` | - |
+| B. Decision projection and delta logic | `xtask/src/family/recommend.rs` | A |
+| C. Downstream artifact propagation and CLI regression coverage | `xtask/src/family/promotion_artifacts.rs`, `xtask/src/lib.rs` | A, B |
+| D. Docs and closeout | `semantic-families/README.md`, `docs/`, `CHANGELOG.md` | A, B, C |
 
 ### Parallel lanes
 
-- Lane A: `A`
-  Sequential foundation lane. Freeze artifact/report truth first.
-- Lane B: `B`
-  Runs after Lane A. Owns the monotone-up packet and harness contract.
-- Lane C: `C`
-  Runs after Lane A in parallel with Lane B. Owns passport/export/status and
-  semantic-review truth alignment.
-- Lane D: `D`
-  Runs after B + C. Docs and closeout last so they describe the actual landed
-  implementation.
+- Lane A: `A -> B -> C`
+  Sequential critical path. All three steps are tightly coupled through the
+  shared artifact contract.
+- Lane B: `D`
+  Optional docs lane. It can begin only after Step A freezes the vocabulary,
+  but it must not merge until Steps B and C are complete.
 
 ### Execution order
 
-Launch Lane A first.
+Launch the sequential code lane first:
 
-After Lane A is merged or otherwise stabilized, launch Lane B and Lane C in
-parallel worktrees.
+```text
+A -> B -> C
+```
 
-Merge B + C, then do Lane D last.
+If the vocabulary is frozen and a second worktree is useful, run docs in
+parallel late:
+
+```text
+(A complete) -> B + partial D -> C -> finalize D
+```
 
 ### Conflict flags
 
-- Lanes B and C both depend on the final target-language artifact shape from
-  Lane A. Freeze that shape before splitting.
-- `xtask/src/lib.rs` belongs to Lane A. Do not let Lane B or Lane C take
-  opportunistic ownership of the CLI parsing layer.
-- `semantic-families/README.md` belongs to Lane D unless a packet-local doc
-  change is compile- or review-forced earlier.
-
-If the work is not split into worktrees, execute sequentially in the same
-order:
-
-```text
-A -> B -> C -> D
-```
+- `xtask/src/family/promotion_artifacts.rs` belongs to the sequential lane.
+  Do not split ownership of that file across worktrees.
+- Docs must not guess the final field names before the validator contract is
+  frozen.
+- If implementation discovers that `promotion_artifacts.rs` needs repeated late
+  edits after docs start, collapse back to single-lane execution.
 
 ## Completion Summary
 
 - Step 0: Scope Challenge
-  Accepted as-is, because the minimum honest surface already spans proof
-  artifacts plus read-side truth surfaces.
+  Accepted as-is. The minimum honest diff already spans analysis artifacts,
+  downstream promotion artifacts, validators, tests, and docs.
 - Architecture Review
-  One bounded monotone-up pilot, one artifact-truth foundation, one read-side
-  truth alignment pass.
+  One bounded recommendation-quality pass over the existing artifact chain.
 - Code Quality Review
-  Reuse the existing CLI, harness, packet, and truth surfaces. Extend them
-  explicitly rather than inventing a new framework.
+  One source of decision truth, downstream carry-forward only, no new policy
+  subsystem.
 - Test Review
-  Explicit second-language coverage diagram plus mandatory regressions above.
+  Full decision-state, delta-state, and downstream artifact coverage required.
 - Performance Review
-  No runtime bottleneck. Truth drift and over-abstraction are the real risks.
+  No runtime bottleneck; determinism drift and duplicated logic are the real
+  risks.
 - NOT in scope
   Written.
 - What already exists
@@ -822,15 +844,21 @@ A -> B -> C -> D
 - Failure modes
   Written.
 - Parallelization
-  Four steps, two post-foundation lanes that can run in parallel.
+  One sequential code lane plus one optional late docs lane.
 - Distribution
-  Explicitly limited to repo truth surfaces.
+  Explicitly limited to current artifact paths and docs.
 
 ## Implementation Guardrail
 
-If implementation discovers that the monotone-up pilot cannot be made truthful
-without widening target-language execution semantics for seam kinds, molecule
-tests, or a second family, stop.
+If implementation discovers that M33 cannot produce a trustworthy recommendation
+decision surface without also changing:
 
-That is not "small spillover." That is M33-or-later work trying to leak into a
-bounded M32 milestone.
+- corpus accounting policy
+- `spec-core` family capability
+- a new family promotion
+- broad target-language semantics
+
+stop.
+
+That is not "small spillover." That is a different milestone trying to leak into
+a bounded M33 plan.

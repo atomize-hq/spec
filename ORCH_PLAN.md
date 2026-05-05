@@ -1,159 +1,132 @@
-# M32 Orchestration Plan
+# M33 Orchestration Plan
 
-Status: **authoritative execution contract for the split-worktree M32 run**  
+Status: **authoritative execution contract for the M33 run**  
 Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
 Live branch: **`feat/corpus-expansion`**  
 Review base: **`main`**  
-Last rewritten: **2026-05-04**  
-Required re-anchor: **`ws/m31-int` at `945284ea7ab6bf788d7202ff674b81581afd47c6` or a merged equivalent proven by the parent**  
-Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion`**  
-Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m32-one-bounded-second-language-promotion`**  
+Last rewritten: **`2026-05-04`**  
+Required re-anchor: **publish SHA `6a1051b601487710d631031171cfde92810f1581` or a direct descendant explicitly proven by the parent to preserve closed M32 artifact truth**  
+Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions`**  
+Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m33-recommendation-quality-promotion-decisions`**  
 Artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts`**
 
 ## Summary
 
-- This run is for **M32 one bounded second-language promotion path** only.
-- `PLAN.md` remains the milestone authority. This file becomes operative only because the work is intentionally split into worktrees.
-- The parent agent is the sole integrator, sole freeze authority, sole stale-lane invalidator, sole push authority, sole CI observer, and sole final verifier.
-- The parent owns the critical path locally: re-anchor, baseline capture, authority freeze, `Lane A`, every merge, every freeze checkpoint, runtime promotion-artifact emission, final verification, publish, observe, and closeout.
-- `Lane A` is the sequential foundation lane and stays parent-owned. No worker launches before `Lane A` lands and the target-language artifact contract is frozen.
-- After `Lane A` is merged and frozen, exactly two worker lanes may run in parallel:
-  - `Lane B` = monotone-up packet and harness lock-in
-  - `Lane C` = read-side truth alignment across semantic review, passport, export, status, and CLI regressions
-- `Lane D` runs last as one bounded worker lane for roadmap and packet-doc closeout after `Lane B` and `Lane C` are merged and re-verified.
-- Recommended worker profile for `Lane B`, `Lane C`, and `Lane D` is `GPT-5.4` with `reasoning_effort=high`.
-- Maximum worker concurrency is `2`.
-- The only primary pilot family is `function.arithmetic_leaf.monotone_up.v1`.
-- `function.wrapper.pipeline.v1` is regression pressure only. It must stay green where required, but it is not a second M32 certify target.
-- No M26-style Gate 1 or Gate 2 human approvals exist in this run. M32 uses parent-owned freeze checkpoints plus machine verification, not approval pauses.
-- `promotion.execution.json` for the monotone-up pilot is a mandatory runtime-generated artifact in this run, not just a schema-covered possibility.
-- `blocker.report.json` for the same pilot is a mandatory blocked-path artifact whenever a required post-foundation lane or final verification stops after artifact-capable code exists.
+- This run is for **M33 recommendation-quality promotion decisions** only.
+- `PLAN.md` remains milestone authority. `ORCH_PLAN.md` becomes the parent-owned execution contract.
+- The parent agent is the sole integrator, sole freeze authority, sole stale-lane invalidator, sole merge authority, sole push authority, sole CI observer, sole blocker emitter, and sole final verifier.
+- The core implementation lane stays **mostly sequential** because `xtask/src/family/recommend.rs`, `xtask/src/family/promotion_artifacts.rs`, `xtask/src/family/paths.rs`, and `xtask/src/lib.rs` all share one tightly coupled artifact contract.
+- The parent owns the critical path locally on `ws/m33-int`: M32 re-anchor, baseline capture, authority freeze, schema freeze, decision projection, downstream artifact propagation, code freeze, green-path artifact emission, final verification, publish, observe, and closeout.
+- At most one narrow worker lane is allowed: a late docs closeout lane. It may start only after `analysis-freeze.json` exists because the docs need the frozen M33 wedge, the real emitted artifact wording, and the recorded current `money/round` interpretation, not just frozen enum names.
+- Recommended worker profile for the optional docs lane is **`GPT-5.4` with `reasoning_effort=high`**.
+- Worker concurrency cap is **`0`** before `analysis-freeze.json` and **`1`** after `analysis-freeze.json` if the optional docs lane is launched.
+- The one real downstream validation family for M33 is still the bounded M32 path: `function.arithmetic_leaf.monotone_up.v1` with `--target-language typescript`.
+- M33 does not reopen proof policy. It improves the decision surface and carries that truth through the existing family-promotion artifact chain.
 - Parent-owned run-state under `RUN_ROOT` is the only execution truth. Worker memory, stale worktree files, and ad hoc notes are not.
 
 ## Hard Guards
 
-- `PLAN.md` wins over this document, worker summaries, stale worktree copies, and run-state notes if they disagree.
+- `PLAN.md` wins over this file, worker summaries, stale worktree copies, and run-state notes if they disagree.
 - `ORCH_PLAN.md` is parent-owned only. Workers do not edit it.
-- The parent does not integrate on the live checkout. All merges and final verification happen on `ws/m32-int`.
-- The live checkout on `feat/corpus-expansion` is a publish target and baseline reference, not the merge surface.
-- M32 starts only from a parent-recorded M31-integrated base:
-  - exact branch: `ws/m31-int`
-  - required anchor commit: `945284ea7ab6bf788d7202ff674b81581afd47c6`
-  - allowed alternative: a merged-equivalent commit explicitly recorded in `m31-base-freeze.json`
-- The closed implementation surface for M32 before authority freeze is:
-  - `xtask/src/lib.rs`
-  - `xtask/src/family/prove.rs`
-  - `xtask/src/family/certify.rs`
-  - `xtask/src/family/report.rs`
-  - `xtask/src/family/promotion_artifacts.rs`
-  - `xtask/src/family/harness.rs`
-  - `spec-core/src/semantic_review.rs`
-  - `spec-core/src/passport.rs`
-  - `spec-core/src/export.rs`
-  - `spec-cli/src/commands.rs`
-  - `spec-cli/tests/cli.rs`
-  - `spec-cli/tests/m14_regressions.rs`
-  - `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
-  - `semantic-families/README.md`
-  - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-- Allowed mechanical spillover is compile- or fixture-forced only:
-  - `xtask/src/family/paths.rs`
-  - `xtask/src/family/routing.rs`
-  - `spec-core/src/types.rs`
-  - `spec-core/src/lib.rs`
-  - `spec-core/src/validator.rs`
-- `PLAN.md` is authority-only during execution. It is read for lane prompts and verification and is not a worker-owned edit surface.
-- `ORCH_PLAN.md` is orchestration authority only during execution. It is not delegated.
-- After `authority-freeze.json` is written, both `PLAN.md` and `ORCH_PLAN.md` are frozen. They are no longer part of normal execution output, lane ownership, merge scope, or final diff allowance.
-- If either authority file must change after `authority-freeze.json`, stop the run, write blocker state, and restart from a new authority baseline rather than mutating the active run contract.
+- The parent does not integrate on the live checkout. All merges and final verification happen on `ws/m33-int`.
+- The live checkout on `feat/corpus-expansion` is the publish target and baseline reference, not the merge surface.
+- M33 starts only from the M32 publish anchor `6a1051b601487710d631031171cfde92810f1581` or a direct descendant explicitly recorded in `m32-base-freeze.json` as preserving the closed M32 artifact chain.
+- The primary analysis artifact path stays fixed at `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`.
+- The M26 root artifact path `.semantic-family-artifacts/family-promotion/recommendation.latest.json` is not repurposed into the M33 decision surface.
 - No one hand-edits JSON under `ARTIFACT_ROOT`. Derived artifacts are created only by repo commands and validated as produced output.
-- The required M32 runtime artifact paths are:
-  - `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json`
-  - `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/promotion.execution.json`
-  - `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/blocker.report.json`
-- M32 is function-only. Stop immediately if any lane requires:
-  - `kind:data` second-language execution semantics
-  - `kind:sum` second-language execution semantics
-  - `.test.spec` target-language execution
-  - a second primary pilot family
-  - a broad repo-wide TypeScript support claim
-  - a new CLI entrypoint instead of the existing `cargo xtask family ... --target-language typescript` surface
-- `function.wrapper.pipeline.v1` remains comparator pressure only. Workers may preserve or repair wrapper-pipeline regressions, but may not widen M32 into a second certify target for that family.
-- The parent may resolve only syntax-level, import-order, or context-drift merge fallout. Semantic ownership conflicts go back to the owning lane.
+- After `authority-freeze.json` is written, both `PLAN.md` and `ORCH_PLAN.md` are frozen. If either authority file must change after that point, stop the run, write blocker state, and restart from a new authority baseline.
+- The closed implementation surface for M33 is:
+  - `xtask/src/family/recommend.rs`
+  - `xtask/src/family/promotion_artifacts.rs`
+  - `xtask/src/family/paths.rs`
+  - `xtask/src/lib.rs`
+  - `semantic-families/README.md`
+  - `docs/recommendation_corpus_expansion_program_v0.1.md`
+  - `docs/semantic_family_capability_corpus_guide_v0.1.md`
+  - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+  - `CHANGELOG.md`
+- Allowed mechanical spillover is compile-, test-, or module-wire-forced only:
+  - `xtask/src/family/mod.rs`
+  - `xtask/src/family/coverage.rs`
+- Stop immediately if any lane requires edits to:
+  - `semantic-families/corpus/rust-function.toml`
+  - any `spec-core/src/**` file
+  - any promoted family packet directory
+  - `xtask/src/family/harness.rs`
+  - prove/certify runtime semantics
+- Stop immediately if work widens into:
+  - corpus-accounting policy redesign
+  - source-kind leverage policy changes
+  - `spec-core` semantic capability expansion
+  - family promotion or certification of a new family
+  - broad target-language or repo-wide TypeScript claims
+- The parent may resolve only syntax-level, formatting, import-order, or context-drift merge fallout. Semantic ownership conflicts go back to the owning lane.
 
 ## Worktree Layout
 
 Canonical worktrees:
 
-- integration
-  - branch: `ws/m32-int`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m32-one-bounded-second-language-promotion/int`
-- `Lane A` target-language artifact foundation
-  - branch: `ws/m32-lane-a-target-language-foundation`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m32-one-bounded-second-language-promotion/lane-a-target-language-foundation`
-- `Lane B` monotone-up packet and harness
-  - branch: `ws/m32-lane-b-monotone-up-packet-harness`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m32-one-bounded-second-language-promotion/lane-b-monotone-up-packet-harness`
-- `Lane C` read-side truth alignment
-  - branch: `ws/m32-lane-c-read-side-truth`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m32-one-bounded-second-language-promotion/lane-c-read-side-truth`
-- `Lane D` roadmap and packet-doc closeout
-  - branch: `ws/m32-lane-d-docs-closeout`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m32-one-bounded-second-language-promotion/lane-d-docs-closeout`
+- integration and sequential code lane
+  - branch: `ws/m33-int`
+  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m33-recommendation-quality-promotion-decisions/int`
+- optional docs lane
+  - branch: `ws/m33-lane-b-docs-closeout`
+  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m33-recommendation-quality-promotion-decisions/docs`
 
 Creation rules:
 
-- The parent first proves the M31 base in `m31-base-freeze.json`.
-- The parent records live branch, live SHA, dirty state, and overlap before creating any M32 worktree.
-- `ws/m32-int` is created from the exact re-anchor commit recorded in `m31-base-freeze.json`, not from an unrecorded live `HEAD`.
-- `Lane A` is forked from `ws/m32-int` after `authority-freeze.json` is written.
-- `Lane B` and `Lane C` are both forked from the exact post-`Lane A` SHA recorded in `lane-a-freeze.json`.
-- `Lane D` is forked from the exact post-merge SHA recorded in `post-bc-freeze.json`.
-- No worker is forked from another worker branch.
-- If any named branch or worktree already exists and points at stale or conflicting state, the parent removes and recreates it before reuse and records that in `session-log.md`.
-- A stale lane is discarded and recreated from the newest relevant freeze SHA. The parent does not hand-forward stale worker branches.
+1. The parent first proves the M32 base in `m32-base-freeze.json`.
+2. The parent records live branch, live SHA, dirty state, and overlap before creating any M33 worktree.
+3. `ws/m33-int` is created from the exact commit recorded in `m32-base-freeze.json`, not from an unrecorded live `HEAD`.
+4. The optional docs lane is forked only from the exact analysis-freeze SHA recorded in `analysis-freeze.json`.
+5. The parent writes `docs-launch.md` before launching the docs worker.
+6. The docs worker launches only from `docs-launch.md` plus the frozen authority excerpts and freeze record referenced by that file.
+7. No worker is forked from another worker branch.
+8. If any named branch or worktree already exists and points at stale or conflicting state, the parent removes and recreates it before reuse and records that in `session-log.md`.
+9. A stale lane is discarded and recreated from the newest relevant freeze SHA. The parent does not hand-forward stale worker branches.
 
 ## Canonical Run-State
 
 Parent-owned orchestration truth lives under:
 
 - `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion`
-- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m32-one-bounded-second-language-promotion`
+- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions`
+- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m33-recommendation-quality-promotion-decisions`
 - `ARTIFACT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts`
 
 `RUN_ROOT` is a parent-written control plane. Workers may read it, but they do not create, update, or delete files under `RUN_ROOT`.
 
 Canonical parent-owned files:
 
-- `m31-base-freeze.json`
-  - required anchor commit
-  - chosen integration base commit
-  - whether the base is the exact anchor or a merged equivalent
-  - evidence proving the equivalence choice
+- `m32-base-freeze.json`
+  - required publish anchor SHA
+  - chosen integration seed SHA
+  - proof that the chosen seed still preserves closed M32 monotone-up artifact truth
 - `baseline.json`
   - live branch name
   - live checkout SHA
   - live dirty-state summary
-  - overlap check against the M32-owned surface
-  - carry-forward decision if the live checkout is not clean
+  - overlap check against the M33-owned surface
 - `integration-base.txt`
-  - the exact commit used to seed `ws/m32-int`
-  - the only allowed diff base for the closed-surface gate in final verification
+  - the exact commit used to seed `ws/m33-int`
+  - the only allowed diff base for the final closed-surface gate
 - `authority-freeze.json`
-  - milestone id `M32`
+  - milestone id `M33`
   - authority paths
-  - worker model recommendation
   - concurrency cap
   - lane map
   - hard guards
   - publish target branch
 - `run-id.txt`
-  - the single canonical M32 run id used for family-promotion artifacts
+  - the single canonical M33 run id selected by the parent
+  - parent-owned convention: `{UTC-basic-timestamp}-function.arithmetic_leaf.monotone_up.v1`
+  - this convention is chosen because it is compatible with the existing family-promotion artifact command surface, not because `RUN_ROOT` itself defines schema
 - `artifact-paths.json`
-  - absolute and repo-relative path for monotone-up `recommendation.latest.json`
-  - absolute and repo-relative path for `promotion.execution.json`
-  - absolute and repo-relative path for `blocker.report.json`
+  - analysis coverage path
+  - analysis recommendation path
+  - family-scoped monotone-up recommendation path
+  - green-path execution artifact path
+  - blocked-path blocker artifact path
 - `tasks.json`
   - ordered task ledger
   - `task_id`
@@ -172,61 +145,57 @@ Canonical parent-owned files:
   - merge results
   - stale-lane invalidations
   - publish and CI observation notes
-- `lane-a-freeze.json`
-  - exact post-`Lane A` commit
-  - frozen target-language artifact/report contract
-  - exact recommendation-refresh invocation for the monotone-up pilot
-  - exact recommendation validation command for that artifact path
-  - exact green-path artifact-emission invocation
-  - exact blocked-path artifact-emission invocation
-  - exact artifact validation commands
-  - exact launch SHA for `Lane B` and `Lane C`
-  - command order for the Rust lane and TypeScript lane
-- `lane-b-launch.md`
-  - reproducible launch packet for `Lane B`
-  - exact `PLAN.md` excerpt text
-  - exact `ORCH_PLAN.md` excerpt text
+- `schema-freeze.json`
+  - frozen schema versions
+  - expected artifact field names
+  - expected enum vocabulary
+  - expected artifact paths
+- `analysis-freeze.json`
+  - exact post-Step-2 commit SHA
+  - exact current merged-state analysis artifact SHA
+  - `recommendation_status`
+  - `decision_status`
+  - top candidate id
+  - blocker reasons
+  - evidence summary
+  - delta summary
+  - explicit capture of the current `money/round` helper-surface wedge
+  - exact launch SHA for the optional docs lane
+- `code-freeze.json`
+  - exact code-lane post-Step-3 commit
+  - exact analysis refresh and validation commands
+  - exact family recommendation refresh and validation commands
+  - exact green-path execution-emission command
+  - exact blocked-path blocker-emission command template
+  - exact final verification floor
+  - closed diff allowlist
+- `docs-launch.md`
+  - reproducible parent-owned launch packet for the optional docs lane
+  - exact `PLAN.md` excerpt
+  - exact `ORCH_PLAN.md` excerpt
+  - exact `analysis-freeze.json` excerpt required by the worker
   - owned paths
   - forbidden paths
   - exact acceptance commands
   - applicable hard guards
+  - worker model/profile: `GPT-5.4` with `reasoning_effort=high`
   - freeze record path and frozen SHA
-- `lane-c-launch.md`
-  - reproducible launch packet for `Lane C`
-  - exact `PLAN.md` excerpt text
-  - exact `ORCH_PLAN.md` excerpt text
-  - owned paths
-  - forbidden paths
-  - exact acceptance commands
-  - applicable hard guards
-  - freeze record path and frozen SHA
-- `post-bc-freeze.json`
-  - exact post-merge commit after `Lane B` and `Lane C`
-  - frozen monotone-up pilot wording for docs
-  - explicit statement that wrapper pipeline remains regression pressure only
-  - exact `Lane D` acceptance commands
-- `lane-d-launch.md`
-  - reproducible launch packet for `Lane D`
-  - exact `PLAN.md` excerpt text
-  - exact `ORCH_PLAN.md` excerpt text
-  - owned paths
-  - forbidden paths
-  - exact acceptance commands
-  - applicable hard guards
-  - freeze record path and frozen SHA
+  - required worker return contract
 - `merge-log.md`
   - ordered merge history
   - merge SHAs
   - conflict notes
   - stale-lane invalidations
-- `promotion-execution-record.json`
+- `green-path-record.json`
   - run id
-  - recommendation artifact path
   - family
-  - artifact path
-  - commands captured into the artifact
-  - proof artifact references included
-  - validation result
+  - target language
+  - analysis path and hash
+  - family recommendation path and hash
+  - execution artifact path and hash
+  - diff base
+  - commands run
+  - validation results
 - `proof-log.json`
   - actual final merged-state verification commands
   - exit code per command
@@ -236,7 +205,6 @@ Canonical parent-owned files:
   - pushed branch
   - pushed SHA
   - push timestamp
-  - whether the push was `ws/m32-int` or the publish target
 - `ci-observation.json`
   - workflow name
   - run id or URL
@@ -248,27 +216,26 @@ Canonical parent-owned files:
   - blocking evidence
   - required next decision
 - `closeout.md`
-  - pilot-family summary
-  - shared-vs-target-specific residue summary
-  - read-side truth alignment summary
-  - roadmap summary
+  - decision-surface summary
+  - downstream artifact-chain summary
+  - docs alignment summary
   - final verdict
 
 Per-task sentinel directories:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-00-reanchor/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-01-baseline/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-02-authority-freeze/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-a-target-language-foundation/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-03-freeze-post-lane-a/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-b-monotone-up-packet-harness/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-c-read-side-truth/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-04-freeze-post-bc/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-d-docs-closeout/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-05-promotion-execution-artifact/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-06-final-verify/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-07-push-observe/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/task-m32-08-closeout/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-00-reanchor/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-01-baseline/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-02-authority-freeze/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-a1-schema-freeze/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-a2-analysis-decision/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-a3-downstream-artifacts/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-b-docs-closeout/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-03-code-freeze/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-04-docs-merge/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-05-green-path-artifacts/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-06-final-verify/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-07-push-observe/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/task-m33-08-closeout/`
 
 Each sentinel directory contains parent-written task state only:
 
@@ -279,477 +246,431 @@ Each sentinel directory contains parent-written task state only:
 ## Task Graph
 
 ```text
-task/m32-00-reanchor
-  -> task/m32-01-baseline
-      -> task/m32-02-authority-freeze
-          -> task/m32-a-target-language-foundation
-              -> task/m32-03-freeze-post-lane-a
-task/m32-03-freeze-post-lane-a
-  -> task/m32-b-monotone-up-packet-harness
-  -> task/m32-c-read-side-truth
-task/m32-b-monotone-up-packet-harness
-  -> task/m32-04-freeze-post-bc
-task/m32-c-read-side-truth
-  -> task/m32-04-freeze-post-bc
-task/m32-04-freeze-post-bc
-  -> task/m32-d-docs-closeout
-      -> task/m32-05-promotion-execution-artifact
-          -> task/m32-06-final-verify
-              -> task/m32-07-push-observe
-                  -> task/m32-08-closeout
+task/m33-00-reanchor
+  -> task/m33-01-baseline
+      -> task/m33-02-authority-freeze
+          -> task/m33-a1-schema-freeze
+              -> task/m33-a2-analysis-decision
+                  -> task/m33-a3-downstream-artifacts
+                      -> task/m33-03-code-freeze
+task/m33-a2-analysis-decision
+  -> task/m33-b-docs-closeout (optional)
+task/m33-03-code-freeze
+  -> task/m33-04-docs-merge
+task/m33-b-docs-closeout
+  -> task/m33-04-docs-merge
+task/m33-04-docs-merge
+  -> task/m33-05-green-path-artifacts
+      -> task/m33-06-final-verify
+          -> task/m33-07-push-observe
+              -> task/m33-08-closeout
 ```
 
 Execution meaning:
 
-1. Parent proves the M31 base and records the exact M32 integration seed.
+1. Parent proves the closed M32 base and records the exact M33 integration seed.
 2. Parent captures live branch state and overlap facts.
 3. Parent freezes orchestration authority and creates the integration worktree.
-4. `Lane A` lands the target-language artifact/report contract and freezes the output truth that `Lane B` and `Lane C` must consume.
-5. Parent merges `Lane A`, reruns its acceptance commands from merged state, writes `lane-a-freeze.json`, and forks `Lane B` and `Lane C` from that exact frozen SHA.
-6. `Lane B` and `Lane C` run in parallel with disjoint ownership.
-7. Parent merges `Lane B`, reruns its acceptance commands, then merges `Lane C`, reruns its acceptance commands, writes `post-bc-freeze.json`, and forks `Lane D`.
-8. `Lane D` lands the roadmap and packet-doc closeout last so docs describe the actual landed pilot, not assumptions.
-9. Parent merges `Lane D`, writes and validates a runtime `promotion.execution.json` for the monotone-up pilot from merged integration state, then runs the full merged-state verification floor.
-10. Parent fast-forwards the publish target only if safe, pushes the exact verified integration SHA, observes CI on that exact SHA, and writes closeout.
+4. Parent lands the sequential code lane on `ws/m33-int`.
+5. After `analysis-freeze.json`, the parent may optionally fork a docs lane from the frozen analysis SHA.
+6. Docs never own code files and never merge before the code lane reaches `code-freeze.json`.
+7. Parent merges docs only after the code lane is complete and re-verified.
+8. Parent then emits the real downstream green-path artifacts from merged integration state.
+9. If any post-`code-freeze.json` step fails, the parent emits and validates a real blocker artifact before stopping.
+10. Parent publishes only the exact verified `ws/m33-int` SHA.
 
 ## Workstream Plan
 
-### WS-0 Re-anchor on the validated M31 base - parent only
+### WS-0 Re-anchor on the validated M32 base - parent only
 
-#### `task/m32-00-reanchor`
+#### `task/m33-00-reanchor`
 
 Required parent actions:
 
-1. Prove that the M32 seed includes the M31 integration boundary.
-2. Prefer `ws/m31-int` directly if it contains `945284ea7ab6bf788d7202ff674b81581afd47c6`.
-3. If using a merged equivalent, record the exact commit and the proof that it already contains the same M31 contract.
-4. Write `m31-base-freeze.json`.
+1. Confirm the live branch is `feat/corpus-expansion`.
+2. Confirm the chosen seed commit is either `6a1051b601487710d631031171cfde92810f1581` or a direct descendant that still preserves M32 artifact truth.
+3. Validate the closed M32 monotone-up proof artifacts from the chosen seed.
+4. Validate the current M27/M32 analysis artifacts from the chosen seed.
+5. Write `m32-base-freeze.json`.
 
 Required commands:
 
 ```bash
-git rev-parse --verify ws/m31-int
-git merge-base --is-ancestor 945284ea7ab6bf788d7202ff674b81581afd47c6 ws/m31-int
-git rev-parse ws/m31-int
-git show --stat --oneline 945284ea7ab6bf788d7202ff674b81581afd47c6
+git rev-parse --verify 6a1051b601487710d631031171cfde92810f1581
+cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/prove.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/certification.report.json
+ATTEMPT_PATH=$(ls -t .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/attempt-*.json | head -n 1)
+test -n "$ATTEMPT_PATH"
+cargo xtask family validate-artifact "$ATTEMPT_PATH"
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 ```
 
 Acceptance:
 
-- `m31-base-freeze.json` exists.
-- the chosen M32 integration base is recorded as either the exact anchor commit or a merged equivalent with explicit evidence.
-- no code lane may start until this freeze exists.
+- `m32-base-freeze.json` exists.
+- The chosen integration seed is recorded exactly.
+- The bounded monotone-up proof chain validates from that seed.
+- The existing analysis artifacts validate from that seed.
+- No code lane may start until this freeze exists.
 
 ### WS-1 Baseline capture - parent only
 
-#### `task/m32-01-baseline`
+#### `task/m33-01-baseline`
 
 Required parent actions:
 
-1. Confirm the live branch is still `feat/corpus-expansion`.
-2. Record the live SHA, dirty state, and overlap with the M32-owned surface.
-3. Stop immediately if dirty overlap exists inside the M32-owned surface and no carry-forward decision has been recorded.
-4. If unrelated local changes must be preserved, record how they are carried or excluded before seeding worktrees. Do not silently fork from SHA and strand local work.
-
-Required commands:
-
-```bash
-git branch --show-current
-git rev-parse HEAD
-git status --short
-git diff --name-only
-git diff --name-only --cached
-```
+1. Record live branch, live SHA, and dirty-state summary.
+2. Record overlap against the M33 closed implementation surface.
+3. Record whether unrelated dirty work exists outside M33 scope.
+4. Write `baseline.json`.
 
 Acceptance:
 
 - `baseline.json` exists.
-- live branch is `feat/corpus-expansion`.
-- dirty overlap is either empty or explicitly blocked.
-- the live SHA and carry-forward decision used for orchestration are recorded.
+- Live branch is `feat/corpus-expansion`.
+- Dirty overlap inside the M33-owned surface is either absent or explicitly blocked before integration starts.
 
 ### WS-2 Orchestration freeze - parent only
 
-#### `task/m32-02-authority-freeze`
+#### `task/m33-02-authority-freeze`
 
 Required parent actions:
 
-1. Confirm `ORCH_PLAN.md` matches the current M32 authority.
+1. Create `RUN_ROOT`.
 2. Write `authority-freeze.json`.
-3. Write `run-id.txt` for the monotone-up pilot family-promotion artifacts.
-4. Write `integration-base.txt` from the exact chosen integration base commit recorded in `m31-base-freeze.json`.
-5. Write `artifact-paths.json` from that run id.
-6. Write `tasks.json`.
-7. Create `ws/m32-int` from the commit recorded in `m31-base-freeze.json`.
-8. Fork `ws/m32-lane-a-target-language-foundation` from `ws/m32-int`.
+3. Write `tasks.json`.
+4. Write `artifact-paths.json`.
+5. Write `run-id.txt`.
+6. Write `integration-base.txt` from the exact seed recorded in `m32-base-freeze.json`.
+7. Create `ws/m33-int` from that exact seed commit.
+
+Artifact path contract to freeze:
+
+- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+- `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json`
+- `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/promotion.execution.json`
+- `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/blocker.report.json`
 
 Acceptance:
 
-- no worker launches before `authority-freeze.json`.
+- No worker launches before `authority-freeze.json`.
 - `ORCH_PLAN.md`, `authority-freeze.json`, and `tasks.json` agree on lane order, hard guards, publish target, and freeze semantics.
-- `run-id.txt`, `integration-base.txt`, and `artifact-paths.json` exist before code work starts.
-- after `authority-freeze.json`, `PLAN.md` and `ORCH_PLAN.md` are frozen and may not re-enter runtime scope unless the run is explicitly aborted and replanned.
+- After `authority-freeze.json`, `PLAN.md` and `ORCH_PLAN.md` are frozen and may not re-enter runtime scope unless the run is explicitly aborted and replanned.
 
-### WS-3 Target-language artifact foundation - parent only
+### WS-3 Sequential code lane - parent only on `ws/m33-int`
 
-#### `task/m32-a-target-language-foundation` on `ws/m32-lane-a-target-language-foundation`
+#### `task/m33-a1-schema-freeze`
 
-Parent mission:
+Mission:
 
-- make `xtask` prove, certify, report, and promotion-artifact truth target-language-aware without widening the milestone beyond the monotone-up pilot.
+- freeze the M33 artifact contract before any downstream code or docs work depends on it.
 
-Parent-owned paths:
+Owned paths:
 
-- `xtask/src/lib.rs`
-- `xtask/src/family/prove.rs`
-- `xtask/src/family/certify.rs`
-- `xtask/src/family/report.rs`
 - `xtask/src/family/promotion_artifacts.rs`
-
-Allowed mechanical spillover only if compile-forced:
-
 - `xtask/src/family/paths.rs`
-- `xtask/src/family/routing.rs`
+- `xtask/src/lib.rs`
+
+Required parent actions:
+
+1. Land the schema and validator changes on `ws/m33-int`.
+2. Freeze the expected M33 schema versions:
+   - analysis artifact `schema_version = 4`
+   - family-scoped recommendation artifact `schema_version = 2`
+   - execution artifact `schema_version = 2`
+   - blocker artifact `schema_version = 2`
+3. Freeze the new decision vocabulary:
+   - `recommended`
+   - `blocked_for_now`
+   - `not_recommended`
+4. Freeze the new blocker and evidence vocabulary from `PLAN.md`.
+5. Write `schema-freeze.json`.
 
 Required acceptance commands:
 
 ```bash
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/prove.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/certification.report.json
-ATTEMPT_PATH=$(ls -t .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/attempt-*.json | head -n 1)
-test -n "$ATTEMPT_PATH"
-cargo xtask family validate-artifact "$ATTEMPT_PATH"
-cargo test -p xtask family_prove_ -- --color never
-cargo test -p xtask family_certify_ -- --color never
 cargo test -p xtask artifact_schema_ -- --color never
 ```
 
-`Lane A` must deliver before any worker launch:
-
-- prove and certify artifacts encode the actual target language for the lane that ran.
-- Rust-default behavior remains truthful when the flag is omitted.
-- artifact validation accepts the new truthful target-language shape.
-- one monotone-up recommendation artifact path exists at `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json`, is refreshed by a parent-usable command, and validates truthfully for the M32 pilot.
-- one parent-usable runtime artifact emission contract exists for:
-  - green-path `promotion.execution.json`
-  - blocked-path `blocker.report.json`
-- `Lane A` is not done until the parent has exercised the new recommendation-refresh command plus both runtime artifact-emission commands in-lane and frozen their exact argv in `lane-a-freeze.json`.
-- `lane-a-freeze.json` records the exact parent commands that refresh the recommendation artifact and generate those artifacts from merged integration state.
-- no broad TypeScript support claim is introduced.
-- the foundation freeze records the command order. The canonical order is:
-  - Rust prove
-  - Rust certify
-  - TypeScript prove
-  - TypeScript certify
-
-### WS-4 Parent merge and post-foundation freeze - parent only
-
-#### `task/m32-03-freeze-post-lane-a`
-
-Strict merge order:
-
-1. merge `ws/m32-lane-a-target-language-foundation` into `ws/m32-int`
-2. rerun all `Lane A` acceptance commands from merged state
-3. write `lane-a-freeze.json`
-4. write `lane-b-launch.md` and `lane-c-launch.md`
-5. fork `ws/m32-lane-b-monotone-up-packet-harness` and `ws/m32-lane-c-read-side-truth` from the recorded frozen SHA
-
-Parent may resolve only:
-
-- straightforward import ordering
-- mechanical context drift
-- compile-local visibility adjustments that do not change the frozen artifact/report contract
-
-Parent must bounce work back to the owning lane for:
-
-- any unfinished target-language artifact schema
-- any attempt to move CLI target-language parsing out of `xtask/src/lib.rs`
-- any widening beyond the single monotone-up pilot contract
-- any attempt to hide actual target-language truth in derived artifacts
-
 Acceptance:
 
-- `Lane A` is merged and re-verified from integration state.
-- `lane-a-freeze.json` exists.
-- `lane-b-launch.md` and `lane-c-launch.md` exist.
-- `Lane B` and `Lane C` both start from the same frozen SHA.
-- `lane-a-freeze.json` contains the exact recommendation-refresh contract and artifact-emission contract the parent must use later for `recommendation.latest.json`, `promotion.execution.json`, and `blocker.report.json`.
+- Artifact paths remain unchanged.
+- Contradictory artifact combinations now fail in validator tests.
+- `schema-freeze.json` exists and records the frozen field vocabulary.
+- No docs lane may launch from schema freeze alone.
 
-### WS-5 Parallel post-foundation lanes - workers, concurrency cap 2
+#### `task/m33-a2-analysis-decision`
 
-#### `task/m32-b-monotone-up-packet-harness` on `ws/m32-lane-b-monotone-up-packet-harness`
+Mission:
 
-Worker mission:
-
-- lock the committed monotone-up packet and harness to the frozen M32 pilot contract without turning wrapper pipeline into a second certification target.
+- make the primary analysis artifact tell the full M33 decision story.
 
 Owned paths:
 
-- `xtask/src/family/harness.rs`
-- `semantic-families/function.arithmetic_leaf.monotone_up.v1/**`
+- `xtask/src/family/recommend.rs`
+- allowed spillover only if forced:
+  - `xtask/src/family/coverage.rs`
+  - `xtask/src/family/mod.rs`
 
-Worker must not do:
+Required parent actions:
 
-- edit `xtask/src/lib.rs`
-- edit `xtask/src/family/prove.rs`
-- edit `xtask/src/family/certify.rs`
-- edit `xtask/src/family/report.rs`
-- edit `xtask/src/family/promotion_artifacts.rs`
-- edit `semantic-families/README.md`
-- edit `docs/**`
-- edit `PLAN.md`
-- edit `ORCH_PLAN.md`
+1. Implement the decision projection in `recommend.rs`.
+2. Keep `recommendation_status` as the compatibility field.
+3. Make missing and stale evidence explicit.
+4. Make delta deterministic against the previous validated analysis artifact at the same path.
+5. Recompute the live analysis artifact from merged state.
+6. Write `analysis-freeze.json`.
+7. If useful, create `docs-launch.md` and fork `ws/m33-lane-b-docs-closeout` from the exact SHA recorded in `analysis-freeze.json`.
 
 Required acceptance commands:
 
 ```bash
-cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo test -p xtask monotone_up_ -- --color never
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo test -p xtask recommendation_ -- --color never
 ```
 
-`Lane B` must deliver:
+Acceptance:
 
-- `family smoke` still enforces the committed monotone-up scaffold exactly.
-- additive `body.typescript` remains committed packet truth in every bucket it already occupies.
-- monotone-up harness suite ownership remains locked.
-- no new family is introduced.
-- wrapper pipeline remains comparator pressure only.
+- The current repo wedge renders as:
+  - `recommendation_status = "no_strong_candidate"`
+  - `decision_status = "not_recommended"`
+  - visible top candidate `unsupported_function_surface-e40675da6fa0`
+  - durable blocker `helper_surface_not_promotable`
+- The analysis artifact exposes explicit missing/stale evidence fields even when empty.
+- The analysis artifact exposes `delta_from_previous`.
+- `analysis-freeze.json` records the exact current wedge and artifact SHA.
+- If the docs lane is launched, it launches only after `analysis-freeze.json` and only from the SHA recorded there.
+- `docs-launch.md` exists before any docs worker starts.
+- A plausible held candidate path is covered in tests as `blocked_for_now`.
+- A promotion-ready path is covered in tests as `recommended`.
 
-#### `task/m32-c-read-side-truth` on `ws/m32-lane-c-read-side-truth`
+#### `task/m33-a3-downstream-artifacts`
 
-Worker mission:
+Mission:
 
-- make semantic review, passport, export, status, and CLI regressions tell one aligned bounded M32 story for the monotone-up pilot without implying broad TypeScript support.
+- thread the analysis basis through the downstream artifact chain without duplicating policy.
 
 Owned paths:
 
-- `spec-core/src/semantic_review.rs`
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/cli.rs`
-- `spec-cli/tests/m14_regressions.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/lib.rs`
+- allowed spillover only if forced:
+  - `xtask/src/family/mod.rs`
 
-Allowed mechanical spillover only if compile- or fixture-forced:
+Required parent actions:
 
-- `spec-core/src/types.rs`
-- `spec-core/src/lib.rs`
-- `spec-core/src/validator.rs`
+1. Update family-scoped recommendation emission to carry analysis-basis truth.
+2. Update execution and blocker emission to carry the same basis.
+3. Preserve bounded M32 target-language honesty on the monotone-up path.
+4. Prove the downstream schema through tests and merged-state command execution.
+5. Write `code-freeze.json`.
+
+Required acceptance commands:
+
+```bash
+cargo xtask family refresh-promotion-recommendation function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json
+cargo test -p xtask family_refresh_promotion_recommendation -- --color never
+cargo test -p xtask artifact_schema_ -- --color never
+cargo test -p xtask -- --color never
+```
+
+Acceptance:
+
+- The family-scoped recommendation artifact cites the analysis basis directly.
+- The downstream artifacts carry basis truth instead of recomputing policy.
+- No downstream artifact implies repo-wide target-language readiness.
+- `code-freeze.json` exists.
+- `code-freeze.json` records the exact argv for:
+  - analysis refresh and validation
+  - family recommendation refresh and validation
+  - green-path execution emission
+  - blocked-path blocker emission
+
+### WS-4 Optional docs lane - worker
+
+#### `task/m33-b-docs-closeout` on `ws/m33-lane-b-docs-closeout`
+
+Worker mission:
+
+- align the human-facing docs with the frozen M33 vocabulary and the real landed wedge, without widening scope.
+
+Worker profile:
+
+- model: `GPT-5.4`
+- `reasoning_effort=high`
+
+Owned paths:
+
+- `semantic-families/README.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+- `CHANGELOG.md`
 
 Worker must not do:
 
 - edit any `xtask/src/**` file
-- edit `semantic-families/**`
-- edit `docs/**`
+- edit any `spec-core/src/**` file
+- edit any packet directory
 - edit `PLAN.md`
 - edit `ORCH_PLAN.md`
+
+Worker launch authority:
+
+- the parent launches the worker from `RUN_ROOT/docs-launch.md`
+- that launch file must point at the frozen `analysis-freeze.json`
+- the worker may use only:
+  - `docs-launch.md`
+  - the exact `PLAN.md` excerpt embedded in that file
+  - the exact `ORCH_PLAN.md` excerpt embedded in that file
+  - the exact `analysis-freeze.json` excerpt embedded in that file
+- the worker does not infer authority from the seeded worktree copy of project docs or from prior chat context
 
 Required acceptance commands:
 
 ```bash
-cargo test -p spec-core monotone_up_ -- --color never
-cargo test -p spec-core wrapper_pipeline_ -- --color never
-cargo test -p spec-cli --test cli monotone_up_ -- --color never
-cargo test -p spec-cli --test cli wrapper_pipeline_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_ -- --color never
-cargo test -p spec-cli --test m14_regressions wrapper_pipeline_ -- --color never
-cargo run -p spec-cli -- status examples/ecommerce --format json
-cargo run -p spec-cli -- export examples/ecommerce --format json
+rg -n "recommended|blocked_for_now|not_recommended|money/round|function.arithmetic_leaf.monotone_up.v1|recommendation.latest.json|bounded second-language" semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md docs/ai_promotion_and_multilanguage_milestones_v0.1.md CHANGELOG.md
+! rg -n "repo-wide TypeScript support|broad TypeScript support|all families now support TypeScript|new promoted family|corpus run 1 spent by M33|spec-core capability expansion" semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md docs/ai_promotion_and_multilanguage_milestones_v0.1.md CHANGELOG.md
 ```
-
-`Lane C` must deliver:
-
-- semantic review still cites authored `body.typescript` truthfully for the monotone-up pilot.
-- passport, export, and status agree on the same pilot fixtures.
-- no read-side surface implies repo-wide TypeScript support.
-- target-specific residue stays visible if it exists.
-- wrapper-pipeline regression surfaces stay green as comparator pressure.
-
-### WS-6 Parent merge of parallel lanes and post-BC freeze - parent only
-
-#### `task/m32-04-freeze-post-bc`
-
-Strict merge order:
-
-1. merge `ws/m32-lane-b-monotone-up-packet-harness` into `ws/m32-int`
-2. rerun `Lane B` acceptance commands from merged state
-3. merge `ws/m32-lane-c-read-side-truth` into `ws/m32-int`
-4. rerun `Lane C` acceptance commands from merged state
-5. if merge fallout appears, resolve only syntax-level or context-level drift and record it in `merge-log.md`
-6. write `post-bc-freeze.json`
-7. write `lane-d-launch.md`
-8. fork `ws/m32-lane-d-docs-closeout` from the recorded frozen SHA
-
-Parent must bounce work back to the owning lane for:
-
-- disagreement between packet/harness contract and read-side truth surfaces
-- any attempt by `Lane C` to redefine the frozen `Lane A` artifact contract
-- any attempt by `Lane B` to broaden the pilot beyond monotone-up
-- any wording that would make wrapper pipeline look like a second M32 certify target
-- any post-`lane-a-freeze.json` lane failure that has not yet been recorded in a validated `blocker.report.json`
 
 Acceptance:
 
-- `Lane B` and `Lane C` are merged and re-verified from integration state.
-- `merge-log.md` records merge SHAs, conflicts, and stale-lane decisions.
-- `post-bc-freeze.json` exists.
-- if any required `Lane B` or `Lane C` merge-time acceptance fails after `lane-a-freeze.json`, the parent emits and validates `blocker.report.json` before stop.
+- Docs use the frozen M33 decision vocabulary exactly.
+- Docs describe the live `money/round` wedge as visible but not the next family.
+- Docs preserve the M32 bounded monotone-up target-language claim and nothing broader.
 
-### WS-7 Roadmap and packet-doc closeout - worker
+### WS-5 Parent docs merge - parent only
 
-#### `task/m32-d-docs-closeout` on `ws/m32-lane-d-docs-closeout`
+#### `task/m33-04-docs-merge`
 
-Worker mission:
+Strict merge order:
 
-- rewrite public wording last so the roadmap and semantic-family docs describe the actual landed M32 pilot exactly and do not overclaim broad TypeScript support.
+1. Finish the sequential code lane on `ws/m33-int`.
+2. Re-run all code-lane acceptance commands from merged state.
+3. If the docs lane exists, merge `ws/m33-lane-b-docs-closeout` into `ws/m33-int`.
+4. Re-run docs acceptance commands from merged state.
+5. Record merge SHAs, conflicts, and stale-lane decisions in `merge-log.md`.
 
-Owned paths:
+Parent may resolve only:
 
-- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-- `semantic-families/README.md`
+- formatting drift
+- line-local doc merge drift
+- wording updates required to match the frozen field names and current wedge exactly
 
-Worker must not do:
+Parent must bounce work back to the owning lane for:
 
-- edit any code file
-- edit `PLAN.md`
-- edit `ORCH_PLAN.md`
+- any post-analysis-freeze vocabulary change
+- any post-analysis-freeze wedge interpretation change without a refreshed `analysis-freeze.json`
+- any attempt by docs to widen M32 into broad target-language readiness
+- any code change
+- any change to the frozen closed surface after `code-freeze.json`
 
-Required acceptance commands:
+Acceptance:
 
-```bash
-rg -n "M31|M32|function.arithmetic_leaf.monotone_up.v1|function.wrapper.pipeline.v1|TypeScript|typescript" docs/ai_promotion_and_multilanguage_milestones_v0.1.md semantic-families/README.md PLAN.md
-! rg -n "kind:data|kind:sum|repo-wide TypeScript support|broad TypeScript support|all families now support TypeScript" docs/ai_promotion_and_multilanguage_milestones_v0.1.md semantic-families/README.md
-```
+- `merge-log.md` exists.
+- If the docs lane was launched, it merged only after the code lane reached `code-freeze.json`.
+- If the docs lane was skipped, `merge-log.md` records the skip explicitly and `task-m33-b-docs-closeout` closes as a no-op.
+- No doc wording conflicts with `analysis-freeze.json` or `code-freeze.json`.
 
-`Lane D` must deliver:
+### WS-6 Runtime green-path artifact emission - parent only
 
-- roadmap text says `M31` then `M32`.
-- roadmap text describes one bounded monotone-up second-language path.
-- packet docs describe monotone-up as the M32 pilot family.
-- wrapper pipeline remains documented as regression pressure only.
-- if `Lane D` acceptance fails after `lane-a-freeze.json`, the parent emits and validates `blocker.report.json` before stop.
-
-### WS-8 Runtime promotion artifact emission - parent only
-
-#### `task/m32-05-promotion-execution-artifact`
+#### `task/m33-05-green-path-artifacts`
 
 Parent mission:
 
-- write one runtime-generated `promotion.execution.json` for the monotone-up pilot from merged `ws/m32-int` state before final verification is allowed to start.
+- emit the real downstream M33 artifacts from merged `ws/m33-int` state for the bounded monotone-up path.
 
 Required parent actions:
 
-1. Read `run-id.txt` and `artifact-paths.json`.
-2. Read the exact recommendation-refresh invocation and green-path artifact-emission invocation recorded in `lane-a-freeze.json`.
-3. Run the full monotone-up proof loop on merged integration state in the frozen order:
-   - Rust prove
-   - Rust certify
-   - TypeScript prove
-   - TypeScript certify
-4. Refresh:
-   - `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json`
-5. Generate:
-   - `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/promotion.execution.json`
-6. Validate the generated artifacts with:
-   - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json`
-   - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/promotion.execution.json`
-7. Write `promotion-execution-record.json`.
+1. Read `run-id.txt`, `artifact-paths.json`, and `code-freeze.json`.
+2. Refresh the analysis artifacts from merged state.
+3. Refresh the monotone-up family recommendation with `--target-language typescript`.
+4. Emit the green-path `promotion.execution.json` from merged state using the frozen `diff_base`.
+5. Validate the generated artifacts.
+6. Write `green-path-record.json`.
 
 Required commands:
 
 ```bash
-RUN_ID=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/run-id.txt)
-RECOMMENDATION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json"
-PROMOTION_EXECUTION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/${RUN_ID}/promotion.execution.json"
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-test -f "$RECOMMENDATION_PATH"
-# Run the exact recommendation-refresh invocation frozen in lane-a-freeze.json.
-# Run the exact recommendation validation command frozen in lane-a-freeze.json.
-# Run the exact green-path artifact-emission invocation frozen in lane-a-freeze.json.
-test -f "$PROMOTION_EXECUTION_PATH"
-cargo xtask family validate-artifact "$RECOMMENDATION_PATH"
-cargo xtask family validate-artifact "$PROMOTION_EXECUTION_PATH"
+RUN_ID=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/run-id.txt)
+DIFF_BASE=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/integration-base.txt)
+ANALYSIS_PATH=".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
+FAMILY_RECOMMENDATION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json"
+EXECUTION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/${RUN_ID}/promotion.execution.json"
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact "$ANALYSIS_PATH"
+cargo xtask family refresh-promotion-recommendation function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+test -f "$FAMILY_RECOMMENDATION_PATH"
+cargo xtask family validate-artifact "$FAMILY_RECOMMENDATION_PATH"
+cargo xtask family emit-promotion-execution function.arithmetic_leaf.monotone_up.v1 "$RUN_ID" "$FAMILY_RECOMMENDATION_PATH" --target-language typescript --diff-base "$DIFF_BASE"
+test -f "$EXECUTION_PATH"
+cargo xtask family validate-artifact "$EXECUTION_PATH"
 ```
 
 Acceptance:
 
-- monotone-up `recommendation.latest.json` exists at the frozen family-promotion path.
-- `cargo xtask family validate-artifact <recommendation-path>` passes on that artifact.
-- `promotion.execution.json` exists at the frozen M32 family-promotion path.
-- `cargo xtask family validate-artifact <path>` passes on that artifact.
-- `promotion-execution-record.json` records the recommendation path, artifact path, run id, and proof artifacts referenced.
+- The analysis artifact validates at the existing path.
+- The family-scoped monotone-up recommendation artifact validates at the existing path.
+- `promotion.execution.json` exists at the frozen family path and validates.
+- `green-path-record.json` records the analysis basis, family recommendation basis, and emitted execution artifact path.
 
-### WS-9 Final verification - parent only
+### WS-7 Final verification - parent only
 
-#### `task/m32-06-final-verify`
+#### `task/m33-06-final-verify`
 
-The parent must run this exact merged-state verification sequence from `ws/m32-int` before calling M32 done:
+The parent must run this exact merged-state verification floor from `ws/m33-int` before calling M33 done:
 
 ```bash
 cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo clippy -p xtask --all-targets --all-features -- -D warnings
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/prove.latest.json
 cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/certification.report.json
 ATTEMPT_PATH=$(ls -t .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/attempt-*.json | head -n 1)
 test -n "$ATTEMPT_PATH"
 cargo xtask family validate-artifact "$ATTEMPT_PATH"
-RUN_ID=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/run-id.txt)
-RECOMMENDATION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json"
-PROMOTION_EXECUTION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/${RUN_ID}/promotion.execution.json"
-test -f "$RECOMMENDATION_PATH"
-test -f "$PROMOTION_EXECUTION_PATH"
-cargo xtask family validate-artifact "$RECOMMENDATION_PATH"
-cargo xtask family validate-artifact "$PROMOTION_EXECUTION_PATH"
-cargo test -p xtask family_prove_ -- --color never
-cargo test -p xtask family_certify_ -- --color never
+cargo xtask family refresh-promotion-recommendation function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json
+RUN_ID=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/run-id.txt)
+DIFF_BASE=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/integration-base.txt)
+cargo xtask family emit-promotion-execution function.arithmetic_leaf.monotone_up.v1 "$RUN_ID" ".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json" --target-language typescript --diff-base "$DIFF_BASE"
+cargo xtask family validate-artifact ".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/${RUN_ID}/promotion.execution.json"
+cargo test -p xtask family_refresh_promotion_recommendation -- --color never
 cargo test -p xtask artifact_schema_ -- --color never
-cargo test -p xtask monotone_up_ -- --color never
-cargo test -p spec-core monotone_up_ -- --color never
-cargo test -p spec-core wrapper_pipeline_ -- --color never
-cargo test -p spec-cli --test cli monotone_up_ -- --color never
-cargo test -p spec-cli --test cli wrapper_pipeline_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_ -- --color never
-cargo test -p spec-cli --test m14_regressions wrapper_pipeline_ -- --color never
-cargo run -p spec-cli -- status examples/ecommerce --format json
-cargo run -p spec-cli -- export examples/ecommerce --format json
-rg -n "M31|M32|function.arithmetic_leaf.monotone_up.v1|function.wrapper.pipeline.v1" docs/ai_promotion_and_multilanguage_milestones_v0.1.md semantic-families/README.md PLAN.md
-! rg -n "kind:data|kind:sum|repo-wide TypeScript support|broad TypeScript support|all families now support TypeScript" docs/ai_promotion_and_multilanguage_milestones_v0.1.md semantic-families/README.md
-INTEGRATION_BASE_SHA=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m32_one_bounded_second_language_promotion/integration-base.txt)
+cargo test -p xtask recommendation_ -- --color never
+cargo test -p xtask -- --color never
+rg -n "recommended|blocked_for_now|not_recommended|money/round|function.arithmetic_leaf.monotone_up.v1|recommendation.latest.json|bounded second-language" semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md docs/ai_promotion_and_multilanguage_milestones_v0.1.md CHANGELOG.md PLAN.md
+! rg -n "repo-wide TypeScript support|broad TypeScript support|all families now support TypeScript|new promoted family|corpus run 1 spent by M33|spec-core capability expansion" semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md docs/ai_promotion_and_multilanguage_milestones_v0.1.md CHANGELOG.md
+INTEGRATION_BASE_SHA=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/integration-base.txt)
 git diff --name-only "${INTEGRATION_BASE_SHA}...HEAD"
-! git diff --name-only "${INTEGRATION_BASE_SHA}...HEAD" | rg -v '^(xtask/src/(lib|family/(prove|certify|report|promotion_artifacts|harness|paths|routing))\.rs|spec-core/src/(semantic_review|passport|export|types|lib|validator)\.rs|spec-cli/src/commands\.rs|spec-cli/tests/(cli|m14_regressions)\.rs|semantic-families/function\.arithmetic_leaf\.monotone_up\.v1/.*|semantic-families/README\.md|docs/ai_promotion_and_multilanguage_milestones_v0\.1\.md)$'
-cargo test
+! git diff --name-only "${INTEGRATION_BASE_SHA}...HEAD" | rg -v '^(xtask/src/(lib|family/(recommend|promotion_artifacts|paths|mod|coverage))\.rs|semantic-families/README\.md|docs/(recommendation_corpus_expansion_program_v0\.1|semantic_family_capability_corpus_guide_v0\.1|ai_promotion_and_multilanguage_milestones_v0\.1)\.md|CHANGELOG\.md)$'
 ```
 
 Rules:
 
-- record every actual command and exit code in `proof-log.json`
-- do not substitute broader or different commands for the sequence above
-- if any command fails after `lane-a-freeze.json` exists, the parent must also emit and validate a runtime `blocker.report.json` at the frozen family-promotion path before stopping
-- M32 is not done if the full floor passes but the diff escapes the closed implementation surface
+- Record every actual command and exit code in `proof-log.json`.
+- Do not substitute broader or different commands for the sequence above.
+- If any command fails after `code-freeze.json` exists, the parent must emit and validate a real blocker artifact before stopping.
+- M33 is not done if the floor passes but the diff escapes the closed implementation surface.
 
-### WS-10 Publish and CI observation - parent only
+### WS-8 Publish and CI observation - parent only
 
-#### `task/m32-07-push-observe`
+#### `task/m33-07-push-observe`
 
 Required parent actions:
 
-1. Confirm the verified `ws/m32-int` commit can fast-forward the publish target branch `feat/corpus-expansion` without discarding or rewriting unrelated work that appeared after baseline.
+1. Confirm the verified `ws/m33-int` commit can fast-forward `feat/corpus-expansion` without discarding unrelated work.
 2. If and only if that fast-forward is safe, update the publish target to the exact verified integration SHA.
 3. Push `feat/corpus-expansion`.
 4. Record remote, branch, SHA, and timestamp in `push-record.json`.
@@ -758,36 +679,35 @@ Required parent actions:
 
 Acceptance:
 
-- publish branch is the exact verified SHA from `ws/m32-int`
-- push succeeded
-- CI ran on the exact pushed SHA
-- workspace CI is green
+- Publish branch is the exact verified SHA from `ws/m33-int`.
+- Push succeeded.
+- CI ran on the exact pushed SHA.
+- Workspace CI is green.
 
-### WS-11 Closeout - parent only
+### WS-9 Closeout - parent only
 
-#### `task/m32-08-closeout`
+#### `task/m33-08-closeout`
 
 Closeout must write `closeout.md` and answer plainly:
 
-1. Did M32 prove one bounded second-language promotion path for `function.arithmetic_leaf.monotone_up.v1` and nothing broader?
-2. Did Rust-default prove/certify remain green while the TypeScript prove/certify lane also went green?
-3. Do prove/certify reports and promotion artifacts now identify actual target language truthfully?
-4. Did the promotion chain refresh and validate a monotone-up recommendation artifact before emitting closeout artifacts?
-5. Do semantic review, passport, export, and status now tell one aligned bounded story about the same pilot?
-6. Did wrapper pipeline remain regression pressure only?
-7. Was `promotion.execution.json` generated, validated, and preserved at the frozen M32 family-promotion path?
-8. If the run stopped early at any point after `lane-a-freeze.json`, was `blocker.report.json` generated and validated before stop?
-9. What remained genuinely shared versus target-specific after the pilot?
-10. Did any part of the run need seam-kind widening, a second pilot family, or a broad TypeScript support claim?
+1. Does the analysis artifact now answer the five M33 objective questions from `PLAN.md` without hidden chat context?
+2. Does the current `money/round` helper-surface wedge read as `not_recommended` rather than as a vague held cluster?
+3. Are missing evidence and stale evidence explicit in the analysis artifact?
+4. Does `delta_from_previous` tell the maintainer what changed?
+5. Does the family-scoped recommendation artifact carry the same analysis basis truth?
+6. Does `promotion.execution.json` preserve the starting decision basis and bounded target-language truth?
+7. If the run stopped after `code-freeze.json`, was `blocker.report.json` emitted and validated before stop?
+8. Do the docs use the same vocabulary the artifacts emit?
+9. Did the run avoid scope leak into corpus accounting, `spec-core` capability, new family promotion, or broad target-language claims?
 
 Allowed closeout verdicts:
 
-- `EXPAND`
-  - M32 landed cleanly and the repo is ready for the next bounded second-language follow-on milestone
+- `PROCEED`
+  - M33 landed cleanly and the repo now has an honest maintainer-facing decision surface
 - `NARROW`
-  - the monotone-up pilot landed, but one bounded truth-surface or artifact follow-on still has to close before the next milestone is honest
+  - M33 landed materially, but one bounded artifact or wording follow-on still blocks a clean next milestone
 - `STOP`
-  - the run required scope widening, failed the verification floor, or left the repo overclaiming what TypeScript support means
+  - The run widened scope, failed verification, or left the repo overclaiming capability
 
 ## Worker Return Contract
 
@@ -823,6 +743,7 @@ Every worker launch packet must include exactly:
 - the lane mission statement from this file
 - the exact relevant `PLAN.md` excerpt for that lane
 - the exact relevant `ORCH_PLAN.md` excerpt for that lane
+- the exact relevant freeze-record excerpt for that lane
 - owned paths
 - forbidden paths
 - exact acceptance commands
@@ -840,49 +761,54 @@ Parent-owned live working context is limited to:
 - the lane-specific launch file being issued
 - the current integration diff summary
 
-After `authority-freeze.json`, `PLAN.md` and `ORCH_PLAN.md` are read only as frozen authority snapshots. The parent does not mutate them or rely on post-freeze edits during the active run.
+For the optional docs lane specifically:
 
-Parent-owned information that is offloaded to run-state and must be read from files rather than reconstructed from chat:
-
-- M31 base proof
-- baseline capture
-- lane launch packets
-- merge decisions and outcomes
-- stale-lane invalidation history
-- final verification logs
-- push records
-- CI observations
-- closeout evidence
+- the parent must issue `RUN_ROOT/docs-launch.md`
+- that file is the only operative worker launch packet
+- it must embed the exact `PLAN.md`, `ORCH_PLAN.md`, and `analysis-freeze.json` excerpts the worker is allowed to rely on
+- the worker does not reconstruct wedge wording from the repo independently when the launch file already freezes it
 
 ## Blocker Protocol
 
 Workers must stop and return a blocker when:
 
 - they need a file outside owned paths
-- they need to widen implementation beyond the M32 closed surface
-- they need to change the frozen `Lane A` artifact contract after `lane-a-freeze.json`
+- they need to widen implementation beyond the M33 closed surface
+- they need to change the frozen schema vocabulary after `schema-freeze.json`
+- they need to change the frozen wedge wording or interpretation after `analysis-freeze.json`
 - they cannot satisfy acceptance commands with concrete evidence
 - they discover overlapping external edits inside their owned surface after launch
-- they discover a requirement for seam-kind or molecule-test target-language execution
-
-Worker blocker response:
-
-- stop work
-- report the smallest blocking fact with evidence
-- do not write or mutate any file under `RUN_ROOT`
+- they discover a need to touch corpus-accounting policy, `spec-core`, family packets, or target-language proof semantics
 
 Parent blocker response:
 
-- write the sentinel terminal blocked state for the blocked task
-- write `blocked.json`
-- if `lane-a-freeze.json` exists, the frozen blocked-path invocation must be a real parent-usable command surface added by `Lane A`; schema support alone is not enough.
-- if `lane-a-freeze.json` exists, read `run-id.txt`, `artifact-paths.json`, and the blocked-path artifact-emission invocation frozen in `lane-a-freeze.json`, then generate:
-  - `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/blocker.report.json`
-- validate the blocker artifact with:
-  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/blocker.report.json`
-- stop downstream launches
-- stop publish and closeout
-- do not report partial green success
+1. Write the sentinel terminal blocked state for the blocked task.
+2. Write `blocked.json`.
+3. If `code-freeze.json` exists, emit a real blocker artifact at:
+   - `.semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/blocker.report.json`
+4. Validate the blocker artifact with:
+   - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/<run-id>/blocker.report.json`
+5. Stop downstream launches, publish, and closeout.
+6. Do not report partial green success.
+
+Canonical blocked-path command template to freeze in `code-freeze.json`:
+
+```bash
+RUN_ID=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/run-id.txt)
+cargo xtask family emit-promotion-blocker function.arithmetic_leaf.monotone_up.v1 "$RUN_ID" \
+  --target-language typescript \
+  --blocking-step certify \
+  --blocker-kind human-decision-required \
+  --summary "$BLOCKER_SUMMARY" \
+  --required-human-action "$REQUIRED_HUMAN_ACTION" \
+  --safe-next-action "$SAFE_NEXT_ACTION_1" \
+  --safe-next-action "$SAFE_NEXT_ACTION_2" \
+  --evidence-command "$FAILING_COMMAND" \
+  --evidence-exit-code "$FAILING_EXIT_CODE" \
+  --evidence-note "$EVIDENCE_NOTE"
+```
+
+If a real artifact or diff path is the best evidence, include `--evidence-path "$EVIDENCE_PATH"` in the frozen invocation.
 
 ## Context-Control Rules
 
@@ -895,29 +821,17 @@ Parent blocker response:
 - Worker authority does not come from:
   - stale plan snapshots inside seeded worktrees
   - prior worker chat history
-  - inferred milestone scope beyond M32
+  - inferred milestone scope beyond M33
 - If a seeded worktree copy of `PLAN.md` or `ORCH_PLAN.md` disagrees with the parent prompt or freeze records, the seeded copy is ignored.
-- Worker prompts must include only:
-  - owned paths
-  - forbidden paths
-  - exact authority excerpts
-  - exact acceptance commands
-  - applicable freeze record path
-  - frozen launch SHA
-  - applicable hard guards
 
 ## Freeze Checkpoints
 
-M32 does not use M26-style human approval gates.
-
-It uses these parent-owned checkpoints instead:
-
-### Checkpoint 0: M31 base freeze
+### Checkpoint 0: M32 base freeze
 
 Required:
 
-- `m31-base-freeze.json` exists
-- the chosen M32 seed proves inclusion of `945284ea7ab6bf788d7202ff674b81581afd47c6` or an explicitly recorded merged equivalent
+- `m32-base-freeze.json` exists
+- the chosen M33 seed proves inclusion of `6a1051b601487710d631031171cfde92810f1581` or an explicitly recorded direct descendant with the same closed M32 artifact truth
 
 ### Checkpoint 1: Baseline freeze
 
@@ -925,91 +839,109 @@ Required:
 
 - `baseline.json` exists
 - live branch is `feat/corpus-expansion`
-- dirty overlap inside the M32-owned surface is either absent or explicitly blocked
+- dirty overlap inside the M33-owned surface is either absent or explicitly blocked
 
-### Checkpoint 2: Post-`Lane A` freeze
-
-Required:
-
-- `Lane A` is merged and re-verified on `ws/m32-int`
-- `lane-a-freeze.json` exists
-- the frozen artifact/report contract is recorded
-- `lane-b-launch.md` and `lane-c-launch.md` exist and point at the same frozen SHA
-
-### Checkpoint 3: Post-BC freeze
+### Checkpoint 2: Authority freeze
 
 Required:
 
-- `Lane B` and `Lane C` acceptance commands pass on merged integration state
-- `post-bc-freeze.json` exists
-- `Lane D` forks from the exact post-BC frozen SHA
+- `authority-freeze.json` exists
+- `artifact-paths.json` exists
+- `run-id.txt` exists
+- `ws/m33-int` was created from the recorded seed SHA
 
-### Checkpoint 4: Promotion execution artifact
-
-Required:
-
-- monotone-up `recommendation.latest.json` exists at the frozen family-promotion path
-- `cargo xtask family validate-artifact <recommendation-path>` passes on it
-- `promotion.execution.json` exists at the frozen family-promotion path for the monotone-up pilot
-- `cargo xtask family validate-artifact <path>` passes on it
-- `promotion-execution-record.json` exists
-
-### Checkpoint 5: Final verification
+### Checkpoint 3: Schema freeze
 
 Required:
 
-- the exact merged-state verification sequence passes
+- `schema-freeze.json` exists
+- frozen schema versions and vocabulary are recorded
+- the docs lane is still disallowed at this checkpoint
+
+### Checkpoint 4: Analysis freeze
+
+Required:
+
+- `analysis-freeze.json` exists
+- the current wedge, artifact wording, and `money/round` interpretation are frozen
+- if the docs lane is launched, it starts from the exact analysis-freeze SHA
+- `docs-launch.md` exists and points at `analysis-freeze.json`
+
+### Checkpoint 5: Code freeze
+
+Required:
+
+- `code-freeze.json` exists
+- the sequential code lane acceptance commands pass on merged integration state
+
+### Checkpoint 6: Docs merge
+
+Required:
+
+- if the docs lane was launched, its acceptance commands pass on merged integration state
+- `merge-log.md` records the merge result or explicit skip
+
+### Checkpoint 7: Green-path artifact emission
+
+Required:
+
+- analysis artifacts validate at the frozen paths
+- the family-scoped monotone-up recommendation artifact validates at the frozen path
+- `promotion.execution.json` validates at the frozen run path
+- `green-path-record.json` exists
+
+### Checkpoint 8: Final verification
+
+Required:
+
+- the exact merged-state verification floor passes
 - `proof-log.json` records every command and exit code
-- the final merged diff stays inside the M32 closed surface plus allowed mechanical spillover
+- the final merged diff stays inside the M33 closed surface plus allowed mechanical spillover
 
 ## Tests And Acceptance
 
 The required floor is locked:
 
 ```bash
-cargo xtask family smoke function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family certify function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo test -p xtask monotone_up_ -- --color never
-cargo test -p spec-core monotone_up_ -- --color never
-cargo test -p spec-core wrapper_pipeline_ -- --color never
-cargo test -p spec-cli --test cli monotone_up_ -- --color never
-cargo test -p spec-cli --test cli wrapper_pipeline_ -- --color never
-cargo test -p spec-cli --test m14_regressions monotone_up_ -- --color never
-cargo test -p spec-cli --test m14_regressions wrapper_pipeline_ -- --color never
-cargo test
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family refresh-promotion-recommendation function.arithmetic_leaf.monotone_up.v1 --target-language typescript
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json
+cargo test -p xtask family_refresh_promotion_recommendation -- --color never
+cargo test -p xtask artifact_schema_ -- --color never
+cargo test -p xtask recommendation_ -- --color never
+cargo test -p xtask -- --color never
 ```
 
 Additional acceptance rules:
 
-- if Rust prove/certify passes but TypeScript prove/certify does not, M32 is incomplete
-- if TypeScript passes but artifacts still say `rust`, M32 is incomplete
-- if the promotion chain still points at a stale recommendation artifact that does not describe the monotone-up pilot, M32 is incomplete
-- if `promotion.execution.json` is missing, unvalidated, or does not reference real monotone-up proof artifacts, M32 is incomplete
-- if a required post-foundation failure path does not produce a validated `blocker.report.json`, the run is blocked and incomplete
-- if read-side surfaces pass while docs overclaim broad TypeScript support, M32 is incomplete
-- if wrapper-pipeline regressions fail while monotone-up is green, M32 is incomplete
-- if a second primary family appears anywhere in accepted scope, M32 is blocked
+- if the live analysis artifact cannot explain the `money/round` wedge without extra maintainer interpretation, M33 is incomplete
+- if `decision_status`, `evidence_summary`, or `delta_from_previous` is absent from the primary analysis artifact, M33 is incomplete
+- if family-scoped recommendation, execution, or blocker artifacts do not preserve the analysis basis fields, M33 is incomplete
+- if downstream artifacts preserve basis truth but widen M32 into repo-wide target-language support, M33 is incomplete
+- if the blocked path is needed after `code-freeze.json` and no validated `blocker.report.json` is emitted, the run is blocked and incomplete
+- if the diff touches corpus manifest policy, `spec-core`, family packets, or prove/certify semantics, the run is blocked
+- if docs diverge from the emitted artifact vocabulary or from `analysis-freeze.json`, M33 is incomplete
 
 ## Assumptions
 
 - `feat/corpus-expansion` remains the publish target branch for this run.
-- `ws/m31-int` or its merged equivalent remains available locally when the run starts.
-- The existing monotone-up packet already contains the additive TypeScript fixture surface M32 needs.
+- The chosen seed commit still preserves the closed M32 monotone-up proof artifacts at run start.
 - `cargo xtask family validate-artifact` remains the stable artifact-truth validator during this run.
-- The repo can prove the bounded second-language pilot without reopening seam portability or molecule-test execution policy.
+- The downstream real path for M33 remains the bounded monotone-up TypeScript pilot from M32.
+- No new family promotion is required to make the M33 decision surface honest.
 
 ## Freeze And Restart Rules
 
 - No lane launches before the parent writes `authority-freeze.json`.
-- `Lane B` and `Lane C` may launch only after `lane-a-freeze.json` exists.
-- `Lane D` may launch only after `post-bc-freeze.json` exists.
-- If the chosen M31 base changes after `m31-base-freeze.json`, every downstream lane is stale and must be recreated from the new base.
-- If `Lane A` changes any frozen artifact or report truth after `Lane B` or `Lane C` is forked, both lanes are stale and must be recreated from the new `lane-a-freeze.json`.
-- If `Lane B` changes the monotone-up harness slug, suite names, or committed packet paths that `Lane C` acceptance depends on, `Lane C` is stale and must be recreated from the newest freeze.
-- If `Lane C` changes read-side truth vocabulary after `Lane D` is forked, `Lane D` is stale and must be recreated from the newest freeze.
+- The optional docs lane may launch only after `analysis-freeze.json` exists and `docs-launch.md` has been written.
+- If the chosen M32 base changes after `m32-base-freeze.json`, every downstream lane is stale and must be recreated from the new base.
+- If `schema-freeze.json` changes before `analysis-freeze.json`, no docs lane may launch until a fresh analysis freeze is created on top of the new schema.
+- If `analysis-freeze.json` changes after the docs lane is forked, the docs lane is stale and must be recreated from the new frozen SHA.
+- If `code-freeze.json` changes any field name, command contract, artifact path, or current-wedge wording after the docs lane is forked, the docs lane is stale and must be recreated.
 - If overlapping third-party edits land anywhere inside a lane-owned surface after launch, the parent records the overlap, invalidates the affected lanes, and relaunches from the newest relevant freeze.
 - The parent does not hand-patch stale worker branches.
-- Any request to widen M32 into seam kinds, molecule-test target-language execution, a second pilot family, or broad TypeScript support blocks the run until `PLAN.md` is rewritten.
+- Any request to widen M33 into corpus accounting redesign, `spec-core` capability expansion, new family promotion, or broad target-language claims blocks the run until `PLAN.md` is rewritten.
+
