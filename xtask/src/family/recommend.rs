@@ -3,6 +3,9 @@ use crate::family::coverage::{
     CoverageRunOutput, collect_latest, current_timestamp_rfc3339,
     normalized_for_recommend_determinism, render_json_bytes, write_latest,
 };
+use crate::family::helper_surface::{
+    HelperSurfaceDisposition, HelperSurfaceSignal, classify_helper_surface,
+};
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
     FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,
@@ -20,10 +23,10 @@ use crate::family::promotion_artifacts::{
     RequiredNextAction, UnsupportedClusterEntry, candidate_qualifies_for_ranked_status,
     corpus_program_basis_snapshot,
 };
-use serde::Deserialize;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -174,10 +177,14 @@ pub(crate) fn derive_corpus_program_decision_contract(
         });
     }
 
-    if top_candidate.is_some_and(|candidate| {
-        candidate.next_step_status == NextStepStatus::DurableHold
-            && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
-    }) && snapshot.decision_status == DecisionStatus::NotRecommended
+    if top_candidate
+        .zip(helper_surface_disposition_for_basis_candidate(basis))
+        .is_some_and(|(candidate, disposition)| {
+            disposition == HelperSurfaceDisposition::DurableNonPromotableHelperSurface
+                && candidate.next_step_status == NextStepStatus::DurableHold
+                && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
+        })
+        && snapshot.decision_status == DecisionStatus::NotRecommended
         && snapshot.open_blockers == vec![DecisionReason::HelperSurfaceNotPromotable]
         && snapshot.missing_evidence.is_empty()
         && snapshot.stale_evidence.is_empty()
@@ -682,17 +689,6 @@ struct DiscoveryProjectionCandidate {
     rationale: String,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct UnsupportedShapeFingerprint {
-    schema_version: u64,
-    function_dep_arity: usize,
-    callable_dep_topology_class: String,
-    contract_input_count: usize,
-    has_return: bool,
-    authored_body_kind: String,
-}
-
 fn project_discovery_candidates(
     unsupported_clusters: &[UnsupportedClusterEntry],
 ) -> Vec<DiscoveryProjectionCandidate> {
@@ -911,24 +907,75 @@ fn push_hold_reason(hold_reasons: &mut Vec<HoldReason>, hold_reason: HoldReason)
 }
 
 fn is_durable_helper_surface_hold(discovery: &DiscoveryProjectionCandidate) -> bool {
-    discovery.primary_reason_code == UnsupportedFunctionReasonCode::UnsupportedFunctionSurface
-        && discovery.overlap_family == "unknown"
-        && discovery.leverage.real_example_hits > 0
-        && helper_surface_shape(discovery)
+    helper_surface_disposition_for_discovery(discovery)
+        == Some(HelperSurfaceDisposition::DurableNonPromotableHelperSurface)
 }
 
-fn helper_surface_shape(discovery: &DiscoveryProjectionCandidate) -> bool {
-    let Ok(fingerprint) =
-        serde_json::from_str::<UnsupportedShapeFingerprint>(&discovery.shape_fingerprint)
-    else {
-        return false;
-    };
-    fingerprint.schema_version == 1
-        && fingerprint.function_dep_arity == 0
-        && fingerprint.callable_dep_topology_class == "no_deps_or_helper"
-        && fingerprint.contract_input_count == 1
-        && fingerprint.has_return
-        && fingerprint.authored_body_kind == "neither"
+fn helper_surface_disposition_for_discovery(
+    discovery: &DiscoveryProjectionCandidate,
+) -> Option<HelperSurfaceDisposition> {
+    classify_helper_surface(&HelperSurfaceSignal {
+        primary_reason_code: discovery.primary_reason_code,
+        overlap_family: discovery.overlap_family.as_str(),
+        real_example_hits: discovery.leverage.real_example_hits,
+        shape_fingerprint: discovery.shape_fingerprint.as_str(),
+    })
+}
+
+fn helper_surface_disposition_for_cluster(
+    cluster: &UnsupportedClusterEntry,
+) -> Option<HelperSurfaceDisposition> {
+    classify_helper_surface(&HelperSurfaceSignal {
+        primary_reason_code: cluster.reason_code,
+        overlap_family: cluster.overlap_family.as_str(),
+        real_example_hits: cluster.real_example_hits,
+        shape_fingerprint: cluster.shape_fingerprint.as_str(),
+    })
+}
+
+fn helper_surface_disposition_for_basis_candidate(
+    basis: &FamilyRecommendationAnalysisArtifact,
+) -> Option<HelperSurfaceDisposition> {
+    let top_candidate = basis.ranked_candidates.first()?;
+    if let Some(disposition) = helper_surface_disposition_from_coverage_basis(basis, top_candidate) {
+        return Some(disposition);
+    }
+    if top_candidate.primary_reason_code != UnsupportedFunctionReasonCode::UnsupportedFunctionSurface
+        || top_candidate.overlap_family != "unknown"
+        || top_candidate.leverage.real_example_hits == 0
+    {
+        return None;
+    }
+    match (
+        top_candidate.next_step_status,
+        top_candidate.next_step_detail,
+        top_candidate.hold_reasons.as_slice(),
+    ) {
+        (
+            NextStepStatus::DurableHold,
+            NextStepDetail::HelperSurfaceNotPromotable,
+            [HoldReason::HelperSurfaceNotPromotable],
+        ) => Some(HelperSurfaceDisposition::DurableNonPromotableHelperSurface),
+        _ => None,
+    }
+}
+
+fn helper_surface_disposition_from_coverage_basis(
+    basis: &FamilyRecommendationAnalysisArtifact,
+    candidate: &RecommendationCandidateEntry,
+) -> Option<HelperSurfaceDisposition> {
+    let cwd = env::current_dir().ok()?;
+    let coverage_path = cwd.join(&basis.coverage_path);
+    let coverage_bytes = fs::read(coverage_path).ok()?;
+    if inventory_sha256_hex(&coverage_bytes) != basis.coverage_sha256 {
+        return None;
+    }
+    let coverage: FamilyCoverageArtifact = serde_json::from_slice(&coverage_bytes).ok()?;
+    coverage
+        .unsupported_clusters
+        .iter()
+        .find(|cluster| candidate.cluster_ids.contains(&cluster.cluster_id))
+        .and_then(helper_surface_disposition_for_cluster)
 }
 
 pub(crate) fn recommendation_status_for(
