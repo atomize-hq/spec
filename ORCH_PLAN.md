@@ -22,6 +22,9 @@ Artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semanti
 - Worker concurrency cap is **`0`** before `analysis-freeze.json` and **`1`** after `analysis-freeze.json` if the optional docs lane is launched.
 - The one real downstream validation family for M33 is still the bounded M32 path: `function.arithmetic_leaf.monotone_up.v1` with `--target-language typescript`.
 - M33 does not reopen proof policy. It improves the decision surface and carries that truth through the existing family-promotion artifact chain.
+- The parent preserves two distinct bases throughout the run:
+  - `integration-base.txt` remains the exact seed commit and the frozen execution `--diff-base`
+  - `closed-surface-base.txt` is the exact commit against which the final M33-owned diff is measured
 - Parent-owned run-state under `RUN_ROOT` is the only execution truth. Worker memory, stale worktree files, and ad hoc notes are not.
 
 ## Hard Guards
@@ -30,6 +33,7 @@ Artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semanti
 - `ORCH_PLAN.md` is parent-owned only. Workers do not edit it.
 - The parent does not integrate on the live checkout. All merges and final verification happen on `ws/m33-int`.
 - The live checkout on `feat/corpus-expansion` is the publish target and baseline reference, not the merge surface.
+- If baseline capture records live-branch commits beyond the chosen seed and those commits do not overlap the M33-owned surface, the parent must replay that preserved live-branch delta onto `ws/m33-int` before WS-6 onward. This replay is parent-only and becomes part of the final verified state.
 - M33 starts only from the M32 publish anchor `6a1051b601487710d631031171cfde92810f1581` or a direct descendant explicitly recorded in `m32-base-freeze.json` as preserving the closed M32 artifact chain.
 - The primary analysis artifact path stays fixed at `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`.
 - The M26 root artifact path `.semantic-family-artifacts/family-promotion/recommendation.latest.json` is not repurposed into the M33 decision surface.
@@ -60,7 +64,7 @@ Artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semanti
   - `spec-core` semantic capability expansion
   - family promotion or certification of a new family
   - broad target-language or repo-wide TypeScript claims
-- The parent may resolve only syntax-level, formatting, import-order, or context-drift merge fallout. Semantic ownership conflicts go back to the owning lane.
+- The parent may resolve only syntax-level, formatting, import-order, context-drift merge fallout, or non-semantic replay fallout from preserved live-branch commits that baseline already proved were outside the M33-owned surface. Semantic ownership conflicts go back to the owning lane.
 
 ## Worktree Layout
 
@@ -84,6 +88,7 @@ Creation rules:
 7. No worker is forked from another worker branch.
 8. If any named branch or worktree already exists and points at stale or conflicting state, the parent removes and recreates it before reuse and records that in `session-log.md`.
 9. A stale lane is discarded and recreated from the newest relevant freeze SHA. The parent does not hand-forward stale worker branches.
+10. If baseline captured preserved live-branch commits beyond the seed, the parent replays those commits only after the code lane is stable enough to absorb them and before WS-6 green-path emission and WS-7 final verification.
 
 ## Canonical Run-State
 
@@ -105,11 +110,19 @@ Canonical parent-owned files:
 - `baseline.json`
   - live branch name
   - live checkout SHA
+  - whether the live checkout equals the chosen seed
+  - whether the live checkout is a descendant of the chosen seed
   - live dirty-state summary
   - overlap check against the M33-owned surface
 - `integration-base.txt`
   - the exact commit used to seed `ws/m33-int`
-  - the only allowed diff base for the final closed-surface gate
+  - the frozen execution `--diff-base` for green-path emission
+- `publish-head.txt`
+  - the exact live branch HEAD captured during baseline
+  - the branch tip the parent must preserve at publish time
+- `closed-surface-base.txt`
+  - the exact commit against which the final M33-owned diff is measured
+  - initialized from the seed and updated to the preserved live branch head if replay occurs
 - `authority-freeze.json`
   - milestone id `M33`
   - authority paths
@@ -184,6 +197,7 @@ Canonical parent-owned files:
 - `merge-log.md`
   - ordered merge history
   - merge SHAs
+  - replay or rebase SHAs when preserved live-branch delta is applied
   - conflict notes
   - stale-lane invalidations
 - `green-path-record.json`
@@ -275,9 +289,10 @@ Execution meaning:
 5. After `analysis-freeze.json`, the parent may optionally fork a docs lane from the frozen analysis SHA.
 6. Docs never own code files and never merge before the code lane reaches `code-freeze.json`.
 7. Parent merges docs only after the code lane is complete and re-verified.
-8. Parent then emits the real downstream green-path artifacts from merged integration state.
-9. If any post-`code-freeze.json` step fails, the parent emits and validates a real blocker artifact before stopping.
-10. Parent publishes only the exact verified `ws/m33-int` SHA.
+8. If baseline captured preserved live-branch commits beyond the seed and those commits remain non-overlapping with the M33-owned surface, the parent replays that preserved delta onto `ws/m33-int` and treats the post-replay head as the only merged integration state for the remaining steps.
+9. Parent then emits the real downstream green-path artifacts from merged integration state.
+10. If any post-`code-freeze.json` step fails, the parent emits and validates a real blocker artifact before stopping.
+11. Parent publishes only the exact verified `ws/m33-int` SHA.
 
 ## Workstream Plan
 
@@ -288,30 +303,42 @@ Execution meaning:
 Required parent actions:
 
 1. Confirm the live branch is `feat/corpus-expansion`.
-2. Confirm the chosen seed commit is either `6a1051b601487710d631031171cfde92810f1581` or a direct descendant that still preserves M32 artifact truth.
-3. Validate the closed M32 monotone-up proof artifacts from the chosen seed.
-4. Validate the current M27/M32 analysis artifacts from the chosen seed.
-5. Write `m32-base-freeze.json`.
+2. Select `SEED_SHA` as either `6a1051b601487710d631031171cfde92810f1581` or a direct descendant that still preserves M32 artifact truth.
+3. Prove `SEED_SHA` is the anchor or a descendant of it.
+4. Validate the closed M32 monotone-up proof artifacts from a detached checkout at `SEED_SHA`.
+5. Validate the current M27/M32 analysis artifacts from that same detached checkout at `SEED_SHA`.
+6. Write `m32-base-freeze.json`.
 
 Required commands:
 
 ```bash
-git rev-parse --verify 6a1051b601487710d631031171cfde92810f1581
-cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/prove.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/certification.report.json
-ATTEMPT_PATH=$(ls -t .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/attempt-*.json | head -n 1)
-test -n "$ATTEMPT_PATH"
-cargo xtask family validate-artifact "$ATTEMPT_PATH"
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+ANCHOR_SHA=6a1051b601487710d631031171cfde92810f1581
+SEED_SHA="${SEED_SHA:-$ANCHOR_SHA}"
+git rev-parse --verify "$ANCHOR_SHA"
+git rev-parse --verify "$SEED_SHA"
+git merge-base --is-ancestor "$ANCHOR_SHA" "$SEED_SHA"
+TMP_PROOF_DIR=$(mktemp -d)
+git worktree add --detach "$TMP_PROOF_DIR" "$SEED_SHA"
+(
+  cd "$TMP_PROOF_DIR"
+  cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/prove.latest.json
+  cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/certification.report.json
+  ATTEMPT_PATH=$(ls -t .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/attempt-*.json | head -n 1)
+  test -n "$ATTEMPT_PATH"
+  cargo xtask family validate-artifact "$ATTEMPT_PATH"
+  cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+  cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+)
+git worktree remove "$TMP_PROOF_DIR"
 ```
 
 Acceptance:
 
 - `m32-base-freeze.json` exists.
 - The chosen integration seed is recorded exactly.
-- The bounded monotone-up proof chain validates from that seed.
-- The existing analysis artifacts validate from that seed.
+- The chosen seed is proven to be the anchor or its descendant.
+- The bounded monotone-up proof chain validates from that exact detached seed checkout.
+- The existing analysis artifacts validate from that exact detached seed checkout.
 - No code lane may start until this freeze exists.
 
 ### WS-1 Baseline capture - parent only
@@ -321,15 +348,18 @@ Acceptance:
 Required parent actions:
 
 1. Record live branch, live SHA, and dirty-state summary.
-2. Record overlap against the M33 closed implementation surface.
-3. Record whether unrelated dirty work exists outside M33 scope.
-4. Write `baseline.json`.
+2. Record whether the live SHA equals the chosen seed or is a descendant that must be preserved for publish.
+3. Record overlap against the M33 closed implementation surface.
+4. Record whether unrelated dirty work exists outside M33 scope.
+5. If the live branch contains preserved commits beyond the seed, determine whether they stay fully outside the M33-owned surface and therefore qualify for later replay.
+6. Write `baseline.json`.
 
 Acceptance:
 
 - `baseline.json` exists.
 - Live branch is `feat/corpus-expansion`.
 - Dirty overlap inside the M33-owned surface is either absent or explicitly blocked before integration starts.
+- If the live branch contains commits beyond the seed, `baseline.json` records whether those commits are replay-safe or whether the run is blocked before integration starts.
 
 ### WS-2 Orchestration freeze - parent only
 
@@ -343,7 +373,9 @@ Required parent actions:
 4. Write `artifact-paths.json`.
 5. Write `run-id.txt`.
 6. Write `integration-base.txt` from the exact seed recorded in `m32-base-freeze.json`.
-7. Create `ws/m33-int` from that exact seed commit.
+7. Write `publish-head.txt` from the exact live branch HEAD recorded in `baseline.json`.
+8. Write `closed-surface-base.txt`, initially equal to `integration-base.txt`.
+9. Create `ws/m33-int` from that exact seed commit.
 
 Artifact path contract to freeze:
 
@@ -357,6 +389,7 @@ Acceptance:
 
 - No worker launches before `authority-freeze.json`.
 - `ORCH_PLAN.md`, `authority-freeze.json`, and `tasks.json` agree on lane order, hard guards, publish target, and freeze semantics.
+- `integration-base.txt` records the seed used for execution diff-base, `publish-head.txt` records the preserved live branch head, and `closed-surface-base.txt` records the current final diff base.
 - After `authority-freeze.json`, `PLAN.md` and `ORCH_PLAN.md` are frozen and may not re-enter runtime scope unless the run is explicitly aborted and replanned.
 
 ### WS-3 Sequential code lane - parent only on `ws/m33-int`
@@ -427,10 +460,17 @@ Required parent actions:
 Required acceptance commands:
 
 ```bash
+ANALYSIS_PATH=".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
 cargo xtask family coverage --format json
 cargo xtask family recommend --format json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family validate-artifact "$ANALYSIS_PATH"
+jq -e '.recommendation_status == "no_strong_candidate"' "$ANALYSIS_PATH"
+jq -e '.decision_summary.decision_status == "not_recommended"' "$ANALYSIS_PATH"
+jq -e '.ranked_candidates[0] | tostring | contains("unsupported_function_surface-e40675da6fa0")' "$ANALYSIS_PATH"
+jq -e '.decision_summary | tostring | contains("helper_surface_not_promotable")' "$ANALYSIS_PATH"
+jq -e 'has("evidence_summary") and has("delta_from_previous")' "$ANALYSIS_PATH"
+jq -e '.evidence_summary | has("missing_evidence") and has("stale_evidence")' "$ANALYSIS_PATH"
 cargo test -p xtask recommendation_ -- --color never
 ```
 
@@ -443,6 +483,7 @@ Acceptance:
   - durable blocker `helper_surface_not_promotable`
 - The analysis artifact exposes explicit missing/stale evidence fields even when empty.
 - The analysis artifact exposes `delta_from_previous`.
+- The exact current wedge and field-presence claims are machine-checked, not only inferred from broad test names.
 - `analysis-freeze.json` records the exact current wedge and artifact SHA.
 - If the docs lane is launched, it launches only after `analysis-freeze.json` and only from the SHA recorded there.
 - `docs-launch.md` exists before any docs worker starts.
@@ -473,8 +514,12 @@ Required parent actions:
 Required acceptance commands:
 
 ```bash
+FAMILY_RECOMMENDATION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json"
 cargo xtask family refresh-promotion-recommendation function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json
+cargo xtask family validate-artifact "$FAMILY_RECOMMENDATION_PATH"
+jq -e '.analysis_basis_path == ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"' "$FAMILY_RECOMMENDATION_PATH"
+jq -e '.analysis_basis_sha256 | type == "string" and length > 0' "$FAMILY_RECOMMENDATION_PATH"
+jq -e 'has("decision_status")' "$FAMILY_RECOMMENDATION_PATH"
 cargo test -p xtask family_refresh_promotion_recommendation -- --color never
 cargo test -p xtask artifact_schema_ -- --color never
 cargo test -p xtask -- --color never
@@ -555,13 +600,15 @@ Strict merge order:
 2. Re-run all code-lane acceptance commands from merged state.
 3. If the docs lane exists, merge `ws/m33-lane-b-docs-closeout` into `ws/m33-int`.
 4. Re-run docs acceptance commands from merged state.
-5. Record merge SHAs, conflicts, and stale-lane decisions in `merge-log.md`.
+5. If `publish-head.txt` differs from `integration-base.txt`, replay the preserved live-branch delta from `publish-head.txt` onto `ws/m33-int`, update `closed-surface-base.txt` to that preserved live branch head, and treat the post-replay head as the only merged integration state for WS-6 onward.
+6. Record merge SHAs, replay SHAs, conflicts, and stale-lane decisions in `merge-log.md`.
 
 Parent may resolve only:
 
 - formatting drift
 - line-local doc merge drift
 - wording updates required to match the frozen field names and current wedge exactly
+- non-semantic replay fallout created by applying preserved live-branch commits that baseline already proved were outside the M33-owned surface
 
 Parent must bounce work back to the owning lane for:
 
@@ -576,6 +623,7 @@ Acceptance:
 - `merge-log.md` exists.
 - If the docs lane was launched, it merged only after the code lane reached `code-freeze.json`.
 - If the docs lane was skipped, `merge-log.md` records the skip explicitly and `task-m33-b-docs-closeout` closes as a no-op.
+- If preserved live-branch delta existed beyond the seed, `merge-log.md` records the replay result and `closed-surface-base.txt` points at the preserved live branch head rather than the seed.
 - No doc wording conflicts with `analysis-freeze.json` or `code-freeze.json`.
 
 ### WS-6 Runtime green-path artifact emission - parent only
@@ -607,12 +655,21 @@ cargo xtask family coverage --format json
 cargo xtask family recommend --format json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
 cargo xtask family validate-artifact "$ANALYSIS_PATH"
+jq -e '.recommendation_status == "no_strong_candidate"' "$ANALYSIS_PATH"
+jq -e '.decision_summary.decision_status == "not_recommended"' "$ANALYSIS_PATH"
+jq -e 'has("evidence_summary") and has("delta_from_previous")' "$ANALYSIS_PATH"
 cargo xtask family refresh-promotion-recommendation function.arithmetic_leaf.monotone_up.v1 --target-language typescript
 test -f "$FAMILY_RECOMMENDATION_PATH"
 cargo xtask family validate-artifact "$FAMILY_RECOMMENDATION_PATH"
+jq -e '.analysis_basis_path == ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"' "$FAMILY_RECOMMENDATION_PATH"
+jq -e '.analysis_basis_sha256 | type == "string" and length > 0' "$FAMILY_RECOMMENDATION_PATH"
+jq -e 'has("decision_status")' "$FAMILY_RECOMMENDATION_PATH"
 cargo xtask family emit-promotion-execution function.arithmetic_leaf.monotone_up.v1 "$RUN_ID" "$FAMILY_RECOMMENDATION_PATH" --target-language typescript --diff-base "$DIFF_BASE"
 test -f "$EXECUTION_PATH"
 cargo xtask family validate-artifact "$EXECUTION_PATH"
+jq -e '.analysis_basis_path == ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"' "$EXECUTION_PATH"
+jq -e '.analysis_basis_sha256 | type == "string" and length > 0' "$EXECUTION_PATH"
+jq -e 'has("decision_status_at_start") and has("open_blockers_at_start") and has("missing_or_stale_evidence_at_start")' "$EXECUTION_PATH"
 ```
 
 Acceptance:
@@ -631,30 +688,45 @@ The parent must run this exact merged-state verification floor from `ws/m33-int`
 ```bash
 cargo fmt --all --check
 cargo clippy -p xtask --all-targets --all-features -- -D warnings
+ANALYSIS_PATH=".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
 cargo xtask family coverage --format json
 cargo xtask family recommend --format json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family validate-artifact "$ANALYSIS_PATH"
+jq -e '.recommendation_status == "no_strong_candidate"' "$ANALYSIS_PATH"
+jq -e '.decision_summary.decision_status == "not_recommended"' "$ANALYSIS_PATH"
+jq -e '.ranked_candidates[0] | tostring | contains("unsupported_function_surface-e40675da6fa0")' "$ANALYSIS_PATH"
+jq -e '.decision_summary | tostring | contains("helper_surface_not_promotable")' "$ANALYSIS_PATH"
+jq -e 'has("evidence_summary") and has("delta_from_previous")' "$ANALYSIS_PATH"
+jq -e '.evidence_summary | has("missing_evidence") and has("stale_evidence")' "$ANALYSIS_PATH"
 cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/prove.latest.json
 cargo xtask family validate-artifact .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/certification.report.json
 ATTEMPT_PATH=$(ls -t .semantic-family-artifacts/semantic-families/function.arithmetic_leaf.monotone_up.v1/attempt-*.json | head -n 1)
 test -n "$ATTEMPT_PATH"
 cargo xtask family validate-artifact "$ATTEMPT_PATH"
+FAMILY_RECOMMENDATION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json"
 cargo xtask family refresh-promotion-recommendation function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json
+cargo xtask family validate-artifact "$FAMILY_RECOMMENDATION_PATH"
+jq -e '.analysis_basis_path == ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"' "$FAMILY_RECOMMENDATION_PATH"
+jq -e '.analysis_basis_sha256 | type == "string" and length > 0' "$FAMILY_RECOMMENDATION_PATH"
+jq -e 'has("decision_status")' "$FAMILY_RECOMMENDATION_PATH"
 RUN_ID=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/run-id.txt)
 DIFF_BASE=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/integration-base.txt)
-cargo xtask family emit-promotion-execution function.arithmetic_leaf.monotone_up.v1 "$RUN_ID" ".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json" --target-language typescript --diff-base "$DIFF_BASE"
-cargo xtask family validate-artifact ".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/${RUN_ID}/promotion.execution.json"
+EXECUTION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/${RUN_ID}/promotion.execution.json"
+cargo xtask family emit-promotion-execution function.arithmetic_leaf.monotone_up.v1 "$RUN_ID" "$FAMILY_RECOMMENDATION_PATH" --target-language typescript --diff-base "$DIFF_BASE"
+cargo xtask family validate-artifact "$EXECUTION_PATH"
+jq -e '.analysis_basis_path == ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"' "$EXECUTION_PATH"
+jq -e '.analysis_basis_sha256 | type == "string" and length > 0' "$EXECUTION_PATH"
+jq -e 'has("decision_status_at_start") and has("open_blockers_at_start") and has("missing_or_stale_evidence_at_start")' "$EXECUTION_PATH"
 cargo test -p xtask family_refresh_promotion_recommendation -- --color never
 cargo test -p xtask artifact_schema_ -- --color never
 cargo test -p xtask recommendation_ -- --color never
 cargo test -p xtask -- --color never
 rg -n "recommended|blocked_for_now|not_recommended|money/round|function.arithmetic_leaf.monotone_up.v1|recommendation.latest.json|bounded second-language" semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md docs/ai_promotion_and_multilanguage_milestones_v0.1.md CHANGELOG.md PLAN.md
 ! rg -n "repo-wide TypeScript support|broad TypeScript support|all families now support TypeScript|new promoted family|corpus run 1 spent by M33|spec-core capability expansion" semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md docs/ai_promotion_and_multilanguage_milestones_v0.1.md CHANGELOG.md
-INTEGRATION_BASE_SHA=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/integration-base.txt)
-git diff --name-only "${INTEGRATION_BASE_SHA}...HEAD"
-! git diff --name-only "${INTEGRATION_BASE_SHA}...HEAD" | rg -v '^(xtask/src/(lib|family/(recommend|promotion_artifacts|paths|mod|coverage))\.rs|semantic-families/README\.md|docs/(recommendation_corpus_expansion_program_v0\.1|semantic_family_capability_corpus_guide_v0\.1|ai_promotion_and_multilanguage_milestones_v0\.1)\.md|CHANGELOG\.md)$'
+CLOSED_SURFACE_BASE_SHA=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m33_recommendation_quality_promotion_decisions/closed-surface-base.txt)
+git diff --name-only "${CLOSED_SURFACE_BASE_SHA}...HEAD"
+! git diff --name-only "${CLOSED_SURFACE_BASE_SHA}...HEAD" | rg -v '^(xtask/src/(lib|family/(recommend|promotion_artifacts|paths|mod|coverage))\.rs|semantic-families/README\.md|docs/(recommendation_corpus_expansion_program_v0\.1|semantic_family_capability_corpus_guide_v0\.1|ai_promotion_and_multilanguage_milestones_v0\.1)\.md|CHANGELOG\.md)$'
 ```
 
 Rules:
@@ -670,7 +742,7 @@ Rules:
 
 Required parent actions:
 
-1. Confirm the verified `ws/m33-int` commit can fast-forward `feat/corpus-expansion` without discarding unrelated work.
+1. Confirm the verified `ws/m33-int` commit is a descendant of the preserved live branch head recorded in `publish-head.txt` and can fast-forward `feat/corpus-expansion` without discarding unrelated work.
 2. If and only if that fast-forward is safe, update the publish target to the exact verified integration SHA.
 3. Push `feat/corpus-expansion`.
 4. Record remote, branch, SHA, and timestamp in `push-record.json`.
@@ -848,6 +920,8 @@ Required:
 - `authority-freeze.json` exists
 - `artifact-paths.json` exists
 - `run-id.txt` exists
+- `publish-head.txt` exists
+- `closed-surface-base.txt` exists
 - `ws/m33-int` was created from the recorded seed SHA
 
 ### Checkpoint 3: Schema freeze
@@ -879,6 +953,7 @@ Required:
 Required:
 
 - if the docs lane was launched, its acceptance commands pass on merged integration state
+- if preserved live-branch commits existed beyond the seed, replay has completed and `closed-surface-base.txt` points at the preserved live branch head
 - `merge-log.md` records the merge result or explicit skip
 
 ### Checkpoint 7: Green-path artifact emission
@@ -903,12 +978,19 @@ Required:
 The required floor is locked:
 
 ```bash
+ANALYSIS_PATH=".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
 cargo xtask family coverage --format json
 cargo xtask family recommend --format json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family validate-artifact "$ANALYSIS_PATH"
+jq -e '.recommendation_status == "no_strong_candidate"' "$ANALYSIS_PATH"
+jq -e '.decision_summary.decision_status == "not_recommended"' "$ANALYSIS_PATH"
+jq -e 'has("evidence_summary") and has("delta_from_previous")' "$ANALYSIS_PATH"
+FAMILY_RECOMMENDATION_PATH=".semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json"
 cargo xtask family refresh-promotion-recommendation function.arithmetic_leaf.monotone_up.v1 --target-language typescript
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/function.arithmetic_leaf.monotone_up.v1/recommendation.latest.json
+cargo xtask family validate-artifact "$FAMILY_RECOMMENDATION_PATH"
+jq -e '.analysis_basis_path == ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"' "$FAMILY_RECOMMENDATION_PATH"
+jq -e '.analysis_basis_sha256 | type == "string" and length > 0' "$FAMILY_RECOMMENDATION_PATH"
 cargo test -p xtask family_refresh_promotion_recommendation -- --color never
 cargo test -p xtask artifact_schema_ -- --color never
 cargo test -p xtask recommendation_ -- --color never
@@ -924,6 +1006,7 @@ Additional acceptance rules:
 - if the blocked path is needed after `code-freeze.json` and no validated `blocker.report.json` is emitted, the run is blocked and incomplete
 - if the diff touches corpus manifest policy, `spec-core`, family packets, or prove/certify semantics, the run is blocked
 - if docs diverge from the emitted artifact vocabulary or from `analysis-freeze.json`, M33 is incomplete
+- if the current wedge or downstream basis claims are not machine-checked by the frozen command floor, M33 is incomplete
 
 ## Assumptions
 
@@ -941,7 +1024,7 @@ Additional acceptance rules:
 - If `schema-freeze.json` changes before `analysis-freeze.json`, no docs lane may launch until a fresh analysis freeze is created on top of the new schema.
 - If `analysis-freeze.json` changes after the docs lane is forked, the docs lane is stale and must be recreated from the new frozen SHA.
 - If `code-freeze.json` changes any field name, command contract, artifact path, or current-wedge wording after the docs lane is forked, the docs lane is stale and must be recreated.
+- If `feat/corpus-expansion` moves after baseline capture, the parent must either refresh baseline and replay planning against the new head or block publish. The parent does not force-publish over a moved branch tip.
 - If overlapping third-party edits land anywhere inside a lane-owned surface after launch, the parent records the overlap, invalidates the affected lanes, and relaunches from the newest relevant freeze.
 - The parent does not hand-patch stale worker branches.
 - Any request to widen M33 into corpus accounting redesign, `spec-core` capability expansion, new family promotion, or broad target-language claims blocks the run until `PLAN.md` is rewritten.
-
