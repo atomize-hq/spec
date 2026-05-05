@@ -937,10 +937,12 @@ fn helper_surface_disposition_for_basis_candidate(
     basis: &FamilyRecommendationAnalysisArtifact,
 ) -> Option<HelperSurfaceDisposition> {
     let top_candidate = basis.ranked_candidates.first()?;
-    if let Some(disposition) = helper_surface_disposition_from_coverage_basis(basis, top_candidate) {
+    if let Some(disposition) = helper_surface_disposition_from_coverage_basis(basis, top_candidate)
+    {
         return Some(disposition);
     }
-    if top_candidate.primary_reason_code != UnsupportedFunctionReasonCode::UnsupportedFunctionSurface
+    if top_candidate.primary_reason_code
+        != UnsupportedFunctionReasonCode::UnsupportedFunctionSurface
         || top_candidate.overlap_family != "unknown"
         || top_candidate.leverage.real_example_hits == 0
     {
