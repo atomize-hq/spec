@@ -296,12 +296,11 @@ mod tests {
             DifficultyTier, EvidenceState, EvidenceSummary, FamilyCoverageArtifact,
             FamilyRecommendationAnalysisArtifact, FamilyRecommendationArtifact, GateStatus,
             GateSummary, HoldReason, MachineEvidence, MachineEvidenceKind, NextStepDetail,
-            NextStepStatus, PromotionApprovals, PromotionArtifactKind,
-            PromotionBlockerArtifact, PromotionExecutionArtifact, PromotionReadiness,
-            RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RECOMMENDATION_SCHEMA_VERSION,
-            RankedCandidate, RecommendationCandidateEntry, RecommendationConfidence,
-            RecommendationDelta, RecommendationDifficulty, RecommendationLeverage,
-            RecommendationStatus, TargetLanguage, UnsupportedClusterEntry,
+            NextStepStatus, PromotionApprovals, PromotionArtifactKind, PromotionBlockerArtifact,
+            PromotionExecutionArtifact, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            RECOMMENDATION_SCHEMA_VERSION, RankedCandidate, RecommendationCandidateEntry,
+            RecommendationConfidence, RecommendationDelta, RecommendationDifficulty,
+            RecommendationLeverage, RecommendationStatus, TargetLanguage, UnsupportedClusterEntry,
         },
         prove, recommend,
         report::{
@@ -4127,8 +4126,12 @@ gate_d = true
             .first()
             .map(warnings_for_candidate)
             .unwrap_or_default();
-        let decision_status =
-            decision_status_for_fixture(recommendation_status, ranked_candidates.first(), &missing_evidence, &stale_evidence);
+        let decision_status = decision_status_for_fixture(
+            recommendation_status,
+            ranked_candidates.first(),
+            &missing_evidence,
+            &stale_evidence,
+        );
         FamilyRecommendationAnalysisArtifact {
             schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
             artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
@@ -4181,7 +4184,8 @@ gate_d = true
     }
 
     fn seed_valid_analysis_basis_artifact(workspace_root: &Path) -> String {
-        let (coverage_path, coverage_sha256) = seed_recommendation_analysis_coverage(workspace_root);
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(workspace_root);
         let analysis = analysis_artifact_fixture(
             coverage_path,
             coverage_sha256,
@@ -4223,7 +4227,9 @@ gate_d = true
         }
     }
 
-    fn open_blockers_for_candidate(candidate: &RecommendationCandidateEntry) -> Vec<DecisionReason> {
+    fn open_blockers_for_candidate(
+        candidate: &RecommendationCandidateEntry,
+    ) -> Vec<DecisionReason> {
         let mut blockers = Vec::new();
         for hold_reason in &candidate.hold_reasons {
             let reason = match hold_reason {
@@ -4231,7 +4237,9 @@ gate_d = true
                 HoldReason::HardDifficulty => DecisionReason::HardDifficulty,
                 HoldReason::ThinRealExampleSupport => DecisionReason::ThinRealExampleSupport,
                 HoldReason::ThinRegressionSupport => DecisionReason::ThinRegressionSupport,
-                HoldReason::HelperSurfaceNotPromotable => DecisionReason::HelperSurfaceNotPromotable,
+                HoldReason::HelperSurfaceNotPromotable => {
+                    DecisionReason::HelperSurfaceNotPromotable
+                }
             };
             if !blockers.contains(&reason) {
                 blockers.push(reason);
@@ -4240,7 +4248,9 @@ gate_d = true
         blockers
     }
 
-    fn missing_evidence_for_candidate(candidate: &RecommendationCandidateEntry) -> Vec<EvidenceState> {
+    fn missing_evidence_for_candidate(
+        candidate: &RecommendationCandidateEntry,
+    ) -> Vec<EvidenceState> {
         let mut missing = Vec::new();
         for hold_reason in &candidate.hold_reasons {
             let Some(state) = (match hold_reason {

@@ -844,13 +844,11 @@ impl FamilyRecommendationArtifact {
                     "family-scoped recommendation must include analysis_basis_path".to_string(),
                 )
             })?;
-            let analysis_basis_sha256 =
-                self.analysis_basis_sha256.as_deref().ok_or_else(|| {
-                    XtaskError::InvalidInput(
-                        "family-scoped recommendation must include analysis_basis_sha256"
-                            .to_string(),
-                    )
-                })?;
+            let analysis_basis_sha256 = self.analysis_basis_sha256.as_deref().ok_or_else(|| {
+                XtaskError::InvalidInput(
+                    "family-scoped recommendation must include analysis_basis_sha256".to_string(),
+                )
+            })?;
             let decision_status = self.decision_status.ok_or_else(|| {
                 XtaskError::InvalidInput(
                     "family-scoped recommendation must include decision_status".to_string(),
@@ -1290,14 +1288,12 @@ impl PromotionBlockerArtifact {
         )?;
         if self.decision_status_at_start != analysis_basis.decision_summary.decision_status {
             return Err(XtaskError::InvalidInput(
-                "blocker report decision_status_at_start must match the analysis basis"
-                    .to_string(),
+                "blocker report decision_status_at_start must match the analysis basis".to_string(),
             ));
         }
         if self.open_blockers_at_start != analysis_basis.decision_summary.open_blockers {
             return Err(XtaskError::InvalidInput(
-                "blocker report open_blockers_at_start must match the analysis basis"
-                    .to_string(),
+                "blocker report open_blockers_at_start must match the analysis basis".to_string(),
             ));
         }
         if self.missing_or_stale_evidence_at_start != missing_or_stale_evidence(&analysis_basis) {
@@ -1347,8 +1343,7 @@ impl DecisionSummary {
         for warning in &self.warnings {
             if *warning != DecisionReason::RegressionWarning {
                 return Err(XtaskError::InvalidInput(
-                    "decision_summary.warnings may only contain `regression_warning`"
-                        .to_string(),
+                    "decision_summary.warnings may only contain `regression_warning`".to_string(),
                 ));
             }
         }
@@ -1366,8 +1361,7 @@ impl EvidenceSummary {
         for warning in &self.warnings {
             if *warning != DecisionReason::RegressionWarning {
                 return Err(XtaskError::InvalidInput(
-                    "evidence_summary.warnings may only contain `regression_warning`"
-                        .to_string(),
+                    "evidence_summary.warnings may only contain `regression_warning`".to_string(),
                 ));
             }
         }
@@ -1826,9 +1820,7 @@ fn validate_analysis_basis_reference(
     Ok(artifact)
 }
 
-fn expected_open_blockers(
-    candidate: Option<&RecommendationCandidateEntry>,
-) -> Vec<DecisionReason> {
+fn expected_open_blockers(candidate: Option<&RecommendationCandidateEntry>) -> Vec<DecisionReason> {
     let mut blockers = Vec::new();
     for hold_reason in candidate
         .map(|candidate| candidate.hold_reasons.as_slice())
@@ -1848,7 +1840,9 @@ fn expected_open_blockers(
     blockers
 }
 
-fn expected_missing_evidence(candidate: Option<&RecommendationCandidateEntry>) -> Vec<EvidenceState> {
+fn expected_missing_evidence(
+    candidate: Option<&RecommendationCandidateEntry>,
+) -> Vec<EvidenceState> {
     let mut missing = Vec::new();
     for hold_reason in candidate
         .map(|candidate| candidate.hold_reasons.as_slice())
@@ -1884,8 +1878,8 @@ fn expected_decision_status(
     candidate: Option<&RecommendationCandidateEntry>,
     evidence_summary: &EvidenceSummary,
 ) -> DecisionStatus {
-    let has_evidence_gaps =
-        !evidence_summary.missing_evidence.is_empty() || !evidence_summary.stale_evidence.is_empty();
+    let has_evidence_gaps = !evidence_summary.missing_evidence.is_empty()
+        || !evidence_summary.stale_evidence.is_empty();
     match candidate {
         Some(candidate)
             if candidate.promotion_readiness == PromotionReadiness::Ready

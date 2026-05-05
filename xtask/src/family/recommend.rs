@@ -18,8 +18,8 @@ use crate::family::promotion_artifacts::{
 };
 use serde::Deserialize;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
-use std::collections::BTreeSet;
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -338,8 +338,8 @@ fn decision_status_for(
     top_candidate: Option<&RecommendationCandidateEntry>,
     evidence_summary: &EvidenceSummary,
 ) -> DecisionStatus {
-    let has_evidence_gaps =
-        !evidence_summary.missing_evidence.is_empty() || !evidence_summary.stale_evidence.is_empty();
+    let has_evidence_gaps = !evidence_summary.missing_evidence.is_empty()
+        || !evidence_summary.stale_evidence.is_empty();
     match top_candidate {
         Some(candidate)
             if candidate.promotion_readiness == PromotionReadiness::Ready
