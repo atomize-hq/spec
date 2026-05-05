@@ -5,16 +5,20 @@ use crate::family::coverage::{
 };
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
-    FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically,
+    FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,
+    FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, write_bytes_atomically,
 };
 use crate::family::promotion_artifacts::{
-    CandidateStatus, ConfidenceLevel, DecisionReason, DecisionStatus, DecisionSummary,
+    CORPUS_PROGRAM_DECISION_SCHEMA_VERSION, CandidateStatus, ConfidenceLevel,
+    CorpusProgramBasisSnapshot, CorpusProgramDecisionAction, CorpusProgramDecisionArtifact,
+    CorpusProgramDecisionBasisCode, DecisionReason, DecisionStatus, DecisionSummary,
     DifficultyTier, EvidenceState, EvidenceSummary, FamilyCoverageArtifact,
     FamilyRecommendationAnalysisArtifact, HoldReason, NextStepDetail, NextStepStatus,
-    PromotionArtifactKind, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-    RecommendationCandidateEntry, RecommendationConfidence, RecommendationDelta,
-    RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
-    UnsupportedClusterEntry, candidate_qualifies_for_ranked_status,
+    PivotTargetClass, PromotionArtifactKind, PromotionReadiness,
+    RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RecommendationCandidateEntry, RecommendationConfidence,
+    RecommendationDelta, RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
+    RequiredNextAction, UnsupportedClusterEntry, candidate_qualifies_for_ranked_status,
+    corpus_program_basis_snapshot,
 };
 use serde::Deserialize;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
@@ -27,6 +31,11 @@ use std::path::Path;
 pub(crate) fn run(workspace_root: &Path, format: &str) -> Result<(), XtaskError> {
     let mut stdout = io::stdout().lock();
     run_with_writer(workspace_root, format, &mut stdout)
+}
+
+pub(crate) fn run_corpus_decision(workspace_root: &Path, format: &str) -> Result<(), XtaskError> {
+    let mut stdout = io::stdout().lock();
+    run_corpus_decision_with_writer(workspace_root, format, &mut stdout)
 }
 
 pub(crate) fn run_with_writer<W: Write>(
@@ -53,6 +62,36 @@ pub(crate) fn run_with_writer<W: Write>(
     })?;
     writer.flush().map_err(|error| {
         XtaskError::WriteFailure(format!("failed to flush recommendation output: {error}"))
+    })
+}
+
+pub(crate) fn run_corpus_decision_with_writer<W: Write>(
+    workspace_root: &Path,
+    format: &str,
+    writer: &mut W,
+) -> Result<(), XtaskError> {
+    if format != "json" {
+        return Err(XtaskError::InvalidInput(format!(
+            "family corpus-decision only supports `--format json`, found `{format}`"
+        )));
+    }
+
+    let (analysis_basis, analysis_basis_sha256) = load_analysis_basis(workspace_root)?;
+    let artifact = build_corpus_program_decision_artifact(
+        current_timestamp_rfc3339()?,
+        analysis_basis_sha256,
+        &analysis_basis,
+    )?;
+    let latest_bytes = effective_corpus_program_decision_bytes(workspace_root, artifact)?;
+    writer.write_all(&latest_bytes).map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to write corpus-program decision output: {error}"
+        ))
+    })?;
+    writer.flush().map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to flush corpus-program decision output: {error}"
+        ))
     })
 }
 
@@ -86,6 +125,125 @@ pub(crate) fn build_recommendation_analysis_artifact(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DerivedCorpusProgramDecision {
+    pub decision_action: CorpusProgramDecisionAction,
+    pub decision_basis_code: CorpusProgramDecisionBasisCode,
+    pub pivot_target_class: Option<PivotTargetClass>,
+    pub required_next_action: RequiredNextAction,
+    pub summary: String,
+}
+
+pub(crate) fn derive_corpus_program_decision_contract(
+    basis: &FamilyRecommendationAnalysisArtifact,
+) -> Result<DerivedCorpusProgramDecision, XtaskError> {
+    let snapshot = corpus_program_basis_snapshot(basis);
+    let top_candidate = basis.ranked_candidates.first();
+
+    if snapshot.decision_status == DecisionStatus::Recommended {
+        return Ok(DerivedCorpusProgramDecision {
+            decision_action: CorpusProgramDecisionAction::PivotToFamilyPromotionRun,
+            decision_basis_code: CorpusProgramDecisionBasisCode::PromotionReadyCandidate,
+            pivot_target_class: Some(PivotTargetClass::FamilyPromotionRun),
+            required_next_action: RequiredNextAction::AuthorFamilyPromotionPlan,
+            summary: format!(
+                "Recommendation basis is `recommended`, so corpus run 1 stays unspent and the repo should pivot to a bounded family-promotion run for `{}`.",
+                snapshot
+                    .top_candidate_id
+                    .as_deref()
+                    .unwrap_or("the current top candidate")
+            ),
+        });
+    }
+
+    if snapshot.decision_status == DecisionStatus::BlockedForNow
+        && (!snapshot.missing_evidence.is_empty() || !snapshot.stale_evidence.is_empty())
+    {
+        return Ok(DerivedCorpusProgramDecision {
+            decision_action: CorpusProgramDecisionAction::SpendCorpusRun1,
+            decision_basis_code: CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence,
+            pivot_target_class: None,
+            required_next_action: RequiredNextAction::AuthorCorpusExpansionPlan,
+            summary: format!(
+                "Recommendation basis is blocked by missing or stale evidence for `{}`, so corpus run 1 should be spent on bounded corpus expansion rather than a promotion run.",
+                snapshot
+                    .top_candidate_id
+                    .as_deref()
+                    .unwrap_or("the current top candidate")
+            ),
+        });
+    }
+
+    if top_candidate.is_some_and(|candidate| {
+        candidate.next_step_status == NextStepStatus::DurableHold
+            && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
+    }) && snapshot.decision_status == DecisionStatus::NotRecommended
+        && snapshot.open_blockers == vec![DecisionReason::HelperSurfaceNotPromotable]
+        && snapshot.missing_evidence.is_empty()
+        && snapshot.stale_evidence.is_empty()
+    {
+        return Ok(DerivedCorpusProgramDecision {
+            decision_action: CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn,
+            decision_basis_code: CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface,
+            pivot_target_class: Some(PivotTargetClass::ArchitectureSharedCoreFollowOn),
+            required_next_action: RequiredNextAction::AuthorArchitectureFollowOnPlan,
+            summary: format!(
+                "Recommendation basis holds `{}` as a durable non-promotable helper surface, so corpus run 1 stays unspent and the repo should pivot to an architecture shared-core follow-on plan.",
+                snapshot
+                    .top_candidate_id
+                    .as_deref()
+                    .unwrap_or("the current top candidate")
+            ),
+        });
+    }
+
+    if snapshot.decision_status == DecisionStatus::BlockedForNow {
+        return Ok(DerivedCorpusProgramDecision {
+            decision_action: CorpusProgramDecisionAction::PivotToRecommendationPolicyRun,
+            decision_basis_code: CorpusProgramDecisionBasisCode::PolicyInterpretationBlocker,
+            pivot_target_class: Some(PivotTargetClass::RecommendationPolicyRun),
+            required_next_action: RequiredNextAction::AuthorRecommendationPolicyPlan,
+            summary: "Recommendation basis is blocked without a bounded evidence-spend path, so the repo should pivot to a recommendation-policy follow-on before spending corpus run 1.".to_string(),
+        });
+    }
+
+    Ok(DerivedCorpusProgramDecision {
+        decision_action: CorpusProgramDecisionAction::Stop,
+        decision_basis_code: CorpusProgramDecisionBasisCode::NoActionableCandidate,
+        pivot_target_class: None,
+        required_next_action: RequiredNextAction::RecordStopWithoutNewMilestone,
+        summary: "Recommendation basis exposes no actionable next family move, so corpus run 1 remains unspent and no new milestone is authorized from this basis.".to_string(),
+    })
+}
+
+pub(crate) fn build_corpus_program_decision_artifact(
+    generated_at: String,
+    analysis_basis_sha256: String,
+    basis: &FamilyRecommendationAnalysisArtifact,
+) -> Result<CorpusProgramDecisionArtifact, XtaskError> {
+    let derived = derive_corpus_program_decision_contract(basis)?;
+    Ok(CorpusProgramDecisionArtifact {
+        schema_version: CORPUS_PROGRAM_DECISION_SCHEMA_VERSION,
+        artifact_kind: PromotionArtifactKind::CorpusProgramDecision,
+        generated_at,
+        analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+        analysis_basis_sha256,
+        basis_snapshot: CorpusProgramBasisSnapshot {
+            recommendation_status: basis.recommendation_status,
+            decision_status: basis.decision_summary.decision_status,
+            top_candidate_id: basis.decision_summary.top_candidate_id.clone(),
+            open_blockers: basis.decision_summary.open_blockers.clone(),
+            missing_evidence: basis.evidence_summary.missing_evidence.clone(),
+            stale_evidence: basis.evidence_summary.stale_evidence.clone(),
+        },
+        decision_action: derived.decision_action,
+        decision_basis_code: derived.decision_basis_code,
+        pivot_target_class: derived.pivot_target_class,
+        required_next_action: derived.required_next_action,
+        summary: derived.summary,
+    })
+}
+
 fn effective_coverage_for_recommend(
     workspace_root: &Path,
 ) -> Result<CoverageRunOutput, XtaskError> {
@@ -104,6 +262,27 @@ fn effective_coverage_for_recommend(
     write_latest(workspace_root, &pending)
 }
 
+fn load_analysis_basis(
+    workspace_root: &Path,
+) -> Result<(FamilyRecommendationAnalysisArtifact, String), XtaskError> {
+    let path = workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+    let bytes = fs::read(&path).map_err(|error| {
+        XtaskError::WriteFailure(format!(
+            "failed to read analysis basis `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    let artifact: FamilyRecommendationAnalysisArtifact =
+        serde_json::from_slice(&bytes).map_err(|error| {
+            XtaskError::InvalidInput(format!(
+                "failed to deserialize analysis basis `{}`: {error}",
+                path.display()
+            ))
+        })?;
+    artifact.validate(workspace_root)?;
+    Ok((artifact, inventory_sha256_hex(&bytes)))
+}
+
 fn effective_recommendation_bytes(
     workspace_root: &Path,
     mut artifact: FamilyRecommendationAnalysisArtifact,
@@ -118,6 +297,24 @@ fn effective_recommendation_bytes(
     }
     artifact.delta_from_previous =
         delta_from_previous(existing.as_ref().map(|(artifact, _)| artifact), &artifact);
+    let latest_bytes = render_json_bytes(&artifact)?;
+    write_bytes_atomically(&workspace_root.join(latest_path), &latest_bytes)?;
+    Ok(latest_bytes)
+}
+
+fn effective_corpus_program_decision_bytes(
+    workspace_root: &Path,
+    artifact: CorpusProgramDecisionArtifact,
+) -> Result<Vec<u8>, XtaskError> {
+    let latest_path = FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH;
+    let existing = load_existing_corpus_program_decision_artifact(workspace_root);
+    if let Some((existing_artifact, existing_bytes)) = &existing
+        && normalized_corpus_program_decision_for_determinism(existing_artifact)
+            == normalized_corpus_program_decision_for_determinism(&artifact)
+    {
+        return Ok(existing_bytes.clone());
+    }
+
     let latest_bytes = render_json_bytes(&artifact)?;
     write_bytes_atomically(&workspace_root.join(latest_path), &latest_bytes)?;
     Ok(latest_bytes)
@@ -143,12 +340,30 @@ fn load_existing_recommendation_artifact(
     Some((artifact, bytes))
 }
 
+fn load_existing_corpus_program_decision_artifact(
+    workspace_root: &Path,
+) -> Option<(CorpusProgramDecisionArtifact, Vec<u8>)> {
+    let path = workspace_root.join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
+    let bytes = fs::read(path).ok()?;
+    let artifact: CorpusProgramDecisionArtifact = serde_json::from_slice(&bytes).ok()?;
+    artifact.validate(workspace_root).ok()?;
+    Some((artifact, bytes))
+}
+
 fn normalized_recommendation_for_determinism(
     artifact: &FamilyRecommendationAnalysisArtifact,
 ) -> FamilyRecommendationAnalysisArtifact {
     let mut normalized = artifact.clone();
     normalized.generated_at.clear();
     normalized.delta_from_previous = RecommendationDelta::normalized_placeholder();
+    normalized
+}
+
+fn normalized_corpus_program_decision_for_determinism(
+    artifact: &CorpusProgramDecisionArtifact,
+) -> CorpusProgramDecisionArtifact {
+    let mut normalized = artifact.clone();
+    normalized.generated_at.clear();
     normalized
 }
 

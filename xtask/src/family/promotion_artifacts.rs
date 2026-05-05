@@ -3,7 +3,8 @@ use crate::XtaskError;
 use crate::family::coverage::current_timestamp_rfc3339;
 use crate::family::inventory::{inventory_sha256_hex, render_snapshot_bytes};
 use crate::family::paths::{
-    FAMILY_COVERAGE_LATEST_PATH, FAMILY_PROMOTION_ARTIFACT_ROOT, FAMILY_PROMOTION_INVENTORY_DIR,
+    FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,
+    FAMILY_PROMOTION_ARTIFACT_ROOT, FAMILY_PROMOTION_INVENTORY_DIR,
     FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId, M27_CORPUS_MANIFEST_PATH,
     family_promotion_blocker_path, family_promotion_execution_path,
     family_recommendation_latest_path, validate_existing_repo_relative_path,
@@ -22,6 +23,7 @@ pub(crate) const RECOMMENDATION_SCHEMA_VERSION: u64 = 1;
 pub(crate) const FAMILY_RECOMMENDATION_SCHEMA_VERSION: u64 = 2;
 pub(crate) const COVERAGE_SCHEMA_VERSION: u64 = 1;
 pub(crate) const RECOMMENDATION_ANALYSIS_SCHEMA_VERSION: u64 = 4;
+pub(crate) const CORPUS_PROGRAM_DECISION_SCHEMA_VERSION: u64 = 1;
 const PROMOTION_EXECUTION_SCHEMA_VERSION: u64 = 2;
 const PROMOTION_BLOCKER_SCHEMA_VERSION: u64 = 2;
 
@@ -31,6 +33,7 @@ pub(crate) enum PromotionArtifactKind {
     FamilyRecommendation,
     FamilyCoverageSnapshot,
     FamilyRecommendationAnalysis,
+    CorpusProgramDecision,
     PromotionExecution,
     PromotionBlocker,
 }
@@ -171,6 +174,44 @@ pub(crate) enum ConfidenceLevel {
     Low,
     Medium,
     High,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CorpusProgramDecisionAction {
+    Stop,
+    SpendCorpusRun1,
+    PivotToFamilyPromotionRun,
+    PivotToRecommendationPolicyRun,
+    PivotToArchitectureSharedCoreFollowOn,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CorpusProgramDecisionBasisCode {
+    PromotionReadyCandidate,
+    PlausibleCandidateMissingEvidence,
+    DurableNonPromotableHelperSurface,
+    NoActionableCandidate,
+    PolicyInterpretationBlocker,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RequiredNextAction {
+    RecordStopWithoutNewMilestone,
+    AuthorCorpusExpansionPlan,
+    AuthorFamilyPromotionPlan,
+    AuthorRecommendationPolicyPlan,
+    AuthorArchitectureFollowOnPlan,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PivotTargetClass {
+    FamilyPromotionRun,
+    RecommendationPolicyRun,
+    ArchitectureSharedCoreFollowOn,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -408,6 +449,34 @@ pub(crate) struct FamilyRecommendationAnalysisArtifact {
     pub decision_summary: DecisionSummary,
     pub evidence_summary: EvidenceSummary,
     pub delta_from_previous: RecommendationDelta,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CorpusProgramDecisionArtifact {
+    pub schema_version: u64,
+    pub artifact_kind: PromotionArtifactKind,
+    pub generated_at: String,
+    pub analysis_basis_path: String,
+    pub analysis_basis_sha256: String,
+    pub basis_snapshot: CorpusProgramBasisSnapshot,
+    pub decision_action: CorpusProgramDecisionAction,
+    pub decision_basis_code: CorpusProgramDecisionBasisCode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pivot_target_class: Option<PivotTargetClass>,
+    pub required_next_action: RequiredNextAction,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CorpusProgramBasisSnapshot {
+    pub recommendation_status: RecommendationStatus,
+    pub decision_status: DecisionStatus,
+    pub top_candidate_id: Option<String>,
+    pub open_blockers: Vec<DecisionReason>,
+    pub missing_evidence: Vec<EvidenceState>,
+    pub stale_evidence: Vec<EvidenceState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -721,6 +790,11 @@ pub(crate) fn run_validate_artifact(
         }
         ArtifactPath::RecommendationAnalysis => {
             let artifact: FamilyRecommendationAnalysisArtifact =
+                serde_json::from_slice(&bytes).map_err(deserialize_error(&absolute))?;
+            artifact.validate(workspace_root)?;
+        }
+        ArtifactPath::CorpusProgramDecision => {
+            let artifact: CorpusProgramDecisionArtifact =
                 serde_json::from_slice(&bytes).map_err(deserialize_error(&absolute))?;
             artifact.validate(workspace_root)?;
         }
@@ -1107,6 +1181,61 @@ impl FamilyRecommendationAnalysisArtifact {
                 "recommendation analysis decision_summary.top_candidate_id must match the first ranked candidate".to_string(),
             ));
         }
+        Ok(())
+    }
+}
+
+impl CorpusProgramDecisionArtifact {
+    pub(crate) fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+        if self.schema_version != CORPUS_PROGRAM_DECISION_SCHEMA_VERSION {
+            return Err(XtaskError::InvalidInput(format!(
+                "corpus-program decision schema_version must be {CORPUS_PROGRAM_DECISION_SCHEMA_VERSION}, found {}",
+                self.schema_version
+            )));
+        }
+        if self.artifact_kind != PromotionArtifactKind::CorpusProgramDecision {
+            return Err(XtaskError::InvalidInput(
+                "corpus-program decision artifact_kind must be `corpus_program_decision`"
+                    .to_string(),
+            ));
+        }
+        if !looks_like_utc_timestamp(&self.generated_at) {
+            return Err(XtaskError::InvalidInput(
+                "corpus-program decision generated_at must be a UTC RFC3339 timestamp".to_string(),
+            ));
+        }
+        if self.summary.trim().is_empty() || self.summary.contains('\n') {
+            return Err(XtaskError::InvalidInput(
+                "corpus-program decision summary must be a single non-empty line".to_string(),
+            ));
+        }
+
+        let analysis_basis = validate_analysis_basis_reference(
+            workspace_root,
+            &self.analysis_basis_path,
+            &self.analysis_basis_sha256,
+            "corpus-program decision",
+        )?;
+        let expected_snapshot = corpus_program_basis_snapshot(&analysis_basis);
+        if self.basis_snapshot != expected_snapshot {
+            return Err(XtaskError::InvalidInput(
+                "corpus-program decision basis_snapshot must exactly match the validated analysis basis".to_string(),
+            ));
+        }
+
+        let expected =
+            crate::family::recommend::derive_corpus_program_decision_contract(&analysis_basis)?;
+        if self.decision_action != expected.decision_action
+            || self.decision_basis_code != expected.decision_basis_code
+            || self.pivot_target_class != expected.pivot_target_class
+            || self.required_next_action != expected.required_next_action
+            || self.summary != expected.summary
+        {
+            return Err(XtaskError::InvalidInput(
+                "corpus-program decision action, basis code, pivot target, next action, and summary must match the validated analysis basis".to_string(),
+            ));
+        }
+
         Ok(())
     }
 }
@@ -1636,6 +1765,7 @@ enum ArtifactPath {
     RecommendationByFamily { family: String },
     Coverage,
     RecommendationAnalysis,
+    CorpusProgramDecision,
     PromotionExecution { family: String, run_id: String },
     PromotionBlocker { family: String, run_id: String },
 }
@@ -1651,6 +1781,9 @@ fn classify_artifact_path(path: &Path) -> Result<ArtifactPath, XtaskError> {
     }
     if path == Path::new(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH) {
         return Ok(ArtifactPath::RecommendationAnalysis);
+    }
+    if path == Path::new(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH) {
+        return Ok(ArtifactPath::CorpusProgramDecision);
     }
 
     let components = path
@@ -1792,6 +1925,19 @@ fn load_analysis_basis_artifact(
         serde_json::from_slice(&bytes).map_err(deserialize_error(&path))?;
     artifact.validate(workspace_root)?;
     Ok((artifact, inventory_sha256_hex(&bytes)))
+}
+
+pub(crate) fn corpus_program_basis_snapshot(
+    artifact: &FamilyRecommendationAnalysisArtifact,
+) -> CorpusProgramBasisSnapshot {
+    CorpusProgramBasisSnapshot {
+        recommendation_status: artifact.recommendation_status,
+        decision_status: artifact.decision_summary.decision_status,
+        top_candidate_id: artifact.decision_summary.top_candidate_id.clone(),
+        open_blockers: artifact.decision_summary.open_blockers.clone(),
+        missing_evidence: artifact.evidence_summary.missing_evidence.clone(),
+        stale_evidence: artifact.evidence_summary.stale_evidence.clone(),
+    }
 }
 
 fn validate_analysis_basis_reference(

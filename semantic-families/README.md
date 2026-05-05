@@ -88,6 +88,28 @@ last state: it stays visible, but the M33 decision surface records it as
 the bounded second-language claim beyond
 `function.arithmetic_leaf.monotone_up.v1`.
 
+M34 adds one bounded sibling decision artifact:
+`.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`.
+Produce it with:
+
+- `cargo xtask family corpus-decision --format json`
+
+That command reads the existing recommendation analysis artifact, validates it,
+and emits one explicit next-step contract:
+
+- `stop`
+- `spend_corpus_run_1`
+- `pivot_to_family_promotion_run`
+- `pivot_to_recommendation_policy_run`
+- `pivot_to_architecture_shared_core_follow_on`
+
+For the current live helper-surface wedge, the emitted M34 decision is
+`pivot_to_architecture_shared_core_follow_on` with
+`decision_basis_code = "durable_non_promotable_helper_surface"` and
+`required_next_action = "author_architecture_follow_on_plan"`.
+That means corpus run `1` remains unspent. It does not mean M34 implemented the
+shared-core follow-on.
+
 ### Corpus Source Kinds
 
 The Rust function corpus uses explicit source kinds:

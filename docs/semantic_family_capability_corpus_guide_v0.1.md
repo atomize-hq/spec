@@ -151,6 +151,9 @@ These are read-side analysis outputs built over the corpus.
   pressure the corpus shows
 - `recommendation.latest.json` says what next family, if any, looks worthy of
   promotion under the current rules
+- `corpus-program-decision.latest.json` says whether the repo should stop,
+  spend corpus run `1`, or pivot away from corpus work based on the validated
+  recommendation analysis basis
 
 Under the M33 decision surface, that same
 `recommendation.latest.json` artifact also carries a top-level decision verdict:
@@ -158,6 +161,25 @@ Under the M33 decision surface, that same
 - `recommended`
 - `blocked_for_now`
 - `not_recommended`
+
+M34 does not rewrite that recommendation artifact. It consumes
+`recommendation.latest.json` and emits the bounded next-step contract with:
+
+- `cargo xtask family corpus-decision --format json`
+
+The M34 action vocabulary is:
+
+- `stop`
+- `spend_corpus_run_1`
+- `pivot_to_family_promotion_run`
+- `pivot_to_recommendation_policy_run`
+- `pivot_to_architecture_shared_core_follow_on`
+
+For the current helper-surface wedge, the M34 output is
+`pivot_to_architecture_shared_core_follow_on`, which means corpus run `1`
+stays unspent and the next bounded task is
+`author_architecture_follow_on_plan`. It does not mean M34 landed shared-core
+implementation.
 
 These artifacts interpret the corpus. They do not define the semantic graph.
 

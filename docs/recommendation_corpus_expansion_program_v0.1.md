@@ -305,6 +305,7 @@ Use this when:
 | Baseline | `M27.75` | 2026-05-01 | `3 -> 5` sources | `no_strong_candidate` | `money/round` gains second real-example hit; arithmetic-shape candidate becomes visible | Continue program |
 | Checkpoint | `M27.8R` | 2026-05-02 | no corpus delta; harness-truth repair only | `ranked` | arithmetic-shape cluster becomes `ready`; `money/round` remains visible as the held helper surface later frozen as durable hold in M27.9B | Switch to promotion-focused milestone |
 | Closeout checkpoint | `M27.9` stop-state | 2026-05-02 | no corpus delta; semantic implementation landed, accounting target failed | `no_strong_candidate` | arithmetic-ready pressure retires; `money/round` remains visible but is not the next family, and corpus run `1` stays unspent pending the M27.9B freeze | Hold corpus program; close out accounting |
+| Decision contract | `M34` | 2026-05-05 | no corpus delta; read-side decision contract only | `no_strong_candidate` | `money/round` remains a durable helper-surface hold under `helper_surface_not_promotable` | `pivot_to_architecture_shared_core_follow_on`; keep corpus run `1` unspent |
 | 1 | — | — | — | — | — | — |
 | 2 | — | — | — | — | — | — |
 | 3 | — | — | — | — | — | — |
@@ -327,14 +328,32 @@ When a new run completes, update the log with:
 
 ## Immediate Next-Step Guidance
 
-As of the `M27.9` stop-state closeout, the recommendation is:
+As of the M34 decision-contract closeout, the repo now records two distinct
+truth surfaces:
+
+- `recommendation.latest.json` is the M33 recommendation-analysis input
+- `corpus-program-decision.latest.json` is the M34 stop/spend/pivot output
+
+Run the bounded decision command with:
+
+```bash
+cargo xtask family corpus-decision --format json
+```
+
+For the current live wedge, that artifact emits:
+
+- `decision_action = "pivot_to_architecture_shared_core_follow_on"`
+- `decision_basis_code = "durable_non_promotable_helper_surface"`
+- `required_next_action = "author_architecture_follow_on_plan"`
+
+The operational guidance is therefore:
 
 - do **not** commit to a long 5-10 milestone corpus roadmap
 - do **not** spend corpus run `1` yet
 - do **not** reopen arithmetic-ready pressure as the default next-step driver
-- do **not** treat M28 as part of this closeout
+- do **not** claim that M34 implemented the architecture/shared-core follow-on
 - keep this document as the corpus fallback ledger while the repo records the
-  truthful stop-state
+  truthful bounded pivot decision
 - keep `money/round` visible without treating it as the next family
 
 The current evidence no longer supports "one more corpus run by default."
@@ -345,4 +364,5 @@ The truthful closeout state is `28 / 17 / 0 / 11` with
 under `helper_surface_not_promotable`. In the M33 vocabulary, a plausible
 future candidate with evidence gaps would read `blocked_for_now`, while a truly
 promotion-worthy candidate would read `recommended`. Corpus run `1` remains
-unspent and unauthorized by default.
+unspent, and the explicit M34 next step is
+`pivot_to_architecture_shared_core_follow_on`, not silent corpus continuation.

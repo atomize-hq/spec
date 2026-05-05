@@ -10,6 +10,8 @@ pub const FAMILY_COVERAGE_LATEST_PATH: &str =
     ".semantic-family-artifacts/family-promotion/analysis/coverage.latest.json";
 pub const FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH: &str =
     ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json";
+pub const FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH: &str =
+    ".semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json";
 pub const M27_CORPUS_MANIFEST_PATH: &str = "semantic-families/corpus/rust-function.toml";
 pub const REQUIRED_BUCKETS: [&str; 4] = [
     "aligned",

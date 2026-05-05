@@ -93,6 +93,10 @@ enum FamilyCommand {
         #[arg(long, default_value = "json")]
         format: String,
     },
+    CorpusDecision {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
     RefreshPromotionRecommendation {
         family: String,
         #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
@@ -196,6 +200,9 @@ where
             FamilyCommand::Inventory { format } => inventory::run(workspace_root, &format),
             FamilyCommand::Coverage { format } => coverage::run(workspace_root, &format),
             FamilyCommand::Recommend { format } => recommend::run(workspace_root, &format),
+            FamilyCommand::CorpusDecision { format } => {
+                recommend::run_corpus_decision(workspace_root, &format)
+            }
             FamilyCommand::RefreshPromotionRecommendation {
                 family,
                 target_language,
@@ -287,20 +294,24 @@ mod tests {
         manifest::Routing,
         manifest::parse_manifest_file,
         paths::{
-            FAMILY_COVERAGE_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId,
-            PacketPaths, REQUIRED_BUCKETS, family_recommendation_latest_path,
+            FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,
+            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId, PacketPaths, REQUIRED_BUCKETS,
+            family_recommendation_latest_path,
         },
         promotion_artifacts::{
             ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CandidateStatus,
-            CommandRecord, ConfidenceLevel, DecisionReason, DecisionStatus, DecisionSummary,
+            CommandRecord, ConfidenceLevel, CorpusProgramBasisSnapshot,
+            CorpusProgramDecisionAction, CorpusProgramDecisionArtifact,
+            CorpusProgramDecisionBasisCode, DecisionReason, DecisionStatus, DecisionSummary,
             DifficultyTier, EvidenceState, EvidenceSummary, FamilyCoverageArtifact,
             FamilyRecommendationAnalysisArtifact, FamilyRecommendationArtifact, GateStatus,
             GateSummary, HoldReason, MachineEvidence, MachineEvidenceKind, NextStepDetail,
-            NextStepStatus, PromotionApprovals, PromotionArtifactKind, PromotionBlockerArtifact,
-            PromotionExecutionArtifact, PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-            RECOMMENDATION_SCHEMA_VERSION, RankedCandidate, RecommendationCandidateEntry,
-            RecommendationConfidence, RecommendationDelta, RecommendationDifficulty,
-            RecommendationLeverage, RecommendationStatus, TargetLanguage, UnsupportedClusterEntry,
+            NextStepStatus, PivotTargetClass, PromotionApprovals, PromotionArtifactKind,
+            PromotionBlockerArtifact, PromotionExecutionArtifact, PromotionReadiness,
+            RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RECOMMENDATION_SCHEMA_VERSION, RankedCandidate,
+            RecommendationCandidateEntry, RecommendationConfidence, RecommendationDelta,
+            RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
+            RequiredNextAction, TargetLanguage, UnsupportedClusterEntry,
         },
         prove, recommend,
         report::{
@@ -3451,6 +3462,33 @@ gate_d = true
     }
 
     #[test]
+    fn corpus_decision_maps_helper_surface_wedge_to_architecture_follow_on() {
+        let artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(
+            derived.decision_action,
+            CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
+        );
+        assert_eq!(
+            derived.pivot_target_class,
+            Some(PivotTargetClass::ArchitectureSharedCoreFollowOn)
+        );
+        assert_eq!(
+            derived.required_next_action,
+            RequiredNextAction::AuthorArchitectureFollowOnPlan
+        );
+    }
+
+    #[test]
     fn recommendation_policy_ranks_known_overlap_candidate_with_strong_evidence() {
         let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
             "strong-known-cluster",
@@ -3656,6 +3694,84 @@ gate_d = true
     }
 
     #[test]
+    fn corpus_decision_command_path_writes_same_bytes_for_unchanged_basis() {
+        let temp_dir = workspace_root();
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+
+        let mut first_stdout = Vec::new();
+        recommend::run_corpus_decision_with_writer(temp_dir.path(), "json", &mut first_stdout)
+            .unwrap();
+
+        let artifact_path = temp_dir
+            .path()
+            .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
+        let first_written_bytes = fs::read(&artifact_path).unwrap();
+        assert_eq!(first_stdout, first_written_bytes);
+
+        let mut second_stdout = Vec::new();
+        recommend::run_corpus_decision_with_writer(temp_dir.path(), "json", &mut second_stdout)
+            .unwrap();
+
+        let second_written_bytes = fs::read(&artifact_path).unwrap();
+        assert_eq!(second_stdout, second_written_bytes);
+        assert_eq!(first_stdout, second_stdout);
+        assert_eq!(first_written_bytes, second_written_bytes);
+
+        let artifact: CorpusProgramDecisionArtifact =
+            serde_json::from_slice(&second_written_bytes).unwrap();
+        assert_eq!(
+            artifact.analysis_basis_path,
+            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH
+        );
+        assert_eq!(artifact.analysis_basis_sha256, analysis_basis_sha256);
+        assert_eq!(
+            artifact.basis_snapshot.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+        assert_eq!(
+            artifact.basis_snapshot.decision_status,
+            DecisionStatus::NotRecommended
+        );
+        assert_eq!(
+            artifact.basis_snapshot.top_candidate_id.as_deref(),
+            Some("z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0")
+        );
+        assert_eq!(
+            artifact.basis_snapshot.open_blockers,
+            vec![DecisionReason::HelperSurfaceNotPromotable]
+        );
+        assert!(artifact.basis_snapshot.missing_evidence.is_empty());
+        assert!(artifact.basis_snapshot.stale_evidence.is_empty());
+        assert_eq!(
+            artifact.decision_action,
+            CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
+        );
+        assert_eq!(
+            artifact.decision_basis_code,
+            CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
+        );
+        assert_eq!(
+            artifact.pivot_target_class,
+            Some(PivotTargetClass::ArchitectureSharedCoreFollowOn)
+        );
+        assert_eq!(
+            artifact.required_next_action,
+            RequiredNextAction::AuthorArchitectureFollowOnPlan
+        );
+
+        let validate_code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH,
+            ],
+        );
+        assert_eq!(validate_code, 0);
+    }
+
+    #[test]
     fn artifact_schema_accepts_execution_report_with_real_proof_artifact_paths() {
         let temp_dir = workspace_root();
         seed_inventory_repo_truth(temp_dir.path());
@@ -3743,6 +3859,56 @@ gate_d = true
         );
 
         assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_corpus_decision_with_contradictory_action_for_helper_surface_basis()
+    {
+        let temp_dir = workspace_root();
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+        let decision_path = temp_dir
+            .path()
+            .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
+
+        write_json_file(
+            &decision_path,
+            &CorpusProgramDecisionArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::CorpusProgramDecision,
+                generated_at: "2026-05-05T02:00:00Z".to_string(),
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                basis_snapshot: CorpusProgramBasisSnapshot {
+                    recommendation_status: RecommendationStatus::NoStrongCandidate,
+                    decision_status: DecisionStatus::NotRecommended,
+                    top_candidate_id: Some(
+                        "z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0"
+                            .to_string(),
+                    ),
+                    open_blockers: vec![DecisionReason::HelperSurfaceNotPromotable],
+                    missing_evidence: Vec::new(),
+                    stale_evidence: Vec::new(),
+                },
+                decision_action: CorpusProgramDecisionAction::SpendCorpusRun1,
+                decision_basis_code:
+                    CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence,
+                pivot_target_class: None,
+                required_next_action: RequiredNextAction::AuthorCorpusExpansionPlan,
+                summary: "Contradictory fixture.".to_string(),
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
     }
 
     #[test]
