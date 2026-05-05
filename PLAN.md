@@ -1,864 +1,830 @@
-# M33 - Recommendation-Quality Promotion Decisions
+# M34 - Stop-Spend-Pivot Decision Contract
 
 Status: **authoritative implementation plan**  
 Base branch: **main**  
 Working branch: **feat/corpus-expansion**  
-Last rewritten: **2026-05-04**  
-Supersedes: **M32 - One Bounded Second-Language Promotion Path**  
-Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260504-201833.md`**  
+Last rewritten: **2026-05-05**  
+Supersedes: **M33 - Recommendation-Quality Promotion Decisions**  
+Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260504-233336.md`**  
 Related roadmap: **`docs/ai_promotion_and_multilanguage_milestones_v0.1.md`**  
 Program tracker: **`docs/recommendation_corpus_expansion_program_v0.1.md`**  
 Capability guide: **`docs/semantic_family_capability_corpus_guide_v0.1.md`**  
-Execution note: **Do not create `ORCH_PLAN.md` up front. Split into worktrees only if the schema contract is frozen and there is still enough isolated docs/test work to justify it.**  
-Foundation precondition: **Start from publish SHA `6a1051b601487710d631031171cfde92810f1581` or a direct descendant that still preserves the closed M32 artifact truth.**
+Live analysis basis: **`.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`**  
+Execution note: **Do not create `ORCH_PLAN.md` up front. This is one bounded `xtask` + docs milestone. Split work only after the schema and command names are frozen.**  
+Foundation precondition: **Start from commit `e7df8cbccfec0d7359d58d32ef17eaacd5a10946` or a direct descendant that preserves the closed M33 truth surface.**
 
 ## Objective
 
-Make the repo able to emit recommendation artifacts that carry the promotion
-decision argument, not just cluster visibility.
+Turn the current truthful M33 output into one explicit machine-readable next-step
+decision.
 
-After M33, a maintainer should be able to open the current recommendation
-artifact and answer five questions without stitching together chat context or
-adjacent proof files:
+After M34, a maintainer or agent should be able to answer one operational
+question without re-reading the corpus tracker, design doc, or chat history:
 
-1. Is a family recommended right now?
-2. If not, is it blocked for now or simply not the next move?
-3. What exact evidence is present, missing, or stale?
-4. What specifically blocks promotion?
-5. What changed since the last truthful recommendation?
+> Should the repo spend corpus run `1`, keep it unspent, or pivot away from
+> corpus work now?
 
-That is the full M33 claim.
+That answer must be emitted as a bounded artifact, not left as prose inference.
 
 ## Decision
 
-M33 ships as a bounded recommendation-quality hardening pass over the existing
-analysis and family-promotion artifact chain.
+M34 ships as a **bounded sibling decision artifact** under the existing family
+analysis tree:
 
-That means:
+- path:
+  `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+- producer command:
+  `cargo xtask family corpus-decision --format json`
+- input:
+  `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
 
-1. The main user surface is still the existing artifact tree under
-   `.semantic-family-artifacts/family-promotion/`.
-2. The primary visible payoff is a better
-   `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`,
-   not a new family or a new proof lane.
-3. M33 reuses the current M27/M32 coverage, ranking, validation, and promotion
-   artifact codepaths. It extends them explicitly instead of creating a new
-   policy subsystem.
-4. M33 keeps bounded second-language honesty. No artifact may imply repo-wide
-   multi-language readiness because M32 only proved one bounded lane for
-   `function.arithmetic_leaf.monotone_up.v1`.
+This is the smallest complete move.
+
+Do not reopen recommendation policy. Do not parse markdown program trackers at
+runtime. Do not widen into corpus accounting, family promotion execution, or
+shared-core implementation.
+
+M34 consumes the fixed M33 analysis artifact, derives one bounded next-step
+decision, validates it, writes it deterministically, and documents what that
+decision means.
 
 ## Problem Statement
 
-M32 is closed. Good.
+M33 closed the recommendation-honesty problem.
 
-The repo now has a real bounded second-language proof path, and the current
-analysis artifact is mechanically honest. But it is still too thin as a
-decision surface.
+The live branch now truthfully says:
 
-Today the current analysis artifact says:
-
-- path:
-  `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `schema_version = 3`
 - `recommendation_status = "no_strong_candidate"`
-- one visible candidate:
+- `decision_summary.decision_status = "not_recommended"`
+- top visible pressure is
   `unsupported_function_surface-e40675da6fa0`
-- that candidate is a durable hold centered on `money/round`
-- the current explanation is spread across:
-  `promotion_readiness`, `hold_reasons`, `next_step_status`,
-  `next_step_detail`, leverage counts, and implicit knowledge of why helper
-  surfaces are not promotable
+- durable blocker is `helper_surface_not_promotable`
+- `missing_evidence = []`
+- `stale_evidence = []`
 
-That output is truthful, but it still makes the maintainer do too much
-interpretation work.
+That is good output, but it still leaves one repo-level operator question
+unresolved:
 
-The missing value is not more proof plumbing. The missing value is a cleaner
-judgment surface:
+- spend corpus run `1`
+- keep it unspent
+- pivot away from corpus work
 
-- recommended
-- blocked for now
-- not recommended
-- why
-- what evidence is stale or missing
-- what changed since the last run
+Right now the repo can say "not this family." It still cannot say "therefore do
+this next" in a machine-readable, bounded, deterministic way.
 
-That is the gap M33 closes.
+That is the whole M34 gap.
+
+## Live Basis
+
+The current branch basis is fixed and must remain the canonical wedge during
+implementation:
+
+```json
+{
+  "recommendation_status": "no_strong_candidate",
+  "decision_status": "not_recommended",
+  "top_candidate_id": "z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0",
+  "open_blockers": ["helper_surface_not_promotable"],
+  "missing_evidence": [],
+  "stale_evidence": []
+}
+```
+
+The expected live M34 output for that basis is:
+
+- `decision_action = "pivot_to_architecture_shared_core_follow_on"`
+- `decision_basis_code = "durable_non_promotable_helper_surface"`
+- `required_next_action = "author_architecture_follow_on_plan"`
+
+This is deliberate. The current blocker is not missing corpus. It is that the
+visible helper-surface pressure is real but not promotable.
+
+## Step 0 - Scope Challenge
+
+### What already exists
+
+| Sub-problem | Existing code or artifact | Reuse decision |
+|---|---|---|
+| Coverage truth | `xtask/src/family/coverage.rs` and `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json` | Reuse unchanged. M34 does not rescan the corpus itself. |
+| Recommendation analysis truth | `xtask/src/family/recommend.rs` and `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json` | Reuse as the fixed input surface. M34 consumes this artifact instead of recomputing policy inside a new subsystem. |
+| Artifact schema + validation | `xtask/src/family/promotion_artifacts.rs` | Extend with one new artifact kind, one new schema, and one new validation path. Do not create a second validator stack. |
+| Artifact paths + atomic writes | `xtask/src/family/paths.rs` and `write_bytes_atomically(...)` | Reuse directly. The new decision artifact lives under the existing `analysis/` directory. |
+| CLI command dispatch | `xtask/src/lib.rs` | Extend with one new `family corpus-decision` command. Do not add a separate binary. |
+| Maintainer-facing truth surfaces | `semantic-families/README.md`, `docs/recommendation_corpus_expansion_program_v0.1.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md` | Update wording so the repo explains stop vs spend vs pivot without reopening M33 semantics. |
+
+### Minimum change set
+
+The minimum complete implementation is:
+
+1. add one new analysis artifact path constant
+2. add one new artifact schema + validator
+3. add one new CLI command that loads the existing recommendation analysis and
+   emits the bounded decision contract
+4. add tests for the live wedge and the contradictory-state guards
+5. update the maintainer docs that describe recommendation and corpus-program
+   outcomes
+
+Anything beyond that is scope leak.
+
+### Complexity check
+
+This milestone should stay within roughly these touched areas:
+
+- `xtask/src/lib.rs`
+- `xtask/src/family/paths.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/recommend.rs`
+- `semantic-families/README.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `PLAN.md`
+
+That is already a real but bounded diff. Do not add:
+
+- a markdown parser for the program tracker
+- a new runtime crate
+- a new artifact directory outside `analysis/`
+- a new command family outside `xtask family`
+
+### Search check
+
+This is a Layer 1 extension of the repo's existing artifact pipeline.
+
+No new framework, concurrency model, storage layer, or distribution path is
+introduced. The right move is to extend the current `xtask` artifact contract,
+not to invent a second decision system.
+
+### Completeness check
+
+A prose-only closeout is not enough.
+
+The complete bounded version is:
+
+- machine-readable artifact
+- validator coverage
+- deterministic write behavior
+- docs aligned to the same vocabulary
+- live wedge proof
+
+That is the lake. Boil it.
+
+### Distribution check
+
+No new package, binary, service, or CI lane is required.
+
+The output is one additional repo-local JSON artifact layered onto the current
+analysis flow.
 
 ## Locked Decisions
 
-### 1. M32 is treated as earned
+### 1. M33 recommendation analysis is fixed input
 
-Do not spend M33 budget re-proving the same bounded TypeScript lane with new
-milestone prose.
+M34 reads the already-written recommendation analysis artifact.
 
-M33 starts from the closed M32 state and improves the decision artifacts built
-on top of it.
+Do not rerun coverage or recommendation inside the decision command. The point
+is to consume fixed truth, not silently recompute it.
 
-### 2. Recommendation quality is the product surface
+### 2. The decision contract is a sibling artifact, not an M33 schema rewrite
 
-The primary M33 output is better recommendation and family-promotion artifact
-truth.
+Write the new contract to:
 
-Do not widen into:
+- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
 
-- a new promoted family
-- corpus-expansion run `1`
-- generic policy or approval workflow machinery
-- broad TypeScript support claims
-- `spec-core` semantic-family runtime expansion
+Do not widen `recommendation.latest.json` into a second semantic domain. That
+artifact remains the recommendation-analysis surface. M34 consumes it and emits
+the next-step decision beside it.
 
-### 3. Keep the current analysis artifact path
+### 3. The command surface is one new read-side command
 
-The current maintainer entrypoint stays:
+Add:
 
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+```bash
+cargo xtask family corpus-decision --format json
+```
 
-M33 makes that artifact more useful. It does not hide the new truth in a new
-parallel artifact family.
+Rules:
 
-### 4. Delta lives inside the primary analysis artifact
+- only `--format json` is supported
+- it loads the current recommendation-analysis artifact
+- it validates the basis before deriving a decision
+- it writes the new `corpus-program-decision.latest.json` artifact
 
-The current recommendation artifact is the thing maintainers already inspect.
-That is where the change summary belongs.
+### 4. Decision vocabulary is explicit and bounded
 
-Do not add a separate sibling delta artifact unless implementation proves the
-embedded form is impossible to keep deterministic.
+`decision_action` may be exactly one of:
 
-### 5. Preserve the current ranking view as a compatibility layer
+- `stop`
+- `spend_corpus_run_1`
+- `pivot_to_family_promotion_run`
+- `pivot_to_recommendation_policy_run`
+- `pivot_to_architecture_shared_core_follow_on`
 
-`recommendation_status` stays in the analysis artifact as the existing
-machine-facing ranking summary.
+Do not allow arbitrary strings.
 
-M33 adds a new maintainer-facing decision layer on top of it rather than
-replacing the field outright. This keeps the diff smaller and avoids breaking
-consumers that only understand the M27/M32 vocabulary.
+### 5. Decision basis vocabulary is explicit and bounded
 
-### 6. Decision vocabulary is explicit and bounded
+`decision_basis_code` may be exactly one of:
 
-M33 introduces one new top-level decision verdict:
+- `promotion_ready_candidate`
+- `plausible_candidate_missing_evidence`
+- `durable_non_promotable_helper_surface`
+- `no_actionable_candidate`
+- `policy_interpretation_blocker`
 
-- `recommended`
-- `blocked_for_now`
-- `not_recommended`
+These are the machine-readable reasons for the action.
 
-And it uses a bounded blocker/evidence vocabulary derived from existing truth:
+### 6. Required next action is explicit and bounded
 
-- `unknown_overlap_family`
-- `hard_difficulty`
-- `thin_real_example_support`
-- `thin_regression_support`
-- `helper_surface_not_promotable`
-- `missing_evidence`
-- `stale_evidence`
-- `regression_warning`
+`required_next_action` may be exactly one of:
 
-Do not turn this into a generic rules engine with arbitrary human-authored
-policies.
+- `record_stop_without_new_milestone`
+- `author_corpus_expansion_plan`
+- `author_family_promotion_plan`
+- `author_recommendation_policy_plan`
+- `author_architecture_follow_on_plan`
 
-### 7. Family-scoped promotion artifacts must carry the same basis
+Do not store free-form workflow prose as the only operational field.
 
-The family-scoped artifact chain under
-`.semantic-family-artifacts/family-promotion/<family>/...` must reference the
-analysis basis that justified the action:
+### 7. Rejected alternatives are required but kept small
 
-- which analysis artifact was used
-- what its verdict was
-- which blockers were already open
-- whether any evidence was stale or missing at emission time
+The artifact must include a bounded `rejected_alternatives` array covering the
+two top-level branches not chosen.
 
-Execution and blocker artifacts do not recompute recommendation policy. They
-carry forward the chosen basis honestly.
+Each entry includes:
 
-### 8. Coverage accounting is not being redesigned
+- `action`
+- `reason_code`
+- `summary`
 
-M33 reuses the current coverage artifact and unsupported-cluster projection.
+This keeps agent handoff honest without turning the contract into an essay.
 
-Do not change corpus manifest policy, source-kind leverage rules, or cluster
-discovery as side work unless implementation proves a blocker in the existing
-inputs.
+### 8. Pivot targets stay milestone-class level, not milestone-id level
 
-### 9. Wrapper regression pressure stays indirect
+M34 names the next **class** of milestone, not a future milestone number.
 
-Wrapper-pipeline pressure remains recommendation input, not a special
-top-level promotion policy.
+Use:
 
-If wrapper regressions matter for a recommendation, they should appear through
-existing leverage and evidence fields plus a bounded `regression_warning`, not
-through a custom wrapper-only policy lane.
+- `family_promotion_run`
+- `recommendation_policy_run`
+- `architecture_shared_core_follow_on`
 
-### 10. Docs must stay narrow about second-language support
+Do not hard-code a roadmap number in the artifact itself.
 
-Every updated doc must keep the M32 boundary explicit:
+### 9. Stop has exact semantics
 
-- one bounded second-language pilot exists
-- recommendation artifacts may discuss that proof
-- no M33 artifact may imply broad repo-wide target-language readiness
+`stop` means:
 
-## Done Means
+- keep corpus run `1` unspent
+- do not authorize another corpus-expansion milestone
+- do not automatically authorize a pivot milestone either
+- record the hold state as the current truthful endpoint
 
-M33 is complete only when all of the following are true:
+This is different from pivot.
 
-1. the analysis artifact still validates at its existing path and now includes
-   a top-level decision summary, explicit evidence state, and delta from the
-   last truthful artifact
-2. the current `money/round` helper-surface path becomes easier to explain from
-   the artifact alone, without extra maintainer interpretation
-3. the analysis artifact can distinguish:
-   - recommended
-   - blocked for now
-   - not recommended
-4. missing evidence and stale evidence are explicit fields, not implied through
-   absent counts or adjacent artifact inspection
-5. family-scoped recommendation artifacts carry forward the analysis basis and
-   remain honest about bounded support
-6. promotion execution and blocker artifacts can point back to the decision
-   basis that started the run
-7. validators reject contradictory combinations such as:
-   - `decision_status = "recommended"` while the first candidate is still held
-   - stale evidence omitted from a blocked recommendation
-   - family-scoped artifacts that disagree with their analysis basis
-8. docs explain the new vocabulary and the current truthful wedge without
-   over-claiming broader capability
-9. the implementation is proven on one real current path, not only on synthetic
-   fixture-only cases
+### 10. Spend has exact semantics
+
+`spend_corpus_run_1` means:
+
+- the repo has a plausible candidate
+- the missing information is still evidence-shaped
+- one more explicitly scoped corpus run is justified
+
+It does **not** mean "corpus forever."
+
+### 11. Live wedge mapping is frozen
+
+For the current basis:
+
+- `decision_status = "not_recommended"`
+- only blocker is `helper_surface_not_promotable`
+- missing/stale evidence are both empty
+
+the emitted action must be:
+
+- `pivot_to_architecture_shared_core_follow_on`
+
+If implementation cannot produce that deterministically, the milestone is not
+done.
+
+### 12. Docs must not over-claim
+
+Every updated doc must keep these boundaries explicit:
+
+- the repo is emitting a next-step decision contract
+- that contract consumes M33 truth
+- M34 does not spend corpus run `1` by default
+- M34 does not promote a new family
+- M34 does not implement shared-core follow-on work
+
+## Artifact Contract
+
+### Artifact path
+
+```text
+.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+```
+
+### Artifact kind and schema
+
+Add one new artifact kind:
+
+- `corpus_program_decision`
+
+Add one new schema version:
+
+- `CORPUS_PROGRAM_DECISION_SCHEMA_VERSION = 1`
+
+### Canonical JSON shape
+
+```json
+{
+  "schema_version": 1,
+  "artifact_kind": "corpus_program_decision",
+  "generated_at": "2026-05-05T03:00:00Z",
+  "analysis_basis_path": ".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json",
+  "analysis_basis_sha256": "sha256...",
+  "basis_snapshot": {
+    "recommendation_status": "no_strong_candidate",
+    "decision_status": "not_recommended",
+    "top_candidate_id": "z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0",
+    "open_blockers": ["helper_surface_not_promotable"],
+    "missing_evidence": [],
+    "stale_evidence": [],
+    "warnings": ["regression_warning"]
+  },
+  "decision_action": "pivot_to_architecture_shared_core_follow_on",
+  "decision_basis_code": "durable_non_promotable_helper_surface",
+  "pivot_target_class": "architecture_shared_core_follow_on",
+  "required_next_action": "author_architecture_follow_on_plan",
+  "summary": "Corpus run 1 should remain unspent; the current visible pressure is durable helper-surface hold, so the next move is an architecture follow-on plan rather than more corpus.",
+  "rejected_alternatives": [
+    {
+      "action": "stop",
+      "reason_code": "no_actionable_candidate",
+      "summary": "Reject stop because the repo does have a clear next class of work."
+    },
+    {
+      "action": "spend_corpus_run_1",
+      "reason_code": "plausible_candidate_missing_evidence",
+      "summary": "Reject spend because the current blocker is not missing corpus evidence."
+    }
+  ]
+}
+```
+
+### Validation invariants
+
+The validator must reject:
+
+1. missing or invalid `analysis_basis_path`
+2. missing or mismatched `analysis_basis_sha256`
+3. unknown `decision_action`, `decision_basis_code`, `required_next_action`, or
+   `pivot_target_class`
+4. `spend_corpus_run_1` when the basis has:
+   - `decision_status != "blocked_for_now"`, or
+   - empty `missing_evidence` and empty `stale_evidence`
+5. `pivot_to_family_promotion_run` unless the basis supports a promotion-ready
+   next move
+6. `pivot_to_architecture_shared_core_follow_on` unless the basis is
+   non-corpus-shaped and the visible blocker is not an evidence gap
+7. `stop` when a more specific pivot or spend action is already justified by the
+   basis
+8. missing `rejected_alternatives`
+9. duplicate or contradictory rejected alternatives
+10. a `pivot_target_class` field on non-pivot actions
+
+## Decision Derivation Rules
+
+Apply these rules in order. The first matching rule wins.
+
+| Basis condition | Emitted action | Basis code | Required next action |
+|---|---|---|---|
+| `decision_status = recommended` | `pivot_to_family_promotion_run` | `promotion_ready_candidate` | `author_family_promotion_plan` |
+| `decision_status = blocked_for_now` and the basis carries missing/stale evidence or a targeted evidence gap | `spend_corpus_run_1` | `plausible_candidate_missing_evidence` | `author_corpus_expansion_plan` |
+| `decision_status = not_recommended`, the blocker is `helper_surface_not_promotable`, and missing/stale evidence are both empty | `pivot_to_architecture_shared_core_follow_on` | `durable_non_promotable_helper_surface` | `author_architecture_follow_on_plan` |
+| `decision_status = not_recommended`, the blocker is recommendation/policy interpretation rather than evidence or architecture | `pivot_to_recommendation_policy_run` | `policy_interpretation_blocker` | `author_recommendation_policy_plan` |
+| no candidate-specific action is justified | `stop` | `no_actionable_candidate` | `record_stop_without_new_milestone` |
+
+This mapping is intentionally small.
+
+If future repo truth requires a new branch, that is a new milestone. Do not
+smuggle it into M34.
+
+## Architecture Review
+
+### System shape
+
+M34 is a read-side analysis extension. No write-path semantic truth changes.
+
+```text
+semantic-families/corpus/rust-function.toml
+        |
+        v
+cargo xtask family coverage --format json
+        |
+        v
+analysis/coverage.latest.json
+        |
+        v
+cargo xtask family recommend --format json
+        |
+        v
+analysis/recommendation.latest.json
+        |
+        v
+cargo xtask family corpus-decision --format json
+        |
+        v
+analysis/corpus-program-decision.latest.json
+```
+
+### Code ownership and module boundaries
+
+```text
+xtask/src/lib.rs
+    CLI dispatch only
+        |
+        v
+xtask/src/family/recommend.rs
+    load validated recommendation basis
+    derive bounded corpus-program decision
+        |
+        v
+xtask/src/family/promotion_artifacts.rs
+    schema types
+    validate-artifact support
+        |
+        v
+xtask/src/family/paths.rs
+    artifact path constant
+    atomic write helpers
+```
+
+### Realistic production failure scenarios
+
+1. The basis artifact is stale, missing, or manually edited into contradiction.
+   M34 must fail validation before writing a decision artifact.
+2. The basis says `blocked_for_now` but missing/stale evidence arrays are empty.
+   M34 must reject `spend_corpus_run_1` rather than silently guessing.
+3. The live helper-surface wedge regresses back to a corpus-shaped gap.
+   M34 must emit the new truthful action, not preserve the old one.
+4. The docs drift and start claiming that pivot means M34 implements the follow-on.
+   Docs must explicitly say M34 names the next class of work, not the work
+   itself.
+
+## Implementation Plan
+
+### Step 1 - Freeze vocabulary, path, and live wedge
+
+Touch:
+
+- `PLAN.md`
+
+Lock:
+
+- artifact path
+- command name
+- action vocabulary
+- basis-code vocabulary
+- required-next-action vocabulary
+- live expected output
+
+This step is complete when there is no remaining ambiguity about the JSON shape
+or the live wedge outcome.
+
+### Step 2 - Add the artifact schema and validator
+
+Touch:
+
+- `xtask/src/family/paths.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+
+Required changes:
+
+1. add the artifact path constant
+2. add `PromotionArtifactKind::CorpusProgramDecision`
+3. add the schema version constant
+4. add the serde struct(s) for the new artifact
+5. add `validate(...)` for the new artifact
+6. extend artifact-path classification so `family validate-artifact` knows the
+   new path
+
+Do not add a second validation entrypoint.
+
+### Step 3 - Add the decision builder command
+
+Touch:
+
+- `xtask/src/lib.rs`
+- `xtask/src/family/recommend.rs`
+
+Required changes:
+
+1. add `FamilyCommand::CorpusDecision`
+2. accept only `--format json`
+3. load the current recommendation-analysis artifact from disk
+4. validate the basis artifact before deriving the decision
+5. derive the bounded decision contract from the rules table above
+6. write the latest artifact atomically
+7. preserve deterministic bytes when the basis is unchanged
+
+Keep the implementation in the current family-analysis code path. Do not create
+an orchestration subsystem.
+
+### Step 4 - Prove the live wedge and the contradictory-state guards
+
+Touch:
+
+- `xtask/src/lib.rs`
+- optionally small helper additions in existing `xtask` test support only if
+  required
+
+Required tests:
+
+1. live helper-surface wedge emits
+   `pivot_to_architecture_shared_core_follow_on`
+2. promotion-ready basis emits `pivot_to_family_promotion_run`
+3. evidence-gap basis emits `spend_corpus_run_1`
+4. empty/no-action basis emits `stop`
+5. contradictory action/basis combinations are rejected by validation
+6. repeated command runs write byte-identical output when the basis is unchanged
+7. non-JSON format is rejected with the current CLI style
+
+### Step 5 - Sync the maintainer docs
+
+Touch:
+
+- `semantic-families/README.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+
+Required wording updates:
+
+1. recommendation analysis remains the M33 truth input
+2. corpus-program decision is the M34 next-step output
+3. stop vs spend vs pivot meanings are explicit
+4. the current live wedge keeps corpus run `1` unspent and points to an
+   architecture follow-on class
+5. M34 does not claim that the follow-on has already been implemented
+
+## Code Quality Review
+
+### DRY guardrails
+
+Do not duplicate:
+
+- artifact path normalization logic
+- artifact validation entrypoints
+- recommendation-basis loading
+- atomic write behavior
+
+If the new decision artifact needs "latest artifact load + deterministic bytes"
+behavior, reuse the current patterns from `recommend.rs` rather than inventing a
+parallel helper stack.
+
+### Explicit over clever
+
+Prefer:
+
+- one small derivation function with a rules table feel
+- one bounded validator
+- one artifact struct
+
+Avoid:
+
+- dynamic rule engines
+- stringly typed free-form pivot targets
+- doc parsing at runtime
+- implicit inference from absent fields alone
+
+### Engineered enough
+
+The right level of engineering here is:
+
+- schema-backed
+- validator-backed
+- deterministic
+- test-covered
+
+The wrong level is:
+
+- new crate
+- new registry
+- generic workflow DSL
+- program tracker parser
+
+## Test Review
+
+### Test framework
+
+This repo already uses Rust tests in `xtask/src/lib.rs` and related modules.
+That remains the primary lock surface.
+
+### Code path coverage
+
+```text
+CODE PATH COVERAGE
+===========================
+[+] cargo xtask family corpus-decision --format json
+    |
+    +- load recommendation basis artifact
+    |  +- [REQ TEST] missing file -> command fails
+    |  +- [REQ TEST] invalid schema -> command fails
+    |  +- [REQ TEST] mismatched sha/path -> validator fails
+    |
+    +- derive decision contract
+    |  +- [REQ TEST] recommended -> pivot_to_family_promotion_run
+    |  +- [REQ TEST] blocked_for_now + evidence gap -> spend_corpus_run_1
+    |  +- [REQ TEST] not_recommended + helper_surface_not_promotable + no evidence gaps
+    |  |              -> pivot_to_architecture_shared_core_follow_on
+    |  +- [REQ TEST] no actionable candidate -> stop
+    |  +- [REQ TEST] policy-shaped blocker -> pivot_to_recommendation_policy_run
+    |
+    +- validate decision contract
+    |  +- [REQ TEST] spend without evidence gap -> reject
+    |  +- [REQ TEST] pivot without pivot_target_class -> reject
+    |  +- [REQ TEST] stop when a stronger action is justified -> reject
+    |  +- [REQ TEST] missing rejected_alternatives -> reject
+    |
+    +- write latest artifact
+       +- [REQ TEST] first run writes artifact
+       +- [REQ TEST] second identical run writes byte-identical output
+```
+
+### Maintainer flow coverage
+
+```text
+MAINTAINER FLOW COVERAGE
+===========================
+[+] Truthful stop/spend/pivot workflow
+    |
+    +- cargo xtask family coverage --format json
+    +- cargo xtask family recommend --format json
+    +- cargo xtask family corpus-decision --format json
+    +- cargo xtask family validate-artifact \
+         .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+    +- cargo xtask family validate-artifact \
+         .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+```
+
+### Regression rule
+
+The highest-priority regression test is the live wedge:
+
+- current basis:
+  `no_strong_candidate` + `not_recommended` +
+  `helper_surface_not_promotable` + no missing/stale evidence
+- expected output:
+  `pivot_to_architecture_shared_core_follow_on`
+
+If that regresses, M34 has failed the exact problem it is supposed to solve.
+
+### Exact test additions
+
+Add or extend tests so they prove:
+
+1. command dispatch recognizes `family corpus-decision`
+2. the new artifact validates on the happy path
+3. invalid combinations are rejected at `validate-artifact`
+4. current branch truth emits the expected pivot output
+5. deterministic re-run behavior matches the repo's existing analysis commands
+
+## Failure Modes
+
+| Codepath | Production failure | Test required? | Error handling required? | User-visible outcome |
+|---|---|---:|---:|---|
+| Load basis artifact | basis file missing or unreadable | Yes | Yes | CLI exits non-zero with bounded error, no decision artifact written |
+| Validate basis snapshot | basis schema drift or manual corruption | Yes | Yes | CLI refuses to guess and points at invalid input |
+| Derive spend action | evidence-gap inference fires when there is no evidence gap | Yes | Yes | rejected as contradictory state, not silent spend authorization |
+| Derive pivot action | helper-surface durable hold incorrectly maps to `stop` | Yes | Yes | regression test catches wrong next-step output |
+| Validate written artifact | pivot target absent or unknown | Yes | Yes | `validate-artifact` fails on the decision artifact |
+| Docs sync | docs imply M34 implemented the follow-on work | Yes, via targeted grep or review pass | Yes | maintainer confusion; block merge until wording is corrected |
+
+### Critical gap rule
+
+Any branch that:
+
+- emits a decision action,
+- has no validation,
+- and can silently authorize the wrong next milestone
+
+is a critical gap.
+
+M34 closes that gap only if the live wedge and contradictory states are both
+locked by tests.
+
+## Performance Review
+
+M34 is cheap if it stays read-side only.
+
+Performance rules:
+
+1. do not rescan the corpus inside `family corpus-decision`
+2. do not rerun recommendation logic from raw sources
+3. read one basis artifact, derive one decision, write one artifact
+4. preserve deterministic latest-byte behavior to avoid unnecessary churn
+
+Expected cost is one JSON read, one validation pass, one decision derivation,
+and one JSON write. Anything slower means the scope drifted.
 
 ## NOT in Scope
 
 The following work was considered and is explicitly deferred:
 
-- Promoting a new family packet
-  Reason: M33 improves the decision surface, not the supported-family set.
-- Spending corpus-expansion run `1`
-  Reason: the current program tracker explicitly says each run needs its own
-  contract, and M33 is not a corpus-growth run.
-- Changing source-kind leverage rules
-  Reason: that is coverage policy work, not decision-surface work.
-- Broad repo-wide TypeScript support messaging
-  Reason: M32 proved one bounded family lane only.
-- Starting seam-kind target-language work
-  Reason: that would reopen the M31/M32 boundary and is a different milestone.
-- Approval workflow machinery, overrides, or RBAC
-  Reason: that is policy-system work, not bounded recommendation-quality work.
-- Rewriting `xtask` command names
-  Reason: the current command surface already exists and should be reused.
-- `spec-core` reviewer capability changes
-  Reason: M33 consumes current runtime truth; it does not expand supported
-  semantic families.
-
-## What Already Exists
-
-| Sub-problem | Existing code or artifact | Reuse decision |
-|---|---|---|
-| Coverage and unsupported-cluster truth | `xtask/src/family/coverage.rs` plus `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json` | Reuse as the evidence input. Do not invent a second coverage pipeline. |
-| Recommendation ranking and hold logic | `xtask/src/family/recommend.rs` | Reuse the current ranking kernel and extend it with an explicit decision layer plus delta logic. |
-| Artifact schemas and validation | `xtask/src/family/promotion_artifacts.rs` | Reuse the existing serde models and path-aware validators. Extend them explicitly. |
-| Artifact paths and deterministic writes | `xtask/src/family/paths.rs` and `write_bytes_atomically` | Reuse the existing artifact tree and deterministic write behavior. |
-| Family-scoped recommendation emission | `run_refresh_recommendation(...)` in `xtask/src/family/promotion_artifacts.rs` | Reuse, but make it analysis-basis-aware instead of acting like an isolated thin packet. |
-| Promotion execution and blocker emission | `run_emit_promotion_execution(...)` and `run_emit_promotion_blocker(...)` in `xtask/src/family/promotion_artifacts.rs` | Reuse, but thread through decision-basis truth. |
-| CLI and schema regression bed | `xtask/src/lib.rs` tests around `validate-artifact`, recommendation analysis, promotion execution, and blocker reports | Reuse as the main lock-test surface. Add M33 fixtures there rather than creating a second test universe. |
-| Maintainer explanation surface | `semantic-families/README.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md`, and `docs/recommendation_corpus_expansion_program_v0.1.md` | Reuse as the human-facing truth surface. Update wording to match the new artifact vocabulary exactly. |
-| Live truthful wedge | current `recommendation.latest.json` durable hold for `unsupported_function_surface-e40675da6fa0` | Use this as the canonical M33 example. If the new artifact cannot explain this path well, M33 is not done. |
-
-## Step 0 - Scope Challenge
-
-This plan likely touches more than 8 files.
-
-Normally that is a smell. Here it is justified because the missing value is
-cross-artifact decision truth, and that truth already spans:
-
-- recommendation analysis schema
-- family-scoped recommendation schema
-- promotion execution schema
-- blocker schema
-- validators
-- CLI regression tests
-- maintainer docs
-
-The minimum honest M33 change is:
-
-1. keep current coverage and ranking discovery intact
-2. add an explicit decision layer to the analysis artifact
-3. make missing and stale evidence first-class fields
-4. embed a deterministic delta from the last truthful analysis artifact
-5. thread the decision basis through downstream family-promotion artifacts
-6. update validators and docs so the new story is enforceable
-
-Anything smaller is just better prose around the same thin output.
-
-### Complexity check
-
-This is a multi-file change, but it does **not** justify a new subsystem.
-
-The right implementation is boring:
-
-- extend current serde structs
-- extend current validators
-- extend current recommend projection
-- update the existing CLI regression bed
-- update the current docs
-
-No new service, no database, no new command family.
-
-### Search check
-
-This is a Layer 1 change.
-
-The repo already has the exact building blocks it needs:
-
-- existing artifact paths
-- existing validator model
-- existing deterministic file writes
-- existing recommendation projection
-- existing family-promotion artifact chain
-
-Do not roll a custom comparison store or approval-state side channel when the
-repo already has a path-stable artifact tree.
-
-### TODOS cross-reference
-
-`docs/recommendation_corpus_expansion_program_v0.1.md` explicitly says each run
-needs its own high-rigor plan and that the open question is whether more
-evidence is needed or the blocker is now recommendation interpretation.
-
-M33 answers the interpretation side of that question.
-
-### Completeness check
-
-The shortcut version would be:
-
-- rename a few statuses
-- add nicer prose to the README
-
-That is not enough.
-
-The complete version is still cheap here:
-
-- schema truth
-- validator truth
-- delta truth
-- downstream artifact truth
-- docs truth
-- regression coverage
-
-Do the complete version.
-
-### Distribution check
-
-M33 introduces no new binary, package, or service.
-
-Its distribution surface is the existing artifact tree plus repo docs.
-
-That means the implementation is only real if a maintainer can consume the new
-decision quality through the current workflow, not by learning a side system.
-
-## Architecture Review
-
-### Chosen artifact model
-
-M33 keeps the current artifact paths and makes the data model more explicit.
-
-#### 1. Analysis artifact
-
-Path stays:
-
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-
-Current shape:
-
-- `schema_version = 3`
-- ranking-oriented view only
-
-M33 change:
-
-- bump to `schema_version = 4`
-- keep existing ranking fields
-- add a top-level `decision_summary`
-- add a top-level `evidence_summary`
-- add a top-level `delta_from_previous`
-
-#### 2. Family-scoped recommendation artifact
-
-Path stays:
-
-- `.semantic-family-artifacts/family-promotion/<family>/recommendation.latest.json`
-
-Current shape:
-
-- thin family-scoped recommendation packet with inventory basis
-
-M33 change:
-
-- bump to `schema_version = 2`
-- add `analysis_basis_path`
-- add `analysis_basis_sha256`
-- add `decision_status`
-- add carried blocker/evidence fields from the chosen analysis basis
-
-#### 3. Promotion execution and blocker artifacts
-
-Paths stay:
-
-- `.semantic-family-artifacts/family-promotion/<family>/<run-id>/promotion.execution.json`
-- `.semantic-family-artifacts/family-promotion/<family>/<run-id>/blocker.report.json`
-
-Current shape:
-
-- execution-step truth only
-
-M33 change:
-
-- bump both to `schema_version = 2`
-- add `analysis_basis_path`
-- add `analysis_basis_sha256`
-- add `decision_status_at_start`
-- add `open_blockers_at_start`
-- add `missing_or_stale_evidence_at_start`
-
-These artifacts do not become a policy engine. They only preserve the decision
-basis that justified the run.
-
-### Decision vocabulary contract
-
-The new decision layer is:
-
-- `recommended`
-  The current first candidate is promotion-worthy now.
-- `blocked_for_now`
-  A plausible target exists, but missing or stale evidence or explicit blockers
-  prevent recommending promotion yet.
-- `not_recommended`
-  The current visible pressure should not drive the next family decision, even
-  if the cluster remains visible.
-
-Exact rules:
-
-1. `recommended` requires:
-   - first candidate `promotion_readiness = ready`
-   - `confidence.level` is `medium` or `high`
-   - no required evidence is stale or missing
-2. `blocked_for_now` applies when:
-   - there is a plausible candidate, and
-   - the recommendation is being held by blocker reasons or freshness gaps
-3. `not_recommended` applies when:
-   - there is no plausible next-family action, or
-   - the visible candidate is a durable helper-surface hold like the current
-     `money/round` path
-
-### Evidence model
-
-M33 splits decision blockers from evidence state.
-
-That means:
-
-- blocker reasons explain **why the decision is held**
-- evidence state explains **what proof is present, missing, or stale**
-- warnings explain **what still deserves caution even if the verdict is usable**
-
-The artifact should not force the reader to infer freshness from missing paths or
-silent count changes.
-
-### Change-awareness contract
-
-Delta is computed against the last validated analysis artifact at the same path.
-
-`delta_from_previous` must include at minimum:
-
-- `previous_generated_at`
-- `previous_decision_status`
-- `previous_recommendation_status`
-- `decision_changed`
-- `top_candidate_changed`
-- `reasons_added[]`
-- `reasons_cleared[]`
-- `evidence_changes[]`
-- one single-line human-readable summary
-
-If there is no prior artifact, the delta block must say that explicitly instead
-of fabricating a baseline.
-
-### Architecture ASCII diagram
-
-```text
-CORPUS + CURRENT REPO TRUTH
-===========================
-semantic-families/corpus/rust-function.toml
-        +
-coverage.rs
-        |
-        v
-coverage.latest.json
-        |
-        v
-recommend.rs
-        |
-        +--> ranked_candidates[]            (existing ranking view)
-        +--> decision_summary              (new M33 verdict)
-        +--> evidence_summary              (new M33 evidence state)
-        +--> delta_from_previous           (new M33 change view)
-        |
-        v
-analysis/recommendation.latest.json
-        |
-        +--> refresh-promotion-recommendation
-        |       |
-        |       v
-        |   <family>/recommendation.latest.json
-        |
-        +--> emit-promotion-execution / emit-promotion-blocker
-                |
-                v
-        promotion.execution.json / blocker.report.json
-```
-
-## Implementation Plan
-
-### Step 1 - Freeze the decision schema contract
-
-Primary files:
-
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/paths.rs`
-
-Work:
-
-1. Add the new decision/evidence/delta structs and enums.
-2. Bump schema versions exactly where M33 changes artifact meaning.
-3. Extend validators so contradictory combinations fail fast.
-4. Keep `recommendation_status` as a compatibility field in the analysis
-   artifact.
-5. Keep all artifact paths unchanged.
-
-Acceptance for Step 1:
-
-- every changed artifact type has a validator that enforces the M33 rules
-- no artifact path changes
-- old contradictions now fail in tests instead of relying on maintainer judgment
-
-### Step 2 - Build the M33 decision projection in `recommend.rs`
-
-Primary files:
-
-- `xtask/src/family/recommend.rs`
-
-Work:
-
-1. Derive the new `decision_status` from the existing candidate ranking,
-   readiness, confidence, and durable-hold logic.
-2. Project blocker reasons separately from evidence state.
-3. Load the previous validated analysis artifact if it exists.
-4. Compute `delta_from_previous` deterministically.
-5. Keep deterministic byte reuse when the normalized logical output has not
-   changed.
-
-Acceptance for Step 2:
-
-- the current `money/round` durable-hold path renders as
-  `decision_status = "not_recommended"` with explicit explanation
-- a held but still plausible candidate path can render
-  `decision_status = "blocked_for_now"`
-- unchanged logical output still reuses prior bytes where the existing
-  determinism contract allows it
-
-### Step 3 - Thread the decision basis through downstream artifacts
-
-Primary files:
-
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/lib.rs`
-
-Work:
-
-1. Update `refresh-promotion-recommendation` so the family-scoped artifact
-   records which analysis artifact justified the chosen family and what that
-   basis said.
-2. Update execution and blocker artifact emission so they carry the same basis.
-3. Ensure downstream validators reject family-scoped artifacts that disagree
-   with the referenced analysis basis.
-4. Keep target-language truth explicit so M32 honesty is preserved.
-
-Acceptance for Step 3:
-
-- family-scoped recommendation artifacts cite the analysis basis directly
-- execution and blocker artifacts preserve that basis without recomputing policy
-- no downstream artifact implies repo-wide multi-language readiness
-
-### Step 4 - Lock the docs and canonical wedge
-
-Primary files:
-
-- `semantic-families/README.md`
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-- `CHANGELOG.md`
-
-Work:
-
-1. Teach the new M33 decision vocabulary exactly once and reuse the same wording
-   everywhere.
-2. Document the current truthful wedge:
-   the helper-surface `money/round` path is visible but not the next family.
-3. Explain how `recommended`, `blocked_for_now`, and `not_recommended` differ.
-4. Keep the M32 bounded second-language claim narrow and explicit.
-
-Acceptance for Step 4:
-
-- a maintainer reading the docs sees the same vocabulary the artifacts emit
-- docs and artifacts describe the same current wedge
-- no doc widens M32 into broad TypeScript readiness
-
-## Code Quality Review
-
-The biggest code-quality risk here is not under-engineering. It is semantic
-duplication.
-
-If the M33 decision rules are implemented twice, once in `recommend.rs` and once
-again inside downstream emission code, the artifact chain will drift.
-
-So the quality bar is:
-
-1. one source of decision truth in the analysis projection
-2. downstream artifacts only carry forward that truth
-3. validators enforce consistency instead of each writer inventing its own rules
-
-This is a minimal-diff plan.
-
-Do not introduce:
-
-- a new policy module tree
-- free-form JSON extension maps
-- artifact-specific copies of the same decision rules
-
-## Test Review
-
-100% branch coverage for the new decision states is required.
-
-### Code path coverage
-
-```text
-ANALYSIS ARTIFACT
-=================
-[+] xtask/src/family/recommend.rs
-    ├── [ADD] emits `decision_status = recommended`
-    ├── [ADD] emits `decision_status = blocked_for_now`
-    ├── [ADD] emits `decision_status = not_recommended`
-    ├── [ADD] computes `delta_from_previous` when prior artifact exists
-    ├── [ADD] emits explicit "no previous artifact" delta when baseline absent
-    └── [ADD] preserves deterministic output when logical recommendation is unchanged
-
-ARTIFACT VALIDATION
-===================
-[+] xtask/src/family/promotion_artifacts.rs
-    ├── [ADD] rejects `recommended` when first candidate is still held
-    ├── [ADD] rejects blocked recommendations that omit required blocker or evidence state
-    ├── [ADD] rejects family-scoped recommendation artifacts with mismatched analysis basis
-    ├── [ADD] rejects execution/blocker artifacts missing carried decision-basis fields
-    └── [ADD] accepts truthful M33 artifacts on existing paths
-
-DOWNSTREAM EMISSION
-===================
-[+] xtask/src/family/promotion_artifacts.rs
-    ├── [ADD] family-scoped recommendation copies analysis-basis verdict
-    ├── [ADD] promotion execution carries analysis basis without widening support claims
-    └── [ADD] blocker artifact preserves open blockers and stale/missing evidence
-```
-
-### User-flow coverage
-
-```text
-MAINTAINER DECISION FLOW
-========================
-[+] Current analysis artifact
-    ├── [ADD] current `money/round` durable-hold path reads as `not_recommended`
-    ├── [ADD] candidate-with-gaps path reads as `blocked_for_now`
-    └── [ADD] truly promotion-ready path reads as `recommended`
-
-CHANGE AWARENESS
-================
-[+] Re-run recommendation after evidence changes
-    ├── [ADD] status flip is visible in `delta_from_previous`
-    ├── [ADD] blocker reasons added/cleared are visible
-    └── [ADD] stale evidence is called out explicitly
-
-PROMOTION CHAIN
-===============
-[+] Maintainer picks a family and starts a promotion run
-    ├── [ADD] family-scoped recommendation cites the analysis basis
-    ├── [ADD] execution artifact preserves starting verdict
-    └── [ADD] blocker artifact preserves starting blockers instead of forcing re-interpretation
-```
-
-### Required regression tests
-
-Add or preserve tests proving:
-
-- the analysis artifact can render all three new decision verdicts
-- the current `money/round` helper-surface wedge is `not_recommended`, not a
-  vague held recommendation
-- missing evidence and stale evidence are explicit fields, not inferred
-- `delta_from_previous` is accurate when:
-  - there is no prior artifact
-  - only blockers change
-  - the top candidate changes
-  - the top-level decision changes
-- family-scoped recommendation artifacts reject mismatched analysis-basis paths
-  or hashes
-- execution and blocker artifacts preserve the analysis basis fields
-- existing path validation rules still hold
-- bounded M32 target-language truth is preserved in downstream artifacts
-
-### Failure modes by codepath
-
-| Codepath | Realistic failure | Test required | Error handling / visible truth |
-|---|---|---|---|
-| Analysis projection | Artifact says `recommended` while the first candidate is still held | Yes | Validator must reject the artifact |
-| Delta projection | Artifact claims "no change" even though blocker reasons changed | Yes | `delta_from_previous` must diff reason sets deterministically |
-| Freshness handling | Recommendation uses stale basis but does not say so | Yes | `evidence_summary` must carry `stale_evidence` explicitly |
-| Family-scoped recommendation emission | Chosen family artifact silently diverges from the analysis basis | Yes | Validator must compare basis path/hash and fail |
-| Promotion execution emission | Execution artifact loses the starting blocker context | Yes | Artifact must carry the open blockers and evidence state at start |
-| Blocker emission | Blocker report explains runtime failure but not pre-existing recommendation blockers | Yes | Artifact must preserve the decision basis and unresolved blockers |
-| Docs | README or roadmap implies broad TypeScript readiness | Yes | Review plus doc update must keep the M32 boundary explicit |
-
-Critical gap rule:
-
-If any new decision path lacks both a regression test and an explicit visible
-truth field, M33 is not done.
-
-### Commands to run
-
-Run at minimum:
-
-```bash
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-cargo test -p xtask family_refresh_promotion_recommendation
-cargo test -p xtask artifact_schema_
-cargo test -p xtask recommendation_
-cargo test -p xtask
-```
-
-The narrow loop can be smaller while implementing. Done still requires the full
-artifact validation loop plus the relevant `xtask` regression bed.
-
-## Performance Review
-
-There is no meaningful runtime hot-path risk in M33.
-
-The real risks are engineering-performance risks:
-
-- recomputing decision policy in multiple places
-- adding unstable delta output that defeats deterministic writes
-- forcing maintainers to read more artifacts, not fewer
-
-Keep the implementation boring:
-
-- one extra validated read of the previous analysis artifact
-- one projection pass
-- one set of validators
-
-Do not turn M33 into a stateful history system.
-
-## Distribution Surface
-
-M33 introduces no new binary, package, container, or service.
-
-Its distribution surface is:
-
-- the current analysis artifact
-- the family-scoped promotion artifacts
-- the validator contract
-- the maintainer docs
-
-If a maintainer still needs hidden chat context to explain the current
-recommendation after M33 lands, then M33 did not actually ship.
+- Spending corpus run `1`
+  Reason: M34 decides whether that run is justified. It does not perform the run.
+- Recommendation-policy redesign
+  Reason: M33 already closed recommendation honesty; M34 consumes that output.
+- Family promotion execution changes
+  Reason: pivot naming is in scope, promotion execution mechanics are not.
+- Corpus manifest or leverage-accounting changes
+  Reason: that is evidence policy work, not next-step contract work.
+- Shared-core follow-on implementation
+  Reason: M34 may point to that class of work, but it does not start it.
+- Runtime parsing of `docs/recommendation_corpus_expansion_program_v0.1.md`
+  Reason: markdown is the human ledger, not the machine input surface.
+- New artifact trees outside `analysis/`
+  Reason: M34 stays inside the current family-analysis contract.
 
 ## Worktree Parallelization Strategy
 
-This plan has a narrow parallelization window, but the core code changes stay
-mostly sequential because they share the same artifact contract.
+Parallelism exists, but it is limited.
+
+All executable logic clusters under `xtask/src/family/`, so the code lane is
+mostly sequential. The only clean peel-off lane is docs, and only after the
+schema and vocabulary are frozen.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| A. Schema and validator freeze | `xtask/src/family/promotion_artifacts.rs`, `xtask/src/family/paths.rs` | - |
-| B. Decision projection and delta logic | `xtask/src/family/recommend.rs` | A |
-| C. Downstream artifact propagation and CLI regression coverage | `xtask/src/family/promotion_artifacts.rs`, `xtask/src/lib.rs` | A, B |
-| D. Docs and closeout | `semantic-families/README.md`, `docs/`, `CHANGELOG.md` | A, B, C |
+| Freeze contract vocabulary and path | `PLAN.md` | — |
+| Add artifact schema and validator | `xtask/src/family/`, `xtask/src/lib.rs` | Freeze contract vocabulary and path |
+| Add command derivation and deterministic write path | `xtask/src/family/`, `xtask/src/lib.rs` | Add artifact schema and validator |
+| Add live-wedge and contradiction tests | `xtask/src/family/`, `xtask/src/lib.rs` | Add command derivation and deterministic write path |
+| Sync maintainer docs | `docs/`, `semantic-families/` | Freeze contract vocabulary and path |
 
 ### Parallel lanes
 
-- Lane A: `A -> B -> C`
-  Sequential critical path. All three steps are tightly coupled through the
-  shared artifact contract.
-- Lane B: `D`
-  Optional docs lane. It can begin only after Step A freezes the vocabulary,
-  but it must not merge until Steps B and C are complete.
+- Lane A: freeze contract -> schema/validator -> command derivation -> tests
+  (sequential, shared `xtask/src/family/`)
+- Lane B: docs sync
+  (independent after schema freeze, touches `docs/` and `semantic-families/`)
 
 ### Execution order
 
-Launch the sequential code lane first:
-
-```text
-A -> B -> C
-```
-
-If the vocabulary is frozen and a second worktree is useful, run docs in
-parallel late:
-
-```text
-(A complete) -> B + partial D -> C -> finalize D
-```
+1. Do the contract freeze first.
+2. Launch Lane A and Lane B in parallel only after the JSON shape, path, and
+   vocabulary are locked.
+3. Merge Lane B after Lane A passes if doc text needs final command-output
+   wording polish.
 
 ### Conflict flags
 
-- `xtask/src/family/promotion_artifacts.rs` belongs to the sequential lane.
-  Do not split ownership of that file across worktrees.
-- Docs must not guess the final field names before the validator contract is
-  frozen.
-- If implementation discovers that `promotion_artifacts.rs` needs repeated late
-  edits after docs start, collapse back to single-lane execution.
+- Do **not** split Lane A into multiple code worktrees. Everything meaningful
+  shares `xtask/src/family/` and `xtask/src/lib.rs`.
+- Lane B should avoid editing `PLAN.md` after Lane A starts. Treat this plan as
+  frozen once implementation begins.
 
-## Completion Summary
+## Acceptance Commands
 
-- Step 0: Scope Challenge
-  Accepted as-is. The minimum honest diff already spans analysis artifacts,
-  downstream promotion artifacts, validators, tests, and docs.
-- Architecture Review
-  One bounded recommendation-quality pass over the existing artifact chain.
-- Code Quality Review
-  One source of decision truth, downstream carry-forward only, no new policy
-  subsystem.
-- Test Review
-  Full decision-state, delta-state, and downstream artifact coverage required.
-- Performance Review
-  No runtime bottleneck; determinism drift and duplicated logic are the real
-  risks.
-- NOT in scope
-  Written.
-- What already exists
-  Written.
-- Failure modes
-  Written.
-- Parallelization
-  One sequential code lane plus one optional late docs lane.
-- Distribution
-  Explicitly limited to current artifact paths and docs.
+Run these commands against the live branch:
 
-## Implementation Guardrail
+```bash
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+cargo test -p xtask corpus_decision
+cargo test -p xtask recommendation_policy_durable_holds_helper_surface_candidate
+```
 
-If implementation discovers that M33 cannot produce a trustworthy recommendation
-decision surface without also changing:
+If the repo's test names differ once implementation lands, keep the same proof
+intent:
 
-- corpus accounting policy
-- `spec-core` family capability
-- a new family promotion
-- broad target-language semantics
+- command dispatch test
+- live helper-surface wedge test
+- contradictory-state validation test
+- deterministic re-run test
 
-stop.
+## Done Means
 
-That is not "small spillover." That is a different milestone trying to leak into
-a bounded M33 plan.
+M34 is complete only when all of the following are true:
+
+1. `cargo xtask family corpus-decision --format json` writes
+   `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+2. the new artifact validates through the existing `family validate-artifact`
+   surface
+3. the current live basis emits
+   `pivot_to_architecture_shared_core_follow_on`
+4. `recommended`, `blocked_for_now`, helper-surface durable hold, and stop
+   outcomes are all covered by tests
+5. contradictory action/basis combinations are rejected by validation
+6. re-running the command on unchanged basis input preserves deterministic bytes
+7. docs explain stop vs spend vs pivot using the same exact vocabulary as the
+   JSON artifact
+8. the diff does not widen into corpus execution, policy redesign, family
+   promotion execution, or shared-core implementation
+
+That is the full M34 claim.
