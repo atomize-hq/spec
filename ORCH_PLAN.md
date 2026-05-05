@@ -1,241 +1,299 @@
-# M35 Orchestration Plan
+# M36 Orchestration Plan
 
-Status: **authoritative execution contract for the M35 run**  
+Status: **authoritative execution contract for the M36 run**  
 Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
+Live checkout: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
 Live branch: **`feat/corpus-expansion`**  
 Review base: **`main`**  
 Last rewritten: **`2026-05-05`**  
-Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m35_architecture_shared_core_follow_on`**  
-Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m35-architecture-shared-core-follow-on`**  
+Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m36_helper_surface_follow_on_contract_consolidation`**  
+Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation`**  
 Artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts`**  
-Recommendation basis path: **`.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`**  
-Decision artifact path: **`.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`**  
-Reality-alignment source: **validated M34 commit `df15e3e392be30a13b10f028eb19e4286c931523` from `ws/m34-int`**  
-Execution note: **M35 is a two-phase run: first land the validated M34 contract unchanged in behavior, then extract one bounded helper-surface classifier inside `xtask/src/family/` and rewire both recommend and corpus-decision to use it.**
+Recommendation artifact: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`**  
+Decision artifact: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`**  
+Execution note: **M36 is one delegated code lane plus one later docs lane. The live checkout on `feat/corpus-expansion` is the baseline and publish target. All integration happens on `ws/m36-int`.**
 
 ## Summary
 
-- This run is for **M35 architecture shared-core follow-on** only.
-- `PLAN.md` remains milestone authority. `ORCH_PLAN.md` is the parent-owned execution contract for the session that lands M35 safely.
-- The parent agent is the sole baseline capturer, sole freeze authority, sole M34 lander, sole helper-surface API freezer, sole integrator, sole stale-lane invalidator, sole final verifier, sole publish authority, and sole closeout author.
-- The opening path is strictly sequential:
-  1. capture baseline on `feat/corpus-expansion`
-  2. freeze authority and create `ws/m35-int`
-  3. land validated M34 commit `df15e3e392be30a13b10f028eb19e4286c931523`
-  4. verify the landed M34 wedge
-  5. add and freeze `xtask/src/family/helper_surface.rs`
-- Real parallelism starts only after `helper-surface-api-freeze.json` exists.
-- Recommended worker profile for every post-freeze lane is:
+- This run is for **M36 helper-surface follow-on contract consolidation** only.
+- `PLAN.md` remains milestone authority. This file is the parent-owned operator contract for landing M36 safely.
+- The parent is the sole baseline capturer, sole freeze authority, sole worktree creator, sole lane launcher, sole integrator, sole stale-lane invalidator, sole final verifier, sole publish authority, and sole closeout author.
+- The run has **one real code lane** and **one docs lane**:
+  - code lane: sequential implementation only, no fake parallelism
+  - docs lane: allowed only after API and vocabulary freeze
+- Recommended worker profile for every delegated lane is:
   - `GPT-5.4`
   - `reasoning_effort=high`
 - Worker concurrency cap is:
-  - `0` before `m34-landing-freeze.json`
-  - `0` before `helper-surface-api-freeze.json`
-  - `3` after `helper-surface-api-freeze.json`
-- The parent remains the only integrator. Workers never merge each other, never publish, and never write orchestration state.
-- `.runs/**` and `.semantic-family-artifacts/**` are run artifacts and derived output surfaces:
+  - `0` before `integration-freeze.json`
+  - `1` after `integration-freeze.json` and before `api-vocabulary-freeze.json`
+  - `2` after `api-vocabulary-freeze.json`
+- The parent remains the only integrator. Workers never merge, never publish, never update orchestration state, and never declare the run green.
+- The local critical path is fixed:
+  1. capture baseline on live `feat/corpus-expansion`
+  2. create `ws/m36-int` from the frozen live SHA
+  3. launch the single code lane from the frozen integration SHA
+  4. integrate code sequentially on `ws/m36-int`
+  5. write `api-vocabulary-freeze.json`
+  6. launch docs lane from the frozen post-code integration SHA
+  7. merge docs into `ws/m36-int`
+  8. run full verification on `ws/m36-int`
+  9. fast-forward or merge back to live `feat/corpus-expansion` only if green
+- `.runs/**` and `.semantic-family-artifacts/**` are run artifacts and derived outputs:
   - not authored source
-  - not assumed git-tracked deliverables
-  - not worker-owned edit surfaces
-- The live wedge must remain explicit end to end:
-  - recommendation basis remains `no_strong_candidate`
-  - recommendation decision status remains `not_recommended`
-  - blocker remains `helper_surface_not_promotable`
-  - corpus decision remains `pivot_to_architecture_shared_core_follow_on`
-  - decision basis remains `durable_non_promotable_helper_surface`
-  - required next action remains `author_architecture_follow_on_plan`
-- M35 does not spend corpus run `1`, does not promote a family, does not create a new crate, does not create a new artifact family, does not move helper-surface truth into `spec-core`, and does not widen into a generic decision engine.
+  - not worker-owned
+  - not acceptable substitutes for runtime gates
+- The live wedge must remain unchanged end to end:
+  - `recommendation_status = "no_strong_candidate"`
+  - `decision_status = "not_recommended"`
+  - `open_blockers = ["helper_surface_not_promotable"]`
+  - `decision_action = "pivot_to_architecture_shared_core_follow_on"`
+  - `decision_basis_code = "durable_non_promotable_helper_surface"`
+  - `required_next_action = "author_architecture_follow_on_plan"`
 
 ## Hard Guards
 
-- `PLAN.md` wins over this file, worker summaries, stale worktree copies, and run-state notes if they disagree.
+- `PLAN.md` wins over this file, worker summaries, stale worktrees, and run-state notes if they disagree.
 - `ORCH_PLAN.md` is parent-owned only. Workers do not edit it.
-- The parent does not integrate on the live checkout. All merges and final verification happen on `ws/m35-int`.
-- The live checkout on `feat/corpus-expansion` is the publish target and baseline reference, not the merge surface.
-- The parent records live branch name, head SHA, dirty state, and overlapping local edits before creating any M35 worktree.
-- If local or incoming edits overlap the M35-owned surface before `authority-freeze.json`, the parent must either re-anchor around them or block the run. It must not silently overwrite them.
+- The live checkout at `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on `feat/corpus-expansion` is the baseline and publish target, not the merge surface.
+- The parent does not integrate on the live checkout. All merges, validations, and final proving happen on:
+  - branch: `ws/m36-int`
+  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/int`
+- The parent records live branch name, head SHA, dirty state, and overlapping local edits before creating any M36 worktree.
+- If overlapping local edits exist on M36-owned surfaces before `authority-freeze.json`, the parent either re-anchors around them or blocks the run. It does not overwrite them silently.
 - After `authority-freeze.json` is written, both authority files are frozen:
-  - `PLAN.md`
-  - `ORCH_PLAN.md`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
 - If either authority file changes after freeze, the run stops and restarts from a fresh baseline.
-- Reality alignment must land the validated M34 commit first. No M35-only edits start before that gate is green.
-- The M34 landing must preserve behavior. Preferred path is:
-  - `git cherry-pick -x df15e3e392be30a13b10f028eb19e4286c931523`
-- If cherry-pick conflicts, the parent may resolve only to produce a behavior-equivalent landed result and must record that rationale in `session-log.md` and `m34-landing-freeze.json`.
-- The shared-core extraction is locked to one new module:
-  - `xtask/src/family/helper_surface.rs`
-- The shared classifier is locked to one bounded concept:
-  - `durable_non_promotable_helper_surface`
-- The classifier must not:
-  - emit corpus actions
-  - emit recommendation statuses
-  - read files
-  - live in `spec-core`
-  - become a generic decision engine
-- `family corpus-decision` must keep reading the existing recommendation artifact. It must not rescan coverage or recompute recommendation from raw corpus inputs.
-- No one hand-edits JSON under `.semantic-family-artifacts/`. Derived artifacts are produced only by repo commands.
-- `.runs/**` and `.semantic-family-artifacts/**` remain run artifacts and derived output, not authored source.
-- M35 must not edit or widen into:
-  - `spec-core/src/**`
-  - `semantic-families/corpus/rust-function.toml`
-  - any promoted family packet under `semantic-families/**`
-  - `xtask/src/family/coverage.rs`
-  - `xtask/src/family/inventory.rs`
-  - `xtask/src/family/report.rs`
-  - prove/certify runtime behavior
-- `xtask/src/family/paths.rs` may change only as part of the M34 landing. No M35-only edits are allowed there after `m34-landing-freeze.json`.
-- `xtask/src/lib.rs` is parent-owned for M35:
-  - workers do not edit it
-  - any M35 test additions in `xtask/src/lib.rs` are parent-only in integration
-  - any corpus-decision dispatch or command wiring in `xtask/src/lib.rs` remains whatever M34 landed; workers do not touch it
-- Stop immediately if any lane requires:
-  - a second new module
+- M36 stays bounded to `xtask/src/family/` plus these documented surfaces only:
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/lib.rs`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/README.md`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/recommendation_corpus_expansion_program_v0.1.md`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/semantic_family_capability_corpus_guide_v0.1.md`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` closeout notes only
+- M36 must not introduce:
   - a new crate
+  - a schema rewrite
+  - a generic decision engine
+  - a registry of follow-on contracts
+  - a policy DSL
   - a new artifact family
-  - moving helper-surface truth into `spec-core`
-  - a generic decision-policy framework
-  - a second semantic classifier in validators
+- The follow-on contract lives only in:
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/helper_surface.rs`
+- `recommend.rs` and `xtask/src/lib.rs` are conflict magnets:
+  - `recommend.rs` is single-writer by the code lane only
+  - `xtask/src/lib.rs` is single-writer by the code lane only
+  - no second code lane may be created to “help”
+- The frozen wedge vocabulary stays unchanged:
+  - `helper_surface_not_promotable`
+  - `durable_non_promotable_helper_surface`
+  - `pivot_to_architecture_shared_core_follow_on`
+  - `author_architecture_follow_on_plan`
+- Stable proof identity is additive and normalized. It is not a public artifact redesign.
+- No one hand-edits JSON under `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/`.
+- Stop immediately if any lane requires:
+  - widening into `spec-core`
+  - a second semantic owner for the helper follow-on contract
+  - recomputing coverage inside `family corpus-decision`
+  - using raw latest-artifact SHA as the closeout gate
+
+## Workstream Plan
 
 ## Closed Implementation Surface
 
 Parent-owned or lane-owned work is limited to:
 
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/helper_surface.rs` (new)
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/paths.rs` only for M34 landing
-- `xtask/src/lib.rs` parent only
-- `semantic-families/README.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `PLAN.md` completion notes only after final verification
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/helper_surface.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/recommend.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/promotion_artifacts.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/coverage.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/mod.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/lib.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/README.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/recommendation_corpus_expansion_program_v0.1.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` completion notes only after final green
 
 Allowed mechanical spillover is compile- or module-wire-forced only:
 
 - imports
 - module exports
-- test names or fixtures inside `xtask/src/lib.rs`
+- test names
+- test fixtures inside `xtask/src/lib.rs`
 
-## Worktree Layout
+## Branch And Worktree Layout
 
-Canonical worktrees:
+Repository root:
 
-- integration and parent-owned sequential lane
-  - branch: `ws/m35-int`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m35-architecture-shared-core-follow-on/int`
-- lane A, consumer rewiring
-  - branch: `ws/m35-lane-a-consumers`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m35-architecture-shared-core-follow-on/lane-a-consumers`
-- lane B, validator alignment
-  - branch: `ws/m35-lane-b-validators`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m35-architecture-shared-core-follow-on/lane-b-validators`
-- lane C, docs alignment
-  - branch: `ws/m35-lane-c-docs`
-  - path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m35-architecture-shared-core-follow-on/lane-c-docs`
+```text
+/Users/spensermcconnell/__Active_Code/atomize-hq/spec
+```
+
+Canonical branches and worktrees:
+
+| Role | Branch | Worktree |
+|---|---|---|
+| Live baseline and publish target | `feat/corpus-expansion` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` |
+| Parent integration | `ws/m36-int` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/int` |
+| Lane A, one real code lane | `ws/m36-lane-a-code` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/lane-a-code` |
+| Lane B, docs lane | `ws/m36-lane-b-docs` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/lane-b-docs` |
 
 Creation rules:
 
-1. The parent captures baseline on the live branch before creating any M35 worktree.
-2. `ws/m35-int` is created from the exact SHA recorded in `integration-base.txt`.
-3. `ws/m35-int` lands M34 and produces both `m34-landing-freeze.json` and `helper-surface-api-freeze.json` before any worker lane exists.
-4. Every worker lane forks from the exact SHA recorded in `helper-surface-api-freeze.json`.
-5. No worker is forked from another worker branch.
-6. If any named worktree already exists with stale state, the parent recreates it and records that in `session-log.md`.
-7. A stale lane is discarded and recreated from the latest relevant freeze SHA. The parent does not hand-forward stale worker branches.
-8. If the live branch moves after baseline capture, the parent either re-baselines and rebuilds orchestration state or blocks publish.
+1. The parent captures baseline on the live checkout before creating any M36 worktree.
+2. `ws/m36-int` is created from the exact SHA recorded in:
+   - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m36_helper_surface_follow_on_contract_consolidation/integration-base.txt`
+3. `ws/m36-lane-a-code` is created from the exact SHA recorded in:
+   - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m36_helper_surface_follow_on_contract_consolidation/integration-freeze.json`
+4. `ws/m36-lane-b-docs` is created only after code integration is green, from the exact SHA recorded in:
+   - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m36_helper_surface_follow_on_contract_consolidation/api-vocabulary-freeze.json`
+5. No worker lane forks from another worker lane.
+6. If any named worktree already exists with stale state, the parent recreates it and records the action in `session.log`.
+7. If the live branch moves after baseline capture but before publish, the parent either re-baselines or explicitly merges the new live head into `ws/m36-int` and reruns the full verification wall. It does not publish blind.
 
-## Parent vs Worker Ownership
+Canonical worktree creation commands:
 
-### Parent-owned always
+```bash
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/int \
+  -b ws/m36-int <BASELINE_SHA>
 
-- baseline capture
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/lane-a-code \
+  -b ws/m36-lane-a-code <INTEGRATION_FREEZE_SHA>
+
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/lane-b-docs \
+  -b ws/m36-lane-b-docs <API_VOCAB_FREEZE_SHA>
+```
+
+## Canonical Run-State
+
+Parent-owned orchestration truth lives under:
+
+- `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
+- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m36_helper_surface_follow_on_contract_consolidation`
+- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation`
+- `ARTIFACT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts`
+
+Canonical parent-owned files:
+
+- `baseline.json`
+- `integration-base.txt`
+- `publish-head.txt`
+- `authority-freeze.json`
+- `authority-snapshot/PLAN.md`
+- `authority-snapshot/ORCH_PLAN.md`
+- `run-state.json`
+- `tasks.json`
+- `queue.json`
+- `session.log`
+- `integration-freeze.json`
+- `api-vocabulary-freeze.json`
+- `lane-a-launch.md`
+- `lane-b-launch.md`
+- `merge-log.md`
+- `proof-log.json`
+- `green-path-record.json`
+- `acceptance.md`
+- `blocked.json`
+- `blocked-failing-command.txt`
+- `blocked-failing-exit-code.txt`
+- `closeout.md`
+
+Required freeze-record contents:
+
+- `baseline.json`
+  - live branch
+  - live HEAD SHA
+  - dirty-state summary
+  - local overlapping edit summary
+  - current recommendation artifact path
+  - current decision artifact path
+- `publish-head.txt`
+  - exact live HEAD SHA captured during baseline
+  - reused only to detect whether the live publish target moved before Task M36-80
+- `integration-freeze.json`
+  - exact SHA used to create `ws/m36-int`
+  - exact SHA used to create `ws/m36-lane-a-code`
+  - explicit statement that one real code lane is now authorized
+  - explicit statement that docs lane is still blocked
+- `api-vocabulary-freeze.json`
+  - exact post-code integration SHA
+  - exact helper contract type and function names
+  - frozen wedge vocabulary strings
+  - explicit docs-lane unblock
+  - explicit statement that raw SHA is debug only and normalized fingerprints are authoritative
+- `run-state.json`
+  - current phase
+  - active branch per lane
+  - accepted sentinels
+  - blocked flag
+  - current freeze SHA pointers
+- `queue.json`
+  - ordered task queue
+  - dependency ids
+  - lane assignment
+  - state: pending, launched, accepted, blocked
+- `proof-log.json`
+  - command name
+  - artifact path
+  - raw SHA if captured
+  - normalized fingerprint if captured
+  - semantic interpretation
+- `acceptance.md`
+  - final checklist by task
+  - final command results
+  - publish decision
+
+Per-task sentinel directories:
+
+- `task-m36-00-baseline-capture`
+- `task-m36-05-authority-freeze`
+- `task-m36-10-create-integration-worktree`
+- `task-m36-20-launch-code-lane`
+- `task-m36-30-parent-code-integration`
+- `task-m36-40-api-vocabulary-freeze`
+- `task-m36-50-launch-docs-lane`
+- `task-m36-60-parent-docs-integration`
+- `task-m36-70-final-verification-wall`
+- `task-m36-80-publish-back-to-live`
+- `task-m36-90-closeout`
+
+Each task directory contains parent-written markers only:
+
+- `started.json`
+- `status.json`
+- exactly one terminal file: `done.json` or `blocked.json`
+
+Workers never write orchestration state, queue files, session logs, sentinels, or parent acceptance records.
+
+## Artifact Handling Rules
+
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/family-promotion/analysis/*.latest.json` are generated artifacts only.
+- Workers may read generated artifacts to understand behavior, but they do not edit them.
+- Parent reruns generation and validation commands on `ws/m36-int` before accepting any lane.
+- Raw SHA of latest artifact bytes may be logged in:
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m36_helper_surface_follow_on_contract_consolidation/proof-log.json`
+  but raw SHA is never a ship gate.
+- Normalized semantic fingerprints are the durable proof identity for closeout.
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m36_helper_surface_follow_on_contract_consolidation/**` are orchestration artifacts only. They never replace green tests, green runtime gates, or parent validation.
+- `PLAN.md` is not updated until all final gates pass on `ws/m36-int`.
+
+## Parent Vs Worker Ownership
+
+### Parent-only always
+
+- baseline capture on `/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
 - authority freeze
-- M34 landing
-- M34 behavior verification
-- helper-surface module creation
-- helper-surface API freeze
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/lib.rs`
-- worker launch packets
-- all merges
+- creation and recreation of all worktrees
+- all files under `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m36_helper_surface_follow_on_contract_consolidation/`
+- all merge operations into `ws/m36-int`
 - stale-lane invalidation
-- final regression tests
-- green-path validation
-- blocked-path capture
-- publish and CI observation
+- final verification wall
+- publish-back to `feat/corpus-expansion`
 - closeout
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
 
-### Lane A: consumer rewiring
-
-Recommended worker profile:
-
-- `GPT-5.4`
-- `reasoning_effort=high`
-
-Owned path:
-
-- `xtask/src/family/recommend.rs`
-
-Mission:
-
-- rewire recommendation durable-hold logic inside `recommend.rs` to use the frozen shared classifier
-- rewire the landed M34 corpus-decision derivation logic inside `recommend.rs` to use the same frozen shared classifier
-- preserve outward artifact vocabulary and live-wedge behavior
-
-Lane A may change only inside `xtask/src/family/recommend.rs`:
-
-- helper-surface signal construction
-- helper-surface classification call sites
-- recommendation durable-hold branching
-- corpus-decision basis derivation branching
-- local helper functions in `recommend.rs` that become unnecessary after extraction
-
-Lane A may not change:
-
-- `xtask/src/lib.rs`
-- command dispatch
-- clap enum wiring
-- parent-owned tests in `xtask/src/lib.rs`
-- `promotion_artifacts.rs`
-- `helper_surface.rs`
-- `mod.rs`
-- `.runs/**`
-- `.semantic-family-artifacts/**`
-
-### Lane B: validator alignment
-
-Recommended worker profile:
-
-- `GPT-5.4`
-- `reasoning_effort=high`
-
-Owned path:
-
-- `xtask/src/family/promotion_artifacts.rs`
-
-Mission:
-
-- align recommendation and corpus-decision tuple validators to the frozen helper-surface contract without introducing a second classifier
-
-Lane B may change only inside `xtask/src/family/promotion_artifacts.rs`:
-
-- tuple-validation rules
-- schema-validation error text
-- corpus-decision tuple acceptance/rejection paths
-- recommendation durable-hold tuple acceptance/rejection paths
-
-Lane B may not change:
-
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/mod.rs`
-- `xtask/src/lib.rs`
-- `.runs/**`
-- `.semantic-family-artifacts/**`
-
-### Lane C: docs alignment
+### Lane A: one real code lane
 
 Recommended worker profile:
 
@@ -244,687 +302,398 @@ Recommended worker profile:
 
 Owned paths:
 
-- `semantic-families/README.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/helper_surface.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/recommend.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/promotion_artifacts.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/coverage.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/mod.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/lib.rs`
 
 Mission:
 
-- explain that helper-surface pressure is still real
-- explain that one shared classifier now owns non-promotability classification
-- explain that recommendation analysis remains input truth
-- explain that corpus-decision remains operator-action output
-- avoid implying M35 spent corpus run `1` or implemented a broader engine
+- extend `helper_surface.rs` to own the derived helper follow-on contract
+- rewire `recommend.rs` to consume that owner
+- rewire `promotion_artifacts.rs` to consume that owner
+- add stable proof-fingerprint helpers and regressions
+- preserve the frozen live wedge behavior
 
-Lane C may not change:
+Forbidden:
 
-- any `xtask/src/**`
-- `PLAN.md`
-- `ORCH_PLAN.md`
-- `.runs/**`
-- `.semantic-family-artifacts/**`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/**`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/**`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/**`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/**`
 
-## Canonical Run-State
+### Lane B: docs lane
 
-Parent-owned orchestration truth lives under:
+Recommended worker profile:
 
-- `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m35_architecture_shared_core_follow_on`
-- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m35-architecture-shared-core-follow-on`
-- `ARTIFACT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts`
+- `GPT-5.4`
+- `reasoning_effort=high`
 
-Canonical parent-owned files:
+Owned paths:
 
-- `baseline.json`
-- `integration-base.txt`
-- `publish-head.txt`
-- `closed-surface-base.txt`
-- `authority-freeze.json`
-- `authority-snapshot/PLAN.md`
-- `authority-snapshot/ORCH_PLAN.md`
-- `tasks.json`
-- `session-log.md`
-- `basis-freeze.json`
-- `m34-landing-freeze.json`
-- `helper-surface-api-freeze.json`
-- `lane-a-launch.md`
-- `lane-b-launch.md`
-- `lane-c-launch.md`
-- `merge-log.md`
-- `code-freeze.json`
-- `green-path-record.json`
-- `proof-log.json`
-- `push-record.json`
-- `ci-observation.json`
-- `blocked.json`
-- `blocked-failing-command.txt`
-- `blocked-failing-exit-code.txt`
-- `blocked-analysis.sha-before`
-- `blocked-analysis.sha-after`
-- `blocked-decision.present-before`
-- `blocked-decision.sha-before`
-- `blocked-decision.present-after`
-- `blocked-decision.sha-after`
-- `blocked-decision.change-status`
-- `blocked-stop-reason.txt`
-- `closeout.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/README.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/recommendation_corpus_expansion_program_v0.1.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/semantic_family_capability_corpus_guide_v0.1.md`
 
-Required freeze-record contents:
+Mission:
 
-- `basis-freeze.json`
-  - live branch name
-  - live head SHA
-  - dirty-state summary
-  - exact recommendation artifact SHA
-  - exact helper-surface wedge assertions
-- `m34-landing-freeze.json`
-  - exact landed SHA
-  - proof that `df15e3e392be30a13b10f028eb19e4286c931523` is ancestor or was cherry-picked
-  - exact M34-owned paths now present
-  - exact emitted corpus-decision wedge
-- `helper-surface-api-freeze.json`
-  - exact launch SHA for all worker lanes
-  - frozen module path
-  - frozen enum/type/function names
-  - frozen classifier semantics
-  - explicit statement that `paths.rs` is frozen after M34 landing
-  - frozen docs vocabulary:
-    - `helper_surface_not_promotable`
-    - `durable_non_promotable_helper_surface`
-    - `author_architecture_follow_on_plan`
+- explain one helper follow-on contract owner
+- explain that M36 preserves the frozen M35 wedge
+- explain that raw latest-artifact SHA is not semantic identity
+- explain that normalized semantic fingerprints are the proof surface
 
-Per-task sentinel directories:
+Forbidden:
 
-- `task-m35-00-baseline`
-- `task-m35-01-authority-freeze`
-- `task-m35-02-reality-alignment`
-- `task-m35-03-helper-api-freeze`
-- `task-m35-a-consumers`
-- `task-m35-b-validators`
-- `task-m35-c-docs`
-- `task-m35-04-parent-integration`
-- `task-m35-05-code-freeze`
-- `task-m35-06-green-path`
-- `task-m35-07-final-verify`
-- `task-m35-08-push-observe`
-- `task-m35-09-closeout`
-
-Each sentinel directory contains:
-
-- `started.json`
-- `status.json`
-- exactly one terminal file: `done.json` or `blocked.json`
-
-## Launch Packets And Worker Return Contract
-
-Parent-written launch packets:
-
-- `RUN_ROOT/lane-a-launch.md`
-- `RUN_ROOT/lane-b-launch.md`
-- `RUN_ROOT/lane-c-launch.md`
-
-Each launch packet must include:
-
-- lane id
-- branch name
-- worktree path
-- owned paths
-- forbidden paths
-- exact relevant `PLAN.md` excerpt
-- exact relevant `ORCH_PLAN.md` excerpt
-- exact `helper-surface-api-freeze.json` excerpt
-- required commands
-- acceptance criteria
-- return contract
-- stale-lane invalidation triggers
-
-Worker return contract is fixed for every lane. A worker returns only:
-
-- changed files
-- commands run and exit codes
-- blockers or unresolved assumptions
-
-A worker does not return:
-
-- transcript dumps
-- long reasoning logs
-- ad hoc plan rewrites
-- edits to `.runs/**`
-- edits to `.semantic-family-artifacts/**`
-
-The parent records worker completion, merge, or relaunch outcomes in `merge-log.md` and `session-log.md`.
+- any `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/**`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/**`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/**`
 
 ## Task Graph
 
 ```text
-task/m35-00-baseline
-  -> task/m35-01-authority-freeze
-      -> task/m35-02-reality-alignment
-          -> task/m35-03-helper-api-freeze
-              -> task/m35-a-consumers
-              -> task/m35-b-validators
-              -> task/m35-c-docs
-task/m35-a-consumers
-  -> task/m35-04-parent-integration
-task/m35-b-validators
-  -> task/m35-04-parent-integration
-task/m35-c-docs
-  -> task/m35-04-parent-integration
-task/m35-04-parent-integration
-  -> task/m35-05-code-freeze
-      -> task/m35-06-green-path
-          -> task/m35-07-final-verify
-              -> task/m35-08-push-observe
-                  -> task/m35-09-closeout
+task-m36-00-baseline-capture
+  -> task-m36-05-authority-freeze
+      -> task-m36-10-create-integration-worktree
+          -> task-m36-20-launch-code-lane
+              -> task-m36-30-parent-code-integration
+                  -> task-m36-40-api-vocabulary-freeze
+                      -> task-m36-50-launch-docs-lane
+                          -> task-m36-60-parent-docs-integration
+                              -> task-m36-70-final-verification-wall
+                                  -> task-m36-80-publish-back-to-live
+                                      -> task-m36-90-closeout
 ```
 
-Execution meaning:
+## Task M36-00 - Baseline Capture On Live Branch
 
-1. Parent proves the live branch still carries the expected M33/M34 helper-surface basis.
-2. Parent freezes authority and creates the integration worktree.
-3. Parent lands validated M34 before any M35-only edits.
-4. Parent freezes the new helper-surface API before any worker launches.
-5. Workers operate only on disjoint owned paths from the exact freeze SHA.
-6. Parent integrates all lanes and owns `xtask/src/lib.rs` for final regression additions and dispatch reconciliation.
-7. Parent runs the authoritative green-path and final verification floors from merged integration state only.
-8. Parent publishes only the exact verified `ws/m35-int` SHA.
+**Owner:** Parent  
+**Branch:** `feat/corpus-expansion`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
 
-## Workstream Plan
+Actions:
 
-### WS-0 Baseline capture and wedge proof
+1. Record current branch, HEAD SHA, dirty state, and overlapping local edits in `baseline.json`.
+2. Write the same live HEAD SHA to `publish-head.txt` before creating any M36 worktree.
+3. Run the live wedge commands on the live checkout.
+4. Record the opening truth in `session.log` and `tasks.json`.
+5. Write:
+   - `task-m36-00-baseline-capture/started.json`
+   - `task-m36-00-baseline-capture/status.json`
 
-#### `task/m35-00-baseline`
-
-Parent mission:
-
-- capture the live branch baseline and prove that the current recommendation artifact still matches the helper-surface wedge that M34 and M35 both depend on
-
-Required commands:
+Runtime gates:
 
 ```bash
-git branch --show-current
-git rev-parse --verify HEAD
-git status --short
-git diff --name-only
-ANALYSIS_PATH=".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
-cargo xtask family validate-artifact "$ANALYSIS_PATH"
-jq -e '.recommendation_status == "no_strong_candidate"' "$ANALYSIS_PATH"
-jq -e '.decision_summary.decision_status == "not_recommended"' "$ANALYSIS_PATH"
-jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' "$ANALYSIS_PATH"
-jq -e '.evidence_summary.missing_evidence == [] and .evidence_summary.stale_evidence == []' "$ANALYSIS_PATH"
-shasum -a 256 "$ANALYSIS_PATH"
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.recommendation_status == "no_strong_candidate"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.decision_status == "not_recommended"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 ```
+
+Stop conditions:
+
+- any command fails
+- any `jq` assertion fails
+- overlapping local edits touch the closed implementation surface and are not explicitly accepted
+- the live wedge drifts from the frozen M35 tuple
 
 Acceptance:
 
-- live branch is `feat/corpus-expansion`
-- recommendation artifact validates
-- live basis still matches the helper-surface wedge
-- overlapping local edits inside the M35-owned surface are either absent or explicitly recorded as a blocker
-- exact working-tree bytes of `PLAN.md` are snapshotted under `authority-snapshot/PLAN.md`
+- `baseline.json` exists and includes branch, SHA, dirty summary, and overlap summary
+- `integration-base.txt` contains the exact live SHA to fork from
+- `publish-head.txt` contains the same exact live SHA recorded in `baseline.json`
+- `task-m36-00-baseline-capture/done.json` exists
+- `task-m36-00-baseline-capture/blocked.json` does not exist
+- `queue.json` marks the next task as ready
 
-### WS-1 Authority freeze and integration worktree creation
+## Task M36-05 - Authority Freeze
 
-#### `task/m35-01-authority-freeze`
+**Owner:** Parent  
+**Branch:** `feat/corpus-expansion`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
 
-Parent mission:
+Actions:
 
-- freeze the orchestration contract and create `ws/m35-int` from the recorded baseline SHA
+1. Snapshot `PLAN.md` and `ORCH_PLAN.md` into `authority-snapshot/`.
+2. Write `authority-freeze.json`.
+3. Mark the implementation surface and branch strategy immutable for the run.
+4. Update `run-state.json` and `queue.json`.
 
-Required commands:
+Stop conditions:
 
-```bash
-BASE_SHA=$(cat /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m35_architecture_shared_core_follow_on/integration-base.txt)
-git worktree add -b ws/m35-int /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m35-architecture-shared-core-follow-on/int "$BASE_SHA"
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m35-architecture-shared-core-follow-on/int rev-parse --verify HEAD
-```
+- either authority file changes after snapshot
+- the requested scope no longer matches `PLAN.md`
+- new overlapping edits appear on authority files during freeze
 
 Acceptance:
 
 - `authority-freeze.json` exists
-- `tasks.json` exists
-- `ws/m35-int` exists and points at the recorded baseline SHA
-- no worker launches before this checkpoint completes
+- `authority-snapshot/PLAN.md` and `authority-snapshot/ORCH_PLAN.md` exist
+- `task-m36-05-authority-freeze/done.json` exists
+- `run-state.json` marks docs lane blocked and code lane not yet launched
 
-### WS-2 Reality alignment: land validated M34 first
+## Task M36-10 - Create Integration Worktree
 
-#### `task/m35-02-reality-alignment`
+**Owner:** Parent  
+**Branch:** `ws/m36-int`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/int`
 
-Parent mission:
+Actions:
 
-- land the validated M34 contract onto `ws/m35-int` before any M35-only edits begin
+1. Create `ws/m36-int` from the SHA in `integration-base.txt`.
+2. Verify branch and worktree point to the recorded baseline SHA.
+3. Write `integration-freeze.json`.
+4. Record creation details in `session.log`.
 
-Required parent actions:
+Stop conditions:
 
-1. Land `df15e3e392be30a13b10f028eb19e4286c931523` from `ws/m34-int`.
-2. Verify these surfaces now exist on `ws/m35-int`:
-   - `cargo xtask family corpus-decision --format json`
-   - `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-   - M34 action vocabulary and docs
-3. Freeze M34 behavior before any new helper-surface extraction work starts.
-
-Preferred command floor:
-
-```bash
-git cherry-pick -x df15e3e392be30a13b10f028eb19e4286c931523
-ANALYSIS_PATH=".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
-DECISION_PATH=".semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json"
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family validate-artifact "$ANALYSIS_PATH"
-cargo xtask family validate-artifact "$DECISION_PATH"
-jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' "$DECISION_PATH"
-jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' "$DECISION_PATH"
-jq -e '.required_next_action == "author_architecture_follow_on_plan"' "$DECISION_PATH"
-```
+- worktree cannot be created from the exact baseline SHA
+- pre-existing stale `int` worktree cannot be safely recreated
+- `ws/m36-int` is not a clean fork from the live baseline SHA
 
 Acceptance:
 
-- M34 commit is landed on `ws/m35-int`
-- M34 command surface exists and validates
-- live wedge remains unchanged after landing
-- `m34-landing-freeze.json` exists before any M35-only edits begin
+- `git rev-parse HEAD` in `ws/m36-int` equals `integration-base.txt`
+- `integration-freeze.json` exists and authorizes exactly one code lane
+- `task-m36-10-create-integration-worktree/done.json` exists
+- `run-state.json` lists `ws/m36-int` as the integration spine
 
-### WS-3 Helper-surface API freeze
+## Task M36-20 - Launch The One Real Code Lane
 
-#### `task/m35-03-helper-api-freeze`
+**Owner:** Parent launches, Lane A executes  
+**Branch:** `ws/m36-lane-a-code`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/lane-a-code`
 
-Parent mission:
+Actions:
 
-- create the shared helper-surface module, freeze the API, and make that frozen commit the only worker launch base
+1. Create `ws/m36-lane-a-code` from the SHA recorded in `integration-freeze.json`.
+2. Write `lane-a-launch.md` with:
+   - owned paths
+   - forbidden paths
+   - exact runtime gates
+   - return contract
+   - stale-lane invalidation triggers
+3. Mark the task launched in `queue.json`.
 
-Required parent actions:
-
-1. Add `xtask/src/family/helper_surface.rs`.
-2. Export it from `xtask/src/family/mod.rs`.
-3. Freeze the API shape:
-   - `HelperSurfaceSignal`
-   - `HelperSurfaceDisposition`
-   - `classify_helper_surface(...) -> Option<HelperSurfaceDisposition>`
-4. Freeze the semantics:
-   - `UnsupportedFunctionReasonCode::UnsupportedFunctionSurface`
-   - `overlap_family == "unknown"`
-   - `real_example_hits > 0`
-   - current helper/no-deps fingerprint rule
-5. Keep the classifier pure, explicit, and wedge-specific.
-6. Keep `recommend.rs` and `promotion_artifacts.rs` consumer rewiring for later lanes.
-
-Suggested command floor:
+Lane A required checkpoints:
 
 ```bash
-cargo fmt --all
-cargo test -p xtask helper_surface -- --color never
-cargo test -p xtask recommendation_policy_durable_holds_helper_surface_candidate -- --color never
-```
-
-Acceptance:
-
-- `helper_surface.rs` exists
-- `mod.rs` exports it
-- `helper-surface-api-freeze.json` exists
-- all worker lanes will fork from this exact commit
-- no worker may alter the frozen helper-surface API without invalidation and relaunch
-
-### WS-4 Parallel lanes after API freeze
-
-All lanes fork from the exact SHA recorded in `helper-surface-api-freeze.json`.
-
-#### `task/m35-a-consumers` on `ws/m35-lane-a-consumers`
-
-Worker mission:
-
-- rewire both recommendation and corpus-decision consumers inside `xtask/src/family/recommend.rs` to call the frozen shared classifier
-
-Required outcomes:
-
-- `recommend.rs` no longer owns an inline helper-surface classifier
-- the durable-hold recommendation path still emits:
-  - `hold_reasons = ["helper_surface_not_promotable"]`
-  - `next_step_status = "durable_hold"`
-  - `next_step_detail = "helper_surface_not_promotable"`
-- the corpus-decision path still emits:
-  - `decision_action = "pivot_to_architecture_shared_core_follow_on"`
-  - `decision_basis_code = "durable_non_promotable_helper_surface"`
-  - `required_next_action = "author_architecture_follow_on_plan"`
-
-Lane-local command floor:
-
-```bash
-cargo test -p xtask recommendation_policy_durable_holds_helper_surface_candidate -- --color never
-cargo test -p xtask corpus_decision_maps_helper_surface_wedge_to_architecture_follow_on -- --color never
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-```
-
-Acceptance:
-
-- only `xtask/src/family/recommend.rs` changed
-- both consumers use the frozen shared classifier
-- no `xtask/src/lib.rs` edits exist on the lane branch
-- outward artifact bytes and wedge vocabulary remain unchanged on unchanged basis
-
-#### `task/m35-b-validators` on `ws/m35-lane-b-validators`
-
-Worker mission:
-
-- align recommendation and corpus-decision tuple validators to the frozen helper-surface contract without introducing a second classifier
-
-Required outcomes:
-
-- validators continue to enforce tuple consistency
-- validators do not independently reconstruct helper-surface semantics from raw fields
-- `promotion_artifacts.rs` remains the artifact schema/validation layer only
-
-Lane-local command floor:
-
-```bash
-cargo test -p xtask artifact_schema_ -- --color never
-```
-
-Acceptance:
-
-- only `xtask/src/family/promotion_artifacts.rs` changed
-- helper-surface validation remains tuple-based, not semantic reclassification
-- no new artifact kind or schema family appears
-
-#### `task/m35-c-docs` on `ws/m35-lane-c-docs`
-
-Worker mission:
-
-- align maintainer docs to the frozen M35 boundary and vocabulary
-
-Lane-local command floor:
-
-```bash
-rg -n "helper_surface_not_promotable|durable_non_promotable_helper_surface|author_architecture_follow_on_plan|corpus-decision|corpus-program-decision.latest.json" semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md
-! rg -n "new crate|generic decision engine|spec-core owns helper-surface truth|M35 spends corpus run 1|M35 promotes a new family" semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md
-```
-
-Acceptance:
-
-- only the three owned docs paths changed
-- docs explain the new shared code owner honestly
-- docs do not imply widened scope
-
-## Merge Order, Conflict Flags, And Relaunch Rules
-
-### Exact merge order into `ws/m35-int`
-
-1. merge `ws/m35-lane-a-consumers`
-2. merge `ws/m35-lane-b-validators`
-3. parent-only `xtask/src/lib.rs` integration and regression completion
-4. run targeted post-code-merge test floor
-5. merge `ws/m35-lane-c-docs`
-6. run doc grep floor
-7. run code-freeze, green-path, and final verification floors
-
-Rationale:
-
-- lane A and lane B are the code-bearing lanes and define the M35 functional contract
-- `xtask/src/lib.rs` is parent-only and is the correct place to finish cross-consumer regressions after both code lanes are present
-- docs merge after code/test freeze avoids wording drift if the parent needed to tighten test names or exact vocabulary during integration
-
-### Merge command concept
-
-Parent uses only non-interactive merges from `ws/m35-int`:
-
-```bash
-git merge --no-ff ws/m35-lane-a-consumers
-git merge --no-ff ws/m35-lane-b-validators
-# parent-only xtask/src/lib.rs integration edits and regression completion happen here
-git merge --no-ff ws/m35-lane-c-docs
-```
-
-If the parent decides squash or cherry-pick is safer for a lane, that choice must be recorded in `merge-log.md` and the lane's acceptance must be re-proved on the integrated tree.
-
-### Conflict magnets
-
-The main conflict magnets are:
-
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/lib.rs`
-- helper-surface vocabulary strings that appear in docs and tests
-
-### Conflicts that the parent may resolve in integration
-
-The parent may resolve only straightforward merge mechanics:
-
-- import ordering
-- module import additions
-- formatting-only collisions
-- test name updates in parent-owned `xtask/src/lib.rs`
-- doc wording alignment after code vocabulary is frozen
-
-### Conflicts that bounce the lane instead of being resolved creatively
-
-Bounce the lane and recreate it if any of these happen:
-
-- lane A edits any file other than `xtask/src/family/recommend.rs`
-- lane B edits any file other than `xtask/src/family/promotion_artifacts.rs`
-- lane C edits any file outside its three owned docs
-- a lane rewrites the frozen helper-surface API
-- a lane requires `xtask/src/lib.rs` edits
-- a lane introduces a second semantic classifier
-- a lane changes the emitted live-wedge vocabulary
-- a lane implies changes to `spec-core`
-- a lane requires widening into a new artifact family, new crate, or generic engine
-- a lane makes the parent choose between conflicting interpretations of helper-surface semantics rather than the frozen contract
-
-### Lane discard and relaunch rules
-
-Discard and recreate a lane from `helper-surface-api-freeze.json` if:
-
-- the lane touched a forbidden path
-- the lane diverged from the frozen API or vocabulary
-- the lane cannot merge without semantic conflict on the frozen contract
-- the parent changed the frozen API after launch
-- the lane’s owned-file diff was polluted by unrelated edits
-- the worker return contract is incomplete or ambiguous
-- targeted lane acceptance commands fail on the lane branch
-
-The parent does not hand-forward a stale lane. Stale or polluted lanes are deleted and relaunched cleanly.
-
-## Parent Integration Command Floor
-
-### `task/m35-04-parent-integration`
-
-Parent mission:
-
-- merge all worker lanes into `ws/m35-int`, resolve only straightforward conflicts, and finish the parent-owned `xtask/src/lib.rs` regression surface
-
-Required parent merge and validation floor:
-
-```bash
-git checkout ws/m35-int
-git merge --no-ff ws/m35-lane-a-consumers
-git merge --no-ff ws/m35-lane-b-validators
-cargo fmt --all
-cargo test -p xtask recommendation_policy_durable_holds_helper_surface_candidate -- --color never
-cargo test -p xtask corpus_decision_maps_helper_surface_wedge_to_architecture_follow_on -- --color never
-cargo test -p xtask artifact_schema_rejects_corpus_decision_with_contradictory_action_for_helper_surface_basis -- --color never
-cargo test -p xtask corpus_decision_command_path_writes_same_bytes_for_unchanged_basis -- --color never
-# parent-only xtask/src/lib.rs regression completion happens here if needed
-cargo fmt --all
 cargo test -p xtask helper_surface -- --color never
 cargo test -p xtask recommend -- --color never
 cargo test -p xtask corpus_decision -- --color never
 cargo test -p xtask artifact_schema_ -- --color never
-git merge --no-ff ws/m35-lane-c-docs
-rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|author_architecture_follow_on_plan|corpus-decision|corpus-program-decision.latest.json' semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md
+cargo test -p xtask proof_fingerprint -- --color never
 ```
+
+The new proof-identity regressions added by M36 must include `proof_fingerprint`
+in the test name so this checkpoint filter is authoritative.
+
+Stop conditions:
+
+- any attempt to split code work across another branch or worktree
+- lane touches forbidden docs or orchestration state
+- lane requires new crate, schema rewrite, or generic engine
 
 Acceptance:
 
-- lane A and lane B merge before any parent `xtask/src/lib.rs` completion
-- parent-only `xtask/src/lib.rs` work is complete before docs merge
-- lane C merges only after code/test vocabulary is frozen
-- targeted post-merge test floor passes
+- `lane-a-launch.md` exists and is complete
+- `ws/m36-lane-a-code` is forked from the frozen integration SHA, not from live
+- `task-m36-20-launch-code-lane/done.json` exists
+- `queue.json` shows one active worker lane only
 
-## Blocked-Path Evidence Capture
+## Task M36-30 - Parent Code Integration On `ws/m36-int`
 
-### Parent-owned blocked-path files
+**Owner:** Parent  
+**Branch:** `ws/m36-int`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/int`
 
-If any step after `authority-freeze.json` fails and the parent decides the run is blocked, the parent must write these files under `RUN_ROOT`:
+Actions:
 
-- `blocked-failing-command.txt`
-- `blocked-failing-exit-code.txt`
-- `blocked-analysis.sha-before`
-- `blocked-analysis.sha-after`
-- `blocked-decision.present-before`
-- `blocked-decision.sha-before`
-- `blocked-decision.present-after`
-- `blocked-decision.sha-after`
-- `blocked-decision.change-status`
-- `blocked-stop-reason.txt`
-- `blocked.json`
+1. Accept or reject Lane A return based on owned paths and checkpoint evidence.
+2. Merge `ws/m36-lane-a-code` into `ws/m36-int`.
+3. Rerun code-lane checkpoints on `ws/m36-int`.
+4. Rerun the live wedge runtime gates on `ws/m36-int`.
+5. Record results in `merge-log.md`, `proof-log.json`, and `session.log`.
 
-### Canonical blocked-path capture floor
-
-The parent must run this exact evidence-capture floor with the real failing command and exit code:
+Runtime gates after merge:
 
 ```bash
-RUN_ROOT="/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m35_architecture_shared_core_follow_on"
-ANALYSIS_PATH=".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
-DECISION_PATH=".semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json"
-FAILING_COMMAND="${FAILING_COMMAND:?set FAILING_COMMAND to the exact command that failed}"
-FAILING_EXIT_CODE="${FAILING_EXIT_CODE:?set FAILING_EXIT_CODE to the exact non-zero exit code}"
-
-ANALYSIS_SHA_BEFORE=$(shasum -a 256 "$ANALYSIS_PATH" | awk '{print $1}')
-DECISION_PRESENT_BEFORE=0
-DECISION_SHA_BEFORE=""
-if [ -f "$DECISION_PATH" ]; then
-  DECISION_PRESENT_BEFORE=1
-  DECISION_SHA_BEFORE=$(shasum -a 256 "$DECISION_PATH" | awk '{print $1}')
-fi
-
-printf '%s\n' "$FAILING_COMMAND" > "$RUN_ROOT/blocked-failing-command.txt"
-printf '%s\n' "$FAILING_EXIT_CODE" > "$RUN_ROOT/blocked-failing-exit-code.txt"
-printf '%s\n' "$ANALYSIS_SHA_BEFORE" > "$RUN_ROOT/blocked-analysis.sha-before"
-printf '%s\n' "$DECISION_PRESENT_BEFORE" > "$RUN_ROOT/blocked-decision.present-before"
-printf '%s\n' "$DECISION_SHA_BEFORE" > "$RUN_ROOT/blocked-decision.sha-before"
-
-cargo xtask family validate-artifact "$ANALYSIS_PATH"
-
-ANALYSIS_SHA_AFTER=$(shasum -a 256 "$ANALYSIS_PATH" | awk '{print $1}')
-DECISION_PRESENT_AFTER=0
-DECISION_SHA_AFTER=""
-if [ -f "$DECISION_PATH" ]; then
-  DECISION_PRESENT_AFTER=1
-  cargo xtask family validate-artifact "$DECISION_PATH"
-  DECISION_SHA_AFTER=$(shasum -a 256 "$DECISION_PATH" | awk '{print $1}')
-fi
-
-printf '%s\n' "$ANALYSIS_SHA_AFTER" > "$RUN_ROOT/blocked-analysis.sha-after"
-printf '%s\n' "$DECISION_PRESENT_AFTER" > "$RUN_ROOT/blocked-decision.present-after"
-printf '%s\n' "$DECISION_SHA_AFTER" > "$RUN_ROOT/blocked-decision.sha-after"
-
-if [ "$DECISION_PRESENT_BEFORE" = "1" ] && [ "$DECISION_PRESENT_AFTER" = "1" ]; then
-  if [ "$DECISION_SHA_BEFORE" = "$DECISION_SHA_AFTER" ]; then
-    printf 'stable\n' > "$RUN_ROOT/blocked-decision.change-status"
-  else
-    printf 'changed_unexpectedly\n' > "$RUN_ROOT/blocked-decision.change-status"
-  fi
-elif [ "$DECISION_PRESENT_BEFORE" = "0" ] && [ "$DECISION_PRESENT_AFTER" = "1" ]; then
-  printf 'appeared_during_failure_window\n' > "$RUN_ROOT/blocked-decision.change-status"
-elif [ "$DECISION_PRESENT_BEFORE" = "1" ] && [ "$DECISION_PRESENT_AFTER" = "0" ]; then
-  printf 'disappeared_during_failure_window\n' > "$RUN_ROOT/blocked-decision.change-status"
-else
-  printf 'absent_both_before_and_after\n' > "$RUN_ROOT/blocked-decision.change-status"
-fi
-
-printf '%s\n' 'stop_publish_and_closeout' > "$RUN_ROOT/blocked-stop-reason.txt"
-test "$FAILING_EXIT_CODE" -ne 0
-```
-
-Blocked-path rules:
-
-- the parent preserves the exact failing command and exit code
-- the parent preserves recommendation artifact SHA before and after
-- the parent preserves decision artifact presence and SHA before and after
-- the parent classifies decision-artifact change status as one of:
-  - `stable`
-  - `changed_unexpectedly`
-  - `appeared_during_failure_window`
-  - `disappeared_during_failure_window`
-  - `absent_both_before_and_after`
-- the parent writes `blocked.json`
-- the parent stops downstream publish and closeout
-- the parent does not report partial green success
-
-## Code Freeze
-
-### `task/m35-05-code-freeze`
-
-Parent mission:
-
-- freeze the merged M35 code lane only after the targeted test and determinism floors pass
-
-Required commands:
-
-```bash
-DECISION_PATH=".semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json"
-PRE_SHA=$(shasum -a 256 "$DECISION_PATH" | awk '{print $1}')
 cargo test -p xtask helper_surface -- --color never
 cargo test -p xtask recommend -- --color never
 cargo test -p xtask corpus_decision -- --color never
 cargo test -p xtask artifact_schema_ -- --color never
-cargo xtask family corpus-decision --format json
-POST_SHA=$(shasum -a 256 "$DECISION_PATH" | awk '{print $1}')
-test "$PRE_SHA" = "$POST_SHA"
-```
-
-Acceptance:
-
-- targeted M35 xtask tests pass
-- corpus-decision output is byte-stable on unchanged basis
-- `code-freeze.json` exists before green-path validation
-
-## Green-Path Validation
-
-### `task/m35-06-green-path`
-
-Parent mission:
-
-- run the exact merged-state green-path floor and prove the live wedge is unchanged
-
-Required commands:
-
-```bash
-ANALYSIS_PATH=".semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json"
-DECISION_PATH=".semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json"
+cargo test -p xtask proof_fingerprint -- --color never
 cargo xtask family coverage --format json
 cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact "$ANALYSIS_PATH"
-cargo xtask family corpus-decision --format json
-cargo xtask family validate-artifact "$DECISION_PATH"
-jq -e '.recommendation_status == "no_strong_candidate"' "$ANALYSIS_PATH"
-jq -e '.decision_summary.decision_status == "not_recommended"' "$ANALYSIS_PATH"
-jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' "$ANALYSIS_PATH"
-jq -e '.evidence_summary.missing_evidence == [] and .evidence_summary.stale_evidence == []' "$ANALYSIS_PATH"
-jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' "$DECISION_PATH"
-jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' "$DECISION_PATH"
-jq -e '.required_next_action == "author_architecture_follow_on_plan"' "$DECISION_PATH"
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.recommendation_status == "no_strong_candidate"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.decision_status == "not_recommended"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 ```
+
+Stop conditions:
+
+- `helper_surface.rs`, `recommend.rs`, and `promotion_artifacts.rs` still encode the helper follow-on contract in parallel
+- validator and decision derivation disagree on whether the helper wedge is active
+- the emitted public tuple changes
+- proof-fingerprint tests fail or are missing
 
 Acceptance:
 
-- both artifacts validate
-- recommendation wedge is unchanged
-- corpus-decision wedge is unchanged
-- `green-path-record.json` records artifact SHAs and command results
+- merge is recorded in `merge-log.md`
+- parent reruns all code-lane checkpoints green on `ws/m36-int`
+- live wedge runtime assertions still pass on `ws/m36-int`
+- `task-m36-30-parent-code-integration/done.json` exists
+- docs lane remains blocked until the next freeze task is complete
 
-## Final Verification
+## Task M36-40 - API And Vocabulary Freeze
 
-### `task/m35-07-final-verify`
+**Owner:** Parent  
+**Branch:** `ws/m36-int`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/int`
 
-Parent mission:
+Actions:
 
-- run the exact final verification floor from `ws/m35-int` before calling M35 done
+1. Capture the post-code integration SHA.
+2. Write `api-vocabulary-freeze.json`.
+3. Record the frozen helper contract surface and wedge vocabulary.
+4. Unblock the docs lane in `run-state.json` and `queue.json`.
 
-Required commands:
+Required frozen facts:
+
+- one semantic owner lives in `xtask/src/family/helper_surface.rs`
+- action mapping remains in `xtask/src/family/recommend.rs`
+- validation recomputes contract from validated basis in `xtask/src/family/promotion_artifacts.rs`
+- raw SHA is debug only
+- normalized fingerprints are authoritative proof identity
+- vocabulary strings remain unchanged
+
+Stop conditions:
+
+- names or semantics are still moving after code integration
+- docs would need to guess or invent wording not frozen in code
+- parent cannot name the exact helper contract surface unambiguously
+
+Acceptance:
+
+- `api-vocabulary-freeze.json` exists
+- `task-m36-40-api-vocabulary-freeze/done.json` exists
+- `queue.json` marks docs lane ready
+- `run-state.json` shows concurrency cap raised from `1` to `2`
+
+## Task M36-50 - Launch Docs Lane
+
+**Owner:** Parent launches, Lane B executes  
+**Branch:** `ws/m36-lane-b-docs`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/lane-b-docs`
+
+Actions:
+
+1. Create `ws/m36-lane-b-docs` from the SHA recorded in `api-vocabulary-freeze.json`.
+2. Write `lane-b-launch.md` with exact frozen vocabulary, owned paths, forbidden paths, and docs acceptance criteria.
+3. Keep code surfaces locked.
+
+Docs gate:
+
+```bash
+rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|pivot_to_architecture_shared_core_follow_on|author_architecture_follow_on_plan|corpus run `1` remains unspent' \
+  semantic-families/README.md \
+  docs/recommendation_corpus_expansion_program_v0.1.md \
+  docs/semantic_family_capability_corpus_guide_v0.1.md
+```
+
+Stop conditions:
+
+- docs lane starts before `api-vocabulary-freeze.json`
+- docs lane edits any `xtask/src/**` surface
+- docs wording reopens public vocabulary or implies raw SHA is authoritative
+
+Acceptance:
+
+- `lane-b-launch.md` exists
+- `ws/m36-lane-b-docs` is forked from the frozen post-code integration SHA
+- `task-m36-50-launch-docs-lane/done.json` exists
+- `queue.json` shows no additional lanes beyond code and docs
+
+## Task M36-60 - Parent Docs Integration
+
+**Owner:** Parent  
+**Branch:** `ws/m36-int`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/int`
+
+Actions:
+
+1. Accept or reject Lane B return based on owned paths and docs gate evidence.
+2. Merge `ws/m36-lane-b-docs` into `ws/m36-int`.
+3. Rerun the docs grep gate.
+4. Confirm docs align with code truth and proof semantics.
+
+Docs gate after merge:
+
+```bash
+rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|pivot_to_architecture_shared_core_follow_on|author_architecture_follow_on_plan|corpus run `1` remains unspent' \
+  semantic-families/README.md \
+  docs/recommendation_corpus_expansion_program_v0.1.md \
+  docs/semantic_family_capability_corpus_guide_v0.1.md
+```
+
+Stop conditions:
+
+- docs imply corpus run `1` was spent
+- docs imply raw latest-artifact SHA is the proof gate
+- docs drift from the frozen strings or parent code truth
+
+Acceptance:
+
+- merge is recorded in `merge-log.md`
+- docs grep gate passes on `ws/m36-int`
+- `task-m36-60-parent-docs-integration/done.json` exists
+- `ws/m36-int` is now ready for the final verification wall
+
+## Task M36-70 - Final Verification Wall
+
+**Owner:** Parent  
+**Branch:** `ws/m36-int`  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation/int`
+
+Actions:
+
+1. Run the full final verification floor from merged integration state.
+2. Confirm proof identity is validated by xtask tests, not raw SHA comparisons.
+3. Record results in `green-path-record.json`, `proof-log.json`, and `acceptance.md`.
+
+Final verification floor:
 
 ```bash
 cargo fmt --all --check
@@ -933,172 +702,198 @@ cargo test -p xtask helper_surface -- --color never
 cargo test -p xtask recommend -- --color never
 cargo test -p xtask corpus_decision -- --color never
 cargo test -p xtask artifact_schema_ -- --color never
+cargo test -p xtask proof_fingerprint -- --color never
 cargo xtask family coverage --format json
 cargo xtask family recommend --format json
 cargo xtask family corpus-decision --format json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-jq -e '.required_next_action == "author_architecture_follow_on_plan"' .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|author_architecture_follow_on_plan|corpus run `1`' semantic-families/README.md docs/recommendation_corpus_expansion_program_v0.1.md docs/semantic_family_capability_corpus_guide_v0.1.md PLAN.md
+jq -e '.recommendation_status == "no_strong_candidate"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.decision_status == "not_recommended"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|pivot_to_architecture_shared_core_follow_on|author_architecture_follow_on_plan|corpus run `1` remains unspent' \
+  semantic-families/README.md \
+  docs/recommendation_corpus_expansion_program_v0.1.md \
+  docs/semantic_family_capability_corpus_guide_v0.1.md
 ```
+
+Stop conditions:
+
+- any final verification command fails
+- any live wedge `jq` assertion fails
+- docs grep gate fails
+- proof identity is argued from raw SHA instead of normalized fingerprint tests
+- the final merged tree requires unexplained manual exceptions
 
 Acceptance:
 
-- formatting, clippy, tests, artifact generation, validation, and doc grep all pass
-- recommendation and corpus-decision remain aligned on the helper-surface wedge
-- no forbidden scope widening is present
+- every command above exits `0`
+- `green-path-record.json` exists and records success
+- `task-m36-70-final-verification-wall/done.json` exists
+- `blocked.json` does not exist
+- parent is authorized to publish back to live
 
-## Publish And Observe
+## Task M36-80 - Publish Back To Live Branch
 
-### `task/m35-08-push-observe`
+**Owner:** Parent  
+**From:** `ws/m36-int`  
+**To:** `feat/corpus-expansion`
 
-Parent mission:
+Actions:
 
-- publish only the exact verified `ws/m35-int` SHA
+1. Compare current live `feat/corpus-expansion` HEAD with `publish-head.txt` or `baseline.json`.
+2. If `PLAN.md` completion notes are required, land them on `ws/m36-int`, rerun Task M36-70 on that updated tree, and publish only the exact reverified SHA.
+3. If unchanged, fast-forward the live branch to the exact verified `ws/m36-int` SHA.
+4. If live moved:
+   - preferred: merge the moved live head into `ws/m36-int`, rerun Task M36-70, then update live
+   - fallback: block the run and require a fresh baseline
+5. Record the publish action in `session.log` and `acceptance.md`.
 
-Publish safety rules:
+Stop conditions:
 
-- parent publishes only if `publish-head.txt` still matches the intended live-branch publish base, or the parent explicitly re-baselines first
-- parent never publishes from a worker branch
-- if live `PLAN.md` authority bytes changed since `authority-freeze.json`, block publish and restart
-- parent records pushed SHA and CI observation in `push-record.json` and `ci-observation.json`
+- live branch moved and parent cannot safely reconcile
+- publish would bypass the final verification wall
+- publish would add a post-verification live-only commit, including a `PLAN.md` closeout edit that was not reverified on `ws/m36-int`
+- parent cannot prove the published tree equals the verified integration tree
 
-## Closeout
+Acceptance:
 
-### `task/m35-09-closeout`
+- live `feat/corpus-expansion` points at the verified M36 result
+- `task-m36-80-publish-back-to-live/done.json` exists
+- `acceptance.md` records whether publish was fast-forward or merge-backed
+- no unverified commit is inserted between `ws/m36-int` and the live published result
 
-Parent mission:
+## Task M36-90 - Closeout
 
-- record the final outcome, lane history, freeze history, blocked-path status if any, and scope-control summary
+**Owner:** Parent  
+**Branch:** `feat/corpus-expansion` after publish  
+**Path:** `/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
 
-Closeout must state:
+Actions:
 
-- M34 was landed first
-- helper-surface truth now has one code owner in `xtask/src/family/helper_surface.rs`
-- recommendation and corpus-decision both consume that shared classifier
-- live wedge still says:
-  - do not spend corpus run `1`
-  - do not promote a new family
-  - pivot to `author_architecture_follow_on_plan`
-- no new crate, no new artifact family, no generic decision engine, no move into `spec-core`
+1. Confirm any required `PLAN.md` completion notes are already present in the published verified tree. Do not create a new live-only source commit in Task M36-90.
+2. Write `closeout.md`.
+3. Mark final accepted sentinels in `run-state.json`.
+4. Ensure all blocked-path files are absent or explicitly empty for green closeout.
 
-## Stale-Lane Invalidation Rules
+Stop conditions:
 
-- Any change to `helper-surface-api-freeze.json` invalidates all worker lanes.
-- Any parent edit to `xtask/src/family/recommend.rs` after lane A launch invalidates lane A.
-- Any parent edit to `xtask/src/family/promotion_artifacts.rs` after lane B launch invalidates lane B.
-- Any parent change to the frozen docs vocabulary after lane C launch invalidates lane C.
-- Any worker touching a forbidden path is discarded and relaunched from the freeze SHA.
-- Any lane that fails its own acceptance command floor is discarded and relaunched.
-- Any lane merged after drifting from the frozen helper-surface contract is invalid and must be recreated.
-- The parent never patches a stale worker branch forward manually. Stale or polluted lanes are deleted and relaunched cleanly.
+- `PLAN.md` would require a new post-publish source commit to describe closeout
+- required sentinel is missing
+- `blocked.json` exists
+
+Acceptance:
+
+- `task-m36-90-closeout/done.json` exists
+- `closeout.md` exists
+- `acceptance.md` shows every task accepted
+- `run-state.json` lists the full accepted sentinel set
+- the published live SHA still equals the exact verified integration SHA from Task M36-80
+- the run is auditable from `queue.json`, `session.log`, `merge-log.md`, `proof-log.json`, and sentinel files alone
 
 ## Context-Control Rules
 
-- Parent keeps only these live artifacts in working context:
-  - `PLAN.md`
-  - `ORCH_PLAN.md`
+- Workers only edit their owned paths. No convenience edits outside lane ownership.
+- Lane A is the only code lane. It absorbs helper contract extraction, recommend rewiring, validator rewiring, and proof hardening sequentially on one branch.
+- Lane B starts only after `api-vocabulary-freeze.json` exists.
+- Parent reruns validation on `ws/m36-int` after every merge. Worker-green never bypasses parent-green.
+- `queue.json` is the launch order authority. If a lane is not queued and launched there, it does not exist.
+- `session.log` is append-only and parent-written. Every worktree creation, merge, relaunch, block, or publish action is logged there with timestamp and SHA.
+- A stale lane is invalid if:
+  - its launch SHA no longer matches the current parent freeze SHA
+  - authority files changed after launch
+  - parent detected semantic drift and wrote `blocked.json`
+- Invalid lanes are discarded and recreated. The parent does not hand-forward stale worker branches.
+- Workers never write:
+  - `run-state.json`
   - `tasks.json`
-  - latest freeze record
-  - latest integration diff summary
-- Each worker prompt contains only:
-  - owned paths
-  - forbidden paths
-  - exact freeze-record excerpt
-  - exact acceptance commands
-  - required return contract
-- Workers return only:
-  - changed files
-  - commands run and exit codes
-  - blockers or unresolved assumptions
-- Workers do not return transcript dumps.
-- Workers do not write `.runs/**` or `.semantic-family-artifacts/**`.
-- The parent reviews narrow diffs and summaries only, not full worker transcripts.
-- Close each worker immediately after merge or invalidation.
+  - `queue.json`
+  - `session.log`
+  - `merge-log.md`
+  - `proof-log.json`
+  - `blocked.json`
+  - `acceptance.md`
+  - any sentinel file
+- If code and docs disagree, code on `ws/m36-int` wins and docs are corrected or blocked.
+- If runtime truth and normalized proof identity disagree, the run stops until the mismatch is explained with tests.
 
 ## Tests And Acceptance
 
-### M34 landing acceptance
+## Required Code Tests
 
-- `df15e3e392be30a13b10f028eb19e4286c931523` is landed on `ws/m35-int` before any M35-only edits.
-- `cargo xtask family corpus-decision --format json` exists on the integration branch.
-- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json` validates after landing.
-- The landed M34 wedge still emits:
-  - `decision_action = pivot_to_architecture_shared_core_follow_on`
-  - `decision_basis_code = durable_non_promotable_helper_surface`
-  - `required_next_action = author_architecture_follow_on_plan`
+Lane A must land or preserve these test surfaces:
 
-### Helper-surface API freeze acceptance
+- `cargo test -p xtask helper_surface -- --color never`
+- `cargo test -p xtask recommend -- --color never`
+- `cargo test -p xtask corpus_decision -- --color never`
+- `cargo test -p xtask artifact_schema_ -- --color never`
+- `cargo test -p xtask proof_fingerprint -- --color never`
 
-- `xtask/src/family/helper_surface.rs` exists.
-- `xtask/src/family/mod.rs` exports the new module.
-- `helper-surface-api-freeze.json` records the exact API and semantics.
-- No worker launches before the API freeze exists.
-- Any post-freeze API change invalidates every worker lane.
+Lane A should name the new proof-identity regressions with `proof_fingerprint`
+in the test name so these gates cannot silently skip them.
 
-### Lane acceptance
+Required behavioral coverage:
 
-- Lane A acceptance:
-  - only `xtask/src/family/recommend.rs` changed
-  - recommendation and corpus-decision logic in that file both call the shared classifier
-  - no `xtask/src/lib.rs` edits exist on the lane branch
-- Lane B acceptance:
-  - only `xtask/src/family/promotion_artifacts.rs` changed
-  - validator behavior remains tuple-consistency validation only
-  - no second semantic classifier exists
-- Lane C acceptance:
-  - only the three owned docs changed
-  - docs describe the shared helper-surface code owner accurately
-  - docs do not imply widened scope
+- exact live helper wedge produces `Some(ArchitectureSharedCoreFollowOn)` through the shared helper contract owner
+- missing evidence and stale evidence keep the helper contract inactive
+- non-helper unsupported pressure does not over-generalize into the architecture follow-on wedge
+- `recommend.rs` still emits the frozen architecture follow-on tuple
+- `promotion_artifacts.rs` rejects tuple/contract contradictions deterministically
+- normalized fingerprints stay stable across harmless `generated_at` and inventory-path churn
+- normalized fingerprints still change when semantic meaning changes
 
-### Operator flow acceptance
+## Required Runtime Gates
 
-- Sequential opening path is honored:
-  - baseline
-  - authority freeze
-  - M34 landing
-  - helper-surface API freeze
-- Worker lanes start only after the API freeze.
-- Merge order into `ws/m35-int` is honored:
-  - lane A
-  - lane B
-  - parent-only `xtask/src/lib.rs` integration
-  - lane C
-- Parent integration runs the targeted post-merge test floor.
-- Blocked-path capture runs before any blocked termination is declared.
-- Green-path and final verification floors both pass before publish.
+The parent must prove all of these on `ws/m36-int`:
 
-### Workspace boundary acceptance
+- `coverage`
+- `recommend`
+- `corpus-decision`
+- `validate-artifact` for coverage
+- `validate-artifact` for recommendation
+- `validate-artifact` for corpus decision
+- all six live wedge `jq` assertions
+- docs grep gate
 
-- No new crate is added.
-- No new artifact family is added.
-- No `spec-core` helper-surface migration occurs.
-- No widening into a generic decision engine occurs.
-- No worker writes `.runs/**` or `.semantic-family-artifacts/**`.
-- `.runs/**` and `.semantic-family-artifacts/**` remain run artifacts and derived output, not authored source.
+## Task Acceptance Standard
 
-### Final publish acceptance
+A task is accepted only when all of the following are true:
 
-- `cargo fmt --all --check` passes.
-- `cargo clippy -p xtask --all-targets --all-features -- -D warnings` passes.
-- `cargo test -p xtask helper_surface -- --color never` passes.
-- `cargo test -p xtask recommend -- --color never` passes.
-- `cargo test -p xtask corpus_decision -- --color never` passes.
-- `cargo test -p xtask artifact_schema_ -- --color never` passes.
-- Coverage, recommendation, and corpus-decision artifacts validate.
-- Final doc grep floor passes.
-- Publish occurs only from the exact verified `ws/m35-int` SHA.
-- If any publish precondition fails, the run stops with blocked-path evidence rather than partial publish.
+1. its `started.json` exists,
+2. its `status.json` records the expected branch, worktree, and owner,
+3. its `done.json` exists,
+4. its `blocked.json` does not exist,
+5. parent validation for that task passed on the declared worktree,
+6. any required freeze file or log entry for that task exists,
+7. `queue.json` advances to the next legal state.
 
-## Done When
+Missing sentinel means the task is not accepted.
 
-1. `feat/corpus-expansion` has the validated M34 command surface first.
-2. `xtask/src/family/helper_surface.rs` exists and is the sole helper-surface classifier.
-3. `recommend.rs` no longer owns an inline helper-surface classifier.
-4. `corpus-decision` and recommendation both use the same shared classifier.
-5. Validators remain tuple-consistency checks, not a second classifier.
-6. Final verification proves the live wedge is unchanged.
-7. No new crate, no new artifact family, no generic decision framework, and no `spec-core` widening were introduced.
+## Green Run Definition
+
+M36 is green only when all of the following are true:
+
+1. the repo has exactly one semantic owner for the durable helper-surface follow-on contract,
+2. `recommend.rs` consumes that owner for the architecture follow-on decision,
+3. `promotion_artifacts.rs` consumes that owner for tuple validation,
+4. the live wedge still emits the frozen M35 tuple,
+5. stable proof identity is demonstrated by normalized fingerprints rather than raw latest-artifact SHA,
+6. docs teach the same truth the code enforces,
+7. the verified `ws/m36-int` result has been published back to `feat/corpus-expansion`.
+
+## Assumptions
+
+- The established repo naming pattern for milestone worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/` is milestone-root plus lane subdirectories, so M36 uses `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m36-helper-surface-follow-on-contract-consolidation`.
+- The live checkout at `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` remains the checked-out `feat/corpus-expansion` baseline referenced by `PLAN.md`.
+- The repo’s existing orchestration style treats parent-written `.runs/**` state, `queue.json`, `session.log`, and per-task sentinels as the runnable source of coordination truth.
+- Publish-back to the live branch is expected after final green; fast-forward is preferred, but an explicit merge-back is acceptable only if the parent reruns the full verification wall on the reconciled integration state.

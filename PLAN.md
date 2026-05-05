@@ -1,3 +1,4 @@
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-autoplan-restore-20260505-134405.md -->
 # M36 - Helper-Surface Follow-On Contract Consolidation
 
 Status: **authoritative implementation plan**  
@@ -96,7 +97,7 @@ There is also one real proof gap:
 | Recommendation normalization | `xtask/src/family/recommend.rs::normalized_recommendation_for_determinism(...)` and `normalized_corpus_program_decision_for_determinism(...)` | Reuse and expose through stable proof-fingerprint helpers. |
 | Regression harness | `xtask/src/lib.rs` targeted tests for `recommend`, `corpus_decision`, and artifact schema validation | Reuse. Add M36 fixtures here instead of creating a new harness. |
 | Maintainer documentation | `semantic-families/README.md`, `docs/recommendation_corpus_expansion_program_v0.1.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md` | Update only where M36 changes ownership or proof semantics. |
-| Current branch truth | commit `4622a30aee132329e87a5d3f2a556d9599a73fb5` | Treat as the opening gate. M36 does not relitigate M35. |
+| M35 semantic anchor | commit `4622a30aee132329e87a5d3f2a556d9599a73fb5` | Treat as the historical wedge reference point for expected M35 behavior. Capture the live M36 baseline SHA at run start and use that live SHA as the worktree fork point. |
 
 ### Minimum change set
 
@@ -364,6 +365,60 @@ docs/
 
 That is the whole game.
 
+## Architecture Dependency Graph
+
+```text
+helper_surface.rs
+  ├── owns low-level helper classification
+  ├── owns derived architecture-follow-on contract
+  └── exports pure inputs/outputs only
+          |
+          v
+recommend.rs
+  ├── recovers helper disposition from validated basis
+  ├── asks helper_surface.rs whether the follow-on contract is active
+  ├── maps active contract -> frozen action tuple
+  └── owns normalized recommendation / corpus-decision write semantics
+          |
+          v
+promotion_artifacts.rs
+  ├── validates analysis basis reference and exact basis snapshot
+  ├── recomputes the same helper follow-on contract from that basis
+  └── enforces frozen tuple exactness only when the contract is active
+          |
+          v
+xtask/src/lib.rs
+  ├── unit tests for helper contract derivation
+  ├── regression tests for recommend / corpus-decision wiring
+  └── validate-artifact contradiction tests + proof-fingerprint tests
+
+coverage.rs
+  └── remains the owner of normalized coverage meaning used by proof hardening
+```
+
+The key boundary is simple:
+
+- `helper_surface.rs` decides whether the durable helper-surface follow-on
+  contract is active
+- `recommend.rs` decides what operator action to emit once that contract result
+  is known
+- `promotion_artifacts.rs` decides whether an emitted artifact is allowed to
+  claim that action
+
+No second file is allowed to restate the wedge preconditions in parallel.
+
+## File-Level Ownership Map
+
+| File | Must own after M36 | Must stop owning after M36 |
+|---|---|---|
+| `xtask/src/family/helper_surface.rs` | `HelperSurfaceSignal`, `HelperSurfaceDisposition`, one bounded `HelperSurfaceFollowOnInputs`, one bounded `HelperSurfaceFollowOnContract`, and the pure derivation function for that contract | any operator-action mapping, any artifact tuple validation |
+| `xtask/src/family/recommend.rs` | basis recovery, decision assembly, normalized recommendation/corpus-decision determinism helpers, action mapping from active contract to frozen public tuple | inline helper-surface wedge preconditions or tuple-specific follow-on semantics |
+| `xtask/src/family/promotion_artifacts.rs` | analysis-basis validation, basis snapshot exactness, tuple exactness enforcement, contradiction rejection | semantic ownership of when the helper follow-on wedge is active |
+| `xtask/src/family/coverage.rs` | normalized coverage meaning used by proof hardening | any new follow-on policy |
+| `xtask/src/family/mod.rs` | only the exports needed so recommend/validator/tests can use the shared helper contract surface | any additional policy layer or orchestration logic |
+| `xtask/src/lib.rs` | regression surface for helper contract, corpus decision wiring, validator contradiction cases, and stable proof fingerprints | ad hoc fixture logic that duplicates production contract rules |
+| `semantic-families/README.md`, `docs/recommendation_corpus_expansion_program_v0.1.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md` | maintainer-facing explanation of contract ownership and proof semantics | any suggestion that raw latest-artifact SHA is semantic identity |
+
 ## Implementation Plan
 
 ### Phase 1 - Freeze and verify the M35 baseline
@@ -485,6 +540,78 @@ Exit gate:
 3. Update `docs/semantic_family_capability_corpus_guide_v0.1.md` so future
    maintainers do not mistake byte churn for recommendation drift.
 4. Update `PLAN.md` completion notes only after all verification commands pass.
+
+## Implementation Threading
+
+Execute the code changes in this order. Do not mix structural and behavioral
+changes in the same substep if a narrower checkpoint exists.
+
+### Thread 1 - Freeze the helper contract API first
+
+1. Extend `helper_surface.rs` with the new follow-on inputs and contract types.
+2. Add the new pure derivation helper and its negative-case tests.
+3. Stop here and make the API shape final before touching consumers.
+
+Checkpoint:
+
+- `cargo test -p xtask helper_surface -- --color never` passes
+- the new helper types are named and frozen
+- no consumer rewiring has started yet
+
+### Thread 2 - Rewire decision derivation second
+
+1. Update basis recovery in `recommend.rs` only enough to recover the helper
+   disposition truthfully.
+2. Replace the local helper-surface wedge condition inside
+   `derive_corpus_program_decision_contract(...)` with one call into the shared
+   helper contract owner.
+3. Keep action mapping in `recommend.rs`; do not move public tuple wording into
+   `helper_surface.rs`.
+
+Checkpoint:
+
+- `cargo test -p xtask recommend -- --color never` passes
+- `cargo test -p xtask corpus_decision -- --color never` passes
+- the emitted public tuple is unchanged on the happy path
+
+### Thread 3 - Rewire validation third
+
+1. Update `promotion_artifacts.rs` to derive the helper follow-on contract from
+   the validated analysis basis.
+2. Leave tuple helper functions only as exactness guards, or delete them if the
+   shared helper contract makes them redundant without losing clarity.
+3. Make contradiction failures explicit and stable.
+
+Checkpoint:
+
+- `cargo test -p xtask artifact_schema_ -- --color never` passes
+- contradictory helper-tuple artifacts fail for the right reason
+- validator and decision derivation now agree on one contract owner
+
+### Thread 4 - Harden proof semantics fourth
+
+1. Add stable proof-fingerprint helpers using the existing normalization logic.
+2. Keep raw latest-artifact SHA available only as debug evidence.
+3. Add the positive and negative fingerprint regressions before touching docs.
+
+Checkpoint:
+
+- unchanged semantic inputs keep the same stable fingerprint
+- meaningful basis changes still change the fingerprint
+- no artifact schema field was widened just to carry proof identity
+
+### Thread 5 - Docs and closeout last
+
+1. Update the three maintainer docs only after the names and proof rules above
+   are frozen in code.
+2. Re-run the full verification floor from a clean working tree state.
+3. Update `PLAN.md` completion notes only after every command is green.
+
+Checkpoint:
+
+- code and docs say the same thing
+- docs describe semantic fingerprints as authoritative and raw SHA as debug only
+- closeout can cite one stable proof surface without caveats
 
 ## Code Quality Rules
 
@@ -643,6 +770,63 @@ If any of those regress, the fix must include a regression test before merge.
 6. doc-grep regression ensuring maintainer docs still match the frozen public
    wedge vocabulary
 
+## Test Plan Artifact
+
+This is the QA-facing version of the test surface. Keep it synchronized with
+the implementation work, even though M36 is internal-facing.
+
+### Affected commands and artifacts
+
+- `cargo xtask family coverage --format json`
+  Reason: coverage normalization remains the root proof input.
+- `cargo xtask family recommend --format json`
+  Reason: recommendation analysis must still expose the durable helper hold.
+- `cargo xtask family corpus-decision --format json`
+  Reason: corpus decision must pivot through the shared helper contract.
+- `cargo xtask family validate-artifact <path>`
+  Reason: validator must reject tuple/contract contradictions deterministically.
+- `.semantic-family-artifacts/family-promotion/analysis/*.latest.json`
+  Reason: stable proof semantics are asserted against these generated artifacts.
+
+### Key interactions to verify
+
+- helper unsupported cluster in coverage -> recommendation durable hold ->
+  corpus decision architecture follow-on
+- validated analysis basis with matching coverage SHA -> helper disposition
+  recovered from coverage truth, not guessed from public tuple alone
+- validated analysis basis with stale or missing evidence -> helper follow-on
+  contract stays inactive
+- contradictory corpus-decision artifact -> `validate-artifact` exits non-zero
+  with a contract/tuple mismatch error
+
+### Edge cases
+
+- same semantic input rerun one second later with only `generated_at` churn
+- same semantic input rerun with a fresh `inventory_path` and
+  `inventory_sha256`
+- helper-surface candidate with zero real-example hits
+- helper-surface candidate with non-`unknown` overlap family
+- helper-surface candidate with extra blocker or stale/missing evidence
+- durable-hold tuple present in a basis where the shared helper contract should
+  be inactive
+
+### Critical paths
+
+- classification path: unsupported cluster -> helper disposition
+- decision path: helper disposition + basis snapshot -> architecture follow-on
+- validation path: analysis basis -> recomputed contract -> frozen tuple exactness
+- proof path: raw artifact -> normalized semantic meaning -> stable fingerprint
+
+### Required test file ownership
+
+- `xtask/src/family/helper_surface.rs`
+  add pure unit tests for contract derivation and negative branches
+- `xtask/src/lib.rs`
+  add command-path and artifact-schema regressions that prove all four command
+  surfaces agree
+- existing recommendation / corpus-decision test surfaces
+  extend, do not fork, the current helper-surface fixture path
+
 ## Failure Modes Registry
 
 | Codepath | Realistic failure | Test coverage required | Error handling required | User-visible outcome |
@@ -749,6 +933,8 @@ rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|pivot
 ```
 
 Stable proof identity verification should be covered by the new xtask tests.
+Name those regressions with `proof_fingerprint` in the test name so the
+orchestration gates can target them explicitly.
 Do not use raw latest-artifact SHA as the closeout gate.
 
 ## Worktree Parallelization Strategy
@@ -815,6 +1001,18 @@ Sequential note:
 - Parallelization: 2 lanes, but only 1 real code lane and 1 docs lane
 - Lake Score: choose the complete version, consolidate the contract and harden
   proof semantics in one pass
+
+## Unresolved Decisions
+
+None.
+
+M36 locks the following so implementation does not reopen them mid-flight:
+
+- the new follow-on contract lives in `helper_surface.rs`
+- validation recomputes that contract from the validated basis
+- proof hardening is additive and normalized, not a schema rewrite
+- public wedge vocabulary stays frozen
+- only docs may move in parallel; the code path is one sequential lane
 
 ## Done when
 
