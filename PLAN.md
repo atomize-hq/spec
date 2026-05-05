@@ -1,85 +1,87 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-corpus-expansion-autoplan-restore-20260505-112225.md -->
-
-# M35 - Architecture Shared-Core Follow-On
+# M36 - Helper-Surface Follow-On Contract Consolidation
 
 Status: **authoritative implementation plan**  
 Base branch: **main**  
 Working branch: **feat/corpus-expansion**  
 Last rewritten: **2026-05-05**  
-Supersedes: **M34 - Stop-Spend-Pivot Decision Contract**  
-Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260505-110352.md`**  
+Supersedes: **M35 - Architecture Shared-Core Follow-On**  
+Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260505-125701.md`**  
+Frozen baseline commit: **`4622a30aee132329e87a5d3f2a556d9599a73fb5`**  
 Related roadmap: **`docs/ai_promotion_and_multilanguage_milestones_v0.1.md`**  
 Program tracker: **`docs/recommendation_corpus_expansion_program_v0.1.md`**  
 Capability guide: **`docs/semantic_family_capability_corpus_guide_v0.1.md`**  
-Reality-alignment prerequisite: **land validated M34 commit `df15e3e392be30a13b10f028eb19e4286c931523` from `ws/m34-int` onto this branch before any M35-only edits**  
-Execution note: **do not create a new crate, a new artifact family, or a generic decision engine. This milestone extracts one bounded shared truth inside the existing `xtask` family layer.**
+Execution note: **keep the work bounded inside `xtask/src/family/`, preserve the frozen public wedge vocabulary, and harden proof semantics without inventing a generic decision engine or a new artifact family.**
 
 ## Objective
 
-Turn the current helper-surface special case into one explicit shared-core
-classification that both recommendation analysis and corpus-program decision
-derivation consume.
+Turn the remaining M35 seam into one first-class follow-on contract for the
+durable helper-surface wedge, then make closeout proof assert stable semantic
+identity instead of unstable raw bytes.
 
-After M35, the repo should still reach the same live wedge conclusion:
+After M36, the repo must still say the same thing:
 
-- do **not** spend corpus run `1`
-- do **not** promote a new family
-- do pivot to `author_architecture_follow_on_plan`
+- `recommendation_status = "no_strong_candidate"`
+- `decision_status = "not_recommended"`
+- `open_blockers = ["helper_surface_not_promotable"]`
+- `decision_action = "pivot_to_architecture_shared_core_follow_on"`
+- `decision_basis_code = "durable_non_promotable_helper_surface"`
+- `required_next_action = "author_architecture_follow_on_plan"`
 
-But it must reach that conclusion through one named reusable truth surface
-instead of embedding the helper-surface rule separately in family-local policy
-code.
+But it must reach that result through one named contract surface, and the proof
+of that result must survive harmless `generated_at` churn.
 
 ## Decision
 
-M35 ships as a **bounded shared-core extraction inside `xtask/src/family/`**.
+M36 ships as a **bounded contract extraction plus proof-surface hardening**
+inside the existing `xtask` family layer.
 
-The implementation has two phases:
+The implementation has four parts:
 
-1. **Reality alignment**
-   Bring the validated M34 command and artifact contract from `ws/m34-int`
-   onto `feat/corpus-expansion` unchanged in behavior.
+1. freeze the shipped M35 baseline on `feat/corpus-expansion`
+2. extend `xtask/src/family/helper_surface.rs` so it owns the helper-surface
+   follow-on contract, not just the low-level classification
+3. rewire `recommend.rs` and `promotion_artifacts.rs` to consume that shared
+   contract instead of reconstructing it in parallel
+4. add stable proof-fingerprint helpers based on normalized artifact meaning,
+   while keeping raw artifact SHA available only as debug evidence
 
-2. **Shared-core extraction**
-   Extract a single helper-surface classification module that answers:
-
-   > Is this visible unsupported-function pressure a durable,
-   > non-promotable helper surface?
-
-   That classification becomes the shared truth consumed by:
-
-   - recommendation derivation in `xtask/src/family/recommend.rs`
-   - corpus-program decision derivation in the M34 command path
-   - bounded invariant tests that prove both consumers stay aligned
-
-This is the smallest complete move.
+This is the smallest honest M36. It finishes the architecture move M35 pointed
+at without widening into a framework.
 
 ## Problem Statement
 
-The repo already knows something important:
+M35 is done on this branch.
 
-- the visible unsupported pressure is real
-- the blocker is not missing evidence
-- the current shape is a helper surface, not the next promotable family
+The current branch already passes the exact frozen M35 verification floor and
+already contains the low-level classifier surface at
+`xtask/src/family/helper_surface.rs`.
 
-Today that truth is not owned cleanly.
+What is still split today is the higher-level contract that means:
 
-The helper-surface rule currently exists as inline recommendation logic in
-`xtask/src/family/recommend.rs`, plus schema-level tuple invariants in
-`xtask/src/family/promotion_artifacts.rs`, plus doc prose that explains what the
-verdict means. That is enough to describe the result, but not enough to make the
-reason reusable.
+> this recommendation basis is the durable non-promotable helper-surface wedge,
+> so corpus run `1` stays unspent and the repo pivots to architecture follow-on
+> work.
 
-The branch split makes the problem worse. The validated M34 outcome exists on
-`ws/m34-int` at `df15e3e392be30a13b10f028eb19e4286c931523`, but the working
-branch does not yet contain:
+That idea still lives in multiple encodings:
 
-- `cargo xtask family corpus-decision --format json`
-- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+- `xtask/src/family/helper_surface.rs` classifies the low-level helper surface
+- `xtask/src/family/recommend.rs` reconstructs the follow-on outcome in
+  `derive_corpus_program_decision_contract(...)`
+- `xtask/src/family/recommend.rs` also reconstructs helper-surface disposition
+  from coverage or durable-hold fields when loading an analysis basis
+- `xtask/src/family/promotion_artifacts.rs` validates the same outcome through
+  tuple-specific helper checks over basis snapshots and emitted decision fields
 
-So M35 cannot treat M34 as ambient background truth. It must first make the
-working branch real, then extract the bounded shared-core concept on top of that
-real surface.
+That is still "one idea, several encodings."
+
+There is also one real proof gap:
+
+- the ignored analysis artifacts under
+  `.semantic-family-artifacts/family-promotion/analysis/` are not byte-stable
+  across unchanged reruns because `generated_at` changes, and coverage also
+  embeds a fresh inventory path and upstream SHA chain
+- raw SHA of those latest artifacts is therefore not durable identity
+- M36 must preserve semantic truth while hardening how closeouts prove sameness
 
 ## Step 0 - Scope Challenge
 
@@ -87,31 +89,31 @@ real surface.
 
 | Sub-problem | Existing code or artifact | Reuse decision |
 |---|---|---|
-| Runtime-supported family inventory | `xtask/src/family/inventory.rs`, `xtask/src/family/harness.rs`, `xtask/src/family/routing.rs` | Reuse unchanged. M35 is not an inventory milestone. |
-| Corpus coverage projection | `xtask/src/family/coverage.rs` and `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json` | Reuse unchanged. M35 must not rescan or reinterpret the corpus outside existing coverage flow. |
-| Recommendation analysis | `xtask/src/family/recommend.rs` and `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json` | Reuse as the current consumer that still owns discovery inputs. Replace only the helper-surface special case with shared classification. |
-| Recommendation/read-side schemas | `xtask/src/family/promotion_artifacts.rs` | Reuse for artifact structs and tuple validation. Do not move artifact ownership elsewhere. |
-| Artifact paths and atomic writes | `xtask/src/family/paths.rs` and `write_bytes_atomically(...)` | Reuse directly. M35 should not invent a new artifact root. |
-| M34 command surface | validated commit `df15e3e392be30a13b10f028eb19e4286c931523` on `ws/m34-int` | Reuse by landing it first, not by re-implementing M34 from scratch inside M35. |
-| Prior shared projection pattern | `spec-core/src/portability.rs` | Reuse as a design pattern only: one projection module, multiple consumers, shared tests. Do **not** move helper-surface truth into `spec-core`. |
-| Maintainer-facing docs | `semantic-families/README.md`, `docs/recommendation_corpus_expansion_program_v0.1.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md` | Update wording only where M35 changes the explanation of where helper-surface truth lives. |
+| Low-level helper-surface classification | `xtask/src/family/helper_surface.rs` | Reuse and extend. Keep this as the single contract owner. |
+| Corpus-program decision derivation | `xtask/src/family/recommend.rs` | Reuse the existing command path, but remove bespoke helper-surface follow-on reconstruction. |
+| Artifact validation | `xtask/src/family/promotion_artifacts.rs` | Reuse the validator surface, but make it consume the shared contract instead of parallel tuple-only reasoning. |
+| Coverage normalization | `xtask/src/family/coverage.rs::normalized_for_recommend_determinism(...)` | Reuse for proof hardening. Do not redesign coverage artifacts. |
+| Recommendation normalization | `xtask/src/family/recommend.rs::normalized_recommendation_for_determinism(...)` and `normalized_corpus_program_decision_for_determinism(...)` | Reuse and expose through stable proof-fingerprint helpers. |
+| Regression harness | `xtask/src/lib.rs` targeted tests for `recommend`, `corpus_decision`, and artifact schema validation | Reuse. Add M36 fixtures here instead of creating a new harness. |
+| Maintainer documentation | `semantic-families/README.md`, `docs/recommendation_corpus_expansion_program_v0.1.md`, `docs/semantic_family_capability_corpus_guide_v0.1.md` | Update only where M36 changes ownership or proof semantics. |
+| Current branch truth | commit `4622a30aee132329e87a5d3f2a556d9599a73fb5` | Treat as the opening gate. M36 does not relitigate M35. |
 
 ### Minimum change set
 
 The minimum complete implementation is:
 
-1. land exact M34 commit `df15e3e392be30a13b10f028eb19e4286c931523` or a
-   byte-equivalent merge result onto `feat/corpus-expansion`
-2. add one new shared module under `xtask/src/family/` for helper-surface
-   classification
-3. rewire `recommend.rs` to use that shared classifier instead of inline helper
-   surface shape logic
-4. rewire the landed M34 corpus-decision path to use the same classifier for the
-   `durable_non_promotable_helper_surface` basis
-5. add cross-consumer regression tests proving both consumers stay aligned on
-   the live wedge and on non-helper counterexamples
-6. update the three maintainer docs so the repo explains the extracted truth
-   honestly
+1. freeze and reverify the current M35 wedge on this branch
+2. extend `helper_surface.rs` with one explicit follow-on contract type and one
+   derivation function for the durable helper-surface wedge
+3. rewire `derive_corpus_program_decision_contract(...)` in `recommend.rs` to
+   consume that contract
+4. rewire `CorpusProgramDecisionArtifact::validate(...)` in
+   `promotion_artifacts.rs` to recompute or consume that same contract before
+   enforcing frozen tuple exactness
+5. add stable proof-fingerprint helpers over normalized coverage,
+   recommendation, and corpus-decision artifacts
+6. add regression tests and maintainer docs proving both the contract
+   extraction and proof hardening are real
 
 Anything beyond that is scope leak.
 
@@ -119,190 +121,204 @@ Anything beyond that is scope leak.
 
 This milestone should stay inside roughly these touched areas:
 
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/helper_surface.rs` (new)
+- `xtask/src/family/helper_surface.rs`
 - `xtask/src/family/recommend.rs`
 - `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/paths.rs` only if the landed M34 merge requires it
+- `xtask/src/family/coverage.rs`
+- `xtask/src/family/mod.rs`
 - `xtask/src/lib.rs`
 - `semantic-families/README.md`
 - `docs/recommendation_corpus_expansion_program_v0.1.md`
 - `docs/semantic_family_capability_corpus_guide_v0.1.md`
 - `PLAN.md`
 
-That is a real diff, but still one bounded lane. The smell threshold is crossed
-only because M35 must first import the already-validated M34 surface. That is
-acceptable. Adding a second new module, a new crate, or new runtime storage is
-not.
+That is a real diff, but still one bounded lane.
+
+The smell threshold is acceptable only because M36 is fixing two tightly-coupled
+surfaces:
+
+- contract duplication
+- proof identity duplication
+
+No new crate, no schema-wide artifact redesign, no new CLI family, no generic
+"decision engine."
 
 ### Search check
 
-**[Layer 1]** Reuse the existing `xtask` artifact pipeline, the existing M33
-recommendation analysis, and the existing M34 command contract from
-`ws/m34-int`.
+**[Layer 1]** Reuse the repo's existing normalization pattern instead of
+inventing a new proof subsystem. The code already has normalized views for
+coverage and recommendation determinism.
 
-**[Layer 1]** Reuse the repo's existing shared-projection pattern from
-`spec-core/src/portability.rs`: one bounded module, explicit projection type,
-multiple read-side consumers, cross-consumer tests.
+**[Layer 1]** Reuse the repo's current boundary: semantic family policy stays in
+`xtask/src/family/`, not `spec-core`.
 
-**[EUREKA]** Do **not** extract this into `spec-core`.
+**[Layer 3]** The correct architecture move is not "make it more generic."
+The correct move is "make the exact durable helper-surface follow-on contract
+explicit once." The broader framework can stay imaginary until the repo proves
+it needs one.
 
-That sounds "more shared" on paper, but it is the wrong layer. Helper-surface
-non-promotability is not authored spec truth. It is family-analysis policy over
-existing promotion artifacts. Pushing it into `spec-core` would spend an
-innovation token to make the layering less honest.
+**[EUREKA]** Do not add a new artifact field just to carry an intermediate
+follow-on contract.
+
+That feels cleaner at first glance, but it spends scope to serialize an
+internal conclusion that can already be recomputed from the validated analysis
+basis. M36 should harden contract ownership, not widen public schema.
 
 ### TODOS cross-reference
 
-No open item in `TODOS.md` blocks M35 directly.
+No open TODO in `TODOS.md` blocks M36 directly.
 
-Relevant nearby backlog items already reinforce the same boundary:
+The closest active backlog themes already point the same direction:
 
-- avoid widening milestone scope when a narrower truth surface exists
-- prefer explicit projection modules over scattered recomposition
-- keep generated analysis/read-side surfaces deterministic
+- keep read-side truth honest
+- prefer one explicit owner over parallel recomposition
+- fix proof semantics where raw artifact bytes are not durable identity
 
-M35 should add new TODOs only if it deliberately defers broader decision-engine
-work or future helper-surface generalization.
+M36 should add new TODOs only if it deliberately defers:
+
+- a future generalized non-helper follow-on contract, or
+- a later artifact-schema redesign for first-class semantic proof fingerprints
 
 ### Completeness check
 
-A prose-only explanation is not enough.
+A partial M36 is not enough.
 
-The complete bounded version is:
+The complete version is:
 
-- M34 is actually present on the working branch
-- helper-surface classification has one code owner
-- recommendation derivation and corpus-decision derivation both call that owner
-- shared regression tests prove they do not drift apart
-- docs explain the new boundary accurately
+- one code owner for the helper-surface follow-on contract
+- both decision derivation and validation consume that owner
+- stable proof identity exists for unchanged semantic inputs
+- tests prove semantic sameness survives byte churn
+- docs explain both boundaries honestly
 
 That is the lake. Boil it.
 
 ### Distribution check
 
-No new package, binary, container image, or release pipeline is required.
+No new package, binary, container image, or publish pipeline is required.
 
-The deliverable is internal repo architecture truth layered onto the existing
-`cargo xtask family ...` command family.
+The deliverable is internal maintainer truth layered onto the existing command
+surfaces:
+
+- `cargo xtask family coverage --format json`
+- `cargo xtask family recommend --format json`
+- `cargo xtask family corpus-decision --format json`
+- `cargo xtask family validate-artifact <path>`
 
 ## Locked Decisions
 
-### 1. M35 starts by landing the validated M34 result
+### 1. The follow-on contract lives in `helper_surface.rs`
 
-Do not rebuild M34 by memory.
+M36 does **not** create a sibling `follow_on_contract.rs`.
 
-First bring commit `df15e3e392be30a13b10f028eb19e4286c931523` from
-`ws/m34-int` onto `feat/corpus-expansion`, then build M35 on top of that exact
-surface.
+Reason:
 
-### 2. Shared-core extraction stays in `xtask/src/family/`
+- the scope is still one wedge
+- the existing module already owns the prerequisite classifier
+- keeping classifier and derived contract together is the minimal diff
 
-The extraction belongs beside the recommendation and decision consumers that use
-it now.
+If the file grows awkwardly later, a future milestone can split it. M36 does
+not pre-spend that abstraction.
 
-Do not:
+### 2. Validation recomputes the contract from the analysis basis
 
-- move it to `spec-core`
-- create a new crate
-- invent a repo-wide "decision engine"
+`promotion_artifacts.rs` should derive the helper-surface follow-on contract
+from the already-validated analysis basis and compare the emitted tuple against
+that expectation.
 
-### 3. The extracted truth is one bounded classification
+M36 does **not** add a new intermediate contract field to public artifacts.
 
-M35 extracts exactly one concept:
+### 3. Stable proof identity is additive and normalized
 
+M36 hardens proof by computing stable semantic fingerprints from normalized
+artifact meaning.
+
+Specifically:
+
+- coverage proof ignores `generated_at`, `inventory_path`, and
+  `inventory_sha256`
+- recommendation proof ignores `generated_at` and replaces
+  `delta_from_previous` with its normalized placeholder
+- corpus-decision proof ignores `generated_at`
+
+Raw SHA of latest artifact bytes may still be logged for debugging, but it is
+not authoritative proof identity anymore.
+
+### 4. Artifact payload churn stays out of scope
+
+M36 does **not** remove `generated_at` or `inventory_path` from the current
+artifacts.
+
+Those fields still serve their operational purpose. The fix is to stop treating
+them as semantic identity.
+
+### 5. The frozen wedge vocabulary remains unchanged
+
+These exact strings stay frozen:
+
+- `helper_surface_not_promotable`
 - `durable_non_promotable_helper_surface`
+- `pivot_to_architecture_shared_core_follow_on`
+- `author_architecture_follow_on_plan`
 
-It does **not** extract:
+M36 consolidates how the repo reaches them. It does not rename them.
 
-- a generalized family recommendation framework
-- all future corpus-spend logic
-- all future promotion-policy routing
+### 6. No generic decision framework
 
-### 4. Recommendation owns discovery inputs, shared core owns classification
+Do not introduce:
 
-`recommend.rs` still owns candidate discovery inputs such as:
+- a registry of follow-on contract types
+- a policy DSL
+- generic tuple engines
+- shared-core portability work
 
-- overlap family
-- leverage counts
-- shape fingerprint
-- primary reason code
+M36 is one bounded wedge repair.
 
-The shared module owns only the helper-surface classification decision over that
-input.
+## Proposed Shared Contract Shape
 
-### 5. Corpus decision owns action mapping
-
-The shared module should say:
-
-- this candidate is, or is not, a durable non-promotable helper surface
-
-The corpus-decision command should translate that classification into M34's
-action vocabulary:
-
-- `decision_action = "pivot_to_architecture_shared_core_follow_on"`
-- `decision_basis_code = "durable_non_promotable_helper_surface"`
-- `required_next_action = "author_architecture_follow_on_plan"`
-
-Do not bury workflow action strings inside the shared classifier itself.
-
-### 6. Artifact validators validate tuple consistency, not independent semantics
-
-`promotion_artifacts.rs` should keep validating bounded field consistency:
-
-- durable hold tuple stays durable hold
-- helper-surface decision tuple stays aligned
-
-It should not become a second semantic classifier that re-derives the helper
-shape from raw fields independently of the shared module.
-
-### 7. No new public artifact family is required
-
-M35 can prove the extraction is real by consumer rewiring and tests.
-
-Do not add a new standalone `helper-surface.latest.json` artifact unless the
-implementation proves there is no smaller honest move.
-
-## Proposed Shared-Core Shape
-
-Add one new module:
-
-- `xtask/src/family/helper_surface.rs`
-
-That module owns:
-
-- a small normalized input struct for helper-surface classification
-- one explicit classification enum
-- one classifier function
-- adapters or constructors needed by the existing consumers
-
-Target shape:
+Keep the existing low-level classifier and add one derived contract beside it:
 
 ```rust
 pub(crate) enum HelperSurfaceDisposition {
-    DurableNonPromotable,
+    DurableNonPromotableHelperSurface,
 }
 
-pub(crate) struct HelperSurfaceSignal {
-    pub primary_reason_code: UnsupportedFunctionReasonCode,
-    pub overlap_family: String,
-    pub real_example_hits: usize,
-    pub shape_fingerprint: String,
+pub(crate) struct HelperSurfaceSignal<'a> {
+    pub(crate) primary_reason_code: UnsupportedFunctionReasonCode,
+    pub(crate) overlap_family: &'a str,
+    pub(crate) real_example_hits: usize,
+    pub(crate) shape_fingerprint: &'a str,
+}
+
+pub(crate) enum HelperSurfaceFollowOnContract {
+    ArchitectureSharedCoreFollowOn,
+}
+
+pub(crate) struct HelperSurfaceFollowOnInputs<'a> {
+    pub(crate) disposition: Option<HelperSurfaceDisposition>,
+    pub(crate) decision_status: DecisionStatus,
+    pub(crate) open_blockers: &'a [DecisionReason],
+    pub(crate) missing_evidence: &'a [String],
+    pub(crate) stale_evidence: &'a [String],
 }
 
 pub(crate) fn classify_helper_surface(
-    signal: &HelperSurfaceSignal,
+    signal: &HelperSurfaceSignal<'_>,
 ) -> Option<HelperSurfaceDisposition>;
+
+pub(crate) fn derive_helper_surface_follow_on_contract(
+    inputs: &HelperSurfaceFollowOnInputs<'_>,
+) -> Option<HelperSurfaceFollowOnContract>;
 ```
 
 Design rules:
 
-1. The classifier is explicit and wedge-specific.
-2. The classifier returns `None` for all non-helper cases.
-3. The classifier does not emit corpus actions or recommendation statuses.
-4. The classifier is pure and testable with fixture-sized inputs.
-
-This is engineered enough. One module. One enum. One signal type. No framework.
+1. `classify_helper_surface(...)` stays pure and low-level.
+2. `derive_helper_surface_follow_on_contract(...)` is still wedge-specific.
+3. The derived contract answers only whether the architecture follow-on wedge is
+   active.
+4. Action mapping stays outside the helper module.
+5. The module remains readable in one screen or two, not a mini-framework.
 
 ## Target Architecture
 
@@ -317,160 +333,208 @@ coverage.latest.json
         |
         v
 recommend.rs
-  ├─ candidate discovery
-  ├─ leverage + overlap computation
-  ├─ helper_surface::classify_helper_surface(...)
-  └─ recommendation.latest.json
+  ├── candidate discovery
+  ├── helper_surface::classify_helper_surface(...)
+  ├── helper_surface::derive_helper_surface_follow_on_contract(...)
+  ├── recommendation.latest.json
+  └── corpus-program-decision.latest.json
                 |
                 v
-      cargo xtask family corpus-decision --format json
-                |
-                ├─ load recommendation artifact
-                ├─ map top candidate -> HelperSurfaceSignal
-                ├─ helper_surface::classify_helper_surface(...)
-                └─ corpus-program-decision.latest.json
-
 promotion_artifacts.rs
-  ├─ validates recommendation tuple consistency
-  └─ validates corpus-decision tuple consistency
+  ├── validate analysis basis exactness
+  ├── recompute helper-surface follow-on contract
+  └── enforce frozen emitted tuple only when that contract is active
+
+proof closeout / run logs
+  ├── raw latest artifact SHA (debug only)
+  └── normalized semantic fingerprint (authoritative identity)
 
 docs/
-  └─ explain that helper-surface non-promotability now has one code owner
+  └── explain one contract owner + stable proof semantics
 ```
 
 ### Why this boundary is right
 
-- `coverage.rs` still owns observation truth
-- `recommend.rs` still owns recommendation assembly
-- M34 command still owns operator action mapping
-- the shared module owns only the helper-surface classification
+- `coverage.rs` still owns observed corpus truth
+- `recommend.rs` still owns recommendation assembly and operator action mapping
+- `promotion_artifacts.rs` still owns artifact validation
+- `helper_surface.rs` owns only the wedge-specific semantic contract
+- proof hardening reuses existing normalized views instead of inventing new
+  runtime truth
 
-That is the architectural seam M35 exists to create.
+That is the whole game.
 
 ## Implementation Plan
 
-### Phase 1 - Reality alignment
+### Phase 1 - Freeze and verify the M35 baseline
 
-1. Bring `df15e3e392be30a13b10f028eb19e4286c931523` from `ws/m34-int` onto
-   `feat/corpus-expansion`.
-2. Verify the branch now contains:
-   - `cargo xtask family corpus-decision --format json`
-   - `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-   - the exact M34 action vocabulary and docs
-3. Freeze behavior. Do not change M34 semantics during the import.
-
-Exit gate:
-
-- M34 command exists on this branch
-- the live wedge still emits the validated M34 decision
-
-### Phase 2 - Extract helper-surface shared core
-
-1. Add `xtask/src/family/helper_surface.rs`.
-2. Move the current helper-surface shape predicate out of `recommend.rs` and
-   into the new module.
-3. Keep the rule byte-for-byte equivalent in meaning:
-   - `UnsupportedFunctionReasonCode::UnsupportedFunctionSurface`
-   - `overlap_family == "unknown"`
-   - `real_example_hits > 0`
-   - the current helper/no-deps fingerprint shape
-4. Export the module from `xtask/src/family/mod.rs`.
+1. Re-run the frozen M35 verification floor on `feat/corpus-expansion`.
+2. Confirm the live wedge still emits:
+   - `no_strong_candidate`
+   - `not_recommended`
+   - `helper_surface_not_promotable`
+   - `pivot_to_architecture_shared_core_follow_on`
+3. Treat any drift here as an opening blocker. M36 does not start from moving
+   ground.
 
 Exit gate:
 
-- there is exactly one code owner for helper-surface classification
-- `recommend.rs` no longer contains an inline helper-shape classifier
+- the branch matches the shipped M35 baseline semantically
+- the current analysis outputs still justify the M36 follow-on instead of a new
+  corpus run
 
-### Phase 3 - Rewire consumers
+### Phase 2 - Extend `helper_surface.rs` from classifier to contract owner
 
-#### Recommendation consumer
-
-Rewire `recommend.rs` so the durable-hold path is driven by the shared
-classifier result, not by an in-file predicate.
-
-The outward recommendation artifact should remain unchanged:
-
-- durable helper surfaces still land in
-  `next_step_status = durable_hold`
-- `next_step_detail = helper_surface_not_promotable`
-- `hold_reasons` still include `helper_surface_not_promotable`
-
-#### Corpus-decision consumer
-
-Rewire the landed M34 command path so the helper-surface pivot basis is produced
-from the same classifier.
-
-The outward corpus-program decision artifact should remain unchanged for the
-live wedge:
-
-- `decision_action = pivot_to_architecture_shared_core_follow_on`
-- `decision_basis_code = durable_non_promotable_helper_surface`
-- `required_next_action = author_architecture_follow_on_plan`
+1. Keep `HelperSurfaceSignal` and `classify_helper_surface(...)` intact in
+   meaning.
+2. Add the derived follow-on contract type and one derivation function.
+3. Encode the exact contract preconditions once:
+   - helper-surface disposition is durable non-promotable
+   - decision status is `not_recommended`
+   - open blockers are exactly `helper_surface_not_promotable`
+   - missing evidence is empty
+   - stale evidence is empty
+4. Keep all non-helper cases as `None`.
 
 Exit gate:
 
-- both consumers call the same shared helper-surface classifier
-- neither consumer re-implements the helper-surface rule locally
+- one file owns both the low-level helper-surface classification and the
+  high-level follow-on contract
+- no other file contains a second semantic copy of those preconditions
 
-### Phase 4 - Docs, verification, and closeout
+### Phase 3 - Rewire `recommend.rs`
 
-1. Update `semantic-families/README.md` to explain that helper-surface pressure
-   is real, but non-promotability is now produced from one shared analysis
-   boundary.
-2. Update `docs/recommendation_corpus_expansion_program_v0.1.md` to distinguish:
-   - recommendation analysis as input truth
-   - shared helper-surface classification as the architectural hinge
-   - corpus-decision as operator-action output
-3. Update `docs/semantic_family_capability_corpus_guide_v0.1.md` so maintainers
-   understand why more corpus does not change this wedge by itself.
+#### Recommendation/read-side logic
+
+Rewire `recommend.rs` so the corpus-program decision path consumes the shared
+follow-on contract instead of reconstructing the wedge through local tuple
+checks.
+
+Rules:
+
+- action mapping remains in `recommend.rs`
+- helper-surface contract detection moves out of `derive_corpus_program_decision_contract(...)`
+- the outward decision artifact stays byte-compatible except for ordinary
+  `generated_at` churn
+
+#### Basis recovery logic
+
+Rewire the basis-loading path so recovery of helper-surface disposition from a
+validated analysis basis is explicit and bounded.
+
+Keep the current recovery order:
+
+1. prefer real coverage-basis reconstruction when the coverage SHA still matches
+2. fall back to the durable-hold tuple only for the exact frozen helper-surface
+   case
+
+But the final follow-on decision must still pass through the shared contract
+owner.
+
+Exit gate:
+
+- `recommend.rs` still owns operator action mapping
+- `recommend.rs` no longer owns a second semantic copy of the helper-surface
+  follow-on contract
+
+### Phase 4 - Rewire `promotion_artifacts.rs`
+
+1. Replace `basis_snapshot_requires_helper_surface_follow_on(...)` as the
+   semantic owner with shared-contract derivation from the validated basis.
+2. Keep tuple-validation helpers only as frozen field exactness guards.
+3. Make contradictory states fail loudly:
+   - if the shared contract says the wedge is active, the emitted tuple must
+     match the frozen M35 vocabulary exactly
+   - if the shared contract says the wedge is not active, helper-surface
+     follow-on tuple fields must not appear
+
+Exit gate:
+
+- validation and decision derivation are anchored on the same contract owner
+- tuple helpers remain read-side guards, not competing semantic engines
+
+### Phase 5 - Harden proof semantics
+
+1. Expose stable proof-fingerprint helpers for:
+   - coverage artifacts
+   - recommendation artifacts
+   - corpus-program decision artifacts
+2. Build those helpers from the repo's existing normalization logic.
+3. Add targeted regression tests proving:
+   - semantic fingerprints are stable across reruns with only ephemeral-field
+     churn
+   - fingerprints still change when semantic inputs change
+4. Update closeout guidance so run logs treat normalized fingerprints as the
+   durable assertion surface.
+
+Exit gate:
+
+- maintainers can prove unchanged meaning without pretending raw latest JSON
+  bytes are stable
+
+### Phase 6 - Docs and closeout
+
+1. Update `semantic-families/README.md` to explain that:
+   - helper-surface classification exists
+   - the architecture follow-on wedge is now a first-class shared contract
+   - raw latest artifact SHA is not semantic identity
+2. Update `docs/recommendation_corpus_expansion_program_v0.1.md` to make the
+   M35-to-M36 handoff explicit:
+   - M35 froze the wedge
+   - M36 consolidates the follow-on contract and proof semantics
+3. Update `docs/semantic_family_capability_corpus_guide_v0.1.md` so future
+   maintainers do not mistake byte churn for recommendation drift.
 4. Update `PLAN.md` completion notes only after all verification commands pass.
 
 ## Code Quality Rules
 
 ### DRY rule
 
-There must be one helper-surface classifier.
+There must be one semantic owner for the helper-surface follow-on contract.
 
 Reject any implementation that leaves:
 
-- one version in `recommend.rs`
-- a second version in the corpus-decision path
-- a third version in validators
+- one contract in `helper_surface.rs`
+- a second contract in `recommend.rs`
+- a third contract in `promotion_artifacts.rs`
 
-That is exactly the architecture debt M35 is supposed to remove.
+That is exactly the duplication M36 exists to remove.
 
 ### Explicit over clever
 
 Do not introduce:
 
-- trait-based classifier registries
-- macro-generated decision tables
-- generic policy pipelines
+- registries of contract evaluators
+- generic policy traits
+- schema-driven rule tables
+- magical normalization layers
 
-Use named structs and `match` blocks. A tired maintainer should read the module
-in 30 seconds.
+Use named structs, explicit enums, and obvious `match` blocks.
 
 ### Minimal diff
 
 Prefer:
 
-- one new module
-- local rewiring in existing files
-- tests beside the current `xtask` test surface
+- one existing module extended
+- two existing consumers rewired
+- proof helpers added beside current normalization logic
+- tests added to the current xtask surface
 
-Do not turn M35 into a test-harness rewrite or a command-layout refactor.
+Do not turn M36 into a general artifact refactor.
 
 ## Test Review
 
 ### Test framework
 
-This repo is Rust-first. M35 verification stays in the existing Cargo/xtask test
-surface:
+This repo is still Rust-first for this milestone.
+
+M36 verification stays inside:
 
 - `cargo test -p xtask ...`
-- targeted artifact-generation commands under `cargo xtask family ...`
+- targeted `cargo xtask family ...` command runs
+- `cargo xtask family validate-artifact ...`
 
-No new test framework is needed.
+No new test framework. No special harness.
 
 ### Code path coverage
 
@@ -479,30 +543,44 @@ CODE PATH COVERAGE
 ===========================
 [+] xtask/src/family/helper_surface.rs
     |
-    ├── [REQ TEST] classify helper surface wedge -> DurableNonPromotable
-    ├── [REQ TEST] non-helper fingerprint -> None
-    ├── [REQ TEST] overlap family known -> None
-    └── [REQ TEST] zero real-example hits -> None
+    ├── [REQ TEST] exact live helper wedge -> classify_helper_surface = Some(DurableNonPromotableHelperSurface)
+    ├── [REQ TEST] exact live helper wedge -> derive_helper_surface_follow_on_contract = Some(ArchitectureSharedCoreFollowOn)
+    ├── [REQ TEST] helper disposition present but missing_evidence non-empty -> None
+    ├── [REQ TEST] helper disposition present but stale_evidence non-empty -> None
+    ├── [REQ TEST] helper disposition present but blocker != helper_surface_not_promotable -> None
+    └── [REQ TEST] non-helper fingerprint / known overlap / zero real-example hits -> None
 
 [+] xtask/src/family/recommend.rs
     |
-    ├── [REQ TEST] shared classifier hit -> durable_hold tuple
-    ├── [REQ TEST] targeted evidence gap path still emits targeted_evidence_gap
-    └── [REQ TEST] ready promotion path remains unchanged
-
-[+] cargo xtask family corpus-decision --format json
+    ├── derive_corpus_program_decision_contract(...)
+    │   ├── [REQ TEST] recommended candidate -> family promotion action unchanged
+    │   ├── [REQ TEST] missing/stale evidence -> spend_corpus_run_1 unchanged
+    │   ├── [REQ TEST] durable helper wedge -> architecture follow-on action via shared contract
+    │   ├── [REQ TEST] blocked_for_now without helper contract -> policy run unchanged
+    │   └── [REQ TEST] no actionable candidate -> stop unchanged
     |
-    ├── [REQ TEST] durable helper-surface wedge -> architecture pivot decision
-    ├── [REQ TEST] evidence-gap wedge -> spend_corpus_run_1
-    ├── [REQ TEST] promotion-ready wedge -> family-promotion action
-    ├── [REQ TEST] contradictory recommendation tuple -> hard error
-    └── [REQ TEST] missing recommendation artifact -> hard error
-
-[+] promotion_artifacts.rs validators
+    ├── basis recovery
+    │   ├── [REQ TEST] matching coverage basis reconstructs helper disposition
+    │   └── [REQ TEST] durable-hold fallback still recovers only the exact frozen helper tuple
     |
-    ├── [REQ TEST] durable_hold recommendation tuple validates
-    ├── [REQ TEST] helper-surface tuple with wrong next_step_status rejects
-    └── [REQ TEST] corpus-decision durable_non_promotable basis tuple validates
+    └── proof helpers
+        ├── [REQ TEST] normalized recommendation fingerprint stable across generated_at churn
+        └── [REQ TEST] normalized corpus-decision fingerprint stable across generated_at churn
+
+[+] xtask/src/family/promotion_artifacts.rs
+    |
+    ├── CorpusProgramDecisionArtifact::validate(...)
+    │   ├── [REQ TEST] shared helper contract active + frozen tuple exact -> validates
+    │   ├── [REQ TEST] shared helper contract active + wrong decision_action -> rejects
+    │   ├── [REQ TEST] shared helper contract inactive + helper tuple fields present -> rejects
+    │   └── [REQ TEST] basis snapshot drift -> rejects before tuple interpretation
+    |
+    └── proof helpers / artifact basis exactness
+        └── [REQ TEST] semantic fingerprint changes when basis meaning changes
+
+[+] xtask/src/family/coverage.rs
+    |
+    └── [REQ TEST] normalized coverage fingerprint stable across generated_at + inventory path churn
 ```
 
 ### User flow coverage
@@ -510,126 +588,149 @@ CODE PATH COVERAGE
 ```text
 USER FLOW COVERAGE
 ===========================
-[+] Maintainer reads the live wedge
-    |
-    ├── [REQ TEST] coverage -> recommend -> corpus-decision stays deterministic
-    └── [REQ TEST] decision artifact bytes stay stable on repeat run
-
 [+] Maintainer asks "should we spend corpus run 1?"
     |
-    ├── [REQ TEST] answer is pivot_to_architecture_shared_core_follow_on
-    └── [REQ TEST] docs match the emitted decision vocabulary
+    ├── [REQ TEST] coverage -> recommend -> corpus-decision still answers "no"
+    └── [REQ TEST] answer is the frozen architecture follow-on tuple
 
-[+] Maintainer encounters malformed or contradictory state
+[+] Maintainer validates the same wedge twice one second apart
     |
-    ├── [REQ TEST] corpus-decision refuses silent fallback
-    └── [REQ TEST] error points at recommendation tuple inconsistency
+    ├── [REQ TEST] raw latest artifact SHA may differ
+    └── [REQ TEST] semantic fingerprint remains identical
+
+[+] Maintainer encounters contradictory decision state
+    |
+    ├── [REQ TEST] validate-artifact rejects helper tuple without shared contract support
+    └── [REQ TEST] failure message points at tuple/contract mismatch, not a silent fallback
+
+[+] Maintainer updates docs after rerunning commands
+    |
+    ├── [REQ TEST] docs still describe corpus run `1` as unspent
+    └── [REQ TEST] docs still describe helper_surface_not_promotable as a durable hold
 ```
 
 ### Regression rule
 
-M35 is partly a regression-protection milestone.
+M36 is partly a regression-protection milestone.
 
-The highest-priority regression to guard is:
+The highest-priority regressions are:
 
-- recommendation and corpus-decision both used to agree on the live helper
-  wedge after M34
-- after extraction, they must still agree
+1. the live wedge stops emitting the frozen M35 decision tuple
+2. validation and decision derivation disagree on whether the helper follow-on
+   contract is active
+3. unchanged semantic inputs produce different stable proof fingerprints
 
-If an extraction changes the emitted live wedge outcome, that is a blocking
-regression and requires a regression test before merge.
+If any of those regress, the fix must include a regression test before merge.
 
 ### Required tests to add
 
-1. Shared-classifier unit tests in the new helper module covering:
-   - exact live helper wedge
-   - each non-helper counterexample
-2. Recommendation regression tests proving the same fixture still yields:
-   - durable hold
-   - `helper_surface_not_promotable`
-3. Corpus-decision regression tests proving the same fixture still yields:
-   - architecture pivot
-   - `durable_non_promotable_helper_surface`
-4. Cross-consumer consistency test:
-   - one shared fixture
-   - recommendation emits durable hold
-   - corpus-decision emits architecture pivot
-5. Contradictory-state tests:
-   - tuple says durable hold but helper classifier returns `None`
-   - command must error, not guess
+1. `helper_surface.rs` unit tests for the new derived contract and its negative
+   cases
+2. `recommend.rs` regression tests proving the live wedge still maps to
+   architecture follow-on through the shared contract
+3. `promotion_artifacts.rs` validator tests for:
+   - correct helper follow-on tuple
+   - contradictory helper follow-on tuple
+   - helper tuple when the contract is inactive
+4. proof-fingerprint tests covering coverage, recommendation, and corpus
+   decision normalization
+5. one end-to-end command-path regression:
+   - `coverage`
+   - `recommend`
+   - `corpus-decision`
+   - `validate-artifact`
+   all agree on the same wedge
+6. doc-grep regression ensuring maintainer docs still match the frozen public
+   wedge vocabulary
 
 ## Failure Modes Registry
 
 | Codepath | Realistic failure | Test coverage required | Error handling required | User-visible outcome |
 |---|---|---|---|---|
-| M34 merge skipped | M35 compiles against a branch that does not have `family corpus-decision` at all | yes | yes, fail at opening gate | explicit blocker, not silent fallback |
-| Shared classifier drift | recommendation says durable hold but corpus-decision chooses a different basis | yes | yes | explicit failing test before merge |
-| Fingerprint parse failure | helper-shaped candidate stops classifying because serialized fingerprint shape changed | yes | yes | explicit non-classification plus failing regression if live wedge changes |
-| Validator mismatch | emitted tuple no longer matches schema invariants | yes | yes | hard validation error |
-| Doc drift | docs tell maintainers to spend corpus run `1` while command says pivot | yes | yes, grep-based doc assertions | visible inconsistency blocked before merge |
+| Contract split persists | `recommend.rs` and `promotion_artifacts.rs` silently disagree about whether the helper follow-on wedge is active | yes | yes | failing test or hard validation error, not divergent green outputs |
+| Contract over-generalizes | non-helper unsupported pressure is incorrectly treated as architecture follow-on | yes | yes | blocked by targeted negative tests |
+| Tuple-only validation survives | validator still accepts the frozen tuple without proving the shared contract | yes | yes | hard validation failure on contradictory artifacts |
+| Proof fingerprint is under-normalized | harmless `generated_at` or inventory-path churn still changes the "stable" proof identity | yes | yes | failing regression before closeout |
+| Proof fingerprint is over-normalized | meaningful semantic change is masked because the helper removed too much data | yes | yes | failing regression when basis meaning changes |
+| Closeout still treats raw SHA as truth | maintainers think the wedge changed when only ignored latest artifacts churned | yes | yes, doc/update guidance | explicit documentation and test-backed fingerprint surface |
 
 Critical gap rule:
 
-If any helper-surface failure mode has no test **and** no hard error path,
-M35 is incomplete.
+If any helper-surface contract or proof-identity failure mode has no test
+**and** no hard error path, M36 is incomplete.
 
 ## Performance Review
 
-M35 should stay read-side and cheap.
+M36 should stay read-side and cheap.
 
 Rules:
 
-1. `family corpus-decision` must continue reading the existing recommendation
-   artifact. It must not rerun coverage or recommendation analysis internally.
-2. The shared classifier must be pure and in-memory. No filesystem access.
-3. Shape-fingerprint parsing remains tiny. This is not a throughput bottleneck.
-4. Deterministic artifact reuse remains intact. Repeated runs on unchanged input
-   should preserve byte-identical outputs where current infrastructure already
-   guarantees that.
-
-There is no legitimate reason for M35 to change runtime complexity class.
+1. `family corpus-decision` must keep reading the existing recommendation
+   artifact. It must not rerun coverage internally.
+2. The helper-surface contract helper stays pure and in-memory.
+3. Stable proof fingerprints are computed from already-loaded artifacts or tiny
+   normalized clones. No extra filesystem crawl. No second corpus load.
+4. `promotion_artifacts.rs` may load the validated analysis basis once, exactly
+   as it already does. No new O(n) scan hidden in validation.
+5. There is no legitimate reason for M36 to change runtime complexity class.
 
 ## What Already Exists
 
-The plan intentionally reuses the repo's existing truth surfaces:
+The plan intentionally reuses the repo's current truth surfaces:
 
-- `xtask/src/family/recommend.rs` already identifies the helper-surface wedge
-- `xtask/src/family/promotion_artifacts.rs` already encodes the durable-hold
-  tuple vocabulary
-- `ws/m34-int` already contains the validated corpus-decision command contract
-- `spec-core/src/portability.rs` already demonstrates the repo's preferred
-  shared-projection pattern
+- `xtask/src/family/helper_surface.rs` already owns the low-level helper
+  classifier
+- `xtask/src/family/recommend.rs` already owns the corpus-program decision
+  command path
+- `xtask/src/family/promotion_artifacts.rs` already owns artifact validation
+- `xtask/src/family/coverage.rs` and `recommend.rs` already contain the exact
+  normalization hooks M36 needs for proof hardening
+- `xtask/src/lib.rs` already contains targeted regression-test surfaces for the
+  relevant commands and artifact schemas
 
-M35 succeeds by making these surfaces line up, not by replacing them.
+M36 succeeds by consolidating and hardening these surfaces, not by replacing
+them.
 
 ## NOT in scope
 
 - spending corpus run `1`
 - promoting a new family
-- redesigning the full recommendation engine
-- moving family-analysis policy into `spec-core`
-- creating a new shared crate
-- introducing a new artifact family just to prove sharing exists
-- changing inventory, coverage, prove, certify, or routing behavior outside the
-  bounded helper-surface wedge
-- broad doc rewrites unrelated to helper-surface non-promotability
+- widening the family recommendation engine
+- moving this policy into `spec-core`
+- creating a new crate or a generic decision framework
+- changing the public wedge vocabulary
+- removing `generated_at` or inventory-path fields from artifacts
+- redesigning the entire artifact schema around proof fingerprints
+- broad roadmap or docs rewrites unrelated to helper-surface follow-on truth
 
 ## Verification Commands
 
-Run these in merged M35 state:
+Run these in merged M36 state:
 
 ```bash
+cargo fmt --all --check
+cargo clippy -p xtask --all-targets --all-features -- -D warnings
 cargo test -p xtask helper_surface -- --color never
-cargo test -p xtask corpus_decision -- --color never
 cargo test -p xtask recommend -- --color never
+cargo test -p xtask corpus_decision -- --color never
+cargo test -p xtask artifact_schema_ -- --color never
 cargo xtask family coverage --format json
 cargo xtask family recommend --format json
 cargo xtask family corpus-decision --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 ```
 
 Then assert the live wedge still says:
 
 ```bash
+jq -e '.recommendation_status == "no_strong_candidate"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.decision_status == "not_recommended"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
   .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' \
@@ -641,82 +742,90 @@ jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
 And confirm docs stay aligned:
 
 ```bash
-rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|author_architecture_follow_on_plan|corpus run `1`' \
+rg -n 'helper_surface_not_promotable|durable_non_promotable_helper_surface|pivot_to_architecture_shared_core_follow_on|author_architecture_follow_on_plan|corpus run `1` remains unspent' \
   semantic-families/README.md \
   docs/recommendation_corpus_expansion_program_v0.1.md \
   docs/semantic_family_capability_corpus_guide_v0.1.md
 ```
 
+Stable proof identity verification should be covered by the new xtask tests.
+Do not use raw latest-artifact SHA as the closeout gate.
+
 ## Worktree Parallelization Strategy
 
-This plan has one real dependency wall and then two bounded parallel lanes.
+This plan has one small parallel window, not a wide fan-out.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Reality alignment | `xtask/src/`, `semantic-families/`, `docs/` | — |
-| Shared classifier extraction | `xtask/src/family/` | Reality alignment |
-| Corpus-decision consumer rewiring + tests | `xtask/src/`, `xtask/src/family/` | Reality alignment, shared classifier extraction |
-| Docs alignment | `semantic-families/`, `docs/` | Reality alignment |
+| Baseline freeze + API shape decision | `xtask/src/family/`, `PLAN.md` | — |
+| Contract extraction + recommend rewiring | `xtask/src/family/`, `xtask/src/lib.rs` | Baseline freeze |
+| Validator alignment | `xtask/src/family/`, `xtask/src/lib.rs` | Contract extraction API freeze |
+| Proof-fingerprint hardening | `xtask/src/family/`, `xtask/src/lib.rs` | Contract extraction API freeze |
+| Docs alignment | `semantic-families/`, `docs/`, `PLAN.md` | Contract vocabulary freeze |
 
 ### Parallel lanes
 
-Lane A: reality alignment → shared classifier extraction → corpus-decision rewiring  
-Lane B: docs alignment (starts after reality alignment, independent of code until final wording freeze)
+Lane A: contract extraction → recommend rewiring → validator alignment → proof-fingerprint hardening  
+Lane B: docs alignment after the contract vocabulary is frozen
 
 Sequential note:
 
-- Lane A is sequential because `xtask/src/lib.rs` and `xtask/src/family/` are
-  the primary codepath and test surface.
-- Lane B can run in parallel once M34 vocabulary is present on branch and the
-  shared classifier name is frozen.
+- Lane A stays sequential because `helper_surface.rs`, `recommend.rs`,
+  `promotion_artifacts.rs`, and `xtask/src/lib.rs` are one tightly-coupled code
+  surface.
+- Lane B is the only safe parallel lane. It can move once the names and final
+  contract wording are frozen.
 
 ### Execution order
 
-1. Launch **Reality alignment** first. No parallelism yet.
-2. After M34 is landed and the shared classifier name is frozen, launch:
-   - **Lane A** shared classifier extraction
-   - **Lane B** docs alignment
-3. Merge Lane B into the parent only after Lane A's field names and vocabulary
-   are final.
-4. Run final corpus-decision rewiring tests and verification sequentially on the
+1. Freeze the M35 baseline and settle the contract API locally.
+2. Run **Lane A** through contract extraction, validator alignment, and proof
+   hardening.
+3. Once Lane A freezes the final vocabulary, launch **Lane B** for docs in a
+   separate worktree if useful.
+4. Merge docs last, then run the full verification floor sequentially on the
    parent branch.
 
 ### Conflict flags
 
-- `xtask/src/lib.rs` is a conflict magnet. Keep all command-dispatch and major
-  xtask regression tests in one lane.
-- `xtask/src/family/recommend.rs` and the new helper module must stay in the
-  same lane. Splitting them would create merge churn for no benefit.
-- Docs can run in parallel, but only after the names
-  `durable_non_promotable_helper_surface` and
-  `author_architecture_follow_on_plan` are frozen.
+- `xtask/src/lib.rs` is a conflict magnet. Keep command-path and regression-test
+  edits in one lane.
+- `recommend.rs` is shared by both contract rewiring and proof hardening. Do not
+  split those into separate parallel workstreams.
+- Docs can move in parallel only after the exact frozen phrases are final.
 
 ## Completion Summary
 
-- Step 0: Scope Challenge — scope accepted as bounded shared-core extraction
-- Architecture Review: one new module, no new crate, M34 land-first dependency
-- Code Quality Review: one DRY mandate, one code owner for helper-surface truth
-- Test Review: coverage diagram produced, shared-consumer regression suite
+- Step 0: Scope Challenge — scope accepted as bounded contract consolidation +
+  proof hardening
+- Architecture Review: one contract owner, no new crate, no schema-spread
+  intermediate artifact
+- Code Quality Review: remove semantic duplication, keep tuple validation as a
+  guard only
+- Test Review: coverage diagram produced, stable proof-fingerprint regressions
   required
-- Performance Review: no new complexity class, no corpus rescan allowed
+- Performance Review: no new complexity class, no extra artifact crawl, no
+  internal rerun of coverage
 - NOT in scope: written
 - What already exists: written
-- Failure modes: explicit critical-gap rule defined
-- Parallelization: 2 lanes after 1 sequential opening gate
-- Lake Score: choose the complete version, land M34 + extract shared truth +
-  prove cross-consumer alignment
+- Failure modes: critical gap rule defined for both contract drift and proof
+  identity drift
+- Parallelization: 2 lanes, but only 1 real code lane and 1 docs lane
+- Lake Score: choose the complete version, consolidate the contract and harden
+  proof semantics in one pass
 
 ## Done when
 
-1. `feat/corpus-expansion` contains the validated M34 command and artifact
-   surface.
-2. The repo has exactly one helper-surface classifier under
-   `xtask/src/family/`.
-3. Recommendation derivation and corpus-decision derivation both use that
-   classifier.
-4. The live wedge still deterministically yields the M34 architecture-pivot
-   outcome.
-5. No new artifact family, crate, or generalized decision framework was added.
-6. Tests and docs prove the extraction is real and non-regressive.
+1. The repo has exactly one semantic owner for the durable helper-surface
+   follow-on contract.
+2. `recommend.rs` uses that owner to choose the architecture follow-on path.
+3. `promotion_artifacts.rs` uses that owner to validate whether the helper
+   follow-on tuple is allowed.
+4. The live wedge still deterministically emits the frozen M35 decision
+   vocabulary.
+5. Stable proof fingerprints remain unchanged across harmless reruns, even when
+   raw latest-artifact bytes change.
+6. Docs teach maintainers to trust semantic fingerprints, not raw ignored
+   artifact SHA, for this wedge.
