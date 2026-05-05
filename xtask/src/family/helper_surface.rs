@@ -1,7 +1,7 @@
 use crate::family::promotion_artifacts::{
-    CorpusProgramBasisSnapshot, CorpusProgramDecisionAction, CorpusProgramDecisionArtifact,
-    CorpusProgramDecisionBasisCode, DecisionReason, HoldReason, NextStepDetail, NextStepStatus,
-    PivotTargetClass, PromotionReadiness, RecommendationCandidateEntry, RequiredNextAction,
+    CorpusProgramDecisionAction, CorpusProgramDecisionArtifact, CorpusProgramDecisionBasisCode,
+    HoldReason, NextStepDetail, NextStepStatus, PivotTargetClass, PromotionReadiness,
+    RecommendationCandidateEntry, RequiredNextAction,
 };
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 
@@ -101,15 +101,6 @@ pub(crate) fn helper_surface_follow_on_decision_tuple() -> HelperSurfaceFollowOn
     }
 }
 
-pub(crate) fn basis_snapshot_requires_helper_surface_follow_on(
-    snapshot: &CorpusProgramBasisSnapshot,
-) -> bool {
-    snapshot.decision_status == crate::family::promotion_artifacts::DecisionStatus::NotRecommended
-        && snapshot.open_blockers == vec![DecisionReason::HelperSurfaceNotPromotable]
-        && snapshot.missing_evidence.is_empty()
-        && snapshot.stale_evidence.is_empty()
-}
-
 pub(crate) fn decision_uses_helper_surface_follow_on_tuple(
     artifact: &CorpusProgramDecisionArtifact,
 ) -> bool {
@@ -150,17 +141,16 @@ fn matches_helper_surface_fingerprint(shape_fingerprint: &str) -> bool {
 mod tests {
     use super::{
         HELPER_SURFACE_FINGERPRINT, HelperSurfaceDisposition, HelperSurfaceSignal,
-        basis_snapshot_requires_helper_surface_follow_on, classify_helper_surface,
-        decision_matches_helper_surface_follow_on_tuple,
+        classify_helper_surface, decision_matches_helper_surface_follow_on_tuple,
         durable_non_promotable_helper_surface_candidate_tuple,
         recommendation_matches_helper_surface_durable_hold_tuple,
     };
+    use crate::family::promotion_artifacts::RecommendationStatus;
     use crate::family::promotion_artifacts::{
         CorpusProgramBasisSnapshot, CorpusProgramDecisionAction, CorpusProgramDecisionArtifact,
-        CorpusProgramDecisionBasisCode, DecisionReason, DecisionStatus, EvidenceState,
-        PivotTargetClass, PromotionArtifactKind, RecommendationCandidateEntry,
-        RecommendationConfidence, RecommendationDifficulty, RecommendationLeverage,
-        RecommendationStatus, RequiredNextAction,
+        CorpusProgramDecisionBasisCode, DecisionReason, DecisionStatus, PivotTargetClass,
+        PromotionArtifactKind, RecommendationCandidateEntry, RecommendationConfidence,
+        RecommendationDifficulty, RecommendationLeverage, RequiredNextAction,
     };
     use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 
@@ -222,28 +212,6 @@ mod tests {
 
         assert!(recommendation_matches_helper_surface_durable_hold_tuple(
             &candidate
-        ));
-    }
-
-    #[test]
-    fn helper_surface_follow_on_requires_exact_basis_snapshot() {
-        let snapshot = CorpusProgramBasisSnapshot {
-            recommendation_status: RecommendationStatus::NoStrongCandidate,
-            decision_status: DecisionStatus::NotRecommended,
-            top_candidate_id: Some("fixture".to_string()),
-            open_blockers: vec![DecisionReason::HelperSurfaceNotPromotable],
-            missing_evidence: Vec::new(),
-            stale_evidence: Vec::new(),
-        };
-
-        assert!(basis_snapshot_requires_helper_surface_follow_on(&snapshot));
-
-        let contradictory_snapshot = CorpusProgramBasisSnapshot {
-            stale_evidence: vec![EvidenceState::StaleEvidence],
-            ..snapshot
-        };
-        assert!(!basis_snapshot_requires_helper_surface_follow_on(
-            &contradictory_snapshot
         ));
     }
 
