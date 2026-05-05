@@ -305,7 +305,7 @@ Use this when:
 | Baseline | `M27.75` | 2026-05-01 | `3 -> 5` sources | `no_strong_candidate` | `money/round` gains second real-example hit; arithmetic-shape candidate becomes visible | Continue program |
 | Checkpoint | `M27.8R` | 2026-05-02 | no corpus delta; harness-truth repair only | `ranked` | arithmetic-shape cluster becomes `ready`; `money/round` remains visible as the held helper surface later frozen as durable hold in M27.9B | Switch to promotion-focused milestone |
 | Closeout checkpoint | `M27.9` stop-state | 2026-05-02 | no corpus delta; semantic implementation landed, accounting target failed | `no_strong_candidate` | arithmetic-ready pressure retires; `money/round` remains visible but is not the next family, and corpus run `1` stays unspent pending the M27.9B freeze | Hold corpus program; close out accounting |
-| Decision contract | `M34` | 2026-05-05 | no corpus delta; read-side decision contract only | `no_strong_candidate` | `money/round` remains a durable helper-surface hold under `helper_surface_not_promotable`; M35 keeps that non-promotability call on one shared classifier surface | `pivot_to_architecture_shared_core_follow_on`; keep corpus run `1` unspent |
+| Decision contract | `M34` | 2026-05-05 | no corpus delta; read-side decision contract only | `no_strong_candidate` | `money/round` remains a durable helper-surface hold under `helper_surface_not_promotable`; M37 keeps that non-promotability call in `helper_surface.rs` while `decision_kernel.rs` owns the bounded family-analysis decision contract | `pivot_to_architecture_shared_core_follow_on`; keep corpus run `1` unspent |
 | 1 | — | — | — | — | — | — |
 | 2 | — | — | — | — | — | — |
 | 3 | — | — | — | — | — | — |
@@ -348,14 +348,17 @@ For the current live wedge, that artifact emits:
 
 At the frozen M35 boundary, `money/round` still represents real helper-surface
 pressure, but the `helper_surface_not_promotable` classification is owned by
-one shared classifier surface. This document treats
+one shared helper-surface classifier. This document treats
 `recommendation.latest.json` as the input truth that carries that
 classification, while `corpus-program-decision.latest.json` remains the
 operator-action output that tells maintainers to stop, spend, or pivot without
 claiming broader implementation scope.
 
-M36 preserves that frozen M35 wedge. One shared classifier surface remains the
-only helper follow-on contract owner, so
+M36 preserved that frozen M35 wedge. M37 keeps the same outcome while making
+the code ownership explicit: `xtask/src/family/helper_surface.rs` still owns
+the helper-surface classification tuple, and
+`xtask/src/family/decision_kernel.rs` now owns the bounded
+family-analysis decision derivation plus normalized proof-fingerprint reuse.
 `helper_surface_not_promotable` still feeds
 `durable_non_promotable_helper_surface`, which still yields
 `pivot_to_architecture_shared_core_follow_on` plus
@@ -382,6 +385,6 @@ promotion-worthy candidate would read `recommended`. Corpus run `1` remains
 unspent, and the explicit M34 next step is
 `pivot_to_architecture_shared_core_follow_on`, not silent corpus continuation.
 That frozen M35 wording does not promote a new family, spend corpus run `1`, or
-move the helper-surface classification out of the shared classifier path.
+move the helper-surface classification out of `helper_surface.rs`.
 
-When reviewing the read-side outputs for that frozen wedge, raw latest-artifact SHA is not semantic identity, and normalized semantic fingerprints are the proof surface. M36 keeps the semantic contract anchored on normalized meaning rather than byte-for-byte churn in `*.latest.json`.
+When reviewing the read-side outputs for that frozen wedge, raw latest-artifact SHA is not semantic identity, and normalized semantic fingerprints are the proof surface. M37 keeps the semantic contract anchored on normalized meaning rather than byte-for-byte churn in `*.latest.json`.

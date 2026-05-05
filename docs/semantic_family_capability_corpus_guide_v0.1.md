@@ -182,15 +182,18 @@ stays unspent and the next bounded task is
 implementation.
 
 At the frozen M35 boundary, the helper-surface wedge is still a real corpus
-signal, but one shared classifier now owns the
+signal, but one shared helper-surface classifier owns the
 `helper_surface_not_promotable` call that keeps it non-promotable. In that
 frozen vocabulary, `recommendation.latest.json` remains the analysis input
 truth, while `corpus-program-decision.latest.json` remains the bounded
 operator-action output.
 
-M36 preserves that frozen M35 wedge rather than widening it. One shared
-classifier surface remains the only helper follow-on contract owner, so the
-same `helper_surface_not_promotable` input still drives the same
+M36 preserved that frozen M35 wedge rather than widening it. M37 keeps the
+same wedge outcome while splitting the code boundary cleanly:
+`xtask/src/family/helper_surface.rs` still owns the helper-surface
+classification, and `xtask/src/family/decision_kernel.rs` now owns the
+family-analysis decision derivation and normalized proof-fingerprint logic.
+The same `helper_surface_not_promotable` input still drives the same
 `durable_non_promotable_helper_surface` basis and the same
 `pivot_to_architecture_shared_core_follow_on` plus
 `author_architecture_follow_on_plan` follow-on contract.
@@ -346,11 +349,11 @@ That means:
 - capability is still missing
 - the current blocker is `helper_surface_not_promotable`, not lack of
   visibility
-- the non-promotability call belongs to the shared classifier path, not a
-  widened family-packet or generic decision layer
-- M36 preserves the frozen M35 wedge, so that single shared classifier owner
-  still controls the helper follow-on contract instead of a corpus-budget or
-  packet-local shortcut
+- the non-promotability call belongs to `helper_surface.rs`, not a widened
+  family-packet or generic decision layer
+- M37 keeps the frozen M35 wedge, with `decision_kernel.rs` deriving the
+  helper follow-on contract from that unchanged helper-surface input instead of
+  a corpus-budget or packet-local shortcut
 
 So if you add more examples of that same unsupported shape, you may increase:
 

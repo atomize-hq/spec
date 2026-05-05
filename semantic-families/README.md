@@ -111,14 +111,16 @@ That means corpus run `1` remains unspent. It does not mean M34 implemented the
 shared-core follow-on.
 
 At the frozen M35 boundary, the helper-surface pressure is still real, but the
-non-promotability classification is owned by one shared classifier surface, not
-by a widened packet-local or `spec`-core decision path. The recommendation
-analysis artifact remains the input truth for that classification, while
-`corpus-program-decision.latest.json` remains the bounded operator-action
-output that records what to do next with that input.
+non-promotability classification is owned by one shared helper-surface
+classifier, not by a widened packet-local or `spec`-core decision path. The
+recommendation analysis artifact remains the input truth for that
+classification, while `corpus-program-decision.latest.json` remains the
+bounded operator-action output that records what to do next with that input.
 
-M36 preserves that frozen M35 wedge exactly. One shared classifier surface is
-still the only helper follow-on contract owner for this lane, so
+M36 preserved that frozen M35 wedge exactly. M37 keeps the same wedge outcome
+while tightening the code boundary: helper-surface classification still lives
+in `xtask/src/family/helper_surface.rs`, family-analysis decision truth now
+lives in `xtask/src/family/decision_kernel.rs`, and
 `helper_surface_not_promotable`,
 `durable_non_promotable_helper_surface`,
 `pivot_to_architecture_shared_core_follow_on`, and
