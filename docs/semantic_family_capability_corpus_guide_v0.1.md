@@ -181,6 +181,13 @@ stays unspent and the next bounded task is
 `author_architecture_follow_on_plan`. It does not mean M34 landed shared-core
 implementation.
 
+At the frozen M35 boundary, the helper-surface wedge is still a real corpus
+signal, but one shared classifier now owns the
+`helper_surface_not_promotable` call that keeps it non-promotable. In that
+frozen vocabulary, `recommendation.latest.json` remains the analysis input
+truth, while `corpus-program-decision.latest.json` remains the bounded
+operator-action output.
+
 These artifacts interpret the corpus. They do not define the semantic graph.
 
 ---
@@ -330,6 +337,8 @@ That means:
 - capability is still missing
 - the current blocker is `helper_surface_not_promotable`, not lack of
   visibility
+- the non-promotability call belongs to the shared classifier path, not a
+  widened family-packet or generic decision layer
 
 So if you add more examples of that same unsupported shape, you may increase:
 
