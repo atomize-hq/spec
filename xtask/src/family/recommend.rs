@@ -1,10 +1,13 @@
 use crate::XtaskError;
 use crate::family::coverage::{
     CoverageRunOutput, collect_latest, current_timestamp_rfc3339,
-    normalized_for_recommend_determinism, render_json_bytes, write_latest,
+    normalized_coverage_proof_fingerprint, render_json_bytes, write_latest,
 };
 use crate::family::helper_surface::{
-    HelperSurfaceDisposition, HelperSurfaceSignal, classify_helper_surface,
+    HelperSurfaceDisposition, HelperSurfaceSignal, basis_snapshot_requires_helper_surface_follow_on,
+    classify_helper_surface, durable_non_promotable_helper_surface_candidate_tuple,
+    helper_surface_follow_on_decision_tuple,
+    recommendation_matches_helper_surface_durable_hold_tuple,
 };
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
@@ -181,19 +184,16 @@ pub(crate) fn derive_corpus_program_decision_contract(
         .zip(helper_surface_disposition_for_basis_candidate(basis))
         .is_some_and(|(candidate, disposition)| {
             disposition == HelperSurfaceDisposition::DurableNonPromotableHelperSurface
-                && candidate.next_step_status == NextStepStatus::DurableHold
-                && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
+                && recommendation_matches_helper_surface_durable_hold_tuple(candidate)
         })
-        && snapshot.decision_status == DecisionStatus::NotRecommended
-        && snapshot.open_blockers == vec![DecisionReason::HelperSurfaceNotPromotable]
-        && snapshot.missing_evidence.is_empty()
-        && snapshot.stale_evidence.is_empty()
+        && basis_snapshot_requires_helper_surface_follow_on(&snapshot)
     {
+        let follow_on = helper_surface_follow_on_decision_tuple();
         return Ok(DerivedCorpusProgramDecision {
-            decision_action: CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn,
-            decision_basis_code: CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface,
-            pivot_target_class: Some(PivotTargetClass::ArchitectureSharedCoreFollowOn),
-            required_next_action: RequiredNextAction::AuthorArchitectureFollowOnPlan,
+            decision_action: follow_on.decision_action,
+            decision_basis_code: follow_on.decision_basis_code,
+            pivot_target_class: Some(follow_on.pivot_target_class),
+            required_next_action: follow_on.required_next_action,
             summary: format!(
                 "Recommendation basis holds `{}` as a durable non-promotable helper surface, so corpus run 1 stays unspent and the repo should pivot to an architecture shared-core follow-on plan.",
                 snapshot
@@ -257,8 +257,8 @@ fn effective_coverage_for_recommend(
     let pending = collect_latest(workspace_root)?;
     let latest_path = FAMILY_COVERAGE_LATEST_PATH.to_string();
     if let Some((existing, existing_bytes)) = load_existing_coverage_artifact(workspace_root)
-        && normalized_for_recommend_determinism(&existing)
-            == normalized_for_recommend_determinism(&pending.artifact)
+        && normalized_coverage_proof_fingerprint(&existing)?
+            == normalized_coverage_proof_fingerprint(&pending.artifact)?
     {
         return Ok(CoverageRunOutput {
             artifact: existing,
@@ -297,8 +297,8 @@ fn effective_recommendation_bytes(
     let latest_path = FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH;
     let existing = load_existing_recommendation_artifact(workspace_root);
     if let Some((existing_artifact, existing_bytes)) = &existing
-        && normalized_recommendation_for_determinism(existing_artifact)
-            == normalized_recommendation_for_determinism(&artifact)
+        && normalized_recommendation_proof_fingerprint(existing_artifact)?
+            == normalized_recommendation_proof_fingerprint(&artifact)?
     {
         return Ok(existing_bytes.clone());
     }
@@ -316,8 +316,8 @@ fn effective_corpus_program_decision_bytes(
     let latest_path = FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH;
     let existing = load_existing_corpus_program_decision_artifact(workspace_root);
     if let Some((existing_artifact, existing_bytes)) = &existing
-        && normalized_corpus_program_decision_for_determinism(existing_artifact)
-            == normalized_corpus_program_decision_for_determinism(&artifact)
+        && normalized_corpus_program_decision_proof_fingerprint(existing_artifact)?
+            == normalized_corpus_program_decision_proof_fingerprint(&artifact)?
     {
         return Ok(existing_bytes.clone());
     }
@@ -366,12 +366,28 @@ fn normalized_recommendation_for_determinism(
     normalized
 }
 
+pub(crate) fn normalized_recommendation_proof_fingerprint(
+    artifact: &FamilyRecommendationAnalysisArtifact,
+) -> Result<String, XtaskError> {
+    let normalized = normalized_recommendation_for_determinism(artifact);
+    let bytes = render_json_bytes(&normalized)?;
+    Ok(inventory_sha256_hex(&bytes))
+}
+
 fn normalized_corpus_program_decision_for_determinism(
     artifact: &CorpusProgramDecisionArtifact,
 ) -> CorpusProgramDecisionArtifact {
     let mut normalized = artifact.clone();
     normalized.generated_at.clear();
     normalized
+}
+
+pub(crate) fn normalized_corpus_program_decision_proof_fingerprint(
+    artifact: &CorpusProgramDecisionArtifact,
+) -> Result<String, XtaskError> {
+    let normalized = normalized_corpus_program_decision_for_determinism(artifact);
+    let bytes = render_json_bytes(&normalized)?;
+    Ok(inventory_sha256_hex(&bytes))
 }
 
 fn decision_summary_for(
@@ -844,11 +860,12 @@ fn confidence_for(
 
 fn next_step_resolution_for(discovery: &DiscoveryProjectionCandidate) -> CandidateResolution {
     if is_durable_helper_surface_hold(discovery) {
+        let durable_hold = durable_non_promotable_helper_surface_candidate_tuple();
         return CandidateResolution {
-            promotion_readiness: PromotionReadiness::Hold,
-            hold_reasons: vec![HoldReason::HelperSurfaceNotPromotable],
-            next_step_status: NextStepStatus::DurableHold,
-            next_step_detail: NextStepDetail::HelperSurfaceNotPromotable,
+            promotion_readiness: durable_hold.promotion_readiness,
+            hold_reasons: vec![durable_hold.hold_reason],
+            next_step_status: durable_hold.next_step_status,
+            next_step_detail: durable_hold.next_step_detail,
         };
     }
 
@@ -948,17 +965,10 @@ fn helper_surface_disposition_for_basis_candidate(
     {
         return None;
     }
-    match (
-        top_candidate.next_step_status,
-        top_candidate.next_step_detail,
-        top_candidate.hold_reasons.as_slice(),
-    ) {
-        (
-            NextStepStatus::DurableHold,
-            NextStepDetail::HelperSurfaceNotPromotable,
-            [HoldReason::HelperSurfaceNotPromotable],
-        ) => Some(HelperSurfaceDisposition::DurableNonPromotableHelperSurface),
-        _ => None,
+    if recommendation_matches_helper_surface_durable_hold_tuple(top_candidate) {
+        Some(HelperSurfaceDisposition::DurableNonPromotableHelperSurface)
+    } else {
+        None
     }
 }
 

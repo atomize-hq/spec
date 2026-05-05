@@ -1,6 +1,13 @@
 use crate::FamilyTargetLanguage;
 use crate::XtaskError;
 use crate::family::coverage::current_timestamp_rfc3339;
+use crate::family::helper_surface::{
+    basis_snapshot_requires_helper_surface_follow_on,
+    decision_matches_helper_surface_follow_on_tuple,
+    decision_uses_helper_surface_follow_on_tuple,
+    recommendation_matches_helper_surface_durable_hold_tuple,
+    recommendation_uses_helper_surface_durable_hold_tuple,
+};
 use crate::family::inventory::{inventory_sha256_hex, render_snapshot_bytes};
 use crate::family::paths::{
     FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,
@@ -1939,52 +1946,6 @@ fn validate_analysis_basis_reference(
         serde_json::from_slice(&bytes).map_err(deserialize_error(&path))?;
     artifact.validate(workspace_root)?;
     Ok(artifact)
-}
-
-fn recommendation_uses_helper_surface_durable_hold_tuple(
-    candidate: &RecommendationCandidateEntry,
-) -> bool {
-    candidate
-        .hold_reasons
-        .contains(&HoldReason::HelperSurfaceNotPromotable)
-        || candidate.next_step_status == NextStepStatus::DurableHold
-        || candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
-}
-
-fn recommendation_matches_helper_surface_durable_hold_tuple(
-    candidate: &RecommendationCandidateEntry,
-) -> bool {
-    candidate.promotion_readiness == PromotionReadiness::Hold
-        && candidate
-            .hold_reasons
-            .contains(&HoldReason::HelperSurfaceNotPromotable)
-        && candidate.next_step_status == NextStepStatus::DurableHold
-        && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable
-}
-
-fn basis_snapshot_requires_helper_surface_follow_on(snapshot: &CorpusProgramBasisSnapshot) -> bool {
-    snapshot.decision_status == DecisionStatus::NotRecommended
-        && snapshot.open_blockers == vec![DecisionReason::HelperSurfaceNotPromotable]
-        && snapshot.missing_evidence.is_empty()
-        && snapshot.stale_evidence.is_empty()
-}
-
-fn decision_uses_helper_surface_follow_on_tuple(artifact: &CorpusProgramDecisionArtifact) -> bool {
-    artifact.decision_action == CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
-        || artifact.decision_basis_code
-            == CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
-        || artifact.pivot_target_class == Some(PivotTargetClass::ArchitectureSharedCoreFollowOn)
-        || artifact.required_next_action == RequiredNextAction::AuthorArchitectureFollowOnPlan
-}
-
-fn decision_matches_helper_surface_follow_on_tuple(
-    artifact: &CorpusProgramDecisionArtifact,
-) -> bool {
-    artifact.decision_action == CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
-        && artifact.decision_basis_code
-            == CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
-        && artifact.pivot_target_class == Some(PivotTargetClass::ArchitectureSharedCoreFollowOn)
-        && artifact.required_next_action == RequiredNextAction::AuthorArchitectureFollowOnPlan
 }
 
 fn expected_open_blockers(candidate: Option<&RecommendationCandidateEntry>) -> Vec<DecisionReason> {

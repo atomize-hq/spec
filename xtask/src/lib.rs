@@ -300,18 +300,21 @@ mod tests {
         },
         promotion_artifacts::{
             ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CandidateStatus,
-            CommandRecord, ConfidenceLevel, CorpusProgramBasisSnapshot,
+            CommandRecord, ConfidenceLevel, CorpusProgramBasisSnapshot, CorpusSourceEntry,
             CorpusProgramDecisionAction, CorpusProgramDecisionArtifact,
             CorpusProgramDecisionBasisCode, DecisionReason, DecisionStatus, DecisionSummary,
             DifficultyTier, EvidenceState, EvidenceSummary, FamilyCoverageArtifact,
-            FamilyRecommendationAnalysisArtifact, FamilyRecommendationArtifact, GateStatus,
-            GateSummary, HoldReason, MachineEvidence, MachineEvidenceKind, NextStepDetail,
-            NextStepStatus, PivotTargetClass, PromotionApprovals, PromotionArtifactKind,
-            PromotionBlockerArtifact, PromotionExecutionArtifact, PromotionReadiness,
-            RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RECOMMENDATION_SCHEMA_VERSION, RankedCandidate,
-            RecommendationCandidateEntry, RecommendationConfidence, RecommendationDelta,
-            RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
-            RequiredNextAction, TargetLanguage, UnsupportedClusterEntry,
+            FamilyCoverageEntry, FamilyRecommendationAnalysisArtifact,
+            FamilyRecommendationArtifact, FunctionCoverageTotals, GateStatus, GateSummary,
+            HoldReason, MachineEvidence, MachineEvidenceKind, NextStepDetail, NextStepStatus,
+            NonFunctionCoverageTotals, PivotTargetClass, PromotionApprovals,
+            PromotionArtifactKind, PromotionBlockerArtifact, PromotionExecutionArtifact,
+            PromotionReadiness, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            RECOMMENDATION_SCHEMA_VERSION, RankedCandidate, RecommendationCandidateEntry,
+            RecommendationConfidence, RecommendationDelta, RecommendationDifficulty,
+            RecommendationLeverage, RecommendationStatus, RequiredNextAction, SourceKind,
+            TargetLanguage,
+            UnsupportedClusterEntry,
         },
         prove, recommend,
         report::{
@@ -3489,6 +3492,52 @@ gate_d = true
     }
 
     #[test]
+    fn corpus_decision_does_not_activate_helper_surface_follow_on_when_evidence_is_missing() {
+        let mut artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        artifact.decision_summary.decision_status = DecisionStatus::BlockedForNow;
+        artifact.decision_summary.open_blockers = vec![
+            DecisionReason::HelperSurfaceNotPromotable,
+            DecisionReason::ThinRealExampleSupport,
+        ];
+        artifact.evidence_summary.missing_evidence = vec![EvidenceState::ThinRealExampleSupport];
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(
+            derived.decision_action,
+            CorpusProgramDecisionAction::SpendCorpusRun1
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence
+        );
+    }
+
+    #[test]
+    fn corpus_decision_does_not_activate_helper_surface_follow_on_when_evidence_is_stale() {
+        let mut artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        artifact.decision_summary.decision_status = DecisionStatus::BlockedForNow;
+        artifact.evidence_summary.stale_evidence = vec![EvidenceState::StaleEvidence];
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(
+            derived.decision_action,
+            CorpusProgramDecisionAction::SpendCorpusRun1
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence
+        );
+    }
+
+    #[test]
     fn recommendation_policy_ranks_known_overlap_candidate_with_strong_evidence() {
         let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
             "strong-known-cluster",
@@ -3517,6 +3566,34 @@ gate_d = true
         );
         assert!(artifact.evidence_summary.missing_evidence.is_empty());
         assert!(artifact.evidence_summary.stale_evidence.is_empty());
+    }
+
+    #[test]
+    fn recommendation_policy_does_not_overgeneralize_non_helper_pressure_into_durable_hold() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "unknown-but-not-helper-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            "unknown",
+            (2, 2, 0),
+            CandidateStatus::Rankable,
+            vec!["examples_ecommerce::money/round".to_string()],
+        )]);
+
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+        let candidate = &artifact.ranked_candidates[0];
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Hold);
+        assert_eq!(
+            candidate.hold_reasons,
+            vec![HoldReason::UnknownOverlapFamily]
+        );
+        assert_eq!(
+            candidate.next_step_status,
+            NextStepStatus::TargetedEvidenceGap
+        );
+        assert_eq!(
+            candidate.next_step_detail,
+            NextStepDetail::TargetedEvidenceGap
+        );
     }
 
     #[test]
@@ -3769,6 +3846,97 @@ gate_d = true
             ],
         );
         assert_eq!(validate_code, 0);
+    }
+
+    #[test]
+    fn coverage_proof_fingerprint_is_stable_across_generated_at_and_inventory_path_churn() {
+        let artifact = coverage_artifact_fixture(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        let baseline = coverage::normalized_coverage_proof_fingerprint(&artifact).unwrap();
+
+        let mut churned = artifact.clone();
+        churned.generated_at = "2026-05-06T03:00:00Z".to_string();
+        churned.inventory_path =
+            ".semantic-family-artifacts/family-promotion/inventory/churned.json".to_string();
+        churned.inventory_sha256 = "different-inventory-sha".to_string();
+
+        assert_eq!(
+            coverage::normalized_coverage_proof_fingerprint(&churned).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn coverage_proof_fingerprint_changes_on_semantic_cluster_change() {
+        let artifact = coverage_artifact_fixture(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        let baseline = coverage::normalized_coverage_proof_fingerprint(&artifact).unwrap();
+
+        let mut changed = artifact.clone();
+        changed.unsupported_clusters[0].real_example_hits = 3;
+
+        assert_ne!(
+            coverage::normalized_coverage_proof_fingerprint(&changed).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn recommendation_proof_fingerprint_is_stable_across_generated_at_churn() {
+        let artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        let baseline = recommend::normalized_recommendation_proof_fingerprint(&artifact).unwrap();
+
+        let mut churned = artifact.clone();
+        churned.generated_at = "2026-05-06T03:00:00Z".to_string();
+        churned.delta_from_previous = RecommendationDelta {
+            previous_generated_at: Some("2026-05-04T03:00:00Z".to_string()),
+            previous_decision_status: Some(DecisionStatus::BlockedForNow),
+            previous_recommendation_status: Some(RecommendationStatus::Ranked),
+            decision_changed: true,
+            top_candidate_changed: true,
+            reasons_added: vec![DecisionReason::ThinRealExampleSupport],
+            reasons_cleared: vec![DecisionReason::HelperSurfaceNotPromotable],
+            evidence_changes: vec!["missing_evidence:+thin_real_example_support".to_string()],
+            summary: "churned".to_string(),
+        };
+
+        assert_eq!(
+            recommend::normalized_recommendation_proof_fingerprint(&churned).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn corpus_decision_proof_fingerprint_changes_on_semantic_action_change() {
+        let artifact = recommend::build_corpus_program_decision_artifact(
+            "2026-05-05T02:00:00Z".to_string(),
+            "analysis-sha".to_string(),
+            &recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+                "unsupported_function_surface-e40675da6fa0",
+                (2, 1, 0),
+            )]),
+        )
+        .unwrap();
+        let baseline =
+            recommend::normalized_corpus_program_decision_proof_fingerprint(&artifact).unwrap();
+
+        let mut changed = artifact.clone();
+        changed.decision_action = CorpusProgramDecisionAction::Stop;
+        changed.decision_basis_code = CorpusProgramDecisionBasisCode::NoActionableCandidate;
+        changed.pivot_target_class = None;
+        changed.required_next_action = RequiredNextAction::RecordStopWithoutNewMilestone;
+
+        assert_ne!(
+            recommend::normalized_corpus_program_decision_proof_fingerprint(&changed).unwrap(),
+            baseline
+        );
     }
 
     #[test]
@@ -4275,6 +4443,49 @@ gate_d = true
             coverage_path,
             inventory::inventory_sha256_hex(&coverage_bytes),
         )
+    }
+
+    fn coverage_artifact_fixture(
+        unsupported_clusters: Vec<UnsupportedClusterEntry>,
+    ) -> FamilyCoverageArtifact {
+        FamilyCoverageArtifact {
+            schema_version: 1,
+            artifact_kind: PromotionArtifactKind::FamilyCoverageSnapshot,
+            generated_at: "2026-05-05T02:00:00Z".to_string(),
+            inventory_path: ".semantic-family-artifacts/family-promotion/inventory/base.json"
+                .to_string(),
+            inventory_sha256: "inventory-sha".to_string(),
+            corpus_manifest_path: ".semantic-family-artifacts/family-promotion/corpus.toml"
+                .to_string(),
+            corpus_manifest_sha256: "manifest-sha".to_string(),
+            sources: vec![CorpusSourceEntry {
+                id: "examples_ecommerce".to_string(),
+                path: "examples/ecommerce/units".to_string(),
+                kind: SourceKind::RealExample,
+                counts_toward_recommendation: true,
+                note: "fixture".to_string(),
+                unit_count: 3,
+            }],
+            function_coverage: FunctionCoverageTotals {
+                total_units: 3,
+                promoted_family_units: 0,
+                supported_unpromoted_family_units: 0,
+                unsupported_function_units: 3,
+            },
+            non_function_coverage: NonFunctionCoverageTotals {
+                total_units: 0,
+                supported_sum_units: 0,
+                supported_data_units: 0,
+                other_units: 0,
+            },
+            family_coverage: vec![FamilyCoverageEntry {
+                family: "function.wrapper.pipeline.v1".to_string(),
+                unit_count: 0,
+                unit_ids: Vec::new(),
+                source_ids: Vec::new(),
+            }],
+            unsupported_clusters,
+        }
     }
 
     fn analysis_artifact_fixture(
