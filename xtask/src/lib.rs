@@ -1,8 +1,9 @@
 mod family;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use family::{
     certify, coverage, inventory, promotion_artifacts, prove, recommend, scaffold, smoke,
+    verify,
 };
 use std::ffi::OsString;
 use std::path::Path;
@@ -151,6 +152,10 @@ enum FamilyCommand {
         #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
         target_language: FamilyTargetLanguage,
     },
+    VerifyDecisionContract {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -191,8 +196,19 @@ where
     I: IntoIterator<Item = S>,
     S: Into<OsString> + Clone,
 {
-    let cli =
-        Cli::try_parse_from(args).map_err(|error| XtaskError::InvalidInput(error.to_string()))?;
+    let cli = match Cli::try_parse_from(args) {
+        Ok(cli) => cli,
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            print!("{error}");
+            return Ok(());
+        }
+        Err(error) => return Err(XtaskError::InvalidInput(error.to_string())),
+    };
 
     match cli.command {
         Command::Family(args) => match args.command {
@@ -265,6 +281,9 @@ where
                 family,
                 target_language,
             } => certify::run(workspace_root, &family, target_language),
+            FamilyCommand::VerifyDecisionContract { format } => {
+                verify::run(workspace_root, &format)
+            }
         },
     }
 }
@@ -5504,6 +5523,34 @@ gate_d = true
             "test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n"
         ));
         stdout
+    }
+
+    #[test]
+    fn family_verify_decision_contract_rejects_non_json_format_from_cli_dispatch() {
+        let temp_dir = workspace_root();
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "verify-decision-contract",
+                "--format",
+                "yaml",
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn family_verify_decision_contract_help_exits_successfully() {
+        let temp_dir = workspace_root();
+        let code = run_from(
+            temp_dir.path(),
+            ["xtask", "family", "verify-decision-contract", "--help"],
+        );
+
+        assert_eq!(code, 0);
     }
 
     struct FakeRunner {

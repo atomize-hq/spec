@@ -1193,7 +1193,10 @@ impl FamilyRecommendationAnalysisArtifact {
 }
 
 impl CorpusProgramDecisionArtifact {
-    pub(crate) fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+    pub(crate) fn validate_contract_surface(
+        &self,
+        workspace_root: &Path,
+    ) -> Result<FamilyRecommendationAnalysisArtifact, XtaskError> {
         if self.schema_version != CORPUS_PROGRAM_DECISION_SCHEMA_VERSION {
             return Err(XtaskError::InvalidInput(format!(
                 "corpus-program decision schema_version must be {CORPUS_PROGRAM_DECISION_SCHEMA_VERSION}, found {}",
@@ -1217,12 +1220,16 @@ impl CorpusProgramDecisionArtifact {
             ));
         }
 
-        let analysis_basis = validate_analysis_basis_reference(
+        validate_analysis_basis_reference(
             workspace_root,
             &self.analysis_basis_path,
             &self.analysis_basis_sha256,
             "corpus-program decision",
-        )?;
+        )
+    }
+
+    pub(crate) fn validate(&self, workspace_root: &Path) -> Result<(), XtaskError> {
+        let analysis_basis = self.validate_contract_surface(workspace_root)?;
         let expected_snapshot = corpus_program_basis_snapshot(&analysis_basis);
         if self.basis_snapshot != expected_snapshot {
             return Err(XtaskError::InvalidInput(

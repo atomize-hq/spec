@@ -14,3 +14,4 @@ pub mod report;
 pub mod routing;
 pub mod scaffold;
 pub mod smoke;
+pub mod verify;
