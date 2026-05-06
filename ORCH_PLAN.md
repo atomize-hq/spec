@@ -68,11 +68,12 @@ Execution note: **M38 is the architecture follow-on trigger-gating milestone onl
 - Optional probe evidence is honest only if a real non-author maintainer is available. Substituting the original author, simulating a second maintainer, or inventing a second consumer invalidates the run.
 - No lane edits anything under:
   - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/`
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`, except parent-owned authority-plan alignment or final closeout note if explicitly required
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
   - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
+- `PLAN.md` and `ORCH_PLAN.md` may be edited only by the parent before `authority-freeze.json` is written. After `authority-freeze.json`, both files are frozen for the remainder of the run.
 - `.runs/m38_trigger_gating/**` is parent-owned only.
 - `.runs/m38_non_author_probe/summary.md` is the only non-parent run artifact an optional worker lane may author, and only if Lane C is explicitly launched.
-- If `PLAN.md` or `ORCH_PLAN.md` changes after `authority-freeze.json`, the run stops and restarts from a fresh baseline.
+- If `PLAN.md` or `ORCH_PLAN.md` changes after `authority-freeze.json`, the run stops and restarts from a fresh baseline. No post-freeze parent-only exception exists.
 - If overlapping local edits exist on owned surfaces before freeze, the parent either re-anchors around them or blocks the run. It does not overwrite them silently.
 - If no warning cleanup is chosen and no real non-author probe can run, the run stays sequential. The parent does not fabricate work just to justify parallelism.
 
@@ -88,6 +89,8 @@ Execution note: **M38 is the architecture follow-on trigger-gating milestone onl
 
 Rules for the closed surface:
 
+- Absolute paths in this table identify the publish-target location on `feat/corpus-expansion`. When a lane runs in a worktree, it edits the corresponding repo-relative path inside that lane's own worktree.
+- After `task-m38-10-create-spine-worktree`, parent-owned run-state files move to the corresponding paths under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int` and only return to the live checkout through Task 10 publish.
 - Any edit outside this table is out of scope unless it is mechanically forced by merge conflict resolution and is recorded in `merge-log.md`.
 - Lane B owns exactly one source file. If it needs any second source file, it is out of scope for M38 and must stop.
 - Lane C owns exactly one summary artifact. It does not rewrite the trigger matrix, reopen scope, or add a synthetic consumer story.
@@ -138,12 +141,22 @@ git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spe
 
 ## Canonical Run-State
 
-Parent-owned orchestration truth lives under:
+Parent-owned orchestration truth uses a phase-specific active root:
 
-- `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-- `RUN_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_trigger_gating`
-- `PROBE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_non_author_probe`
+- `LIVE_PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
+- `INT_PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int`
+- `ACTIVE_PARENT_ROOT=LIVE_PRIMARY_ROOT` for `task-m38-00-baseline-capture` through `task-m38-05-authority-freeze`
+- `ACTIVE_PARENT_ROOT=INT_PRIMARY_ROOT` for `task-m38-10-create-spine-worktree` through `task-m38-70-closeout`
+- `ACTIVE_RUN_ROOT=$ACTIVE_PARENT_ROOT/.runs/m38_trigger_gating`
+- `ACTIVE_PROBE_ROOT=$ACTIVE_PARENT_ROOT/.runs/m38_non_author_probe`
 - `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating`
+
+Run-state handoff rules:
+
+- Before `task-m38-10-create-spine-worktree`, the live checkout copy is canonical because the integration worktree does not exist yet.
+- `task-m38-10-create-spine-worktree` must copy the already-written parent run-state from `LIVE_PRIMARY_ROOT` into `INT_PRIMARY_ROOT` before any parent spine work continues.
+- After that copy, the integration worktree copy is canonical for all parent-owned run-state, acceptance, merge, and closeout artifacts.
+- The live checkout copy becomes read-only until Task 10 publish or a full restart.
 
 Canonical parent-owned files:
 
@@ -192,7 +205,7 @@ Required contents:
   - closed implementation surface literal copy or checksum
   - explicit statement that no optional lanes are yet authorized
 - `rewrite-freeze.json`
-  - exact `ws/m38-int` SHA after parent plan spine work
+  - exact committed `ws/m38-int` SHA after parent plan spine work
   - exact trigger matrix values accepted by the parent
   - explicit statement whether Lane B is `launch` or `skip`
   - explicit statement whether Lane C is `launch` or `skip`
@@ -288,12 +301,12 @@ task-m38-00-baseline-capture
           -> task-m38-20-parent-plan-spine
               -> task-m38-25-rewrite-freeze
                   -> task-m38-30-launch-lane-b (optional)
-                  -> task-m38-31-launch-lane-c (optional)
                       -> task-m38-40-merge-lane-b (if launched)
+                  -> task-m38-31-launch-lane-c (optional)
                       -> task-m38-45-accept-lane-c (if launched)
-                          -> task-m38-60-final-verification-wall
-                              -> task-m38-65-publish-back-to-live
-                                  -> task-m38-70-closeout
+                  -> task-m38-60-final-verification-wall (when all launched optional lanes have merged or been accepted, or both lanes were skipped)
+                      -> task-m38-65-publish-back-to-live
+                          -> task-m38-70-closeout
 ```
 
 ### Parent Task 1 - Baseline Capture
@@ -383,7 +396,9 @@ Actions:
 
 1. Create `ws/m38-int` from the SHA in `integration-base.txt`.
 2. Verify the worktree is an exact fork from the frozen baseline.
-3. Record creation details in `session.log`.
+3. Copy the canonical parent run-state from the live checkout into the integration worktree.
+4. Verify the copied run-state still reflects the frozen baseline and authority freeze.
+5. Record creation and handoff details in `session.log`.
 
 Minimum command wall:
 
@@ -391,7 +406,10 @@ Minimum command wall:
 git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int \
   -b ws/m38-int "$(cat .runs/m38_trigger_gating/integration-base.txt)"
 git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int rev-parse HEAD
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int status --short
+test -z "$(git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int status --short)"
+rsync -a --delete /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_trigger_gating/ \
+  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int/.runs/m38_trigger_gating/
+test -f /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int/.runs/m38_trigger_gating/authority-freeze.json
 ```
 
 Stop conditions:
@@ -399,6 +417,7 @@ Stop conditions:
 - the worktree cannot be created from the exact baseline SHA
 - the worktree points at the wrong SHA
 - the worktree starts with unexpected dirt
+- the parent run-state handoff into `ws/m38-int` is missing or incomplete
 
 ### Parent Task 4 - Parent Plan Spine
 
@@ -414,6 +433,7 @@ Actions:
 4. Decide whether Lane C is `launch` or `skip`.
 5. Reject any attempt to turn M38 into runtime extraction, corpus spend, or synthetic evidence generation.
 6. Prepare optional launch packets or skip markers.
+7. Leave `ws/m38-int` at a clean committed handoff state before `rewrite-freeze.json` records the lane base SHA.
 
 Minimum command wall:
 
@@ -439,7 +459,7 @@ Branch: `ws/m38-int`
 Actions:
 
 1. Write `rewrite-freeze.json`.
-2. Record the accepted parent spine SHA.
+2. Record the accepted committed parent spine SHA.
 3. Record Lane B and Lane C as `launch` or `skip`.
 4. Freeze the optional lane boundaries and stale-lane rules.
 
@@ -447,13 +467,15 @@ Minimum command wall:
 
 ```bash
 git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int rev-parse HEAD
-test -f /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_trigger_gating/authority-freeze.json
+test -z "$(git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int status --short)"
+test -f /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int/.runs/m38_trigger_gating/authority-freeze.json
 ```
 
 Stop conditions:
 
 - optional lane status is ambiguous
 - the accepted spine SHA is not recorded
+- the parent spine handoff is not at a clean committed SHA
 - stale-lane rules are missing from the freeze
 
 ### Parent Task 6 - Launch Optional Lanes
@@ -593,21 +615,27 @@ Branches: `ws/m38-int` -> `feat/corpus-expansion`
 Actions:
 
 1. Verify the live branch still matches `publish-head.txt`, or reconcile and rerun the full verification wall.
-2. Publish only from `ws/m38-int`.
-3. Record the final integrated SHA and final live SHA.
+2. Verify the live checkout is clean before any publish action.
+3. Publish by fast-forwarding `feat/corpus-expansion` to the accepted `ws/m38-int` HEAD after all verification passes.
+4. Record the final integrated SHA and final live SHA.
 
 Minimum command wall:
 
 ```bash
 git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int rev-parse HEAD
+test -z "$(git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec status --short)"
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
+cat /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int/.runs/m38_trigger_gating/publish-head.txt
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec merge --ff-only ws/m38-int
 git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
 ```
 
 Stop conditions:
 
 - live branch moved incompatibly and was not reconciled
+- the live checkout is dirty at publish time
 - `ws/m38-int` is not fully green
-- publish cannot happen cleanly from the accepted integration branch
+- publish cannot happen as a clean fast-forward from the accepted integration branch
 
 ### Parent Task 11 - Closeout
 
