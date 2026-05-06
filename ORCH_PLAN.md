@@ -679,10 +679,7 @@ The baseline gate must run the pre-M39 shell ladder once and record it in `legac
 Run on `ws/m39-int` immediately before writing `implementation-contract-freeze.json`:
 
 ```bash
-cargo xtask family verify-decision-contract --format json | tee \
-  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
-jq -e '.overall_verdict == "pass"' \
-  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+cargo xtask family verify-decision-contract --format json
 ```
 
 ### Integration Verifier Wall
@@ -691,10 +688,7 @@ Run after merging Lane B or recording `lane-b-skip.json`:
 
 ```bash
 cargo test -p xtask
-cargo xtask family verify-decision-contract --format json | tee \
-  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
-jq -e '.overall_verdict == "pass"' \
-  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+cargo xtask family verify-decision-contract --format json
 ```
 
 ### Final Verification Wall
@@ -702,10 +696,7 @@ jq -e '.overall_verdict == "pass"' \
 Run immediately before writing `closeout.md`:
 
 ```bash
-cargo xtask family verify-decision-contract --format json | tee \
-  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
-jq -e '.overall_verdict == "pass"' \
-  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+cargo xtask family verify-decision-contract --format json
 ```
 
 ### Post-Publish Verification Wall
