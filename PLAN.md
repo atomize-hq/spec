@@ -18,41 +18,38 @@ Execution note: **M39 is a bounded verification-consumer probe. It does not move
 Turn the repeated shell-level verification path around the frozen helper-surface
 decision tuple into one truthful in-tree maintainer surface:
 
-`cargo xtask family verify-decision-contract --format json`
+```text
+cargo xtask family verify-decision-contract --format json
+```
 
-M39 is not an extraction milestone.
+M39 is not an extraction milestone. It is a bounded probe with one question:
 
-M39 is:
+> does the repo have a real third consumer of the existing family decision
+> semantics, or only repeated shell glue around the same proof floor?
 
-1. prove whether the current verification path is a real third consumer of the
-   existing family decision semantics
-2. keep the implementation read-side only and minimal-diff
-3. replace the duplicated `jq` ladder in standing orchestration surfaces if,
-   and only if, the command earns that adoption
-4. close with an explicit verdict:
-   - candidate third consumer observed
-   - third honest consumer proven
-   - keep the kernel local
+The milestone succeeds only if the answer is backed by implementation,
+orchestration adoption, parity proof, and an explicit closeout verdict.
 
 ## Executive Verdict
 
-The honest M39 implementation is a thin verifier plus standing adoption, not a
-new kernel and not a generalized contract framework.
+The honest M39 implementation is a thin read-side verifier plus standing
+adoption, not a new kernel and not a generalized contract framework.
 
-The live code already gives us most of the semantics we need:
+The repo already has almost all of the semantics M39 needs:
 
 - `xtask/src/family/promotion_artifacts.rs` already validates both artifacts
 - `CorpusProgramDecisionArtifact::validate(...)` already enforces:
   - basis snapshot parity against the validated analysis basis
-  - derived decision tuple parity against `derive_corpus_program_decision_contract(...)`
+  - derived decision tuple parity against
+    `derive_corpus_program_decision_contract(...)`
 - `xtask/src/family/decision_kernel.rs` already owns the kernel truth
 
-That means M39 should add one new read-side command surface, expose its checks
-as structured JSON, and then replace the standing shell ladder in
-`ORCH_PLAN.md`.
+That means M39 should add one new command surface, expose its checks as
+structured JSON, and replace the standing shell ladder in `ORCH_PLAN.md` if,
+and only if, the command earns that adoption.
 
-If that adoption lands and sticks, the repo has a credible third consumer
-signal. If it does not, the kernel stays local and M39 says so plainly.
+If adoption lands and sticks, the repo has a credible third-consumer signal. If
+it does not, the kernel stays local and M39 says so plainly.
 
 ## Live Baseline
 
@@ -77,6 +74,26 @@ The frozen M38 helper-surface floor remains:
 - `decision_basis_code = "durable_non_promotable_helper_surface"`
 - `required_next_action = "author_architecture_follow_on_plan"`
 
+## Problem Statement
+
+Today the repo has kernel semantics that are reused in practice, but the
+maintainer-facing verification story is still split across:
+
+- two `validate-artifact` calls
+- repeated semantic `jq` assertions
+- copy-paste proof blocks in `ORCH_PLAN.md`
+
+That is close to a third consumer, but not enough to claim one yet.
+
+The missing proof is standing adoption. M39 needs to answer one narrow
+question:
+
+> is there a real in-tree verification consumer that maintainers will actually
+> use for the standing helper-surface proof floor?
+
+If yes, the repo has real pressure. If no, the kernel remains local and the
+repo avoids another fake abstraction detour.
+
 ## Frozen Premises
 
 1. M38 already decided that deeper extraction is not justified on current repo
@@ -93,25 +110,6 @@ The frozen M38 helper-surface floor remains:
 6. The command output can be structured JSON, but M39 must not introduce a new
    persisted artifact class or widen any public artifact schema.
 
-## Problem Statement
-
-Today the repo has kernel semantics that are reused in practice, but the
-maintainer-facing verification story is still split across:
-
-- two `validate-artifact` calls
-- six semantic `jq` assertions
-- repeated copy/paste blocks in `ORCH_PLAN.md`
-
-That is close to a third consumer, but not enough to claim it yet.
-
-The missing proof is adoption. M39 needs to answer one narrow question:
-
-> is there a real in-tree verification consumer that maintainers actually want
-> to use for the standing helper-surface proof floor?
-
-If yes, the repo has real pressure. If no, the kernel remains local and the
-repo avoids another fake abstraction detour.
-
 ## Step 0 - Scope Challenge
 
 ### What already exists
@@ -121,10 +119,10 @@ repo avoids another fake abstraction detour.
 | CLI family subcommand dispatch | `xtask/src/lib.rs` | Reuse. Add exactly one new subcommand branch. |
 | Family module registration | `xtask/src/family/mod.rs` | Reuse. Add one new module export only. |
 | Kernel truth for basis snapshot and derived decision tuple | `xtask/src/family/decision_kernel.rs` | Reuse unchanged. M39 reads from it, not around it. |
-| Recommendation and corpus-decision latest paths | `xtask/src/family/paths.rs`, `xtask/src/family/recommend.rs` | Reuse unchanged. M39 reads the same canonical latest paths. |
+| Recommendation and decision latest paths | `xtask/src/family/paths.rs`, `xtask/src/family/recommend.rs` | Reuse unchanged. M39 reads the same canonical latest paths. |
 | Artifact structs and validators | `xtask/src/family/promotion_artifacts.rs` | Reuse directly. This is the main leverage point. |
 | Existing operator proof floor | `ORCH_PLAN.md` repeated validation + `jq` blocks | Replace with the new command once parity is proven. |
-| Existing trigger context | `TODOS.md` post-M37 follow-ups | Reuse unchanged. M39 is evidence-gathering, not trigger expansion. |
+| Existing trigger context | `TODOS.md` post-M37 follow-ups | Reuse unchanged. M39 is evidence gathering, not trigger expansion. |
 | Existing milestone record | `.runs/m38_trigger_gating/` | Reuse as the frozen semantic floor and truth source. |
 
 ### Minimum complete change set
@@ -149,7 +147,7 @@ Anything beyond that is scope leak.
 
 ### Complexity check
 
-This plan should stay under the smell line:
+This plan stays below the smell line on purpose:
 
 - one new module under `xtask/src/family/`
 - one CLI wiring update
@@ -160,13 +158,13 @@ This plan should stay under the smell line:
 - no movement of `decision_kernel.rs`
 
 If M39 grows into a framework for arbitrary verification contracts, stop. That
-is the exact overbuild this milestone is meant to reject.
+is the exact overbuild this milestone exists to reject.
 
 ### Search check
 
-**[Layer 1]** Reuse `CorpusProgramDecisionArtifact::validate(...)` as the
-parity truth source instead of recreating that logic in shell or in a second
-decision path.
+**[Layer 1]** Reuse `CorpusProgramDecisionArtifact::validate(...)` as the parity
+truth source instead of recreating that logic in shell or in a second decision
+path.
 
 **[Layer 1]** Reuse the canonical latest paths already wired through
 `recommend.rs` and `paths.rs`. Do not add path override flags in M39.
@@ -199,9 +197,11 @@ The complete version includes:
 - exact CLI contract
 - exact JSON output contract
 - exact failure reason vocabulary
-- exact codepath/test diagram
-- exact ORCH_PLAN adoption points
+- exact codepath and maintainer-flow coverage
+- exact `ORCH_PLAN.md` adoption points
+- exact parity proof
 - exact closeout verdict rules
+- explicit worktree parallelization boundaries
 
 That is the lake. Boil it.
 
@@ -213,7 +213,7 @@ Distribution for M39 means maintainer adoption inside existing repo workflows:
 
 - `cargo xtask ...` command surface
 - `ORCH_PLAN.md` standing verification blocks
-- accepted run proof log / closeout record
+- accepted run proof log and closeout record
 
 If those surfaces do not adopt the new command, the consumer claim is not
 proven.
@@ -358,10 +358,39 @@ Required machine failure reasons:
 - `frozen_helper_surface_evidence_not_current`
 - `frozen_helper_surface_floor_mismatch`
 
+The verifier should also report field-level mismatch detail inside the relevant
+check object. That makes failures debuggable without inventing a new error
+taxonomy.
+
+### Artifact-field audit
+
+The probe is feasible under current constraints because the emitted artifacts
+already contain the read-side truth the verifier needs:
+
+- recommendation-analysis artifact already carries:
+  - `recommendation_status`
+  - `decision_summary.decision_status`
+  - `decision_summary.top_candidate_id`
+  - `decision_summary.open_blockers`
+  - `evidence_summary.missing_evidence`
+  - `evidence_summary.stale_evidence`
+- corpus-program-decision artifact already carries:
+  - `analysis_basis_path`
+  - `analysis_basis_sha256`
+  - `basis_snapshot`
+  - `decision_action`
+  - `decision_basis_code`
+  - `pivot_target_class`
+  - `required_next_action`
+
+That is enough to recompute the basis snapshot and derived decision contract
+from the validated analysis artifact and compare them against the emitted
+decision artifact without touching raw corpus inputs.
+
 ### Adoption boundary
 
 M39 counts as a consumer probe only if the new command replaces the repeated
-shell ladder in the standing repo-root surfaces:
+shell ladder in standing repo-root surfaces:
 
 1. `ORCH_PLAN.md` baseline verification block around lines `340-350`
 2. `ORCH_PLAN.md` later verification block around lines `582-592`
@@ -391,7 +420,7 @@ The code should be explicit, minimal, and hostile to duplication:
 - Reuse `corpus_program_basis_snapshot(...)` and
   `derive_corpus_program_decision_contract(...)` for parity checks.
 - Reuse canonical latest paths from `paths.rs`.
-- Keep any verifier-local JSON result structs local to `verify.rs`. They do not
+- Keep verifier-local JSON result structs inside `verify.rs`. They do not
   belong in `promotion_artifacts.rs` because they are command output, not repo
   artifacts.
 
@@ -404,6 +433,9 @@ The code should be explicit, minimal, and hostile to duplication:
   struct for a different purpose.
 
 ## Implementation Plan
+
+The implementation order is strict because later steps depend on a frozen
+command contract, not a moving draft.
 
 ### Step 1 - Wire the CLI surface
 
@@ -441,7 +473,7 @@ Responsibilities:
 7. verify the frozen helper-surface floor exactly
 8. emit structured JSON and return the correct exit status
 
-Important implementation rule:
+Implementation rule:
 
 - the verifier may read artifact files and call existing validation helpers
   only
@@ -497,10 +529,9 @@ Changes:
 
 1. replace the repeated validate + `jq` clusters at the named blocks with the
    new command
-2. keep any surrounding branch/sha/status commands that provide useful proof
-   context
-3. optionally tee verifier stdout to a `.runs/.../verify-decision-contract.stdout.json`
-   proof file if the closeout flow benefits from a captured machine report
+2. keep any surrounding branch, sha, and status commands that provide useful
+   proof context
+3. capture verifier stdout to a proof file during the accepted run
 
 Target shape:
 
@@ -509,7 +540,7 @@ cargo xtask family verify-decision-contract --format json | tee \
   .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
 ```
 
-Optional follow-up assertion if the proof flow wants an explicit JSON gate:
+Optional explicit JSON gate if the proof flow wants it:
 
 ```bash
 jq -e '.overall_verdict == "pass"' \
@@ -526,7 +557,10 @@ M39 closes with exactly one of:
 
 The closeout record must explain which adoption bar was or was not met.
 
-## Test And Verification Plan
+## Test Review
+
+100% of new codepaths and maintainer-facing behavior must be covered in the
+plan before implementation starts. This is not optional cleanup work.
 
 ### Code path coverage
 
@@ -700,7 +734,7 @@ This plan has one real parallel seam after the verifier contract is frozen.
 |---|---|---|
 | CLI + verifier implementation | `xtask/src/`, `xtask/src/family/` | — |
 | Verifier tests and parity fixtures | `xtask/src/`, `xtask/src/family/`, `.semantic-family-artifacts/` | CLI + verifier implementation |
-| ORCH adoption rewrite | repo-root docs (`ORCH_PLAN.md`) | verifier command contract frozen |
+| ORCH adoption rewrite | repo-root docs | verifier command contract frozen |
 | Closeout proof capture | `.runs/`, repo-root docs | verifier tests green, ORCH adoption drafted |
 | Final milestone authority update | `PLAN.md`, optional closeout docs | all prior steps |
 
@@ -731,23 +765,6 @@ If the team chooses not to update `ORCH_PLAN.md` in the same change, then the
 correct answer is:
 
 `Sequential implementation only, because the consumer claim cannot be proven without doc adoption.`
-
-## Completion Summary
-
-- Step 0 - Scope Challenge: scope accepted as-is for a bounded verification
-  consumer probe
-- Architecture Review: one new read-side consumer, zero new write-side
-  semantics
-- Code Quality Review: reuse validators and kernel truth, avoid framework creep
-- Test Review: full codepath and maintainer-flow coverage defined
-- Performance Review: no runtime hot path, operator-surface only
-- NOT in scope: written
-- What already exists: written
-- TODOS.md handling: existing post-M37 follow-up TODOs remain authoritative
-- Failure modes: all non-happy paths named with stable machine reasons
-- Parallelization: 3 lanes total, 1 real parallel seam after command contract freeze
-- Lake Score: complete option chosen, including contract, parity, adoption, and
-  closeout verdict
 
 ## Deliverables
 
@@ -782,6 +799,23 @@ M39 is done only when all of these are true:
 | `candidate third consumer observed, but the kernel still stays local` | the command works and parity passes, but standing repo-root adoption is incomplete or not yet merged |
 | `third honest consumer proven` | the command works, parity passes, and the named `ORCH_PLAN.md` proof blocks adopt it as the standing path |
 | `keep the kernel local` | parity fails, adoption fails, or the command requires enough special casing that it is not an honest reusable consumer |
+
+## Completion Summary
+
+- Step 0 - Scope Challenge: scope accepted as-is for a bounded verification
+  consumer probe
+- Architecture Review: one new read-side consumer, zero new write-side
+  semantics
+- Code Quality Review: reuse validators and kernel truth, avoid framework creep
+- Test Review: full codepath and maintainer-flow coverage defined
+- Performance Review: no runtime hot path, operator-surface only
+- NOT in scope: written
+- What already exists: written
+- TODOS.md handling: existing post-M37 follow-up TODOs remain authoritative
+- Failure modes: all non-happy paths named with stable machine reasons
+- Parallelization: 3 lanes total, 1 real parallel seam after command contract freeze
+- Lake Score: complete option chosen, including contract, parity, adoption, and
+  closeout verdict
 
 ## Next Actions
 

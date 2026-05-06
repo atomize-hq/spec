@@ -1,100 +1,85 @@
-# M38 Orchestration Plan
+# M39 Orchestration Plan
 
-Status: **authoritative execution contract for the M38 run**  
+Status: **authoritative execution contract for the M39 run**  
 Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
 Live checkout: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
 Live branch: **`feat/corpus-expansion`**  
 Review base: **`main`**  
-Baseline HEAD: **`e04d2fa9059c0010f84bd1f2b150feee6246bb84`** (`e04d2fa`)  
-Last rewritten: **`2026-05-05`**  
-Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_trigger_gating`**  
-Optional probe root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_non_author_probe`**  
-Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating`**  
-Artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts`**  
-Recommendation artifact: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`**  
-Decision artifact: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`**  
-Execution note: **M38 is the architecture follow-on trigger-gating milestone only. It is not a new runtime extraction, not a `spec-core` move, not a schema or artifact expansion, not corpus run `1` activation, and not a synthetic pressure exercise.**
+Baseline HEAD: **`0f8202c35e29f1db67a0dbc15e1c664175e80eef`** (`0f8202c`)  
+Last rewritten: **`2026-05-06`**  
+Run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m39_verification_consumer_probe`**  
+Worktree root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m39-verification-consumer-probe`**  
+Canonical command: **`cargo xtask family verify-decision-contract --format json`**  
+Execution note: **M39 is the verification-consumer probe only. It proves or rejects one read-side consumer claim. It does not move `decision_kernel.rs`, does not widen public schemas, does not rescan raw corpus inputs, does not add path override flags, and does not grow a generic verification framework.**
 
 ## Summary
 
-- This run is for **M38 - Architecture Follow-On Trigger Gating After M37** only.
-- `PLAN.md` is milestone authority. This file is the parent-owned operator contract for executing that authority without improvisation.
-- The parent agent is the sole baseline capturer, sole authority freeze owner, sole worktree creator, sole stale-lane invalidator, sole verification gatekeeper, sole merge authority, sole final verifier, and sole closeout author.
-- Honest concurrency is conditional and capped:
-  - `0` before `authority-freeze.json`
-  - `1` through baseline confirmation and parent plan spine work
-  - `2` maximum after `rewrite-freeze.json`, and only if one or both optional lanes are explicitly activated
-  - `1` again for final verification and closeout
-- The critical path is fixed:
-  1. capture baseline on live `feat/corpus-expansion`
-  2. freeze `PLAN.md` and `ORCH_PLAN.md`
-  3. create the parent integration spine worktree
-  4. execute the parent plan spine: confirm the M37 semantic floor, lock the M38 trigger ledger, and decide whether optional lanes exist at all
-  5. write `rewrite-freeze.json`
-  6. optionally launch Lane B and/or Lane C from that exact freeze SHA
-  7. merge or accept optional lane outputs back into `ws/m38-int`
-  8. rerun the full verification wall
-  9. write one exact allowed closeout statement and stop
-- The frozen semantic floor must remain exact throughout the run:
-  - `recommendation_status = "no_strong_candidate"`
-  - `decision_status = "not_recommended"`
-  - `open_blockers = ["helper_surface_not_promotable"]`
-  - `decision_action = "pivot_to_architecture_shared_core_follow_on"`
-  - `decision_basis_code = "durable_non_promotable_helper_surface"`
-  - `required_next_action = "author_architecture_follow_on_plan"`
+- `PLAN.md` is milestone authority. This file is the operator contract for executing that authority without improvisation.
+- The parent agent owns the full critical path: baseline capture, authority freeze, implementation, verifier contract freeze, parity proof, merge, pre-publish acceptance, publish, post-publish verification, and final closeout.
+- There is exactly one honest optional parallel seam in M39:
+  - after the verifier contract is frozen
+  - only if `ORCH_PLAN.md` adoption work is still open
+  - only as a dedicated worktree/subagent lane for `ORCH_PLAN.md`
+- Concurrency is capped by phase:
+  - `0` before baseline capture finishes
+  - `1` through authority freeze and verifier contract freeze
+  - `2` maximum after optional lane launch
+  - `1` again for merge, parity proof, and closeout
+- M39 is not complete until the repo proves all of these together:
+  - the new verifier command exists and is green on the frozen helper-surface floor
+  - parity with the legacy shell ladder is recorded on the same artifact set
+  - repo-root orchestration adopts the verifier in standing proof walls
+  - `closeout.md` ends with exactly one allowed verdict
 
 ## Hard Guards
 
 - `PLAN.md` wins over this file, worker notes, stale worktrees, and run-state summaries if they disagree.
-- `ORCH_PLAN.md` is parent-owned only. Optional lanes do not edit it.
 - The live checkout at `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on `feat/corpus-expansion` is the baseline and publish target, not the merge surface.
-- All proving happens on `ws/m38-int`, not on the live checkout.
-- M38 must not introduce:
-  - any new crate
-  - any `spec-core` move
-  - any new artifact kind
-  - any schema version bump
-  - any public semantic fingerprint fields
-  - any corpus run `1` activation
-  - any synthetic second durable wedge
-  - any synthetic second consumer
-  - any new runtime extraction framed as "small enough to sneak in"
-- The only authorized deliverables are:
-  - authoritative trigger gating
-  - baseline verification
-  - optional real non-author maintainer probe evidence
-  - optional tiny local helper-surface warning cleanup, if explicitly chosen
-- Optional warning cleanup is hygiene only. It must stay tiny, local to `xtask/src/family/helper_surface.rs`, and non-milestone-defining.
-- Optional probe evidence is honest only if a real non-author maintainer is available. Substituting the original author, simulating a second maintainer, or inventing a second consumer invalidates the run.
-- No lane edits anything under:
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/`
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
-- `PLAN.md` and `ORCH_PLAN.md` may be edited only by the parent before `authority-freeze.json` is written. After `authority-freeze.json`, both files are frozen for the remainder of the run.
-- `.runs/m38_trigger_gating/**` is parent-owned only.
-- `.runs/m38_non_author_probe/summary.md` is the only non-parent run artifact an optional worker lane may author, and only if Lane C is explicitly launched.
-- If `PLAN.md` or `ORCH_PLAN.md` changes after `authority-freeze.json`, the run stops and restarts from a fresh baseline. No post-freeze parent-only exception exists.
-- If overlapping local edits exist on owned surfaces before freeze, the parent either re-anchors around them or blocks the run. It does not overwrite them silently.
-- If no warning cleanup is chosen and no real non-author probe can run, the run stays sequential. The parent does not fabricate work just to justify parallelism.
+- All parent-owned implementation, proof capture, and integration work happens on `ws/m39-int`, not on the live checkout.
+- M39 must not introduce:
+  - any move of `xtask/src/family/decision_kernel.rs`
+  - any new public artifact schema field or schema version bump
+  - any new persisted artifact kind
+  - any rescan of raw corpus inputs
+  - any path override flags for verifier inputs
+  - any generic verification framework, trait system, registry, or reusable abstraction beyond this exact command
+  - any new recommendation policy path
+  - any second semantics path that recomputes coverage or recommendation from source corpus data
+- The only authorized command surface for the new consumer is:
+  - `cargo xtask family verify-decision-contract --format json`
+- The verifier is read-side only. It may read canonical latest artifacts and call existing validators and kernel helpers only.
+- `PLAN.md` is frozen after `authority-freeze.json`.
+- `ORCH_PLAN.md` is frozen after `authority-freeze.json` except for the explicit M39 adoption edits performed either by the parent or by launched Lane B under this contract.
+- Parent-owned canonical run-state remains writable by the parent for the full run. Freeze records and snapshots are immutable once written, but the parent must keep appending or writing later run-state artifacts such as `implementation-contract-freeze.json`, `proof-log.json`, `parity-proof.md`, `acceptance.md`, publish records, and `closeout.md`.
+- If `PLAN.md` changes after `authority-freeze.json`, the run stops and restarts from a fresh baseline.
+- If Lane B is not launched, only the parent may edit `ORCH_PLAN.md` after `authority-freeze.json`.
+- If Lane B is launched, Lane B owns `ORCH_PLAN.md` in its worktree until it returns or is invalidated. The parent remains the only merge authority.
+- `.runs/m39_verification_consumer_probe/**` is parent-owned only. Optional lanes do not write canonical run-state.
+- No lane edits `.semantic-family-artifacts/**`. Those files are read-only derived inputs.
+- If the verifier command string, required JSON contract, required failure reasons, or named proof-wall contract changes after `implementation-contract-freeze.json`, every launched optional lane is stale and must be recreated from a new freeze SHA.
+- ORCH adoption is part of proving the consumer. If standing proof walls do not adopt the verifier, the closeout verdict cannot be `third honest consumer proven`.
 
 ## Closed Implementation Surface
 
-| Path | M38 responsibility | Lane owner |
+| Path | M39 responsibility | Owner |
 |---|---|---|
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` | authority file for the trigger matrix, probe contract, verification floor, and allowed closeout lines | Parent Lane A |
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md` | execution contract, branch/worktree rules, freeze rules, stale-lane rules, verification wall, closeout discipline | Parent Lane A |
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/helper_surface.rs` | optional tiny warning cleanup only; no semantic policy change, no new helpers outside the existing local surface | Optional Lane B |
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_trigger_gating/**` | canonical run-state, launch packets, proof log, acceptance record, blocked state, closeout record | Parent Lane A |
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_non_author_probe/summary.md` | optional probe outcome, evidence mapping, skip or inconclusive recording | Optional Lane C |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` | milestone authority and freeze reference | Parent only |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md` | execution contract, verifier proof walls, adoption proof surface, closeout discipline | Parent through authority freeze; Optional Lane B only after launch; parent merges final |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/lib.rs` | CLI wiring for `family verify-decision-contract` | Parent Lane A |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/mod.rs` | verifier module registration only | Parent Lane A |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/verify.rs` | verifier implementation, local JSON result structs, unit tests | Parent Lane A |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/promotion_artifacts.rs` | validator/helper exposure only if strictly required without schema widening | Parent Lane A |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/decision_kernel.rs` | semantic source of truth reused unchanged | Read-only input |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/paths.rs` | canonical latest-path source reused unchanged | Read-only input |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/recommend.rs` | canonical latest-path and artifact relationship reused unchanged | Read-only input |
+| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m39_verification_consumer_probe/**` | baseline records, freeze records, launch packets, proof capture, acceptance, blocked state, closeout | Parent only |
 
 Rules for the closed surface:
 
-- Absolute paths in this table identify the publish-target location on `feat/corpus-expansion`. When a lane runs in a worktree, it edits the corresponding repo-relative path inside that lane's own worktree.
-- After `task-m38-10-create-spine-worktree`, parent-owned run-state files move to the corresponding paths under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int` and only return to the live checkout through Task 10 publish.
-- Any edit outside this table is out of scope unless it is mechanically forced by merge conflict resolution and is recorded in `merge-log.md`.
-- Lane B owns exactly one source file. If it needs any second source file, it is out of scope for M38 and must stop.
-- Lane C owns exactly one summary artifact. It does not rewrite the trigger matrix, reopen scope, or add a synthetic consumer story.
-- `.semantic-family-artifacts/**` are read-only derived inputs for baseline and final verification.
+- Any edit outside this table is out of scope unless a merge conflict mechanically forces it and the parent records that in `merge-log.md`.
+- Lane B owns exactly one authored file: `ORCH_PLAN.md`.
+- There is no honest Lane C in M39. Closeout, acceptance, parity proof, and final verdict remain parent-owned because they depend on merged truth.
+- Read-only input paths may be read for parity and validation, but changing them violates M39 scope.
 
 ## Branch And Worktree Layout
 
@@ -109,34 +94,28 @@ Canonical branches and worktrees:
 | Role | Branch | Worktree |
 |---|---|---|
 | Live baseline and publish target | `feat/corpus-expansion` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` |
-| Parent integration spine | `ws/m38-int` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int` |
-| Optional Lane B, helper-surface warning cleanup | `ws/m38-lane-b-warning-cleanup` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/lane-b-warning-cleanup` |
-| Optional Lane C, non-author probe artifact lane | `ws/m38-lane-c-non-author-probe` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/lane-c-non-author-probe` |
+| Parent integration spine | `ws/m39-int` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m39-verification-consumer-probe/int` |
+| Optional Lane B, `ORCH_PLAN.md` adoption lane | `ws/m39-lane-b-orch-adoption` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m39-verification-consumer-probe/lane-b-orch-adoption` |
 
 Creation rules:
 
-1. The parent captures baseline on the live checkout before creating any M38 worktree.
-2. `ws/m38-int` is created from the exact SHA recorded in `integration-base.txt`.
-3. Optional lanes are created only after `rewrite-freeze.json`, and only from the exact integrated SHA recorded there.
-4. Lane B is created only if maintainers explicitly choose the tiny warning cleanup.
-5. Lane C is created only if a real non-author maintainer is available and the probe will actually run.
-6. No optional lane forks from another optional lane.
-7. No optional lane forks from the live checkout.
-8. If no optional lanes are activated, no optional worktrees are created.
-9. If any named worktree already exists with stale state, the parent recreates it and records that action in `session.log`.
-10. If the live branch moves after baseline capture but before publish, the parent either re-baselines or explicitly merges the new live head into `ws/m38-int` and reruns the full verification wall.
+1. The parent captures baseline on the live checkout before creating any M39 worktree.
+2. `ws/m39-int` is created from the exact SHA recorded in `integration-base.txt`.
+3. Lane B may be created only after `implementation-contract-freeze.json` exists and only from the exact freeze SHA recorded there.
+4. Lane B is launched only if `ORCH_PLAN.md` adoption work is still open after contract freeze. If adoption is already complete on the freeze commit, write `lane-b-skip.json` and stay sequential.
+5. Lane B never forks from the live checkout. It forks only from the frozen integration SHA.
+6. If a named M39 worktree already exists with stale state, the parent recreates it and records that in `session.log`.
+7. The live branch moving after baseline capture does not silently change the run. The parent must either re-baseline or explicitly merge the new live head into `ws/m39-int` and rerun the full verification wall.
+8. No optional lane writes back to the live checkout directly.
 
 Canonical worktree creation commands:
 
 ```bash
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int \
-  -b ws/m38-int <BASELINE_SHA>
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m39-verification-consumer-probe/int \
+  -b ws/m39-int <BASELINE_SHA>
 
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/lane-b-warning-cleanup \
-  -b ws/m38-lane-b-warning-cleanup <REWRITE_FREEZE_SHA>
-
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/lane-c-non-author-probe \
-  -b ws/m38-lane-c-non-author-probe <REWRITE_FREEZE_SHA>
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m39-verification-consumer-probe/lane-b-orch-adoption \
+  -b ws/m39-lane-b-orch-adoption <IMPLEMENTATION_CONTRACT_FREEZE_SHA>
 ```
 
 ## Canonical Run-State
@@ -144,19 +123,20 @@ git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spe
 Parent-owned orchestration truth uses a phase-specific active root:
 
 - `LIVE_PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-- `INT_PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int`
-- `ACTIVE_PARENT_ROOT=LIVE_PRIMARY_ROOT` for `task-m38-00-baseline-capture` through `task-m38-05-authority-freeze`
-- `ACTIVE_PARENT_ROOT=INT_PRIMARY_ROOT` for `task-m38-10-create-spine-worktree` through `task-m38-70-closeout`
-- `ACTIVE_RUN_ROOT=$ACTIVE_PARENT_ROOT/.runs/m38_trigger_gating`
-- `ACTIVE_PROBE_ROOT=$ACTIVE_PARENT_ROOT/.runs/m38_non_author_probe`
-- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating`
+- `INT_PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m39-verification-consumer-probe/int`
+- `ACTIVE_PARENT_ROOT=LIVE_PRIMARY_ROOT` through `gate-m39-10-authority-freeze`
+- `ACTIVE_PARENT_ROOT=INT_PRIMARY_ROOT` from `task-m39-20-create-integration-worktree` through `gate-m39-80-pre-publish-acceptance`
+- `ACTIVE_PARENT_ROOT=LIVE_PRIMARY_ROOT` from `task-m39-90-publish-to-live` through `gate-m39-100-final-closeout`
+- `ACTIVE_RUN_ROOT=$ACTIVE_PARENT_ROOT/.runs/m39_verification_consumer_probe`
+- `WORKTREE_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m39-verification-consumer-probe`
 
 Run-state handoff rules:
 
-- Before `task-m38-10-create-spine-worktree`, the live checkout copy is canonical because the integration worktree does not exist yet.
-- `task-m38-10-create-spine-worktree` must copy the already-written parent run-state from `LIVE_PRIMARY_ROOT` into `INT_PRIMARY_ROOT` before any parent spine work continues.
-- After that copy, the integration worktree copy is canonical for all parent-owned run-state, acceptance, merge, and closeout artifacts.
-- The live checkout copy becomes read-only until Task 10 publish or a full restart.
+- Before `task-m39-20-create-integration-worktree`, the live checkout copy is canonical because the integration worktree does not exist yet.
+- `task-m39-20-create-integration-worktree` must copy the already-written parent run-state from `LIVE_PRIMARY_ROOT` into `INT_PRIMARY_ROOT` before parent implementation work continues.
+- After that copy, the integration worktree copy is canonical for all parent-owned run-state, proof, merge, and pre-publish acceptance artifacts.
+- The live checkout copy becomes read-only until `task-m39-90-publish-to-live` or full restart.
+- `task-m39-90-publish-to-live` must land the accepted `ws/m39-int` result onto the live checkout and then make the live checkout copy canonical again for post-publish verification and final closeout.
 
 Canonical parent-owned files:
 
@@ -170,14 +150,18 @@ Canonical parent-owned files:
 - `tasks.json`
 - `queue.json`
 - `session.log`
-- `rewrite-freeze.json`
+- `legacy-shell-baseline.md`
+- `implementation-contract-freeze.json`
 - `lane-b-launch.md`
-- `lane-c-launch.md`
 - `lane-b-skip.json`
-- `lane-c-skip.json`
 - `merge-log.md`
 - `proof-log.json`
+- `verify-decision-contract.stdout.json`
+- `parity-proof.md`
+- `orch-adoption-proof.md`
 - `acceptance.md`
+- `publish-verification.md`
+- `publish-result.json`
 - `blocked.json`
 - `blocked-failing-command.txt`
 - `blocked-failing-exit-code.txt`
@@ -188,50 +172,75 @@ Required contents:
 - `baseline.json`
   - live branch
   - live HEAD SHA
-  - dirty-state summary
-  - overlapping local edit summary on the closed implementation surface
-  - current recommendation artifact path
-  - current decision artifact path
-  - current raw byte hashes for recommendation and decision artifacts
-  - current frozen semantic output values
-  - drift classification: `none` | `hygiene_only` | `trigger_relevant`
+  - dirty-state summary for the closed implementation surface
+  - authoritative artifact paths
+  - raw byte hashes for the recommendation and decision artifacts
+  - frozen helper-surface floor tuple captured from legacy shell proof
 - `integration-base.txt`
-  - exact SHA used to create `ws/m38-int`
+  - exact SHA used to create `ws/m39-int`
 - `publish-head.txt`
   - exact live HEAD SHA captured during baseline
 - `authority-freeze.json`
   - snapshot paths for `PLAN.md` and `ORCH_PLAN.md`
   - frozen branch and worktree layout
-  - closed implementation surface literal copy or checksum
-  - explicit statement that no optional lanes are yet authorized
-- `rewrite-freeze.json`
-  - exact committed `ws/m38-int` SHA after parent plan spine work
-  - exact trigger matrix values accepted by the parent
-  - explicit statement whether Lane B is `launch` or `skip`
-  - explicit statement whether Lane C is `launch` or `skip`
-  - explicit statement that no deeper extraction is authorized by the freeze itself
-  - if Lane C is `launch`, the exact probe prompt boundary and required closeout rules
+  - closed implementation surface checksum or literal copy
+  - explicit statement that no optional lane is yet authorized
+- `run-state.json`
+  - `current_task_id`
+  - `current_task_status`
+  - `active_parent_root`
+  - `active_run_root`
+  - `live_publish_status: not_started|in_progress|blocked|complete`
+  - `last_updated_at`
+- `queue.json`
+  - one ordered entry per task or gate in this plan
+  - required fields per entry:
+    - `id`
+    - `kind: task|gate`
+    - `title`
+    - `owner`
+    - `status: pending|active|blocked|skipped|complete`
+    - `depends_on`
+    - `worktree`
+    - `artifacts`
+    - `blocking_reason`
+    - `started_at`
+    - `completed_at`
+  - required initial entries:
+    - `gate-m39-00-baseline-capture`
+    - `gate-m39-10-authority-freeze`
+    - `task-m39-20-create-integration-worktree`
+    - `gate-m39-30-implementation-contract-freeze`
+    - `gate-m39-40-optional-lane-launch`
+    - `gate-m39-50-merge-and-integration`
+    - `gate-m39-60-parity-proof`
+    - `gate-m39-70-orch-adoption-proof`
+    - `gate-m39-80-pre-publish-acceptance`
+    - `task-m39-90-publish-to-live`
+    - `gate-m39-95-post-publish-verification`
+    - `gate-m39-100-final-closeout`
+- `legacy-shell-baseline.md`
+  - the exact baseline commands
+  - exit codes
+  - captured tuple results proving the M38 floor before implementation starts
+- `implementation-contract-freeze.json`
+  - exact committed `ws/m39-int` SHA after parent verifier work is green
+  - frozen command string
+  - required top-level JSON keys
+  - required `checks` keys
+  - required failure reasons
+  - explicit `lane_b_status: launch|skip`
+  - explicit statement that no wider verifier framework is authorized
 - `lane-b-launch.md`
-  - owned file
+  - owned file: `ORCH_PLAN.md`
   - forbidden files
-  - exact `PLAN.md` excerpts copied into the worker packet
-  - exact commands to run
-  - stale-lane invalidation triggers
-  - required return contract
-- `lane-c-launch.md`
-  - owned file
-  - forbidden files
-  - exact `PLAN.md` excerpts copied into the worker packet
-  - exact probe entry criteria
-  - exact commands or evidence steps
+  - exact verifier command literal
+  - exact required proof walls to adopt
   - stale-lane invalidation triggers
   - required return contract
 - `lane-b-skip.json`
   - `status: skipped`
-  - explicit reason for not taking optional cleanup
-- `lane-c-skip.json`
-  - `status: skipped`
-  - explicit reason, including `no real non-author maintainer available` when applicable
+  - exact reason for no parallel launch
 - `merge-log.md`
   - source branch
   - source SHA
@@ -239,109 +248,89 @@ Required contents:
   - target SHA after merge
   - conflicts encountered
   - resolutions applied
-  - whether the merge preserved the frozen semantic outputs
+  - whether verifier contract freeze remained intact
 - `proof-log.json`
   - command
   - cwd
   - exit code
   - artifact path if applicable
-  - raw byte hash if captured
-  - semantic interpretation
   - pass/fail
+  - semantic interpretation
+- `verify-decision-contract.stdout.json`
+  - verbatim stdout capture from the canonical verifier command on the accepted run
+- `parity-proof.md`
+  - legacy shell path commands and results
+  - verifier command and result
+  - exact artifact hashes proving both ran on the same inputs
+- `orch-adoption-proof.md`
+  - named proof walls present in `ORCH_PLAN.md`
+  - confirmation each standing wall uses the verifier command
+  - explicit note whether Lane B was used or skipped
 - `acceptance.md`
-  - final checklist mapped to M38 acceptance criteria
-  - baseline revalidation proof
-  - trigger evaluation proof
-  - optional lane skip or run proof
-  - final semantic output proof
-  - final closeout outcome proof
+  - final checklist mapped to M39 acceptance gates
+  - baseline capture proof
+  - contract freeze proof
+  - lane launch or skip proof
+  - merge and parity proof
+  - ORCH adoption proof
+  - publish proof
+  - final verdict proof
+- `publish-verification.md`
+  - live checkout branch and HEAD after publish
+  - commands and exit codes for post-publish verification
+  - confirmation that live `feat/corpus-expansion` matches the accepted `ws/m39-int` result
+- `publish-result.json`
+  - `publish_source_branch`
+  - `publish_source_sha`
+  - `publish_target_branch`
+  - `publish_target_sha_before`
+  - `publish_target_sha_after`
+  - `publish_method: fast_forward|merge`
+  - `status: complete|blocked`
 - `blocked.json`
   - blocking task id
   - blocking lane
-  - exact violated guard
-  - restart requirement
+  - blocking reason
+  - whether the honest verdict is forced to `keep the kernel local`
 - `closeout.md`
-  - final integrated SHA
-  - final live publish SHA
-  - commands run
-  - optional lane disposition
-  - accepted deltas
-  - exact final closeout statement
-  - any deferred next action if a trigger was proven
-
-Per-task sentinel directories:
-
-- `task-m38-00-baseline-capture`
-- `task-m38-05-authority-freeze`
-- `task-m38-10-create-spine-worktree`
-- `task-m38-20-parent-plan-spine`
-- `task-m38-25-rewrite-freeze`
-- `task-m38-30-launch-lane-b`
-- `task-m38-31-launch-lane-c`
-- `task-m38-40-merge-lane-b`
-- `task-m38-45-accept-lane-c`
-- `task-m38-60-final-verification-wall`
-- `task-m38-65-publish-back-to-live`
-- `task-m38-70-closeout`
-
-Each task directory contains parent-written markers only:
-
-- `started.json`
-- `status.json`
-- exactly one terminal file: `done.json` or `blocked.json`
+  - short narrative of what was proven
+  - explicit adoption result
+  - exact final verdict as the last non-empty line
 
 ## Workstream Plan
 
-Task graph:
+### Parent Lane A - critical path only
 
-```text
-task-m38-00-baseline-capture
-  -> task-m38-05-authority-freeze
-      -> task-m38-10-create-spine-worktree
-          -> task-m38-20-parent-plan-spine
-              -> task-m38-25-rewrite-freeze
-                  -> task-m38-30-launch-lane-b (optional)
-                      -> task-m38-40-merge-lane-b (if launched)
-                  -> task-m38-31-launch-lane-c (optional)
-                      -> task-m38-45-accept-lane-c (if launched)
-                  -> task-m38-60-final-verification-wall (when all launched optional lanes have merged or been accepted, or both lanes were skipped)
-                      -> task-m38-65-publish-back-to-live
-                          -> task-m38-70-closeout
-```
+The parent owns the only non-optional workstream. No subagent is launched before `implementation-contract-freeze.json`.
 
-### Parent Task 1 - Baseline Capture
+Before the first gate starts, the parent initializes `run-state.json` and `queue.json`, marks `gate-m39-00-baseline-capture` as `active`, and leaves every later entry as `pending` until promoted by the parent. `queue.json` is the ordering ledger. Prose in this file does not override the ledger.
 
-Owner: `Parent`  
-Branch: `feat/corpus-expansion`  
-Path: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
+#### Gate `gate-m39-00-baseline-capture`
 
-Actions:
+Objective:
 
-1. Record current branch, HEAD SHA, dirty state, and overlapping local edits in `baseline.json`.
-2. Write the same live HEAD SHA to both `integration-base.txt` and `publish-head.txt`.
-3. Capture current recommendation and decision artifact raw byte hashes.
-4. Run the baseline verification floor and verify the frozen semantic outputs.
-5. Classify drift as `none`, `hygiene_only`, or `trigger_relevant`.
-6. Update `session.log`, `tasks.json`, and `queue.json`.
+- prove the current M38 helper-surface floor on the live branch before any M39 implementation begins
+- record authoritative artifact hashes and live HEAD
 
-Minimum command wall:
+Commands:
 
 ```bash
-git rev-parse --abbrev-ref HEAD
+git branch --show-current
 git rev-parse HEAD
-git status --short
-cargo test -p xtask
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
+git status --short PLAN.md ORCH_PLAN.md xtask/src/lib.rs xtask/src/family
+
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-shasum -a 256 .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-shasum -a 256 .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+
 jq -e '.recommendation_status == "no_strong_candidate"' \
   .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 jq -e '.decision_summary.decision_status == "not_recommended"' \
   .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.evidence_summary.missing_evidence == []' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.evidence_summary.stale_evidence == []' \
   .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
   .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
@@ -351,239 +340,179 @@ jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
   .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 ```
 
-Stop conditions:
+Pass criteria:
 
-- any command fails
-- any semantic assertion fails
-- overlapping local edits touch the closed implementation surface and are not explicitly accepted
-- drift is `trigger_relevant`
+- all artifact validation and `jq` checks exit `0`
+- the tuple matches the frozen helper-surface floor from `PLAN.md`
+- `baseline.json`, `publish-head.txt`, and `legacy-shell-baseline.md` are written before any worktree is created
 
-### Parent Task 2 - Authority Freeze
+#### Gate `gate-m39-10-authority-freeze`
 
-Owner: `Parent`  
-Branch: `feat/corpus-expansion`  
-Path: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
+Objective:
 
-Actions:
+- freeze the authoritative planning inputs and run layout before implementation starts
+
+Tasks:
 
 1. Snapshot `PLAN.md` and `ORCH_PLAN.md` into `authority-snapshot/`.
 2. Write `authority-freeze.json`.
-3. Freeze branch layout, worktree layout, implementation surface, and guard set for the run.
-4. Mark all optional lanes blocked until `rewrite-freeze.json`.
+3. Stop the run if `PLAN.md` changes after this point.
 
-Minimum command wall:
+Pass criteria:
 
-```bash
-git diff -- PLAN.md ORCH_PLAN.md
-git rev-parse HEAD
-test -f PLAN.md
-test -f ORCH_PLAN.md
-```
+- `authority-freeze.json` exists
+- `PLAN.md` and `ORCH_PLAN.md` snapshots are recorded
+- no optional lane is yet authorized
 
-Stop conditions:
+#### Task `task-m39-20-create-integration-worktree`
 
-- either authority file changes during freeze
-- scope no longer matches `PLAN.md`
-- new overlapping edits appear on authority files during freeze
+Objective:
 
-### Parent Task 3 - Create Spine Worktree
+- create the parent integration spine and move canonical run-state into it
 
-Owner: `Parent`  
-Branch: `ws/m38-int`  
-Path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int`
+Tasks:
 
-Actions:
+1. Write `integration-base.txt` from the baseline SHA.
+2. Create `ws/m39-int`.
+3. Copy `.runs/m39_verification_consumer_probe/` into the integration worktree.
+4. Continue all parent work from `INT_PRIMARY_ROOT`.
 
-1. Create `ws/m38-int` from the SHA in `integration-base.txt`.
-2. Verify the worktree is an exact fork from the frozen baseline.
-3. Copy the canonical parent run-state from the live checkout into the integration worktree.
-4. Verify the copied run-state still reflects the frozen baseline and authority freeze.
-5. Record creation and handoff details in `session.log`.
+#### Gate `gate-m39-30-implementation-contract-freeze`
 
-Minimum command wall:
+Objective:
 
-```bash
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int \
-  -b ws/m38-int "$(cat .runs/m38_trigger_gating/integration-base.txt)"
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int rev-parse HEAD
-test -z "$(git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int status --short)"
-rsync -a --delete /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_trigger_gating/ \
-  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int/.runs/m38_trigger_gating/
-test -f /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int/.runs/m38_trigger_gating/authority-freeze.json
-```
+- finish the verifier implementation and lock the exact contract before any optional parallel adoption lane can begin
 
-Stop conditions:
+Parent-owned implementation scope:
 
-- the worktree cannot be created from the exact baseline SHA
-- the worktree points at the wrong SHA
-- the worktree starts with unexpected dirt
-- the parent run-state handoff into `ws/m38-int` is missing or incomplete
+1. add the `VerifyDecisionContract { format: String }` CLI surface
+2. register `verify.rs`
+3. implement the verifier against canonical latest artifacts
+4. enforce the frozen helper-surface floor exactly
+5. add tests for happy path and all required failure reasons
+6. prove non-`json` format rejects
 
-### Parent Task 4 - Parent Plan Spine
-
-Owner: `Parent only`  
-Branch: `ws/m38-int`  
-Path: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int`
-
-Actions:
-
-1. Confirm the M38 authority plan states the three trigger gates, the optional probe contract, the hard boundary, and the three exact allowed closeout lines.
-2. Confirm the M37 semantic floor is still the live truth being gated.
-3. Decide whether Lane B is `launch` or `skip`.
-4. Decide whether Lane C is `launch` or `skip`.
-5. Reject any attempt to turn M38 into runtime extraction, corpus spend, or synthetic evidence generation.
-6. Prepare optional launch packets or skip markers.
-7. Leave `ws/m38-int` at a clean committed handoff state before `rewrite-freeze.json` records the lane base SHA.
-
-Minimum command wall:
-
-```bash
-git rev-parse HEAD
-rg -n "no_strong_candidate|not_recommended|helper_surface_not_promotable|author_architecture_follow_on_plan" \
-  PLAN.md ORCH_PLAN.md
-rg -n "No deeper extraction justified yet\\. Keep the kernel local\\.|Trigger proven\\. Author the next milestone against <exact trigger>\\.|Probe inconclusive\\. Do not extract yet\\. Re-run only with real new evidence\\." \
-  PLAN.md
-```
-
-Stop conditions:
-
-- any trigger is already proven by current live truth
-- the authority files disagree on the trigger matrix or closeout rules
-- optional lane scope cannot be expressed inside the closed implementation surface
-
-### Parent Task 5 - Rewrite Freeze
-
-Owner: `Parent only`  
-Branch: `ws/m38-int`
-
-Actions:
-
-1. Write `rewrite-freeze.json`.
-2. Record the accepted committed parent spine SHA.
-3. Record Lane B and Lane C as `launch` or `skip`.
-4. Freeze the optional lane boundaries and stale-lane rules.
-
-Minimum command wall:
-
-```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int rev-parse HEAD
-test -z "$(git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int status --short)"
-test -f /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int/.runs/m38_trigger_gating/authority-freeze.json
-```
-
-Stop conditions:
-
-- optional lane status is ambiguous
-- the accepted spine SHA is not recorded
-- the parent spine handoff is not at a clean committed SHA
-- stale-lane rules are missing from the freeze
-
-### Parent Task 6 - Launch Optional Lanes
-
-Owner: `Parent only`  
-Branch base: `rewrite-freeze.json`
-
-Actions:
-
-1. Create only the optional worktrees whose status is `launch`.
-2. Write `lane-b-launch.md` and/or `lane-c-launch.md` when launched.
-3. Write `lane-b-skip.json` and/or `lane-c-skip.json` when skipped.
-4. Mark each optional lane started or skipped in `tasks.json` and `queue.json`.
-
-Minimum command wall:
-
-```bash
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/lane-b-warning-cleanup \
-  -b ws/m38-lane-b-warning-cleanup <REWRITE_FREEZE_SHA>
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/lane-c-non-author-probe \
-  -b ws/m38-lane-c-non-author-probe <REWRITE_FREEZE_SHA>
-```
-
-Launch interpretation:
-
-- Run only the commands that correspond to lanes whose status is `launch`.
-- If Lane B is `skip`, do not create its worktree.
-- If Lane C is `skip`, do not create its worktree.
-
-Stop conditions:
-
-- a lane worktree is created despite being marked `skip`
-- a launch packet omits owned-file boundaries or stale-lane rules
-- a lane is launched against the wrong freeze SHA
-
-### Parent Task 7 - Merge Lane B
-
-Owner: `Parent only`  
-Branch: `ws/m38-int`
-
-Actions:
-
-1. Inspect Lane B diff against the launch contract.
-2. Merge `ws/m38-lane-b-warning-cleanup` into `ws/m38-int` only if it stayed inside one-file hygiene scope.
-3. Rerun `cargo test -p xtask` and the semantic floor if the merge occurs.
-4. Record the merge in `merge-log.md`.
-
-Minimum command wall:
-
-```bash
-git diff --stat ws/m38-int..ws/m38-lane-b-warning-cleanup
-git merge --no-ff ws/m38-lane-b-warning-cleanup
-cargo test -p xtask
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-```
-
-Stop conditions:
-
-- Lane B edited any file other than `xtask/src/family/helper_surface.rs`
-- Lane B changes semantic outputs
-- Lane B turns a warning cleanup into a behavior or architecture change
-
-### Parent Task 8 - Accept Lane C
-
-Owner: `Parent only`  
-Branch: `ws/m38-int`
-
-Actions:
-
-1. Inspect Lane C output against the launch contract.
-2. Accept the probe summary only if a real non-author maintainer ran it and the result maps cleanly to one trigger or to an allowed inconclusive outcome.
-3. Merge `ws/m38-lane-c-non-author-probe` into `ws/m38-int` only if the summary artifact is the only delta.
-4. Record the result in `merge-log.md`.
-
-Minimum command wall:
-
-```bash
-git diff --stat ws/m38-int..ws/m38-lane-c-non-author-probe
-git merge --no-ff ws/m38-lane-c-non-author-probe
-test -f .runs/m38_non_author_probe/summary.md
-```
-
-Stop conditions:
-
-- Lane C lacks a real non-author maintainer
-- Lane C introduces any file outside `.runs/m38_non_author_probe/summary.md`
-- Lane C tries to prove more than one trigger
-- Lane C relies on synthetic consumers, synthetic wedges, or vague evidence that maps to nothing
-
-### Parent Task 9 - Final Verification Wall
-
-Owner: `Parent only`  
-Branch: `ws/m38-int`
-
-Ordered command wall:
+Commands:
 
 ```bash
 cargo test -p xtask
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
+cargo xtask family verify-decision-contract --help
+cargo xtask family verify-decision-contract --format json | tee \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+jq -e '.overall_verdict == "pass"' \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+```
+
+Pass criteria:
+
+- the exact command exists and is green on the frozen helper-surface floor
+- stdout JSON includes the required top-level keys, required `checks` keys, and stable failure reasons from `PLAN.md`
+- `cargo test -p xtask` is green
+- `implementation-contract-freeze.json` is written with the exact freeze SHA and contract
+
+### Optional Lane B - `ORCH_PLAN.md` adoption lane
+
+Lane B exists only after `gate-m39-30-implementation-contract-freeze` passes. It is optional because M39 has only one honest parallel seam.
+
+Launch condition:
+
+- launch only if `ORCH_PLAN.md` adoption work is still open on the contract-freeze commit
+- otherwise write `lane-b-skip.json` and continue sequentially
+
+Owned file:
+
+- `ORCH_PLAN.md`
+
+Forbidden files:
+
+- all Rust source
+- all `.runs/m39_verification_consumer_probe/**`
+- all `.semantic-family-artifacts/**`
+- `PLAN.md`
+
+Lane B required changes:
+
+1. ensure the standing proof walls in `ORCH_PLAN.md` use the verifier command instead of repeated shell ladders
+2. preserve branch/worktree/run-state/gate semantics from the frozen contract
+3. do not expand scope beyond verifier adoption
+
+Lane B required proof walls:
+
+1. `Contract Freeze Verifier Wall`
+2. `Integration Verifier Wall`
+3. `Final Verification Wall`
+
+Lane B return contract:
+
+- one branch off the exact `implementation-contract-freeze.json` SHA
+- one narrow summary of what changed in `ORCH_PLAN.md`
+- no run-state edits
+
+Stale-lane invalidation triggers:
+
+- `implementation-contract-freeze.json` SHA changes
+- canonical verifier command string changes
+- required JSON top-level keys change
+- required `checks` keys change
+- required failure reasons change
+- parent lands conflicting `ORCH_PLAN.md` edits on `ws/m39-int`
+
+#### Gate `gate-m39-40-optional-lane-launch`
+
+Objective:
+
+- make the only honest parallel seam concrete and bounded
+
+Tasks:
+
+1. decide `launch` or `skip` for Lane B
+2. if `launch`, write `lane-b-launch.md` and create the lane worktree from the exact freeze SHA
+3. if `skip`, write `lane-b-skip.json` with the explicit reason
+
+Pass criteria:
+
+- exactly one of `lane-b-launch.md` or `lane-b-skip.json` exists
+- no second optional lane is created
+
+#### Gate `gate-m39-50-merge-and-integration`
+
+Objective:
+
+- merge optional adoption work, if any, back into `ws/m39-int`
+
+Tasks:
+
+1. if Lane B was launched, merge `ws/m39-lane-b-orch-adoption` into `ws/m39-int`
+2. resolve only straightforward `ORCH_PLAN.md` merge mechanics
+3. if conflict resolution would alter the frozen verifier contract, stop, invalidate Lane B, and recreate it from a new freeze
+4. record the result in `merge-log.md`
+
+Pass criteria:
+
+- `ws/m39-int` contains the accepted implementation and any accepted `ORCH_PLAN.md` adoption edits
+- `merge-log.md` records whether Lane B was used or skipped
+
+#### Gate `gate-m39-60-parity-proof`
+
+Objective:
+
+- prove the new verifier returns the same green result as the legacy shell ladder on the same artifact set
+
+Commands:
+
+```bash
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+
 jq -e '.recommendation_status == "no_strong_candidate"' \
   .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 jq -e '.decision_summary.decision_status == "not_recommended"' \
   .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.evidence_summary.missing_evidence == []' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.evidence_summary.stale_evidence == []' \
   .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
 jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
   .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
@@ -591,410 +520,246 @@ jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' \
   .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
   .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+
+cargo xtask family verify-decision-contract --format json | tee \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+jq -e '.overall_verdict == "pass"' \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
 ```
 
-What this proves:
+Pass criteria:
 
-- the baseline verification floor still holds after any optional lane work
-- recommendation and decision artifacts still validate
-- the semantic floor stayed frozen
-- no hidden runtime extraction or public surface expansion slipped in under M38
+- the legacy shell path still passes
+- the verifier passes on the same artifact hashes
+- `parity-proof.md` records the shared input hashes and both result surfaces
 
-Stop conditions:
+#### Gate `gate-m39-70-orch-adoption-proof`
 
-- any command fails
-- any semantic assertion fails
-- optional warning cleanup changed runtime truth
-- the probe result is being used to justify a broader extraction than the exact trigger permits
+Objective:
 
-### Parent Task 10 - Publish Back To Live
+- prove that repo-root orchestration adopted the verifier as a standing surface
 
-Owner: `Parent only`  
-Branches: `ws/m38-int` -> `feat/corpus-expansion`
+Named standing proof walls:
 
-Actions:
+1. `Contract Freeze Verifier Wall`
+2. `Integration Verifier Wall`
+3. `Final Verification Wall`
 
-1. Verify the live branch still matches `publish-head.txt`, or reconcile and rerun the full verification wall.
-2. Verify the live checkout is clean before any publish action.
-3. Publish by fast-forwarding `feat/corpus-expansion` to the accepted `ws/m38-int` HEAD after all verification passes.
-4. Record the final integrated SHA and final live SHA.
-
-Minimum command wall:
+Required command in each standing wall:
 
 ```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int rev-parse HEAD
-test -z "$(git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec status --short)"
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
-cat /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int/.runs/m38_trigger_gating/publish-head.txt
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec merge --ff-only ws/m38-int
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
+cargo xtask family verify-decision-contract --format json
 ```
 
-Stop conditions:
-
-- live branch moved incompatibly and was not reconciled
-- the live checkout is dirty at publish time
-- `ws/m38-int` is not fully green
-- publish cannot happen as a clean fast-forward from the accepted integration branch
-
-### Parent Task 11 - Closeout
-
-Owner: `Parent only`  
-Branch: `feat/corpus-expansion`
-
-Actions:
-
-1. Write `acceptance.md` and `closeout.md`.
-2. Mark the queue complete.
-3. Record exact optional lane dispositions: `skipped`, `merged`, `accepted`, or `not run`.
-4. Write one exact allowed final closeout statement.
-
-Minimum command wall:
+Proof command:
 
 ```bash
+rg -n "Contract Freeze Verifier Wall|Integration Verifier Wall|Final Verification Wall|verify-decision-contract --format json" ORCH_PLAN.md
+```
+
+Pass criteria:
+
+- all three named standing proof walls exist in `ORCH_PLAN.md`
+- each standing wall uses the verifier command
+- `orch-adoption-proof.md` explicitly records whether Lane B was used or skipped
+
+#### Gate `gate-m39-80-pre-publish-acceptance`
+
+Objective:
+
+- prove the accepted integration tree is ready to publish back to the live checkout
+
+Tasks:
+
+1. rerun the final verification wall
+2. write `acceptance.md`
+3. confirm `queue.json` marks gates `00` through `70` as `complete`
+4. move `task-m39-90-publish-to-live` to `active`
+
+Failure rule:
+
+- publish is not allowed if implementation, parity, or adoption proof is still blocked
+
+Pass criteria:
+
+- `acceptance.md` exists and maps gates `00` through `70` to pass or blocker outcomes
+- the accepted tree on `ws/m39-int` is the exact tree chosen for publish
+- `queue.json` records `gate-m39-80-pre-publish-acceptance` as `complete`
+
+#### Task `task-m39-90-publish-to-live`
+
+Objective:
+
+- land the accepted `ws/m39-int` result back onto the live `feat/corpus-expansion` checkout as the end-to-end publish step for this run
+
+Publish rules:
+
+1. publish is allowed only after `gate-m39-80-pre-publish-acceptance` is complete
+2. the parent is the only publisher
+3. publish lands the accepted integration result as one unit; do not cherry-pick partial M39 surfaces
+4. authored source changes and accepted `.runs/m39_verification_consumer_probe/**` proof artifacts from `ws/m39-int` must land together
+5. if live `feat/corpus-expansion` has moved since `publish-head.txt`, the parent must first merge that live movement into `ws/m39-int`, rerun gates `50` through `80`, and only then publish
+6. publish may use fast-forward only when the live branch still matches `publish-head.txt`; otherwise publish uses a normal merge from the accepted `ws/m39-int` commit
+7. publish does not reopen scope; it only lands the already-accepted integration tree
+
+Tasks:
+
+1. read `publish-head.txt` and compare it to live `feat/corpus-expansion`
+2. publish the accepted `ws/m39-int` commit set onto the live checkout by fast-forward or merge, as allowed above
+3. write `publish-result.json`
+4. mark `gate-m39-95-post-publish-verification` as `active` in `queue.json`
+
+#### Gate `gate-m39-95-post-publish-verification`
+
+Objective:
+
+- prove the published live checkout still satisfies the verifier and adoption contract after landing
+
+Commands:
+
+```bash
+git branch --show-current
 git rev-parse HEAD
-test -f .runs/m38_trigger_gating/acceptance.md
-test -f .runs/m38_trigger_gating/closeout.md
-```
-
-Stop conditions:
-
-- acceptance evidence is incomplete
-- the final closeout line is not one of the three allowed outcomes
-- closeout attempts to authorize broader work than the exact trigger permits
-
-## Lane Definitions
-
-### Lane A - Parent Spine
-
-Owner: `Parent only`  
-Branch: `ws/m38-int`  
-Worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/int`  
-Starts after: `task-m38-10-create-spine-worktree`  
-Concurrency during this lane: `1`
-
-Mission:
-
-- own baseline confirmation and authority freeze
-- own trigger-ledger confirmation and optional-lane decisions
-- own all run-state artifacts under `.runs/m38_trigger_gating`
-- own all merge and verification gates
-- own the final closeout statement
-
-Owned files:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_trigger_gating/**`
-
-Acceptance criteria for Lane A:
-
-- baseline floor is reproduced
-- authority freeze is written before any optional lane launch
-- `rewrite-freeze.json` records explicit `launch` or `skip` for both optional lanes
-- no synthetic pressure source is authorized
-- final closeout uses one exact allowed statement
-
-### Lane B - Optional Helper-Surface Warning Cleanup
-
-Owner: `Worker, GPT-5.4 high`  
-Branch: `ws/m38-lane-b-warning-cleanup`  
-Worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/lane-b-warning-cleanup`  
-Starts after: `rewrite-freeze.json`, only if `Lane B = launch`  
-Concurrency during this lane: at most one optional lane
-
-Mission:
-
-- keep the warning cleanup tiny and local
-- touch only `xtask/src/family/helper_surface.rs`
-- preserve the exact semantic outputs
-- stop immediately if the cleanup wants to become real milestone work
-
-Owned file:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/helper_surface.rs`
-
-Readable but not writable:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/recommend.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/family/promotion_artifacts.rs`
-
-Lane command wall:
-
-```bash
 cargo test -p xtask
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
+cargo xtask family verify-decision-contract --format json | tee \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+jq -e '.overall_verdict == "pass"' \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+rg -n "Contract Freeze Verifier Wall|Integration Verifier Wall|Final Verification Wall|verify-decision-contract --format json" ORCH_PLAN.md
 ```
 
-Acceptance criteria for Lane B:
+Pass criteria:
 
-- only `helper_surface.rs` changed
-- no new runtime surface or trigger policy was introduced
-- the exact semantic floor is preserved
-- no second file was required
+- live checkout branch is `feat/corpus-expansion`
+- live checkout HEAD equals the published accepted result
+- verifier remains green after publish
+- `ORCH_PLAN.md` on the live checkout still contains the named standing verifier walls
+- `publish-verification.md` and `publish-result.json` are complete
 
-### Lane C - Optional Non-Author Probe Artifact
+#### Gate `gate-m39-100-final-closeout`
 
-Owner: `Worker, GPT-5.4 high`  
-Branch: `ws/m38-lane-c-non-author-probe`  
-Worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating/lane-c-non-author-probe`  
-Starts after: `rewrite-freeze.json`, only if `Lane C = launch`  
-Concurrency during this lane: at most one optional lane
+Objective:
 
-Mission:
+- finish with one exact honest verdict and stop
 
-- run the real non-author maintainer legibility dry run
-- record the result without inventing new pressure
-- map any failure to exactly one listed trigger or return `inconclusive`
-- stop rather than generalize
+Tasks:
 
-Owned file:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m38_non_author_probe/summary.md`
-
-Readable but not writable:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-
-Lane evidence steps:
-
-1. confirm a real non-author maintainer is actually available
-2. run the baseline command floor from the frozen M38 branch state
-3. ask the maintainer to explain:
-   - why the wedge remains `helper_surface_not_promotable`
-   - why the kernel stays in `xtask/src/family/`
-   - why corpus run `1` remains unspent
-   - why semantic fingerprints stay internal only
-4. record confusion, hidden context requests, or extraction requests
-5. map any failure to exactly one trigger or mark the run `inconclusive`
-
-Acceptance criteria for Lane C:
-
-- exactly one file changed
-- the participant is a real non-author maintainer
-- result is `pass`, `fail`, or `inconclusive`
-- any `fail` maps to exactly one trigger
-- no synthetic consumer or synthetic wedge evidence was used
-
-## Worker Launch Packets
-
-Each optional worker launch packet is a parent-authored, single-source execution note. It must be written to the corresponding `lane-*.md` file and delivered verbatim.
-
-Required prompt ingredients for every worker packet:
-
-1. Milestone title: `M38 - Architecture Follow-On Trigger Gating After M37`.
-2. Authority path: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`.
-3. Launch freeze SHA from `rewrite-freeze.json`.
-4. Worker branch name and worktree path.
-5. Worker model requirement:
-   - `GPT-5.4`
-   - `reasoning_effort=high`
-6. Exact owned files.
-7. Exact forbidden files.
-8. Exact readable reference files.
-9. Exact `PLAN.md` excerpt list for that lane.
-10. Exact command wall or evidence steps.
-11. Hard guards copied verbatim:
-   - no new crate
-   - no `spec-core` move
-   - no new artifact kind
-   - no schema version bump
-   - no public fingerprint fields
-   - no corpus run `1` activation
-   - no synthetic second wedge
-   - no synthetic second consumer
-12. Merge policy: worker does not merge or publish.
-13. Stale-lane rules.
-14. Required return format.
-
-Required return format for every optional worker:
-
-```text
-RESULT
-- status: ready-to-merge | skipped | blocked | inconclusive
-- branch: <worker-branch>
-- base-freeze-sha: <rewrite-freeze-sha>
-- head-sha: <worker-head-sha>
-
-FILES
-- <absolute path>
-
-COMMANDS
-- <command or evidence step> -> <exit/result summary>
-
-CHECKS
-- owned-surface-only: yes|no
-- synthetic-pressure-used: yes|no
-- exact-trigger-mapping-or-not-applicable: yes|no
-
-NOTES
-- <brief operator note>
-
-BLOCKERS
-- <exact blocker or "none">
-```
-
-Worker stale-lane rules:
-
-- If `rewrite-freeze.json` changes after packet launch, every launched optional lane is stale.
-- If `PLAN.md` or `ORCH_PLAN.md` changes after packet launch, every launched optional lane is stale.
-- If Lane B needs more than `helper_surface.rs`, Lane B is stale and stops.
-- If Lane C cannot secure a real non-author maintainer, Lane C becomes `skipped`, not stretched into synthetic evidence generation.
-- If any optional lane edits a forbidden file, that lane is stale.
-- Stale lanes are not repaired in place. The parent recreates their worktrees from the new freeze SHA and relaunches them if still justified.
+1. confirm `queue.json` marks `task-m39-90-publish-to-live` and `gate-m39-95-post-publish-verification` as `complete`
+2. write `closeout.md`
+3. mark `gate-m39-100-final-closeout` as `complete`
+4. stop the run after the closeout verdict is written
 
 ## Context-Control Rules
 
-Every optional worker launch note must contain:
+- The parent is the only integrator, the only run-state author, the only lane launcher, the only stale-lane invalidator, and the only closeout author.
+- Lane B is an optimization, not a second source of truth.
+- If Lane B is launched, it receives only the frozen contract packet from `lane-b-launch.md`. It does not reinterpret `PLAN.md`.
+- If the live baseline artifacts drift after baseline capture, the parent either re-baselines from the new truth or stops. It does not silently continue on mixed evidence.
+- If `PLAN.md` changes after authority freeze, all worktrees are stale.
+- If `ORCH_PLAN.md` changes on `ws/m39-int` after Lane B launches, Lane B is stale unless the parent explicitly records the conflict as non-overlapping in `session.log`.
+- If `cargo xtask family verify-decision-contract --format json` changes shape after contract freeze, Lane B is stale even if its branch still merges cleanly.
+- No run-state file is considered authoritative unless it exists under the current `ACTIVE_RUN_ROOT`.
 
-- the exact branch and worktree path
-- the exact frozen base SHA from `rewrite-freeze.json`
-- the exact owned file set
-- the exact forbidden file set
-- the exact commands or evidence steps the worker is expected to run
-- the exact return contract
-- the exact stale-lane invalidation rules
-- verbatim copies of the relevant `PLAN.md` excerpts listed below
+## Tests And Acceptance
 
-Required `PLAN.md` excerpts by worker:
-
-- Lane B packet must include:
-  - `Optional Hygiene`
-  - `Verification floor`
-  - `Acceptance matrix`
-  - `Failure Modes Registry`
-- Lane C packet must include:
-  - `Phase 3 - Optional evidence probe`
-  - `Probe verdict rules`
-  - `Acceptance matrix`
-  - `M39 Authorization Rule`
-
-Shared worker prohibitions:
-
-- no worker edits `PLAN.md`
-- no worker edits `ORCH_PLAN.md`
-- no worker edits `.semantic-family-artifacts/**`
-- no worker merges branches
-- no worker broadens the trigger matrix
-- no worker spends corpus run `1`
-- no worker creates or requests a synthetic second wedge or synthetic second consumer
-
-## Diff Inspection Before Merge
-
-The parent must inspect every optional worker diff before merge.
-
-For Lane B, confirm:
-
-- only `helper_surface.rs` changed
-- the change is warning hygiene only
-- no semantic floor drift is visible
-- no follow-on extraction justification was smuggled in
-
-For Lane C, confirm:
-
-- only `.runs/m38_non_author_probe/summary.md` changed
-- the summary names the real participant role without substituting the original author
-- any failure maps to exactly one trigger
-- any inconclusive outcome stays inconclusive and does not authorize extraction
-
-## Conflict Rules
-
-- `PLAN.md` and `ORCH_PLAN.md` are parent-owned only.
-- Lane B is the single writer for `helper_surface.rs` only if it is explicitly launched.
-- Lane C is the single writer for `.runs/m38_non_author_probe/summary.md` only if it is explicitly launched.
-- If Lane B asks for a second file or behavior change, the lane is stale immediately.
-- If Lane C asks to revise the trigger matrix, the lane is stale immediately.
-- If any merge conflict touches `PLAN.md` or `ORCH_PLAN.md` after `authority-freeze.json`, the run stops and restarts from a fresh baseline.
-- If any merge conflict touches `helper_surface.rs`, the parent resolves it only if the result remains one-file hygiene. Otherwise the run stops.
-- If any merge conflict touches `.runs/m38_non_author_probe/summary.md`, the parent either accepts the single summary artifact or relaunches Lane C. It does not hand-edit synthetic evidence into place.
-
-## Verification Wall And Acceptance Wall
-
-### Required verification commands
+### Required implementation-time commands
 
 ```bash
 cargo test -p xtask
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+cargo xtask family verify-decision-contract --help
+cargo xtask family verify-decision-contract --format json
 ```
 
-### Required unchanged-semantic assertions
+### Legacy baseline capture
+
+The baseline gate must run the pre-M39 shell ladder once and record it in `legacy-shell-baseline.md`. That is the frozen comparison floor, not the standing post-M39 operator surface.
+
+### Contract Freeze Verifier Wall
+
+Run on `ws/m39-int` immediately before writing `implementation-contract-freeze.json`:
 
 ```bash
-jq -e '.recommendation_status == "no_strong_candidate"' \
-  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family verify-decision-contract --format json | tee \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+jq -e '.overall_verdict == "pass"' \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+```
 
-jq -e '.decision_summary.decision_status == "not_recommended"' \
-  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+### Integration Verifier Wall
 
-jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' \
-  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+Run after merging Lane B or recording `lane-b-skip.json`:
 
-jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
-  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+```bash
+cargo test -p xtask
+cargo xtask family verify-decision-contract --format json | tee \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+jq -e '.overall_verdict == "pass"' \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+```
 
-jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' \
-  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+### Final Verification Wall
 
-jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
-  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+Run immediately before writing `closeout.md`:
+
+```bash
+cargo xtask family verify-decision-contract --format json | tee \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+jq -e '.overall_verdict == "pass"' \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+```
+
+### Post-Publish Verification Wall
+
+Run on the live `feat/corpus-expansion` checkout immediately after `task-m39-90-publish-to-live`:
+
+```bash
+git branch --show-current
+git rev-parse HEAD
+cargo xtask family verify-decision-contract --format json | tee \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+jq -e '.overall_verdict == "pass"' \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
 ```
 
 ### Acceptance checklist
 
-1. Baseline revalidation passed on the live branch.
-2. The semantic floor remained exact through final verification.
-3. All three trigger verdicts remain explicit and current.
-4. Lane B is either skipped or merged as one-file hygiene only.
-5. Lane C is either skipped because no real non-author maintainer was available, accepted as `pass`, accepted as a one-trigger `fail`, or accepted as `inconclusive`.
-6. No synthetic second wedge, synthetic second consumer, public fingerprint field, schema change, or corpus run `1` activation was introduced.
-7. The final closeout line is exactly one allowed outcome.
+M39 is not complete until all of these are true:
 
-## Blocking Rules
+1. `baseline.json` and `legacy-shell-baseline.md` prove the frozen helper-surface floor on the live baseline SHA.
+2. `implementation-contract-freeze.json` proves the exact verifier command contract and freeze SHA.
+3. `cargo test -p xtask` is green on the accepted integration tree.
+4. `verify-decision-contract.stdout.json` shows `overall_verdict == "pass"` on the accepted integration tree.
+5. `parity-proof.md` proves legacy shell parity and verifier parity on the same artifact set.
+6. `orch-adoption-proof.md` proves the named standing proof walls use the verifier command.
+7. `acceptance.md` maps every gate in this file to a pass or blocker outcome.
+8. `publish-result.json` and `publish-verification.md` prove the accepted result landed back on live `feat/corpus-expansion` and stayed green.
+9. `closeout.md` ends with exactly one allowed verdict.
 
-- Stop immediately if the baseline verification floor drifts from the frozen semantic outputs.
-- Stop immediately if any trigger is already true before optional lanes start. In that case M38 closes as authoring input for the exact next milestone, not as a deeper execution run.
-- Stop immediately if Lane B expands beyond tiny local warning cleanup.
-- Stop immediately if Lane C cannot prove the participant is a real non-author maintainer.
-- Stop immediately if any optional lane relies on synthetic evidence.
-- Stop immediately if the final closeout statement is ambiguous or names more than one trigger.
-- Restart from a fresh baseline if the live branch moves and the parent cannot safely reconcile it into `ws/m38-int` with a rerun of the full verification wall.
+## Closeout Rules
 
-## Closeout Contract
+Allowed final verdicts:
 
-The final closeout statement must be exactly one of:
+1. `candidate third consumer observed, but the kernel still stays local`
+2. `third honest consumer proven`
+3. `keep the kernel local`
 
-1. `No deeper extraction justified yet. Keep the kernel local.`
-2. `Trigger proven. Author the next milestone against <exact trigger>.`
-3. `Probe inconclusive. Do not extract yet. Re-run only with real new evidence.`
+Verdict selection rules:
 
-Allowed `<exact trigger>` values are:
+- `third honest consumer proven` is allowed only if:
+  - the verifier command is implemented and green
+  - parity proof passes
+  - `ORCH_PLAN.md` standing proof walls adopt the verifier
+- `candidate third consumer observed, but the kernel still stays local` is allowed only if:
+  - the verifier command is implemented and green
+  - parity proof passes
+  - adoption is incomplete, intentionally deferred, or not yet accepted into standing orchestration
+- `keep the kernel local` is required if:
+  - verifier implementation fails
+  - parity proof fails
+  - adoption proof fails badly enough that the consumer claim is not honest
+  - the command requires scope-violating abstraction, rescanning, schema widening, or path overrides to survive
 
-- `generalized multi-wedge decision layer`
-- `cross-crate family-analysis shared core`
-- `public semantic fingerprint fields`
+Final file rule:
 
-Closeout mapping rules:
-
-- Outcome `1` is allowed when baseline truth stayed frozen and no trigger was proven. The probe may be skipped or may pass.
-- Outcome `2` is allowed only when exactly one trigger was proven by real evidence. It does not authorize any broader extraction than that named trigger.
-- Outcome `3` is allowed only when the probe actually ran and the evidence quality was too weak to map honestly to one trigger.
-- `probe not run, no real non-author maintainer available` is a valid lane disposition, but it still closes with outcome `1`, not with a special fourth outcome.
-- No closeout line may reopen corpus run `1`, authorize multiple triggers, or smuggle in a "small" shared-core move.
-
-## Assumptions
-
-- `PLAN.md` at `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` remains the M38 authority for the duration of the run.
-- The baseline branch is `feat/corpus-expansion` at `e04d2fa9059c0010f84bd1f2b150feee6246bb84`.
-- The repo can create the listed worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m38-trigger-gating`.
-- The required proving surface is the five-command verification floor plus the exact semantic assertions.
-- The current local `PLAN.md` state is accepted as authority input and is not rewritten by optional lanes.
-- A real non-author maintainer may not be available during the milestone window. If not, Lane C is skipped and the run stops after trigger-ledger completion and final verification.
+- The last non-empty line of `closeout.md` must be exactly one of the three allowed verdict strings above.
+- No alternate verdict wording is allowed.
