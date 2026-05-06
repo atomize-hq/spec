@@ -1,114 +1,116 @@
-# M38 - Architecture Follow-On Trigger Gating After M37
+# M39 - Verification Consumer Probe After M38
 
 Status: **authoritative implementation plan**  
 Base branch: **main**  
 Working branch: **feat/corpus-expansion**  
-Last rewritten: **2026-05-05**  
-Supersedes: **M37 - Family-Analysis Decision-Kernel Extraction After M36**  
-Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260505-184257.md`**  
-Frozen baseline commit: **`e04d2fa9059c0010f84bd1f2b150feee6246bb84`**  
+Last rewritten: **2026-05-06**  
+Supersedes: **M38 - Architecture Follow-On Trigger Gating After M37**  
+Design authority: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-corpus-expansion-design-20260505-231151.md`**  
+Frozen baseline commit: **`a9e6d7252a2e7dc1d9c53f14ad65b1b8d685c5dc`**  
 Related roadmap: **`docs/ai_promotion_and_multilanguage_milestones_v0.1.md`**  
 Program tracker: **`docs/recommendation_corpus_expansion_program_v0.1.md`**  
 Capability guide: **`docs/semantic_family_capability_corpus_guide_v0.1.md`**  
-M37 closeout: **`.runs/m37_decision_kernel_extraction/closeout.md`**  
-Execution note: **M38 is a plan-first gating milestone. It does not spend corpus run `1`, does not reopen the arithmetic-ready story, does not move the family-analysis kernel out of `xtask/src/family/`, and does not widen any public artifact schema or CLI surface by default.**
+M38 closeout: **`.runs/m38_trigger_gating/closeout.md`**  
+Execution note: **M39 is a bounded verification-consumer probe. It does not move `decision_kernel.rs`, does not widen public artifact schemas, does not rescan raw corpus inputs, and does not claim shared-core pressure unless repo-root orchestration actually adopts the new verifier.**
 
 ## Objective
 
-Turn the current `author_architecture_follow_on_plan` instruction into one
-explicit repo-owned gate:
+Turn the repeated shell-level verification path around the frozen helper-surface
+decision tuple into one truthful in-tree maintainer surface:
 
-> what exact evidence would justify a deeper post-M37 family-analysis
-> extraction, and what evidence means the repo should keep the current kernel
-> local and stop?
+`cargo xtask family verify-decision-contract --format json`
 
-M38 is not "do more architecture because the current shape feels close to
-general."
+M39 is not an extraction milestone.
 
-M38 is:
+M39 is:
 
-1. confirm what M37 actually landed on the live branch
-2. record which post-M37 triggers are currently false
-3. define the exact evidence that would make any one of them true
-4. authorize at most one bounded evidence probe
-5. state the exact stop condition if that probe does not produce real pressure
-
-The deliverable is a truthful go / no-go gate for M39+, not a stealth shared
-core extraction.
+1. prove whether the current verification path is a real third consumer of the
+   existing family decision semantics
+2. keep the implementation read-side only and minimal-diff
+3. replace the duplicated `jq` ladder in standing orchestration surfaces if,
+   and only if, the command earns that adoption
+4. close with an explicit verdict:
+   - candidate third consumer observed
+   - third honest consumer proven
+   - keep the kernel local
 
 ## Executive Verdict
 
-The repo does not currently justify:
+The honest M39 implementation is a thin verifier plus standing adoption, not a
+new kernel and not a generalized contract framework.
 
-1. a generalized multi-wedge decision layer
-2. a cross-crate family-analysis shared core
-3. public semantic fingerprint fields in emitted JSON
+The live code already gives us most of the semantics we need:
 
-M38 therefore ships as a **trigger-gating milestone**, not as another runtime
-architecture move.
+- `xtask/src/family/promotion_artifacts.rs` already validates both artifacts
+- `CorpusProgramDecisionArtifact::validate(...)` already enforces:
+  - basis snapshot parity against the validated analysis basis
+  - derived decision tuple parity against `derive_corpus_program_decision_contract(...)`
+- `xtask/src/family/decision_kernel.rs` already owns the kernel truth
 
-The only authorized follow-on probe is a **real non-author maintainer
-legibility dry run**. If no real non-author maintainer is available during the
-milestone window, M38 stops after the trigger ledger and records that no probe
-ran. It does not simulate a maintainer and it does not invent a second
-consumer.
+That means M39 should add one new read-side command surface, expose its checks
+as structured JSON, and then replace the standing shell ladder in
+`ORCH_PLAN.md`.
+
+If that adoption lands and sticks, the repo has a credible third consumer
+signal. If it does not, the kernel stays local and M39 says so plainly.
 
 ## Live Baseline
 
-M37 landed on `feat/corpus-expansion` at
-`e04d2fa9059c0010f84bd1f2b150feee6246bb84`.
+Live HEAD on `feat/corpus-expansion` is
+`a9e6d7252a2e7dc1d9c53f14ad65b1b8d685c5dc`.
 
-Live revalidation on 2026-05-05 preserved the closeout floor:
+The current standing verification path is still shell-first:
 
-- `cargo test -p xtask` passes `123/123`
-- `cargo xtask family recommend --format json` remains
-  `recommendation_status = "no_strong_candidate"`
-- `cargo xtask family corpus-decision --format json` remains
-  `decision_status = "not_recommended"`
-- `open_blockers = ["helper_surface_not_promotable"]`
+- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+- repeated `jq` assertions in `ORCH_PLAN.md` around:
+  - lines `340-350`
+  - lines `582-592`
+  - lines `938-947`
+
+The frozen M38 helper-surface floor remains:
+
+- `recommendation_status = "no_strong_candidate"`
+- `decision_summary.decision_status = "not_recommended"`
+- `decision_summary.open_blockers = ["helper_surface_not_promotable"]`
 - `decision_action = "pivot_to_architecture_shared_core_follow_on"`
 - `decision_basis_code = "durable_non_promotable_helper_surface"`
 - `required_next_action = "author_architecture_follow_on_plan"`
 
-The only new runtime-adjacent signal from the live rerun is small:
-
-- `xtask/src/family/helper_surface.rs` emits two `dead_code` warnings for
-  `decision_uses_helper_surface_follow_on_tuple(...)` and
-  `decision_matches_helper_surface_follow_on_tuple(...)`
-
-That is hygiene pressure. It is not milestone pressure.
-
 ## Frozen Premises
 
-1. M37 actually landed and still reproduces on the live branch.
-2. The current repo state still contains one durable non-promotable
-   helper-surface wedge, not multiple durable wedges.
-3. `xtask/src/family/decision_kernel.rs` currently has two real runtime
-   consumers:
-   - `xtask/src/family/recommend.rs`
-   - `xtask/src/family/promotion_artifacts.rs`
-4. No current non-`xtask` crate needs family-analysis decision semantics.
-5. No current external consumer needs first-class semantic fingerprint fields
-   in emitted JSON.
-6. Therefore none of the three post-M37 deeper-extraction triggers are true
-   today.
+1. M38 already decided that deeper extraction is not justified on current repo
+   truth.
+2. The only honest reason to revisit extraction is new consumer pressure, not
+   momentum.
+3. The verification path is the strongest nearby candidate for a third
+   consumer because it repeatedly reads the same emitted analysis and decision
+   semantics.
+4. That candidate counts only if the repo adopts it in standing orchestration
+   surfaces, not if it appears once in a scratch experiment.
+5. M39 must stay read-side only. Recomputing coverage or recommendation from
+   raw corpus inputs would be fake scope.
+6. The command output can be structured JSON, but M39 must not introduce a new
+   persisted artifact class or widen any public artifact schema.
 
 ## Problem Statement
 
-The repo now has the correct bounded kernel shape, but it does not yet have a
-truthful rule for when to go further.
+Today the repo has kernel semantics that are reused in practice, but the
+maintainer-facing verification story is still split across:
 
-That gap invites three bad moves:
+- two `validate-artifact` calls
+- six semantic `jq` assertions
+- repeated copy/paste blocks in `ORCH_PLAN.md`
 
-1. extracting a generalized multi-wedge decision layer before a second durable
-   wedge exists
-2. extracting a cross-crate shared core before a real third-consumer or
-   non-`xtask` pressure exists
-3. publishing semantic fingerprint fields because the repo can, not because a
-   real consumer needs them
+That is close to a third consumer, but not enough to claim it yet.
 
-All three are plausible future moves. None are justified by current branch
-truth.
+The missing proof is adoption. M39 needs to answer one narrow question:
+
+> is there a real in-tree verification consumer that maintainers actually want
+> to use for the standing helper-surface proof floor?
+
+If yes, the repo has real pressure. If no, the kernel remains local and the
+repo avoids another fake abstraction detour.
 
 ## Step 0 - Scope Challenge
 
@@ -116,365 +118,486 @@ truth.
 
 | Sub-problem | Existing code or artifact | Reuse decision |
 |---|---|---|
-| Family-analysis decision truth | `xtask/src/family/decision_kernel.rs` | Reuse unchanged. M38 does not relocate it. |
-| Helper-surface classifier and frozen tuples | `xtask/src/family/helper_surface.rs` | Reuse unchanged except optional warning cleanup. |
-| Recommendation emission and latest-byte reuse | `xtask/src/family/recommend.rs` | Reuse unchanged. M38 does not change recommendation policy. |
-| Artifact validation | `xtask/src/family/promotion_artifacts.rs` | Reuse unchanged. M38 does not widen schema or add public fingerprint fields. |
-| Current operator decision surface | `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json` | Reuse as live truth input. |
-| Trigger ledger | `TODOS.md` post-M37 decision-kernel follow-ups | Reuse as the source of candidate deeper moves. |
-| Corpus program stop/pivot guidance | `docs/recommendation_corpus_expansion_program_v0.1.md` | Reuse unchanged in substance. M38 must not silently reactivate corpus spending. |
-| M37 verification record | `.runs/m37_decision_kernel_extraction/acceptance.md`, `closeout.md`, `proof-log.json` | Reuse as the baseline proof that the bounded extraction is complete. |
+| CLI family subcommand dispatch | `xtask/src/lib.rs` | Reuse. Add exactly one new subcommand branch. |
+| Family module registration | `xtask/src/family/mod.rs` | Reuse. Add one new module export only. |
+| Kernel truth for basis snapshot and derived decision tuple | `xtask/src/family/decision_kernel.rs` | Reuse unchanged. M39 reads from it, not around it. |
+| Recommendation and corpus-decision latest paths | `xtask/src/family/paths.rs`, `xtask/src/family/recommend.rs` | Reuse unchanged. M39 reads the same canonical latest paths. |
+| Artifact structs and validators | `xtask/src/family/promotion_artifacts.rs` | Reuse directly. This is the main leverage point. |
+| Existing operator proof floor | `ORCH_PLAN.md` repeated validation + `jq` blocks | Replace with the new command once parity is proven. |
+| Existing trigger context | `TODOS.md` post-M37 follow-ups | Reuse unchanged. M39 is evidence-gathering, not trigger expansion. |
+| Existing milestone record | `.runs/m38_trigger_gating/` | Reuse as the frozen semantic floor and truth source. |
 
 ### Minimum complete change set
 
-The minimum honest M38 is:
+The minimum complete M39 is:
 
-1. replace the finished M37 `PLAN.md` with an M38 plan grounded in live branch
-   truth
-2. define the exact trigger matrix for the three post-M37 follow-ups:
-   - generalized multi-wedge decision layer
-   - cross-crate family-analysis shared core
-   - public semantic fingerprint fields
-3. record the current verdict for each trigger and why it is false today
-4. authorize at most one bounded evidence probe
-5. state explicit non-goals and stop conditions
+1. add `cargo xtask family verify-decision-contract --format json`
+2. implement the verifier as a read-side command over canonical latest
+   artifacts
+3. expose machine-readable pass/fail details for:
+   - recommendation-analysis artifact validity
+   - corpus-program-decision artifact validity
+   - basis snapshot parity
+   - derived decision tuple parity
+   - frozen helper-surface floor parity
+4. add targeted tests plus one end-to-end parity proof
+5. replace the named shell `jq` ladders in `ORCH_PLAN.md`
+6. record one explicit closeout verdict for whether the third-consumer claim
+   was proven
 
-Anything beyond that is scope leak unless it directly supports the optional
-probe or a tiny warning cleanup.
+Anything beyond that is scope leak.
 
 ### Complexity check
 
-M38 should stay almost entirely in planning and documentation surfaces.
+This plan should stay under the smell line:
 
-The hard boundary is:
-
+- one new module under `xtask/src/family/`
+- one CLI wiring update
+- one orchestration-doc adoption update
 - no new crate
-- no `spec-core` move
-- no new artifact kind
-- no schema version bump
-- no public fingerprint fields
-- no new family recommendation policy
-- no corpus manifest expansion
-- no synthetic second durable wedge
+- no new public schema
+- no new decision policy branch
+- no movement of `decision_kernel.rs`
 
-If a proposed M38 task needs any of those, it is not M38.
+If M39 grows into a framework for arbitrary verification contracts, stop. That
+is the exact overbuild this milestone is meant to reject.
 
 ### Search check
 
-**[Layer 1]** Reuse the repo's existing trigger ledger in `TODOS.md`.
+**[Layer 1]** Reuse `CorpusProgramDecisionArtifact::validate(...)` as the
+parity truth source instead of recreating that logic in shell or in a second
+decision path.
 
-**[Layer 1]** Reuse the current live decision artifact and M37 closeout as the
-source of truth, not stale chat summaries.
+**[Layer 1]** Reuse the canonical latest paths already wired through
+`recommend.rs` and `paths.rs`. Do not add path override flags in M39.
 
-**[Layer 3]** The right next move is not "generalize now." It is "write down
-what would make generalization real."
+**[Layer 3]** The command exists to prove adoption pressure, not to become a
+mini framework. Keep the surface narrow and frozen to the current helper-surface
+floor.
 
-**[EUREKA]** A second synthetic consumer created only to prove that a shared
-core is needed is fake evidence. A trigger counts only if it comes from a real
-repo pressure source, a real maintainer legibility failure, or a real
-downstream consumer need.
+**[EUREKA]** The existing validator already proves basis and derived-tuple
+parity. The new command is valuable because it consolidates operator behavior
+and makes that proof legible, not because it discovers new semantics.
 
 ### TODOS cross-reference
 
-The relevant post-M37 TODOs already exist:
+Relevant standing TODOs already exist:
 
-1. `Generalized multi-wedge decision layer`
-2. `Cross-crate family-analysis shared core`
+1. `Cross-crate family-analysis shared core`
+2. `Generalized multi-wedge decision layer`
 3. `Public semantic fingerprint fields`
-4. `Run a true non-author maintainer promotion dry run`
 
-M38 should not add new deeper-extraction TODOs unless a genuinely distinct
-pressure source appears during the optional probe.
+M39 should not add new architecture TODOs. It should either strengthen or
+weaken the existing shared-core trigger through evidence.
 
 ### Completeness check
 
-A vague "we'll know it when we see it" follow-on is not enough.
+A half-plan would stop at "add a command."
 
-The complete version is:
+The complete version includes:
 
-- one trigger matrix
-- one current verdict per trigger
-- one explicit probe contract
-- one explicit non-goal list
-- one exact rule for when M39 is authorized and when it is not
+- exact CLI contract
+- exact JSON output contract
+- exact failure reason vocabulary
+- exact codepath/test diagram
+- exact ORCH_PLAN adoption points
+- exact closeout verdict rules
 
 That is the lake. Boil it.
 
 ### Distribution check
 
-No new package, binary, image, or release pipeline is required.
+No new package, binary, image, or release channel is introduced.
 
-The affected operator surfaces remain:
+Distribution for M39 means maintainer adoption inside existing repo workflows:
 
-- `cargo xtask family recommend --format json`
-- `cargo xtask family corpus-decision --format json`
-- `cargo xtask family validate-artifact ...`
-- `.semantic-family-artifacts/family-promotion/analysis/*.latest.json`
+- `cargo xtask ...` command surface
+- `ORCH_PLAN.md` standing verification blocks
+- accepted run proof log / closeout record
+
+If those surfaces do not adopt the new command, the consumer claim is not
+proven.
 
 ## Approved Scope
 
-M38 includes exactly four deliverables:
+M39 includes exactly six deliverables:
 
-1. this authoritative trigger-gating plan
-2. a trigger matrix with current verdicts, evidence rules, and non-evidence
-3. one optional non-author maintainer probe contract
-4. a verification and closeout checklist that makes the stop condition
-   impossible to misread
+1. this authoritative `PLAN.md`
+2. a new read-side verifier command:
+   `cargo xtask family verify-decision-contract --format json`
+3. tests for pass and failure cases on the frozen helper-surface floor
+4. adoption of the command in the named `ORCH_PLAN.md` proof blocks
+5. one accepted-run parity proof against the old shell path
+6. one explicit closeout verdict on whether the third-consumer claim is proven
 
 ## NOT in scope
 
 The following work is explicitly deferred:
 
-- generalized decision-engine extraction
-  Reason: no second durable wedge exists.
-- cross-crate family-analysis shared core
-  Reason: no third consumer or non-`xtask` pressure exists.
-- public semantic fingerprint fields in JSON
-  Reason: no external consumer requires them.
-- corpus run `1` activation
-  Reason: M38 is a gating milestone, not a corpus-spend milestone.
-- arithmetic-ready story reactivation
-  Reason: M37 retired that steering path.
-- schema or CLI surface expansion
-  Reason: M38 must not turn internal proof surfaces into public contract
-  accidentally.
-- synthetic consumers or fake wedges
-  Reason: manufactured pressure would poison the next milestone decision.
+- moving `xtask/src/family/decision_kernel.rs`
+  Reason: M39 is testing consumer pressure, not responding to it yet.
+- new shared-core extraction
+  Reason: the milestone exists to decide whether that pressure is real.
+- generalized verification of arbitrary decision floors
+  Reason: that would spend complexity before the consumer is proven.
+- path override flags for ad hoc artifact locations
+  Reason: M39 is about the standing repo surface, not arbitrary files.
+- rescanning coverage or recomputing recommendation from raw inputs
+  Reason: that would create a second semantics path and fake the probe.
+- public schema or artifact-kind expansion
+  Reason: the new JSON is command output, not a new persisted artifact contract.
+- corpus run `1` spending or family recommendation policy changes
+  Reason: M39 is read-side only.
 
 ## Architecture Review
 
 ### System boundary
 
-M38 is intentionally a boundary-preserving milestone:
+M39 keeps the existing write-side architecture intact and adds one read-side
+verification consumer:
 
 ```text
-CURRENT FAMILY-ANALYSIS SHAPE
-=============================
+CURRENT WRITE-SIDE + NEW READ-SIDE SHAPE
+========================================
 
-xtask/src/family/recommend.rs
-        │
-        ├──── derives recommendation inputs
-        │
-        ▼
-xtask/src/family/decision_kernel.rs
-        │
-        ├──── basis snapshot derivation
-        ├──── decision derivation
-        └──── normalized proof fingerprints
-        │
-        ├───────────────────────────────┐
-        ▼                               ▼
-xtask/src/family/promotion_artifacts.rs  live *.latest.json artifacts
-        │
-        └──── validates emitted truth
-
-xtask/src/family/helper_surface.rs
-        │
-        └──── helper-surface classification + frozen tuples
-
-M38 RULE:
-keep every box in place unless a listed trigger becomes true
+family coverage
+    │
+    ▼
+family recommend --format json
+    │ writes recommendation.latest.json
+    ▼
+family corpus-decision --format json
+    │ writes corpus-program-decision.latest.json
+    ▼
+existing artifact validators + decision kernel
+    │
+    ├── existing shell proof path
+    │     ├── validate-artifact recommendation.latest.json
+    │     ├── validate-artifact corpus-program-decision.latest.json
+    │     └── repeated jq assertions
+    │
+    └── NEW: family verify-decision-contract --format json
+          ├── reads recommendation.latest.json
+          ├── reads corpus-program-decision.latest.json
+          ├── runs existing validators
+          ├── recomputes expected basis snapshot from validated analysis
+          ├── recomputes expected decision tuple from validated analysis
+          ├── checks frozen helper-surface floor
+          └── emits one structured pass/fail report
 ```
 
-### Decision flow
+### Module boundaries
+
+The implementation stays intentionally boring:
+
+| Module | Responsibility |
+|---|---|
+| `xtask/src/lib.rs` | Add `VerifyDecisionContract` subcommand and dispatch only. |
+| `xtask/src/family/mod.rs` | Register the new verifier module only. |
+| `xtask/src/family/verify.rs` | Own all command-specific read-side logic and JSON rendering. |
+| `xtask/src/family/decision_kernel.rs` | Remains the semantic source of truth, unchanged. |
+| `xtask/src/family/promotion_artifacts.rs` | Remains the artifact contract and validator source of truth, reused directly. |
+| `ORCH_PLAN.md` | Replace repeated shell assertions with the consolidated command once parity is proven. |
+
+### Command contract
+
+The command surface is frozen for M39:
 
 ```text
-LIVE TRUTH → TRIGGER JUDGMENT → NEXT ACTION
-===========================================
-
-cargo test -p xtask
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family validate-artifact ...
-        │
-        ▼
-confirm live wedge still equals:
-  no_strong_candidate
-  not_recommended
-  helper_surface_not_promotable
-        │
-        ▼
-evaluate three follow-on triggers:
-  multi-wedge?
-  cross-crate?
-  public fingerprint consumer?
-        │
-        ├── none true ──► keep kernel local, stop
-        │
-        └── one true ───► author exact next milestone against that trigger only
+cargo xtask family verify-decision-contract --format json
 ```
 
-### Trigger matrix
+Rules:
 
-| Follow-on | Current verdict | Trigger condition | Acceptable evidence | Non-evidence |
-|---|---|---|---|---|
-| Generalized multi-wedge decision layer | `not triggered` | A second durable non-promotable wedge appears whose path cannot be expressed in `decision_kernel.rs` without branching beyond the helper-surface contract. | Real recommendation-analysis output, real corpus-program decision behavior, or real validator/emitter divergence caused by the single-wedge assumption. | Hypothetical future wedges or a synthetic second wedge authored only to make the abstraction look useful. |
-| Cross-crate family-analysis shared core | `not triggered` | At least two non-`recommend.rs` / non-`promotion_artifacts.rs` consumers inside `xtask/src/family/` need the same kernel logic, or a non-`xtask` crate needs the same decision semantics. | A justified third consumer, a real downstream crate or command path blocked on duplicated logic, or a maintainer workflow that becomes unmaintainable because the kernel cannot stay local honestly. | Extracting preemptively because a split "seems likely," or adding an artificial consumer whose only purpose is to satisfy the trigger. |
-| Public semantic fingerprint fields | `not triggered` | An external consumer needs first-class semantic fingerprint fields in emitted JSON rather than internal proof gating only. | A real validator, CLI workflow, downstream tool, or review automation that cannot consume current artifact truth honestly without those fields. | "It would be nice for debugging" or exposing internals because the hash already exists. |
+- only `--format json` is supported
+- no path override flags
+- reads only:
+  - `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+  - `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+- exits `0` only when every required check passes
+- exits non-zero on any validation failure, drift, or floor mismatch
+
+### JSON output contract
+
+The command output is structured JSON to stdout. It is not a new persisted
+artifact.
+
+Required top-level fields:
+
+| Field | Meaning |
+|---|---|
+| `command` | exact command name, `family verify-decision-contract` |
+| `format` | `json` |
+| `recommendation_analysis_path` | canonical latest analysis path |
+| `corpus_program_decision_path` | canonical latest decision path |
+| `checks` | object containing one result object per required check |
+| `overall_verdict` | `pass` or `fail` |
+| `failure_reasons` | stable machine-readable reason list, empty on pass |
+
+Required `checks.*.status` values:
+
+- `pass`
+- `fail`
+
+Required `checks` entries:
+
+1. `recommendation_analysis_validation`
+2. `corpus_program_decision_validation`
+3. `basis_snapshot_parity`
+4. `derived_decision_parity`
+5. `frozen_helper_surface_floor`
+
+Required machine failure reasons:
+
+- `missing_recommendation_analysis_artifact`
+- `missing_corpus_program_decision_artifact`
+- `invalid_artifact_json`
+- `invalid_artifact_contract`
+- `basis_snapshot_mismatch`
+- `derived_decision_mismatch`
+- `frozen_helper_surface_evidence_not_current`
+- `frozen_helper_surface_floor_mismatch`
+
+### Adoption boundary
+
+M39 counts as a consumer probe only if the new command replaces the repeated
+shell ladder in the standing repo-root surfaces:
+
+1. `ORCH_PLAN.md` baseline verification block around lines `340-350`
+2. `ORCH_PLAN.md` later verification block around lines `582-592`
+3. `ORCH_PLAN.md` final verification wall around lines `938-947`
+4. accepted M39 run proof output under `.runs/`
+
+If implementation lands but these surfaces stay on the old shell ladder, the
+repo has not proven a third honest consumer.
+
+## Code Quality Review
+
+### Quality bar
+
+The code should be explicit, minimal, and hostile to duplication:
+
+1. keep all verifier-specific logic in one new module
+2. call existing validators instead of duplicating contract rules
+3. compute parity details directly from validated artifacts so the JSON can name
+   what failed
+4. do not add a generic verification framework, traits, or registry
+5. do not thread this command through unrelated family modules
+
+### DRY decisions
+
+- Reuse `FamilyRecommendationAnalysisArtifact::validate(...)` and
+  `CorpusProgramDecisionArtifact::validate(...)` as the contract floor.
+- Reuse `corpus_program_basis_snapshot(...)` and
+  `derive_corpus_program_decision_contract(...)` for parity checks.
+- Reuse canonical latest paths from `paths.rs`.
+- Keep any verifier-local JSON result structs local to `verify.rs`. They do not
+  belong in `promotion_artifacts.rs` because they are command output, not repo
+  artifacts.
+
+### Explicit-over-clever decisions
+
+- One new module is preferred over hiding the command inside `recommend.rs`.
+- Stable reason strings are preferred over serializing raw Rust error text.
+- Fixed-path verification is preferred over configurable path plumbing.
+- A small local result model is preferred over trying to reuse every artifact
+  struct for a different purpose.
 
 ## Implementation Plan
 
-### Phase 1 - Baseline confirmation
+### Step 1 - Wire the CLI surface
 
-Goal: confirm that M37 truth still reproduces on the live branch before any
-follow-on interpretation.
+Files:
 
-Steps:
+- `xtask/src/lib.rs`
+- `xtask/src/family/mod.rs`
 
-1. run the verification floor in the listed command order
-2. confirm the expected semantic outputs still match the live artifacts
-3. record any drift from M37 closeout
-4. classify any drift as one of:
-   - no drift
-   - hygiene drift
-   - trigger-relevant drift
+Changes:
 
-Exit rule:
+1. add `VerifyDecisionContract { format: String }` to `FamilyCommand`
+2. dispatch it to `verify::run(workspace_root, &format)`
+3. export `pub mod verify;` from `xtask/src/family/mod.rs`
 
-- if trigger-relevant drift appears, stop and rewrite M38 around that new truth
-- otherwise continue
+Acceptance:
 
-### Phase 2 - Trigger ledger finalization
+- `cargo xtask family verify-decision-contract --help` shows the new subcommand
+- non-`json` format exits with the same invalid-input behavior as existing
+  family commands
 
-Goal: turn the post-M37 follow-ups into explicit gates instead of vibes.
+### Step 2 - Implement the verifier module
 
-Steps:
+File:
 
-1. evaluate each trigger against live truth
-2. write the current verdict for each trigger
-3. write acceptable evidence and non-evidence for each trigger
-4. confirm that none of the three are currently true
+- `xtask/src/family/verify.rs`
 
-Exit rule:
+Responsibilities:
 
-- if any trigger is already true, M38 stops being a gating milestone and
-  becomes the authoring input for the next exact milestone
-- if none are true, continue
+1. load both canonical latest artifacts
+2. deserialize them with stable failure categorization
+3. validate them using the existing artifact validators
+4. recompute expected basis snapshot from validated analysis
+5. recompute expected derived decision contract from validated analysis
+6. compare observed vs expected parity fields
+7. verify the frozen helper-surface floor exactly
+8. emit structured JSON and return the correct exit status
 
-### Phase 3 - Optional evidence probe
+Important implementation rule:
 
-Goal: test whether the current architecture hides real maintainer pressure
-without manufacturing it.
+- the verifier may read artifact files and call existing validation helpers
+  only
+- it must not call coverage collection, recommendation generation, or any other
+  write-side path
 
-Authorized probe:
+### Step 3 - Freeze the helper-surface floor in command logic
 
-- `non-author maintainer legibility dry run`
+The verifier must assert all of these together:
 
-Entry criteria:
+- `recommendation_status == no_strong_candidate`
+- `decision_summary.decision_status == not_recommended`
+- `decision_summary.open_blockers == [helper_surface_not_promotable]`
+- `evidence_summary.missing_evidence == []`
+- `evidence_summary.stale_evidence == []`
+- `decision_action == pivot_to_architecture_shared_core_follow_on`
+- `decision_basis_code == durable_non_promotable_helper_surface`
+- `required_next_action == author_architecture_follow_on_plan`
 
-1. a real maintainer who did not author M35-M37 is available
-2. the probe can run on current live branch truth
-3. the probe is treated as evidence gathering, not as a reason to pre-approve
-   deeper extraction
+Rationale:
 
-If any entry criterion is false:
+- M39 is intentionally frozen to the M38 floor
+- this prevents the probe from silently broadening into a general policy
+  checker
 
-- do not substitute the original author
-- do not simulate the role with a second write-up
-- record `probe not run, no real non-author maintainer available`
-- stop after Phase 2
+### Step 4 - Add tests before orchestration adoption
 
-If all entry criteria are true:
+Primary test home:
 
-1. run the baseline commands from a clean checkout or worktree
-2. ask the maintainer to explain, in writing:
-   - why the wedge remains `helper_surface_not_promotable`
-   - why the kernel stays in `xtask/src/family/`
-   - why corpus run `1` remains unspent
-   - why semantic fingerprints stay internal only
-3. record hidden context requests, confusion points, and any request for deeper
-   extraction
-4. map each failure, if any, back to one trigger only
+- `xtask/src/family/verify.rs` unit tests
+- `xtask/src/lib.rs` CLI dispatch test coverage if needed
 
-Required output location if the probe runs:
+Required test categories:
 
-- `.runs/m38_non_author_probe/summary.md`
+1. happy path on the frozen helper-surface floor
+2. missing recommendation artifact
+3. missing decision artifact
+4. invalid JSON
+5. artifact-contract validation failure
+6. basis snapshot mismatch
+7. derived decision mismatch
+8. stale or missing evidence on the analysis artifact
+9. frozen floor mismatch with one tuple field changed
+10. CLI rejects non-`json` format
 
-Probe verdict rules:
+### Step 5 - Replace the standing orchestration ladder
 
-- `pass`: maintainer can explain and operate the current path without hidden
-  author context and without requesting deeper extraction
-- `fail`: repeated legibility or operability failure maps cleanly to a listed
-  trigger
-- `inconclusive`: probe was interrupted or evidence quality is too weak to map
-  honestly to a trigger
+Primary file:
 
-### Phase 4 - Closeout
+- `ORCH_PLAN.md`
 
-Goal: close M38 with one unambiguous answer.
+Changes:
 
-Closeout statement must be exactly one of:
+1. replace the repeated validate + `jq` clusters at the named blocks with the
+   new command
+2. keep any surrounding branch/sha/status commands that provide useful proof
+   context
+3. optionally tee verifier stdout to a `.runs/.../verify-decision-contract.stdout.json`
+   proof file if the closeout flow benefits from a captured machine report
 
-1. `No deeper extraction justified yet. Keep the kernel local.`
-2. `Trigger proven. Author the next milestone against <exact trigger>.`
-3. `Probe inconclusive. Do not extract yet. Re-run only with real new evidence.`
+Target shape:
 
-## Evidence Probe Decision
+```bash
+cargo xtask family verify-decision-contract --format json | tee \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+```
 
-M38 authorizes the maintainer legibility dry run and rejects the "deliberate
-second consumer" probe for now.
+Optional follow-up assertion if the proof flow wants an explicit JSON gate:
 
-Why this probe wins:
+```bash
+jq -e '.overall_verdict == "pass"' \
+  .runs/m39_verification_consumer_probe/verify-decision-contract.stdout.json
+```
 
-1. it tests whether the current local-kernel shape is actually hard to operate
-2. it does not create fake architectural pressure
-3. it reuses an already-existing backlog pressure source
-4. it can fail honestly into either the cross-crate or multi-consumer trigger
-   without widening the runtime surface first
+### Step 6 - Close with an explicit verdict
 
-Why the second-consumer probe is rejected in M38:
+M39 closes with exactly one of:
 
-1. it is too easy to fake
-2. it risks spending architecture effort to manufacture the evidence
-3. it confuses "can build another consumer" with "must build another consumer"
+1. `candidate third consumer observed, but the kernel still stays local`
+2. `third honest consumer proven`
+3. `keep the kernel local`
 
-## Optional Hygiene
-
-M38 may carry one tiny warning-cleanup decision if maintainers want warning-clean
-output during the probe:
-
-- keep `decision_uses_helper_surface_follow_on_tuple(...)` and
-  `decision_matches_helper_surface_follow_on_tuple(...)` as explicit
-  freeze-sentinel runtime helpers, or
-- move them behind test-only usage
-
-This is never a milestone driver. If it threatens to expand beyond a tiny local
-cleanup, defer it.
+The closeout record must explain which adoption bar was or was not met.
 
 ## Test And Verification Plan
 
-M38 is plan-first, so the test surface is the verification floor plus probe
-truthfulness, not new product behavior.
-
-### Execution coverage
+### Code path coverage
 
 ```text
-M38 EXECUTION COVERAGE
-======================
+CODE PATH COVERAGE
+==================
+[+] xtask/src/lib.rs
+    │
+    └── FamilyCommand::VerifyDecisionContract
+        ├── [REQ TEST] format == "json" -> dispatches verifier
+        └── [REQ TEST] format != "json" -> invalid input error
 
-[1] Baseline reproduction
-    ├── cargo test -p xtask
-    ├── family recommend --format json
-    ├── family corpus-decision --format json
-    └── validate-artifact on both *.latest.json artifacts
-
-[2] Trigger evaluation
-    ├── multi-wedge trigger
-    ├── cross-crate trigger
-    └── public fingerprint trigger
-
-[3] Optional probe
-    ├── maintainer can explain current wedge
-    ├── maintainer can operate current commands
-    └── failure maps to one trigger or does not count
-
-[4] Closeout
-    └── exact stop/go statement written with no ambiguous middle state
+[+] xtask/src/family/verify.rs
+    │
+    ├── load recommendation.latest.json
+    │   ├── [REQ TEST] file exists + valid JSON
+    │   ├── [REQ TEST] missing file -> missing_recommendation_analysis_artifact
+    │   └── [REQ TEST] invalid JSON -> invalid_artifact_json
+    │
+    ├── load corpus-program-decision.latest.json
+    │   ├── [REQ TEST] file exists + valid JSON
+    │   ├── [REQ TEST] missing file -> missing_corpus_program_decision_artifact
+    │   └── [REQ TEST] invalid JSON -> invalid_artifact_json
+    │
+    ├── validate analysis artifact
+    │   ├── [REQ TEST] valid artifact -> pass
+    │   └── [REQ TEST] invalid contract -> invalid_artifact_contract
+    │
+    ├── validate decision artifact
+    │   ├── [REQ TEST] valid artifact -> pass
+    │   └── [REQ TEST] invalid contract -> invalid_artifact_contract
+    │
+    ├── recompute expected basis snapshot
+    │   ├── [REQ TEST] exact parity -> pass
+    │   └── [REQ TEST] field drift -> basis_snapshot_mismatch
+    │
+    ├── recompute expected derived decision tuple
+    │   ├── [REQ TEST] exact parity -> pass
+    │   └── [REQ TEST] field drift -> derived_decision_mismatch
+    │
+    └── enforce frozen helper-surface floor
+        ├── [REQ TEST] exact M38 floor -> pass
+        ├── [REQ TEST] missing/stale evidence -> frozen_helper_surface_evidence_not_current
+        └── [REQ TEST] tuple drift -> frozen_helper_surface_floor_mismatch
 ```
 
-### Verification floor
+### Maintainer flow coverage
 
-Run these commands in order:
+```text
+MAINTAINER FLOW COVERAGE
+========================
+[+] Standing proof floor
+    │
+    ├── [REQ TEST] old shell path passes on frozen artifact set
+    ├── [REQ TEST] new verifier passes on same artifact set
+    └── [REQ TEST] both surfaces fail on the same intentionally drifted fixture
+
+[+] ORCH_PLAN adoption
+    │
+    ├── [REQ TEST] named verification blocks replaced with verifier command
+    └── [REQ TEST] accepted proof flow captures machine-readable verifier output
+
+[+] Regression protection
+    │
+    └── [CRITICAL] if any existing artifact contract change breaks verifier parity,
+        implementation must add or update a regression test before merge
+```
+
+### Required implementation-time commands
+
+Baseline proof:
 
 ```bash
 cargo test -p xtask
@@ -484,173 +607,188 @@ cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 ```
 
-Expected semantic outcome:
+M39 verifier proof:
 
-- `recommendation_status = "no_strong_candidate"`
-- `decision_status = "not_recommended"`
-- `open_blockers = ["helper_surface_not_promotable"]`
-- `decision_action = "pivot_to_architecture_shared_core_follow_on"`
-- `decision_basis_code = "durable_non_promotable_helper_surface"`
-- `required_next_action = "author_architecture_follow_on_plan"`
+```bash
+cargo xtask family verify-decision-contract --format json
+```
 
-### Acceptance matrix
+Parity proof:
 
-| Check | Pass condition | Failure meaning |
-|---|---|---|
-| Baseline revalidation | All commands pass and semantic outputs match the frozen floor. | M37 truth drifted. Re-baseline before interpreting M38. |
-| Trigger evaluation | All three current verdicts remain `not triggered`. | M38 is no longer just a gating milestone. |
-| Probe integrity | Probe uses a real non-author maintainer or does not run. | Synthetic evidence invalidates the milestone decision. |
-| Closeout | Final statement matches one of the three allowed closeout lines. | The milestone remains ambiguous and is not done. |
+```bash
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.recommendation_status == "no_strong_candidate"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.decision_status == "not_recommended"' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_summary.open_blockers == ["helper_surface_not_promotable"]' \
+  .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq -e '.decision_action == "pivot_to_architecture_shared_core_follow_on"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.decision_basis_code == "durable_non_promotable_helper_surface"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+jq -e '.required_next_action == "author_architecture_follow_on_plan"' \
+  .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+cargo xtask family verify-decision-contract --format json
+```
+
+### Acceptance checklist
+
+M39 is not complete until all of these are true:
+
+1. the verifier returns `0` on the frozen M38 floor
+2. the verifier returns non-zero on each modeled failure category
+3. command JSON includes stable `checks` and `failure_reasons`
+4. `ORCH_PLAN.md` named proof blocks use the verifier instead of the repeated
+   `jq` ladder
+5. parity with the old shell path is recorded on the same artifact set
+6. closeout picks one and only one allowed verdict
 
 ## Failure Modes Registry
 
-| Failure mode | Covered by verification? | Error handling exists? | User-visible effect | Critical? | Mitigation |
-|---|---|---|---|---|---|
-| Baseline commands drift from M37 truth | Yes | Yes | Maintainers would make decisions from stale reality. | Yes | Stop and re-baseline before any trigger judgment. |
-| Probe uses synthetic consumer or fake maintainer pressure | Yes | Yes | Repo may over-extract for a problem it invented. | Yes | Reject the evidence and keep kernel local. |
-| Probe reveals confusion but it does not map to a listed trigger | Yes | Yes | Team may overfit one vague complaint into a roadmap move. | No | Record as inconclusive, do not authorize extraction. |
-| Warning cleanup expands into behavior change | Partially | Yes | A hygiene task could silently become a runtime milestone. | No | Defer cleanup unless it stays tiny and local. |
-| Corpus run `1` gets reopened implicitly | Yes | Yes | Team starts spending program budget under the wrong milestone. | Yes | Keep corpus activation explicitly out of scope. |
-| Public fingerprint exposure gets bundled "for convenience" | Yes | Yes | Internal proof surface becomes accidental public contract. | Yes | Reject unless a real external consumer is demonstrated. |
+| Failure mode | Test coverage required | Error handling required | Operator-visible result |
+|---|---|---|---|
+| recommendation artifact missing | yes | map to `missing_recommendation_analysis_artifact` | clear fail in stdout JSON + non-zero exit |
+| decision artifact missing | yes | map to `missing_corpus_program_decision_artifact` | clear fail in stdout JSON + non-zero exit |
+| invalid JSON in either artifact | yes | map to `invalid_artifact_json` | clear fail in stdout JSON + non-zero exit |
+| artifact schema drift | yes | map to `invalid_artifact_contract` | clear fail in stdout JSON + non-zero exit |
+| analysis basis evidence becomes stale | yes | map to `frozen_helper_surface_evidence_not_current` | clear fail naming evidence freshness, not silent pass |
+| basis snapshot field drift | yes | map to `basis_snapshot_mismatch` | clear fail with mismatched field list |
+| derived decision tuple drift | yes | map to `derived_decision_mismatch` | clear fail with mismatched field list |
+| frozen helper-surface tuple drift | yes | map to `frozen_helper_surface_floor_mismatch` | clear fail with observed vs expected tuple |
 
-No M38 failure mode is allowed to fail silently. Every failure must end in
-either stop, defer, or re-baseline.
+Critical gap rule:
+
+- any failure mode that could currently become a silent false green is a merge
+  blocker for M39
+- the verifier exists specifically to eliminate that silent-failure class from
+  the operator path
 
 ## Performance And Operability Review
 
-There is no new runtime hot path in M38.
+M39 adds no runtime hot path. It is an operator command over two JSON files.
 
-The only meaningful performance and operability considerations are:
+Expected performance shape:
 
-1. baseline verification should stay limited to the existing `xtask` floor
-2. the optional probe should run against existing commands, not add new heavy
-   harnessing
-3. warning cleanup, if done, must stay local to `xtask/src/family/helper_surface.rs`
-   and must not widen compile or test scope
+- two file reads
+- two JSON deserializations
+- existing validation calls
+- two small semantic recomputations
+- one JSON write to stdout
 
-This is intentionally boring. Good.
+Performance risks:
+
+- effectively none at repo scale
+- the main operability risk is human, not CPU: the command must stay easier to
+  understand than the shell ladder it replaces
+
+Operability guardrails:
+
+1. fixed canonical paths keep the command honest
+2. stable failure reasons keep CI and humans aligned
+3. structured stdout keeps proof logs machine-readable
+4. non-zero exit on any drift keeps ORCH verification trustworthy
 
 ## Worktree Parallelization Strategy
 
-Default expectation: **mostly sequential**.
-
-This milestone has only two genuine parallel opportunities, and both are
-conditional. If the team is only landing this plan, use one lane and keep it
-simple.
+This plan has one real parallel seam after the verifier contract is frozen.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Baseline confirmation | `xtask/src/family/`, `.semantic-family-artifacts/`, `.runs/m37_decision_kernel_extraction/` | — |
-| Authoritative M38 plan rewrite | repo root planning docs (`PLAN.md`) | baseline confirmation |
-| Optional warning cleanup | `xtask/src/family/` | baseline confirmation |
-| Optional non-author probe artifact | `.runs/m38_non_author_probe/` | plan rewrite |
-| Final closeout statement | `PLAN.md`, optional `.runs/m38_non_author_probe/` | all prior executed steps |
+| CLI + verifier implementation | `xtask/src/`, `xtask/src/family/` | — |
+| Verifier tests and parity fixtures | `xtask/src/`, `xtask/src/family/`, `.semantic-family-artifacts/` | CLI + verifier implementation |
+| ORCH adoption rewrite | repo-root docs (`ORCH_PLAN.md`) | verifier command contract frozen |
+| Closeout proof capture | `.runs/`, repo-root docs | verifier tests green, ORCH adoption drafted |
+| Final milestone authority update | `PLAN.md`, optional closeout docs | all prior steps |
 
 ### Parallel lanes
 
-Lane A: baseline confirmation → plan rewrite → final closeout  
-Lane B: optional warning cleanup (sequential inside `xtask/src/family/`)  
-Lane C: optional non-author probe artifact generation
+Lane A: CLI + verifier implementation -> verifier tests and parity fixtures  
+Lane B: ORCH adoption rewrite -> closeout proof capture  
+Lane C: final milestone authority update
 
 ### Execution order
 
-1. Run Lane A first through baseline confirmation.
-2. After baseline confirmation:
-   - continue Lane A with the plan rewrite
-   - optionally launch Lane B in parallel if the team explicitly wants the tiny
-     warning cleanup
-3. Launch Lane C only after the plan rewrite is stable, because the probe must
-   use the final trigger matrix and closeout rules.
-4. Merge Lane B and Lane C back into Lane A, then write the final closeout
-   statement.
+1. Launch Lane A first. The command contract and JSON shape must freeze before
+   any doc adoption is trustworthy.
+2. Once Lane A has the command interface and failure reason vocabulary locked,
+   launch Lane B in parallel to replace the named `ORCH_PLAN.md` proof blocks.
+3. Merge Lane A and Lane B, run the full parity proof, then finish Lane C with
+   the accepted closeout wording.
 
 ### Conflict flags
 
-- Lanes A and C are safe in parallel after the plan rewrite because they touch
-  different directories.
-- Lanes A and B should not run in parallel after the rewrite if both need to
-  touch milestone wording about the cleanup decision.
-- Lane B must stay single-owner because every step touches the same
-  `xtask/src/family/` module lane.
+- Lane A owns `xtask/src/` and must stay single-owner.
+- Lane B is safe in parallel after the command contract freezes because it
+  touches repo-root docs, not Rust modules.
+- Lane C should wait for both prior lanes because it is the authoritative
+  summary lane and should not race the actual implementation verdict.
 
-If the team does not take the optional cleanup and does not run the probe, the
+If the team chooses not to update `ORCH_PLAN.md` in the same change, then the
 correct answer is:
 
-`Sequential implementation, no parallelization opportunity beyond the plan rewrite.`
+`Sequential implementation only, because the consumer claim cannot be proven without doc adoption.`
 
 ## Completion Summary
 
-- Step 0 - Scope Challenge: scope accepted as-is for a plan-first gating
-  milestone
-- Architecture Review: 3 explicit trigger gates, 0 new runtime architecture
-  moves authorized
-- Code Quality Review: optional helper-surface warning cleanup only, otherwise
-  reuse current code unchanged
-- Test Review: verification floor defined, probe coverage defined, no new
-  product-behavior test surface added
-- Performance Review: no new runtime hot path, operability limited to existing
-  `xtask` command floor
+- Step 0 - Scope Challenge: scope accepted as-is for a bounded verification
+  consumer probe
+- Architecture Review: one new read-side consumer, zero new write-side
+  semantics
+- Code Quality Review: reuse validators and kernel truth, avoid framework creep
+- Test Review: full codepath and maintainer-flow coverage defined
+- Performance Review: no runtime hot path, operator-surface only
 - NOT in scope: written
 - What already exists: written
-- TODOS.md handling: existing post-M37 TODOs stay authoritative; no new TODO is
-  created unless the probe reveals a genuinely distinct pressure source
-- Failure modes: 4 critical stop/defer conditions flagged
-- Parallelization: 3 lanes total, with 2 optional conditional lanes
-- Lake Score: complete option chosen, explicit trigger matrix + probe contract +
-  failure modes + parallelization all included
+- TODOS.md handling: existing post-M37 follow-up TODOs remain authoritative
+- Failure modes: all non-happy paths named with stable machine reasons
+- Parallelization: 3 lanes total, 1 real parallel seam after command contract freeze
+- Lake Score: complete option chosen, including contract, parity, adoption, and
+  closeout verdict
 
 ## Deliverables
 
-M38 is complete only when all of these exist:
+M39 is complete only when all of these exist:
 
 1. this authoritative `PLAN.md`
-2. one explicit trigger matrix with current verdicts
-3. one explicit non-goals section
-4. one verification floor and acceptance matrix
-5. one failure modes registry
-6. one worktree parallelization strategy
-7. if the probe ran, `.runs/m38_non_author_probe/summary.md`
-8. one exact closeout statement chosen from the allowed list
+2. `cargo xtask family verify-decision-contract --format json`
+3. tests covering happy path plus all named failure reasons
+4. updated `ORCH_PLAN.md` proof blocks using the verifier
+5. one accepted-run parity proof log or closeout record
+6. one explicit verdict on whether the third-consumer claim is proven
 
 ## Success Criteria
 
-M38 is done only when all of these are true:
+M39 is done only when all of these are true:
 
-1. `PLAN.md` no longer describes the finished M37 extraction and instead
-   states the M38 trigger-gating mission.
-2. Each post-M37 follow-up has an explicit current verdict, trigger rule,
-   acceptable evidence, and non-evidence.
-3. The repo names at most one honest evidence probe.
-4. The plan makes clear that deeper extraction is unauthorized until one of the
-   listed triggers becomes true.
-5. The live wedge remains:
-   - `recommendation_status = "no_strong_candidate"`
-   - `decision_status = "not_recommended"`
-   - `open_blockers = ["helper_surface_not_promotable"]`
-   - `decision_action = "pivot_to_architecture_shared_core_follow_on"`
-   - `decision_basis_code = "durable_non_promotable_helper_surface"`
-   - `required_next_action = "author_architecture_follow_on_plan"`
+1. the new verifier works on the live M38 floor without widening semantics
+2. the verifier proves the same pass/fail result as the old shell path on the
+   same artifact set
+3. the verifier returns stable machine reasons for all modeled failures
+4. repo-root `ORCH_PLAN.md` adopts the verifier in the named standing proof
+   blocks
+5. the closeout can truthfully state one of:
+   - candidate third consumer observed
+   - third honest consumer proven
+   - keep the kernel local
 
-## M39 Authorization Rule
+## Closeout Decision Table
 
-M39 is authorized only if one of these becomes true:
-
-1. a second real durable wedge exists
-2. a third real consumer or non-`xtask` consumer exists
-3. a real external consumer needs public semantic fingerprint fields
-4. the non-author maintainer probe fails in a way that maps cleanly to one of
-   the three triggers above
-
-If none of those happen, the repo keeps the kernel local and stops.
+| Outcome | Rule |
+|---|---|
+| `candidate third consumer observed, but the kernel still stays local` | the command works and parity passes, but standing repo-root adoption is incomplete or not yet merged |
+| `third honest consumer proven` | the command works, parity passes, and the named `ORCH_PLAN.md` proof blocks adopt it as the standing path |
+| `keep the kernel local` | parity fails, adoption fails, or the command requires enough special casing that it is not an honest reusable consumer |
 
 ## Next Actions
 
-1. Treat this file as the authoritative M38 boundary.
-2. Re-run the verification floor before any follow-on discussion.
-3. Run the non-author maintainer probe only if a real non-author maintainer is
-   available.
-4. If the probe does not produce a trigger, stop and keep the kernel local.
-5. If the probe does produce a trigger, author the next milestone against that
-   exact trigger and nothing broader.
+1. Treat this file as the authoritative M39 execution boundary.
+2. Implement the verifier as a thin read-side command in `xtask/src/family/verify.rs`.
+3. Prove parity against the current shell path on the same frozen artifact set.
+4. Replace the named `ORCH_PLAN.md` proof blocks only after the command contract
+   is frozen.
+5. Close with an explicit verdict about whether the third-consumer claim was
+   actually proven.
