@@ -1,10 +1,10 @@
+#[cfg(test)]
+use crate::family::promotion_artifacts::CorpusProgramDecisionArtifact;
 use crate::family::promotion_artifacts::{
     CorpusProgramDecisionAction, CorpusProgramDecisionBasisCode, HoldReason, NextStepDetail,
     NextStepStatus, PivotTargetClass, PromotionReadiness, RecommendationCandidateEntry,
     RequiredNextAction,
 };
-#[cfg(test)]
-use crate::family::promotion_artifacts::CorpusProgramDecisionArtifact;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

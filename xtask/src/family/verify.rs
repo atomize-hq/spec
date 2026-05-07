@@ -8,9 +8,8 @@ use crate::family::paths::{
 };
 use crate::family::promotion_artifacts::{
     CorpusProgramDecisionAction, CorpusProgramDecisionArtifact, CorpusProgramDecisionBasisCode,
-    DecisionReason, DecisionStatus,
-    EvidenceState, FamilyRecommendationAnalysisArtifact, RecommendationStatus,
-    RequiredNextAction,
+    DecisionReason, DecisionStatus, EvidenceState, FamilyRecommendationAnalysisArtifact,
+    RecommendationStatus, RequiredNextAction,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -227,7 +226,9 @@ fn build_report(workspace_root: &Path) -> VerificationReport {
     }
 }
 
-fn load_recommendation_analysis(workspace_root: &Path) -> ArtifactLoad<FamilyRecommendationAnalysisArtifact> {
+fn load_recommendation_analysis(
+    workspace_root: &Path,
+) -> ArtifactLoad<FamilyRecommendationAnalysisArtifact> {
     let path = workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -259,7 +260,9 @@ fn load_recommendation_analysis(workspace_root: &Path) -> ArtifactLoad<FamilyRec
     }
 }
 
-fn load_corpus_program_decision(workspace_root: &Path) -> ArtifactLoad<CorpusProgramDecisionArtifact> {
+fn load_corpus_program_decision(
+    workspace_root: &Path,
+) -> ArtifactLoad<CorpusProgramDecisionArtifact> {
     let path = workspace_root.join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -315,7 +318,10 @@ fn decision_validation_result(
     match decision_load {
         ArtifactLoad::Missing(path) => CheckResult::fail(
             FailureReason::MissingCorpusProgramDecisionArtifact,
-            format!("missing corpus program decision artifact at `{}`", path.display()),
+            format!(
+                "missing corpus program decision artifact at `{}`",
+                path.display()
+            ),
         ),
         ArtifactLoad::InvalidJson { path, error } => CheckResult::fail(
             FailureReason::InvalidArtifactJson,
@@ -330,7 +336,10 @@ fn decision_validation_result(
                 Ok(_) => CheckResult::pass(),
                 Err(error) => CheckResult::fail(
                     FailureReason::InvalidArtifactContract,
-                    format!("artifact contract failed for `{}`: {error}", FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH),
+                    format!(
+                        "artifact contract failed for `{}`: {error}",
+                        FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH
+                    ),
                 ),
             },
             _ => CheckResult::fail_from_reasons(
@@ -427,7 +436,9 @@ fn derived_decision_parity_result(
         Err(error) => {
             return CheckResult::fail(
                 FailureReason::InvalidArtifactContract,
-                format!("failed to derive decision contract from validated analysis artifact: {error}"),
+                format!(
+                    "failed to derive decision contract from validated analysis artifact: {error}"
+                ),
             );
         }
     };
@@ -457,7 +468,12 @@ fn derived_decision_parity_result(
         &expected.required_next_action,
         &decision.required_next_action,
     );
-    push_mismatch(&mut mismatches, "summary", &expected.summary, &decision.summary);
+    push_mismatch(
+        &mut mismatches,
+        "summary",
+        &expected.summary,
+        &decision.summary,
+    );
 
     if mismatches.is_empty() {
         CheckResult::pass()
@@ -565,13 +581,21 @@ fn ready_artifacts<'a>(
     decision_load: &'a ArtifactLoad<CorpusProgramDecisionArtifact>,
     decision_validation: &CheckResult,
     label: &str,
-) -> Result<(&'a FamilyRecommendationAnalysisArtifact, &'a CorpusProgramDecisionArtifact), CheckResult> {
+) -> Result<
+    (
+        &'a FamilyRecommendationAnalysisArtifact,
+        &'a CorpusProgramDecisionArtifact,
+    ),
+    CheckResult,
+> {
     let analysis = match analysis_load {
         ArtifactLoad::Ready(artifact) => artifact,
         _ => {
             return Err(CheckResult::fail_from_reasons(
                 prerequisite_reasons_from_analysis(analysis_load),
-                format!("cannot evaluate {label} because the recommendation analysis artifact is unavailable"),
+                format!(
+                    "cannot evaluate {label} because the recommendation analysis artifact is unavailable"
+                ),
             ));
         }
     };
@@ -597,13 +621,19 @@ fn ready_artifacts<'a>(
         ArtifactLoad::InvalidJson { path, error } => {
             return Err(CheckResult::fail(
                 FailureReason::InvalidArtifactJson,
-                format!("cannot evaluate {label} because `{}` is invalid JSON: {error}", path.display()),
+                format!(
+                    "cannot evaluate {label} because `{}` is invalid JSON: {error}",
+                    path.display()
+                ),
             ));
         }
         ArtifactLoad::InvalidContract { path, error } => {
             return Err(CheckResult::fail(
                 FailureReason::InvalidArtifactContract,
-                format!("cannot evaluate {label} because `{}` failed contract validation: {error}", path.display()),
+                format!(
+                    "cannot evaluate {label} because `{}` failed contract validation: {error}",
+                    path.display()
+                ),
             ));
         }
     };
@@ -661,6 +691,7 @@ mod tests {
         CheckStatus, FailureReason, OverallVerdict, VerificationReport, build_report,
         run_with_writer,
     };
+    use crate::XtaskError;
     use crate::family::coverage::render_json_bytes;
     use crate::family::decision_kernel::{
         corpus_program_basis_snapshot, derive_corpus_program_decision_contract,
@@ -678,10 +709,9 @@ mod tests {
         RecommendationConfidence, RecommendationDelta, RecommendationDifficulty,
         RecommendationLeverage, RecommendationStatus,
     };
-    use crate::XtaskError;
+    use spec_core::semantic_review::UnsupportedFunctionReasonCode;
     use std::fs;
     use std::path::Path;
-    use spec_core::semantic_review::UnsupportedFunctionReasonCode;
     use tempfile::TempDir;
 
     #[test]
@@ -699,8 +729,14 @@ mod tests {
             report.checks.corpus_program_decision_validation.status,
             CheckStatus::Pass
         );
-        assert_eq!(report.checks.basis_snapshot_parity.status, CheckStatus::Pass);
-        assert_eq!(report.checks.derived_decision_parity.status, CheckStatus::Pass);
+        assert_eq!(
+            report.checks.basis_snapshot_parity.status,
+            CheckStatus::Pass
+        );
+        assert_eq!(
+            report.checks.derived_decision_parity.status,
+            CheckStatus::Pass
+        );
         assert_eq!(
             report.checks.frozen_helper_surface_floor.status,
             CheckStatus::Pass
@@ -710,53 +746,75 @@ mod tests {
     #[test]
     fn verifier_reports_missing_recommendation_artifact() {
         let workspace = seeded_workspace();
-        fs::remove_file(workspace.path().join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH)).unwrap();
+        fs::remove_file(
+            workspace
+                .path()
+                .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),
+        )
+        .unwrap();
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::MissingRecommendationAnalysisArtifact));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::MissingRecommendationAnalysisArtifact)
+        );
     }
 
     #[test]
     fn verifier_reports_missing_decision_artifact() {
         let workspace = seeded_workspace();
-        fs::remove_file(workspace.path().join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH)).unwrap();
+        fs::remove_file(
+            workspace
+                .path()
+                .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH),
+        )
+        .unwrap();
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::MissingCorpusProgramDecisionArtifact));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::MissingCorpusProgramDecisionArtifact)
+        );
     }
 
     #[test]
     fn verifier_reports_invalid_json_for_analysis_artifact() {
         let workspace = seeded_workspace();
         fs::write(
-            workspace.path().join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),
+            workspace
+                .path()
+                .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),
             b"{",
         )
         .unwrap();
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::InvalidArtifactJson));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::InvalidArtifactJson)
+        );
     }
 
     #[test]
     fn verifier_reports_invalid_json_for_decision_artifact() {
         let workspace = seeded_workspace();
         fs::write(
-            workspace.path().join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH),
+            workspace
+                .path()
+                .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH),
             b"{",
         )
         .unwrap();
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::InvalidArtifactJson));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::InvalidArtifactJson)
+        );
     }
 
     #[test]
@@ -767,9 +825,11 @@ mod tests {
         write_analysis_only(workspace.path(), &analysis);
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::InvalidArtifactContract));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::InvalidArtifactContract)
+        );
     }
 
     #[test]
@@ -780,9 +840,11 @@ mod tests {
         write_decision(workspace.path(), &decision);
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::BasisSnapshotMismatch));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::BasisSnapshotMismatch)
+        );
     }
 
     #[test]
@@ -793,9 +855,11 @@ mod tests {
         write_decision(workspace.path(), &decision);
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::DerivedDecisionMismatch));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::DerivedDecisionMismatch)
+        );
     }
 
     #[test]
@@ -808,9 +872,11 @@ mod tests {
         write_analysis_and_decision(workspace.path(), &analysis, &decision);
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::FrozenHelperSurfaceEvidenceNotCurrent));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::FrozenHelperSurfaceEvidenceNotCurrent)
+        );
     }
 
     #[test]
@@ -822,9 +888,11 @@ mod tests {
         write_decision(workspace.path(), &decision);
 
         let report = failing_report(workspace.path());
-        assert!(report
-            .failure_reasons
-            .contains(&FailureReason::FrozenHelperSurfaceFloorMismatch));
+        assert!(
+            report
+                .failure_reasons
+                .contains(&FailureReason::FrozenHelperSurfaceFloorMismatch)
+        );
     }
 
     #[test]
@@ -855,7 +923,9 @@ mod tests {
         let analysis = fixture_analysis_artifact();
         let analysis_bytes = render_json_bytes(&analysis).unwrap();
         fs::write(
-            temp_dir.path().join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),
+            temp_dir
+                .path()
+                .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),
             &analysis_bytes,
         )
         .unwrap();
@@ -914,14 +984,20 @@ mod tests {
             decision_summary: DecisionSummary {
                 decision_status: crate::family::promotion_artifacts::DecisionStatus::NotRecommended,
                 top_candidate_id: Some("fixture/helper_surface".to_string()),
-                open_blockers: vec![crate::family::promotion_artifacts::DecisionReason::HelperSurfaceNotPromotable],
-                warnings: vec![crate::family::promotion_artifacts::DecisionReason::RegressionWarning],
+                open_blockers: vec![
+                    crate::family::promotion_artifacts::DecisionReason::HelperSurfaceNotPromotable,
+                ],
+                warnings: vec![
+                    crate::family::promotion_artifacts::DecisionReason::RegressionWarning,
+                ],
                 summary: "fixture".to_string(),
             },
             evidence_summary: EvidenceSummary {
                 missing_evidence: Vec::new(),
                 stale_evidence: Vec::new(),
-                warnings: vec![crate::family::promotion_artifacts::DecisionReason::RegressionWarning],
+                warnings: vec![
+                    crate::family::promotion_artifacts::DecisionReason::RegressionWarning,
+                ],
                 summary: "fixture".to_string(),
             },
             delta_from_previous: RecommendationDelta::no_previous_artifact(),
@@ -929,19 +1005,18 @@ mod tests {
     }
 
     fn read_analysis(workspace_root: &Path) -> FamilyRecommendationAnalysisArtifact {
-        let bytes = fs::read(workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH)).unwrap();
+        let bytes =
+            fs::read(workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH)).unwrap();
         serde_json::from_slice(&bytes).unwrap()
     }
 
     fn read_decision(workspace_root: &Path) -> CorpusProgramDecisionArtifact {
-        let bytes = fs::read(workspace_root.join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH)).unwrap();
+        let bytes =
+            fs::read(workspace_root.join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH)).unwrap();
         serde_json::from_slice(&bytes).unwrap()
     }
 
-    fn write_analysis_only(
-        workspace_root: &Path,
-        analysis: &FamilyRecommendationAnalysisArtifact,
-    ) {
+    fn write_analysis_only(workspace_root: &Path, analysis: &FamilyRecommendationAnalysisArtifact) {
         let bytes = render_json_bytes(analysis).unwrap();
         fs::write(
             workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),

@@ -2,8 +2,7 @@ mod family;
 
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use family::{
-    certify, coverage, inventory, promotion_artifacts, prove, recommend, scaffold, smoke,
-    verify,
+    certify, coverage, inventory, promotion_artifacts, prove, recommend, scaffold, smoke, verify,
 };
 use std::ffi::OsString;
 use std::path::Path;
