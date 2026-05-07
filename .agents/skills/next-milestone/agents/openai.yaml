@@ -1,0 +1,4 @@
+interface:
+  display_name: "Next Milestone"
+  short_description: "Choose the next milestone from repo signals."
+  default_prompt: "Use this repo-local skill to determine the next milestone or wedge. Recover context, collect repo signals, score the viable options, and recommend one next move with evidence and exact follow-up commands."

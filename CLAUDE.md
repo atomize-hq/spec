@@ -15,6 +15,7 @@ Key routing rules:
 - Design system, brand → invoke design-consultation
 - Visual audit, design polish → invoke design-review
 - Architecture review → invoke plan-eng-review
+- "What should be next", "what next", next milestone, next wedge → invoke next-milestone
 
 ## M20 semantic review note
 
