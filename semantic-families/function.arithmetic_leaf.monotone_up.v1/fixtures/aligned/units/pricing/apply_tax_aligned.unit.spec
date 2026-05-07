@@ -20,6 +20,11 @@ body:
         let taxed = subtotal + subtotal * rate;
         round(taxed)
     }
+  typescript: |
+    {
+        const taxed = subtotal + subtotal * rate;
+        return round(taxed);
+    }
 local_tests:
   - id: apply_tax_aligned_happy_path
     expect: apply_tax_aligned(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)

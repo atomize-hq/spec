@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.14.0 - 2026-05-07
+
+### Added
+
+- **Bounded second-language proof surfaces for promoted families** — monotone-up and wrapper-pipeline now ship committed packet truth, starter fixtures, and Rust plus TypeScript prove/certify coverage without claiming full second-language backend support.
+- **Family-analysis decision kernel and verifier contracts** — `xtask` now derives bounded corpus-program decisions, verifies basis and decision parity, freezes helper-surface durable-hold tuples, and ships `family verify-decision-contract` as a standing truth wall.
+- **Repo-local next-milestone operator tooling** — the repo now includes a `next-milestone` skill, live signal collector, and review rubric for choosing the next honest milestone from checkpoints, authority plans, and current family-analysis outputs.
+
+### Changed
+
+- **Read-side semantic review now routes through explicit backend-execution and portability layers** — passports, status/export projection, escape-hatch gates, and semantic review handling share bounded backend and portability surfaces instead of re-deriving lowering assumptions in each consumer.
+- **Recommendation artifacts are now maintainer-facing and decision-explicit** — analysis outputs now carry durable `recommended`, `blocked_for_now`, and `not_recommended` verdicts, blocker evidence, normalized proof fingerprints, and follow-on action contracts for corpus-program decisions.
+- **CI now gates promoted-family proof walls directly** — the main workflow adds monotone-up and wrapper-pipeline pilot jobs, and the repo docs/examples now teach the prove/certify loop as part of the maintained product surface.
+- **Planning docs now freeze the shared-core follow-on boundary explicitly** — the current authority plan, orchestration plan, and semantic-family guides distinguish core semantic-review product work from family-analysis servant work and pin the exact trigger table for any later shared-core extraction.
+
+### Fixed
+
+- **Canonical example truth stays aligned across promoted-family and portability changes** — checked-in passports, regression fixtures, semantic-family packets, and cross-library examples now reflect the landed monotone-up, wrapper-pipeline, and preserve-mode portability contracts.
+- **Helper-surface follow-on helpers no longer leave release CI red under `clippy -D warnings`** — dead runtime predicates were trimmed to the test-only surface so the workspace passes the same warning gate the release workflow enforces.
+
 ## 0.13.1 - 2026-04-29
 
 ### Added

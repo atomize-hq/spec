@@ -26,7 +26,7 @@ use spec_core::molecule_evidence::{
 };
 use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
-    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
+    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker, PassportMarkerId,
     PassportProjectionContext, PassportTestResult, apply_projected_passport_truth,
     build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
     compute_contract_hash, ensure_gitignore_entry, project_passport_truth_with_context,
@@ -38,6 +38,9 @@ use spec_core::pipeline::{
 };
 use spec_core::plan::{
     PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
+};
+use spec_core::portability::{
+    PortabilityMarkerKind, PortabilityProjectionContext, project_portability_truth,
 };
 use spec_core::semantic_review::{
     SemanticHealthEffect, SemanticProjectionMode, SemanticReview, SemanticReviewContext,
@@ -435,7 +438,7 @@ impl Command {
                     &context,
                 )
             }
-            Self::Export(args) => export_command(&args.path, args.output.as_deref()),
+            Self::Export(args) => export_command(&args.path, args.output.as_deref(), args.format),
             Self::Plan(args) => match args.command {
                 PlanCommand::Validate(args) => plan_validate_command(&args.path, args.format),
                 PlanCommand::Export(args) => {
@@ -543,6 +546,8 @@ pub struct ExportArgs {
     pub path: PathBuf,
     #[arg(long, help = "Write JSON bundle to FILE instead of stdout")]
     pub output: Option<PathBuf>,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+    pub format: OutputFormat,
 }
 
 #[derive(Args, Debug)]
@@ -859,6 +864,27 @@ fn apply_semantic_review_to_health(
             health
         }
     }
+}
+
+fn passport_markers_from_portability(
+    portability: Option<&spec_core::portability::PortabilityProjection>,
+) -> Option<Vec<PassportMarker>> {
+    let markers = portability?
+        .markers
+        .iter()
+        .map(|marker| PassportMarker {
+            id: match marker.kind {
+                PortabilityMarkerKind::DomainLowering
+                | PortabilityMarkerKind::ProofHelperLowering => {
+                    PassportMarkerId::MethodLoweringRustBody
+                }
+                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
+            },
+            path: marker.path.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    (!markers.is_empty()).then_some(markers)
 }
 
 fn freshness_stale_reason(freshness: Option<&PassportFreshness>) -> Option<String> {
@@ -1275,6 +1301,11 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             specs_by_id: &specs_by_id,
             semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
+        let portability_context = PortabilityProjectionContext {
+            molecule_tests: &molecule_report.tests,
+            molecule_evidence_by_id: &molecule_evidence_by_id,
+            specs_by_id: &specs_by_id,
+        };
 
         let mut units = Vec::with_capacity(validation_specs.root_specs.len());
         for spec in &validation_specs.root_specs {
@@ -1298,9 +1329,11 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 &semantic_review_context,
             );
             let freshness = projected_truth.freshness.clone();
-            let markers = projected_truth.markers.clone();
-            let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
             let semantic_review = projected_truth.semantic_review.clone();
+            let portability =
+                project_portability_truth(spec, passport.as_ref(), &portability_context);
+            let markers = passport_markers_from_portability(portability.as_ref());
+            let escape_hatch_gate = portability.and_then(|projection| projection.escape_hatch_gate);
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
@@ -1469,7 +1502,11 @@ fn suppress_cross_library_dep_not_found_for_failed_imports(
         .collect()
 }
 
-fn export_command(path: &Path, output: Option<&Path>) -> Result<()> {
+fn export_command(path: &Path, output: Option<&Path>, format: OutputFormat) -> Result<()> {
+    if format != OutputFormat::Json {
+        bail!("spec export only supports --format json");
+    }
+
     let context = load_workspace_context(path)?;
     let mut validation_specs = collect_validation_specs(path, &context)?;
     let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
@@ -5002,6 +5039,7 @@ mod tests {
                 imports: Vec::new(),
                 body: spec_core::types::Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: (0..tests_per_spec)
                     .map(|test_index| spec_core::types::LocalTest {
@@ -5653,6 +5691,7 @@ body:
                 imports: vec![],
                 body: spec_core::types::Body {
                     rust: "{ subtotal }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![spec_core::types::LocalTest {
                     id: "basic".to_string(),

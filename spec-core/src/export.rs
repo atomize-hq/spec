@@ -15,10 +15,13 @@ use crate::AUTHORED_SPEC_VERSION;
 use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
 use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
 use crate::passport::{
-    ArtifactProvenance, Passport, PassportProjectionContext, apply_projected_passport_truth,
-    passport_path_for, project_passport_truth_with_context,
+    ArtifactProvenance, Passport, PassportMarker, PassportMarkerId, PassportProjectionContext,
+    apply_projected_passport_truth, passport_path_for, project_passport_truth_with_context,
 };
 use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
+use crate::portability::{
+    PortabilityMarkerKind, PortabilityProjectionContext, project_portability_truth,
+};
 use crate::semantic_review::{SemanticProjectionMode, SemanticReviewContext};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
@@ -201,6 +204,11 @@ fn enrich_passports_for_export(
         specs_by_id,
         semantic_projection_mode: SemanticProjectionMode::Preserve,
     };
+    let portability_context = PortabilityProjectionContext {
+        molecule_tests,
+        molecule_evidence_by_id,
+        specs_by_id,
+    };
     passports
         .into_iter()
         .map(|mut passport| {
@@ -212,10 +220,42 @@ fn enrich_passports_for_export(
                     &semantic_review_context,
                 );
                 apply_projected_passport_truth(&mut passport, projected_truth);
+                apply_projected_portability_truth(&mut passport, spec, &portability_context);
             }
             passport
         })
         .collect()
+}
+
+fn apply_projected_portability_truth(
+    passport: &mut Passport,
+    spec: &LoadedSpec,
+    context: &PortabilityProjectionContext<'_>,
+) {
+    let portability = project_portability_truth(spec, Some(passport), context);
+    passport.markers = portability_markers_for_passport(portability.as_ref());
+    passport.escape_hatch_gate = portability.and_then(|projection| projection.escape_hatch_gate);
+}
+
+fn portability_markers_for_passport(
+    portability: Option<&crate::portability::PortabilityProjection>,
+) -> Option<Vec<PassportMarker>> {
+    let markers = portability?
+        .markers
+        .iter()
+        .map(|marker| PassportMarker {
+            id: match marker.kind {
+                PortabilityMarkerKind::DomainLowering
+                | PortabilityMarkerKind::ProofHelperLowering => {
+                    PassportMarkerId::MethodLoweringRustBody
+                }
+                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
+            },
+            path: marker.path.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    (!markers.is_empty()).then_some(markers)
 }
 
 fn load_molecule_evidence_for_tests(
@@ -296,6 +336,11 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
         specs_by_id: &specs_by_id,
         semantic_projection_mode: SemanticProjectionMode::Preserve,
     };
+    let portability_context = PortabilityProjectionContext {
+        molecule_tests: empty_molecule_tests,
+        molecule_evidence_by_id: &empty_molecule_evidence,
+        specs_by_id: &specs_by_id,
+    };
     let passports = passports
         .into_iter()
         .map(|mut passport| {
@@ -307,6 +352,7 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
                     &semantic_review_context,
                 );
                 apply_projected_passport_truth(&mut passport, projected_truth);
+                apply_projected_portability_truth(&mut passport, spec, &portability_context);
             }
             passport
         })
@@ -441,6 +487,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: "{ value }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "basic".to_string(),
@@ -621,6 +668,7 @@ mod tests {
     round((subtotal - subtotal * rate).max(Decimal::ZERO))
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -666,6 +714,7 @@ mod tests {
     round(subtotal + subtotal * rate)
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -724,6 +773,7 @@ mod tests {
     apply_tax(discounted, tax_rate)
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -905,6 +955,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: Some("0.3.0".to_string()),
             },
@@ -950,6 +1001,7 @@ mod tests {
                 imports: imports.map(|values| values.into_iter().map(str::to_string).collect()),
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },
@@ -1009,6 +1061,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },

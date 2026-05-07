@@ -1,4 +1,3 @@
-use crate::XtaskError;
 use crate::family::harness::{
     FamilyHarness, GateResults, registered_family_harnesses, require_family_harness_in,
     validate_suite_ownership,
@@ -10,10 +9,15 @@ use crate::family::report::{
     ArtifactKind, CertificationReport, CommandRunner, SystemRunner, collect_fixture_digests,
     failed_suite_names, prove_artifact_path, run_suite, set_gates, set_overall, write_report,
 };
+use crate::{FamilyTargetLanguage, XtaskError};
 use std::path::Path;
 
-pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
-    run_with_runner(workspace_root, raw_family, &SystemRunner)
+pub fn run(
+    workspace_root: &Path,
+    raw_family: &str,
+    target_language: FamilyTargetLanguage,
+) -> Result<(), XtaskError> {
+    run_with_runner(workspace_root, raw_family, target_language, &SystemRunner)
 }
 
 #[derive(Debug, Clone)]
@@ -46,9 +50,10 @@ impl ProveExecution {
 pub(crate) fn run_with_runner<R: CommandRunner>(
     workspace_root: &Path,
     raw_family: &str,
+    target_language: FamilyTargetLanguage,
     runner: &R,
 ) -> Result<(), XtaskError> {
-    let execution = execute(workspace_root, raw_family, runner)?;
+    let execution = execute(workspace_root, raw_family, target_language, runner)?;
     write_report(&prove_artifact_path(&execution.paths), &execution.report)?;
     execution.finish_for_prove()
 }
@@ -56,12 +61,14 @@ pub(crate) fn run_with_runner<R: CommandRunner>(
 pub(crate) fn execute<R: CommandRunner>(
     workspace_root: &Path,
     raw_family: &str,
+    target_language: FamilyTargetLanguage,
     runner: &R,
 ) -> Result<ProveExecution, XtaskError> {
     execute_in(
         registered_family_harnesses(),
         workspace_root,
         raw_family,
+        target_language,
         runner,
     )
 }
@@ -70,12 +77,15 @@ pub(crate) fn execute_in<R: CommandRunner>(
     registry: &[FamilyHarness],
     workspace_root: &Path,
     raw_family: &str,
+    target_language: FamilyTargetLanguage,
     runner: &R,
 ) -> Result<ProveExecution, XtaskError> {
     let family = FamilyId::parse(raw_family)?;
+    validate_target_language(&family, target_language, "family prove")?;
     let harness = *require_family_harness_in(registry, &family, "family prove")?;
     let paths = PacketPaths::new(workspace_root, family.clone());
-    let mut report = crate::family::report::build_report(workspace_root, &family, runner);
+    let mut report =
+        crate::family::report::build_report(workspace_root, &family, target_language, runner);
 
     if let Err(error) = ensure_packet_path_safe(workspace_root, &paths.root) {
         set_gates(&mut report, false, false, false, false);
@@ -188,4 +198,25 @@ pub(crate) fn execute_in<R: CommandRunner>(
         report,
         outcome,
     })
+}
+
+pub(crate) fn validate_target_language(
+    family: &FamilyId,
+    target_language: FamilyTargetLanguage,
+    command: &str,
+) -> Result<(), XtaskError> {
+    match target_language {
+        FamilyTargetLanguage::Rust => Ok(()),
+        FamilyTargetLanguage::Typescript
+            if matches!(
+                family.as_str(),
+                "function.arithmetic_leaf.monotone_up.v1" | "function.wrapper.pipeline.v1"
+            ) =>
+        {
+            Ok(())
+        }
+        FamilyTargetLanguage::Typescript => Err(XtaskError::InvalidInput(format!(
+            "{command} supports --target-language typescript only for function.arithmetic_leaf.monotone_up.v1 and function.wrapper.pipeline.v1"
+        ))),
+    }
 }

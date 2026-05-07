@@ -5,10 +5,14 @@
 //! `.unit.spec` source file. Passports are derived artifacts (gitignored) and
 //! are written atomically only after all generation succeeds.
 
-use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_escape_hatch_gate};
+use crate::escape_hatch::EscapeHatchGate;
 use crate::generator::write_generated_file;
 use crate::graph::top_level_deps;
 use crate::molecule_evidence::MoleculeEvidence;
+use crate::portability::{
+    PortabilityMarker, PortabilityMarkerKind, PortabilityProjection, PortabilityProjectionContext,
+    collect_portability_markers, compute_portability_backend_digest, project_portability_truth,
+};
 use crate::semantic_review::SemanticProjectionMode;
 use crate::semantic_review::{
     SemanticReview, SemanticReviewContext, project_semantic_review_with_context,
@@ -417,14 +421,6 @@ struct FunctionAuthoredTruthSurface<'a> {
     body_rust: &'a str,
 }
 
-#[derive(Serialize)]
-struct SeamBackendExecutionSurface<'a> {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    method_lowering_rust_bodies: Vec<&'a str>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    rust_derives: Vec<&'a str>,
-}
-
 /// Compute SHA-256 of the unit's top-level truth surface.
 ///
 /// Function units hash only the legacy top-level `contract` surface.
@@ -498,87 +494,12 @@ pub fn compute_authored_truth_digest(spec: &LoadedSpec) -> Option<String> {
 
 /// Compute the backend-only execution digest for seam escape hatches.
 pub fn compute_backend_execution_digest(spec: &LoadedSpec) -> Option<String> {
-    let seam_kind = matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum));
-    if !seam_kind {
-        return None;
-    }
-
-    let method_lowering_rust_bodies: Vec<&str> = spec
-        .spec
-        .extensions
-        .methods
-        .iter()
-        .filter_map(|method| {
-            method
-                .lowering
-                .as_ref()
-                .and_then(|lowering| lowering.rust.as_ref())
-                .map(|rust| rust.body.as_str())
-        })
-        .collect();
-    let rust_derives: Vec<&str> = spec
-        .spec
-        .extensions
-        .backends
-        .as_ref()
-        .and_then(|backends| backends.rust.as_ref())
-        .map(|rust| rust.derives.iter().map(String::as_str).collect())
-        .unwrap_or_default();
-
-    if method_lowering_rust_bodies.is_empty() && rust_derives.is_empty() {
-        return None;
-    }
-
-    let json = serde_json::to_string(&SeamBackendExecutionSurface {
-        method_lowering_rust_bodies,
-        rust_derives,
-    })
-    .expect("seam backend-execution serialization cannot fail for well-formed spec");
-    Some(sha256_digest(&json))
+    compute_portability_backend_digest(spec)
 }
 
 /// Compute explicit backend-only markers for seam units.
 pub fn compute_passport_markers(spec: &LoadedSpec) -> Option<Vec<PassportMarker>> {
-    match spec.spec.unit_kind() {
-        Ok(UnitKind::Data | UnitKind::Sum) => {
-            let mut markers = Vec::new();
-            if spec
-                .spec
-                .extensions
-                .backends
-                .as_ref()
-                .and_then(|backends| backends.rust.as_ref())
-                .map(|rust| !rust.derives.is_empty())
-                .unwrap_or(false)
-            {
-                markers.push(PassportMarker {
-                    id: PassportMarkerId::BackendRustDerives,
-                    path: "backends.rust.derives".to_string(),
-                });
-            }
-
-            for method in &spec.spec.extensions.methods {
-                if method
-                    .lowering
-                    .as_ref()
-                    .and_then(|lowering| lowering.rust.as_ref())
-                    .is_some()
-                {
-                    markers.push(PassportMarker {
-                        id: PassportMarkerId::MethodLoweringRustBody,
-                        path: format!("methods.{}.lowering.rust.body", method.id),
-                    });
-                }
-            }
-
-            if markers.is_empty() {
-                None
-            } else {
-                Some(markers)
-            }
-        }
-        _ => None,
-    }
+    passport_markers_from_portability_markers(collect_portability_markers(spec))
 }
 
 /// Default proof-coverage hook for seam-localized review metadata.
@@ -668,18 +589,23 @@ pub fn project_passport_truth_with_context(
     context: &PassportProjectionContext<'_>,
     semantic_review_context: &SemanticReviewContext<'_>,
 ) -> ProjectedPassportTruth {
+    let portability_context = PortabilityProjectionContext {
+        molecule_tests: context.molecule_tests,
+        molecule_evidence_by_id: context.molecule_evidence_by_id,
+        specs_by_id: context.specs_by_id,
+    };
+    let portability_projection = project_portability_truth(spec, passport, &portability_context);
     let freshness = resolve_passport_freshness(spec, passport);
     ProjectedPassportTruth {
         freshness: freshness.clone(),
-        markers: compute_passport_markers(spec),
-        proof_coverage: project_passport_proof_coverage(spec, passport, context),
-        escape_hatch_gate: evaluate_escape_hatch_gate(
+        markers: projected_passport_markers(portability_projection.as_ref())
+            .or_else(|| compute_passport_markers(spec)),
+        proof_coverage: project_passport_proof_coverage_from_portability(
             spec,
-            passport,
-            context.molecule_tests,
-            context.molecule_evidence_by_id,
-            context.specs_by_id,
+            portability_projection.as_ref(),
         ),
+        escape_hatch_gate: portability_projection
+            .and_then(|projection| projection.escape_hatch_gate),
         semantic_review: project_passport_semantic_review_with_context(
             spec,
             passport.and_then(|passport| passport.semantic_review.as_ref()),
@@ -854,10 +780,54 @@ fn passport_freshness_anchor_for_write(
         .flatten()
 }
 
+#[cfg(test)]
 fn project_passport_proof_coverage(
     spec: &LoadedSpec,
     passport: Option<&Passport>,
     context: &PassportProjectionContext<'_>,
+) -> Option<Vec<PassportProofCoverage>> {
+    let portability_context = PortabilityProjectionContext {
+        molecule_tests: context.molecule_tests,
+        molecule_evidence_by_id: context.molecule_evidence_by_id,
+        specs_by_id: context.specs_by_id,
+    };
+    let portability_projection = project_portability_truth(spec, passport, &portability_context);
+    project_passport_proof_coverage_from_portability(spec, portability_projection.as_ref())
+}
+
+fn projected_passport_markers(
+    portability_projection: Option<&PortabilityProjection>,
+) -> Option<Vec<PassportMarker>> {
+    passport_markers_from_portability_markers(
+        portability_projection
+            .map(|projection| projection.markers.clone())
+            .unwrap_or_default(),
+    )
+}
+
+fn passport_markers_from_portability_markers(
+    markers: Vec<PortabilityMarker>,
+) -> Option<Vec<PassportMarker>> {
+    let markers = markers
+        .into_iter()
+        .map(|marker| PassportMarker {
+            id: match marker.kind {
+                PortabilityMarkerKind::DomainLowering
+                | PortabilityMarkerKind::ProofHelperLowering => {
+                    PassportMarkerId::MethodLoweringRustBody
+                }
+                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
+            },
+            path: marker.path,
+        })
+        .collect::<Vec<_>>();
+
+    (!markers.is_empty()).then_some(markers)
+}
+
+fn project_passport_proof_coverage_from_portability(
+    spec: &LoadedSpec,
+    portability_projection: Option<&PortabilityProjection>,
 ) -> Option<Vec<PassportProofCoverage>> {
     let definitions = canonical_proof_coverage_definitions(spec)?;
     let authored_local_test_ids = spec
@@ -866,13 +836,14 @@ fn project_passport_proof_coverage(
         .iter()
         .map(|test| test.id.as_str())
         .collect::<std::collections::BTreeSet<_>>();
-    let current_surfaces = current_proof_surfaces(
-        spec,
-        passport,
-        context.molecule_tests,
-        context.molecule_evidence_by_id,
-        context.specs_by_id,
-    );
+    let (atom, molecule) = portability_projection
+        .map(|projection| {
+            (
+                projection.proof_surfaces.atom,
+                projection.proof_surfaces.molecule,
+            )
+        })
+        .unwrap_or_default();
 
     Some(
         definitions
@@ -882,8 +853,8 @@ fn project_passport_proof_coverage(
                 surfaces: normalize_proof_surfaces(branch_proof_surfaces(
                     definition,
                     &authored_local_test_ids,
-                    current_surfaces.atom,
-                    current_surfaces.molecule,
+                    atom,
+                    molecule,
                 )),
             })
             .collect(),
@@ -1146,6 +1117,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: "{ 42 }".to_string(),
+                    typescript: None,
                 },
                 local_tests: local_tests
                     .into_iter()
@@ -1317,6 +1289,7 @@ mod tests {
     round((subtotal - subtotal * rate).max(Decimal::ZERO))
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -1356,6 +1329,7 @@ mod tests {
     round(subtotal + subtotal * rate)
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -1404,6 +1378,7 @@ mod tests {
     apply_tax(discounted, tax_rate)
 }"#
                     .to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -1565,6 +1540,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: Some("0.3.0".to_string()),
             },

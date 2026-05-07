@@ -177,3 +177,11 @@
 - [ ] **Run a true non-author maintainer promotion dry run** — M23 planning now treats maintainer legibility as a first-class outcome, but the claim is only fully retired once someone other than the original author follows `family new` → packet authoring → prove/certify without hidden context. Do this only after the narrower starter-scaffold smoke gate is explicit and green so the dry run is testing authoring legibility rather than an ambiguous packet diff.
 
 - [ ] **Reduce packet authoring ceremony only after two real leaf promotions exist** — If M23 and M24 both land cleanly, evaluate whether `candidate.md` scaffolding, starter fixtures, or packet metadata can be made lighter without weakening truthfulness. Do not pre-optimize packet ergonomics before the second leaf-family proof exists.
+
+## Post-M37 decision-kernel follow-ups
+
+- [ ] **Generalized multi-wedge decision layer** — trigger: add a second durable non-promotable wedge whose decision path cannot be expressed in `decision_kernel.rs` without branching beyond the current helper-surface contract.
+
+- [ ] **Cross-crate family-analysis shared core** — trigger: at least two non-`recommend.rs` / non-`promotion_artifacts.rs` consumers inside `xtask/src/family/` need the same kernel logic, or a non-`xtask` crate needs the same decision semantics.
+
+- [ ] **Public semantic fingerprint fields** — trigger: an external consumer needs first-class semantic fingerprint fields in emitted JSON, not just internal normalized proof gating.

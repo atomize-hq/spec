@@ -1,7 +1,9 @@
 mod family;
 
-use clap::{Args, Parser, Subcommand};
-use family::{certify, prove, scaffold, smoke};
+use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use family::{
+    certify, coverage, inventory, promotion_artifacts, prove, recommend, scaffold, smoke, verify,
+};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
@@ -76,10 +78,89 @@ struct FamilyArgs {
 
 #[derive(Debug, Subcommand)]
 enum FamilyCommand {
-    New { family: String },
-    Smoke { family: String },
-    Prove { family: String },
-    Certify { family: String },
+    New {
+        family: String,
+    },
+    Inventory {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+    Coverage {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+    Recommend {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+    CorpusDecision {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+    RefreshPromotionRecommendation {
+        family: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
+    },
+    EmitPromotionExecution {
+        family: String,
+        run_id: String,
+        recommendation_path: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
+        #[arg(long)]
+        diff_base: String,
+    },
+    EmitPromotionBlocker {
+        family: String,
+        run_id: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
+        #[arg(long, value_enum)]
+        blocking_step: promotion_artifacts::BlockingStep,
+        #[arg(long, value_enum)]
+        blocker_kind: promotion_artifacts::BlockerKind,
+        #[arg(long)]
+        summary: String,
+        #[arg(long)]
+        required_human_action: String,
+        #[arg(long = "safe-next-action")]
+        safe_next_actions: Vec<String>,
+        #[arg(long)]
+        evidence_command: Option<String>,
+        #[arg(long)]
+        evidence_exit_code: Option<i32>,
+        #[arg(long)]
+        evidence_path: Option<String>,
+        #[arg(long)]
+        evidence_note: String,
+    },
+    ValidateArtifact {
+        path: String,
+    },
+    Smoke {
+        family: String,
+    },
+    Prove {
+        family: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
+    },
+    Certify {
+        family: String,
+        #[arg(long, value_enum, default_value_t = FamilyTargetLanguage::Rust)]
+        target_language: FamilyTargetLanguage,
+    },
+    VerifyDecisionContract {
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum FamilyTargetLanguage {
+    Rust,
+    Typescript,
 }
 
 pub fn run() -> i32 {
@@ -114,15 +195,94 @@ where
     I: IntoIterator<Item = S>,
     S: Into<OsString> + Clone,
 {
-    let cli =
-        Cli::try_parse_from(args).map_err(|error| XtaskError::InvalidInput(error.to_string()))?;
+    let cli = match Cli::try_parse_from(args) {
+        Ok(cli) => cli,
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            print!("{error}");
+            return Ok(());
+        }
+        Err(error) => return Err(XtaskError::InvalidInput(error.to_string())),
+    };
 
     match cli.command {
         Command::Family(args) => match args.command {
             FamilyCommand::New { family } => scaffold::run(workspace_root, &family),
+            FamilyCommand::Inventory { format } => inventory::run(workspace_root, &format),
+            FamilyCommand::Coverage { format } => coverage::run(workspace_root, &format),
+            FamilyCommand::Recommend { format } => recommend::run(workspace_root, &format),
+            FamilyCommand::CorpusDecision { format } => {
+                recommend::run_corpus_decision(workspace_root, &format)
+            }
+            FamilyCommand::RefreshPromotionRecommendation {
+                family,
+                target_language,
+            } => promotion_artifacts::run_refresh_recommendation(
+                workspace_root,
+                &family,
+                target_language,
+            ),
+            FamilyCommand::EmitPromotionExecution {
+                family,
+                run_id,
+                recommendation_path,
+                target_language,
+                diff_base,
+            } => promotion_artifacts::run_emit_promotion_execution(
+                workspace_root,
+                &family,
+                &run_id,
+                &recommendation_path,
+                target_language,
+                &diff_base,
+            ),
+            FamilyCommand::EmitPromotionBlocker {
+                family,
+                run_id,
+                target_language,
+                blocking_step,
+                blocker_kind,
+                summary,
+                required_human_action,
+                safe_next_actions,
+                evidence_command,
+                evidence_exit_code,
+                evidence_path,
+                evidence_note,
+            } => promotion_artifacts::run_emit_promotion_blocker(
+                workspace_root,
+                &family,
+                &run_id,
+                target_language,
+                blocking_step,
+                blocker_kind,
+                &summary,
+                &required_human_action,
+                &safe_next_actions,
+                evidence_command.as_deref(),
+                evidence_exit_code,
+                evidence_path.as_deref(),
+                &evidence_note,
+            ),
+            FamilyCommand::ValidateArtifact { path } => {
+                promotion_artifacts::run_validate_artifact(workspace_root, &path)
+            }
             FamilyCommand::Smoke { family } => smoke::run(workspace_root, &family),
-            FamilyCommand::Prove { family } => prove::run(workspace_root, &family),
-            FamilyCommand::Certify { family } => certify::run(workspace_root, &family),
+            FamilyCommand::Prove {
+                family,
+                target_language,
+            } => prove::run(workspace_root, &family, target_language),
+            FamilyCommand::Certify {
+                family,
+                target_language,
+            } => certify::run(workspace_root, &family, target_language),
+            FamilyCommand::VerifyDecisionContract { format } => {
+                verify::run(workspace_root, &format)
+            }
         },
     }
 }
@@ -131,7 +291,7 @@ where
 mod tests {
     use super::*;
     use crate::family::{
-        certify,
+        certify, decision_kernel,
         harness::{
             CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
             CHAIN3_SUITE_SLUG, FamilyHarness, LockedManifestArgs, LockedManifestRouting,
@@ -141,15 +301,38 @@ mod tests {
             MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
             MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
             ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
-            TERMINAL_UNSUPPORTED_CATCH_ALL, family_harness, family_harness_in,
-            registered_harnesses_in_routing_order_from, require_family_harness_in,
-            validate_suite_ownership,
+            TERMINAL_UNSUPPORTED_CATCH_ALL, WRAPPER_PIPELINE_CERTIFY_SUITES,
+            WRAPPER_PIPELINE_MUST_NOT_SHADOW, WRAPPER_PIPELINE_PRECEDENCE,
+            WRAPPER_PIPELINE_PROVE_SUITES, WRAPPER_PIPELINE_SUITE_SLUG, family_harness,
+            family_harness_in, registered_harnesses_in_routing_order_from,
+            require_family_harness_in, validate_suite_ownership,
         },
+        inventory,
         layout::validate_packet_layout,
         manifest::Routing,
         manifest::parse_manifest_file,
-        paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS},
-        prove,
+        paths::{
+            FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,
+            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH, FamilyId, PacketPaths, REQUIRED_BUCKETS,
+            family_recommendation_latest_path,
+        },
+        promotion_artifacts::{
+            ApprovalRecord, ApprovalStatus, BlockerKind, BlockingStep, CandidateStatus,
+            CommandRecord, ConfidenceLevel, CorpusProgramBasisSnapshot,
+            CorpusProgramDecisionAction, CorpusProgramDecisionArtifact,
+            CorpusProgramDecisionBasisCode, CorpusSourceEntry, DecisionReason, DecisionStatus,
+            DecisionSummary, DifficultyTier, EvidenceState, EvidenceSummary,
+            FamilyCoverageArtifact, FamilyCoverageEntry, FamilyRecommendationAnalysisArtifact,
+            FamilyRecommendationArtifact, FunctionCoverageTotals, GateStatus, GateSummary,
+            HoldReason, MachineEvidence, MachineEvidenceKind, NextStepDetail, NextStepStatus,
+            NonFunctionCoverageTotals, PivotTargetClass, PromotionApprovals, PromotionArtifactKind,
+            PromotionBlockerArtifact, PromotionExecutionArtifact, PromotionReadiness,
+            RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RECOMMENDATION_SCHEMA_VERSION, RankedCandidate,
+            RecommendationCandidateEntry, RecommendationConfidence, RecommendationDelta,
+            RecommendationDifficulty, RecommendationLeverage, RecommendationStatus,
+            RequiredNextAction, SourceKind, TargetLanguage, UnsupportedClusterEntry,
+        },
+        prove, recommend,
         report::{
             CERTIFY_ARTIFACT_NAME, CommandOutput, CommandRunner, PROVE_ARTIFACT_NAME, PassFail,
             SuiteDefinition, certification_report_path, run_suite,
@@ -162,7 +345,9 @@ mod tests {
         scaffold, smoke,
     };
     use spec_core::loader::load_file;
-    use spec_core::semantic_review::{SemanticSupportStatus, evaluate_semantic_review};
+    use spec_core::semantic_review::{
+        SemanticSupportStatus, UnsupportedFunctionReasonCode, evaluate_semantic_review,
+    };
     use spec_core::validator::validate_full;
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
@@ -535,6 +720,12 @@ mod tests {
                 unit_path.display()
             );
             assert_candidate_lists_path_once(&candidate, case.path);
+            let authored = fs::read_to_string(&unit_path).unwrap();
+            assert!(
+                authored.contains("  typescript: |"),
+                "missing additive typescript body in `{}`",
+                unit_path.display()
+            );
         }
 
         let aligned = fs::read_to_string(
@@ -549,9 +740,13 @@ mod tests {
         assert!(aligned.contains("deps:\n  - money/round"));
         assert!(aligned.contains("let taxed = subtotal + subtotal * rate;"));
         assert!(aligned.contains("round(taxed)"));
+        assert!(aligned.contains("typescript: |"));
+        assert!(aligned.contains("const taxed = subtotal + subtotal * rate;"));
+        assert!(aligned.contains("return round(taxed);"));
 
         let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec")).unwrap();
         assert!(unsupported.contains("if rate == Decimal::ZERO"));
+        assert!(unsupported.contains("if (rate === Decimal.ZERO)"));
         assert!(!candidate.contains("TODO: replace"));
     }
 
@@ -584,7 +779,7 @@ mod tests {
         let aligned = fs::read_to_string(&aligned_path).unwrap();
         write_string(
             &aligned_path,
-            &aligned.replacen("subtotal: Decimal", "amount: Decimal", 1),
+            &aligned.replacen("typescript: |", "javascript: |", 1),
         );
 
         let failures = smoke::collect_smoke_failures(
@@ -595,8 +790,7 @@ mod tests {
         .unwrap();
 
         assert!(failures.iter().any(|message| {
-            message.contains("scaffolded smoke-contract file")
-                && message.contains("subtotal: Decimal")
+            message.contains("scaffolded smoke-contract file") && message.contains("typescript: |")
         }));
     }
 
@@ -606,6 +800,7 @@ mod tests {
             locked_routing_order_with_terminal(),
             [
                 "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
                 "unsupported.function.v1",
@@ -660,6 +855,180 @@ mod tests {
             ]
         );
         assert_eq!(harness.suite_slug, CHAIN3_SUITE_SLUG);
+    }
+
+    #[test]
+    fn family_new_creates_locked_wrapper_pipeline_scaffold() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.v1";
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family_id);
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains(&format!("precedence = {WRAPPER_PIPELINE_PRECEDENCE}")));
+        assert!(manifest.contains("dep_min = 2"));
+        assert!(manifest.contains("dep_max = 2"));
+        assert!(manifest.contains("requires_supported_function_deps = true"));
+        for family_id in WRAPPER_PIPELINE_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        for bucket in REQUIRED_BUCKETS {
+            for relative_path in expected_wrapper_pipeline_scaffold_unit_paths(bucket) {
+                let unit_path = paths.root.join(&relative_path);
+                assert!(
+                    unit_path.is_file(),
+                    "missing wrapper scaffold `{}`",
+                    unit_path.display()
+                );
+                assert_candidate_lists_path_once(&candidate, &relative_path);
+                let loaded = load_file(&unit_path).unwrap();
+                validate_full(&loaded).unwrap();
+            }
+        }
+
+        let aligned = fs::read_to_string(
+            paths
+                .root
+                .join("fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec"),
+        )
+        .unwrap();
+        assert!(aligned.contains("discount_rate: Decimal"));
+        assert!(aligned.contains("tax_rate: Decimal"));
+        assert!(aligned.contains("pricing_discount_leaf_aligned(subtotal, discount_rate)"));
+        assert!(aligned.contains("pricing_tax_leaf_aligned(discounted, tax_rate)"));
+        assert!(aligned.contains("typescript: |"));
+        assert!(aligned.contains(
+            "const discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);"
+        ));
+        assert!(aligned.contains("return pricing_tax_leaf_aligned(discounted, tax_rate);"));
+
+        let drift = fs::read_to_string(
+            paths
+                .root
+                .join("fixtures/drift/units/pricing/pricing_total_wrapper_drift.unit.spec"),
+        )
+        .unwrap();
+        assert!(drift.contains("let taxed = pricing_tax_leaf_drift(subtotal, tax_rate);"));
+        assert!(drift.contains("pricing_discount_leaf_drift(taxed, discount_rate)"));
+        assert!(drift.contains("const taxed = pricing_tax_leaf_drift(subtotal, tax_rate);"));
+        assert!(drift.contains("return pricing_discount_leaf_drift(taxed, discount_rate);"));
+
+        let under_specified = fs::read_to_string(paths.root.join("fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec")).unwrap();
+        assert!(under_specified.contains("why: todo"));
+        assert!(under_specified.contains("typescript: |"));
+
+        let unsupported = fs::read_to_string(paths.root.join("fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec")).unwrap();
+        assert!(unsupported.contains("tax_rate.max(Decimal::ZERO)"));
+        assert!(unsupported.contains("tax_rate >= Decimal.ZERO ? tax_rate : Decimal.ZERO"));
+        assert!(!candidate.contains("TODO: replace"));
+        assert_eq!(harness.suite_slug, WRAPPER_PIPELINE_SUITE_SLUG);
+    }
+
+    #[test]
+    fn family_smoke_accepts_committed_wrapper_pipeline_scaffold_surfaces() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.v1";
+
+        scaffold::run(temp_dir.path(), family).unwrap();
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "smoke", family]),
+            0
+        );
+    }
+
+    #[test]
+    fn family_smoke_rejects_wrapper_pipeline_aligned_starter_shape_drift() {
+        let committed_root = workspace_root();
+        let scaffolded_root = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.v1").unwrap();
+
+        scaffold::run(committed_root.path(), family.as_str()).unwrap();
+        scaffold::run(scaffolded_root.path(), family.as_str()).unwrap();
+
+        let scaffolded_paths = PacketPaths::new(scaffolded_root.path(), family.clone());
+        let aligned_path = scaffolded_paths
+            .root
+            .join("fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec");
+        let aligned = fs::read_to_string(&aligned_path).unwrap();
+        write_string(
+            &aligned_path,
+            &aligned.replacen("discount_rate: Decimal", "discount: Decimal", 1),
+        );
+
+        let failures = smoke::collect_smoke_failures(
+            &PacketPaths::new(committed_root.path(), family.clone()),
+            &scaffolded_paths,
+            *family_harness(&family).unwrap(),
+        )
+        .unwrap();
+
+        assert!(failures.iter().any(|message| {
+            message.contains("scaffolded smoke-contract file")
+                && message.contains("discount_rate: Decimal")
+        }));
+    }
+
+    #[test]
+    fn wrapper_pipeline_harness_contract_is_locked() {
+        let temp_dir = workspace_root();
+        let family = "function.wrapper.pipeline.v1";
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness =
+            family_harness(&family_id).expect("wrapper pipeline harness should be registered");
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+        assert_eq!(WRAPPER_PIPELINE_PROVE_SUITES.len(), 3);
+        assert_eq!(WRAPPER_PIPELINE_CERTIFY_SUITES.len(), 1);
+        assert_eq!(
+            harness
+                .prove_suites
+                .iter()
+                .map(|definition| definition.gate)
+                .collect::<Vec<_>>(),
+            vec![
+                crate::family::report::GateId::GateA,
+                crate::family::report::GateId::GateC,
+                crate::family::report::GateId::GateB,
+            ]
+        );
+        assert_eq!(harness.shape.dep_min, 2);
+        assert_eq!(harness.shape.dep_max, 2);
+        assert!(harness.shape.requires_supported_function_deps);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_exact_match_paths,
+            ["family.toml"]
+        );
+        assert_eq!(harness.scaffold.smoke.scaffold_file_contracts.len(), 1);
+        assert_eq!(
+            harness.scaffold.smoke.scaffold_file_contracts[0].path,
+            "fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec"
+        );
+        let aligned = fs::read_to_string(
+            temp_dir.path().join(
+                "semantic-families/function.wrapper.pipeline.v1/fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec",
+            ),
+        )
+        .unwrap();
+        assert!(aligned.contains("typescript: |"));
+        assert!(aligned.contains(
+            "const discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);"
+        ));
+        assert!(aligned.contains("return pricing_tax_leaf_aligned(discounted, tax_rate);"));
+        assert_eq!(harness.suite_slug, WRAPPER_PIPELINE_SUITE_SLUG);
     }
 
     #[test]
@@ -738,6 +1107,16 @@ mod tests {
         assert_eq!(
             harness.scaffold.smoke.scaffold_file_contracts[0].path,
             "fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec"
+        );
+        assert!(
+            harness.scaffold.smoke.scaffold_file_contracts[0]
+                .required_contents
+                .contains(&"typescript: |")
+        );
+        assert!(
+            harness.scaffold.smoke.scaffold_file_contracts[0]
+                .required_contents
+                .contains(&"return round(taxed);")
         );
         assert_eq!(harness.suite_slug, MONOTONE_UP_SUITE_SLUG);
     }
@@ -831,6 +1210,86 @@ mod tests {
                 "unexpected error variant for `{family}`"
             );
         }
+    }
+
+    #[test]
+    fn family_prove_cli_accepts_target_language_flag() {
+        let cli = Cli::try_parse_from([
+            "xtask",
+            "family",
+            "prove",
+            "function.arithmetic_leaf.monotone_up.v1",
+            "--target-language",
+            "typescript",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Family(FamilyArgs {
+                command:
+                    FamilyCommand::Prove {
+                        family,
+                        target_language,
+                    },
+            }) => {
+                assert_eq!(family, "function.arithmetic_leaf.monotone_up.v1");
+                assert_eq!(target_language, FamilyTargetLanguage::Typescript);
+            }
+            other => panic!("unexpected command shape: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn family_refresh_promotion_recommendation_writes_family_scoped_typescript_artifact() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+        write_string(
+            &temp_dir
+                .path()
+                .join("semantic-families/function.arithmetic_leaf.monotone_up.v1/candidate.md"),
+            "# monotone up packet\n",
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "refresh-promotion-recommendation",
+                "function.arithmetic_leaf.monotone_up.v1",
+                "--target-language",
+                "typescript",
+            ],
+        );
+
+        assert_eq!(code, 0);
+        let recommendation_path = family_recommendation_latest_path(
+            &FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap(),
+        );
+        let artifact = read_report(&temp_dir.path().join(&recommendation_path));
+        assert_eq!(artifact["target_language"], "typescript");
+        assert_eq!(
+            artifact["ranked_candidates"][0]["family"],
+            "function.arithmetic_leaf.monotone_up.v1"
+        );
+        assert_eq!(
+            artifact["analysis_basis_path"],
+            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH
+        );
+        assert_eq!(artifact["analysis_basis_sha256"], analysis_basis_sha256);
+        assert_eq!(artifact["decision_status"], "not_recommended");
+
+        let validate_code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                recommendation_path.to_str().unwrap(),
+            ],
+        );
+        assert_eq!(validate_code, 0);
     }
 
     #[test]
@@ -1552,7 +2011,13 @@ gate_d = true
             normalized_libtest_stdout(&expected_suite_test_names(CHAIN3_PROVE_SUITES[2])),
         ]);
 
-        prove::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+        prove::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap();
 
         let report_path = paths.artifacts.join(PROVE_ARTIFACT_NAME);
         let report = read_report(&report_path);
@@ -1592,8 +2057,13 @@ gate_d = true
             suite_outputs[failing_index] = String::new();
 
             let runner = prove_runner_with_suite_outputs(&suite_outputs);
-            let error =
-                prove::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+            let error = prove::run_with_runner(
+                temp_dir.path(),
+                family.as_str(),
+                FamilyTargetLanguage::Rust,
+                &runner,
+            )
+            .unwrap_err();
             assert!(matches!(error, XtaskError::ProveSuiteFailure(_)));
 
             let report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
@@ -1623,7 +2093,13 @@ gate_d = true
 
         let runner = success_certify_runner();
 
-        certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+        certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap();
 
         let certification_report = certification_report_path(&paths);
         let report = read_report(&certification_report);
@@ -1668,7 +2144,13 @@ gate_d = true
 
         let runner = success_certify_runner();
 
-        certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap();
+        certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap();
 
         let prove_report = read_report(&paths.artifacts.join(PROVE_ARTIFACT_NAME));
         assert_eq!(prove_report["schema_version"], 3);
@@ -1727,8 +2209,13 @@ gate_d = true
         write_string(&cert_report_path, "{\"previous\":true}\n");
 
         let runner = success_certify_runner();
-        let error =
-            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+        let error = certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
                 if message.contains("manifest-local routing mismatch")
@@ -1769,8 +2256,13 @@ gate_d = true
         write_string(&cert_report_path, "{\"previous\":true}\n");
 
         let runner = success_certify_runner();
-        let error =
-            certify::run_with_runner(temp_dir.path(), family.as_str(), &runner).unwrap_err();
+        let error = certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
                 if message.contains("manifest-local routing mismatch")
@@ -1813,9 +2305,14 @@ gate_d = true
         write_string(&cert_report_path, "{\"previous\":true}\n");
 
         let runner = success_certify_runner();
-        let error =
-            certify::run_with_runner_in(&registry, temp_dir.path(), family.as_str(), &runner)
-                .unwrap_err();
+        let error = certify::run_with_runner_in(
+            &registry,
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
                 if message.contains("registry-global routing incoherence")
@@ -1857,9 +2354,14 @@ gate_d = true
         write_string(&cert_report_path, "{\"previous\":true}\n");
 
         let runner = success_certify_runner();
-        let error =
-            certify::run_with_runner_in(&registry, temp_dir.path(), family.as_str(), &runner)
-                .unwrap_err();
+        let error = certify::run_with_runner_in(
+            &registry,
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &runner,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, XtaskError::CertifySuiteFailure(message)
                 if message.contains("manifest-local routing mismatch")
@@ -1890,7 +2392,13 @@ gate_d = true
         seed_suite_sources(temp_dir.path(), true);
 
         let success_runner = success_certify_runner();
-        certify::run_with_runner(temp_dir.path(), family.as_str(), &success_runner).unwrap();
+        certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &success_runner,
+        )
+        .unwrap();
 
         let cert_report_path = certification_report_path(&paths);
         let previous_bytes = fs::read(&cert_report_path).unwrap();
@@ -1908,8 +2416,13 @@ gate_d = true
             "2026-04-27T18:20:00Z\n",
         );
 
-        let error = certify::run_with_runner(temp_dir.path(), family.as_str(), &failing_runner)
-            .unwrap_err();
+        let error = certify::run_with_runner(
+            temp_dir.path(),
+            family.as_str(),
+            FamilyTargetLanguage::Rust,
+            &failing_runner,
+        )
+        .unwrap_err();
         assert!(matches!(error, XtaskError::CertifySuiteFailure(_)));
         assert_eq!(fs::read(&cert_report_path).unwrap(), previous_bytes);
         let attempts_after = attempt_reports(&paths);
@@ -2058,6 +2571,1972 @@ gate_d = true
         assert_eq!(report.status, PassFail::Fail);
     }
 
+    #[test]
+    fn family_inventory_reports_locked_promoted_and_supported_unpromoted_families() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let inventory =
+            inventory::collect_inventory_in(&pre_wrapper_promotion_registry(), temp_dir.path())
+                .unwrap();
+
+        assert_eq!(inventory.schema_version, 1);
+        assert_eq!(inventory.generated_at, "1970-01-01T00:00:00Z");
+        assert_eq!(
+            inventory.promoted_families,
+            vec![
+                "function.wrapper.pipeline.chain3.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+            ]
+        );
+        assert_eq!(
+            inventory.runtime_supported_routes,
+            vec![
+                "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+            ]
+        );
+        assert_eq!(inventory.supported_unpromoted_families.len(), 1);
+
+        let wrapper = inventory.supported_unpromoted_families.first().unwrap();
+        assert_eq!(wrapper.family, "function.wrapper.pipeline.v1");
+        assert_eq!(
+            wrapper.routing_predecessor.as_deref(),
+            Some("function.wrapper.pipeline.chain3.v1")
+        );
+        assert_eq!(
+            wrapper.routing_successors,
+            vec![
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+                "unsupported.function.v1",
+            ]
+        );
+        assert_eq!(
+            wrapper.canonical_seed_paths,
+            vec!["examples/ecommerce/units/pricing/calculate_total.unit.spec"]
+        );
+        assert_eq!(
+            wrapper.existing_wedge_paths,
+            vec!["spec-cli/tests/m14_regressions.rs"]
+        );
+        assert_eq!(wrapper.supporting_packet_paths.len(), 6);
+    }
+
+    #[test]
+    fn family_inventory_snapshot_bytes_are_stable_and_hash_exact_stdout_bytes() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let first =
+            inventory::render_snapshot_bytes_in(&pre_wrapper_promotion_registry(), temp_dir.path())
+                .unwrap();
+        let second =
+            inventory::render_snapshot_bytes_in(&pre_wrapper_promotion_registry(), temp_dir.path())
+                .unwrap();
+
+        assert_eq!(first, second);
+        assert!(first.ends_with(b"\n"));
+        assert!(!first.ends_with(b"\n\n"));
+
+        let rendered: serde_json::Value = serde_json::from_slice(&first).unwrap();
+        assert!(rendered.get("ranked_candidates").is_none());
+        assert!(rendered.get("approval").is_none());
+        assert!(rendered.get("runtime_supported_families").is_none());
+        assert!(rendered.get("families").is_none());
+
+        let exact_hash = inventory::inventory_sha256_hex(&first);
+        let without_trailing_newline = first[..first.len() - 1].to_vec();
+        assert_ne!(
+            exact_hash,
+            inventory::inventory_sha256_hex(&without_trailing_newline)
+        );
+    }
+
+    #[test]
+    fn family_inventory_command_rejects_non_json_format() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let code = run_from(
+            temp_dir.path(),
+            ["xtask", "family", "inventory", "--format", "text"],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_accepts_recommendation_with_exact_inventory_hash() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let inventory_path = write_inventory_snapshot(temp_dir.path(), run_id);
+        let inventory_bytes = fs::read(temp_dir.path().join(&inventory_path)).unwrap();
+        let recommendation_path = temp_dir
+            .path()
+            .join(".semantic-family-artifacts/family-promotion/recommendation.latest.json");
+
+        write_json_file(
+            &recommendation_path,
+            &family_recommendation_artifact_fixture(
+                inventory_path.clone(),
+                inventory::inventory_sha256_hex(&inventory_bytes),
+                vec![
+                    RankedCandidate {
+                        family: "function.wrapper.pipeline.v1".to_string(),
+                        evidence: vec![
+                            "spec-core/src/semantic_review.rs".to_string(),
+                            "examples/ecommerce/units/pricing/calculate_total.unit.spec"
+                                .to_string(),
+                        ],
+                        expected_leverage:
+                            "Broadens the promoted corpus from leaves to a two-step wrapper."
+                                .to_string(),
+                        expected_risks: vec![
+                            "Routing order must stay between chain3 and the leaves.".to_string(),
+                        ],
+                    },
+                    RankedCandidate {
+                        family: "function.arithmetic_leaf.monotone_up.v1".to_string(),
+                        evidence: vec!["spec-core/src/semantic_review.rs".to_string()],
+                        expected_leverage: "Already promoted and therefore informational only."
+                            .to_string(),
+                        expected_risks: vec![
+                            "Not approval-eligible from this artifact.".to_string(),
+                        ],
+                    },
+                ],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                ".semantic-family-artifacts/family-promotion/recommendation.latest.json",
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_recommendation_when_inventory_hash_is_recomputed_from_different_bytes()
+     {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let inventory_path = write_inventory_snapshot(temp_dir.path(), run_id);
+        let recommendation_path = temp_dir
+            .path()
+            .join(".semantic-family-artifacts/family-promotion/recommendation.latest.json");
+
+        write_json_file(
+            &recommendation_path,
+            &family_recommendation_artifact_fixture(
+                inventory_path,
+                "deadbeef".to_string(),
+                vec![RankedCandidate {
+                    family: "function.wrapper.pipeline.v1".to_string(),
+                    evidence: vec!["spec-core/src/semantic_review.rs".to_string()],
+                    expected_leverage: "Two-step wrapper promotion target.".to_string(),
+                    expected_risks: vec![
+                        "Inventory hash mismatch should fail validation.".to_string(),
+                    ],
+                }],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                ".semantic-family-artifacts/family-promotion/recommendation.latest.json",
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_accepts_schema_v3_recommendation_analysis_with_ready_first_candidate() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::Ranked,
+                vec![valid_recommendation_candidate(
+                    PromotionReadiness::Ready,
+                    Vec::new(),
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_ready_recommendation_candidate_with_hold_reasons() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::NoStrongCandidate,
+                vec![valid_recommendation_candidate(
+                    PromotionReadiness::Ready,
+                    vec![HoldReason::ThinRealExampleSupport],
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_held_recommendation_candidate_without_hold_reasons() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::NoStrongCandidate,
+                vec![valid_recommendation_candidate(
+                    PromotionReadiness::Hold,
+                    Vec::new(),
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_ranked_recommendation_analysis_when_first_candidate_is_held() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::Ranked,
+                vec![valid_recommendation_candidate(
+                    PromotionReadiness::Hold,
+                    vec![HoldReason::UnknownOverlapFamily],
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_ranked_recommendation_analysis_when_first_candidate_is_ready_with_low_confidence()
+     {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::Ranked,
+                vec![recommendation_candidate_with_confidence_level(
+                    PromotionReadiness::Ready,
+                    Vec::new(),
+                    2,
+                    3,
+                    ConfidenceLevel::Low,
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_accepts_insufficient_real_corpus_with_held_zero_real_candidates() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::InsufficientRealCorpus,
+                vec![recommendation_candidate_with_real_example_hits(
+                    PromotionReadiness::Hold,
+                    vec![
+                        HoldReason::ThinRealExampleSupport,
+                        HoldReason::ThinRegressionSupport,
+                    ],
+                    0,
+                    1,
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_insufficient_real_corpus_when_any_held_candidate_has_real_hits() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::InsufficientRealCorpus,
+                vec![recommendation_candidate_with_real_example_hits(
+                    PromotionReadiness::Hold,
+                    vec![HoldReason::ThinRealExampleSupport],
+                    1,
+                    2,
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_no_strong_candidate_when_every_held_candidate_has_zero_real_hits() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::NoStrongCandidate,
+                vec![recommendation_candidate_with_real_example_hits(
+                    PromotionReadiness::Hold,
+                    vec![
+                        HoldReason::ThinRealExampleSupport,
+                        HoldReason::ThinRegressionSupport,
+                    ],
+                    0,
+                    1,
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_insufficient_real_corpus_when_any_candidate_is_ready() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::InsufficientRealCorpus,
+                vec![valid_recommendation_candidate(
+                    PromotionReadiness::Ready,
+                    Vec::new(),
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_no_strong_candidate_when_any_candidate_is_ready() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::NoStrongCandidate,
+                vec![valid_recommendation_candidate(
+                    PromotionReadiness::Ready,
+                    Vec::new(),
+                )],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_durable_hold_candidate_without_hold_readiness() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        let mut candidate = valid_recommendation_candidate(PromotionReadiness::Ready, Vec::new());
+        candidate.next_step_status = NextStepStatus::DurableHold;
+        candidate.next_step_detail = NextStepDetail::HelperSurfaceNotPromotable;
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::NoStrongCandidate,
+                vec![candidate],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_helper_surface_not_promotable_without_durable_hold() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        let mut candidate = valid_recommendation_candidate(
+            PromotionReadiness::Hold,
+            vec![HoldReason::HelperSurfaceNotPromotable],
+        );
+        candidate.next_step_status = NextStepStatus::TargetedEvidenceGap;
+        candidate.next_step_detail = NextStepDetail::TargetedEvidenceGap;
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::NoStrongCandidate,
+                vec![candidate],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_ranked_recommendation_analysis_with_durable_hold_candidate() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_json_file(
+            &analysis_path,
+            &analysis_artifact_fixture(
+                coverage_path,
+                coverage_sha256,
+                RecommendationStatus::Ranked,
+                vec![
+                    valid_recommendation_candidate(PromotionReadiness::Ready, Vec::new()),
+                    valid_recommendation_candidate(
+                        PromotionReadiness::Hold,
+                        vec![HoldReason::HelperSurfaceNotPromotable],
+                    ),
+                ],
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_stale_schema_version_even_when_next_step_fields_are_present() {
+        let temp_dir = workspace_root();
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(temp_dir.path());
+        let analysis_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+
+        write_string(
+            &analysis_path,
+            &format!(
+                concat!(
+                    "{{\n",
+                    "  \"schema_version\": 2,\n",
+                    "  \"artifact_kind\": \"family_recommendation_analysis\",\n",
+                    "  \"generated_at\": \"2026-04-29T15:45:00Z\",\n",
+                    "  \"coverage_path\": \"{}\",\n",
+                    "  \"coverage_sha256\": \"{}\",\n",
+                    "  \"recommendation_status\": \"no_strong_candidate\",\n",
+                    "  \"ranked_candidates\": [\n",
+                    "    {{\n",
+                    "      \"candidate_id\": \"z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0\",\n",
+                    "      \"cluster_ids\": [\"unsupported_function_surface-e40675da6fa0\"],\n",
+                    "      \"primary_reason_code\": \"unsupported_function_surface\",\n",
+                    "      \"overlap_family\": \"unknown\",\n",
+                    "      \"promotion_readiness\": \"hold\",\n",
+                    "      \"hold_reasons\": [\"helper_surface_not_promotable\"],\n",
+                    "      \"next_step_status\": \"durable_hold\",\n",
+                    "      \"next_step_detail\": \"helper_surface_not_promotable\",\n",
+                    "      \"leverage\": {{\n",
+                    "        \"real_example_hits\": 2,\n",
+                    "        \"promotion_relevant_regression_hits\": 1,\n",
+                    "        \"boundary_only_hits\": 0,\n",
+                    "        \"total_units_in_cluster\": 3\n",
+                    "      }},\n",
+                    "      \"difficulty\": {{\n",
+                    "        \"tier\": \"hard\",\n",
+                    "        \"why\": \"helper surface fixture\"\n",
+                    "      }},\n",
+                    "      \"confidence\": {{\n",
+                    "        \"level\": \"low\",\n",
+                    "        \"why\": \"helper surface fixture\"\n",
+                    "      }},\n",
+                    "      \"rationale\": \"fixture\"\n",
+                    "    }}\n",
+                    "  ]\n",
+                    "}}\n"
+                ),
+                coverage_path, coverage_sha256
+            ),
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn recommendation_policy_holds_unknown_overlap_hard_single_real_candidate() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "money-round-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            "unknown",
+            (1, 1, 0),
+            CandidateStatus::Rankable,
+            vec![
+                "examples_ecommerce::money/round".to_string(),
+                "m20_unsupported_truth_pack::money/round".to_string(),
+            ],
+        )]);
+
+        assert_eq!(
+            artifact.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+
+        let candidate = &artifact.ranked_candidates[0];
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Hold);
+        assert_eq!(candidate.confidence.level, ConfidenceLevel::Low);
+        assert_eq!(
+            candidate.hold_reasons,
+            vec![
+                HoldReason::UnknownOverlapFamily,
+                HoldReason::HardDifficulty,
+                HoldReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport,
+            ]
+        );
+        assert_eq!(
+            candidate.next_step_status,
+            NextStepStatus::TargetedEvidenceGap
+        );
+        assert_eq!(
+            candidate.next_step_detail,
+            NextStepDetail::TargetedEvidenceGap
+        );
+    }
+
+    #[test]
+    fn recommendation_policy_returns_insufficient_real_corpus_when_no_discoverable_candidates() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "insufficient-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            "function.wrapper.pipeline*",
+            (0, 1, 0),
+            CandidateStatus::InsufficientEvidence,
+            vec!["m20_unsupported_truth_pack::pricing/checkout_total_bad_body_shape".to_string()],
+        )]);
+
+        assert_eq!(
+            artifact.recommendation_status,
+            RecommendationStatus::InsufficientRealCorpus
+        );
+        assert!(artifact.ranked_candidates.is_empty());
+    }
+
+    #[test]
+    fn recommendation_policy_returns_insufficient_real_corpus_when_discoverable_candidates_have_zero_real_hits()
+     {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "zero-real-held-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            "function.wrapper.pipeline*",
+            (0, 1, 0),
+            CandidateStatus::Rankable,
+            vec!["m20_unsupported_truth_pack::pricing/checkout_total_bad_body_shape".to_string()],
+        )]);
+
+        assert_eq!(
+            artifact.recommendation_status,
+            RecommendationStatus::InsufficientRealCorpus
+        );
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+        assert_eq!(
+            artifact.ranked_candidates[0].promotion_readiness,
+            PromotionReadiness::Hold
+        );
+        assert_eq!(
+            artifact.ranked_candidates[0].hold_reasons,
+            vec![
+                HoldReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport,
+            ]
+        );
+        assert_eq!(
+            artifact.ranked_candidates[0].next_step_status,
+            NextStepStatus::TargetedEvidenceGap
+        );
+    }
+
+    #[test]
+    fn recommendation_policy_returns_no_strong_candidate_when_discoverable_candidates_are_held_with_real_pressure()
+     {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "held-real-pressure-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            "function.wrapper.pipeline*",
+            (1, 2, 0),
+            CandidateStatus::Rankable,
+            vec!["m20_unsupported_truth_pack::pricing/checkout_total_bad_body_shape".to_string()],
+        )]);
+
+        assert_eq!(
+            artifact.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+        assert_eq!(
+            artifact.ranked_candidates[0].promotion_readiness,
+            PromotionReadiness::Hold
+        );
+        assert_eq!(
+            artifact.ranked_candidates[0].hold_reasons,
+            vec![HoldReason::ThinRealExampleSupport]
+        );
+        assert_eq!(
+            artifact.ranked_candidates[0].next_step_detail,
+            NextStepDetail::TargetedEvidenceGap
+        );
+        assert_eq!(
+            artifact.decision_summary.decision_status,
+            DecisionStatus::BlockedForNow
+        );
+        assert_eq!(
+            artifact.evidence_summary.missing_evidence,
+            vec![EvidenceState::ThinRealExampleSupport]
+        );
+    }
+
+    #[test]
+    fn recommendation_policy_durable_holds_helper_surface_candidate() {
+        let artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+
+        assert_eq!(
+            artifact.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+
+        let candidate = &artifact.ranked_candidates[0];
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Hold);
+        assert_eq!(
+            candidate.hold_reasons,
+            vec![HoldReason::HelperSurfaceNotPromotable]
+        );
+        assert_eq!(candidate.next_step_status, NextStepStatus::DurableHold);
+        assert_eq!(
+            candidate.next_step_detail,
+            NextStepDetail::HelperSurfaceNotPromotable
+        );
+        assert_eq!(
+            artifact.decision_summary.decision_status,
+            DecisionStatus::NotRecommended
+        );
+        assert_eq!(
+            artifact.decision_summary.open_blockers,
+            vec![DecisionReason::HelperSurfaceNotPromotable]
+        );
+    }
+
+    #[test]
+    fn corpus_decision_maps_helper_surface_wedge_to_architecture_follow_on() {
+        let artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(
+            derived.decision_action,
+            CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
+        );
+        assert_eq!(
+            derived.pivot_target_class,
+            Some(PivotTargetClass::ArchitectureSharedCoreFollowOn)
+        );
+        assert_eq!(
+            derived.required_next_action,
+            RequiredNextAction::AuthorArchitectureFollowOnPlan
+        );
+    }
+
+    #[test]
+    fn corpus_decision_does_not_activate_helper_surface_follow_on_when_evidence_is_missing() {
+        let mut artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        artifact.decision_summary.decision_status = DecisionStatus::BlockedForNow;
+        artifact.decision_summary.open_blockers = vec![
+            DecisionReason::HelperSurfaceNotPromotable,
+            DecisionReason::ThinRealExampleSupport,
+        ];
+        artifact.evidence_summary.missing_evidence = vec![EvidenceState::ThinRealExampleSupport];
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(
+            derived.decision_action,
+            CorpusProgramDecisionAction::SpendCorpusRun1
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence
+        );
+    }
+
+    #[test]
+    fn corpus_decision_does_not_activate_helper_surface_follow_on_when_evidence_is_stale() {
+        let mut artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        artifact.decision_summary.decision_status = DecisionStatus::BlockedForNow;
+        artifact.evidence_summary.stale_evidence = vec![EvidenceState::StaleEvidence];
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(
+            derived.decision_action,
+            CorpusProgramDecisionAction::SpendCorpusRun1
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence
+        );
+    }
+
+    #[test]
+    fn corpus_program_basis_snapshot_matches_validated_analysis_basis() {
+        let artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+
+        assert_eq!(
+            decision_kernel::corpus_program_basis_snapshot(&artifact),
+            CorpusProgramBasisSnapshot {
+                recommendation_status: artifact.recommendation_status,
+                decision_status: artifact.decision_summary.decision_status,
+                top_candidate_id: artifact.decision_summary.top_candidate_id.clone(),
+                open_blockers: artifact.decision_summary.open_blockers.clone(),
+                missing_evidence: artifact.evidence_summary.missing_evidence.clone(),
+                stale_evidence: artifact.evidence_summary.stale_evidence.clone(),
+            }
+        );
+    }
+
+    #[test]
+    fn corpus_decision_ready_candidate_maps_to_family_promotion_run() {
+        let artifact = analysis_artifact_fixture(
+            FAMILY_COVERAGE_LATEST_PATH.to_string(),
+            "coverage-sha".to_string(),
+            RecommendationStatus::Ranked,
+            vec![valid_recommendation_candidate(
+                PromotionReadiness::Ready,
+                Vec::new(),
+            )],
+        );
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(
+            derived.decision_action,
+            CorpusProgramDecisionAction::PivotToFamilyPromotionRun
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::PromotionReadyCandidate
+        );
+        assert_eq!(
+            derived.pivot_target_class,
+            Some(PivotTargetClass::FamilyPromotionRun)
+        );
+        assert_eq!(
+            derived.required_next_action,
+            RequiredNextAction::AuthorFamilyPromotionPlan
+        );
+    }
+
+    #[test]
+    fn corpus_decision_blocked_non_helper_candidate_maps_to_policy_run() {
+        let artifact = analysis_artifact_fixture(
+            FAMILY_COVERAGE_LATEST_PATH.to_string(),
+            "coverage-sha".to_string(),
+            RecommendationStatus::NoStrongCandidate,
+            vec![valid_recommendation_candidate(
+                PromotionReadiness::Hold,
+                vec![HoldReason::UnknownOverlapFamily],
+            )],
+        );
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(
+            derived.decision_action,
+            CorpusProgramDecisionAction::PivotToRecommendationPolicyRun
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::PolicyInterpretationBlocker
+        );
+        assert_eq!(
+            derived.pivot_target_class,
+            Some(PivotTargetClass::RecommendationPolicyRun)
+        );
+        assert_eq!(
+            derived.required_next_action,
+            RequiredNextAction::AuthorRecommendationPolicyPlan
+        );
+    }
+
+    #[test]
+    fn corpus_decision_without_candidate_stops() {
+        let artifact = analysis_artifact_fixture(
+            FAMILY_COVERAGE_LATEST_PATH.to_string(),
+            "coverage-sha".to_string(),
+            RecommendationStatus::InsufficientRealCorpus,
+            Vec::new(),
+        );
+
+        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+
+        assert_eq!(derived.decision_action, CorpusProgramDecisionAction::Stop);
+        assert_eq!(
+            derived.decision_basis_code,
+            CorpusProgramDecisionBasisCode::NoActionableCandidate
+        );
+        assert_eq!(derived.pivot_target_class, None);
+        assert_eq!(
+            derived.required_next_action,
+            RequiredNextAction::RecordStopWithoutNewMilestone
+        );
+    }
+
+    #[test]
+    fn recommendation_policy_ranks_known_overlap_candidate_with_strong_evidence() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "strong-known-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            "function.wrapper.pipeline*",
+            (3, 1, 0),
+            CandidateStatus::Rankable,
+            vec!["examples_ecommerce::pricing/calculate_total".to_string()],
+        )]);
+
+        assert_eq!(artifact.recommendation_status, RecommendationStatus::Ranked);
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+
+        let candidate = &artifact.ranked_candidates[0];
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Ready);
+        assert!(candidate.hold_reasons.is_empty());
+        assert_eq!(candidate.next_step_status, NextStepStatus::Promote);
+        assert_eq!(
+            candidate.next_step_detail,
+            NextStepDetail::ReadyForPromotion
+        );
+        assert_eq!(candidate.confidence.level, ConfidenceLevel::High);
+        assert_eq!(
+            artifact.decision_summary.decision_status,
+            DecisionStatus::Recommended
+        );
+        assert!(artifact.evidence_summary.missing_evidence.is_empty());
+        assert!(artifact.evidence_summary.stale_evidence.is_empty());
+    }
+
+    #[test]
+    fn recommendation_policy_does_not_overgeneralize_non_helper_pressure_into_durable_hold() {
+        let artifact = recommendation_analysis_from_clusters(vec![unsupported_cluster(
+            "unknown-but-not-helper-cluster",
+            UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            "unknown",
+            (2, 2, 0),
+            CandidateStatus::Rankable,
+            vec!["examples_ecommerce::money/round".to_string()],
+        )]);
+
+        assert_eq!(artifact.ranked_candidates.len(), 1);
+        let candidate = &artifact.ranked_candidates[0];
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Hold);
+        assert_eq!(
+            candidate.hold_reasons,
+            vec![HoldReason::UnknownOverlapFamily]
+        );
+        assert_eq!(
+            candidate.next_step_status,
+            NextStepStatus::TargetedEvidenceGap
+        );
+        assert_eq!(
+            candidate.next_step_detail,
+            NextStepDetail::TargetedEvidenceGap
+        );
+    }
+
+    #[test]
+    fn recommendation_status_does_not_rank_ready_low_confidence_candidate() {
+        let candidate = recommendation_candidate_with_confidence_level(
+            PromotionReadiness::Ready,
+            Vec::new(),
+            2,
+            3,
+            ConfidenceLevel::Low,
+        );
+
+        assert_eq!(
+            recommend::recommendation_status_for(&[candidate]),
+            RecommendationStatus::NoStrongCandidate
+        );
+    }
+
+    #[test]
+    fn recommendation_policy_sorts_ready_candidates_ahead_of_held_candidates() {
+        let artifact = recommendation_analysis_from_clusters(vec![
+            unsupported_cluster(
+                "held-high-leverage",
+                UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+                "unknown",
+                (5, 5, 0),
+                CandidateStatus::Rankable,
+                vec!["examples_ecommerce::money/round".to_string()],
+            ),
+            unsupported_cluster(
+                "ready-medium-confidence",
+                UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression,
+                "function.wrapper.pipeline*",
+                (1, 3, 0),
+                CandidateStatus::Rankable,
+                vec!["examples_ecommerce::pricing/calculate_total".to_string()],
+            ),
+            unsupported_cluster(
+                "ready-high-confidence",
+                UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+                "function.wrapper.pipeline*",
+                (3, 1, 0),
+                CandidateStatus::Rankable,
+                vec!["examples_ecommerce::pricing/checkout_total".to_string()],
+            ),
+        ]);
+
+        assert_eq!(artifact.recommendation_status, RecommendationStatus::Ranked);
+        assert_eq!(
+            artifact
+                .ranked_candidates
+                .iter()
+                .map(|candidate| candidate.cluster_ids[0].as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "ready-high-confidence",
+                "ready-medium-confidence",
+                "held-high-leverage",
+            ]
+        );
+        assert_eq!(
+            artifact.ranked_candidates[0].promotion_readiness,
+            PromotionReadiness::Ready
+        );
+        assert_eq!(
+            artifact.ranked_candidates[1].confidence.level,
+            ConfidenceLevel::Medium
+        );
+        assert_eq!(
+            artifact.ranked_candidates[2].promotion_readiness,
+            PromotionReadiness::Hold
+        );
+    }
+
+    #[test]
+    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held()
+     {
+        let temp_dir = workspace_root();
+        seed_locked_recommendation_workspace(temp_dir.path());
+
+        let mut first_stdout = Vec::new();
+        recommend::run_with_writer(temp_dir.path(), "json", &mut first_stdout).unwrap();
+
+        let artifact_path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+        let coverage_path = temp_dir.path().join(FAMILY_COVERAGE_LATEST_PATH);
+        let first_written_bytes = fs::read(&artifact_path).unwrap();
+        let first_coverage_bytes = fs::read(&coverage_path).unwrap();
+        assert_eq!(first_stdout, first_written_bytes);
+
+        let mut second_stdout = Vec::new();
+        recommend::run_with_writer(temp_dir.path(), "json", &mut second_stdout).unwrap();
+
+        let second_written_bytes = fs::read(&artifact_path).unwrap();
+        let second_coverage_bytes = fs::read(&coverage_path).unwrap();
+        assert_eq!(second_stdout, second_written_bytes);
+        assert_eq!(first_stdout, second_stdout);
+        assert_eq!(first_written_bytes, second_written_bytes);
+        assert_eq!(first_coverage_bytes, second_coverage_bytes);
+
+        let recommendation: FamilyRecommendationAnalysisArtifact =
+            serde_json::from_slice(&second_written_bytes).unwrap();
+        let coverage: FamilyCoverageArtifact =
+            serde_json::from_slice(&second_coverage_bytes).unwrap();
+
+        assert_eq!(
+            recommendation.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+        assert_eq!(
+            coverage
+                .sources
+                .iter()
+                .map(|source| source.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "examples_ecommerce",
+                "m19_semantic_falsification_pack",
+                "m20_unsupported_truth_pack",
+                "examples_shared_spec",
+                "examples_crosslib_app",
+            ]
+        );
+        assert_eq!(
+            coverage
+                .sources
+                .iter()
+                .map(|source| source.unit_count)
+                .collect::<Vec<_>>(),
+            vec![6, 12, 9, 1, 2]
+        );
+        assert_eq!(coverage.function_coverage.total_units, 28);
+        assert_eq!(coverage.function_coverage.promoted_family_units, 17);
+        assert_eq!(
+            coverage.function_coverage.supported_unpromoted_family_units,
+            0
+        );
+        assert_eq!(coverage.function_coverage.unsupported_function_units, 11);
+
+        assert_eq!(recommendation.ranked_candidates.len(), 1);
+
+        let visible_candidate = &recommendation.ranked_candidates[0];
+        assert_eq!(
+            visible_candidate.cluster_ids,
+            vec!["unsupported_function_surface-e40675da6fa0".to_string()]
+        );
+        assert_eq!(
+            visible_candidate.promotion_readiness,
+            PromotionReadiness::Hold
+        );
+        assert_eq!(
+            visible_candidate.hold_reasons,
+            vec![HoldReason::HelperSurfaceNotPromotable]
+        );
+        assert_eq!(
+            visible_candidate.next_step_status,
+            NextStepStatus::DurableHold
+        );
+        assert_eq!(
+            visible_candidate.next_step_detail,
+            NextStepDetail::HelperSurfaceNotPromotable
+        );
+        assert_eq!(
+            visible_candidate.leverage,
+            RecommendationLeverage {
+                real_example_hits: 2,
+                promotion_relevant_regression_hits: 1,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 3,
+            }
+        );
+        assert_eq!(visible_candidate.difficulty.tier, DifficultyTier::Hard);
+        assert_eq!(visible_candidate.confidence.level, ConfidenceLevel::Low);
+    }
+
+    #[test]
+    fn corpus_decision_command_path_writes_same_bytes_for_unchanged_basis() {
+        let temp_dir = workspace_root();
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+
+        let mut first_stdout = Vec::new();
+        recommend::run_corpus_decision_with_writer(temp_dir.path(), "json", &mut first_stdout)
+            .unwrap();
+
+        let artifact_path = temp_dir
+            .path()
+            .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
+        let first_written_bytes = fs::read(&artifact_path).unwrap();
+        assert_eq!(first_stdout, first_written_bytes);
+
+        let mut second_stdout = Vec::new();
+        recommend::run_corpus_decision_with_writer(temp_dir.path(), "json", &mut second_stdout)
+            .unwrap();
+
+        let second_written_bytes = fs::read(&artifact_path).unwrap();
+        assert_eq!(second_stdout, second_written_bytes);
+        assert_eq!(first_stdout, second_stdout);
+        assert_eq!(first_written_bytes, second_written_bytes);
+
+        let artifact: CorpusProgramDecisionArtifact =
+            serde_json::from_slice(&second_written_bytes).unwrap();
+        assert_eq!(
+            artifact.analysis_basis_path,
+            FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH
+        );
+        assert_eq!(artifact.analysis_basis_sha256, analysis_basis_sha256);
+        assert_eq!(
+            artifact.basis_snapshot.recommendation_status,
+            RecommendationStatus::NoStrongCandidate
+        );
+        assert_eq!(
+            artifact.basis_snapshot.decision_status,
+            DecisionStatus::NotRecommended
+        );
+        assert_eq!(
+            artifact.basis_snapshot.top_candidate_id.as_deref(),
+            Some("z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0")
+        );
+        assert_eq!(
+            artifact.basis_snapshot.open_blockers,
+            vec![DecisionReason::HelperSurfaceNotPromotable]
+        );
+        assert!(artifact.basis_snapshot.missing_evidence.is_empty());
+        assert!(artifact.basis_snapshot.stale_evidence.is_empty());
+        assert_eq!(
+            artifact.decision_action,
+            CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
+        );
+        assert_eq!(
+            artifact.decision_basis_code,
+            CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
+        );
+        assert_eq!(
+            artifact.pivot_target_class,
+            Some(PivotTargetClass::ArchitectureSharedCoreFollowOn)
+        );
+        assert_eq!(
+            artifact.required_next_action,
+            RequiredNextAction::AuthorArchitectureFollowOnPlan
+        );
+
+        let validate_code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH,
+            ],
+        );
+        assert_eq!(validate_code, 0);
+    }
+
+    #[test]
+    fn coverage_proof_fingerprint_is_stable_across_generated_at_and_inventory_path_churn() {
+        let artifact = coverage_artifact_fixture(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        let baseline = coverage::normalized_coverage_proof_fingerprint(&artifact).unwrap();
+
+        let mut churned = artifact.clone();
+        churned.generated_at = "2026-05-06T03:00:00Z".to_string();
+        churned.inventory_path =
+            ".semantic-family-artifacts/family-promotion/inventory/churned.json".to_string();
+        churned.inventory_sha256 = "different-inventory-sha".to_string();
+
+        assert_eq!(
+            coverage::normalized_coverage_proof_fingerprint(&churned).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn coverage_proof_fingerprint_changes_on_semantic_cluster_change() {
+        let artifact = coverage_artifact_fixture(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        let baseline = coverage::normalized_coverage_proof_fingerprint(&artifact).unwrap();
+
+        let mut changed = artifact.clone();
+        changed.unsupported_clusters[0].real_example_hits = 3;
+
+        assert_ne!(
+            coverage::normalized_coverage_proof_fingerprint(&changed).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn recommendation_proof_fingerprint_is_stable_across_generated_at_churn() {
+        let artifact = recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+            "unsupported_function_surface-e40675da6fa0",
+            (2, 1, 0),
+        )]);
+        let baseline = recommend::normalized_recommendation_proof_fingerprint(&artifact).unwrap();
+
+        let mut churned = artifact.clone();
+        churned.generated_at = "2026-05-06T03:00:00Z".to_string();
+        churned.delta_from_previous = RecommendationDelta {
+            previous_generated_at: Some("2026-05-04T03:00:00Z".to_string()),
+            previous_decision_status: Some(DecisionStatus::BlockedForNow),
+            previous_recommendation_status: Some(RecommendationStatus::Ranked),
+            decision_changed: true,
+            top_candidate_changed: true,
+            reasons_added: vec![DecisionReason::ThinRealExampleSupport],
+            reasons_cleared: vec![DecisionReason::HelperSurfaceNotPromotable],
+            evidence_changes: vec!["missing_evidence:+thin_real_example_support".to_string()],
+            summary: "churned".to_string(),
+        };
+
+        assert_eq!(
+            recommend::normalized_recommendation_proof_fingerprint(&churned).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn corpus_decision_proof_fingerprint_changes_on_semantic_action_change() {
+        let artifact = recommend::build_corpus_program_decision_artifact(
+            "2026-05-05T02:00:00Z".to_string(),
+            "analysis-sha".to_string(),
+            &recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+                "unsupported_function_surface-e40675da6fa0",
+                (2, 1, 0),
+            )]),
+        )
+        .unwrap();
+        let baseline =
+            recommend::normalized_corpus_program_decision_proof_fingerprint(&artifact).unwrap();
+
+        let mut changed = artifact.clone();
+        changed.decision_action = CorpusProgramDecisionAction::Stop;
+        changed.decision_basis_code = CorpusProgramDecisionBasisCode::NoActionableCandidate;
+        changed.pivot_target_class = None;
+        changed.required_next_action = RequiredNextAction::RecordStopWithoutNewMilestone;
+
+        assert_ne!(
+            recommend::normalized_corpus_program_decision_proof_fingerprint(&changed).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn corpus_decision_proof_fingerprint_is_stable_across_generated_at_churn() {
+        let artifact = recommend::build_corpus_program_decision_artifact(
+            "2026-05-05T02:00:00Z".to_string(),
+            "analysis-sha".to_string(),
+            &recommendation_analysis_from_clusters(vec![helper_surface_cluster(
+                "unsupported_function_surface-e40675da6fa0",
+                (2, 1, 0),
+            )]),
+        )
+        .unwrap();
+        let baseline =
+            recommend::normalized_corpus_program_decision_proof_fingerprint(&artifact).unwrap();
+
+        let mut churned = artifact.clone();
+        churned.generated_at = "2026-05-06T03:00:00Z".to_string();
+
+        assert_eq!(
+            recommend::normalized_corpus_program_decision_proof_fingerprint(&churned).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
+    fn artifact_schema_accepts_execution_report_with_real_proof_artifact_paths() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let recommendation_path = seed_valid_recommendation_artifact(temp_dir.path(), run_id);
+        seed_promoted_wrapper_proof_artifacts(temp_dir.path());
+        write_string(
+            &temp_dir
+                .path()
+                .join("semantic-families/function.wrapper.pipeline.v1/candidate.md"),
+            "# wrapper packet\n",
+        );
+
+        let report_path = temp_dir.path().join(format!(
+            ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/promotion.execution.json"
+        ));
+        write_json_file(
+            &report_path,
+            &PromotionExecutionArtifact {
+                schema_version: 2,
+                artifact_kind: PromotionArtifactKind::PromotionExecution,
+                run_id: run_id.to_string(),
+                family: "function.wrapper.pipeline.v1".to_string(),
+                target_language: TargetLanguage::Rust,
+                status: promotion_artifacts::ExecutionStatus::Green,
+                recommendation_path,
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                decision_status_at_start: DecisionStatus::NotRecommended,
+                open_blockers_at_start: vec![DecisionReason::HelperSurfaceNotPromotable],
+                missing_or_stale_evidence_at_start: Vec::new(),
+                approvals: PromotionApprovals {
+                    target_family: ApprovalRecord {
+                        status: ApprovalStatus::Approved,
+                    },
+                    final_output: ApprovalRecord {
+                        status: ApprovalStatus::Approved,
+                    },
+                },
+                files_changed: vec![
+                    "semantic-families/function.wrapper.pipeline.v1/candidate.md".to_string(),
+                    "spec-cli/tests/cli.rs".to_string(),
+                ],
+                commands: vec![CommandRecord {
+                    step: "prove".to_string(),
+                    command: "cargo xtask family prove function.wrapper.pipeline.v1".to_string(),
+                    exit_code: 0,
+                    started_at: "2026-04-29T15:50:00Z".to_string(),
+                    finished_at: "2026-04-29T15:51:00Z".to_string(),
+                    artifact_path: Some(
+                        ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/prove.latest.json"
+                            .to_string(),
+                    ),
+                }],
+                referenced_proof_artifacts: vec![
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/prove.latest.json"
+                        .to_string(),
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/attempt-20260429T155100Z.json"
+                        .to_string(),
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/certification.report.json"
+                        .to_string(),
+                ],
+                iterations: 1,
+                gate_summary: GateSummary {
+                    smoke: GateStatus::Pass,
+                    prove: GateStatus::Pass,
+                    certify: GateStatus::Pass,
+                },
+                notes: vec!["All hard gates are green.".to_string()],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                &format!(
+                    ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/promotion.execution.json"
+                ),
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_corpus_decision_with_contradictory_action_for_helper_surface_basis()
+    {
+        let temp_dir = workspace_root();
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+        let decision_path = temp_dir
+            .path()
+            .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
+
+        write_json_file(
+            &decision_path,
+            &CorpusProgramDecisionArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::CorpusProgramDecision,
+                generated_at: "2026-05-05T02:00:00Z".to_string(),
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                basis_snapshot: CorpusProgramBasisSnapshot {
+                    recommendation_status: RecommendationStatus::NoStrongCandidate,
+                    decision_status: DecisionStatus::NotRecommended,
+                    top_candidate_id: Some(
+                        "z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0"
+                            .to_string(),
+                    ),
+                    open_blockers: vec![DecisionReason::HelperSurfaceNotPromotable],
+                    missing_evidence: Vec::new(),
+                    stale_evidence: Vec::new(),
+                },
+                decision_action: CorpusProgramDecisionAction::SpendCorpusRun1,
+                decision_basis_code:
+                    CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence,
+                pivot_target_class: None,
+                required_next_action: RequiredNextAction::AuthorCorpusExpansionPlan,
+                summary: "Contradictory fixture.".to_string(),
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_corpus_decision_with_drifted_basis_snapshot() {
+        let temp_dir = workspace_root();
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+        let decision_path = temp_dir
+            .path()
+            .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
+        let mut artifact = recommend::build_corpus_program_decision_artifact(
+            "2026-05-05T02:00:00Z".to_string(),
+            analysis_basis_sha256.clone(),
+            &analysis_artifact_fixture(
+                FAMILY_COVERAGE_LATEST_PATH.to_string(),
+                "coverage-sha".to_string(),
+                RecommendationStatus::NoStrongCandidate,
+                vec![helper_surface_candidate_fixture()],
+            ),
+        )
+        .unwrap();
+        artifact.analysis_basis_path = FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string();
+        artifact.basis_snapshot.top_candidate_id = Some("drifted-candidate".to_string());
+        write_json_file(&decision_path, &artifact);
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_ready_path_with_architecture_follow_on_tuple() {
+        let temp_dir = workspace_root();
+        let path = temp_dir
+            .path()
+            .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+        let analysis = analysis_artifact_fixture(
+            FAMILY_COVERAGE_LATEST_PATH.to_string(),
+            "coverage-sha".to_string(),
+            RecommendationStatus::Ranked,
+            vec![valid_recommendation_candidate(
+                PromotionReadiness::Ready,
+                Vec::new(),
+            )],
+        );
+        write_json_file(&path, &analysis);
+        let analysis_basis_sha256 = inventory::inventory_sha256_hex(&fs::read(&path).unwrap());
+
+        let decision_path = temp_dir
+            .path()
+            .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
+        write_json_file(
+            &decision_path,
+            &CorpusProgramDecisionArtifact {
+                schema_version: 1,
+                artifact_kind: PromotionArtifactKind::CorpusProgramDecision,
+                generated_at: "2026-05-05T02:00:00Z".to_string(),
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                basis_snapshot: decision_kernel::corpus_program_basis_snapshot(&analysis),
+                decision_action: CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn,
+                decision_basis_code:
+                    CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface,
+                pivot_target_class: Some(PivotTargetClass::ArchitectureSharedCoreFollowOn),
+                required_next_action: RequiredNextAction::AuthorArchitectureFollowOnPlan,
+                summary: "Contradictory ready-path fixture.".to_string(),
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH,
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn corpus_decision_latest_bytes_are_reused_when_semantic_fingerprint_is_unchanged() {
+        let temp_dir = workspace_root();
+        seed_valid_analysis_basis_artifact(temp_dir.path());
+
+        let mut first_stdout = Vec::new();
+        recommend::run_corpus_decision_with_writer(temp_dir.path(), "json", &mut first_stdout)
+            .unwrap();
+
+        let artifact_path = temp_dir
+            .path()
+            .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH);
+        let first_written_bytes = fs::read(&artifact_path).unwrap();
+
+        let mut second_stdout = Vec::new();
+        recommend::run_corpus_decision_with_writer(temp_dir.path(), "json", &mut second_stdout)
+            .unwrap();
+
+        let second_written_bytes = fs::read(&artifact_path).unwrap();
+
+        assert_eq!(first_stdout, second_stdout);
+        assert_eq!(first_written_bytes, second_written_bytes);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_execution_report_when_proof_artifact_path_is_missing() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let recommendation_path = seed_valid_recommendation_artifact(temp_dir.path(), run_id);
+        let report_path = temp_dir.path().join(format!(
+            ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/promotion.execution.json"
+        ));
+        write_json_file(
+            &report_path,
+            &PromotionExecutionArtifact {
+                schema_version: 2,
+                artifact_kind: PromotionArtifactKind::PromotionExecution,
+                run_id: run_id.to_string(),
+                family: "function.wrapper.pipeline.v1".to_string(),
+                target_language: TargetLanguage::Rust,
+                status: promotion_artifacts::ExecutionStatus::Green,
+                recommendation_path,
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                decision_status_at_start: DecisionStatus::NotRecommended,
+                open_blockers_at_start: vec![DecisionReason::HelperSurfaceNotPromotable],
+                missing_or_stale_evidence_at_start: Vec::new(),
+                approvals: PromotionApprovals {
+                    target_family: ApprovalRecord {
+                        status: ApprovalStatus::Approved,
+                    },
+                    final_output: ApprovalRecord {
+                        status: ApprovalStatus::Pending,
+                    },
+                },
+                files_changed: vec![
+                    "semantic-families/function.wrapper.pipeline.v1/candidate.md".to_string(),
+                ],
+                commands: vec![CommandRecord {
+                    step: "certify".to_string(),
+                    command: "cargo xtask family certify function.wrapper.pipeline.v1".to_string(),
+                    exit_code: 1,
+                    started_at: "2026-04-29T15:52:00Z".to_string(),
+                    finished_at: "2026-04-29T15:53:00Z".to_string(),
+                    artifact_path: None,
+                }],
+                referenced_proof_artifacts: vec![
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/prove.latest.json"
+                        .to_string(),
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/attempt-20260429T155100Z.json"
+                        .to_string(),
+                    ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/certification.report.json"
+                        .to_string(),
+                ],
+                iterations: 2,
+                gate_summary: GateSummary {
+                    smoke: GateStatus::Pass,
+                    prove: GateStatus::Pass,
+                    certify: GateStatus::Fail,
+                },
+                notes: vec!["Missing proof artifacts should fail validation.".to_string()],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                &format!(
+                    ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/promotion.execution.json"
+                ),
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn artifact_schema_accepts_blocker_report_with_locked_vocabulary() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+        let analysis_basis_sha256 = seed_valid_analysis_basis_artifact(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let inventory_path = write_inventory_snapshot(temp_dir.path(), run_id);
+        let report_path = temp_dir.path().join(format!(
+            ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/blocker.report.json"
+        ));
+        write_json_file(
+            &report_path,
+            &PromotionBlockerArtifact {
+                schema_version: 2,
+                artifact_kind: PromotionArtifactKind::PromotionBlocker,
+                run_id: run_id.to_string(),
+                family: "function.wrapper.pipeline.v1".to_string(),
+                target_language: TargetLanguage::Rust,
+                analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
+                analysis_basis_sha256,
+                decision_status_at_start: DecisionStatus::NotRecommended,
+                open_blockers_at_start: vec![DecisionReason::HelperSurfaceNotPromotable],
+                missing_or_stale_evidence_at_start: Vec::new(),
+                blocking_step: BlockingStep::Certify,
+                blocker_kind: BlockerKind::CertifyRoutingConflict,
+                summary: "Registry routing order still conflicts with the promoted wrapper family."
+                    .to_string(),
+                machine_evidence: vec![
+                    MachineEvidence {
+                        kind: MachineEvidenceKind::Command,
+                        path: None,
+                        command: Some(
+                            "cargo xtask family certify function.wrapper.pipeline.v1".to_string(),
+                        ),
+                        exit_code: Some(1),
+                        observed_at: "2026-04-29T15:55:00Z".to_string(),
+                        note: "Certify failed during the routing gate.".to_string(),
+                    },
+                    MachineEvidence {
+                        kind: MachineEvidenceKind::Artifact,
+                        path: Some(inventory_path),
+                        command: None,
+                        exit_code: None,
+                        observed_at: "2026-04-29T15:55:01Z".to_string(),
+                        note: "Gate 1 inventory snapshot for this run.".to_string(),
+                    },
+                ],
+                required_human_action:
+                    "Confirm whether the routing conflict should be resolved in the packet or the runtime contract."
+                        .to_string(),
+                safe_next_actions: vec![
+                    "Do not start wrapper-family edits under the stale routing contract."
+                        .to_string(),
+                ],
+            },
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                &format!(
+                    ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/blocker.report.json"
+                ),
+            ],
+        );
+
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn artifact_schema_rejects_blocker_report_with_unknown_blocker_kind() {
+        let temp_dir = workspace_root();
+        seed_inventory_repo_truth(temp_dir.path());
+
+        let run_id = "20260429T154500Z-function.wrapper.pipeline.v1";
+        let report_path = temp_dir.path().join(format!(
+            ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/blocker.report.json"
+        ));
+        write_string(
+            &report_path,
+            r#"{
+  "schema_version": 1,
+  "artifact_kind": "promotion_blocker",
+  "run_id": "20260429T154500Z-function.wrapper.pipeline.v1",
+  "family": "function.wrapper.pipeline.v1",
+  "blocking_step": "smoke",
+  "blocker_kind": "unknown_kind",
+  "summary": "unknown blocker kind",
+  "machine_evidence": [
+    {
+      "kind": "command",
+      "path": null,
+      "command": "cargo xtask family smoke function.wrapper.pipeline.v1",
+      "exit_code": 1,
+      "observed_at": "2026-04-29T15:55:00Z",
+      "note": "smoke failed"
+    }
+  ],
+  "required_human_action": "decide next step",
+  "safe_next_actions": ["do not proceed"]
+}
+"#,
+        );
+
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "validate-artifact",
+                &format!(
+                    ".semantic-family-artifacts/family-promotion/function.wrapper.pipeline.v1/{run_id}/blocker.report.json"
+                ),
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
     fn workspace_root() -> TempDir {
         let temp_dir = TempDir::new().unwrap();
         fs::create_dir(temp_dir.path().join("semantic-families")).unwrap();
@@ -2069,6 +4548,617 @@ gate_d = true
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, contents).unwrap();
+    }
+
+    fn write_json_file<T: serde::Serialize>(path: &Path, value: &T) {
+        let contents = serde_json::to_string_pretty(value).unwrap();
+        write_string(path, &format!("{contents}\n"));
+    }
+
+    fn seed_inventory_repo_truth(workspace_root: &Path) {
+        write_string(
+            &workspace_root.join("spec-core/src/semantic_review.rs"),
+            r#"const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 4] = [
+    SupportedFunctionRoute::WrapperPipelineChain3,
+    SupportedFunctionRoute::WrapperPipeline,
+    SupportedFunctionRoute::ArithmeticLeafMonotoneDownNonnegative,
+    SupportedFunctionRoute::ArithmeticLeafMonotoneUp,
+];
+"#,
+        );
+        write_string(
+            &workspace_root.join("examples/ecommerce/units/pricing/apply_discount.unit.spec"),
+            "id: pricing/apply_discount\n",
+        );
+        write_string(
+            &workspace_root.join("examples/ecommerce/units/pricing/apply_tax.unit.spec"),
+            "id: pricing/apply_tax\n",
+        );
+        write_string(
+            &workspace_root.join("examples/ecommerce/units/pricing/calculate_total.unit.spec"),
+            "id: pricing/calculate_total\n",
+        );
+        write_string(
+            &workspace_root.join("spec-cli/tests/m14_regressions.rs"),
+            "fn wrapper_pipeline_existing_wedge() {}\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_discount_leaf_aligned.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_tax_leaf_aligned.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/drift/units/pricing/pricing_total_wrapper_drift.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        write_string(
+            &workspace_root.join(
+                "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec",
+            ),
+            "kind: function\n",
+        );
+        fs::create_dir_all(
+            workspace_root
+                .join("semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1"),
+        )
+        .unwrap();
+        fs::create_dir_all(
+            workspace_root.join("semantic-families/function.arithmetic_leaf.monotone_up.v1"),
+        )
+        .unwrap();
+    }
+
+    fn write_inventory_snapshot(workspace_root: &Path, run_id: &str) -> String {
+        let relative_path =
+            format!(".semantic-family-artifacts/family-promotion/inventory/{run_id}.json");
+        let absolute_path = workspace_root.join(&relative_path);
+        let bytes =
+            inventory::render_snapshot_bytes_in(&pre_wrapper_promotion_registry(), workspace_root)
+                .unwrap();
+        if let Some(parent) = absolute_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&absolute_path, bytes).unwrap();
+        relative_path
+    }
+
+    fn pre_wrapper_promotion_registry() -> [FamilyHarness; 3] {
+        [
+            *family_harness(&FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap())
+                .unwrap(),
+            *family_harness(
+                &FamilyId::parse("function.arithmetic_leaf.monotone_down_nonnegative.v1").unwrap(),
+            )
+            .unwrap(),
+            *family_harness(&FamilyId::parse("function.arithmetic_leaf.monotone_up.v1").unwrap())
+                .unwrap(),
+        ]
+    }
+
+    fn seed_valid_recommendation_artifact(workspace_root: &Path, run_id: &str) -> String {
+        let inventory_path = write_inventory_snapshot(workspace_root, run_id);
+        let inventory_bytes = fs::read(workspace_root.join(&inventory_path)).unwrap();
+        let recommendation_path = workspace_root
+            .join(".semantic-family-artifacts/family-promotion/recommendation.latest.json");
+        write_json_file(
+            &recommendation_path,
+            &family_recommendation_artifact_fixture(
+                inventory_path,
+                inventory::inventory_sha256_hex(&inventory_bytes),
+                vec![RankedCandidate {
+                    family: "function.wrapper.pipeline.v1".to_string(),
+                    evidence: vec![
+                        "spec-core/src/semantic_review.rs".to_string(),
+                        "examples/ecommerce/units/pricing/calculate_total.unit.spec".to_string(),
+                    ],
+                    expected_leverage:
+                        "Broadens the corpus from leaves to a dedicated wrapper family.".to_string(),
+                    expected_risks: vec![
+                        "Routing order must remain between chain3 and the leaves.".to_string(),
+                    ],
+                }],
+            ),
+        );
+        ".semantic-family-artifacts/family-promotion/recommendation.latest.json".to_string()
+    }
+
+    fn seed_recommendation_analysis_coverage(workspace_root: &Path) -> (String, String) {
+        let coverage_path = FAMILY_COVERAGE_LATEST_PATH.to_string();
+        write_string(
+            &workspace_root.join(FAMILY_COVERAGE_LATEST_PATH),
+            "{\n  \"analysis_fixture\": true\n}\n",
+        );
+        let coverage_bytes = fs::read(workspace_root.join(FAMILY_COVERAGE_LATEST_PATH)).unwrap();
+        (
+            coverage_path,
+            inventory::inventory_sha256_hex(&coverage_bytes),
+        )
+    }
+
+    fn coverage_artifact_fixture(
+        unsupported_clusters: Vec<UnsupportedClusterEntry>,
+    ) -> FamilyCoverageArtifact {
+        FamilyCoverageArtifact {
+            schema_version: 1,
+            artifact_kind: PromotionArtifactKind::FamilyCoverageSnapshot,
+            generated_at: "2026-05-05T02:00:00Z".to_string(),
+            inventory_path: ".semantic-family-artifacts/family-promotion/inventory/base.json"
+                .to_string(),
+            inventory_sha256: "inventory-sha".to_string(),
+            corpus_manifest_path: ".semantic-family-artifacts/family-promotion/corpus.toml"
+                .to_string(),
+            corpus_manifest_sha256: "manifest-sha".to_string(),
+            sources: vec![CorpusSourceEntry {
+                id: "examples_ecommerce".to_string(),
+                path: "examples/ecommerce/units".to_string(),
+                kind: SourceKind::RealExample,
+                counts_toward_recommendation: true,
+                note: "fixture".to_string(),
+                unit_count: 3,
+            }],
+            function_coverage: FunctionCoverageTotals {
+                total_units: 3,
+                promoted_family_units: 0,
+                supported_unpromoted_family_units: 0,
+                unsupported_function_units: 3,
+            },
+            non_function_coverage: NonFunctionCoverageTotals {
+                total_units: 0,
+                supported_sum_units: 0,
+                supported_data_units: 0,
+                other_units: 0,
+            },
+            family_coverage: vec![FamilyCoverageEntry {
+                family: "function.wrapper.pipeline.v1".to_string(),
+                unit_count: 0,
+                unit_ids: Vec::new(),
+                source_ids: Vec::new(),
+            }],
+            unsupported_clusters,
+        }
+    }
+
+    fn analysis_artifact_fixture(
+        coverage_path: String,
+        coverage_sha256: String,
+        recommendation_status: RecommendationStatus,
+        ranked_candidates: Vec<RecommendationCandidateEntry>,
+    ) -> FamilyRecommendationAnalysisArtifact {
+        let missing_evidence = ranked_candidates
+            .first()
+            .map(missing_evidence_for_candidate)
+            .unwrap_or_default();
+        let stale_evidence = Vec::new();
+        let warnings = ranked_candidates
+            .first()
+            .map(warnings_for_candidate)
+            .unwrap_or_default();
+        let decision_status = decision_status_for_fixture(
+            recommendation_status,
+            ranked_candidates.first(),
+            &missing_evidence,
+            &stale_evidence,
+        );
+        FamilyRecommendationAnalysisArtifact {
+            schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
+            generated_at: "2026-04-29T15:45:00Z".to_string(),
+            coverage_path,
+            coverage_sha256,
+            recommendation_status,
+            ranked_candidates: ranked_candidates.clone(),
+            decision_summary: DecisionSummary {
+                decision_status,
+                top_candidate_id: ranked_candidates
+                    .first()
+                    .map(|candidate| candidate.candidate_id.clone()),
+                open_blockers: ranked_candidates
+                    .first()
+                    .map(open_blockers_for_candidate)
+                    .unwrap_or_default(),
+                warnings: warnings.clone(),
+                summary: "Fixture decision summary.".to_string(),
+            },
+            evidence_summary: EvidenceSummary {
+                missing_evidence,
+                stale_evidence,
+                warnings,
+                summary: "Fixture evidence summary.".to_string(),
+            },
+            delta_from_previous: RecommendationDelta::no_previous_artifact(),
+        }
+    }
+
+    fn family_recommendation_artifact_fixture(
+        inventory_path: String,
+        inventory_sha256: String,
+        ranked_candidates: Vec<RankedCandidate>,
+    ) -> FamilyRecommendationArtifact {
+        FamilyRecommendationArtifact {
+            schema_version: RECOMMENDATION_SCHEMA_VERSION,
+            artifact_kind: PromotionArtifactKind::FamilyRecommendation,
+            generated_at: "2026-04-29T15:45:00Z".to_string(),
+            inventory_path,
+            inventory_sha256,
+            target_language: TargetLanguage::Rust,
+            ranked_candidates,
+            analysis_basis_path: None,
+            analysis_basis_sha256: None,
+            decision_status: None,
+            open_blockers: None,
+            missing_or_stale_evidence: None,
+        }
+    }
+
+    fn seed_valid_analysis_basis_artifact(workspace_root: &Path) -> String {
+        let (coverage_path, coverage_sha256) =
+            seed_recommendation_analysis_coverage(workspace_root);
+        let analysis = analysis_artifact_fixture(
+            coverage_path,
+            coverage_sha256,
+            RecommendationStatus::NoStrongCandidate,
+            vec![helper_surface_candidate_fixture()],
+        );
+        let path = workspace_root.join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH);
+        write_json_file(&path, &analysis);
+        let bytes = fs::read(&path).unwrap();
+        inventory::inventory_sha256_hex(&bytes)
+    }
+
+    fn helper_surface_candidate_fixture() -> RecommendationCandidateEntry {
+        RecommendationCandidateEntry {
+            candidate_id: "z-unsupportedfunctionsurface-unsupported_function_surface-e40675da6fa0"
+                .to_string(),
+            cluster_ids: vec!["unsupported_function_surface-e40675da6fa0".to_string()],
+            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            overlap_family: "unknown".to_string(),
+            promotion_readiness: PromotionReadiness::Hold,
+            hold_reasons: vec![HoldReason::HelperSurfaceNotPromotable],
+            next_step_status: NextStepStatus::DurableHold,
+            next_step_detail: NextStepDetail::HelperSurfaceNotPromotable,
+            leverage: RecommendationLeverage {
+                real_example_hits: 2,
+                promotion_relevant_regression_hits: 1,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 3,
+            },
+            difficulty: RecommendationDifficulty {
+                tier: DifficultyTier::Hard,
+                why: "helper surface fixture".to_string(),
+            },
+            confidence: RecommendationConfidence {
+                level: ConfidenceLevel::Low,
+                why: "helper surface fixture".to_string(),
+            },
+            rationale: "fixture".to_string(),
+        }
+    }
+
+    fn open_blockers_for_candidate(
+        candidate: &RecommendationCandidateEntry,
+    ) -> Vec<DecisionReason> {
+        let mut blockers = Vec::new();
+        for hold_reason in &candidate.hold_reasons {
+            let reason = match hold_reason {
+                HoldReason::UnknownOverlapFamily => DecisionReason::UnknownOverlapFamily,
+                HoldReason::HardDifficulty => DecisionReason::HardDifficulty,
+                HoldReason::ThinRealExampleSupport => DecisionReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport => DecisionReason::ThinRegressionSupport,
+                HoldReason::HelperSurfaceNotPromotable => {
+                    DecisionReason::HelperSurfaceNotPromotable
+                }
+            };
+            if !blockers.contains(&reason) {
+                blockers.push(reason);
+            }
+        }
+        blockers
+    }
+
+    fn missing_evidence_for_candidate(
+        candidate: &RecommendationCandidateEntry,
+    ) -> Vec<EvidenceState> {
+        let mut missing = Vec::new();
+        for hold_reason in &candidate.hold_reasons {
+            let Some(state) = (match hold_reason {
+                HoldReason::ThinRealExampleSupport => Some(EvidenceState::ThinRealExampleSupport),
+                HoldReason::ThinRegressionSupport => Some(EvidenceState::ThinRegressionSupport),
+                HoldReason::UnknownOverlapFamily
+                | HoldReason::HardDifficulty
+                | HoldReason::HelperSurfaceNotPromotable => None,
+            }) else {
+                continue;
+            };
+            if !missing.contains(&state) {
+                missing.push(state);
+            }
+        }
+        missing
+    }
+
+    fn warnings_for_candidate(candidate: &RecommendationCandidateEntry) -> Vec<DecisionReason> {
+        if candidate.leverage.promotion_relevant_regression_hits > 0 {
+            vec![DecisionReason::RegressionWarning]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn decision_status_for_fixture(
+        recommendation_status: RecommendationStatus,
+        top_candidate: Option<&RecommendationCandidateEntry>,
+        missing_evidence: &[EvidenceState],
+        stale_evidence: &[EvidenceState],
+    ) -> DecisionStatus {
+        let has_evidence_gaps = !missing_evidence.is_empty() || !stale_evidence.is_empty();
+        match top_candidate {
+            Some(candidate)
+                if candidate.promotion_readiness == PromotionReadiness::Ready
+                    && matches!(
+                        candidate.confidence.level,
+                        ConfidenceLevel::Medium | ConfidenceLevel::High
+                    )
+                    && !has_evidence_gaps =>
+            {
+                DecisionStatus::Recommended
+            }
+            Some(candidate)
+                if candidate.next_step_status == NextStepStatus::DurableHold
+                    && candidate.next_step_detail == NextStepDetail::HelperSurfaceNotPromotable =>
+            {
+                DecisionStatus::NotRecommended
+            }
+            Some(_) if recommendation_status == RecommendationStatus::InsufficientRealCorpus => {
+                DecisionStatus::NotRecommended
+            }
+            Some(_) => DecisionStatus::BlockedForNow,
+            None => DecisionStatus::NotRecommended,
+        }
+    }
+
+    fn valid_recommendation_candidate(
+        promotion_readiness: PromotionReadiness,
+        hold_reasons: Vec<HoldReason>,
+    ) -> RecommendationCandidateEntry {
+        recommendation_candidate_with_confidence_level(
+            promotion_readiness,
+            hold_reasons,
+            2,
+            3,
+            ConfidenceLevel::Medium,
+        )
+    }
+
+    fn recommendation_candidate_with_real_example_hits(
+        promotion_readiness: PromotionReadiness,
+        hold_reasons: Vec<HoldReason>,
+        real_example_hits: usize,
+        promotion_relevant_regression_hits: usize,
+    ) -> RecommendationCandidateEntry {
+        recommendation_candidate_with_confidence_level(
+            promotion_readiness,
+            hold_reasons,
+            real_example_hits,
+            promotion_relevant_regression_hits,
+            ConfidenceLevel::Medium,
+        )
+    }
+
+    fn recommendation_candidate_with_confidence_level(
+        promotion_readiness: PromotionReadiness,
+        hold_reasons: Vec<HoldReason>,
+        real_example_hits: usize,
+        promotion_relevant_regression_hits: usize,
+        confidence_level: ConfidenceLevel,
+    ) -> RecommendationCandidateEntry {
+        let (next_step_status, next_step_detail) =
+            if promotion_readiness == PromotionReadiness::Ready {
+                (NextStepStatus::Promote, NextStepDetail::ReadyForPromotion)
+            } else if hold_reasons.contains(&HoldReason::HelperSurfaceNotPromotable) {
+                (
+                    NextStepStatus::DurableHold,
+                    NextStepDetail::HelperSurfaceNotPromotable,
+                )
+            } else {
+                (
+                    NextStepStatus::TargetedEvidenceGap,
+                    NextStepDetail::TargetedEvidenceGap,
+                )
+            };
+        RecommendationCandidateEntry {
+            candidate_id: "a-unsupportedwrappershape-cluster-01".to_string(),
+            cluster_ids: vec!["cluster-01".to_string()],
+            primary_reason_code: spec_core::semantic_review::UnsupportedFunctionReasonCode::UnsupportedWrapperBodyShape,
+            overlap_family: "function.wrapper.pipeline*".to_string(),
+            promotion_readiness,
+            hold_reasons,
+            next_step_status,
+            next_step_detail,
+            leverage: RecommendationLeverage {
+                real_example_hits,
+                promotion_relevant_regression_hits,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 2,
+            },
+            difficulty: RecommendationDifficulty {
+                tier: DifficultyTier::Adjacent,
+                why: "This cluster is adjacent to the promoted wrapper pipeline family."
+                    .to_string(),
+            },
+            confidence: RecommendationConfidence {
+                level: confidence_level,
+                why: "The cluster has enough support for validator coverage.".to_string(),
+            },
+            rationale: "Validator fixture candidate.".to_string(),
+        }
+    }
+
+    fn helper_surface_cluster(
+        cluster_id: &str,
+        leverage_counts: (usize, usize, usize),
+    ) -> UnsupportedClusterEntry {
+        let (real_example_hits, promotion_relevant_regression_hits, boundary_only_hits) =
+            leverage_counts;
+        UnsupportedClusterEntry {
+            cluster_id: cluster_id.to_string(),
+            reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            shape_fingerprint: "{\"schema_version\":1,\"function_dep_arity\":0,\"callable_dep_topology_class\":\"no_deps_or_helper\",\"contract_input_count\":1,\"has_return\":true,\"authored_body_kind\":\"neither\"}".to_string(),
+            representative_unit_ids: vec![
+                "examples_ecommerce::money/round".to_string(),
+                "examples_shared_spec::money/round".to_string(),
+                "m20_unsupported_truth_pack::money/round".to_string(),
+            ],
+            source_ids: vec![
+                "examples_ecommerce".to_string(),
+                "examples_shared_spec".to_string(),
+                "m20_unsupported_truth_pack".to_string(),
+            ],
+            real_example_hits,
+            promotion_relevant_regression_hits,
+            boundary_only_hits,
+            overlap_family: "unknown".to_string(),
+            candidate_status: CandidateStatus::Rankable,
+        }
+    }
+
+    fn recommendation_analysis_from_clusters(
+        clusters: Vec<UnsupportedClusterEntry>,
+    ) -> FamilyRecommendationAnalysisArtifact {
+        recommend::build_recommendation_analysis_artifact(
+            "2026-04-29T15:45:00Z".to_string(),
+            FAMILY_COVERAGE_LATEST_PATH.to_string(),
+            "coverage-sha".to_string(),
+            &clusters,
+        )
+    }
+
+    fn unsupported_cluster(
+        cluster_id: &str,
+        reason_code: UnsupportedFunctionReasonCode,
+        overlap_family: &str,
+        leverage_counts: (usize, usize, usize),
+        candidate_status: CandidateStatus,
+        representative_unit_ids: Vec<String>,
+    ) -> UnsupportedClusterEntry {
+        let (real_example_hits, promotion_relevant_regression_hits, boundary_only_hits) =
+            leverage_counts;
+        UnsupportedClusterEntry {
+            cluster_id: cluster_id.to_string(),
+            reason_code,
+            shape_fingerprint: format!("shape::{cluster_id}"),
+            representative_unit_ids,
+            source_ids: vec!["synthetic_source".to_string()],
+            real_example_hits,
+            promotion_relevant_regression_hits,
+            boundary_only_hits,
+            overlap_family: overlap_family.to_string(),
+            candidate_status,
+        }
+    }
+
+    fn seed_locked_recommendation_workspace(workspace_root: &Path) {
+        // Promoted packet roots are command-path inventory truth in the seeded workspace.
+        for relative_path in [
+            "examples/ecommerce/units",
+            "examples/shared-spec/units",
+            "examples/crosslib-app/units",
+            "semantic-families/corpus/rust-function.toml",
+            "semantic-families/function.wrapper.pipeline.v1",
+            "semantic-families/function.wrapper.pipeline.chain3.v1",
+            "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1",
+            "semantic-families/function.arithmetic_leaf.monotone_up.v1",
+            "spec-cli/tests/fixtures/m19/semantic_falsification_pack/units",
+            "spec-cli/tests/fixtures/m20/unsupported_truth_pack/units",
+            "spec-cli/tests/m14_regressions.rs",
+            "spec-core/src/semantic_review.rs",
+        ] {
+            copy_path_from_repo(workspace_root, relative_path);
+        }
+    }
+
+    fn copy_path_from_repo(destination_root: &Path, relative_path: &str) {
+        let source = repo_workspace_root().join(relative_path);
+        let destination = destination_root.join(relative_path);
+        if source.is_dir() {
+            copy_dir_recursive(&source, &destination);
+        } else {
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::copy(source, destination).unwrap();
+        }
+    }
+
+    fn copy_dir_recursive(source: &Path, destination: &Path) {
+        fs::create_dir_all(destination).unwrap();
+        for entry in fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            let source_path = entry.path();
+            let destination_path = destination.join(entry.file_name());
+            if source_path.is_dir() {
+                copy_dir_recursive(&source_path, &destination_path);
+            } else {
+                if let Some(parent) = destination_path.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::copy(source_path, destination_path).unwrap();
+            }
+        }
+    }
+
+    fn repo_workspace_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf()
+    }
+
+    fn seed_promoted_wrapper_proof_artifacts(workspace_root: &Path) {
+        write_string(
+            &workspace_root.join(
+                ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/prove.latest.json",
+            ),
+            "{}\n",
+        );
+        write_string(
+            &workspace_root.join(
+                ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/attempt-20260429T155100Z.json",
+            ),
+            "{}\n",
+        );
+        write_string(
+            &workspace_root.join(
+                ".semantic-family-artifacts/semantic-families/function.wrapper.pipeline.v1/certification.report.json",
+            ),
+            "{}\n",
+        );
     }
 
     fn seed_valid_manifest(manifest_path: &Path, family: &str) {
@@ -2242,6 +5332,14 @@ gate_d = true
         ]
     }
 
+    fn expected_wrapper_pipeline_scaffold_unit_paths(bucket: &str) -> [String; 3] {
+        [
+            format!("fixtures/{bucket}/units/pricing/pricing_discount_leaf_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/pricing_tax_leaf_{bucket}.unit.spec"),
+            format!("fixtures/{bucket}/units/pricing/pricing_total_wrapper_{bucket}.unit.spec"),
+        ]
+    }
+
     fn assert_candidate_lists_path_once(candidate: &str, relative_path: &str) {
         assert_eq!(candidate.matches(relative_path).count(), 1);
     }
@@ -2363,6 +5461,7 @@ gate_d = true
             "rust_toolchain",
             "schema_version",
             "suites",
+            "target_language",
         ];
         expected_keys.sort_unstable();
 
@@ -2423,6 +5522,34 @@ gate_d = true
             "test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n"
         ));
         stdout
+    }
+
+    #[test]
+    fn family_verify_decision_contract_rejects_non_json_format_from_cli_dispatch() {
+        let temp_dir = workspace_root();
+        let code = run_from(
+            temp_dir.path(),
+            [
+                "xtask",
+                "family",
+                "verify-decision-contract",
+                "--format",
+                "yaml",
+            ],
+        );
+
+        assert_eq!(code, 2);
+    }
+
+    #[test]
+    fn family_verify_decision_contract_help_exits_successfully() {
+        let temp_dir = workspace_root();
+        let code = run_from(
+            temp_dir.path(),
+            ["xtask", "family", "verify-decision-contract", "--help"],
+        );
+
+        assert_eq!(code, 0);
     }
 
     struct FakeRunner {

@@ -439,6 +439,14 @@ fn validate_body_rust_block(spec: &LoadedSpec) -> Result<()> {
     Ok(())
 }
 
+fn reject_top_level_typescript_body(spec: &LoadedSpec, message: &'static str) -> Result<()> {
+    if spec.spec.body.typescript.is_some() {
+        return Err(semantic_error(spec, message));
+    }
+
+    Ok(())
+}
+
 fn validate_contract_types(contract: &Contract, field_root: &str, path: &str) -> Result<()> {
     if let Some(inputs) = &contract.inputs {
         for (name, type_str) in inputs {
@@ -486,13 +494,17 @@ fn validate_data_escape_hatches(spec: &LoadedSpec) -> Result<()> {
     if !spec.spec.imports.is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:data must not use top-level imports; Rust-specific escape hatches are limited to methods[].lowering.rust.body and backends.rust.derives",
+            "kind:data must not use top-level imports; that is an invalid shared-surface authored shape. Rust-specific details are only authored in methods[].lowering.rust.body and backends.rust.derives, and any portability contamination is decided later",
         ));
     }
+    reject_top_level_typescript_body(
+        spec,
+        "kind:data must not declare top-level body.typescript; that is an invalid shared-surface authored shape, not a portability verdict",
+    )?;
     if !spec.spec.body.rust.trim().is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:data must leave body.rust empty; shared seam behavior belongs in methods[].lowering.rust.body",
+            "kind:data must leave top-level body.rust empty; that authored slot is outside the shared seam surface. Rust-specific lowering belongs in methods[].lowering.rust.body, and portability consequences are decided later",
         ));
     }
 
@@ -515,13 +527,17 @@ fn validate_sum_escape_hatches(spec: &LoadedSpec) -> Result<()> {
     if !spec.spec.imports.is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:sum must not use top-level imports; Rust-specific escape hatches are limited to methods[].lowering.rust.body and backends.rust.derives",
+            "kind:sum must not use top-level imports; that is an invalid shared-surface authored shape. Rust-specific details are only authored in methods[].lowering.rust.body and backends.rust.derives, and any portability contamination is decided later",
         ));
     }
+    reject_top_level_typescript_body(
+        spec,
+        "kind:sum must not declare top-level body.typescript; that is an invalid shared-surface authored shape, not a portability verdict",
+    )?;
     if !spec.spec.body.rust.trim().is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:sum must leave body.rust empty; shared seam behavior belongs in methods[].lowering.rust.body",
+            "kind:sum must leave top-level body.rust empty; that authored slot is outside the shared seam surface. Rust-specific lowering belongs in methods[].lowering.rust.body, and portability consequences are decided later",
         ));
     }
     if spec.spec.extensions.data.is_some() {
@@ -1273,6 +1289,15 @@ pub fn validate_raw_molecule_test_yaml(yaml_value: &YamlValue, file_path: &str) 
 /// 3. id segments must not be Rust reserved keywords
 /// 4. id segments must not use reserved generated namespace names
 pub fn validate_molecule_test_semantic(test: &LoadedMoleculeTest) -> Result<()> {
+    if test.test.body.typescript.is_some() {
+        return Err(SpecError::SemanticValidation {
+            message:
+                "body.typescript is not supported in .test.spec; molecule tests remain Rust-only"
+                    .to_string(),
+            path: test.source.file_path.clone(),
+        });
+    }
+
     syn::parse_str::<syn::Block>(&test.test.body.rust).map_err(|e| {
         SpecError::MoleculeBodyRustMustBeBlock {
             message: e.to_string(),
@@ -1422,6 +1447,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: rust_body.to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -1446,6 +1472,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },
@@ -1469,6 +1496,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: String::new(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -2237,6 +2265,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "use std::collections::HashMap; pub fn test() {}".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -2308,6 +2337,15 @@ local_tests:
         let spec = create_test_spec("pricing/apply_discount", "{ subtotal - subtotal * rate }");
         let result = validate_semantic(&spec);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_semantic_allows_additive_function_typescript_body() {
+        let mut spec = create_test_spec("pricing/apply_tax", "{ subtotal + subtotal * rate }");
+        spec.spec.body.typescript = Some("return subtotal + subtotal * rate;".to_string());
+
+        let result = validate_semantic(&spec);
+        assert!(result.is_ok(), "{result:?}");
     }
 
     #[test]
@@ -2386,6 +2424,18 @@ local_tests:
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
             err.contains("conflicts with the emitted enum name 'CheckoutStatus'"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_sum_semantic_rejects_top_level_typescript_body() {
+        let mut spec = create_sum_spec("pricing/checkout_status");
+        spec.spec.body.typescript = Some("return \"pending\";".to_string());
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("kind:sum must not declare top-level body.typescript"),
             "{err}"
         );
     }
@@ -2533,7 +2583,19 @@ local_tests:
 
         let err = validate_semantic(&spec).unwrap_err().to_string();
         assert!(
-            err.contains("kind:data must leave body.rust empty"),
+            err.contains("kind:data must leave top-level body.rust empty"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_data_semantic_rejects_top_level_typescript_body() {
+        let mut spec = create_data_spec("pricing/checkout_quote");
+        spec.spec.body.typescript = Some("return unreachable();".to_string());
+
+        let err = validate_semantic(&spec).unwrap_err().to_string();
+        assert!(
+            err.contains("kind:data must not declare top-level body.typescript"),
             "{err}"
         );
     }
@@ -2665,6 +2727,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "pub use std::collections::HashMap;\npub fn func() {}".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -2768,6 +2831,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "injection_attempt".to_string(),
@@ -2804,6 +2868,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "happy_path".to_string(),
@@ -2836,6 +2901,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "block_allowed".to_string(),
@@ -2873,6 +2939,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![
                     LocalTest {
@@ -2916,6 +2983,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "block_attempt".to_string(),
@@ -2952,6 +3020,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_call_arg".to_string(),
@@ -2989,6 +3058,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "block_in_binary_operand".to_string(),
@@ -3026,6 +3096,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_method_arg".to_string(),
@@ -3063,6 +3134,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_field_base".to_string(),
@@ -3100,6 +3172,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_index".to_string(),
@@ -3137,6 +3210,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_unary".to_string(),
@@ -3174,6 +3248,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "unsafe_in_cast".to_string(),
@@ -3218,6 +3293,7 @@ local_tests:
                 imports: vec![],
                 body: Body {
                     rust: "{ () }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -3606,6 +3682,7 @@ body:
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![LocalTest {
                     id: "deep".to_string(),
@@ -3841,6 +3918,7 @@ methods:
                 imports: None,
                 body: Body {
                     rust: body.to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },
@@ -3883,6 +3961,20 @@ methods:
         assert!(
             err.contains("unsafe"),
             "expected 'unsafe' in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn molecule_body_with_typescript_is_rejected() {
+        let mut test = make_molecule_test("pricing/checkout_flow", "{ true }");
+        test.test.body.typescript = Some("return true;".to_string());
+
+        let err = validate_molecule_test_semantic(&test)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("body.typescript is not supported in .test.spec"),
+            "{err}"
         );
     }
 

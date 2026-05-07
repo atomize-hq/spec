@@ -8,6 +8,7 @@
 
 pub const AUTHORED_SPEC_VERSION: &str = "0.3.0";
 
+pub mod backend_execution;
 pub mod escape_hatch;
 pub mod export;
 pub mod generator;
@@ -18,12 +19,17 @@ pub mod normalizer;
 pub mod passport;
 pub mod pipeline;
 pub mod plan;
+pub mod portability;
 pub mod semantic_review;
 mod syntax;
 pub mod types;
 pub mod validator;
 
 pub use graph::{ImpactSet, MoleculeTestNode, SpecEdge, SpecGraph, UnitNode};
+pub use semantic_review::{
+    UnsupportedFunctionShapeFingerprint, unsupported_function_shape_fingerprint,
+    unsupported_function_shape_fingerprint_with_context,
+};
 
 use thiserror::Error;
 

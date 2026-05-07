@@ -9,3 +9,5 @@ spec-cli/.tmp*/
 .context
 .runs
 .semantic-family-artifacts/
+.worktrees/
+.codex

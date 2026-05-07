@@ -1,0 +1,38 @@
+schema_version = 1
+target_language = "rust"
+target_lane = "function"
+
+[[sources]]
+id = "examples_ecommerce"
+path = "examples/ecommerce/units"
+kind = "real_example"
+counts_toward_recommendation = true
+note = "Canonical maintained example corpus."
+
+[[sources]]
+id = "m19_semantic_falsification_pack"
+path = "spec-cli/tests/fixtures/m19/semantic_falsification_pack/units"
+kind = "regression_unsupported"
+counts_toward_recommendation = true
+note = "Regression pack with aligned, drift, under-specified, and boundary fixtures."
+
+[[sources]]
+id = "m20_unsupported_truth_pack"
+path = "spec-cli/tests/fixtures/m20/unsupported_truth_pack/units"
+kind = "regression_unsupported"
+counts_toward_recommendation = true
+note = "Explicit unsupported-function truth pack."
+
+[[sources]]
+id = "examples_shared_spec"
+path = "examples/shared-spec/units"
+kind = "real_example"
+counts_toward_recommendation = true
+note = "Maintained sibling-library helper example."
+
+[[sources]]
+id = "examples_crosslib_app"
+path = "examples/crosslib-app/units"
+kind = "real_example"
+counts_toward_recommendation = true
+note = "Maintained cross-library app example."

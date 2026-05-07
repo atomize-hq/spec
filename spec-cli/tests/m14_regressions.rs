@@ -99,7 +99,134 @@ fn copied_m24_monotone_up_fixture(bucket: &str) -> (TempDir, PathBuf) {
             .join(bucket),
         &fixture_dst,
     );
+    inject_monotone_up_typescript_body(
+        &fixture_dst.join(monotone_up_fixture_unit_relative_path(bucket)),
+        monotone_up_typescript_body(bucket),
+    );
     (temp_dir, fixture_dst)
+}
+
+fn copied_m30_wrapper_pipeline_fixture(bucket: &str) -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture_dst = temp_dir
+        .path()
+        .join(format!("m30_wrapper_pipeline_{bucket}"));
+    copy_dir_all(
+        &repo_root()
+            .join("semantic-families/function.wrapper.pipeline.v1/fixtures")
+            .join(bucket),
+        &fixture_dst,
+    );
+    (temp_dir, fixture_dst)
+}
+
+fn monotone_up_fixture_unit_relative_path(bucket: &str) -> &'static str {
+    match bucket {
+        "aligned" => "units/pricing/apply_tax_aligned.unit.spec",
+        "drift" => "units/pricing/apply_tax_drift.unit.spec",
+        "under_specified" => "units/pricing/apply_tax_under_specified.unit.spec",
+        "unsupported_near_miss" => {
+            "units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec"
+        }
+        other => panic!("unexpected monotone-up bucket `{other}`"),
+    }
+}
+
+fn wrapper_pipeline_fixture_unit_relative_path(bucket: &str) -> &'static str {
+    match bucket {
+        "aligned" => "units/pricing/pricing_total_wrapper_aligned.unit.spec",
+        "drift" => "units/pricing/pricing_total_wrapper_drift.unit.spec",
+        "under_specified" => "units/pricing/pricing_total_wrapper_under_specified.unit.spec",
+        "unsupported_near_miss" => {
+            "units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec"
+        }
+        other => panic!("unexpected wrapper-pipeline bucket `{other}`"),
+    }
+}
+
+fn monotone_up_typescript_body(bucket: &str) -> &'static str {
+    match bucket {
+        "aligned" => {
+            "    {\n        const taxed = subtotal + subtotal * rate;\n        return round(taxed);\n    }"
+        }
+        "drift" => {
+            "    {\n        const taxed = subtotal - subtotal * rate;\n        return round(taxed >= Decimal.ZERO ? taxed : Decimal.ZERO);\n    }"
+        }
+        "under_specified" => {
+            "    {\n        const taxed = subtotal + subtotal * rate;\n        return round(taxed);\n    }"
+        }
+        "unsupported_near_miss" => {
+            "    {\n        const taxed = subtotal + subtotal * rate;\n        if (rate === Decimal.ZERO) {\n            return subtotal;\n        }\n        return round(taxed);\n    }"
+        }
+        other => panic!("unexpected monotone-up bucket `{other}`"),
+    }
+}
+
+fn wrapper_pipeline_typescript_body(bucket: &str) -> &'static str {
+    match bucket {
+        "aligned" => {
+            "    {\n        const discounted = pricing_discount_leaf_aligned(subtotal, discount_rate);\n        return pricing_tax_leaf_aligned(discounted, tax_rate);\n    }"
+        }
+        "drift" => {
+            "    {\n        const taxed = pricing_tax_leaf_drift(subtotal, tax_rate);\n        return pricing_discount_leaf_drift(taxed, discount_rate);\n    }"
+        }
+        "under_specified" => {
+            "    {\n        const discounted = pricing_discount_leaf_under_specified(subtotal, discount_rate);\n        return pricing_tax_leaf_under_specified(discounted, tax_rate);\n    }"
+        }
+        "unsupported_near_miss" => {
+            "    {\n        const discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);\n        return pricing_tax_leaf_unsupported_near_miss(\n            discounted,\n            tax_rate >= Decimal.ZERO ? tax_rate : Decimal.ZERO\n        );\n    }"
+        }
+        other => panic!("unexpected wrapper-pipeline bucket `{other}`"),
+    }
+}
+
+fn inject_monotone_up_typescript_body(unit_path: &Path, typescript_body: &str) {
+    let contents = fs::read_to_string(unit_path).unwrap();
+    if contents.contains("\n  typescript: |\n") {
+        return;
+    }
+
+    let rewritten = contents.replace(
+        "\nlocal_tests:\n",
+        &format!("\n  typescript: |\n{typescript_body}\nlocal_tests:\n"),
+    );
+    assert_ne!(
+        rewritten,
+        contents,
+        "expected to inject a typescript body into `{}`",
+        unit_path.display()
+    );
+    fs::write(unit_path, rewritten).unwrap();
+}
+
+fn assert_monotone_up_fixture_has_additive_typescript(fixture_dst: &Path, bucket: &str) {
+    let unit_path = fixture_dst.join(monotone_up_fixture_unit_relative_path(bucket));
+    let contents = fs::read_to_string(&unit_path).unwrap();
+    assert!(
+        contents.contains("\n  typescript: |\n"),
+        "expected additive typescript body in `{}`",
+        unit_path.display()
+    );
+    assert!(
+        contents.contains(monotone_up_typescript_body(bucket)),
+        "expected truthful monotone-up typescript body in `{}`",
+        unit_path.display()
+    );
+}
+
+fn assert_wrapper_pipeline_fixture_has_additive_typescript(fixture_dst: &Path, bucket: &str) {
+    let unit_path = fixture_dst.join(wrapper_pipeline_fixture_unit_relative_path(bucket));
+    let contents = fs::read_to_string(&unit_path).unwrap();
+    assert!(
+        contents.contains("\n  typescript: |\n"),
+        "expected additive typescript body in `{}`",
+        unit_path.display()
+    );
+    assert!(
+        contents.contains(wrapper_pipeline_typescript_body(bucket)),
+        "expected truthful wrapper-pipeline typescript body in `{}`",
+        unit_path.display()
+    );
 }
 
 fn status_unit<'a>(status_json: &'a Value, id: &str) -> &'a Value {
@@ -321,7 +448,7 @@ fn rewrite_apply_tax_as_under_specified(unit_path: &Path) {
     );
 }
 
-fn rewrite_apply_tax_as_clamp_drift(unit_path: &Path) {
+fn rewrite_apply_tax_as_helper_then_clamp(unit_path: &Path) {
     replace_in_file(unit_path, "round(taxed)", "round(taxed.max(Decimal::ZERO))");
 }
 
@@ -331,30 +458,6 @@ fn rewrite_apply_tax_as_unsupported_near_miss(unit_path: &Path) {
         unit_path,
         "    {\n        let taxed = subtotal + subtotal * rate;\n        round(taxed)\n    }\n",
         "    {\n        let taxed = subtotal + subtotal * rate;\n        if rate == Decimal::ZERO {\n            subtotal\n        } else {\n            round(taxed)\n        }\n    }\n",
-    );
-}
-
-fn rewrite_calculate_total_as_reversed_pipeline(unit_path: &Path) {
-    replace_in_file(
-        unit_path,
-        "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
-        "    {\n        let taxed_first = apply_tax(subtotal, tax_rate);\n        apply_discount(taxed_first, discount_rate)\n    }\n",
-    );
-}
-
-fn rewrite_calculate_total_as_under_specified(unit_path: &Path) {
-    replace_in_file(
-        unit_path,
-        "Combine discount and tax so a checkout flow can produce the final price.",
-        "todo",
-    );
-}
-
-fn rewrite_calculate_total_as_unsupported_near_miss(unit_path: &Path) {
-    replace_in_file(
-        unit_path,
-        "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
-        "    {\n        apply_tax(apply_discount(subtotal, discount_rate), tax_rate.max(Decimal::ZERO))\n    }\n",
     );
 }
 
@@ -416,6 +519,48 @@ fn run_supported_function_wedge_assertions(
         expectation.reason_codes,
         expectation.summary,
     );
+}
+
+fn run_wrapper_pipeline_bucket_unit_tests(fixture_dst: &Path, bucket: &str) {
+    let unit_paths = match bucket {
+        "aligned" => [
+            "units/pricing/pricing_discount_leaf_aligned.unit.spec",
+            "units/pricing/pricing_tax_leaf_aligned.unit.spec",
+            "units/pricing/pricing_total_wrapper_aligned.unit.spec",
+        ],
+        "drift" => [
+            "units/pricing/pricing_discount_leaf_drift.unit.spec",
+            "units/pricing/pricing_tax_leaf_drift.unit.spec",
+            "units/pricing/pricing_total_wrapper_drift.unit.spec",
+        ],
+        "under_specified" => [
+            "units/pricing/pricing_discount_leaf_under_specified.unit.spec",
+            "units/pricing/pricing_tax_leaf_under_specified.unit.spec",
+            "units/pricing/pricing_total_wrapper_under_specified.unit.spec",
+        ],
+        "unsupported_near_miss" => [
+            "units/pricing/pricing_discount_leaf_unsupported_near_miss.unit.spec",
+            "units/pricing/pricing_tax_leaf_unsupported_near_miss.unit.spec",
+            "units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec",
+        ],
+        other => panic!("unexpected wrapper-pipeline bucket `{other}`"),
+    };
+
+    for relative_path in unit_paths {
+        let output = run_spec(
+            fixture_dst,
+            &[
+                "test",
+                fixture_dst.join(relative_path).to_str().unwrap(),
+                "--crate-root",
+                fixture_dst.to_str().unwrap(),
+            ],
+        );
+        assert_success(
+            &output,
+            &format!("wrapper-pipeline bucket `{bucket}` unit test `{relative_path}`"),
+        );
+    }
 }
 
 fn aligned_checkout_quote_molecule_body() -> &'static str {
@@ -2332,6 +2477,7 @@ fn monotone_up_truth_surface_stale_status_and_export_preserve_last_proven_review
 fn monotone_up_corpus_aligned_fixture_projects_valid_state() {
     let (_temp_dir, fixture_dst) = copied_m24_monotone_up_fixture("aligned");
     let passport_path = fixture_dst.join("units/pricing/apply_tax_aligned.spec.passport.json");
+    assert_monotone_up_fixture_has_additive_typescript(&fixture_dst, "aligned");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2368,6 +2514,7 @@ fn monotone_up_corpus_aligned_fixture_projects_valid_state() {
 fn monotone_up_corpus_drift_fixture_projects_failing_state() {
     let (_temp_dir, fixture_dst) = copied_m24_monotone_up_fixture("drift");
     let passport_path = fixture_dst.join("units/pricing/apply_tax_drift.spec.passport.json");
+    assert_monotone_up_fixture_has_additive_typescript(&fixture_dst, "drift");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2404,6 +2551,7 @@ fn monotone_up_corpus_under_specified_fixture_projects_incomplete_state() {
     let (_temp_dir, fixture_dst) = copied_m24_monotone_up_fixture("under_specified");
     let passport_path =
         fixture_dst.join("units/pricing/apply_tax_under_specified.spec.passport.json");
+    assert_monotone_up_fixture_has_additive_typescript(&fixture_dst, "under_specified");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2443,6 +2591,7 @@ fn monotone_up_corpus_unsupported_near_miss_stays_additive_only_and_neutral() {
     let (_temp_dir, fixture_dst) = copied_m24_monotone_up_fixture("unsupported_near_miss");
     let passport_path = fixture_dst
         .join("units/pricing/apply_tax_control_flow_unsupported_near_miss.spec.passport.json");
+    assert_monotone_up_fixture_has_additive_typescript(&fixture_dst, "unsupported_near_miss");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2610,11 +2759,11 @@ fn under_specified_apply_tax_wedge_projects_incomplete_state() {
 }
 
 #[test]
-fn clamp_drift_apply_tax_wedge_projects_failing_state() {
+fn helper_then_clamp_apply_tax_wedge_projects_valid_state() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let unit_path = fixture_dst.join("units/pricing/apply_tax.unit.spec");
     let passport_path = fixture_dst.join("units/pricing/apply_tax.spec.passport.json");
-    rewrite_apply_tax_as_clamp_drift(&unit_path);
+    rewrite_apply_tax_as_helper_then_clamp(&unit_path);
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -2625,47 +2774,74 @@ fn clamp_drift_apply_tax_wedge_projects_failing_state() {
             fixture_dst.to_str().unwrap(),
         ],
     );
-    assert_success(&unit_test_output, "clamp drift apply_tax wedge unit test");
+    assert_success(
+        &unit_test_output,
+        "helper-then-clamp apply_tax wedge unit test",
+    );
 
-    run_supported_function_wedge_assertions(
+    let passport = read_json(&passport_path);
+    assert_function_semantic_review(
+        &passport["semantic_review"],
+        FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+
+    let status_output = run_spec(
         &fixture_dst,
-        &passport_path,
-        SupportedFunctionWedgeExpectation {
-            unit_id: "pricing/apply_tax",
-            compatibility_key: FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
-            verdict: "semantic_drift",
-            reason_codes: &["function_body_contradicts_semantic_intent"],
-            summary: "executable lowering contradicts authored semantic claims",
-            expected_status: "failing",
-            expected_reason: Some(
-                "semantic drift: executable lowering contradicts authored semantic claims",
-            ),
-        },
+        &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
+    );
+    assert_exit_code(
+        &status_output,
+        1,
+        "helper-then-clamp apply_tax status should stay non-green while covered molecule proof is stale",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+    let apply_tax_status = status_unit(&status_json, "pricing/apply_tax");
+    assert_eq!(apply_tax_status["status"], "valid");
+    assert!(apply_tax_status["reason"].is_null());
+    assert_function_semantic_review(
+        &apply_tax_status["semantic_review"],
+        FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
+    );
+
+    let discount_policy = status_unit(&status_json, "pricing/discount_policy");
+    assert_eq!(discount_policy["status"], "incomplete");
+    assert_eq!(
+        discount_policy["reason"],
+        "missing required escape-hatch proof: molecule"
+    );
+
+    let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
+    assert_success(&export_output, "helper-then-clamp apply_tax export");
+    let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
+    let exported = exported_passport(&export_json, "pricing/apply_tax");
+    assert_function_semantic_review(
+        &exported["semantic_review"],
+        FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "aligned",
+        &[],
+        "authored semantics and executable lowering agree on the supported function surface",
     );
 }
 
 #[test]
 fn m21_chain3_regression_family_b_read_side_surfaces_are_not_shadowed() {
-    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
-    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
-    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
-
-    let unit_test_output = run_spec(
-        &fixture_dst,
-        &[
-            "test",
-            unit_path.to_str().unwrap(),
-            "--crate-root",
-            fixture_dst.to_str().unwrap(),
-        ],
-    );
-    assert_success(&unit_test_output, "aligned calculate_total wedge unit test");
+    let (_temp_dir, fixture_dst) = copied_m30_wrapper_pipeline_fixture("aligned");
+    let passport_path =
+        fixture_dst.join("units/pricing/pricing_total_wrapper_aligned.spec.passport.json");
+    assert_wrapper_pipeline_fixture_has_additive_typescript(&fixture_dst, "aligned");
+    run_wrapper_pipeline_bucket_unit_tests(&fixture_dst, "aligned");
 
     run_supported_function_wedge_assertions(
         &fixture_dst,
         &passport_path,
         SupportedFunctionWedgeExpectation {
-            unit_id: "pricing/calculate_total",
+            unit_id: "pricing/pricing_total_wrapper_aligned",
             compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
             verdict: "aligned",
             reason_codes: &[],
@@ -2677,31 +2853,23 @@ fn m21_chain3_regression_family_b_read_side_surfaces_are_not_shadowed() {
 }
 
 #[test]
-fn reversed_pipeline_calculate_total_wedge_projects_failing_state() {
-    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
-    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
-    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
-    rewrite_calculate_total_as_reversed_pipeline(&unit_path);
+fn wrapper_pipeline_corpus_aligned_fixture_projects_valid_state() {
+    m21_chain3_regression_family_b_read_side_surfaces_are_not_shadowed();
+}
 
-    let unit_test_output = run_spec(
-        &fixture_dst,
-        &[
-            "test",
-            unit_path.to_str().unwrap(),
-            "--crate-root",
-            fixture_dst.to_str().unwrap(),
-        ],
-    );
-    assert_success(
-        &unit_test_output,
-        "reversed pipeline calculate_total wedge unit test",
-    );
+#[test]
+fn reversed_pipeline_calculate_total_wedge_projects_failing_state() {
+    let (_temp_dir, fixture_dst) = copied_m30_wrapper_pipeline_fixture("drift");
+    let passport_path =
+        fixture_dst.join("units/pricing/pricing_total_wrapper_drift.spec.passport.json");
+    assert_wrapper_pipeline_fixture_has_additive_typescript(&fixture_dst, "drift");
+    run_wrapper_pipeline_bucket_unit_tests(&fixture_dst, "drift");
 
     run_supported_function_wedge_assertions(
         &fixture_dst,
         &passport_path,
         SupportedFunctionWedgeExpectation {
-            unit_id: "pricing/calculate_total",
+            unit_id: "pricing/pricing_total_wrapper_drift",
             compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
             verdict: "semantic_drift",
             reason_codes: &["function_body_contradicts_semantic_intent"],
@@ -2715,31 +2883,23 @@ fn reversed_pipeline_calculate_total_wedge_projects_failing_state() {
 }
 
 #[test]
-fn under_specified_calculate_total_wedge_projects_incomplete_state() {
-    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
-    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
-    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
-    rewrite_calculate_total_as_under_specified(&unit_path);
+fn wrapper_pipeline_corpus_drift_fixture_projects_failing_state() {
+    reversed_pipeline_calculate_total_wedge_projects_failing_state();
+}
 
-    let unit_test_output = run_spec(
-        &fixture_dst,
-        &[
-            "test",
-            unit_path.to_str().unwrap(),
-            "--crate-root",
-            fixture_dst.to_str().unwrap(),
-        ],
-    );
-    assert_success(
-        &unit_test_output,
-        "under-specified calculate_total wedge unit test",
-    );
+#[test]
+fn under_specified_calculate_total_wedge_projects_incomplete_state() {
+    let (_temp_dir, fixture_dst) = copied_m30_wrapper_pipeline_fixture("under_specified");
+    let passport_path =
+        fixture_dst.join("units/pricing/pricing_total_wrapper_under_specified.spec.passport.json");
+    assert_wrapper_pipeline_fixture_has_additive_typescript(&fixture_dst, "under_specified");
+    run_wrapper_pipeline_bucket_unit_tests(&fixture_dst, "under_specified");
 
     run_supported_function_wedge_assertions(
         &fixture_dst,
         &passport_path,
         SupportedFunctionWedgeExpectation {
-            unit_id: "pricing/calculate_total",
+            unit_id: "pricing/pricing_total_wrapper_under_specified",
             compatibility_key: FUNCTION_FAMILY_B_COMPATIBILITY_KEY,
             verdict: "under_specified",
             reason_codes: &["vague_unit_intent"],
@@ -2753,25 +2913,17 @@ fn under_specified_calculate_total_wedge_projects_incomplete_state() {
 }
 
 #[test]
-fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral() {
-    let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
-    let unit_path = fixture_dst.join("units/pricing/calculate_total.unit.spec");
-    let passport_path = fixture_dst.join("units/pricing/calculate_total.spec.passport.json");
-    rewrite_calculate_total_as_unsupported_near_miss(&unit_path);
+fn wrapper_pipeline_corpus_under_specified_fixture_projects_incomplete_state() {
+    under_specified_calculate_total_wedge_projects_incomplete_state();
+}
 
-    let unit_test_output = run_spec(
-        &fixture_dst,
-        &[
-            "test",
-            unit_path.to_str().unwrap(),
-            "--crate-root",
-            fixture_dst.to_str().unwrap(),
-        ],
-    );
-    assert_success(
-        &unit_test_output,
-        "unsupported near-miss calculate_total wedge unit test",
-    );
+#[test]
+fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral() {
+    let (_temp_dir, fixture_dst) = copied_m30_wrapper_pipeline_fixture("unsupported_near_miss");
+    let passport_path = fixture_dst
+        .join("units/pricing/pricing_total_wrapper_unsupported_near_miss.spec.passport.json");
+    assert_wrapper_pipeline_fixture_has_additive_typescript(&fixture_dst, "unsupported_near_miss");
+    run_wrapper_pipeline_bucket_unit_tests(&fixture_dst, "unsupported_near_miss");
 
     let passport = read_json(&passport_path);
     let seeded_review = passport["semantic_review"].clone();
@@ -2781,13 +2933,15 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
         &fixture_dst,
         &["status", fixture_dst.to_str().unwrap(), "--format", "json"],
     );
-    assert_exit_code(
+    assert_success(
         &status_output,
-        1,
         "unsupported near-miss calculate_total wedge status",
     );
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/calculate_total");
+    let status_unit = status_unit(
+        &status_json,
+        "pricing/pricing_total_wrapper_unsupported_near_miss",
+    );
     assert_eq!(status_unit["status"], "valid");
     assert!(status_unit["reason"].is_null());
     assert_eq!(status_unit["semantic_review"], seeded_review);
@@ -2798,8 +2952,26 @@ fn unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral()
         "unsupported near-miss calculate_total wedge export",
     );
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/calculate_total");
+    let exported = exported_passport(
+        &export_json,
+        "pricing/pricing_total_wrapper_unsupported_near_miss",
+    );
     assert_eq!(exported["semantic_review"], seeded_review);
+}
+
+#[test]
+fn wrapper_pipeline_corpus_unsupported_near_miss_stays_additive_only_and_neutral() {
+    unsupported_near_miss_calculate_total_wedge_stays_additive_only_and_neutral();
+}
+
+#[test]
+fn wrapper_pipeline_regression_read_side_surfaces_are_not_shadowed() {
+    wrapper_pipeline_corpus_aligned_fixture_projects_valid_state();
+}
+
+#[test]
+fn wrapper_pipeline_regression_unsupported_near_miss_stays_additive_only_and_neutral() {
+    wrapper_pipeline_corpus_unsupported_near_miss_stays_additive_only_and_neutral();
 }
 
 #[test]

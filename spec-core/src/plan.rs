@@ -374,6 +374,7 @@ mod tests {
                 imports: vec![],
                 body: Body {
                     rust: "{ true }".to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -398,6 +399,7 @@ mod tests {
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
+                    typescript: None,
                 },
                 spec_version: None,
             },

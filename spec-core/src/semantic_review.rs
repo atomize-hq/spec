@@ -1,6 +1,10 @@
-use crate::escape_hatch::{is_helper_or_example_method, summarize_escape_hatch_semantic_markers};
+use crate::backend_execution::is_helper_or_example_method;
 use crate::generator::{lower_data_seam, lower_sum_seam};
 use crate::normalizer::normalize_unit;
+use crate::portability::{
+    PortabilityContaminationSummary, PortabilityMarkerSummary, summarize_portability_contamination,
+    summarize_portability_markers,
+};
 use crate::types::{
     AuthoredDataShape, AuthoredSumShape, DepRef, LoadedSpec, NormalizedUnit, UnitKind,
     callable_name,
@@ -119,6 +123,129 @@ impl SemanticReview {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UnsupportedFunctionShapeFingerprint {
+    pub schema_version: u8,
+    pub function_dep_arity: usize,
+    pub callable_dep_topology_class: UnsupportedFunctionDepTopologyClass,
+    pub contract_input_count: usize,
+    pub has_return: bool,
+    pub authored_body_kind: UnsupportedFunctionAuthoredBodyKind,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UnsupportedFunctionDepTopologyClass {
+    NoDepsOrHelper,
+    SupportedCallablePair,
+    UnsupportedCallablePair,
+    SupportedCallableTriple,
+    UnsupportedCallableTriple,
+    Fanout,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UnsupportedFunctionAuthoredBodyKind {
+    WrapperLike,
+    ArithmeticLike,
+    Neither,
+}
+
+impl UnsupportedFunctionShapeFingerprint {
+    pub fn from_spec(spec: &LoadedSpec) -> Option<Self> {
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+        let context = SemanticReviewContext::new(&specs_by_id);
+        Self::from_spec_with_context(spec, &context)
+    }
+
+    pub fn from_spec_with_context(
+        spec: &LoadedSpec,
+        context: &SemanticReviewContext<'_>,
+    ) -> Option<Self> {
+        let review = evaluate_semantic_review_with_context(spec, context)?;
+        if !review_describes_unsupported_function_shape(&review) {
+            return None;
+        }
+        let authored = build_authored_function_packet(spec)?;
+
+        Some(Self {
+            schema_version: 1,
+            function_dep_arity: authored.deps.len(),
+            callable_dep_topology_class: unsupported_function_dep_topology_class(
+                &authored, context,
+            ),
+            contract_input_count: authored.inputs.len(),
+            has_return: authored.returns.is_some(),
+            authored_body_kind: unsupported_function_authored_body_kind(&authored),
+        })
+    }
+
+    pub fn as_key(&self) -> String {
+        serde_json::to_string(self).expect("unsupported-function fingerprint must serialize")
+    }
+}
+
+pub fn unsupported_function_shape_fingerprint(spec: &LoadedSpec) -> Option<String> {
+    UnsupportedFunctionShapeFingerprint::from_spec(spec).map(|fingerprint| fingerprint.as_key())
+}
+
+pub fn unsupported_function_shape_fingerprint_with_context(
+    spec: &LoadedSpec,
+    context: &SemanticReviewContext<'_>,
+) -> Option<String> {
+    UnsupportedFunctionShapeFingerprint::from_spec_with_context(spec, context)
+        .map(|fingerprint| fingerprint.as_key())
+}
+
+fn review_describes_unsupported_function_shape(review: &SemanticReview) -> bool {
+    review.effective_support_status() == SemanticSupportStatus::Unsupported
+        && (review
+            .compatibility_key
+            .starts_with("unsupported.function.")
+            || !review.unsupported_reason_codes.is_empty())
+}
+
+fn unsupported_function_dep_topology_class(
+    authored: &SemanticAuthoredFunctionPacket,
+    context: &SemanticReviewContext<'_>,
+) -> UnsupportedFunctionDepTopologyClass {
+    match authored.deps.len() {
+        0 | 1 => UnsupportedFunctionDepTopologyClass::NoDepsOrHelper,
+        2 => {
+            let mut stack = HashSet::new();
+            if family_b_deps_are_supported(authored, context, &mut stack) {
+                UnsupportedFunctionDepTopologyClass::SupportedCallablePair
+            } else {
+                UnsupportedFunctionDepTopologyClass::UnsupportedCallablePair
+            }
+        }
+        3 => {
+            let mut stack = HashSet::new();
+            if family_c_deps_are_supported(authored, context, &mut stack) {
+                UnsupportedFunctionDepTopologyClass::SupportedCallableTriple
+            } else {
+                UnsupportedFunctionDepTopologyClass::UnsupportedCallableTriple
+            }
+        }
+        _ => UnsupportedFunctionDepTopologyClass::Fanout,
+    }
+}
+
+fn unsupported_function_authored_body_kind(
+    authored: &SemanticAuthoredFunctionPacket,
+) -> UnsupportedFunctionAuthoredBodyKind {
+    if authored_function_looks_like_wrapper_contract(authored)
+        || authored_function_looks_like_chain3_wrapper_contract(authored)
+    {
+        UnsupportedFunctionAuthoredBodyKind::WrapperLike
+    } else if authored_function_looks_like_arithmetic_contract(authored) {
+        UnsupportedFunctionAuthoredBodyKind::ArithmeticLike
+    } else {
+        UnsupportedFunctionAuthoredBodyKind::Neither
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SemanticProjectionMode {
     Preserve,
@@ -190,6 +317,8 @@ pub struct SemanticAuthoredFunctionPacket {
     pub returns: Option<String>,
     pub invariants: Vec<String>,
     pub deps: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_typescript: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -227,11 +356,10 @@ pub struct SemanticConstructorPacket {
     pub inputs: Vec<SemanticFieldPacket>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SemanticMarkerSummary {
-    pub has_domain_lowering: bool,
-    pub has_helper_lowering: bool,
-    pub has_backend_derives: bool,
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct SupportedSeamPortabilitySummary {
+    markers: PortabilityMarkerSummary,
+    contamination: PortabilityContaminationSummary,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -885,10 +1013,10 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         .map(|method| method.id.clone())
         .collect::<HashSet<_>>();
     let executable = build_executable_packet(spec, &helper_method_ids)?;
-    let markers = summarize_markers(spec);
+    let portability = supported_seam_portability_summary(spec);
     let mut reasons = Vec::new();
     let mut authored_surfaces = authored_citations(spec, &authored);
-    let mut executable_surfaces = executable_citations(spec, &executable, markers);
+    let mut executable_surfaces = executable_citations(spec, &executable, portability.markers);
 
     if authored.methods.is_empty() {
         reasons.push(SemanticReasonCode::MissingSemanticMethods);
@@ -985,7 +1113,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     drift_reasons.dedup();
 
     if !drift_reasons.is_empty() {
-        let verdict = if markers.has_domain_lowering {
+        let verdict = if portability.contamination.has_contaminating_domain_lowering {
             SemanticVerdict::BackendOnlySemanticsLeaked
         } else {
             SemanticVerdict::SemanticDrift
@@ -1004,9 +1132,9 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         });
     }
 
-    if markers.has_backend_derives || markers.has_helper_lowering {
+    if portability.contamination.has_backend_only_detail {
         let mut reason_codes = vec![SemanticReasonCode::BackendOnlyExecutionMarker];
-        if markers.has_helper_lowering {
+        if portability.markers.has_proof_helper_lowering {
             reason_codes.push(SemanticReasonCode::ProofHelperOnlyMarker);
         }
         return Some(SemanticReview {
@@ -1024,7 +1152,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         });
     }
 
-    if markers.has_domain_lowering {
+    if portability.markers.has_domain_lowering {
         authored_surfaces.push(SemanticCitation {
             path: "methods".to_string(),
             summary: "domain methods fully described by authored intent and contracts".to_string(),
@@ -1254,8 +1382,26 @@ fn family_a_authored_role(
         Some(FamilyAFunctionRole::MonotoneDownNonnegative)
     } else if normalized.len() == 1 && normalized.contains(FAMILY_A_INVARIANT_OUTPUT_GE_INPUT0) {
         Some(FamilyAFunctionRole::MonotoneUp)
+    } else if normalized.is_empty() {
+        family_a_cross_library_canonical_role(authored)
     } else {
         None
+    }
+}
+
+fn family_a_cross_library_canonical_role(
+    authored: &SemanticAuthoredFunctionPacket,
+) -> Option<FamilyAFunctionRole> {
+    let [dep] = authored.deps.as_slice() else {
+        return None;
+    };
+    let dep = DepRef::parse(dep).ok()?;
+    dep.library_alias()?;
+
+    match authored.id.as_str() {
+        "pricing/apply_discount" => Some(FamilyAFunctionRole::MonotoneDownNonnegative),
+        "pricing/apply_tax" => Some(FamilyAFunctionRole::MonotoneUp),
+        _ => None,
     }
 }
 
@@ -1520,10 +1666,10 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         .map(|method| method.id.clone())
         .collect::<HashSet<_>>();
     let executable = build_executable_data_packet(spec, &helper_method_ids)?;
-    let markers = summarize_markers(spec);
+    let portability = supported_seam_portability_summary(spec);
     let mut reasons = Vec::new();
     let authored_surfaces = authored_data_citations(&authored);
-    let executable_surfaces = executable_data_citations(&executable, markers);
+    let executable_surfaces = executable_data_citations(&executable, portability.markers);
 
     if semantic_text_is_vague(&authored.intent) {
         reasons.push(SemanticReasonCode::VagueUnitIntent);
@@ -1618,7 +1764,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
     drift_reasons.dedup();
 
     if !drift_reasons.is_empty() {
-        let verdict = if markers.has_domain_lowering {
+        let verdict = if portability.contamination.has_contaminating_domain_lowering {
             SemanticVerdict::BackendOnlySemanticsLeaked
         } else {
             SemanticVerdict::SemanticDrift
@@ -1637,9 +1783,9 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         });
     }
 
-    if markers.has_backend_derives || markers.has_helper_lowering {
+    if portability.contamination.has_backend_only_detail {
         let mut reason_codes = vec![SemanticReasonCode::BackendOnlyExecutionMarker];
-        if markers.has_helper_lowering {
+        if portability.markers.has_proof_helper_lowering {
             reason_codes.push(SemanticReasonCode::ProofHelperOnlyMarker);
         }
         return Some(SemanticReview {
@@ -1808,6 +1954,7 @@ fn build_authored_function_packet(spec: &LoadedSpec) -> Option<SemanticAuthoredF
             .map(|contract| contract.invariants.clone())
             .unwrap_or_default(),
         deps: function.deps,
+        body_typescript: function.body_typescript.map(|body| body.trim().to_string()),
     })
 }
 
@@ -2044,6 +2191,12 @@ fn authored_function_citations(authored: &SemanticAuthoredFunctionPacket) -> Vec
             summary: format!("{} declared dep(s)", authored.deps.len()),
         });
     }
+    if authored.body_typescript.is_some() {
+        citations.push(SemanticCitation {
+            path: "body.typescript".to_string(),
+            summary: "authored TypeScript body present".to_string(),
+        });
+    }
 
     citations
 }
@@ -2083,7 +2236,7 @@ fn authored_data_citations(authored: &SemanticAuthoredDataPacket) -> Vec<Semanti
 fn executable_citations(
     _spec: &LoadedSpec,
     executable: &SemanticExecutablePacket,
-    markers: SemanticMarkerSummary,
+    markers: PortabilityMarkerSummary,
 ) -> Vec<SemanticCitation> {
     let mut citations = vec![SemanticCitation {
         path: "sum".to_string(),
@@ -2096,7 +2249,7 @@ fn executable_citations(
             summary: format!("{} executable semantic method(s)", executable.methods.len()),
         });
     }
-    if markers.has_backend_derives {
+    if markers.has_backend_rust_derives {
         citations.push(SemanticCitation {
             path: "backends.rust.derives".to_string(),
             summary: "Rust derives contribute backend-only execution metadata".to_string(),
@@ -2120,7 +2273,7 @@ fn executable_function_citations(
 
 fn executable_data_citations(
     executable: &SemanticExecutableDataPacket,
-    markers: SemanticMarkerSummary,
+    markers: PortabilityMarkerSummary,
 ) -> Vec<SemanticCitation> {
     let mut citations = vec![SemanticCitation {
         path: "data".to_string(),
@@ -2142,7 +2295,7 @@ fn executable_data_citations(
             summary: format!("{} executable semantic method(s)", executable.methods.len()),
         });
     }
-    if markers.has_backend_derives {
+    if markers.has_backend_rust_derives {
         citations.push(SemanticCitation {
             path: "backends.rust.derives".to_string(),
             summary: "Rust derives contribute backend-only execution metadata".to_string(),
@@ -2152,12 +2305,10 @@ fn executable_data_citations(
     citations
 }
 
-fn summarize_markers(spec: &LoadedSpec) -> SemanticMarkerSummary {
-    let summary = summarize_escape_hatch_semantic_markers(spec);
-    SemanticMarkerSummary {
-        has_domain_lowering: summary.has_domain_lowering,
-        has_helper_lowering: summary.has_proof_helper_lowering,
-        has_backend_derives: summary.has_backend_rust_derives,
+fn supported_seam_portability_summary(spec: &LoadedSpec) -> SupportedSeamPortabilitySummary {
+    SupportedSeamPortabilitySummary {
+        markers: summarize_portability_markers(spec).unwrap_or_default(),
+        contamination: summarize_portability_contamination(spec).unwrap_or_default(),
     }
 }
 
@@ -2348,20 +2499,18 @@ fn classify_family_a_body(
             let Some(tail) = block_tail_expr(&block) else {
                 return SupportedBodyClassification::OutsideHonestSubset;
             };
-            let (tail_inner, helper_present) = strip_outer_helper_if_present(tail, helper_name);
-            let has_clamp = if expr_is_ident(tail_inner, &alias) {
-                false
-            } else if expr_is_alias_max_zero(tail_inner, &alias) {
-                true
-            } else {
+            let Some(tail_shape) = normalize_family_a_terminal_shape(tail, helper_name) else {
                 return SupportedBodyClassification::OutsideHonestSubset;
             };
+            if !expr_is_ident(tail_shape.core_expr, &alias) {
+                return SupportedBodyClassification::OutsideHonestSubset;
+            }
             classify_family_a_shape(
                 authored_role,
                 body_role,
-                has_clamp,
+                tail_shape.has_clamp,
                 helper_name,
-                helper_present,
+                tail_shape.helper_present,
             )
         }
         _ => SupportedBodyClassification::OutsideHonestSubset,
@@ -2375,18 +2524,19 @@ fn classify_family_a_terminal_shape(
     input1_name: &str,
     helper_name: Option<&str>,
 ) -> SupportedBodyClassification {
-    let (inner, helper_present) = strip_outer_helper_if_present(expr, helper_name);
-    let Some((body_role, has_clamp)) =
-        classify_family_a_terminal_expr(inner, input0_name, input1_name)
+    let Some(shape) = normalize_family_a_terminal_shape(expr, helper_name) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(body_role) = classify_family_a_core_role(shape.core_expr, input0_name, input1_name)
     else {
         return SupportedBodyClassification::OutsideHonestSubset;
     };
     classify_family_a_shape(
         authored_role,
         body_role,
-        has_clamp,
+        shape.has_clamp,
         helper_name,
-        helper_present,
+        shape.helper_present,
     )
 }
 
@@ -2410,7 +2560,8 @@ fn classify_family_a_shape(
             }
         }
         FamilyAFunctionRole::MonotoneUp => {
-            if body_role == FamilyAFunctionRole::MonotoneUp && !has_clamp {
+            let clamp_is_supported = !has_clamp || (helper_name.is_some() && helper_present);
+            if body_role == FamilyAFunctionRole::MonotoneUp && clamp_is_supported {
                 SupportedBodyClassification::Aligned
             } else {
                 SupportedBodyClassification::Contradictory
@@ -2419,38 +2570,61 @@ fn classify_family_a_shape(
     }
 }
 
-fn classify_family_a_terminal_expr(
-    expr: &syn::Expr,
-    input0_name: &str,
-    input1_name: &str,
-) -> Option<(FamilyAFunctionRole, bool)> {
-    if let Some((receiver, true)) = expr_as_max_zero(expr) {
-        return Some((
-            classify_family_a_core_role(receiver, input0_name, input1_name)?,
-            true,
-        ));
-    }
-
-    Some((
-        classify_family_a_core_role(expr, input0_name, input1_name)?,
-        false,
-    ))
+#[derive(Clone, Copy)]
+struct FamilyATerminalShape<'a> {
+    core_expr: &'a syn::Expr,
+    helper_present: bool,
+    has_clamp: bool,
 }
 
-fn strip_outer_helper_if_present<'a>(
+fn normalize_family_a_terminal_shape<'a>(
     expr: &'a syn::Expr,
     helper_name: Option<&str>,
-) -> (&'a syn::Expr, bool) {
+) -> Option<FamilyATerminalShape<'a>> {
+    let mut current = strip_expr_wrappers(expr)?;
+    let mut helper_present = false;
+    let mut has_clamp = false;
+
+    loop {
+        if !helper_present
+            && let Some((inner, true)) = strip_outer_helper_call_if_present(current, helper_name)
+        {
+            current = inner;
+            helper_present = true;
+            continue;
+        }
+
+        if !has_clamp && let Some((inner, true)) = expr_as_max_zero(current) {
+            current = inner;
+            has_clamp = true;
+            continue;
+        }
+
+        break;
+    }
+
+    Some(FamilyATerminalShape {
+        core_expr: current,
+        helper_present,
+        has_clamp,
+    })
+}
+
+fn strip_outer_helper_call_if_present<'a>(
+    expr: &'a syn::Expr,
+    helper_name: Option<&str>,
+) -> Option<(&'a syn::Expr, bool)> {
+    let expr = strip_expr_wrappers(expr)?;
     let Some(helper_name) = helper_name else {
-        return (expr, false);
+        return Some((expr, false));
     };
     let Some(call) = expr_as_call(expr) else {
-        return (expr, false);
+        return Some((expr, false));
     };
     if call.args.len() == 1 && expr_path_is_callable_name(&call.func, helper_name) {
-        (&call.args[0], true)
+        Some((&call.args[0], true))
     } else {
-        (expr, false)
+        Some((expr, false))
     }
 }
 
@@ -2525,19 +2699,6 @@ fn expr_is_subtotal_times_rate_exact_for_inputs(
     matches!(binary.op, syn::BinOp::Mul(_))
         && expr_is_ident(&binary.left, input0_name)
         && expr_is_ident(&binary.right, input1_name)
-}
-
-fn expr_is_alias_max_zero(expr: &syn::Expr, alias: &str) -> bool {
-    let Some(expr) = strip_expr_wrappers(expr) else {
-        return false;
-    };
-    let syn::Expr::MethodCall(call) = expr else {
-        return false;
-    };
-    call.method == "max"
-        && call.args.len() == 1
-        && expr_is_ident(&call.receiver, alias)
-        && expr_is_zero_expr(&call.args[0])
 }
 
 fn expr_is_zero_expr(expr: &syn::Expr) -> bool {
@@ -4015,6 +4176,7 @@ mod tests {
                 imports: vec!["rust_decimal::Decimal".to_string()],
                 body: Body {
                     rust: body.to_string(),
+                    typescript: None,
                 },
                 local_tests: vec![],
                 links: None,
@@ -4726,7 +4888,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_aligned_review_requires_contextual_dep_resolution() {
+    fn wrapper_pipeline_classifier_aligned_review_requires_contextual_dep_resolution() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4761,7 +4923,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_reversed_pipeline_order() {
+    fn wrapper_pipeline_classifier_drift_marks_reversed_pipeline_order() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4785,7 +4947,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_under_specified_marks_vague_authored_intent() {
+    fn wrapper_pipeline_classifier_under_specified_marks_vague_authored_intent() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "todo",
@@ -4809,7 +4971,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_swapped_inner_args() {
+    fn wrapper_pipeline_classifier_drift_marks_swapped_inner_args() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4833,7 +4995,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_swapped_outer_rate_arg() {
+    fn wrapper_pipeline_classifier_drift_marks_swapped_outer_rate_arg() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4857,7 +5019,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_wrong_threaded_alias_return() {
+    fn wrapper_pipeline_classifier_drift_marks_wrong_threaded_alias_return() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4882,7 +5044,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_drift_marks_duplicated_param_flow() {
+    fn wrapper_pipeline_classifier_drift_marks_duplicated_param_flow() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4906,7 +5068,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_under_specified_marks_dropped_required_arg() {
+    fn wrapper_pipeline_classifier_under_specified_marks_dropped_required_arg() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4934,7 +5096,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_under_specified_marks_unused_extra_param() {
+    fn wrapper_pipeline_classifier_under_specified_marks_unused_extra_param() {
         let wrapper = function_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4971,7 +5133,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_literal_required_arg_stays_unsupported() {
+    fn wrapper_pipeline_classifier_literal_required_arg_stays_unsupported() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -4995,7 +5157,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_arithmetic_required_arg_stays_unsupported() {
+    fn wrapper_pipeline_classifier_arithmetic_required_arg_stays_unsupported() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5019,7 +5181,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_method_chain_required_arg_stays_unsupported() {
+    fn wrapper_pipeline_classifier_unsupported_near_miss_stays_unsupported() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5043,7 +5205,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_extra_let_marks_unsupported_wrapper_body_shape() {
+    fn wrapper_pipeline_classifier_extra_let_marks_unsupported_wrapper_body_shape() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5069,7 +5231,7 @@ mod tests {
     }
 
     #[test]
-    fn family_b_non_stacking_rejection_stays_unsupported() {
+    fn wrapper_pipeline_classifier_non_stacking_rejection_stays_unsupported() {
         let inner = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5268,7 +5430,7 @@ mod tests {
     }
 
     #[test]
-    fn m21_chain3_regression_family_b_is_not_shadowed() {
+    fn wrapper_pipeline_classifier_aligned_fixture_routes_to_promoted_family() {
         let wrapper = wrapper_pipeline_spec(
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
@@ -5293,7 +5455,7 @@ mod tests {
     }
 
     #[test]
-    fn m21_chain3_regression_runtime_order_matches_locked_precedence() {
+    fn wrapper_pipeline_runtime_route_order_preserves_chain3_wrapper_monotone_down_monotone_up() {
         let routed_keys =
             SUPPORTED_FUNCTION_ROUTING_ORDER.map(SupportedFunctionRoute::compatibility_key);
 
@@ -5324,6 +5486,32 @@ mod tests {
         assert_eq!(
             review.evaluator_scope,
             EvaluatorScope::SupportedFunctionSurface
+        );
+    }
+
+    #[test]
+    fn monotone_down_nonnegative_classifier_cross_library_canonical_example_routes_to_promoted_leaf_without_invariants()
+     {
+        let crosslib = arithmetic_leaf_spec(
+            "pricing/apply_discount",
+            "Apply a discount while importing the shared round helper from a sibling spec library.",
+            &[],
+            &["shared::money/round"],
+            r#"{
+            let discounted = subtotal - subtotal * rate;
+            round(discounted.max(Decimal::ZERO))
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&crosslib).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
         );
     }
 
@@ -5425,6 +5613,115 @@ mod tests {
     }
 
     #[test]
+    fn monotone_up_classifier_reads_authored_typescript_without_spec_version_sentinel() {
+        let mut spec = apply_tax_function_spec();
+        spec.spec.spec_version = None;
+        spec.spec.body.typescript =
+            Some("return round(subtotal.add(subtotal.mul(rate)));".to_string());
+
+        let authored = build_authored_function_packet(&spec).unwrap();
+        assert_eq!(
+            authored.body_typescript.as_deref(),
+            Some("return round(subtotal.add(subtotal.mul(rate)));")
+        );
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert!(
+            review
+                .authored_surfaces
+                .iter()
+                .any(|citation| citation.path == "body.typescript"),
+            "{review:?}"
+        );
+    }
+
+    #[test]
+    fn wrapper_pipeline_classifier_reads_authored_typescript_without_spec_version_sentinel() {
+        let mut spec = wrapper_pipeline_spec(
+            "pricing/calculate_total_typescript_authored",
+            "Return the checkout total after discounting the subtotal and then applying tax.",
+            r#"{
+            let discounted = pricing/apply_discount(subtotal, discount_rate);
+            pricing/apply_tax(discounted, tax_rate)
+        }"#,
+        );
+        spec.spec.spec_version = None;
+        spec.spec.body.typescript = Some(
+            "{\n            const discounted = apply_discount(subtotal, discount_rate);\n            return apply_tax(discounted, tax_rate);\n        }"
+                .to_string(),
+        );
+
+        let authored = build_authored_function_packet(&spec).unwrap();
+        assert_eq!(
+            authored.body_typescript.as_deref(),
+            Some(
+                "{\n            const discounted = apply_discount(subtotal, discount_rate);\n            return apply_tax(discounted, tax_rate);\n        }"
+            )
+        );
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert!(
+            review
+                .authored_surfaces
+                .iter()
+                .any(|citation| citation.path == "body.typescript"),
+            "{review:?}"
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_helper_then_clamp_routes_to_promoted_leaf() {
+        let helper_then_clamp = arithmetic_leaf_spec(
+            "pricing/apply_tax_helper_then_clamp",
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            &["output >= subtotal"],
+            &["money/round"],
+            r#"{
+            let taxed = subtotal + subtotal * rate;
+            round(taxed).max(Decimal::ZERO)
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&helper_then_clamp).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_cross_library_canonical_example_routes_to_promoted_leaf_without_invariants()
+     {
+        let crosslib = arithmetic_leaf_spec(
+            "pricing/apply_tax",
+            "Apply tax while importing the shared round helper from a sibling spec library.",
+            &[],
+            &["shared::money/round"],
+            r#"{
+            let taxed = subtotal + subtotal * rate;
+            round(taxed).max(Decimal::ZERO)
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&crosslib).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+    }
+
+    #[test]
     fn monotone_up_classifier_drift_fixture_reports_semantic_drift() {
         let drift = arithmetic_leaf_spec(
             "pricing/apply_tax_drift",
@@ -5485,6 +5782,35 @@ mod tests {
                 subtotal
             } else {
                 round(taxed)
+            }
+        }"#,
+        );
+
+        let review = evaluate_semantic_review(&near_miss).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.compatibility_key,
+            UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedControlFlow]
+        );
+    }
+
+    #[test]
+    fn monotone_up_classifier_cross_library_control_flow_near_miss_stays_unsupported() {
+        let near_miss = arithmetic_leaf_spec(
+            "pricing/apply_tax_crosslib_control_flow_unsupported_near_miss",
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            &["output >= subtotal"],
+            &["shared::money/round"],
+            r#"{
+            let taxed = subtotal + subtotal * rate;
+            if rate == Decimal::ZERO {
+                subtotal
+            } else {
+                round(taxed).max(Decimal::ZERO)
             }
         }"#,
         );
@@ -5668,22 +5994,23 @@ mod tests {
     }
 
     #[test]
-    fn family_a_helper_dep_exclusion_rejects_non_outermost_helper_call() {
+    fn family_a_helper_dep_normalization_allows_helper_then_clamp_for_monotone_up() {
         let spec = arithmetic_leaf_spec(
             "billing/apply_discount",
-            "Return the subtotal after applying the discount rate and clamping at zero.",
-            &["output <= subtotal", "output >= 0"],
+            "Return the subtotal after applying the tax rate and rounding the total.",
+            &["output >= subtotal"],
             &["money/round"],
             r#"{
-            round(subtotal - subtotal * rate).max(Decimal::ZERO)
+            let taxed = subtotal + subtotal * rate;
+            round(taxed).max(Decimal::ZERO)
         }"#,
         );
 
         let review = evaluate_semantic_review(&spec).unwrap();
-        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
         assert_eq!(
-            review.unsupported_reason_codes,
-            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+            review.compatibility_key,
+            FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
         );
     }
 
@@ -5963,6 +6290,142 @@ mod tests {
         );
         assert!(!refreshed.authored_surfaces.is_empty());
         assert!(!refreshed.executable_surfaces.is_empty());
+    }
+
+    #[test]
+    fn unsupported_function_shape_fingerprint_same_reason_same_shape_stays_equal_across_unit_names()
+    {
+        let canonical = calculate_total_function_spec();
+        let renamed = arithmetic_leaf_spec(
+            "pricing/calculate_total_again",
+            "Return a second combined total from pricing inputs.",
+            &["output >= 0"],
+            &[],
+            r#"{
+            subtotal + subtotal * rate
+        }"#,
+        );
+        let canonical_review = evaluate_semantic_review(&canonical).unwrap();
+        let renamed_review = evaluate_semantic_review(&renamed).unwrap();
+        let canonical_key = unsupported_function_shape_fingerprint(&canonical);
+        let renamed_key = unsupported_function_shape_fingerprint(&renamed);
+
+        assert_eq!(
+            canonical_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
+        assert_eq!(
+            renamed_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
+        assert_eq!(
+            canonical_key,
+            Some(
+                r#"{"schema_version":1,"function_dep_arity":0,"callable_dep_topology_class":"no_deps_or_helper","contract_input_count":2,"has_return":true,"authored_body_kind":"arithmetic_like"}"#
+                    .to_string()
+            )
+        );
+        assert_eq!(canonical_key, renamed_key);
+    }
+
+    #[test]
+    fn unsupported_function_shape_fingerprint_same_reason_different_shape_stays_different() {
+        let unsupported_pair = function_spec(
+            "pricing/calculate_total_pair",
+            "Return the total after passing through an unsupported dep pair.",
+            &[
+                ("subtotal", "rust_decimal::Decimal"),
+                ("discount_rate", "rust_decimal::Decimal"),
+                ("tax_rate", "rust_decimal::Decimal"),
+            ],
+            Some("rust_decimal::Decimal"),
+            &[],
+            &["pricing/apply_discount", "pricing/apply_fee"],
+            r#"{
+            apply_fee(apply_discount(subtotal, discount_rate), tax_rate)
+        }"#,
+        );
+        let fanout = function_spec(
+            "pricing/calculate_total_fanout",
+            "Return the total after passing through too many helpers.",
+            &[
+                ("subtotal", "rust_decimal::Decimal"),
+                ("discount_rate", "rust_decimal::Decimal"),
+                ("tax_rate", "rust_decimal::Decimal"),
+                ("surcharge_rate", "rust_decimal::Decimal"),
+                ("loyalty_rate", "rust_decimal::Decimal"),
+            ],
+            Some("rust_decimal::Decimal"),
+            &[],
+            &[
+                "pricing/apply_discount",
+                "pricing/apply_tax",
+                "pricing/apply_fee",
+                "pricing/apply_loyalty_credit",
+            ],
+            r#"{
+            subtotal
+        }"#,
+        );
+        let specs_by_id = HashMap::from([
+            (
+                "pricing/apply_discount".to_string(),
+                apply_discount_function_spec(),
+            ),
+            (unsupported_pair.spec.id.clone(), unsupported_pair.clone()),
+            (fanout.spec.id.clone(), fanout.clone()),
+        ]);
+        let context = SemanticReviewContext::new(&specs_by_id);
+
+        let pair_review =
+            evaluate_semantic_review_with_context(&unsupported_pair, &context).unwrap();
+        let fanout_review = evaluate_semantic_review_with_context(&fanout, &context).unwrap();
+
+        assert_eq!(
+            pair_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedDepTopology]
+        );
+        assert_eq!(
+            fanout_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedDepTopology]
+        );
+        assert_ne!(
+            unsupported_function_shape_fingerprint_with_context(&unsupported_pair, &context),
+            unsupported_function_shape_fingerprint_with_context(&fanout, &context)
+        );
+    }
+
+    #[test]
+    fn unsupported_function_shape_fingerprint_ignores_reason_and_review_prose_policy() {
+        let arithmetic_shape = calculate_total_function_spec();
+        let control_flow_shape = arithmetic_leaf_spec(
+            "billing/calculate_total_control_flow_same_shape",
+            "Return a combined total from pricing inputs.",
+            &["output >= 0"],
+            &[],
+            r#"{
+            if rate > Decimal::ZERO {
+                subtotal + subtotal * rate
+            } else {
+                subtotal
+            }
+        }"#,
+        );
+        let arithmetic_review = evaluate_semantic_review(&arithmetic_shape).unwrap();
+        let control_flow_review = evaluate_semantic_review(&control_flow_shape).unwrap();
+
+        assert_eq!(
+            arithmetic_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedArithmeticShape]
+        );
+        assert_eq!(
+            control_flow_review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedControlFlow]
+        );
+        assert_eq!(
+            unsupported_function_shape_fingerprint(&arithmetic_shape),
+            unsupported_function_shape_fingerprint(&control_flow_shape)
+        );
     }
 
     #[test]
