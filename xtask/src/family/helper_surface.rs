@@ -1,8 +1,10 @@
 use crate::family::promotion_artifacts::{
-    CorpusProgramDecisionAction, CorpusProgramDecisionArtifact, CorpusProgramDecisionBasisCode,
-    HoldReason, NextStepDetail, NextStepStatus, PivotTargetClass, PromotionReadiness,
-    RecommendationCandidateEntry, RequiredNextAction,
+    CorpusProgramDecisionAction, CorpusProgramDecisionBasisCode, HoldReason, NextStepDetail,
+    NextStepStatus, PivotTargetClass, PromotionReadiness, RecommendationCandidateEntry,
+    RequiredNextAction,
 };
+#[cfg(test)]
+use crate::family::promotion_artifacts::CorpusProgramDecisionArtifact;
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,16 +103,7 @@ pub(crate) fn helper_surface_follow_on_decision_tuple() -> HelperSurfaceFollowOn
     }
 }
 
-pub(crate) fn decision_uses_helper_surface_follow_on_tuple(
-    artifact: &CorpusProgramDecisionArtifact,
-) -> bool {
-    let follow_on = helper_surface_follow_on_decision_tuple();
-    artifact.decision_action == follow_on.decision_action
-        || artifact.decision_basis_code == follow_on.decision_basis_code
-        || artifact.pivot_target_class == Some(follow_on.pivot_target_class)
-        || artifact.required_next_action == follow_on.required_next_action
-}
-
+#[cfg(test)]
 pub(crate) fn decision_matches_helper_surface_follow_on_tuple(
     artifact: &CorpusProgramDecisionArtifact,
 ) -> bool {
