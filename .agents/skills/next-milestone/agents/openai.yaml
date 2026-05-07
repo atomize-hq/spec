@@ -1,4 +1,4 @@
 interface:
   display_name: "Next Milestone"
-  short_description: "Choose the next milestone from repo signals."
-  default_prompt: "Use this repo-local skill to determine the next milestone or wedge. Recover context, collect repo signals, score the viable options, and recommend one next move with evidence and exact follow-up commands."
+  short_description: "Choose the next milestone or planning action."
+  default_prompt: "Use this repo-local skill to determine the next milestone, planning action, or wedge. Recover context, apply the source hierarchy, distinguish authority context from live signals, classify the recommendation into exactly one of the six milestone families, classify PLAN.md and ORCH_PLAN.md by authority-file state, and decide the next artifact kind plus whether /autoplan is actually ready now. Recommend one honest next move with evidence and a concrete handoff, not just a milestone label."

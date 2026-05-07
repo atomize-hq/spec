@@ -31,6 +31,9 @@ run_json_summary() {
         recommendation)
           jq -r '"recommendation_status: \(.recommendation_status)\ndecision_status: \(.decision_summary.decision_status)\nsummary: \(.decision_summary.summary)\nblockers: \((.decision_summary.open_blockers // []) | join(", "))\nmissing_evidence: \((.evidence_summary.missing_evidence // []) | join(", "))\nstale_evidence: \((.evidence_summary.stale_evidence // []) | join(", "))"' "$out" 2>/dev/null || cat "$out"
           ;;
+        corpus_decision)
+          jq -r '"decision_action: \(.decision_action)\ndecision_basis_code: \(.decision_basis_code)\npivot_target_class: \(.pivot_target_class // "")\nrequired_next_action: \(.required_next_action // "")\nsummary: \(.summary)"' "$out" 2>/dev/null || cat "$out"
+          ;;
         contract)
           jq -r '"overall_verdict: \(.overall_verdict)\nfailed_checks: \([.checks | to_entries[] | select(.value.status != "pass") | .key] | join(", "))"' "$out" 2>/dev/null || cat "$out"
           ;;
@@ -99,6 +102,33 @@ else
   echo "path: [none]"
 fi
 
+print_section "CURRENT_AUTHORITY_PLAN"
+if [ -f "PLAN.md" ]; then
+  echo "path: $ROOT/PLAN.md"
+  sed -n 's/^Status: /status: /p' PLAN.md | head -1
+  sed -n 's/^Supersedes: /supersedes: /p' PLAN.md | head -1
+  sed -n 's/^Execution note: /execution_note: /p' PLAN.md | head -1
+else
+  echo "path: [none]"
+fi
+
+print_section "CURRENT_AUTHORITY_ORCH"
+if [ -f "ORCH_PLAN.md" ]; then
+  echo "path: $ROOT/ORCH_PLAN.md"
+  sed -n 's/^Status: /status: /p' ORCH_PLAN.md | head -1
+else
+  echo "path: [none]"
+fi
+
+print_section "LATEST_AUTHORITY_CLOSEOUT"
+latest_closeout=$(find .runs -path '*/closeout.md' -type f 2>/dev/null | xargs ls -1t 2>/dev/null | head -1)
+if [ -n "$latest_closeout" ] && [ -f "$latest_closeout" ]; then
+  echo "path: $latest_closeout"
+  tail -n 5 "$latest_closeout" | sed '/^$/d'
+else
+  echo "path: [none]"
+fi
+
 run_json_summary \
   "FAMILY_COVERAGE" \
   coverage \
@@ -108,6 +138,11 @@ run_json_summary \
   "FAMILY_RECOMMENDATION" \
   recommendation \
   cargo xtask family recommend --format json
+
+run_json_summary \
+  "FAMILY_CORPUS_DECISION" \
+  corpus_decision \
+  cargo xtask family corpus-decision --format json
 
 run_json_summary \
   "FAMILY_DECISION_CONTRACT" \

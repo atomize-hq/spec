@@ -1,5 +1,23 @@
 # Next Milestone Rubric
 
+Before scoring, classify each realistic candidate into exactly one milestone family:
+
+- `semantic-review-substrate`
+  Base `spec` / semantic-review capability growth beyond the current narrow family set.
+- `rust-family-promotion`
+  A new promoted Rust family or a bounded proof wedge that lands more shipped family truth.
+- `corpus-recommendation-policy`
+  Corpus expansion, recommendation-policy hardening, or decision-contract work.
+- `shared-core-portability`
+  Shared-core extraction, seam boundary hardening, and portability honesty.
+- `second-language-backend`
+  Real non-Rust backend execution support such as first-class TypeScript generate/build/test.
+- `operator-consumer-tooling`
+  Maintainer-facing truth consumers, verification readers, orchestration surfaces, or other honest operator tooling.
+
+The milestone family is the strategic lane.
+The candidate itself is the concrete planning or implementation move inside that lane.
+
 Score each realistic candidate on these dimensions from `0` to `3`.
 
 - `product_core_leverage`
@@ -27,6 +45,11 @@ Score each realistic candidate on these dimensions from `0` to `3`.
   - `2`: two of the three point here
   - `1`: weak signal
   - `0`: mostly speculative
+- `contract_alignment`
+  - `3`: frozen decision docs name this exact action or clearly imply it
+  - `2`: consistent with frozen decision docs
+  - `1`: not ruled out, but not named
+  - `0`: conflicts with explicit next-action wording
 - `churn_penalty`
   - subtract `3`: likely to reopen family-analysis or recommendation-governance churn
   - subtract `2`: broad decision work with thin proof
@@ -38,22 +61,27 @@ Score each realistic candidate on these dimensions from `0` to `3`.
 Apply these before comparing totals.
 
 - If a candidate does not create new product truth within one milestone, it should almost never win.
+- A planning follow-on can beat immediate implementation if it is the truthful next contract inside the winning family.
+- If a frozen source names a `required_next_action`, do not skip over it casually.
 - If a candidate requires the user to make multiple subjective choices just to start, it should usually lose to a more bounded path.
 - If current repo signals say `no_strong_candidate`, more corpus or recommendation work should lose unless the blocker is plainly "missing evidence we can collect in one tight pass."
 - If the candidate is first-class TypeScript backend support, it must beat the Rust wedge on product leverage and boundedness. "Interesting" is not enough.
 
 ## Default interpretation for this repo
 
-- Rust semantic-review wedge expansion starts with a structural advantage because it is closest to product-core truth and existing machinery.
-- Reusable seam semantic-review expansion can win if it unlocks repeated semantics across more than one real example without demanding a large new framework.
-- First-class TypeScript backend work is valid, but expensive. It wins only when the repo has clearly exhausted the next useful Rust wedge or the product docs explicitly elevate multi-language execution now.
-- Family-analysis and corpus-governance work should usually be support work, not the next headline milestone.
+- `semantic-review-substrate` is for broadening what the base reviewer or `spec` core can truthfully classify. It can win when the next blocker is substrate capability itself, not "which family next?"
+- `rust-family-promotion` starts with a structural advantage because it is closest to product-core truth and existing machinery, but it loses if frozen decision surfaces explicitly say there is no strong next family move.
+- `corpus-recommendation-policy` is usually support work, not the headline next move. It wins only when frozen decision surfaces still say evidence quality or decision honesty is the blocker.
+- `shared-core-portability` can win over immediate implementation if frozen decision surfaces say the next honest step is to author the architecture/shared-core follow-on plan first.
+- `second-language-backend` is valid, but expensive. It wins only when the repo has clearly earned real backend expansion rather than another Rust wedge or portability-boundary hardening.
+- `operator-consumer-tooling` is real milestone work when the missing capability is an honest maintainer-facing consumer of repo truth, not a hidden helper or dashboard garnish.
 
 ## Tie-breakers
 
 If scores are close:
 
 1. Pick the higher `proof_yield`.
-2. Then pick the higher `boundedness`.
-3. Then pick the option that reduces future "what next?" ambiguity.
-4. Then pick the simpler path that still ships the full lake.
+2. Then pick the higher `contract_alignment`.
+3. Then pick the higher `boundedness`.
+4. Then pick the option that reduces future "what next?" ambiguity.
+5. Then pick the simpler path that still ships the full lake.
