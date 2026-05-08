@@ -91,6 +91,8 @@ First classify each realistic candidate into exactly one milestone family from t
 
 Within the chosen family, choose the concrete product-surface milestone, not the prerequisite planning task.
 The skill may still say that the milestone is blocked on an artifact, but it must not recommend "planning follow-on" as the milestone itself.
+If sources say `required_next_action = author_*_plan`, keep the winner on the product lane and move that planning requirement into `Implementation readiness`, `Next artifact kind`, `Autoplan ready`, and `Handoff` only.
+If sources say `recommendation_status = no_strong_candidate`, that does not authorize `planning`, `no milestone`, `more evidence`, or any other null final answer. Force-rank one honest product-surface winner and explain the loser reasons.
 
 Do not collapse these six family names into looser prose. They are part of the output contract.
 
@@ -102,6 +104,7 @@ This skill is closer to `/autoplan` than to brainstorming.
 - Include up to two alternates.
 - If the top choice is uncertain, still choose it and explain the uncertainty.
 - Only ask the user a question if required inputs are missing or the repo is in a contradictory state.
+- The final answer must force one winner. Planning may appear only as a gating artifact, never as the recommended milestone.
 
 Mechanical ambiguity should not become a user question. Resolve it with source hierarchy and explicit guardrails.
 
@@ -188,6 +191,8 @@ Use this output shape:
 NEXT MILESTONE
 
 Milestone family: <semantic-review-substrate | rust-family-promotion | corpus-recommendation-policy | shared-core-portability | second-language-backend | operator-consumer-tooling>
+Executable wedge: <one concrete product-surface wedge inside the winning family>
+Confidence: <high | medium | low>
 Implementation readiness: <ready-now | needs_artifact_first>
 Next artifact kind: <design_doc | authority_plan_draft | authority_plan>
 Autoplan ready: <yes | no>
@@ -201,9 +206,9 @@ Why this wins:
 - <proof / truth reason>
 - <boundedness reason>
 
-Why not the others:
-- <alt 1>
-- <alt 2>
+Ranked alternates:
+1. <runner-up wedge> - <why it loses to the winner right now>
+2. <third-place wedge> - <why it loses to the winner right now>
 
 Evidence used:
 - Checkpoint: <checkpoint file or summary>
@@ -218,6 +223,8 @@ Handoff:
 ```
 
 The recommendation must be a product-surface milestone, not "planning next."
+`Executable wedge` must name the concrete winner, not a planning label, family label, or null answer.
+`Confidence` must reflect the evidence quality after the winner is chosen. It is not permission to refuse ranking.
 If implementation is not ready, make that explicit in `Implementation readiness` and in the handoff rather than turning planning into the milestone recommendation.
 If the answer depends on current authority docs, say "authority context" or "current milestone authority" rather than calling those docs "live signals."
 If a command did not run, failed, or was unavailable, say that plainly. Do not backfill a fake live-signal claim from memory or nearby docs.
@@ -226,6 +233,8 @@ If `Autoplan ready: yes`, name the exact file `/autoplan` should review.
 If `Next artifact kind: authority_plan_draft` and `Autoplan ready: yes`, briefly justify why the draft passes the artifact-readiness check and unblocks the recommended milestone.
 If an authority file is classified as `completed_authority_context`, do not target it with `/autoplan`.
 If an authority file is classified as `active_execution_contract`, do not target it with `/autoplan` unless the next milestone is explicitly to review that same in-flight execution contract.
+Hard-banned final outputs: `planning`, `planning milestone next`, `author a plan`, `no milestone`, `more evidence`.
+If `required_next_action = author_*_plan`, the only allowed place for that planning requirement is readiness and handoff semantics. It must not replace the winning wedge.
 
 ## Decision rules
 
@@ -280,13 +289,13 @@ Do not let a noisy or stale lower-priority source override a cleaner higher-prio
 - Do not treat repo-root `PLAN.md` as authoritative by default. It must earn that role by clearly being the current branch's active plan and not merely prior landed work.
 - If the latest closeout shows the current `ORCH_PLAN.md` execution contract is complete, treat it as completed authority context, not the next milestone contract.
 - If the latest closeout shows the current `PLAN.md` draft is the authored output of that completed planning run, decide between `draft_next_artifact` and `completed_authority_context` using the artifact-readiness check rather than auto-demoting it.
-- If the best honest answer is "planning milestone next, implementation later," say exactly that.
 - If a live signal is branch-local noise but the frozen decision surfaces are stable, call it secondary evidence, not the primary reason.
 - Do not label `PLAN.md`, `ORCH_PLAN.md`, or closeout files as live signals. They are authority context or closeout context.
 - Do not say "touch `PLAN.md` first" unless repo convention and current authority context clearly make repo-root `PLAN.md` the next milestone authority file.
 - If `PLAN.md` is only likely, say "author the next milestone authority plan, likely in `PLAN.md`."
 - Do not say "replace `PLAN.md`" unless repo convention clearly requires replacement rather than a new authority artifact.
 - Do not emit a plan artifact whose main purpose is to say "write the plan." The artifact itself must carry the scoped contract once it exists.
+- For the captured `feat/m40-plus` branch truth, if evidence still includes `pivot_to_architecture_shared_core_follow_on` plus `author_architecture_follow_on_plan`, the winner stays in `shared-core-portability`; planning remains handoff-only and must not become the recommendation.
 
 ## Repo-specific cautions
 

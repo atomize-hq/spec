@@ -18,6 +18,7 @@ Before scoring, classify each realistic candidate into exactly one milestone fam
 The milestone family is the strategic lane.
 The candidate itself is the concrete product-surface milestone inside that lane.
 Prerequisite planning may gate a candidate, but it is not itself a candidate milestone.
+Every scoring pass must force-rank one winner and explain why each alternate loses.
 
 Score each realistic candidate on these dimensions from `0` to `3`.
 
@@ -64,9 +65,14 @@ Apply these before comparing totals.
 - If a candidate does not create new product truth within one milestone, it should almost never win.
 - Recommend the product milestone, not the prerequisite planning step.
 - If the winning milestone still needs a plan artifact first, keep the recommendation on that milestone and treat planning as gating handoff only.
+- Hard-banned final outputs: `planning`, `planning milestone next`, `author a plan`, `no milestone`, `more evidence`.
+- If sources say `recommendation_status = no_strong_candidate`, still pick the strongest honest product-surface candidate and explain why the field is insufficient to overturn the forced ranking.
 - If a frozen source names a `required_next_action`, do not skip over it casually.
+- If sources say `required_next_action = author_*_plan`, move that constraint into readiness and handoff only. It does not authorize a planning winner or a null answer.
 - If `required_next_action` still points at the current planning artifact, do not jump ahead to a later milestone named only inside that artifact's future trigger table or gate section.
 - A trigger-table row marked `not yet triggered` cannot win until live evidence shows the trigger fired or a higher-priority source explicitly says to author that follow-on now.
+- A future trigger row, authorization branch, or not-yet-fired follow-on cannot beat a current product-lane winner just because the winner is blocked on readiness.
+- Blocked readiness does not demote the winner into planning. It changes `Implementation readiness`, `Next artifact kind`, and `Autoplan ready`, not the recommendation itself.
 - If a candidate requires the user to make multiple subjective choices just to start, it should usually lose to a more bounded path.
 - If current repo signals say `no_strong_candidate`, more corpus or recommendation work should lose unless the blocker is plainly "missing evidence we can collect in one tight pass."
 - If the candidate is first-class TypeScript backend support, it must beat the Rust wedge on product leverage and boundedness. "Interesting" is not enough.
@@ -77,6 +83,7 @@ Apply these before comparing totals.
 - `rust-family-promotion` starts with a structural advantage because it is closest to product-core truth and existing machinery, but it loses if frozen decision surfaces explicitly say there is no strong next family move.
 - `corpus-recommendation-policy` is usually support work, not the headline next move. It wins only when frozen decision surfaces still say evidence quality or decision honesty is the blocker.
 - `shared-core-portability` can still be the winning milestone family when frozen decision surfaces say the next honest step is to author the architecture/shared-core follow-on plan first; in that case the milestone is blocked, not replaced by planning.
+- For the captured `feat/m40-plus` branch truth, if evidence still shows `pivot_to_architecture_shared_core_follow_on` plus `author_architecture_follow_on_plan`, keep `shared-core-portability` as the winner and record planning only as the gating artifact.
 - A closed planning run for `shared-core-portability` does not by itself authorize an `operator-consumer-tooling` or implementation follow-on when the same sources still say `implementation still gated`.
 - `second-language-backend` is valid, but expensive. It wins only when the repo has clearly earned real backend expansion rather than another Rust wedge or portability-boundary hardening.
 - `operator-consumer-tooling` is real milestone work when the missing capability is an honest maintainer-facing consumer of repo truth, not a hidden helper or dashboard garnish.
