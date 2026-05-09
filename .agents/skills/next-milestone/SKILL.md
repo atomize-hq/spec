@@ -114,14 +114,21 @@ Do not stop at "what milestone next?" Also decide what artifact should exist nex
 
 This skill is read-only. It must not clear, replace, archive, or rewrite `PLAN.md` or `ORCH_PLAN.md`. Its job is to classify those files correctly, not mutate them.
 
+Repo invariant for this project:
+
+- `ORCH_PLAN.md` is always an execution contract, never a plan draft.
+- By the time `/next-milestone` runs, repo-root `PLAN.md` and repo-root `ORCH_PLAN.md` are already completed authority context if they exist.
+- During `/next-milestone`, treat those two repo-root files as evidence inputs, not active work targets.
+- The handoff should point to a fresh artifact or refreshed authority file for the next move, not re-open the current repo-root `PLAN.md` or `ORCH_PLAN.md` as in-flight execution state.
+
 You must decide:
 
 - `Implementation readiness: <ready-now | needs_artifact_first>`
 - `Next artifact kind: <design_doc | authority_plan_draft | authority_plan>`
 - `Autoplan ready: <yes | no>`
 - `Authority file states:`
-  - `PLAN.md: <completed_authority_context | active_execution_contract | draft_next_artifact | stale_historical_artifact | none>`
-  - `ORCH_PLAN.md: <completed_authority_context | active_execution_contract | draft_next_artifact | stale_historical_artifact | none>`
+  - `PLAN.md: <completed_authority_context | none>`
+  - `ORCH_PLAN.md: <completed_authority_context | none>`
 
 Use these rules:
 
@@ -138,22 +145,15 @@ Use these rules:
 Authority file state classification:
 
 - `completed_authority_context`
-  - use this when the latest relevant closeout proves that milestone landed and the file still describes that completed milestone
-  - a finished `ORCH_PLAN.md` for a closed planning run usually belongs here once its execution job is done
+  - use this for repo-root `PLAN.md` and repo-root `ORCH_PLAN.md` whenever those files exist during `/next-milestone`
+  - `ORCH_PLAN.md` reaches this state as a completed execution contract
+  - `PLAN.md` reaches this state as completed branch authority context for the last landed move
   - completed authority context is evidence, not the next review target
-- `active_execution_contract`
-  - use this when the file still governs an in-flight run or current execution lane and is not yet closed out
-- `draft_next_artifact`
-  - use this only when the file is the actual next draft artifact for the next milestone and is reviewable as-is
-  - a current `PLAN.md` can stay here even after the planning run that authored it closes out, but only if the closeout shows the draft was authored or refined and implementation remains gated
-- `stale_historical_artifact`
-  - use this when the file is older residue that is neither the current active contract nor the next draft artifact
 - `none`
   - use this when the file does not exist
 
-Never assume `PLAN.md` or `ORCH_PLAN.md` are always the previous landed milestone.
-Never assume they are always the next draft artifact either.
-Classify them from repo truth each time.
+For this repo, do not classify repo-root `PLAN.md` or repo-root `ORCH_PLAN.md` as `active_execution_contract`, `draft_next_artifact`, or `stale_historical_artifact` during `/next-milestone`.
+Classify them from repo truth each time, but enforce the repo invariant above.
 
 Artifact-readiness check for `authority_plan_draft`:
 
@@ -179,7 +179,6 @@ Automatic negative signals for `draft_next_artifact` / `Autoplan ready: yes`:
 - if the file says `author the ... plan`, treat that as evidence the artifact is still partly meta
 - if the file says `run /autoplan on this plan candidate`, treat that as evidence the artifact boundary is not yet fully settled
 - if the latest closeout proves the file's milestone already landed and the file now serves only as historical context, classify it as `completed_authority_context`, not `draft_next_artifact`
-- do not auto-demote a current `PLAN.md` draft just because the planning run that authored it has a closeout; first check whether the draft now passes the readiness criteria as the exact review target
 
 Never hand off a planning-follow-on recommendation as "proceed to `/autoplan` based on these findings." `/autoplan` reviews a plan artifact. It should not be asked to invent the artifact boundary from a milestone memo alone.
 
@@ -197,8 +196,8 @@ Implementation readiness: <ready-now | needs_artifact_first>
 Next artifact kind: <design_doc | authority_plan_draft | authority_plan>
 Autoplan ready: <yes | no>
 Authority file states:
-- PLAN.md: <completed_authority_context | active_execution_contract | draft_next_artifact | stale_historical_artifact | none>
-- ORCH_PLAN.md: <completed_authority_context | active_execution_contract | draft_next_artifact | stale_historical_artifact | none>
+- PLAN.md: <completed_authority_context | none>
+- ORCH_PLAN.md: <completed_authority_context | none>
 Recommendation: <one-line recommendation>
 
 Why this wins:
@@ -232,7 +231,7 @@ If `Autoplan ready: no`, the handoff must name the artifact that gates the recom
 If `Autoplan ready: yes`, name the exact file `/autoplan` should review.
 If `Next artifact kind: authority_plan_draft` and `Autoplan ready: yes`, briefly justify why the draft passes the artifact-readiness check and unblocks the recommended milestone.
 If an authority file is classified as `completed_authority_context`, do not target it with `/autoplan`.
-If an authority file is classified as `active_execution_contract`, do not target it with `/autoplan` unless the next milestone is explicitly to review that same in-flight execution contract.
+Do not target repo-root `PLAN.md` or repo-root `ORCH_PLAN.md` with `/autoplan` during `/next-milestone`; recommend a fresh artifact or refreshed authority file instead.
 Hard-banned final outputs: `planning`, `planning milestone next`, `author a plan`, `no milestone`, `more evidence`.
 If `required_next_action = author_*_plan`, the only allowed place for that planning requirement is readiness and handoff semantics. It must not replace the winning wedge.
 
@@ -282,18 +281,15 @@ Do not let a noisy or stale lower-priority source override a cleaner higher-prio
 - If sources say `required_next_action = author_*_plan`, do not hand off directly to `/autoplan` unless that plan artifact already exists and is clearly the intended review target.
 - If `required_next_action` still points at the current planning artifact, do not synthesize a later M41-style follow-on from that artifact's future trigger table or authorization gate.
 - A draft file existing on disk is not enough by itself to make `/autoplan` ready. The draft must already behave like a reviewable authority plan, not a plan-to-write-a-plan.
-- If the latest closeout proves an orchestration run landed, `ORCH_PLAN.md` should usually classify as `completed_authority_context`, not `draft_next_artifact`.
-- If that same closeout proves the run authored or refined the current next authority-plan draft while leaving implementation gated, `PLAN.md` may still classify as `draft_next_artifact`.
+- For this repo, `ORCH_PLAN.md` is always execution-only and should classify as `completed_authority_context` during `/next-milestone` if it exists.
+- For this repo, repo-root `PLAN.md` should also classify as `completed_authority_context` during `/next-milestone` if it exists.
 - If a closeout or plan says `implementation still gated`, treat that as evidence against recommending the gated successor milestone right now.
 - Do not turn a future trigger-table row, `M41` gate branch, or `allowed if...` clause into the next milestone unless current evidence proves the trigger fired or a higher-priority source explicitly names that follow-on.
-- Do not treat repo-root `PLAN.md` as authoritative by default. It must earn that role by clearly being the current branch's active plan and not merely prior landed work.
-- If the latest closeout shows the current `ORCH_PLAN.md` execution contract is complete, treat it as completed authority context, not the next milestone contract.
-- If the latest closeout shows the current `PLAN.md` draft is the authored output of that completed planning run, decide between `draft_next_artifact` and `completed_authority_context` using the artifact-readiness check rather than auto-demoting it.
+- Do not treat repo-root `PLAN.md` or repo-root `ORCH_PLAN.md` as the next review target during `/next-milestone`; they are completed authority context for the move that already landed.
 - If a live signal is branch-local noise but the frozen decision surfaces are stable, call it secondary evidence, not the primary reason.
 - Do not label `PLAN.md`, `ORCH_PLAN.md`, or closeout files as live signals. They are authority context or closeout context.
-- Do not say "touch `PLAN.md` first" unless repo convention and current authority context clearly make repo-root `PLAN.md` the next milestone authority file.
-- If `PLAN.md` is only likely, say "author the next milestone authority plan, likely in `PLAN.md`."
-- Do not say "replace `PLAN.md`" unless repo convention clearly requires replacement rather than a new authority artifact.
+- Do not say "touch `PLAN.md` first" when you mean the current repo-root `PLAN.md`; ask for or recommend a fresh artifact instead.
+- If repo convention suggests the next authority artifact will probably live at repo-root `PLAN.md`, say "refresh `PLAN.md` into the next authority artifact" rather than treating the current file as already active.
 - Do not emit a plan artifact whose main purpose is to say "write the plan." The artifact itself must carry the scoped contract once it exists.
 - For the captured `feat/m40-plus` branch truth, if evidence still includes `pivot_to_architecture_shared_core_follow_on` plus `author_architecture_follow_on_plan`, the winner stays in `shared-core-portability`; planning remains handoff-only and must not become the recommendation.
 
