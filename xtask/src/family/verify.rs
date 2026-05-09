@@ -1,8 +1,8 @@
 use crate::XtaskError;
-use crate::family::coverage::render_json_bytes;
-use crate::family::decision_kernel::{
+use crate::family::analysis_core::{
     corpus_program_basis_snapshot, derive_corpus_program_decision_contract,
 };
+use crate::family::coverage::render_json_bytes;
 use crate::family::paths::{
     FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
 };
@@ -692,10 +692,10 @@ mod tests {
         run_with_writer,
     };
     use crate::XtaskError;
-    use crate::family::coverage::render_json_bytes;
-    use crate::family::decision_kernel::{
+    use crate::family::analysis_core::{
         corpus_program_basis_snapshot, derive_corpus_program_decision_contract,
     };
+    use crate::family::coverage::render_json_bytes;
     use crate::family::inventory::inventory_sha256_hex;
     use crate::family::paths::{
         FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,

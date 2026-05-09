@@ -361,24 +361,6 @@ pub(crate) fn write_latest(
     })
 }
 
-pub(crate) fn normalized_for_recommend_determinism(
-    artifact: &FamilyCoverageArtifact,
-) -> FamilyCoverageArtifact {
-    let mut normalized = artifact.clone();
-    normalized.generated_at.clear();
-    normalized.inventory_path.clear();
-    normalized.inventory_sha256.clear();
-    normalized
-}
-
-pub(crate) fn normalized_coverage_proof_fingerprint(
-    artifact: &FamilyCoverageArtifact,
-) -> Result<String, XtaskError> {
-    let normalized = normalized_for_recommend_determinism(artifact);
-    let bytes = render_json_bytes(&normalized)?;
-    Ok(inventory_sha256_hex(&bytes))
-}
-
 pub(crate) fn current_timestamp_rfc3339() -> Result<String, XtaskError> {
     let output = Command::new("date")
         .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])

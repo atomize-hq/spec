@@ -1,3 +1,4 @@
+pub mod analysis_core;
 pub mod certify;
 pub mod coverage;
 pub mod decision_kernel;

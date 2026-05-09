@@ -1,12 +1,13 @@
 use crate::XtaskError;
-use crate::family::coverage::{
-    CoverageRunOutput, collect_latest, current_timestamp_rfc3339,
-    normalized_coverage_proof_fingerprint, render_json_bytes, write_latest,
-};
-use crate::family::decision_kernel::corpus_program_basis_snapshot;
-use crate::family::helper_surface::{
+use crate::family::analysis_core::{
     HelperSurfaceDisposition, HelperSurfaceSignal, classify_helper_surface,
+    corpus_program_basis_snapshot, derive_corpus_program_decision_contract,
     durable_non_promotable_helper_surface_candidate_tuple,
+    normalized_corpus_program_decision_proof_fingerprint, normalized_coverage_proof_fingerprint,
+    normalized_recommendation_proof_fingerprint,
+};
+use crate::family::coverage::{
+    CoverageRunOutput, collect_latest, current_timestamp_rfc3339, render_json_bytes, write_latest,
 };
 use crate::family::inventory::inventory_sha256_hex;
 use crate::family::paths::{
@@ -28,11 +29,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
-
-pub(crate) use crate::family::decision_kernel::{
-    derive_corpus_program_decision_contract, normalized_corpus_program_decision_proof_fingerprint,
-    normalized_recommendation_proof_fingerprint,
-};
 
 pub(crate) fn run(workspace_root: &Path, format: &str) -> Result<(), XtaskError> {
     let mut stdout = io::stdout().lock();
@@ -837,4 +833,193 @@ fn candidate_id(
         "a"
     };
     format!("{prefix}-{:?}-{}", cluster.reason_code, cluster.cluster_id).to_ascii_lowercase()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_corpus_program_decision_artifact, build_recommendation_analysis_artifact,
+        effective_corpus_program_decision_bytes, effective_recommendation_bytes,
+    };
+    use crate::family::coverage::render_json_bytes;
+    use crate::family::paths::{
+        FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,
+        FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
+    };
+    use crate::family::promotion_artifacts::{
+        CandidateStatus, CorpusSourceEntry, FamilyCoverageArtifact, FunctionCoverageTotals,
+        NonFunctionCoverageTotals, PromotionArtifactKind, SourceKind, UnsupportedClusterEntry,
+    };
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn recommendation_bytes_reuse_existing_bytes_when_semantics_are_unchanged() {
+        let temp_dir = seeded_workspace();
+        let artifact = recommendation_artifact();
+        let existing_bytes = render_json_bytes(&artifact).unwrap();
+        fs::write(
+            temp_dir
+                .path()
+                .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),
+            &existing_bytes,
+        )
+        .unwrap();
+
+        let mut churned = artifact.clone();
+        churned.generated_at = "2026-05-06T03:00:00Z".to_string();
+
+        let observed = effective_recommendation_bytes(temp_dir.path(), churned).unwrap();
+        assert_eq!(observed, existing_bytes);
+        assert_eq!(
+            fs::read(
+                temp_dir
+                    .path()
+                    .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH)
+            )
+            .unwrap(),
+            existing_bytes
+        );
+    }
+
+    #[test]
+    fn corpus_decision_bytes_reuse_existing_bytes_when_semantics_are_unchanged() {
+        let temp_dir = seeded_workspace();
+        let analysis = recommendation_artifact();
+        let analysis_bytes = render_json_bytes(&analysis).unwrap();
+        fs::write(
+            temp_dir
+                .path()
+                .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH),
+            &analysis_bytes,
+        )
+        .unwrap();
+
+        let artifact = build_corpus_program_decision_artifact(
+            "2026-05-05T02:00:00Z".to_string(),
+            crate::family::inventory::inventory_sha256_hex(&analysis_bytes),
+            &analysis,
+        )
+        .unwrap();
+        let existing_bytes = render_json_bytes(&artifact).unwrap();
+        fs::write(
+            temp_dir
+                .path()
+                .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH),
+            &existing_bytes,
+        )
+        .unwrap();
+
+        let mut churned = artifact.clone();
+        churned.generated_at = "2026-05-06T03:00:00Z".to_string();
+
+        let observed = effective_corpus_program_decision_bytes(temp_dir.path(), churned).unwrap();
+        assert_eq!(observed, existing_bytes);
+        assert_eq!(
+            fs::read(
+                temp_dir
+                    .path()
+                    .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH)
+            )
+            .unwrap(),
+            existing_bytes
+        );
+    }
+
+    fn seeded_workspace() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(
+            temp_dir
+                .path()
+                .join(FAMILY_COVERAGE_LATEST_PATH)
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
+        fs::create_dir_all(
+            temp_dir
+                .path()
+                .join(FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH)
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
+        fs::create_dir_all(
+            temp_dir
+                .path()
+                .join(FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH)
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
+
+        let coverage = coverage_artifact();
+        let coverage_bytes = render_json_bytes(&coverage).unwrap();
+        fs::write(
+            temp_dir.path().join(FAMILY_COVERAGE_LATEST_PATH),
+            &coverage_bytes,
+        )
+        .unwrap();
+
+        temp_dir
+    }
+
+    fn coverage_artifact() -> FamilyCoverageArtifact {
+        FamilyCoverageArtifact {
+            schema_version: 1,
+            artifact_kind: PromotionArtifactKind::FamilyCoverageSnapshot,
+            generated_at: "2026-05-05T00:00:00Z".to_string(),
+            inventory_path: ".semantic-family-artifacts/family-promotion/inventory/current.json"
+                .to_string(),
+            inventory_sha256: "inventory-sha".to_string(),
+            corpus_manifest_path: "xtask/fixtures/family-corpus.toml".to_string(),
+            corpus_manifest_sha256: "manifest-sha".to_string(),
+            sources: vec![CorpusSourceEntry {
+                id: "real".to_string(),
+                path: "fixtures/real".to_string(),
+                kind: SourceKind::RealExample,
+                counts_toward_recommendation: true,
+                note: "fixture".to_string(),
+                unit_count: 2,
+            }],
+            function_coverage: FunctionCoverageTotals {
+                total_units: 2,
+                promoted_family_units: 0,
+                supported_unpromoted_family_units: 0,
+                unsupported_function_units: 2,
+            },
+            non_function_coverage: NonFunctionCoverageTotals {
+                total_units: 0,
+                supported_sum_units: 0,
+                supported_data_units: 0,
+                other_units: 0,
+            },
+            family_coverage: Vec::new(),
+            unsupported_clusters: vec![UnsupportedClusterEntry {
+                cluster_id: "unsupported_function_surface-e40675da6fa0".to_string(),
+                reason_code:
+                    spec_core::semantic_review::UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+                shape_fingerprint: crate::family::analysis_core::HELPER_SURFACE_FINGERPRINT
+                    .to_string(),
+                representative_unit_ids: vec!["real::pricing/helper".to_string()],
+                source_ids: vec!["real".to_string()],
+                real_example_hits: 2,
+                promotion_relevant_regression_hits: 1,
+                boundary_only_hits: 0,
+                overlap_family: "unknown".to_string(),
+                candidate_status: CandidateStatus::Rankable,
+            }],
+        }
+    }
+
+    fn recommendation_artifact()
+    -> crate::family::promotion_artifacts::FamilyRecommendationAnalysisArtifact {
+        let coverage = coverage_artifact();
+        build_recommendation_analysis_artifact(
+            "2026-05-05T01:00:00Z".to_string(),
+            FAMILY_COVERAGE_LATEST_PATH.to_string(),
+            crate::family::inventory::inventory_sha256_hex(&render_json_bytes(&coverage).unwrap()),
+            &coverage.unsupported_clusters,
+        )
+    }
 }

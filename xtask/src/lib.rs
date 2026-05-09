@@ -3487,7 +3487,8 @@ gate_d = true
             (2, 1, 0),
         )]);
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3520,7 +3521,8 @@ gate_d = true
         ];
         artifact.evidence_summary.missing_evidence = vec![EvidenceState::ThinRealExampleSupport];
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3541,7 +3543,8 @@ gate_d = true
         artifact.decision_summary.decision_status = DecisionStatus::BlockedForNow;
         artifact.evidence_summary.stale_evidence = vec![EvidenceState::StaleEvidence];
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3585,7 +3588,8 @@ gate_d = true
             )],
         );
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3617,7 +3621,8 @@ gate_d = true
             )],
         );
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3646,7 +3651,8 @@ gate_d = true
             Vec::new(),
         );
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(derived.decision_action, CorpusProgramDecisionAction::Stop);
         assert_eq!(
@@ -3977,7 +3983,8 @@ gate_d = true
             "unsupported_function_surface-e40675da6fa0",
             (2, 1, 0),
         )]);
-        let baseline = coverage::normalized_coverage_proof_fingerprint(&artifact).unwrap();
+        let baseline =
+            family::analysis_core::normalized_coverage_proof_fingerprint(&artifact).unwrap();
 
         let mut churned = artifact.clone();
         churned.generated_at = "2026-05-06T03:00:00Z".to_string();
@@ -3986,7 +3993,7 @@ gate_d = true
         churned.inventory_sha256 = "different-inventory-sha".to_string();
 
         assert_eq!(
-            coverage::normalized_coverage_proof_fingerprint(&churned).unwrap(),
+            family::analysis_core::normalized_coverage_proof_fingerprint(&churned).unwrap(),
             baseline
         );
     }
@@ -3997,13 +4004,14 @@ gate_d = true
             "unsupported_function_surface-e40675da6fa0",
             (2, 1, 0),
         )]);
-        let baseline = coverage::normalized_coverage_proof_fingerprint(&artifact).unwrap();
+        let baseline =
+            family::analysis_core::normalized_coverage_proof_fingerprint(&artifact).unwrap();
 
         let mut changed = artifact.clone();
         changed.unsupported_clusters[0].real_example_hits = 3;
 
         assert_ne!(
-            coverage::normalized_coverage_proof_fingerprint(&changed).unwrap(),
+            family::analysis_core::normalized_coverage_proof_fingerprint(&changed).unwrap(),
             baseline
         );
     }
@@ -4014,7 +4022,8 @@ gate_d = true
             "unsupported_function_surface-e40675da6fa0",
             (2, 1, 0),
         )]);
-        let baseline = recommend::normalized_recommendation_proof_fingerprint(&artifact).unwrap();
+        let baseline =
+            family::analysis_core::normalized_recommendation_proof_fingerprint(&artifact).unwrap();
 
         let mut churned = artifact.clone();
         churned.generated_at = "2026-05-06T03:00:00Z".to_string();
@@ -4031,7 +4040,7 @@ gate_d = true
         };
 
         assert_eq!(
-            recommend::normalized_recommendation_proof_fingerprint(&churned).unwrap(),
+            family::analysis_core::normalized_recommendation_proof_fingerprint(&churned).unwrap(),
             baseline
         );
     }
@@ -4048,7 +4057,8 @@ gate_d = true
         )
         .unwrap();
         let baseline =
-            recommend::normalized_corpus_program_decision_proof_fingerprint(&artifact).unwrap();
+            family::analysis_core::normalized_corpus_program_decision_proof_fingerprint(&artifact)
+                .unwrap();
 
         let mut changed = artifact.clone();
         changed.decision_action = CorpusProgramDecisionAction::Stop;
@@ -4057,7 +4067,8 @@ gate_d = true
         changed.required_next_action = RequiredNextAction::RecordStopWithoutNewMilestone;
 
         assert_ne!(
-            recommend::normalized_corpus_program_decision_proof_fingerprint(&changed).unwrap(),
+            family::analysis_core::normalized_corpus_program_decision_proof_fingerprint(&changed)
+                .unwrap(),
             baseline
         );
     }
@@ -4074,13 +4085,15 @@ gate_d = true
         )
         .unwrap();
         let baseline =
-            recommend::normalized_corpus_program_decision_proof_fingerprint(&artifact).unwrap();
+            family::analysis_core::normalized_corpus_program_decision_proof_fingerprint(&artifact)
+                .unwrap();
 
         let mut churned = artifact.clone();
         churned.generated_at = "2026-05-06T03:00:00Z".to_string();
 
         assert_eq!(
-            recommend::normalized_corpus_program_decision_proof_fingerprint(&churned).unwrap(),
+            family::analysis_core::normalized_corpus_program_decision_proof_fingerprint(&churned)
+                .unwrap(),
             baseline
         );
     }
