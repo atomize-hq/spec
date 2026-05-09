@@ -2597,9 +2597,10 @@ gate_d = true
                 "function.wrapper.pipeline.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
+                "function.helper.identity_passthrough.v1",
             ]
         );
-        assert_eq!(inventory.supported_unpromoted_families.len(), 1);
+        assert_eq!(inventory.supported_unpromoted_families.len(), 2);
 
         let wrapper = inventory.supported_unpromoted_families.first().unwrap();
         assert_eq!(wrapper.family, "function.wrapper.pipeline.v1");
@@ -2612,6 +2613,7 @@ gate_d = true
             vec![
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
+                "function.helper.identity_passthrough.v1",
                 "unsupported.function.v1",
             ]
         );
@@ -2624,6 +2626,29 @@ gate_d = true
             vec!["spec-cli/tests/m14_regressions.rs"]
         );
         assert_eq!(wrapper.supporting_packet_paths.len(), 6);
+
+        let helper = inventory.supported_unpromoted_families.get(1).unwrap();
+        assert_eq!(helper.family, "function.helper.identity_passthrough.v1");
+        assert_eq!(
+            helper.routing_predecessor.as_deref(),
+            Some("function.arithmetic_leaf.monotone_up.v1")
+        );
+        assert_eq!(
+            helper.routing_successors,
+            vec!["unsupported.function.v1"]
+        );
+        assert_eq!(
+            helper.canonical_seed_paths,
+            vec![
+                "examples/ecommerce/units/money/round.unit.spec",
+                "examples/shared-spec/units/money/round.unit.spec",
+            ]
+        );
+        assert_eq!(
+            helper.existing_wedge_paths,
+            vec!["xtask/src/family/analysis_core/helper_surface.rs"]
+        );
+        assert!(helper.supporting_packet_paths.is_empty());
     }
 
     #[test]
@@ -3831,7 +3856,7 @@ gate_d = true
 
         assert_eq!(
             recommendation.recommendation_status,
-            RecommendationStatus::NoStrongCandidate
+            RecommendationStatus::InsufficientRealCorpus
         );
         assert_eq!(
             coverage
@@ -3859,44 +3884,26 @@ gate_d = true
         assert_eq!(coverage.function_coverage.promoted_family_units, 17);
         assert_eq!(
             coverage.function_coverage.supported_unpromoted_family_units,
-            0
+            3
         );
-        assert_eq!(coverage.function_coverage.unsupported_function_units, 11);
+        assert_eq!(coverage.function_coverage.unsupported_function_units, 8);
 
-        assert_eq!(recommendation.ranked_candidates.len(), 1);
+        let helper_family = coverage
+            .family_coverage
+            .iter()
+            .find(|entry| entry.family == "function.helper.identity_passthrough.v1")
+            .unwrap();
+        assert_eq!(helper_family.unit_count, 3);
+        assert_eq!(
+            helper_family.source_ids,
+            vec![
+                "examples_ecommerce".to_string(),
+                "examples_shared_spec".to_string(),
+                "m20_unsupported_truth_pack".to_string(),
+            ]
+        );
 
-        let visible_candidate = &recommendation.ranked_candidates[0];
-        assert_eq!(
-            visible_candidate.cluster_ids,
-            vec!["unsupported_function_surface-e40675da6fa0".to_string()]
-        );
-        assert_eq!(
-            visible_candidate.promotion_readiness,
-            PromotionReadiness::Hold
-        );
-        assert_eq!(
-            visible_candidate.hold_reasons,
-            vec![HoldReason::HelperSurfaceNotPromotable]
-        );
-        assert_eq!(
-            visible_candidate.next_step_status,
-            NextStepStatus::DurableHold
-        );
-        assert_eq!(
-            visible_candidate.next_step_detail,
-            NextStepDetail::HelperSurfaceNotPromotable
-        );
-        assert_eq!(
-            visible_candidate.leverage,
-            RecommendationLeverage {
-                real_example_hits: 2,
-                promotion_relevant_regression_hits: 1,
-                boundary_only_hits: 0,
-                total_units_in_cluster: 3,
-            }
-        );
-        assert_eq!(visible_candidate.difficulty.tier, DifficultyTier::Hard);
-        assert_eq!(visible_candidate.confidence.level, ConfidenceLevel::Low);
+        assert!(recommendation.ranked_candidates.is_empty());
     }
 
     #[test]
@@ -4571,13 +4578,18 @@ gate_d = true
     fn seed_inventory_repo_truth(workspace_root: &Path) {
         write_string(
             &workspace_root.join("spec-core/src/semantic_review.rs"),
-            r#"const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 4] = [
+            r#"const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 5] = [
     SupportedFunctionRoute::WrapperPipelineChain3,
     SupportedFunctionRoute::WrapperPipeline,
     SupportedFunctionRoute::ArithmeticLeafMonotoneDownNonnegative,
     SupportedFunctionRoute::ArithmeticLeafMonotoneUp,
+    SupportedFunctionRoute::HelperIdentityPassthrough,
 ];
 "#,
+        );
+        write_string(
+            &workspace_root.join("examples/ecommerce/units/money/round.unit.spec"),
+            "id: money/round\n",
         );
         write_string(
             &workspace_root.join("examples/ecommerce/units/pricing/apply_discount.unit.spec"),
@@ -4594,6 +4606,14 @@ gate_d = true
         write_string(
             &workspace_root.join("spec-cli/tests/m14_regressions.rs"),
             "fn wrapper_pipeline_existing_wedge() {}\n",
+        );
+        write_string(
+            &workspace_root.join("examples/shared-spec/units/money/round.unit.spec"),
+            "id: money/round\n",
+        );
+        write_string(
+            &workspace_root.join("xtask/src/family/analysis_core/helper_surface.rs"),
+            "const HELPER_SURFACE_FINGERPRINT: &str = \"fixture\";\n",
         );
         write_string(
             &workspace_root.join(
@@ -5110,6 +5130,7 @@ gate_d = true
             "spec-cli/tests/fixtures/m19/semantic_falsification_pack/units",
             "spec-cli/tests/fixtures/m20/unsupported_truth_pack/units",
             "spec-cli/tests/m14_regressions.rs",
+            "xtask/src/family/analysis_core/helper_surface.rs",
             "spec-core/src/semantic_review.rs",
         ] {
             copy_path_from_repo(workspace_root, relative_path);

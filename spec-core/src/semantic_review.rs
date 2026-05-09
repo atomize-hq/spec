@@ -379,6 +379,7 @@ enum SupportedFunctionFamily {
     FamilyC,
     FamilyA(FamilyAFunctionRole),
     FamilyB,
+    HelperIdentityPassthrough,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -388,11 +389,24 @@ enum FamilyAFunctionRole {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HelperIdentityPassthroughIntentRole {
+    Passthrough,
+    RoundLike,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HelperIdentityPassthroughBodyKind {
+    DirectPassthrough,
+    RoundLike,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SupportedFunctionRoute {
     WrapperPipelineChain3,
     WrapperPipeline,
     ArithmeticLeafMonotoneDownNonnegative,
     ArithmeticLeafMonotoneUp,
+    HelperIdentityPassthrough,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -434,15 +448,18 @@ const FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY: &str
 const FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_up.v1";
 const FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
+const FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY: &str =
+    "function.helper.identity_passthrough.v1";
 const UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY: &str = "unsupported.function.v1";
 const FAMILY_A_INVARIANT_OUTPUT_LE_INPUT0: &str = "output <= input0";
 const FAMILY_A_INVARIANT_OUTPUT_GE_ZERO: &str = "output >= 0";
 const FAMILY_A_INVARIANT_OUTPUT_GE_INPUT0: &str = "output >= input0";
-const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 4] = [
+const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 5] = [
     SupportedFunctionRoute::WrapperPipelineChain3,
     SupportedFunctionRoute::WrapperPipeline,
     SupportedFunctionRoute::ArithmeticLeafMonotoneDownNonnegative,
     SupportedFunctionRoute::ArithmeticLeafMonotoneUp,
+    SupportedFunctionRoute::HelperIdentityPassthrough,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -485,6 +502,9 @@ impl SupportedSurface {
             Self::Function(SupportedFunctionFamily::FamilyB) => {
                 Some(FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY)
             }
+            Self::Function(SupportedFunctionFamily::HelperIdentityPassthrough) => {
+                Some(FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY)
+            }
             Self::SumDiscountPolicy => Some(SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY),
             Self::DataCheckoutQuote => Some(DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY),
             Self::Unsupported(_) => None,
@@ -507,6 +527,7 @@ impl SupportedFunctionFamily {
             Self::FamilyC => 5,
             Self::FamilyA(_) => 2,
             Self::FamilyB => 3,
+            Self::HelperIdentityPassthrough => 1,
         }
     }
 }
@@ -522,6 +543,9 @@ impl SupportedFunctionRoute {
             }
             Self::ArithmeticLeafMonotoneUp => {
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY
+            }
+            Self::HelperIdentityPassthrough => {
+                FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY
             }
         }
     }
@@ -580,6 +604,15 @@ impl SupportedFunctionRoute {
                     )
                 {
                     Some(SupportedFunctionFamily::FamilyA(role))
+                } else {
+                    None
+                }
+            }
+            Self::HelperIdentityPassthrough => {
+                if helper_identity_passthrough_contract_is_supported(authored)
+                    && helper_identity_passthrough_body_kind(executable).is_some()
+                {
+                    Some(SupportedFunctionFamily::HelperIdentityPassthrough)
                 } else {
                     None
                 }
@@ -1314,6 +1347,9 @@ fn authored_function_contract_is_supported(
                 && authored.returns.as_deref().is_some_and(type_is_decimal)
                 && authored.deps.len() == 2
         }
+        SupportedFunctionFamily::HelperIdentityPassthrough => {
+            helper_identity_passthrough_contract_is_supported(authored)
+        }
     }
 }
 
@@ -1346,6 +1382,16 @@ fn authored_function_looks_like_arithmetic_contract(
 ) -> bool {
     authored.deps.len() <= 1
         && function_inputs_are_decimal(&authored.inputs, 2)
+        && authored.returns.as_deref().is_some_and(type_is_decimal)
+}
+
+fn helper_identity_passthrough_contract_is_supported(
+    authored: &SemanticAuthoredFunctionPacket,
+) -> bool {
+    authored.fn_name == "round"
+        && authored.deps.is_empty()
+        && authored.invariants.is_empty()
+        && function_inputs_are_decimal(&authored.inputs, 1)
         && authored.returns.as_deref().is_some_and(type_is_decimal)
 }
 
@@ -1602,6 +1648,9 @@ fn classify_supported_function_body(
                     SupportedBodyClassification::OutsideHonestSubset
                 }
             }
+        }
+        SupportedFunctionFamily::HelperIdentityPassthrough => {
+            classify_helper_identity_passthrough_body(authored, executable)
         }
     }
 }
@@ -2567,6 +2616,102 @@ fn classify_family_a_shape(
                 SupportedBodyClassification::Contradictory
             }
         }
+    }
+}
+
+fn classify_helper_identity_passthrough_body(
+    authored: &SemanticAuthoredFunctionPacket,
+    executable: &SemanticExecutableFunctionPacket,
+) -> SupportedBodyClassification {
+    let Some(intent_role) = helper_identity_passthrough_intent_role(&authored.intent) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+    let Some(body_kind) = helper_identity_passthrough_body_kind(executable) else {
+        return SupportedBodyClassification::OutsideHonestSubset;
+    };
+
+    match (intent_role, body_kind) {
+        (
+            HelperIdentityPassthroughIntentRole::Passthrough,
+            HelperIdentityPassthroughBodyKind::DirectPassthrough,
+        ) => SupportedBodyClassification::Aligned,
+        (
+            HelperIdentityPassthroughIntentRole::Passthrough,
+            HelperIdentityPassthroughBodyKind::RoundLike,
+        ) => SupportedBodyClassification::Contradictory,
+        (
+            HelperIdentityPassthroughIntentRole::RoundLike,
+            HelperIdentityPassthroughBodyKind::DirectPassthrough
+            | HelperIdentityPassthroughBodyKind::RoundLike,
+        ) => SupportedBodyClassification::Aligned,
+    }
+}
+
+fn helper_identity_passthrough_intent_role(
+    intent: &str,
+) -> Option<HelperIdentityPassthroughIntentRole> {
+    let normalized = intent.trim().to_ascii_lowercase();
+    if normalized.contains("round") {
+        Some(HelperIdentityPassthroughIntentRole::RoundLike)
+    } else if normalized.contains("pass through")
+        || normalized.contains("passthrough")
+        || normalized.contains("provided value")
+        || normalized.contains("echo")
+        || normalized.contains("unchanged")
+    {
+        Some(HelperIdentityPassthroughIntentRole::Passthrough)
+    } else {
+        None
+    }
+}
+
+fn helper_identity_passthrough_body_kind(
+    executable: &SemanticExecutableFunctionPacket,
+) -> Option<HelperIdentityPassthroughBodyKind> {
+    if !function_inputs_are_decimal(&executable.inputs, 1) {
+        return None;
+    }
+
+    let block = syn::parse_str::<syn::Block>(&executable.body_rust).ok()?;
+    if block_contains_unsupported_control_flow(&block) || !block_prefix_stmts(&block).is_empty() {
+        return None;
+    }
+    let input_name = executable.inputs[0].name.as_str();
+    let tail = block_tail_expr(&block)?;
+
+    if expr_is_ident(tail, input_name) {
+        Some(HelperIdentityPassthroughBodyKind::DirectPassthrough)
+    } else if expr_is_round_like_unary_helper_body(tail, input_name) {
+        Some(HelperIdentityPassthroughBodyKind::RoundLike)
+    } else {
+        None
+    }
+}
+
+fn expr_is_round_like_unary_helper_body(expr: &syn::Expr, input_name: &str) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+    let syn::Expr::MethodCall(call) = expr else {
+        return false;
+    };
+
+    call.method.to_string().starts_with("round")
+        && expr_is_ident(&call.receiver, input_name)
+        && call.args.iter().all(expr_is_helper_literal_or_path_arg)
+}
+
+fn expr_is_helper_literal_or_path_arg(expr: &syn::Expr) -> bool {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return false;
+    };
+
+    match expr {
+        syn::Expr::Lit(_) | syn::Expr::Path(_) => true,
+        syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Neg(_)) => {
+            matches!(strip_expr_wrappers(&unary.expr), Some(syn::Expr::Lit(_)))
+        }
+        _ => false,
     }
 }
 
@@ -4231,6 +4376,18 @@ mod tests {
         )
     }
 
+    fn helper_identity_passthrough_spec(id: &str, intent: &str, body: &str) -> LoadedSpec {
+        function_spec(
+            id,
+            intent,
+            &[("value", "rust_decimal::Decimal")],
+            Some("rust_decimal::Decimal"),
+            &[],
+            &[],
+            body,
+        )
+    }
+
     fn calculate_total_function_spec() -> LoadedSpec {
         arithmetic_leaf_spec(
             "pricing/calculate_total",
@@ -5408,6 +5565,7 @@ mod tests {
                 FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY,
+                FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY,
             ]
         );
     }
@@ -5466,6 +5624,7 @@ mod tests {
                 FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY,
+                FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY,
             ]
         );
     }
@@ -5911,7 +6070,104 @@ mod tests {
                 FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY,
+                FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY,
             ]
+        );
+    }
+
+    #[test]
+    fn helper_identity_passthrough_classifier_aligned_fixture_routes_to_supported_helper() {
+        let review = evaluate_semantic_review(&helper_identity_passthrough_spec(
+            "money/round",
+            "Round a decimal value to two fractional digits for pricing flows.",
+            r#"{
+            value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+        }"#,
+        ))
+        .unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+        assert_eq!(
+            review.evaluator_scope,
+            EvaluatorScope::SupportedFunctionSurface
+        );
+    }
+
+    #[test]
+    fn helper_identity_passthrough_classifier_under_specified_fixture_reports_vague_truth() {
+        let review = evaluate_semantic_review(&helper_identity_passthrough_spec(
+            "money/round",
+            "todo",
+            r#"{
+            value
+        }"#,
+        ))
+        .unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::VagueUnitIntent]
+        );
+    }
+
+    #[test]
+    fn helper_identity_passthrough_classifier_drift_fixture_reports_semantic_drift() {
+        let review = evaluate_semantic_review(&helper_identity_passthrough_spec(
+            "money/round",
+            "Echo the provided value unchanged for downstream pricing flows.",
+            r#"{
+            value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+        }"#,
+        ))
+        .unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn helper_identity_passthrough_classifier_unsupported_near_miss_stays_unsupported() {
+        let review = evaluate_semantic_review(&helper_identity_passthrough_spec(
+            "money/round",
+            "Round a decimal value to two fractional digits for pricing flows.",
+            r#"{
+            if value == Decimal::ZERO {
+                value
+            } else {
+                value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+            }
+        }"#,
+        ))
+        .unwrap();
+
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.compatibility_key,
+            UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedControlFlow]
         );
     }
 

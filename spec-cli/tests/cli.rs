@@ -840,6 +840,57 @@ local_tests:
     units_dir
 }
 
+fn write_supported_helper_function_semantic_status_project(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "supported-helper-function-semantic-status-project"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[workspace]
+"#,
+    );
+    write_file(
+        project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round a decimal value to two fractional digits for pricing flows.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    value: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+  - rust_decimal::RoundingStrategy
+body:
+  rust: |
+    {
+        value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+    }
+local_tests:
+  - id: rounds_half_up
+    expect: "round(Decimal::new(12345, 3)) == Decimal::new(1235, 2)"
+"#,
+    );
+
+    units_dir
+}
+
 const FUNCTION_FAMILY_A_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_down_nonnegative.v1";
 const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
@@ -847,6 +898,8 @@ const FUNCTION_FAMILY_A_LEGACY_COMPATIBILITY_KEY: &str = "function.apply_discoun
 const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
 const FUNCTION_FAMILY_B_LEGACY_COMPATIBILITY_KEY: &str = "function.calculate_total.v1";
 const FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.chain3.v1";
+const FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY: &str =
+    "function.helper.identity_passthrough.v1";
 
 fn load_unit_specs_by_id(units_dir: &Path) -> HashMap<String, spec_core::types::LoadedSpec> {
     WalkDir::new(units_dir)
@@ -5907,6 +5960,66 @@ fn supported_wrapper_function_semantic_review_command_matrix_preserves_or_refres
 #[test]
 fn wrapper_pipeline_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
     supported_wrapper_function_semantic_review_command_matrix_preserves_or_refreshes_by_flow();
+}
+
+#[test]
+fn helper_identity_passthrough_truth_surfaces_preserve_supported_semantic_review() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_supported_helper_function_semantic_status_project(project_dir);
+    let passport_path = units_dir.join("money/round.spec.passport.json");
+
+    let test_output = run_in(
+        project_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("helper semantic review test should succeed", &test_output);
+
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_supported_function_semantic_review(
+        &seeded_review,
+        FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY,
+    );
+    assert_eq!(seeded_review["verdict"], "aligned");
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert_output_success(
+        "fresh helper semantic review status should stay green",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "money/round")
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert!(unit["reason"].is_null(), "{status_json}");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run_in(project_dir, &["export", "units"]);
+    assert_output_success("helper semantic review export should succeed", &export_output);
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "money/round")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
 }
 
 #[test]

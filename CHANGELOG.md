@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- **Helper-surface runtime support for the live `money/round` wedge** — `spec-core` now routes the current zero-dep, one-Decimal-input helper shape through `function.helper.identity_passthrough.v1` instead of dropping it to generic unsupported-function truth.
+
+### Changed
+
+- **Fresh helper proof now stays truthful on read-side surfaces** — the checked-in `examples/shared-spec` passport and `spec status` / `spec export` now preserve supported helper semantic-review truth for `money/round` instead of surfacing `unsupported.function.v1`.
+- **Family-analysis operator truth now treats the helper wedge as supported-unpromoted substrate** — `cargo xtask family inventory --format json` publishes `function.helper.identity_passthrough.v1` as runtime-supported, coverage moves the three helper units into `supported_unpromoted_family_units`, and recommendation output no longer surfaces `helper_surface_not_promotable` as live unsupported pressure.
+
 ## 0.14.0 - 2026-05-07
 
 ### Added

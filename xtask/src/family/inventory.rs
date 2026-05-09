@@ -14,7 +14,7 @@ use std::process::Command;
 
 const INVENTORY_SCHEMA_VERSION: u64 = 1;
 const TERMINAL_UNSUPPORTED_CATCH_ALL: &str = "unsupported.function.v1";
-const RUNTIME_ROUTE_MARKERS: [(&str, &str); 4] = [
+const RUNTIME_ROUTE_MARKERS: [(&str, &str); 5] = [
     (
         "WrapperPipelineChain3",
         "function.wrapper.pipeline.chain3.v1",
@@ -28,9 +28,13 @@ const RUNTIME_ROUTE_MARKERS: [(&str, &str); 4] = [
         "ArithmeticLeafMonotoneUp",
         "function.arithmetic_leaf.monotone_up.v1",
     ),
+    (
+        "HelperIdentityPassthrough",
+        "function.helper.identity_passthrough.v1",
+    ),
 ];
 
-const INVENTORY_METADATA: [InventoryFamilyMetadata; 4] = [
+const INVENTORY_METADATA: [InventoryFamilyMetadata; 5] = [
     InventoryFamilyMetadata {
         family: "function.wrapper.pipeline.chain3.v1",
         canonical_seed_paths: &[
@@ -65,6 +69,15 @@ const INVENTORY_METADATA: [InventoryFamilyMetadata; 4] = [
         canonical_seed_paths: &["examples/ecommerce/units/pricing/apply_tax.unit.spec"],
         existing_wedge_paths: &["spec-cli/tests/m14_regressions.rs"],
         supporting_packet_paths: &["semantic-families/function.arithmetic_leaf.monotone_up.v1"],
+    },
+    InventoryFamilyMetadata {
+        family: "function.helper.identity_passthrough.v1",
+        canonical_seed_paths: &[
+            "examples/ecommerce/units/money/round.unit.spec",
+            "examples/shared-spec/units/money/round.unit.spec",
+        ],
+        existing_wedge_paths: &["xtask/src/family/analysis_core/helper_surface.rs"],
+        supporting_packet_paths: &[],
     },
 ];
 
