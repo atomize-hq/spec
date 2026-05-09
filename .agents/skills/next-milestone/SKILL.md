@@ -138,9 +138,10 @@ Use these rules:
   - the handoff may go straight into `/autoplan`
 - If `Implementation readiness = needs_artifact_first`:
   - default to `Autoplan ready: no`
-  - choose `Next artifact kind: design_doc` when the seam, trigger table, or proof gate framing is still under-defined and needs problem-shaping first
-  - choose `Next artifact kind: authority_plan_draft` when the source hierarchy already gives enough structure to draft the bounded authority plan directly
-- Only emit `Autoplan ready: yes` for `needs_artifact_first` when the required draft artifact already exists, is clearly the file `/autoplan` should review, and passes the artifact-readiness check below
+  - choose `Next artifact kind: design_doc` when the next milestone should start with a fresh gstack design doc or when `/gstack-autoplan` can bootstrap the missing design doc from completed authority context
+  - choose `Next artifact kind: authority_plan_draft` only when repo convention explicitly requires a fresh authority-plan draft before any `/gstack-autoplan` review and the intended draft shape is already concrete
+- Emit `Autoplan ready: yes` for `needs_artifact_first` when `/gstack-autoplan` is the truthful immediate next tool, including the case where it will bootstrap a missing design doc via its inline prerequisite flow
+- Emit `Autoplan ready: no` for `needs_artifact_first` only when the user truly must author a fresh artifact outside `/gstack-autoplan` first
 
 Authority file state classification:
 
@@ -167,11 +168,24 @@ Artifact-readiness check for `authority_plan_draft`:
 
 If any of those are missing, `Autoplan ready` must stay `no` even if a draft file already exists.
 
+Artifact-readiness check for `design_doc` / `/gstack-autoplan` handoff:
+
+- completed authority context plus current repo signals already define the next milestone tightly enough for `/gstack-autoplan` to start from them
+- the next move benefits from the `/gstack-autoplan` review pipeline creating or tightening the design doc before implementation
+- if no design doc exists yet, `/gstack-autoplan` can still be the immediate next tool because it offers `/office-hours` inline to create the prerequisite design doc
+- the handoff names `/gstack-autoplan` explicitly instead of telling the user to author the design doc manually first
+
 Positive signals for `authority_plan_draft` / `Autoplan ready: yes`:
 
 - the latest relevant closeout says the planning run authored or refined the draft artifact and still left implementation gated
 - the file already carries the seam or boundary definition, trigger table, proof gates, non-goals, and any needed future parallelization or execution split directly
 - the file no longer asks a later agent to decide what artifact should exist before review can begin
+
+Positive signals for `design_doc` / `Autoplan ready: yes`:
+
+- the completed authority context already names the seam, trigger table, proof floor, non-goals, or milestone boundary tightly enough to seed `/gstack-autoplan`
+- the next milestone is better served by a fresh gstack design doc than by reusing the completed repo-root authority files
+- `/gstack-autoplan` is the desired immediate next tool because it can create the missing design doc through its inline prerequisite flow and then continue the review
 
 Automatic negative signals for `draft_next_artifact` / `Autoplan ready: yes`:
 
@@ -198,7 +212,7 @@ Autoplan ready: <yes | no>
 Authority file states:
 - PLAN.md: <completed_authority_context | none>
 - ORCH_PLAN.md: <completed_authority_context | none>
-Recommendation: <one-line recommendation>
+Recommendation: <one-line recommendation naming the winning wedge itself; if blocked, append the gate as "gated on <artifact>" rather than telling the user to author or refresh the artifact here>
 
 Why this wins:
 - <product-core reason>
@@ -225,15 +239,20 @@ The recommendation must be a product-surface milestone, not "planning next."
 `Executable wedge` must name the concrete winner, not a planning label, family label, or null answer.
 `Confidence` must reflect the evidence quality after the winner is chosen. It is not permission to refuse ranking.
 If implementation is not ready, make that explicit in `Implementation readiness` and in the handoff rather than turning planning into the milestone recommendation.
+The `Recommendation` line must lead with the winning wedge itself. It may mention a blocking artifact only as a gate on that wedge, for example `Recommendation: pursue <wedge>, gated on <artifact>`.
+The `Recommendation` line must not begin with or center on `author`, `write`, `refresh`, `draft`, `plan`, or `/autoplan`.
 If the answer depends on current authority docs, say "authority context" or "current milestone authority" rather than calling those docs "live signals."
 If a command did not run, failed, or was unavailable, say that plainly. Do not backfill a fake live-signal claim from memory or nearby docs.
 If `Autoplan ready: no`, the handoff must name the artifact that gates the recommended milestone and must not tell the user to run `/autoplan` yet.
-If `Autoplan ready: yes`, name the exact file `/autoplan` should review.
+If `Autoplan ready: yes` and `Next artifact kind: design_doc`, tell the user to run `/gstack-autoplan` now and say that it should produce or tighten the fresh gstack design doc for the next milestone.
+If `Autoplan ready: yes` and the target artifact already exists, name the exact file `/autoplan` should review.
 If `Next artifact kind: authority_plan_draft` and `Autoplan ready: yes`, briefly justify why the draft passes the artifact-readiness check and unblocks the recommended milestone.
 If an authority file is classified as `completed_authority_context`, do not target it with `/autoplan`.
 Do not target repo-root `PLAN.md` or repo-root `ORCH_PLAN.md` with `/autoplan` during `/next-milestone`; recommend a fresh artifact or refreshed authority file instead.
 Hard-banned final outputs: `planning`, `planning milestone next`, `author a plan`, `no milestone`, `more evidence`.
 If `required_next_action = author_*_plan`, the only allowed place for that planning requirement is readiness and handoff semantics. It must not replace the winning wedge.
+If the output still reads like "author a fresh plan before any implementation work" in the `Recommendation` slot, it is wrong and must be rewritten so the wedge stays the subject.
+If the best truthful immediate next tool is `/gstack-autoplan`, do not hide that behind a manual-authoring handoff. Say so directly and set `Next artifact kind` / `Autoplan ready` to match.
 
 ## Decision rules
 
@@ -279,11 +298,13 @@ Do not let a noisy or stale lower-priority source override a cleaner higher-prio
 - If sources say `required_next_action = author_architecture_follow_on_plan`, keep the milestone recommendation on the relevant product lane and mark it `needs_artifact_first` unless a higher-priority source explicitly upgrades that to ready-now implementation.
 - If sources say `required_next_action = author_*_plan`, do not recommend the planning work as the milestone. Treat it as the gating artifact for the winning product milestone.
 - If sources say `required_next_action = author_*_plan`, do not hand off directly to `/autoplan` unless that plan artifact already exists and is clearly the intended review target.
+- Exception for this repo: if the desired next artifact is a fresh gstack design doc and `/gstack-autoplan` can bootstrap it from completed authority context plus inline `/office-hours`, hand off directly to `/gstack-autoplan` instead of requiring manual pre-authoring.
 - If `required_next_action` still points at the current planning artifact, do not synthesize a later M41-style follow-on from that artifact's future trigger table or authorization gate.
 - A draft file existing on disk is not enough by itself to make `/autoplan` ready. The draft must already behave like a reviewable authority plan, not a plan-to-write-a-plan.
 - For this repo, `ORCH_PLAN.md` is always execution-only and should classify as `completed_authority_context` during `/next-milestone` if it exists.
 - For this repo, repo-root `PLAN.md` should also classify as `completed_authority_context` during `/next-milestone` if it exists.
 - If a closeout or plan says `implementation still gated`, treat that as evidence against recommending the gated successor milestone right now.
+- When completed authority context already contains the seam, trigger table, proof floor, and non-goals for the next milestone, prefer `Next artifact kind: design_doc` plus `Autoplan ready: yes` over a manual `authority_plan_draft` handoff.
 - Do not turn a future trigger-table row, `M41` gate branch, or `allowed if...` clause into the next milestone unless current evidence proves the trigger fired or a higher-priority source explicitly names that follow-on.
 - Do not treat repo-root `PLAN.md` or repo-root `ORCH_PLAN.md` as the next review target during `/next-milestone`; they are completed authority context for the move that already landed.
 - If a live signal is branch-local noise but the frozen decision surfaces are stable, call it secondary evidence, not the primary reason.

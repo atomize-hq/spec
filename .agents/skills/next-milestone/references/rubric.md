@@ -69,10 +69,12 @@ Apply these before comparing totals.
 - If sources say `recommendation_status = no_strong_candidate`, still pick the strongest honest product-surface candidate and explain why the field is insufficient to overturn the forced ranking.
 - If a frozen source names a `required_next_action`, do not skip over it casually.
 - If sources say `required_next_action = author_*_plan`, move that constraint into readiness and handoff only. It does not authorize a planning winner or a null answer.
+- If `/gstack-autoplan` can truthfully create or tighten the next milestone's gstack design doc from completed authority context, prefer that direct handoff over telling the user to author the draft manually first.
 - If `required_next_action` still points at the current planning artifact, do not jump ahead to a later milestone named only inside that artifact's future trigger table or gate section.
 - A trigger-table row marked `not yet triggered` cannot win until live evidence shows the trigger fired or a higher-priority source explicitly says to author that follow-on now.
 - A future trigger row, authorization branch, or not-yet-fired follow-on cannot beat a current product-lane winner just because the winner is blocked on readiness.
 - Blocked readiness does not demote the winner into planning. It changes `Implementation readiness`, `Next artifact kind`, and `Autoplan ready`, not the recommendation itself.
+- The recommendation sentence must keep the winning wedge as the subject. If it says `author`, `write`, `refresh`, `draft`, `plan`, or `/autoplan` as the main action, the output is wrong even if the winner family is correct.
 - If a candidate requires the user to make multiple subjective choices just to start, it should usually lose to a more bounded path.
 - If current repo signals say `no_strong_candidate`, more corpus or recommendation work should lose unless the blocker is plainly "missing evidence we can collect in one tight pass."
 - If the candidate is first-class TypeScript backend support, it must beat the Rust wedge on product leverage and boundedness. "Interesting" is not enough.
