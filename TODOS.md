@@ -185,3 +185,11 @@
 - [ ] **Cross-crate family-analysis shared core** — trigger: at least two non-`recommend.rs` / non-`promotion_artifacts.rs` consumers inside `xtask/src/family/` need the same kernel logic, or a non-`xtask` crate needs the same decision semantics.
 
 - [ ] **Public semantic fingerprint fields** — trigger: an external consumer needs first-class semantic fingerprint fields in emitted JSON, not just internal normalized proof gating.
+
+## Deferred from M46 /autoplan review (2026-05-10)
+
+- [ ] **Wrapper TypeScript execution in `spec`** — Deferred by the M46 review. This is a wider dependency-topology milestone than the helper-aware monotone-up follow-on and should be scoped separately after M46 lands.
+
+- [ ] **Cross-library TypeScript helper imports** — Deferred by the M46 review. Same-tree helper execution is enough to close the current product-family mismatch; cross-library target resolution is a different portability problem.
+
+- [ ] **Generic multi-dependency TypeScript execution** — Deferred by the M46 review. M46 is intentionally bounded to zero deps or one helper passthrough dep only.
