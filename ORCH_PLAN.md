@@ -563,7 +563,12 @@ Acceptance:
   - molecule rejection still intact
   - TypeScript proof separation from Rust proof
   - zero-dep preservation at the product surface
-- the lane is merge-safe only if the required commands pass and changed files stay inside owned paths
+- `cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json` is an expected non-green truth surface for M46:
+  - command exits `1`
+  - `pricing/apply_tax` is `valid`
+  - `money/round`, `pricing/apply_discount`, `pricing/calculate_total`, `pricing/checkout_quote`, and `pricing/discount_policy` are `untested`
+  - no Rust proof inheritance appears in the TypeScript status view
+- the lane is merge-safe only if the required commands produce their expected outcomes and changed files stay inside owned paths
 
 Blocked conditions:
 
@@ -726,8 +731,12 @@ Acceptance:
 
 - README states exactly the bounded M46 lane and no broader claim
 - CHANGELOG records only the helper-aware monotone-up widening
+- `cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json` is an expected non-green truth surface for M46 docs:
+  - command exits `1`
+  - the bounded TypeScript lane is documented as per-eligible-unit, not whole-root green
+  - no wording implies that the entire ecommerce root is proven in TypeScript
 - docs lane remains low-risk and late by design
-- the lane is merge-safe only if changed files stay inside owned paths and required commands pass
+- the lane is merge-safe only if changed files stay inside owned paths and required commands produce their expected outcomes
 
 Blocked conditions:
 
@@ -783,7 +792,7 @@ Restart point if blocked:
 
 Purpose:
 
-- run and record the exact M46 proof wall on the integrated branch and treat any failure as a stop condition
+- run and record the exact M46 proof wall on the integrated branch and treat any unexpected result as a stop condition
 
 Required commands:
 
@@ -828,9 +837,12 @@ Expected results by command family:
   - molecule target is rejected for TypeScript before Bun runs
   - this remains an explicit boundary check in M46
 - `spec status` on ecommerce root
+  - command exits `1`
   - reads only `target_proofs.typescript`
   - reports TypeScript truth without inheriting Rust proof
   - reflects the helper-aware example as freshly proven in the TS lane
+  - `pricing/apply_tax` is `valid`
+  - `money/round`, `pricing/apply_discount`, `pricing/calculate_total`, `pricing/checkout_quote`, and `pricing/discount_policy` are `untested`
 - `spec export` on ecommerce units
   - additive proof truth is preserved
   - Rust proof remains untouched by TypeScript execution
