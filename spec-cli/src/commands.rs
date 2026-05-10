@@ -47,6 +47,7 @@ use spec_core::semantic_review::{
 use spec_core::types::ResolvedSpec;
 use spec_core::types::{
     DepRef, LoadedMoleculeTest, LoadedSpec, NormalizedUnit, QualifiedUnitRef, ResolvedMoleculeTest,
+    TargetLanguage,
 };
 use spec_core::validator::{
     QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
@@ -125,6 +126,10 @@ const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 pub enum OutputFormat {
     Text,
     Json,
+}
+
+fn parse_target_language(value: &str) -> std::result::Result<TargetLanguage, String> {
+    value.parse()
 }
 
 #[derive(Serialize)]
@@ -417,24 +422,30 @@ impl Command {
     pub fn run(self) -> Result<()> {
         match self {
             Self::Validate(args) => validate_command(&args.path, args.no_strict, args.format),
-            Self::Status(args) => status_command(&args.path, args.format),
-            Self::Generate(args) => generate_command(&args.path, args.output.as_deref()),
+            Self::Status(args) => {
+                status_command_for_target(&args.path, args.format, args.target_language)
+            }
+            Self::Generate(args) => {
+                generate_command_for_target(&args.path, args.output.as_deref(), args.target_language)
+            }
             Self::Build(args) => {
                 let context = load_workspace_context(&args.path)?;
-                build_command(
+                build_command_for_target(
                     &args.path,
                     args.output.as_deref(),
                     args.crate_root.as_deref(),
                     &context,
+                    args.target_language,
                 )
             }
             Self::Test(args) => {
                 let context = load_workspace_context(&args.path)?;
-                test_command(
+                test_command_for_target(
                     &args.path,
                     args.output.as_deref(),
                     args.crate_root.as_deref(),
                     &context,
+                    args.target_language,
                 )
             }
             Self::Export(args) => export_command(&args.path, args.output.as_deref(), args.format),
@@ -488,6 +499,8 @@ pub struct StatusArgs {
     pub path: PathBuf,
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+    #[arg(long, default_value_t = TargetLanguage::Rust, value_parser = parse_target_language)]
+    pub target_language: TargetLanguage,
 }
 
 #[derive(Args, Debug)]
@@ -499,6 +512,8 @@ pub struct GenerateArgs {
         help = "Output directory for generated Rust files (default: {crate_root}/src/generated)"
     )]
     pub output: Option<PathBuf>,
+    #[arg(long, default_value_t = TargetLanguage::Rust, value_parser = parse_target_language)]
+    pub target_language: TargetLanguage,
 }
 
 #[derive(Args, Debug)]
@@ -515,6 +530,8 @@ pub struct BuildArgs {
         help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)"
     )]
     pub crate_root: Option<PathBuf>,
+    #[arg(long, default_value_t = TargetLanguage::Rust, value_parser = parse_target_language)]
+    pub target_language: TargetLanguage,
 }
 
 #[derive(Args, Debug)]
@@ -534,6 +551,8 @@ pub struct TestArgs {
         help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)"
     )]
     pub crate_root: Option<PathBuf>,
+    #[arg(long, default_value_t = TargetLanguage::Rust, value_parser = parse_target_language)]
+    pub target_language: TargetLanguage,
 }
 
 #[derive(Args, Debug)]
@@ -1108,6 +1127,15 @@ fn zero_roots_status_entry(path: &Path) -> JsonErrorEntry {
 }
 
 fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
+    status_command_for_target(path, format, TargetLanguage::Rust)
+}
+
+fn status_command_for_target(
+    path: &Path,
+    format: OutputFormat,
+    target_language: TargetLanguage,
+) -> Result<()> {
+    let _ = target_language;
     let root_context = match load_workspace_context(path) {
         Ok(context) => context,
         Err(err) if matches!(format, OutputFormat::Json) => {
@@ -1844,6 +1872,15 @@ fn emit_plan_validate_failure(
 }
 
 fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    generate_command_for_target(path, output, TargetLanguage::Rust)
+}
+
+fn generate_command_for_target(
+    path: &Path,
+    output: Option<&Path>,
+    target_language: TargetLanguage,
+) -> Result<()> {
+    let _ = target_language;
     if path.is_file() {
         bail!(
             "❌ spec generate requires a directory path — pass the units directory, not a single file"
@@ -2469,6 +2506,23 @@ fn build_command(
     crate_root_flag: Option<&Path>,
     context: &WorkspaceContext,
 ) -> Result<()> {
+    build_command_for_target(
+        path,
+        output,
+        crate_root_flag,
+        context,
+        TargetLanguage::Rust,
+    )
+}
+
+fn build_command_for_target(
+    path: &Path,
+    output: Option<&Path>,
+    crate_root_flag: Option<&Path>,
+    context: &WorkspaceContext,
+    target_language: TargetLanguage,
+) -> Result<()> {
+    let _ = target_language;
     if path.is_file() {
         bail!(
             "❌ spec build requires a directory path — pass the units directory, not a single file"
@@ -2550,6 +2604,23 @@ fn test_command(
     crate_root_flag: Option<&Path>,
     context: &WorkspaceContext,
 ) -> Result<()> {
+    test_command_for_target(
+        path,
+        output,
+        crate_root_flag,
+        context,
+        TargetLanguage::Rust,
+    )
+}
+
+fn test_command_for_target(
+    path: &Path,
+    output: Option<&Path>,
+    crate_root_flag: Option<&Path>,
+    context: &WorkspaceContext,
+    target_language: TargetLanguage,
+) -> Result<()> {
+    let _ = target_language;
     if !cargo_available() {
         bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
     }
@@ -4967,10 +5038,17 @@ fn pluralize(count: usize) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
     use std::fs;
     use std::process::Command as ProcessCommand;
     use std::time::Instant;
     use tempfile::TempDir;
+
+    #[derive(Parser, Debug)]
+    struct TestCli {
+        #[command(subcommand)]
+        command: Command,
+    }
 
     fn write_spec(dir: &Path, relative_path: &str, body: &str) {
         let path = dir.join(relative_path);
@@ -4994,6 +5072,103 @@ mod tests {
                 fs::copy(&entry_path, &dst_path).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn target_language_parser_accepts_frozen_values() {
+        assert_eq!(parse_target_language("rust").unwrap(), TargetLanguage::Rust);
+        assert_eq!(
+            parse_target_language("typescript").unwrap(),
+            TargetLanguage::TypeScript
+        );
+    }
+
+    #[test]
+    fn generate_build_test_and_status_accept_target_language() {
+        let cli = TestCli::try_parse_from([
+            "spec",
+            "generate",
+            "examples/ecommerce/units",
+            "--target-language",
+            "typescript",
+        ])
+        .expect("generate should parse typescript target");
+        assert!(matches!(
+            cli.command,
+            Command::Generate(GenerateArgs {
+                target_language: TargetLanguage::TypeScript,
+                ..
+            })
+        ));
+
+        let cli = TestCli::try_parse_from([
+            "spec",
+            "build",
+            "examples/ecommerce/units",
+            "--target-language",
+            "typescript",
+        ])
+        .expect("build should parse typescript target");
+        assert!(matches!(
+            cli.command,
+            Command::Build(BuildArgs {
+                target_language: TargetLanguage::TypeScript,
+                ..
+            })
+        ));
+
+        let cli = TestCli::try_parse_from([
+            "spec",
+            "test",
+            "examples/ecommerce/units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ])
+        .expect("test should parse typescript target");
+        assert!(matches!(
+            cli.command,
+            Command::Test(TestArgs {
+                target_language: TargetLanguage::TypeScript,
+                ..
+            })
+        ));
+
+        let cli = TestCli::try_parse_from([
+            "spec",
+            "status",
+            "examples/ecommerce",
+            "--target-language",
+            "typescript",
+        ])
+        .expect("status should parse typescript target");
+        assert!(matches!(
+            cli.command,
+            Command::Status(StatusArgs {
+                target_language: TargetLanguage::TypeScript,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn validate_and_export_do_not_accept_target_language() {
+        assert!(TestCli::try_parse_from([
+            "spec",
+            "validate",
+            "examples/ecommerce/units",
+            "--target-language",
+            "typescript",
+        ])
+        .is_err());
+
+        assert!(TestCli::try_parse_from([
+            "spec",
+            "export",
+            "examples/ecommerce/units",
+            "--target-language",
+            "typescript",
+        ])
+        .is_err());
     }
 
     fn benchmark_loaded_spec(index: usize, tests_per_spec: usize) -> LoadedSpec {

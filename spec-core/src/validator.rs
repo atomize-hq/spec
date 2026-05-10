@@ -6,6 +6,7 @@
 
 use crate::graph::top_level_deps;
 use crate::portability_contract::{SharedSeamAuthoredShapeRule, shared_surface_violation_message};
+use crate::semantic_review::{SemanticSupportStatus, evaluate_semantic_review};
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
     AuthoredField, Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec,
@@ -27,6 +28,16 @@ const TEST_SCHEMA_JSON: &str = include_str!("schema/test.spec.json");
 
 static COMPILED_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 static COMPILED_TEST_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
+
+pub const TYPESCRIPT_TARGET_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
+pub const TYPESCRIPT_MOLECULE_UNSUPPORTED_MESSAGE: &str =
+    ".test.spec is not supported for --target-language typescript in M45; molecule tests remain Rust-only";
+pub const TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript target currently supports only kind:function units in M45";
+pub const TYPESCRIPT_DEPS_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript target requires deps: [] in M45; dependency-bearing units are unsupported";
+pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M45";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ValidationOptions {
@@ -271,6 +282,130 @@ fn validate_function_semantic(spec: &LoadedSpec, options: &ValidationOptions) ->
     }
 
     Ok(())
+}
+
+pub fn validate_typescript_execution_target_spec(spec: &LoadedSpec) -> Result<()> {
+    if spec.spec.unit_kind().map_err(|message| semantic_error(spec, message))? != UnitKind::Function
+    {
+        return Err(semantic_error(spec, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE));
+    }
+
+    if !spec.spec.deps.is_empty() {
+        return Err(semantic_error(spec, TYPESCRIPT_DEPS_UNSUPPORTED_MESSAGE));
+    }
+
+    let Some(review) = evaluate_semantic_review(spec) else {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "TypeScript target requires compatibility key {} in M45",
+                TYPESCRIPT_TARGET_COMPATIBILITY_KEY
+            ),
+        ));
+    };
+
+    if review.effective_support_status() != SemanticSupportStatus::Supported
+        || review.compatibility_key != TYPESCRIPT_TARGET_COMPATIBILITY_KEY
+    {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "TypeScript target requires compatibility key {} in M45; found {}",
+                TYPESCRIPT_TARGET_COMPATIBILITY_KEY, review.compatibility_key
+            ),
+        ));
+    }
+
+    validate_typescript_local_test_expect_shape(spec)
+}
+
+pub fn validate_typescript_local_test_expect_shape(spec: &LoadedSpec) -> Result<()> {
+    let unit_fn = callable_name(&spec.spec.id).to_string();
+    for test in &spec.spec.local_tests {
+        let expr = validate_expect_expr(test.expect.trim(), false).map_err(|err| {
+            SpecError::LocalTestExpectNotExpr {
+                id: test.id.clone(),
+                message: err.message(),
+                path: spec.source.file_path.clone(),
+            }
+        })?;
+
+        if !is_supported_typescript_expect_expr(&expr, &unit_fn) {
+            return Err(semantic_error(spec, TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE));
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_typescript_molecule_target(test: &LoadedMoleculeTest) -> Result<()> {
+    Err(SpecError::SemanticValidation {
+        message: TYPESCRIPT_MOLECULE_UNSUPPORTED_MESSAGE.to_string(),
+        path: test.source.file_path.clone(),
+    })
+}
+
+fn is_supported_typescript_expect_expr(expr: &syn::Expr, unit_fn: &str) -> bool {
+    let syn::Expr::Binary(binary) = expr else {
+        return false;
+    };
+    if !matches!(binary.op, syn::BinOp::Eq(_)) {
+        return false;
+    }
+
+    let syn::Expr::Call(call) = binary.left.as_ref() else {
+        return false;
+    };
+    if !matches!(call.func.as_ref(), syn::Expr::Path(path) if path.path.is_ident(unit_fn)) {
+        return false;
+    }
+
+    if !call.args.iter().all(|arg| is_decimal_new_expr(arg, true)) {
+        return false;
+    }
+
+    is_decimal_new_expr(binary.right.as_ref(), true)
+}
+
+fn is_decimal_new_expr(expr: &syn::Expr, allow_negative_value: bool) -> bool {
+    let syn::Expr::Call(call) = expr else {
+        return false;
+    };
+
+    let syn::Expr::Path(path) = call.func.as_ref() else {
+        return false;
+    };
+    let segments: Vec<_> = path.path.segments.iter().map(|segment| segment.ident.to_string()).collect();
+    if segments.as_slice() != ["Decimal", "new"] {
+        return false;
+    }
+
+    if call.args.len() != 2 {
+        return false;
+    }
+
+    let mut args = call.args.iter();
+    let value = args.next().expect("decimal value arg present");
+    let scale = args.next().expect("decimal scale arg present");
+    is_integer_literal_expr(value, allow_negative_value) && is_integer_literal_expr(scale, false)
+}
+
+fn is_integer_literal_expr(expr: &syn::Expr, allow_negative: bool) -> bool {
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(_),
+            ..
+        }) => true,
+        syn::Expr::Unary(unary) if allow_negative && matches!(unary.op, syn::UnOp::Neg(_)) => {
+            matches!(
+                unary.expr.as_ref(),
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Int(_),
+                    ..
+                })
+            )
+        }
+        _ => false,
+    }
 }
 
 fn validate_data_semantic(spec: &LoadedSpec, options: &ValidationOptions) -> Result<()> {
@@ -1436,6 +1571,43 @@ mod tests {
                 links: None,
                 spec_version: None,
                 extensions: crate::types::UnitExtensions::default(),
+            },
+        }
+    }
+
+    fn create_typescript_lane_function_spec() -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: "units/pricing/apply_tax.unit.spec".to_string(),
+                id: "pricing/apply_tax".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/apply_tax".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Return the subtotal after applying the tax rate.".to_string(),
+                },
+                contract: Some(Contract {
+                    inputs: Some(IndexMap::from([
+                        ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                        ("rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    ])),
+                    returns: Some("rust_decimal::Decimal".to_string()),
+                    invariants: vec!["output >= subtotal".to_string()],
+                }),
+                deps: vec![],
+                imports: vec!["rust_decimal::Decimal".to_string()],
+                body: Body {
+                    rust: "{ subtotal + subtotal * rate }".to_string(),
+                    typescript: Some("return subtotal.add(subtotal.mul(rate));".to_string()),
+                },
+                local_tests: vec![LocalTest {
+                    id: "taxes_subtotal".to_string(),
+                    expect: "apply_tax(Decimal::new(1000, 2), Decimal::new(7, 2)) == Decimal::new(1070, 2)".to_string(),
+                }],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions::default(),
             },
         }
     }
@@ -3958,6 +4130,76 @@ methods:
         assert!(
             err.contains("body.typescript is not supported in .test.spec"),
             "{err}"
+        );
+    }
+
+    #[test]
+    fn typescript_target_accepts_monotone_up_leaf_with_bounded_expect() {
+        let spec = create_typescript_lane_function_spec();
+        validate_typescript_execution_target_spec(&spec)
+            .expect("bounded monotone-up spec should be eligible");
+    }
+
+    #[test]
+    fn typescript_target_rejects_dependency_bearing_units() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.deps = vec!["money/round".to_string()];
+
+        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
+        assert!(
+            err.to_string().contains(TYPESCRIPT_DEPS_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn typescript_target_rejects_wrong_semantic_family() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.id = "pricing/apply_discount".to_string();
+        spec.source.id = "pricing/apply_discount".to_string();
+        spec.source.file_path = "units/pricing/apply_discount.unit.spec".to_string();
+        spec.spec.intent.why =
+            "Return the subtotal after applying the discount rate and clamping at zero."
+                .to_string();
+        spec.spec.contract.as_mut().unwrap().invariants =
+            vec!["output <= subtotal".to_string(), "output >= 0".to_string()];
+        spec.spec.body.rust = "{ (subtotal - subtotal * rate).max(Decimal::ZERO) }".to_string();
+        spec.spec.body.typescript =
+            Some("return subtotal.sub(subtotal.mul(rate)).max(Decimal.zero());".to_string());
+        spec.spec.local_tests[0].expect =
+            "apply_discount(Decimal::new(1000, 2), Decimal::new(7, 2)) == Decimal::new(930, 2)"
+                .to_string();
+
+        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1 in M45"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn typescript_target_rejects_expect_outside_bounded_ast() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.local_tests[0].expect =
+            "apply_tax(Decimal::new(1000, 2), Decimal::new(7, 2)) >= Decimal::new(1070, 2)"
+                .to_string();
+
+        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
+        assert!(
+            err.to_string().contains(TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn typescript_target_rejects_molecule_specs_before_execution() {
+        let test = create_molecule_test_spec("pricing/discount_plus_tax", vec!["pricing/apply_tax"]);
+        let err = validate_typescript_molecule_target(&test).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(".test.spec is not supported for --target-language typescript in M45"),
+            "unexpected error: {err}"
         );
     }
 
