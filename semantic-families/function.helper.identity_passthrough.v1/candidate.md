@@ -7,13 +7,14 @@ already supports. The contract stays frozen and narrow: `fn_name == round`, one 
 `Decimal` return, no deps, no invariants, and no control flow in supported cases.
 
 The packet is self-contained and ships all four required buckets. The aligned bucket proves both
-honest supported lanes without widening the contract: one `round` fixture with round-like intent
-and round-like body, and one `round` fixture with passthrough intent and direct-passthrough body.
+honest supported lanes without widening the contract: one locked starter-path `round` fixture with
+round-like intent and round-like body, and one suffixed proof fixture with passthrough intent and
+direct-passthrough body while keeping `fn_name == round`.
 
 ## Aligned
 
 - `fixtures/aligned/units/money/round.unit.spec`: round-like intent plus round-like body, matching the currently supported helper lane for a real rounding implementation.
-- `fixtures/aligned/units/passthrough/round.unit.spec`: passthrough intent plus direct-passthrough body, proving the second supported aligned lane under the same frozen helper contract.
+- `fixtures/aligned/units/passthrough/round_aligned.unit.spec`: passthrough intent plus direct-passthrough body, proving the second supported aligned lane under the same frozen helper contract.
 
 ## Drift
 

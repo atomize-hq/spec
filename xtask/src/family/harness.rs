@@ -1,6 +1,6 @@
-use crate::XtaskError;
 use crate::family::paths::FamilyId;
 use crate::family::report::{ArtifactKind, CertificationReport, GateId, SuiteDefinition};
+use crate::XtaskError;
 
 pub(crate) const TERMINAL_UNSUPPORTED_CATCH_ALL: &str = "unsupported.function.v1";
 
@@ -21,8 +21,7 @@ pub const MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW: [&str; 2] = [
     "function.helper.identity_passthrough.v1",
 ];
 pub const MONOTONE_UP_MUST_NOT_SHADOW: [&str; 1] = ["function.helper.identity_passthrough.v1"];
-pub const HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW: [&str; 1] =
-    [TERMINAL_UNSUPPORTED_CATCH_ALL];
+pub const HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW: [&str; 1] = [TERMINAL_UNSUPPORTED_CATCH_ALL];
 pub const WRAPPER_PIPELINE_MUST_NOT_SHADOW: [&str; 3] = [
     "function.arithmetic_leaf.monotone_down_nonnegative.v1",
     "function.arithmetic_leaf.monotone_up.v1",
@@ -695,8 +694,8 @@ pub(crate) const HELPER_IDENTITY_PASSTHROUGH_PROVE_SUITES: [SuiteDefinition; 3] 
             "never",
         ],
         expected_tests: &[
-            "semantic_review::tests::helper_identity_passthrough_classifier_aligned_fixture_routes_to_supported_helper",
-            "semantic_review::tests::helper_identity_passthrough_classifier_passthrough_aligned_fixture_routes_to_supported_helper",
+            "semantic_review::tests::helper_identity_passthrough_classifier_direct_passthrough_aligned_fixture_routes_to_supported_helper",
+            "semantic_review::tests::helper_identity_passthrough_classifier_round_like_aligned_fixture_routes_to_supported_helper",
             "semantic_review::tests::helper_identity_passthrough_classifier_drift_fixture_reports_semantic_drift",
             "semantic_review::tests::helper_identity_passthrough_classifier_under_specified_fixture_reports_vague_truth",
             "semantic_review::tests::helper_identity_passthrough_classifier_unsupported_near_miss_stays_unsupported",
@@ -721,44 +720,29 @@ pub(crate) const HELPER_IDENTITY_PASSTHROUGH_PROVE_SUITES: [SuiteDefinition; 3] 
         ],
     },
     SuiteDefinition {
-        name: "spec-core:helper_identity_passthrough_regression_",
+        name: "spec-core:helper_identity_passthrough_classifier_",
         command: &[
             "cargo",
             "test",
             "-p",
             "spec-core",
             "--lib",
-            "helper_identity_passthrough_regression_",
+            "helper_identity_passthrough_classifier_",
             "--",
             "--color",
             "never",
         ],
         expected_tests: &[
-            "semantic_review::tests::helper_identity_passthrough_regression_monotone_up_is_not_shadowed",
-            "semantic_review::tests::helper_identity_passthrough_regression_runtime_order_matches_locked_precedence",
+            "semantic_review::tests::helper_identity_passthrough_classifier_direct_passthrough_aligned_fixture_routes_to_supported_helper",
+            "semantic_review::tests::helper_identity_passthrough_classifier_round_like_aligned_fixture_routes_to_supported_helper",
+            "semantic_review::tests::helper_identity_passthrough_classifier_drift_fixture_reports_semantic_drift",
+            "semantic_review::tests::helper_identity_passthrough_classifier_under_specified_fixture_reports_vague_truth",
+            "semantic_review::tests::helper_identity_passthrough_classifier_unsupported_near_miss_stays_unsupported",
         ],
     },
 ];
 
-pub(crate) const HELPER_IDENTITY_PASSTHROUGH_CERTIFY_SUITES: [SuiteDefinition; 1] =
-    [SuiteDefinition {
-        name: "spec-core:helper_identity_passthrough_regression_",
-        command: &[
-            "cargo",
-            "test",
-            "-p",
-            "spec-core",
-            "--lib",
-            "helper_identity_passthrough_regression_",
-            "--",
-            "--color",
-            "never",
-        ],
-        expected_tests: &[
-            "semantic_review::tests::helper_identity_passthrough_regression_monotone_up_is_not_shadowed",
-            "semantic_review::tests::helper_identity_passthrough_regression_runtime_order_matches_locked_precedence",
-        ],
-    }];
+pub(crate) const HELPER_IDENTITY_PASSTHROUGH_CERTIFY_SUITES: [SuiteDefinition; 0] = [];
 
 const CHAIN3_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 3] = [
     ProveSuiteDefinition {
