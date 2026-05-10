@@ -5,8 +5,8 @@ use crate::family::analysis_core::helper_surface::{
 };
 use crate::family::promotion_artifacts::{
     CorpusProgramBasisSnapshot, CorpusProgramDecisionAction, CorpusProgramDecisionBasisCode,
-    DecisionReason, DecisionStatus, FamilyRecommendationAnalysisArtifact, PivotTargetClass,
-    RecommendationCandidateEntry, RequiredNextAction,
+    DecisionReason, DecisionStatus, EvidenceState, FamilyRecommendationAnalysisArtifact,
+    PivotTargetClass, RecommendationCandidateEntry, RecommendationStatus, RequiredNextAction,
 };
 use spec_core::semantic_review::UnsupportedFunctionReasonCode;
 
@@ -17,6 +17,31 @@ pub(crate) struct DerivedCorpusProgramDecision {
     pub pivot_target_class: Option<PivotTargetClass>,
     pub required_next_action: RequiredNextAction,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DecisionContractStopStateTuple {
+    pub recommendation_status: RecommendationStatus,
+    pub decision_status: DecisionStatus,
+    pub open_blockers: Vec<DecisionReason>,
+    pub missing_evidence: Vec<EvidenceState>,
+    pub stale_evidence: Vec<EvidenceState>,
+    pub decision_action: CorpusProgramDecisionAction,
+    pub decision_basis_code: CorpusProgramDecisionBasisCode,
+    pub required_next_action: RequiredNextAction,
+}
+
+pub(crate) fn decision_contract_stop_state_tuple() -> DecisionContractStopStateTuple {
+    DecisionContractStopStateTuple {
+        recommendation_status: RecommendationStatus::InsufficientRealCorpus,
+        decision_status: DecisionStatus::NotRecommended,
+        open_blockers: Vec::new(),
+        missing_evidence: Vec::new(),
+        stale_evidence: Vec::new(),
+        decision_action: CorpusProgramDecisionAction::Stop,
+        decision_basis_code: CorpusProgramDecisionBasisCode::NoActionableCandidate,
+        required_next_action: RequiredNextAction::RecordStopWithoutNewMilestone,
+    }
 }
 
 pub(crate) fn corpus_program_basis_snapshot(
@@ -137,7 +162,8 @@ fn basis_candidate_is_helper_surface_follow_on(candidate: &RecommendationCandida
 mod tests {
     use super::{
         basis_activates_helper_surface_follow_on, basis_snapshot_requires_helper_surface_follow_on,
-        corpus_program_basis_snapshot,
+        corpus_program_basis_snapshot, decision_contract_stop_state_tuple,
+        derive_corpus_program_decision_contract,
     };
     use crate::family::analysis_core::durable_non_promotable_helper_surface_candidate_tuple;
     use crate::family::promotion_artifacts::{
@@ -225,5 +251,71 @@ mod tests {
         let snapshot = corpus_program_basis_snapshot(&basis);
         assert!(basis_snapshot_requires_helper_surface_follow_on(&snapshot));
         assert!(basis_activates_helper_surface_follow_on(&basis));
+    }
+
+    #[test]
+    fn stop_state_tuple_matches_locked_truth() {
+        let tuple = decision_contract_stop_state_tuple();
+
+        assert_eq!(
+            tuple.recommendation_status,
+            RecommendationStatus::InsufficientRealCorpus
+        );
+        assert_eq!(tuple.decision_status, DecisionStatus::NotRecommended);
+        assert!(tuple.open_blockers.is_empty());
+        assert!(tuple.missing_evidence.is_empty());
+        assert!(tuple.stale_evidence.is_empty());
+        assert_eq!(
+            tuple.decision_action,
+            crate::family::promotion_artifacts::CorpusProgramDecisionAction::Stop
+        );
+        assert_eq!(
+            tuple.decision_basis_code,
+            crate::family::promotion_artifacts::CorpusProgramDecisionBasisCode::NoActionableCandidate
+        );
+        assert_eq!(
+            tuple.required_next_action,
+            crate::family::promotion_artifacts::RequiredNextAction::RecordStopWithoutNewMilestone
+        );
+    }
+
+    #[test]
+    fn stop_state_tuple_matches_kernel_stop_decision() {
+        let basis = FamilyRecommendationAnalysisArtifact {
+            schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
+            artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
+            generated_at: "2026-05-09T00:00:00Z".to_string(),
+            coverage_path: "coverage.json".to_string(),
+            coverage_sha256: "sha".to_string(),
+            recommendation_status: RecommendationStatus::InsufficientRealCorpus,
+            ranked_candidates: Vec::new(),
+            decision_summary: crate::family::promotion_artifacts::DecisionSummary {
+                decision_status: DecisionStatus::NotRecommended,
+                top_candidate_id: None,
+                open_blockers: Vec::new(),
+                warnings: Vec::new(),
+                summary: "fixture".to_string(),
+            },
+            evidence_summary: crate::family::promotion_artifacts::EvidenceSummary {
+                missing_evidence: Vec::new(),
+                stale_evidence: Vec::new(),
+                warnings: Vec::new(),
+                summary: "fixture".to_string(),
+            },
+            delta_from_previous: RecommendationDelta::no_previous_artifact(),
+        };
+
+        let tuple = decision_contract_stop_state_tuple();
+        let derived = derive_corpus_program_decision_contract(&basis).unwrap();
+        let snapshot = corpus_program_basis_snapshot(&basis);
+
+        assert_eq!(snapshot.recommendation_status, tuple.recommendation_status);
+        assert_eq!(snapshot.decision_status, tuple.decision_status);
+        assert_eq!(snapshot.open_blockers, tuple.open_blockers);
+        assert_eq!(snapshot.missing_evidence, tuple.missing_evidence);
+        assert_eq!(snapshot.stale_evidence, tuple.stale_evidence);
+        assert_eq!(derived.decision_action, tuple.decision_action);
+        assert_eq!(derived.decision_basis_code, tuple.decision_basis_code);
+        assert_eq!(derived.required_next_action, tuple.required_next_action);
     }
 }

@@ -4,8 +4,9 @@ pub(crate) mod proof_fingerprint;
 
 #[allow(unused_imports)]
 pub(crate) use decision_contract::{
-    DerivedCorpusProgramDecision, basis_activates_helper_surface_follow_on,
-    basis_snapshot_requires_helper_surface_follow_on, corpus_program_basis_snapshot,
+    DecisionContractStopStateTuple, DerivedCorpusProgramDecision,
+    basis_activates_helper_surface_follow_on, basis_snapshot_requires_helper_surface_follow_on,
+    corpus_program_basis_snapshot, decision_contract_stop_state_tuple,
     derive_corpus_program_decision_contract,
 };
 #[allow(unused_imports)]
