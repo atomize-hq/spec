@@ -9,7 +9,8 @@ use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
 use spec_core::export::{build_export_bundle, build_plan_export_bundle};
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
-    generate_unit_code_with_options, safe_output_path_with_project_root, write_generated_file,
+    generate_typescript_output_tree, generate_unit_code_with_options,
+    safe_output_path_with_project_root, write_generated_file,
 };
 use spec_core::graph::{ProjectedUnitRef, project_unit, top_level_deps};
 use spec_core::loader::{
@@ -1329,17 +1330,20 @@ fn status_command_for_target(
                 &projection_context,
                 &semantic_review_context,
             );
+            let target_evidence =
+                passport
+                    .as_ref()
+                    .and_then(|passport| passport_evidence_for_target(passport, target_language));
             let freshness = resolve_passport_freshness_for_target(
                 spec,
                 passport.as_ref(),
                 target_language,
-            );
+            )
+            .filter(|_| target_evidence.is_some());
             let markers = projected_truth.markers.clone();
             let proof_coverage = projected_truth.proof_coverage.clone();
             let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
             let semantic_review = projected_truth.semantic_review.clone();
-            let target_evidence =
-                passport.as_ref().and_then(|passport| passport_evidence_for_target(passport, target_language));
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
@@ -2015,7 +2019,7 @@ fn generate_typescript_specs(
     output: &Path,
     project_root: &Path,
     context: &WorkspaceContext,
-    test_name_prefix: &str,
+    _test_name_prefix: &str,
 ) -> Result<GeneratedSpecs> {
     let mut validation_specs = collect_validation_specs(path, context)?;
     let specs: Vec<LoadedSpec> = validation_specs
@@ -2119,9 +2123,27 @@ fn generate_typescript_specs(
         );
     }
 
+    let mut normalized_units = Vec::with_capacity(specs.len());
+    for spec in &specs {
+        let unit = normalize_unit(spec.spec.clone())
+            .with_context(|| format!("Failed to normalize {}", spec.source.file_path))?;
+        normalized_units.push(unit);
+    }
+
     let output_base = ensure_output_marker(output, project_root)?;
     let generated_at = rfc3339_now();
-    write_typescript_output(&output_base, project_root, &specs, test_name_prefix)?;
+    let tree = generate_typescript_output_tree(&normalized_units)
+        .with_context(|| "Failed to generate bounded TypeScript output tree")?;
+    let mut generated_rel_paths = HashSet::<PathBuf>::new();
+    for (rel_path, content) in tree {
+        let output_path = output_base.join(&rel_path);
+        write_generated_file(&output_path.display().to_string(), &content)
+            .with_context(|| format!("Failed to write {}", output_path.display()))?;
+        generated_rel_paths.insert(rel_path);
+    }
+    clean_output_dir(&output_base, &generated_rel_paths, project_root).with_context(|| {
+        format!("Failed to clean output directory {}", output_base.display())
+    })?;
 
     let generated_count = specs.len() + 3;
     println!(
@@ -3290,6 +3312,7 @@ fn test_typescript_command(
         passport_write_plan.specs,
         &test_name_prefix,
         &parsed_test_results,
+        test_result.exit_code == 0,
         &observed_at,
         provenance.as_ref(),
     )?;
@@ -4128,6 +4151,7 @@ fn build_typescript_test_evidence(
     specs: &[LoadedSpec],
     test_name_prefix: &str,
     parsed_test_results: &HashMap<String, ParsedCargoTestResult>,
+    default_success_when_unparsed: bool,
     observed_at: &str,
     provenance: Option<&ArtifactProvenance>,
 ) -> Result<BTreeMap<String, PassportEvidence>> {
@@ -4140,6 +4164,7 @@ fn build_typescript_test_evidence(
             let observed = parsed_test_results.get(&full_name);
             let (status, reason) = match observed {
                 Some(result) => (result.status.clone(), result.reason.clone()),
+                None if default_success_when_unparsed => ("pass".to_string(), None),
                 None => (
                     "unknown".to_string(),
                     Some("test not found in bun output".to_string()),

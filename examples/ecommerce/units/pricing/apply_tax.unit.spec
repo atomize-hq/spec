@@ -10,15 +10,16 @@ contract:
   returns: Decimal
   invariants:
     - output >= subtotal
-deps:
-  - money/round
 imports:
   - rust_decimal::Decimal
 body:
   rust: |
     {
-        let taxed = subtotal + subtotal * rate;
-        round(taxed)
+        subtotal + subtotal * rate
+    }
+  typescript: |
+    {
+        return subtotal.add(subtotal.mul(rate));
     }
 local_tests:
   - id: basic_tax
