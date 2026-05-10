@@ -47,13 +47,15 @@ spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
 
-## Bounded TypeScript lane (M45)
+## Bounded TypeScript lane (M46)
 
 `spec` now exposes one bounded TypeScript execution lane. It is intentionally narrow:
 
 - Bun is the only TypeScript prerequisite. The lane shells out to `bun`; no alternate Node, npm, or tsx contract is supported.
-- Eligible units are exactly `kind: function` specs that classify to `function.arithmetic_leaf.monotone_up.v1` and declare `deps: []`.
-- TypeScript execution is atom-only. Only `local_tests` run in this lane; `.test.spec` molecule tests remain Rust-only and are rejected for `--target-language typescript`.
+- Eligible units are exactly `kind: function` specs that classify to `function.arithmetic_leaf.monotone_up.v1` and declare either `deps: []` or exactly one direct local helper dep.
+- When one helper dep is present, it must classify to `function.helper.identity_passthrough.v1`, exist in the same loaded unit set and generated tree, and be the only direct dep of the current unit.
+- Rust remains the default target. TypeScript proof is additive only; it writes `target_proofs.typescript` without replacing the Rust proof surface.
+- TypeScript execution is atom-only. Only `local_tests` run in this lane; `.test.spec` molecule tests remain unsupported for `--target-language typescript` and fail before Bun runs.
 - The accepted `local_tests.expect` grammar is deliberately small: `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)`. The left-hand side must be a direct call to the current unit, and both the arguments and expected value must use integer-literal `Decimal::new(...)` forms.
 
 Commands available in this lane:
@@ -65,16 +67,19 @@ spec test <path> --target-language typescript
 spec status <unit-or-root> --target-language typescript
 ```
 
-The generated helper filenames are frozen in M45:
+`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M46, a root-level status over a mixed example like `examples/ecommerce` may stay non-green even when the helper-aware `pricing/apply_tax` unit is freshly proven, because units outside the bounded monotone-up lane remain intentionally untested in TypeScript.
+
+The generated helper filenames remain frozen in M46:
 
 - `__spec_ts/runtime.ts`
 - `__spec_ts/build_entry.ts`
 - `__spec_ts/local_tests.ts`
 
-Commands that do not widen for M45:
+Commands and surfaces that do not widen for M46:
 
 - `spec validate` does not accept `--target-language`
 - `spec export` does not accept `--target-language`
+- This lane does not widen to wrapper execution, molecule execution, multi-dep execution, seam kinds, cross-library TypeScript resolution, `spec validate --target-language`, or `spec export --target-language`.
 
 ## Spec format
 
