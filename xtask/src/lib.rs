@@ -294,8 +294,10 @@ mod tests {
         certify, decision_kernel,
         harness::{
             CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
-            CHAIN3_SUITE_SLUG, FamilyHarness, LockedManifestArgs, LockedManifestRouting,
-            LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
+            CHAIN3_SUITE_SLUG, FamilyHarness, HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW,
+            HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE, HELPER_IDENTITY_PASSTHROUGH_SUITE_SLUG,
+            LockedManifestArgs, LockedManifestRouting, LockedManifestShape,
+            MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
             MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
             MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
             MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
@@ -346,7 +348,8 @@ mod tests {
     };
     use spec_core::loader::load_file;
     use spec_core::semantic_review::{
-        SemanticSupportStatus, UnsupportedFunctionReasonCode, evaluate_semantic_review,
+        SemanticSupportStatus, SemanticVerdict, UnsupportedFunctionReasonCode,
+        evaluate_semantic_review,
     };
     use spec_core::validator::validate_full;
     use std::cell::RefCell;
@@ -748,6 +751,70 @@ mod tests {
         assert!(unsupported.contains("if rate == Decimal::ZERO"));
         assert!(unsupported.contains("if (rate === Decimal.ZERO)"));
         assert!(!candidate.contains("TODO: replace"));
+    }
+
+    #[test]
+    fn family_new_creates_locked_helper_identity_passthrough_scaffold() {
+        let temp_dir = workspace_root();
+        let family = "function.helper.identity_passthrough.v1";
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family_id);
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains(&format!(
+            "precedence = {HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE}"
+        )));
+        assert!(manifest.contains("dep_min = 0"));
+        assert!(manifest.contains("dep_max = 0"));
+        assert!(manifest.contains("requires_supported_function_deps = false"));
+        for family_id in HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        for case in harness.scaffold.starter_cases {
+            let unit_path = paths.root.join(case.path);
+            assert!(
+                unit_path.is_file(),
+                "missing helper scaffold `{}`",
+                unit_path.display()
+            );
+            assert_candidate_lists_path_once(&candidate, case.path);
+            let loaded = load_file(&unit_path).unwrap();
+            validate_full(&loaded).unwrap();
+        }
+
+        let aligned_path = paths
+            .root
+            .join("fixtures/aligned/units/money/round.unit.spec");
+        let aligned = fs::read_to_string(&aligned_path).unwrap();
+        let aligned_review = evaluate_semantic_review(&load_file(&aligned_path).unwrap()).unwrap();
+        assert!(aligned.contains("id: money/round"));
+        assert!(aligned.contains(
+            "why: \"TODO: replace this scaffolded helper with real authored behavior.\""
+        ));
+        assert!(aligned.contains("value: Decimal"));
+        assert!(aligned.contains("returns: Decimal"));
+        assert!(aligned.contains("{\n        value\n    }"));
+        assert!(aligned.contains("round_placeholder"));
+        assert!(!aligned.contains("deps:"));
+        assert!(!aligned.contains("invariants:"));
+        assert!(!aligned.contains("if "));
+        assert!(!aligned.contains("round_dp_with_strategy"));
+        assert_eq!(aligned_review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            aligned_review.effective_support_status(),
+            SemanticSupportStatus::Supported
+        );
+        assert_eq!(harness.suite_slug, HELPER_IDENTITY_PASSTHROUGH_SUITE_SLUG);
     }
 
     #[test]
