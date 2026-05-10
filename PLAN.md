@@ -1,630 +1,528 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260509-211536.md -->
-# M43 - Promote `function.helper.identity_passthrough.v1`
+# M44 - Freeze The Shared-Core Portability Contract
 
 Status: **authority plan**  
-Milestone family: **rust-family-promotion**  
+Milestone family: **architecture-follow-on**  
 Implementation readiness: **ready-now**  
 Next artifact kind: **authority_plan**  
 Autoplan ready: **yes**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
-Last rewritten: **2026-05-09**  
-Source design doc: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260509-211536.md`**  
-Source test plan: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260509-212037.md`**  
-Supersedes: **M42 Decision-Contract Verifier Stop-State Parity**
+Last rewritten: **2026-05-10**  
+Source design doc: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260510-080847.md`**  
+Supersedes: **M43 - Promote `function.helper.identity_passthrough.v1`**
 
 ## Executive Verdict
 
-M43 is the narrow Rust-family promotion wedge the branch has now earned.
+M44 is not another family-promotion milestone.
 
-The repo already supports `function.helper.identity_passthrough.v1` at runtime. The missing capability is not semantic-review understanding. The missing capability is that maintainers still cannot promote, smoke, prove, or certify that family as first-class packet truth.
+The branch already proved the Rust family lane honestly enough to stop. The next honest move is to freeze one explicit portability contract for seam units so the repo can say, in code and in read-side truth, which semantics are shared, which details are Rust-only backend execution, and which escape hatches contaminate portability claims.
 
-This plan promotes exactly that family. No corpus-policy reopening. No shared-core portability follow-on. No second-language backend expansion.
+This milestone is **not** docs-only. It includes one small structural extraction inside `spec-core`: add one explicit portability-contract owner, route every seam-portability consumer through it, and keep `xtask` family-analysis logic as precedent rather than reopening it.
 
 ## Problem Statement
 
-The helper route for `money/round` has crossed the substrate threshold but not the promotion threshold.
+M43 finished the last obvious Rust-family lake on this branch.
 
-Current repo truth:
+Current repo truth now says:
 
-- `spec-core/src/semantic_review.rs` routes helper-shaped unary Decimal functions to `function.helper.identity_passthrough.v1`.
-- `cargo xtask family inventory --format json` reports that family as runtime-supported and supported-unpromoted.
-- `cargo xtask family coverage --format json` reports `supported_unpromoted_family_units = 3`.
-- There is no registered `FamilyHarness` entry for `function.helper.identity_passthrough.v1`.
-- There is no `semantic-families/function.helper.identity_passthrough.v1/` packet.
+- promoted Rust families are no longer the bottleneck
+- family-analysis can stop honestly instead of inventing a next family
+- the remaining architectural ambiguity is the seam between shared semantic truth and Rust-only backend execution detail
 
-That means the repo can describe the helper family honestly, but it cannot ship or maintain it through the same packetized proof workflow used for the promoted Rust families.
+That ambiguity is visible in code today:
+
+- `xtask/src/family/analysis_core/` already freezes the family-analysis decision seam for helper-surface durable hold, decision derivation, and proof-fingerprint normalization
+- `spec-core/src/backend_execution.rs` already identifies backend-only seam markers
+- `spec-core/src/escape_hatch.rs` already computes the atom/molecule gate for seam units
+- `spec-core/src/portability.rs` already projects markers, contamination, digests, and gate state
+- `spec-core/src/semantic_review.rs`, `spec-core/src/passport.rs`, and CLI read-side surfaces already consume that truth
+- `spec-core/src/validator.rs` still hardcodes part of the shared-surface contract inline as literal seam restrictions
+
+So the seam exists. The problem is that the contract is still spread across multiple files and partly implied by maintainers knowing where to look.
+
+If M44 does nothing, the next backend or read-side consumer will either duplicate these rules or quietly smuggle Rust-specific assumptions into a fake shared core.
 
 ## Repo Truth Basis
 
+### Live evidence
+
+- `xtask/src/family/analysis_core/helper_surface.rs` already freezes the durable helper-surface hold and follow-on decision tuple.
+- `xtask/src/family/analysis_core/decision_contract.rs` already derives corpus-program decisions from validated analysis truth without path or IO concerns.
+- `spec-core/src/backend_execution.rs` already distinguishes `DomainLowering`, `ProofHelperLowering`, and `BackendRustDerives`.
+- `spec-core/src/escape_hatch.rs` already makes seam proof surfaces explicit: `atom` and `molecule`.
+- `spec-core/src/portability.rs` already exposes marker summaries, contamination summaries, backend digests, and escape-hatch gate projection.
+- `spec-core/src/validator.rs` already enforces that `kind:data` and `kind:sum` must keep top-level `contract`, `deps`, `imports`, and `body.rust` out of the shared authored seam.
+- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md` still says shared-core extraction plus escape-hatch containment must come before broader second-language work.
+
 ### What already exists
 
-| Sub-problem | Existing owner | M43 decision |
+| Sub-problem | Existing owner | M44 decision |
 |---|---|---|
-| Runtime helper-family routing | `spec-core/src/semantic_review.rs` | reuse directly, do not widen the classifier |
-| Supported-unpromoted inventory truth | `xtask/src/family/inventory.rs` | reuse as the before/after promotion oracle |
-| Coverage accounting | `xtask/src/family/coverage.rs` | reuse as the before/after coverage oracle |
-| Existing promotion workflow | `xtask/src/family/harness.rs`, `scaffold.rs`, `smoke.rs`, `prove.rs`, `certify.rs` | reuse directly |
-| Canonical helper seeds | `examples/ecommerce/units/money/round.unit.spec`, `examples/shared-spec/units/money/round.unit.spec` | use as the narrow wedge inputs |
-| Helper regression truth | helper-family classifier tests in `spec-core/src/semantic_review.rs` | reuse as the semantic proof floor |
-
-### Live signals that justify this wedge
-
-- `cargo xtask family inventory --format json` reports `function.helper.identity_passthrough.v1` as the only supported-unpromoted runtime family.
-- `cargo xtask family coverage --format json` reports the three helper units inside `supported_unpromoted_family_units`.
-- The latest checkpoint says semantic review is core product, family-analysis is servant work, and the next bounded Rust wedge should reuse the M26-style promotion loop instead of more corpus churn.
-- The current `recommend` / `corpus-decision` stop-state means there is no new unsupported-family discovery task to do first.
+| Family-analysis decision seam | `xtask/src/family/analysis_core/*` | reuse as precedent, no new `xtask` seam work unless compile-forced |
+| Raw backend-only seam markers | `spec-core/src/backend_execution.rs` | keep as the raw marker collector |
+| Escape-hatch proof gate | `spec-core/src/escape_hatch.rs` | keep as the sole gate owner |
+| Portability truth projection | `spec-core/src/portability.rs` | keep as the read-side projection owner |
+| Seam semantic verdict composition | `spec-core/src/semantic_review.rs` | keep as consumer, remove inline policy drift |
+| Passport/status/export truth surfaces | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | keep as consumers, not policy authors |
+| Shared authored-surface restrictions | `spec-core/src/validator.rs` | extract into one explicit contract owner |
 
 ## Scope Challenge
 
 ### 0A. Premise challenge
 
-1. The right problem is not “make recommendation smarter again.” The right problem is “convert already-supported helper truth into promoted packet truth.”
-2. Doing nothing leaves one real runtime capability stuck outside the repo’s maintained proof workflow.
-3. A broader helper-substrate milestone would solve a larger but less immediate problem and would delay the cleaner lake that is already visible.
+1. The right problem is not “do more TypeScript now.” The right problem is “freeze the truth boundary that TypeScript would have to obey.”
+2. The right problem is not “extract a new crate.” The code already has one bounded `spec-core` seam. Make that seam explicit before spending packaging overhead.
+3. The right problem is not “rewrite family-analysis again.” `xtask` already has the reusable decision seam. M44 should reuse that precedent, not reopen it.
 
-### 0B. Existing code leverage
+### 0B. Minimum complete change set
 
-This milestone should reuse almost everything:
+M44 should do the complete version of this lake:
 
-- `spec-core` already owns the classifier and regression tests.
-- `xtask` already owns packet registry, scaffold, smoke, prove, and certify.
-- existing promoted families already show the packet directory shape, manifest contract, prove/certify artifact flow, and smoke invariants.
+1. define one explicit portability-contract owner in `spec-core`
+2. move seam authored-surface rules and portability-policy tables behind that owner
+3. thread that owner through validator, portability projection, semantic review, passport, export, and status surfaces
+4. lock the contract with regression tests and command-path proofs
+5. rewrite roadmap and user-facing docs so the repo story matches the code
 
-The only missing layer is the helper-family-specific harness plus packet assets.
+Anything smaller is fake completeness. It would save almost no CC time and leave the same ambiguity behind.
 
-### 0C. Dream state mapping
+### 0C. Complexity check
 
-```text
-CURRENT STATE
-  Runtime helper route exists.
-  Inventory says one family is supported but unpromoted.
-  Maintainers cannot prove/certify it as packet truth.
+This milestone will likely touch more than 8 files, but that is justified because it is one contract-change lake with one new module and many consumers.
 
-THIS PLAN
-  Adds one helper-family harness and one helper-family packet.
-  Runs the normal smoke/prove/certify workflow.
-  Removes the helper family from supported-unpromoted inventory.
+The smell threshold still applies:
 
-12-MONTH IDEAL
-  Every runtime-supported Rust family is either intentionally unpromoted for a named reason
-  or has a packetized proof path. No orphaned supported families.
-```
+- **acceptable**: one new module inside `spec-core`, no new crate, no new artifact type
+- **not acceptable**: adding a second new abstraction layer, a new workspace crate, or any second-language execution surface
 
-### 0C-bis. Implementation alternatives
+### 0D. Distribution check
 
-#### Approach A: Keep helper support substrate-only
+No new end-user distribution artifact is introduced here.
 
-Summary: leave the helper route in `spec-core` and do no packet work.  
-Effort: S  
-Risk: High  
-Pros:
-- no code churn in `xtask`
-- no packet maintenance cost
-Cons:
-- strands real product truth outside the promotion workflow
-- keeps inventory and coverage in a knowingly incomplete state
-Reuses:
-- all existing code, but solves nothing
+The distribution surface is repo truth:
 
-#### Approach B: Promote the helper family through the existing Rust-family workflow
-
-Summary: add one harness, one scaffold template, one packet, and the proof wiring needed to promote `function.helper.identity_passthrough.v1`.  
-Effort: M  
-Risk: Medium  
-Pros:
-- directly ships the missing product truth
-- reuses all current M26 workflow machinery
-- removes the only supported-unpromoted family from inventory
-Cons:
-- requires careful fixture semantics because the family allows both passthrough and round-like aligned behavior
-Reuses:
-- `harness.rs`, `scaffold.rs`, `smoke.rs`, `prove.rs`, `certify.rs`, helper classifier tests
-
-#### Approach C: Broaden helper substrate before promotion
-
-Summary: widen the helper-family semantic subset first, then promote a larger helper packet later.  
-Effort: L  
-Risk: High  
-Pros:
-- may cover more future helper shapes
-Cons:
-- larger blast radius
-- delays the bounded ship-ready wedge
-- reopens substrate work before shipping existing truth
-Reuses:
-- classifier code, but requires new semantic-design work
-
-**RECOMMENDATION:** Choose Approach B because it ships the full lake already visible in repo truth without widening into a new research milestone.
-
-### 0D. Mode-specific analysis
-
-This is a feature enhancement on existing product-core machinery, so the correct review mode is **SELECTIVE EXPANSION** with a strong bias against any expansion that escapes the helper-family lake.
-
-Possible expansions scanned and rejected for M43:
-
-- add second-language helper-family proof
-- generalize helper-family routing beyond the current honest subset
-- rewrite inventory/recommendation policy to foreground supported-unpromoted families
-- fold in shared-core portability cleanup
-
-All are real follow-ons. None belong in M43.
-
-### 0E. Temporal interrogation
-
-```text
-HOUR 1 (foundations):
-  Register the family cleanly. Decide the helper packet contract before touching fixtures.
-
-HOUR 2-3 (core logic):
-  Add scaffold support and committed packet fixtures. Lock what counts as aligned, drift,
-  under-specified, and unsupported-near-miss for this family.
-
-HOUR 4-5 (integration):
-  Thread the new family through smoke, prove, certify, inventory, and coverage expectations.
-
-HOUR 6+ (polish/tests):
-  Re-run the full xtask proof wall, confirm inventory/coverage deltas, and verify the family
-  is no longer reported as supported-unpromoted.
-```
+- `spec-core` source boundaries
+- CLI read-side output truth
+- roadmap and README language
 
 ## Accepted Scope
 
-M43 is complete only if all of this lands together:
+M44 is complete only if all of this lands together:
 
-1. Add `function.helper.identity_passthrough.v1` to the family harness registry.
-2. Add helper-family scaffold support so `cargo xtask family new function.helper.identity_passthrough.v1` can generate shape-honest starter packet content.
-3. Commit a self-contained helper-family packet under `semantic-families/function.helper.identity_passthrough.v1/`.
-4. Add or refresh smoke/prove/certify coverage for the new family.
-5. Update regression tests so inventory and coverage truth reflects the promoted helper family.
-6. Prove the before/after inventory and coverage state with live commands.
+1. Add one explicit contract owner at `spec-core/src/portability_contract.rs`.
+2. Move seam shared-surface ownership rules out of `validator.rs` literals and behind that contract.
+3. Move portability-policy classification behind that contract:
+   - what is shared authored seam truth
+   - what is backend-only but non-contaminating
+   - what is contaminating domain lowering
+4. Rewire `backend_execution.rs`, `escape_hatch.rs`, `portability.rs`, `semantic_review.rs`, `passport.rs`, `export.rs`, and `spec-cli/src/commands.rs` to consume the explicit contract instead of re-deriving local policy.
+5. Preserve current family-analysis stop-state truth by keeping `xtask/src/family/analysis_core/*` unchanged except for import or wording changes forced by compile or docs alignment.
+6. Lock the command-path proof wall for seam portability truth in validation, test, status, and export flows.
+7. Rewrite the roadmap and active docs so the public story matches the landed boundary.
 
 ## Not In Scope
 
-- widening helper-family semantic support beyond the current honest subset
-- second-language packet proof for the helper family
-- changing `recommend` or `corpus-decision` policy to prioritize supported-unpromoted families
-- shared-core portability work
-- generic multi-family registry refactors
-- docs/changelog cleanup outside files forced by the promotion surface
+- new family promotion work
+- recommendation-policy or corpus-expansion changes
+- a new workspace crate or cross-crate shared portability library
+- first-class TypeScript backend execution
+- widening supported function portability claims
+- new JSON schema versions unless a read-side contract change forces one explicit additive field update
+- broad cleanup of unrelated `xtask/src/family/*` code
+- any change to `spec generate/build/test` ownership beyond read-side truth projection
 
-## Architecture Contract
+## Architecture Review
 
-### Current to target
+### Locked architectural decision
+
+M44 includes **one small extraction**, not a docs-only freeze:
+
+- add `spec-core/src/portability_contract.rs`
+- make it the sole owner of seam portability policy
+- keep `backend_execution.rs`, `escape_hatch.rs`, and `portability.rs` as the execution, proof-gate, and projection layers
+
+This is the exact answer to the design doc’s open question. The milestone needs one code move to prove the seam is real. It does **not** need a new crate.
+
+### Locked target boundary
 
 ```text
-CURRENT
-  spec-core helper classifier -> runtime-supported helper family
-  inventory/coverage -> supported_unpromoted helper truth
-  xtask family workflow -> no registered helper family
+spec-core/src/
+  portability_contract.rs   <-- NEW, sole policy owner
+  backend_execution.rs      <-- raw marker extraction + digest
+  escape_hatch.rs           <-- atom/molecule gate computation
+  portability.rs            <-- projected portability truth
+  semantic_review.rs        <-- verdict consumer
+  validator.rs              <-- hard authored-shape enforcement consumer
+  passport.rs               <-- passport/status projection consumer
+  export.rs                 <-- export projection consumer
+  lib.rs                    <-- module wiring
 
-TARGET
-  spec-core helper classifier -> same runtime-supported helper family
-  semantic-families/function.helper.identity_passthrough.v1 -> committed packet truth
-  xtask family workflow -> helper family fully smoke/prove/certify capable
-  inventory/coverage -> helper family counts as promoted, not supported-unpromoted
+spec-cli/src/
+  commands.rs               <-- status/export CLI consumer
+
+xtask/src/family/
+  analysis_core/*           <-- reuse as precedent, do not widen
 ```
+
+### Exact ownership map
+
+| Module | Owns after M44 | Must not own |
+|---|---|---|
+| `portability_contract.rs` | seam-kind helpers, allowed shared authored surfaces, allowed backend-only surfaces, contamination policy table, stable reason strings/helpers for shared vs Rust-only classification | file IO, cargo commands, artifact loading, latest-artifact reuse, read-side rendering |
+| `backend_execution.rs` | detection of raw backend markers and backend digest material | verdict policy, gate policy, validator policy text |
+| `escape_hatch.rs` | proof-surface requirements and open/closed gate evaluation | marker classification policy, semantic verdict policy |
+| `portability.rs` | composition of markers, contamination summary, gate, and digest into projected portability truth | inline seam policy duplication |
+| `semantic_review.rs` | semantic verdict generation using projected portability truth | ownership of seam policy tables |
+| `validator.rs` | hard validation using contract-owned seam rules | hand-maintained duplicate seam policy strings |
+| `passport.rs`, `export.rs`, `spec-cli/src/commands.rs` | projection of current truth only | new local policy branches about what is shared vs Rust-only |
+| `xtask/src/family/analysis_core/*` | family-analysis decision semantics | seam portability policy for `spec-core` |
+
+### Exact move and rewire plan
+
+| Current owner | Surface | Destination or action | Why |
+|---|---|---|---|
+| `validator.rs` | `kind:data` and `kind:sum` shared-surface restrictions | move rule ownership into `portability_contract.rs`; keep validator as caller | one source of truth |
+| `portability.rs` | local `is_seam` helper and seam ownership assumptions | move seam-kind helper to `portability_contract.rs` | no more local re-derivation |
+| `semantic_review.rs` | inline portability policy branches that assume which markers contaminate | switch to contract-owned classification helpers | keep semantic review a consumer |
+| `backend_execution.rs` | marker kind enums and digest inputs | keep local, but classify through contract-owned policy names where needed | raw signals stay separate from verdict policy |
+| `escape_hatch.rs` | required surfaces and gate wording | keep local, but align wording and shared helpers with contract owner | gate remains explicit |
+| `passport.rs` / `export.rs` / `commands.rs` | projection of markers, gate, proof coverage | rewire only as needed to consume explicit contract/projected truth | keep read-side behavior aligned |
+| roadmap/docs | milestone wording and README seam language | update to reflect exact landed boundary | public story must match code |
 
 ### Dependency graph
 
 ```text
-spec-core/src/semantic_review.rs
-        |
-        v
-xtask/src/family/harness.rs
-        |
-        +--> xtask/src/family/scaffold.rs
-        +--> xtask/src/family/smoke.rs
-        +--> xtask/src/family/prove.rs
-        +--> xtask/src/family/certify.rs
-        |
-        v
-semantic-families/function.helper.identity_passthrough.v1/**
-        |
-        v
-inventory / coverage / certification artifacts
+AUTHORED SEAM SPEC
+      |
+      v
+portability_contract.rs
+      |
+      +--> validator.rs
+      +--> backend_execution.rs
+      +--> escape_hatch.rs
+      +--> portability.rs
+                |
+                +--> semantic_review.rs
+                +--> passport.rs
+                +--> export.rs
+                +--> spec-cli/src/commands.rs
+
+parallel precedent, unchanged in scope:
+xtask/src/family/analysis_core/*
 ```
 
-### File surface
+### Architecture constraints
 
-Required production surfaces:
+- No `Path`, `fs`, `Write`, or repo-root knowledge inside `portability_contract.rs`.
+- No new policy duplication inside `semantic_review.rs`, `validator.rs`, or CLI projection code.
+- No new crate extraction.
+- No change to family-analysis stop-state semantics.
+- No widening of what counts as portability-safe.
 
-- `xtask/src/family/harness.rs`
-- `xtask/src/family/scaffold.rs`
-- `semantic-families/function.helper.identity_passthrough.v1/**`
+### Architectural verdict
 
-Likely test / projection surfaces:
+Recommendation: add one explicit contract module inside `spec-core` and stop there.
 
-- `xtask/src/lib.rs`
-- `spec-core/src/semantic_review.rs` tests only if current helper-family coverage is insufficient for prove/certify truth
+Why:
 
-Conditionally touched only if compile- or proof-forced:
+- it is the smallest complete move
+- it aligns with the already-landed `xtask` `analysis_core` precedent
+- it keeps the change reversible
+- it avoids spending an innovation token on packaging before the seam settles
 
-- `xtask/src/family/inventory.rs`
-- `xtask/src/family/coverage.rs`
-- `semantic-families/README.md`
+## Code Quality Review
 
-Forbidden surfaces unless the plan is rewritten:
+### Problems this plan removes
 
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/analysis_core/decision_contract.rs`
-- `xtask/src/family/helper_surface.rs`
-- repo-root `ORCH_PLAN.md`
+1. **Scattered seam policy**
+   - today the seam rules live partly in validator literals, partly in portability projections, and partly in semantic-review branches
+   - after M44 the seam policy has one named owner
 
-## Packet Contract
+2. **Consumer drift risk**
+   - today passport/export/status consumers can stay green while silently disagreeing with validator or semantic-review assumptions
+   - after M44 all of them consume the same portability contract
 
-The helper family must stay aligned with the current classifier contract:
+3. **Fake shared-core language**
+   - today the code has the pieces, but the contract is still partly a story
+   - after M44 the contract is embodied in one module and one policy table
 
-- function name: `round`
-- deps: none
-- invariants: none
-- exactly one Decimal input
-- Decimal return
-- no control flow
-- body shape:
-  - direct passthrough is supported
-  - round-like unary helper body is supported
-- locked routing:
-  - `precedence = 5`
-  - `must_not_shadow = ["unsupported.function.v1"]`
+### Implementation rules
 
-The packet buckets must prove:
-
-- **aligned**:
-  - round-like intent + round-like body
-  - passthrough intent + direct passthrough body
-- **drift**: passthrough intent + round-like body
-- **under_specified**: vague intent with otherwise-supported body
-- **unsupported_near_miss**: control-flow branch around an otherwise helper-shaped body
-
-This keeps the packet honest to both the shared-spec example and the classifier tests already shipping in `spec-core`.
-
-Helper-family naming constraint:
-
-- committed proving fixtures cannot rely on filenames like `round_aligned.unit.spec` for supported cases, because the current classifier hard-requires `fn_name == "round"`
-- the locked scaffold starter can still live at `fixtures/<bucket>/units/money/round.unit.spec` and remain non-proving by authored content, matching the existing `family new` contract
-- if M43 needs a second aligned proving case, add it as an extra committed packet fixture under a second namespace while keeping scaffold generation single-namespace; do not widen scaffold namespace plumbing in this milestone
+- move policy before tweaking behavior
+- do not mix structural extraction with second-language logic
+- keep existing public read-side behavior stable unless a deliberate portability-truth correction is named in this plan
+- prefer small helper extraction over broad renames
+- preserve explicit naming over clever abstractions
 
 ## Implementation Plan
 
-Execution order matters more than code volume in M43. Freeze the helper-family contract first,
-then let packet authoring and regression work happen in parallel, then merge back into one proof
-wall. Do not mix contract definition, scaffold widening, and projection rewrites in the same first
-edit.
+### Step 1. Freeze the contract surface
 
-### Step dependency table
+- Add `spec-core/src/portability_contract.rs`.
+- Define seam-kind helpers and portability policy helpers there.
+- Add module wiring in `spec-core/src/lib.rs`.
+- Keep the contract small and typed.
 
-| Step | Goal | Primary surfaces | Depends on | Exit signal |
-|---|---|---|---|---|
-| 1 | lock the promoted helper-family contract | `xtask/src/family/harness.rs` | — | the registry exposes the family with the final routing and suite ownership contract |
-| 2 | make `family new` emit truthful helper starter content | `xtask/src/family/scaffold.rs`, `xtask/src/lib.rs` | 1 | starter generation is green and still valid-but-non-proving |
-| 3 | commit the packet that the harness and smoke/prove/certify will enforce | `semantic-families/function.helper.identity_passthrough.v1/**` | 1 | the packet contains all four buckets and an explicit story for both aligned lanes |
-| 4 | refresh regression and read-side truth | `spec-core/src/semantic_review.rs`, `xtask/src/lib.rs`, `xtask/src/family/inventory.rs`, `xtask/src/family/coverage.rs` | 1, 2, 3 | direct passthrough is proven and projections flip from supported-unpromoted to promoted |
-| 5 | run the full proof wall and capture acceptance evidence | local command wall | 2, 3, 4 | smoke, prove, certify, inventory, and coverage all match the expected end state |
+### Step 2. Move shared authored-surface rules behind the contract
 
-### Step 1. Lock the helper-family contract in `harness.rs`
+- Replace inline `kind:data` and `kind:sum` portability rule ownership in `spec-core/src/validator.rs`.
+- Keep hard validation behavior the same:
+  - illegal shared-surface authored shapes remain validation errors
+  - allowed backend-only details remain valid input, not automatic portability-safe truth
 
-Goal: make the runtime-supported helper family first-class in the registry without widening what
-the family means.
+### Step 3. Rewire raw marker and gate layers to consume the contract
 
-Required edits:
+- Update `spec-core/src/backend_execution.rs` to align raw marker naming with the contract.
+- Update `spec-core/src/escape_hatch.rs` only where shared helpers or wording are needed.
+- Update `spec-core/src/portability.rs` to consume the contract instead of local seam assumptions.
 
-- add the family routing entry to `FAMILY_REGISTRY`
-- lock `precedence = 5`
-- lock `must_not_shadow = ["unsupported.function.v1"]`
-- define the suite slug, summary text, starter-case definitions, smoke contract, prove suites, and certify ownership
+### Step 4. Rewire read-side truth consumers
 
-Done when:
+- Update `spec-core/src/semantic_review.rs`.
+- Update `spec-core/src/passport.rs`.
+- Update `spec-core/src/export.rs`.
+- Update `spec-cli/src/commands.rs` if status/export JSON or text projection needs one centralized portability path.
 
-- helper family discovery succeeds through the same registry lookup path as the promoted arithmetic families
-- no TypeScript or second-language prove/certify ownership is introduced
-- the harness contract matches the classifier contract already defined in `spec-core`
+### Step 5. Lock examples, fixtures, and docs
 
-### Step 2. Add helper-family scaffold support in `scaffold.rs`
+- Refresh any example artifacts whose projected portability truth changes.
+- Update `README.md` seam wording if needed.
+- Rewrite `docs/ai_promotion_and_multilanguage_milestones_v0.1.md` so the shared-core/escape-hatch ladder matches the landed boundary.
+- Update `CHANGELOG.md` only if user-facing read-side truth changes.
 
-Goal: make `cargo xtask family new function.helper.identity_passthrough.v1` generate a starter
-packet that is truthful, stable, and intentionally non-proving.
+### Step 6. Run the full proof wall
 
-Required edits:
+- prove validator, semantic-review, passport, export, and status parity
+- prove family-analysis stop-state remains unchanged
+- prove no new portability claims were accidentally widened
 
-- add one helper-family scaffold template for `candidate.md`, `family.toml`, and the four fixture buckets
-- keep locked starter units at `fixtures/<bucket>/units/money/round.unit.spec`
-- preserve the current starter contract instead of inventing a second scaffold mode
+## Test Review
 
-Done when:
-
-- every scaffolded starter validates
-- every scaffolded starter remains outside the supported subset by default
-- the scaffold does not introduce per-case namespace plumbing just to express the second aligned lane
-
-### Step 3. Commit the helper-family packet
-
-Goal: commit the exact packet truth that smoke, prove, and certify will defend.
-
-Required files:
-
-- `semantic-families/function.helper.identity_passthrough.v1/family.toml`
-- `semantic-families/function.helper.identity_passthrough.v1/candidate.md`
-- `semantic-families/function.helper.identity_passthrough.v1/fixtures/aligned/**`
-- `semantic-families/function.helper.identity_passthrough.v1/fixtures/drift/**`
-- `semantic-families/function.helper.identity_passthrough.v1/fixtures/under_specified/**`
-- `semantic-families/function.helper.identity_passthrough.v1/fixtures/unsupported_near_miss/**`
-
-Packet rules:
-
-- the packet must be self-contained and must not depend on units outside the packet
-- the aligned bucket must preserve the existing round-like `money/round` wedge
-- the plan must also prove the direct-passthrough aligned lane that the classifier already accepts
-- if the second aligned lane is easiest to express as an extra committed packet fixture plus a `spec-core` regression, do that
-- do not widen scaffold infrastructure first just to make the second aligned lane look symmetrical
-
-### Step 4. Refresh regression and read-side truth
-
-Goal: make the codebase prove the promotion everywhere it matters, not just in packet files.
-
-Required edits:
-
-- add the missing direct-passthrough aligned regression in `spec-core/src/semantic_review.rs`
-- refresh `xtask` tests so they prove registry presence, scaffold generation, smoke, prove, and certify
-- update inventory and coverage expectations so the helper family leaves supported-unpromoted truth and enters promoted-family truth
-- repoint any helper-family inventory metadata that still describes the family as a transitional supported-unpromoted wedge
-
-Done when:
-
-- `spec-core` proves both supported aligned lanes plus drift, under-specified, and unsupported-near-miss behavior
-- `xtask` proves scaffold starters stay valid-but-non-proving
-- inventory no longer reports the helper family as supported-unpromoted
-- coverage moves the three helper units out of `supported_unpromoted_family_units`
-
-### Step 5. Run the live proof wall
-
-Run the narrow tests first, then the full promotion loop, then the read-side truth commands:
+### Required proof loop
 
 ```bash
-cargo test -p spec-core helper_identity_passthrough -- --color never
-cargo test -p xtask inventory -- --color never
-cargo test -p xtask coverage -- --color never
-cargo test -p xtask -- --color never
-cargo xtask family smoke function.helper.identity_passthrough.v1
-cargo xtask family prove function.helper.identity_passthrough.v1
-cargo xtask family certify function.helper.identity_passthrough.v1
-cargo xtask family inventory --format json
-cargo xtask family coverage --format json
+cargo test
+cargo run -p spec-cli -- validate examples/ecommerce/units --format json
+cargo run -p spec-cli -- test examples/ecommerce/units
+cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- export examples/ecommerce/units --format json
+cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
+cargo xtask family verify-decision-contract --format json
 ```
 
-Acceptance evidence:
+Expected preserved truth:
 
-- `supported_unpromoted_families[]` no longer contains `function.helper.identity_passthrough.v1`
-- `supported_unpromoted_family_units = 0`
-- helper-family packet artifacts are present and truthful
-- `cargo xtask family certify function.helper.identity_passthrough.v1` passes without manual patch-up
+- seam validator still rejects illegal top-level shared-surface authored shapes
+- helper-only lowering remains backend-only but not contaminating
+- domain lowering remains contaminating
+- escape-hatch gate still requires fresh `atom` and `molecule` proof
+- family-analysis stop-state still points to architecture follow-on, not another family
 
-## Error And Rescue Registry
-
-| Method / codepath | What can go wrong | Rescue class | Rescue action | User sees |
-|---|---|---|---|---|
-| `family new function.helper.identity_passthrough.v1` | harness missing | `NotImplemented` | fail loudly with harness registration message | maintainer gets actionable error |
-| `family smoke ...` | scaffold output mismatches committed packet | smoke failure | fail loudly with exact-match / content diff | maintainer sees smoke failure |
-| `family prove ...` | helper classifier or suite expectations drift | prove failure | fail loudly with gate and suite detail | maintainer sees failed gate |
-| `family certify ...` | certify gates fail after prove | certification failure | fail loudly and preserve artifacts | maintainer sees certification failure |
-| inventory / coverage projections | helper family remains supported-unpromoted | regression test failure | fail test / live assertion | maintainer sees projection mismatch |
-
-No silent failure paths are acceptable in M43.
-
-## Test Diagram
+### Code path coverage diagram
 
 ```text
-HELPER FAMILY PROMOTION COVERAGE
-================================
-[+] spec-core helper classifier truth
-    ├── aligned round-like helper routes to supported helper family
-    ├── aligned passthrough helper routes to supported helper family
-    ├── vague intent reports under-specified
-    ├── passthrough intent + round-like body reports drift
-    └── control-flow near miss stays unsupported
+CODE PATH COVERAGE
+===========================
+[+] spec-core/src/portability_contract.rs
+    |
+    |-- seam-kind helpers
+    |   `-- [GAP] new direct unit tests required
+    |
+    |-- shared-authored-surface rules
+    |   `-- [GAP] validator-backed regression tests required
+    |
+    `-- contamination policy table
+        `-- [GAP] semantic-review and portability projection tests required
 
-[+] xtask harness / scaffold
-    ├── helper family registered for family new/smoke/prove/certify
-    ├── scaffold emits shape-honest valid-but-non-proving starter files
-    └── smoke verifies committed packet contracts
+[~] spec-core/src/validator.rs
+    |
+    |-- kind:data shared-surface rejection
+    |   `-- [PASS TESTED] existing seam restriction coverage, refresh through contract owner
+    |
+    `-- kind:sum shared-surface rejection
+        `-- [PASS TESTED] existing seam restriction coverage, refresh through contract owner
 
-[+] packet proof loop
-    ├── prove passes all helper-family suites
-    ├── certify passes all helper-family gates
-    └── artifacts serialize correctly
+[~] spec-core/src/backend_execution.rs
+    |
+    |-- collect_backend_execution_markers()
+    |   |-- [PASS TESTED] proof-helper marker
+    |   |-- [PASS TESTED] domain-lowering marker
+    |   `-- [PASS TESTED] backend-rust-derives marker
+    |
+    `-- compute_backend_execution_digest()
+        `-- [PASS TESTED] authored-only edits do not change digest
 
-[+] read-side family-analysis truth
-    ├── inventory no longer lists helper family as supported-unpromoted
-    └── coverage no longer counts helper units in supported_unpromoted_family_units
+[~] spec-core/src/escape_hatch.rs
+    |
+    |-- current_proof_surfaces()
+    |   |-- [PASS TESTED] fresh atom path
+    |   `-- [PASS TESTED] current molecule path
+    |
+    `-- evaluate_escape_hatch_gate()
+        |-- [PASS TESTED] closed gate
+        `-- [GAP] stale atom + missing molecule parity regression after contract extraction
+
+[!] spec-core/src/portability.rs
+    |
+    |-- collect/summarize markers
+    |   `-- [GAP] direct contract-owner parity tests required
+    |
+    |-- summarize_portability_contamination()
+    |   `-- [GAP] helper-only vs domain-lowering split must be locked
+    |
+    `-- project_portability_truth()
+        `-- [GAP] status/export/passport shared projection parity required
+
+[!] spec-core/src/semantic_review.rs
+    |
+    |-- supported seam portability summary
+    |   `-- [GAP] direct consumer parity with contract owner required
+    |
+    |-- backend-only meaning preserved
+    |   `-- [PASS TESTED] existing helper-marker verdict coverage
+    |
+    `-- backend-only semantics leaked
+        `-- [PASS TESTED] existing domain-lowering contamination coverage
+
+[!] spec-core/src/passport.rs + export.rs + spec-cli/src/commands.rs
+    |
+    |-- projected markers
+    |   `-- [GAP] read-side parity tests required
+    |
+    |-- proof coverage / gate projection
+    |   `-- [GAP] status/export current-truth parity required
+    |
+    `-- CLI JSON/text rendering
+        `-- [GAP] command-path regression tests required
+
+---------------------------------
+REQUIRED NEW TESTS:
+1. direct unit tests for portability_contract helpers
+2. validator regressions proving rules now route through the contract owner
+3. portability projection regressions for helper-only vs contaminating lowering
+4. passport/export/status parity tests
+5. stale-proof gate regressions
+6. xtask stop-state parity regression proving M44 did not reopen family choice
+---------------------------------
 ```
+
+### Required new tests
+
+1. `spec-core` unit tests for `portability_contract.rs`.
+2. Validator regressions proving `kind:data` and `kind:sum` restrictions still hard-fail through the new contract owner.
+3. Portability projection regressions proving:
+   - helper-only lowering is backend-only but non-contaminating
+   - domain lowering contaminates portability claims
+4. Escape-hatch regressions proving stale atom or missing molecule proof opens the gate.
+5. Passport/export/status parity tests proving all read-side surfaces agree on markers, proof coverage, and gate state.
+6. CLI command-path tests in `spec-cli/tests/cli.rs` proving `validate`, `status`, and `export` remain truthful.
+7. `xtask` parity proof proving `family recommend`, `family corpus-decision`, and `verify-decision-contract` remain unchanged.
+
+## Performance Review
+
+This milestone is not performance-driven, but it can create accidental churn if done sloppily.
+
+Performance constraints:
+
+- do not add filesystem or cargo-process work to the read-side path
+- keep marker collection and contamination summarization linear in seam method count
+- avoid recomputing the same portability summary multiple times inside one projection path when a shared local result will do
+- keep `xtask` latest-artifact fingerprint reuse unchanged
+
+Performance anti-goals:
+
+- no caching layer
+- no global memoization
+- no new persisted artifact just for portability summaries
 
 ## Failure Modes Registry
 
 | Codepath | Failure mode | Rescued? | Test? | User sees? | Logged? |
 |---|---|---:|---:|---|---:|
-| helper harness registration | family id omitted from registry | N | Y | explicit `NotImplemented` failure | Y |
-| helper scaffold | emitted starter does not match committed packet contract | N | Y | explicit smoke failure | Y |
-| helper prove suites | helper classifier truth and packet fixtures disagree | N | Y | explicit prove failure | Y |
-| helper certify gates | one certify suite regresses | N | Y | explicit certification failure | Y |
-| inventory / coverage projections | helper family still counted as supported-unpromoted after packet lands | N | Y | explicit test / command mismatch | Y |
+| seam validator contract | illegal top-level seam shape becomes a warning or silently passes | N | Y | explicit validate failure required | Y |
+| backend marker classification | proof-helper and domain-lowering markers collapse into one meaning | N | Y | wrong portability verdict unless caught | Y |
+| escape-hatch gate | stale atom or missing molecule proof still projects as closed | N | Y | false green portability truth | Y |
+| semantic-review projection | backend-only detail gets treated as portability-safe shared semantics | N | Y | wrong semantic verdict | Y |
+| passport/export/status parity | different read-side surfaces disagree on markers or gate state | N | Y | conflicting repo truth | Y |
+| roadmap/docs | docs claim portability is solved more broadly than code proves | N | Y | maintainers plan the wrong next milestone | Y |
+| family-analysis precedent | M44 accidentally mutates `xtask` stop-state semantics | N | Y | next-family truth reopens incorrectly | Y |
 
 Critical-gap rule:
 
-- any row with `Test = N` is unacceptable for M43
-- any silent failure in the promotion workflow is unacceptable for M43
+- any row with `Test = N` is unacceptable for M44
+- any silent green portability claim is unacceptable for M44
 
 ## Worktree Parallelization Strategy
 
-This plan has one global gate and then three honest parallel workstreams.
+This milestone has one real contract-freeze gate, one safe code-parallel window, and one serialized integration finish.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Step 1. Lock helper-family contract | `xtask/src/family/` | — |
-| Step 2. Add scaffold support | `xtask/src/family/`, `xtask/src/` | Step 1 |
-| Step 3. Commit packet assets | `semantic-families/function.helper.identity_passthrough.v1/` | Step 1 |
-| Step 4. Add direct-passthrough regression | `spec-core/src/` | Step 1 |
-| Step 5. Refresh projections and run proof wall | `xtask/src/`, `xtask/src/family/`, local proof commands | Steps 2, 3, 4 |
+| Step 1. Freeze portability contract API | `spec-core/src/` | — |
+| Step 2. Enforce contract in validation and raw marker layers | `spec-core/src/` | Step 1 |
+| Step 3. Rewire read-side projection consumers | `spec-core/src/`, `spec-cli/src/` | Step 1 |
+| Step 4. Refresh docs and example truth surfaces | `docs/`, `README.md`, `CHANGELOG.md`, `examples/` | Step 1 |
+| Step 5. Integrate, rerun proof wall, and fix parity drift | `spec-core/src/`, `spec-cli/src/`, `xtask/src/family/`, `docs/` | Steps 2, 3, 4 |
 
 ### Parallel lanes
 
 - Lane 0: Step 1
-  Lock the family contract first. No other lane should guess the final routing, suite, or naming rules.
+  Freeze the API first. This is the contract that every later lane must obey.
 - Lane A: Step 2
-  Scaffold support in `xtask/src/family/` and `xtask/src/` stays sequential because it shares starter-generation logic and test helpers.
+  Validation plus raw backend-marker alignment. This lane owns `portability_contract.rs`, `validator.rs`, `backend_execution.rs`, and `lib.rs`.
 - Lane B: Step 3
-  Packet authoring under `semantic-families/function.helper.identity_passthrough.v1/` can run independently once Step 1 freezes the contract.
+  Read-side consumer rewiring. This lane owns `escape_hatch.rs`, `portability.rs`, `semantic_review.rs`, `passport.rs`, `export.rs`, `spec-cli/src/commands.rs`, and CLI tests.
 - Lane C: Step 4
-  The `spec-core` direct-passthrough regression can run independently once Step 1 freezes the contract.
+  Docs, roadmap, and example truth surfaces. This lane can run independently once the contract is frozen.
 - Lane D: Step 5
-  Projection updates, integration tests, and the live proof loop run after A, B, and C merge.
+  Final integration and proof wall.
 
 ### Execution order
 
-- Launch Lane 0 first.
+- Launch Lane 0 first and freeze the portability-contract API.
 - After Step 1 lands, launch Lanes A, B, and C in parallel worktrees.
-- Merge Lanes B and C as soon as they are green.
-- Merge Lane A once scaffold snapshots and starter-contract tests are green.
-- Run Lane D last on top of the merged result to refresh projections and prove the end state.
+- Merge Lane A first if Lane B needs any final contract call-shape adjustments.
+- Merge Lane C whenever docs and example updates are green.
+- Run Lane D last on the merged result to rerun the proof wall and fix any parity drift.
 
 ### Conflict flags
 
-- Lanes A and D both touch `xtask/src/` and `xtask/src/family/`, so D must wait.
-- Lanes A and B do not share modules, but they do share the packet contract. Step 1 is the contract freeze that keeps them from drifting.
-- Lane C is low-conflict, but it must not invent a different interpretation of the helper subset than the packet and harness use.
+- Lanes A and B both touch `spec-core/src/`, so Step 1 must freeze names and function signatures before launch.
+- Lanes B and D both touch `spec-cli/src/commands.rs` and read-side parity tests, so D must wait.
+- Lane C is low-conflict, but it must not invent milestone language that outruns the landed code.
 
-## Review Notes
+## Docs And Roadmap Updates
 
-### UI scope
+Required documentation updates:
 
-No UI scope. `plan-design-review` should be skipped for M43.
+- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+  - rewrite the shared-core and escape-hatch milestone text so it matches the landed M44 boundary
+- `README.md`
+  - keep seam wording honest if any read-side truth surfaces become more explicit
+- `CHANGELOG.md`
+  - only if user-facing command truth or milestone status language changes
 
-### DX scope
-
-DX scope exists because this milestone changes maintainer-facing commands and packet ergonomics. The main DX rule is clarity:
-
-- the new family must use the same workflow shape maintainers already know
-- command failures must stay explicit and local
-- no hidden second path for helper promotion
+The docs update is part of the milestone, not cleanup garnish. If the code lands and the roadmap still tells the older story, M44 is incomplete.
 
 ## Completion Criteria
 
-M43 is complete only if all of the following are true:
+M44 is complete only if all of the following are true:
 
-1. `function.helper.identity_passthrough.v1` is registered in the harness registry.
-2. A committed helper-family packet exists under `semantic-families/`.
-3. `family smoke`, `family prove`, and `family certify` all pass for the helper family.
-4. Inventory and coverage no longer report the helper family as supported-unpromoted.
-5. The full `cargo test -p xtask` wall stays green.
-6. The implementation did not widen into recommendation policy, shared-core portability, or second-language work.
+1. `spec-core/src/portability_contract.rs` exists and is the sole seam portability policy owner.
+2. `validator.rs` no longer owns duplicated seam portability policy inline.
+3. `backend_execution.rs`, `escape_hatch.rs`, and `portability.rs` consume the explicit contract without changing their basic responsibilities.
+4. `semantic_review.rs`, `passport.rs`, `export.rs`, and CLI read-side surfaces project the same portability truth.
+5. Existing helper-only and contaminating-domain-lowering verdict behavior remains correct.
+6. The escape-hatch gate still requires fresh atom and molecule proof.
+7. `xtask` family-analysis stop-state truth remains unchanged.
+8. The roadmap and active docs match the landed code boundary.
+9. The implementation did not widen into second-language execution, new crate extraction, or fresh family-choice work.
 
 ## Completion Summary
 
-If M43 lands cleanly, the repo stops treating helper support as an orphaned runtime fact.
+If M44 lands cleanly, the repo stops hand-waving about portability.
 
-Maintainers get the same `family new` / `family smoke` / `family prove` / `family certify`
-workflow for `function.helper.identity_passthrough.v1` that the other promoted Rust families
-already have. Inventory and coverage stop reporting the helper family as stranded supported truth.
-
-## CEO Review
-
-Verdict: hold scope, but tighten the honest subset so the plan does not quietly under-prove the
-family it claims to promote.
-
-What changed in review:
-
-- kept the milestone focused on promotion, not corpus policy or substrate widening
-- rejected a scaffold-plumbing expansion just to model a second aligned namespace
-- required explicit proof for the direct-passthrough aligned lane because the classifier already treats it as supported truth
-
-CEO CONSENSUS TABLE:
-
-| Topic | Host review | Outside voice | Subagent | Result |
-|---|---|---|---|---|
-| Scope | promote helper family only | unavailable | unavailable | confirm |
-| Corpus policy | no change in M43 | unavailable | unavailable | confirm |
-| Second-language work | defer | unavailable | unavailable | confirm |
-| Helper subset | prove both aligned lanes | unavailable | unavailable | confirm |
-
-## Eng Review
-
-Verdict: the plan is execution-ready after one correction.
-
-Critical engineering finding:
-
-- the helper classifier hard-requires `fn_name == "round"` in [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs:1388), so committed proving fixtures cannot use suffix-bearing callable names the way the arithmetic packets do
-- scaffold starters are already expected to remain valid-but-non-proving in [xtask/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/xtask/src/lib.rs:5381), so M43 should preserve that contract instead of trying to make `family new` emit already-proving helper fixtures
-- the current helper regression set proves round-like alignment, drift, under-specification, and unsupported control flow, but it does not prove the supported direct-passthrough aligned lane at [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs:6079)
-
-Engineering decision:
-
-- keep scaffold generation single-namespace and starter-only
-- prove the second aligned lane with a hand-authored extra packet fixture and a new `spec-core` regression
-- repoint helper inventory metadata away from the old supported-unpromoted wedge once the packet exists
-
-ENG CONSENSUS TABLE:
-
-| Topic | Host review | Outside voice | Subagent | Result |
-|---|---|---|---|---|
-| Registry/harness change | required | unavailable | unavailable | confirm |
-| Scaffold model | keep existing starter contract | unavailable | unavailable | confirm |
-| Helper aligned coverage | add direct-passthrough proof | unavailable | unavailable | confirm |
-| Inventory/coverage delta | must flip to promoted truth | unavailable | unavailable | confirm |
-
-## DX Review
-
-Verdict: DX scope exists, but it is narrow and maintainer-facing.
-
-No dedicated `plan-devex-review` skill was available in this environment, so this pass used host
-review only.
-
-DX scorecard:
-
-| Dimension | Score | Note |
-|---|---:|---|
-| Discoverability | 8/10 | existing `xtask family` verbs already frame the workflow |
-| Setup friction | 8/10 | no new toolchain expected |
-| Naming clarity | 7/10 | helper packet naming must explicitly document the `round` filename constraint |
-| Error clarity | 9/10 | smoke/prove/certify already fail loudly |
-| Workflow consistency | 9/10 | promotion path stays identical to the other Rust families |
-| Testability | 9/10 | proof loop is explicit |
-| TTHW | 8/10 | familiar maintainer loop, one new packet |
-| Escape hatches | 8/10 | scope boundaries are explicit in this plan |
-
-DX implementation checklist:
-
-- document the `round` callable-name constraint in `candidate.md`
-- keep scaffold failure messages local and explicit if helper starter files drift
-- avoid adding a second hidden promotion path for helper fixtures
-
-## Cross-Phase Themes
-
-**Theme: keep the helper subset explicit**. CEO, eng, and DX review all converged on the same
-point: M43 is good only if it promotes the exact helper truth the runtime already supports, no
-more and no less.
-
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-|---|---|---|---:|---|---|
-| CEO Review | `/autoplan` | Scope & strategy | 1 | clean | tightened proof contract, kept scope narrow |
-| Codex Review | outside voice | Independent 2nd opinion | 0 | unavailable | Claude auth unavailable, no outside run |
-| Eng Review | `/autoplan` | Architecture & tests | 1 | clean | fixed helper filename/scaffold assumption, added missing aligned lane proof |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | no UI scope |
-| DX Review | `/autoplan` host fallback | Maintainer workflow | 1 | clean | keep one promotion path, preserve valid-but-non-proving starter contract |
-
-**VERDICT:** REVIEWED, READY FOR APPROVAL GATE.
-
-<!-- AUTONOMOUS DECISION LOG -->
-## Decision Audit Trail
-
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-|---|---|---|---|---|---|---|
-| 1 | 0 | Bootstrap a fresh M43 design doc inside `/autoplan` instead of offering prerequisite branches | user direction | P6 | the user explicitly corrected the workflow and the design doc was missing | pause for `/office-hours` or skip design doc creation |
-| 2 | 1 | Hold scope to helper-family promotion only | auto-decided | P2 | this is the smallest complete lake with live demand evidence | corpus-policy reopening, shared-core follow-on, TypeScript expansion |
-| 3 | 2 | Skip design review | auto-decided | P1 | M43 has no UI scope | running a fake UI review |
-| 4 | 3 | Preserve scaffold starters as valid-but-non-proving | auto-decided | P4 | existing `xtask` tests already enforce that contract | making `family new` emit proving helper fixtures |
-| 5 | 3 | Add explicit direct-passthrough aligned proof | auto-decided | P1 | the classifier already accepts that lane, and the current tests do not prove it | shipping a promoted packet that under-covers supported truth |
-| 6 | 3.5 | Keep scaffold single-namespace and express any second aligned lane in committed packet proof | taste decision | P2 | it avoids widening framework plumbing for one bounded family | expanding scaffold namespace modeling in M43 |
-| 7 | 3.5 | Repoint helper inventory metadata to classifier-plus-packet truth after promotion | auto-decided | P4 | the old helper-surface wedge is only honest while the family is supported-unpromoted | leaving inventory metadata anchored to transitional surfaces |
+Maintainers get one explicit place in `spec-core` that defines the seam contract. Validator, semantic review, passport, export, and status all read from the same policy instead of re-deriving it. `xtask` keeps its already-explicit family-analysis seam untouched, and the roadmap stops implying that broader portability or second-language execution has already been earned.
