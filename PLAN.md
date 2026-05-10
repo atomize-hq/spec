@@ -1,345 +1,430 @@
-# M44 - Freeze The Shared-Core Portability Contract
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260510-111915.md -->
+# M45 - Make TypeScript Real For One Bounded Monotone-Up Lane
 
 Status: **authority plan**  
-Milestone family: **architecture-follow-on**  
+Milestone family: **second-language-backend**  
 Implementation readiness: **ready-now**  
 Next artifact kind: **authority_plan**  
 Autoplan ready: **yes**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
 Last rewritten: **2026-05-10**  
-Source design doc: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260510-080847.md`**  
-Supersedes: **M43 - Promote `function.helper.identity_passthrough.v1`**
+Primary sources:
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260510-111915.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-111915.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-m45-plan-20260510-111915.md`
+Supersedes: **M44 - Freeze The Shared-Core Portability Contract**
 
 ## Executive Verdict
 
-M44 is the contract-freeze milestone that has to land before any broader portability or second-language story gets louder.
+M45 should make TypeScript real in `spec`, but only for one bounded lane:
 
-The repo already has the raw pieces:
+- `kind:function`
+- semantic family `function.arithmetic_leaf.monotone_up.v1`
+- zero-dependency units only
+- generated `.ts` modules only
+- Bun build and Bun execution only
+- atom tests only
 
-- seam-specific validator restrictions
-- backend-only marker collection
-- escape-hatch proof gating
-- portability projection
-- semantic review consumption
-- passport / export / status read-side truth
+Everything else stays explicitly out of scope.
 
-What it does not have is one explicit owner for the seam portability policy. Right now the boundary is real in practice but still partly distributed across `validator.rs`, `portability.rs`, `semantic_review.rs`, and read-side consumers. That is close enough to work, but not clean enough to trust when the next backend or portability claim arrives.
+This milestone is not "TypeScript support." It is one honest execution lake inside the main `spec` loop.
 
-M44 fixes that by adding one new module inside `spec-core`, moving the policy there, rewiring all consumers to read from it, and proving that the current truth stays intact.
+## Product Truth Gap
 
-This is a real code milestone. Not docs-only. Not a new crate. Not TypeScript execution. One bounded extraction lake.
+The repo can already:
 
-## Problem Statement
+- author `body.typescript`
+- read authored TypeScript in semantic review
+- run bounded family-packet proof in `xtask` for selected families
 
-M43 closed the last honest Rust-family promotion loop on this branch.
+But the first-class `spec` workflow is still Rust-only:
 
-The current branch state already says:
+- `spec generate` ignores authored TypeScript bodies
+- `spec build` only knows Cargo
+- `spec test` only knows Cargo plus Rust-shaped `local_tests.expect`
+- `.test.spec` is still Rust-only by design
 
-- promoted Rust families are not the blocker
-- the family-analysis stop-state is real and should stay real
-- the next architectural risk is lying about what is shared-core truth versus what is still Rust-only backend execution detail
+That means the repo can talk about TypeScript without delivering a TypeScript backend. M45 fixes that by making one bounded path executable, testable, and visible in the same truth surfaces users already trust.
 
-That risk is visible in the code today:
-
-- `spec-core/src/validator.rs` hard-rejects illegal seam authored shapes inline
-- `spec-core/src/backend_execution.rs` classifies raw backend markers
-- `spec-core/src/escape_hatch.rs` computes the atom / molecule gate
-- `spec-core/src/portability.rs` projects markers, contamination, digest, and gate state
-- `spec-core/src/semantic_review.rs` uses that truth to decide supported seam meaning
-- `spec-core/src/passport.rs`, `spec-core/src/export.rs`, and `spec-cli/src/commands.rs` surface the projected truth
-- `xtask/src/family/analysis_core/*` already demonstrates the right pattern on the family-analysis side: one explicit shared decision seam, many consumers
-
-The missing artifact is not more analysis. The missing artifact is one explicit portability contract owner inside `spec-core`.
-
-## Current Repo Truth
+## Repo Truth Basis
 
 ### Live code surfaces
 
-- `spec-core/src/backend_execution.rs` already distinguishes:
-  - `DomainLowering`
-  - `ProofHelperLowering`
-  - `BackendRustDerives`
-- `spec-core/src/escape_hatch.rs` already treats seam proof requirements as:
-  - `atom`
-  - `molecule`
-- `spec-core/src/portability.rs` already projects:
-  - portability markers
-  - contamination summary
-  - backend execution digest
-  - proof surfaces
-  - escape-hatch gate
-- `spec-core/src/semantic_review.rs` already differentiates:
-  - backend-only meaning preserved
-  - backend-only semantics leaked
-  - supported seam subsets
-- `spec-core/src/validator.rs` already enforces:
-  - `kind:data` and `kind:sum` may not use top-level `contract`
-  - `kind:data` and `kind:sum` may not use top-level `deps`
-  - `kind:data` and `kind:sum` may not use top-level `imports`
-  - `kind:data` and `kind:sum` may not use top-level `body.typescript`
-  - `kind:data` and `kind:sum` must leave top-level `body.rust` empty
-- `xtask/src/family/analysis_core/*` already proves the repo knows how to freeze a shared decision contract without prematurely extracting a new crate
+- `spec-core/src/generator.rs` has a regression proving authored TypeScript is ignored today.
+- `spec-core/src/types.rs` already carries `ResolvedSpec.body_typescript`.
+- `spec-core/src/pipeline.rs` only exposes Cargo build/test execution.
+- `spec-cli/src/commands.rs` routes `spec build` and `spec test` through Cargo only.
+- `spec-core/src/validator.rs` rejects `body.typescript` in `.test.spec` and should keep doing that in M45.
+- `xtask/src/family/prove.rs` already gates `--target-language typescript` to `function.arithmetic_leaf.monotone_up.v1` and `function.wrapper.pipeline.v1`.
 
-### Roadmap truth
+### Branch truth
 
-`docs/ai_promotion_and_multilanguage_milestones_v0.1.md` already says the ordering is:
+- M44 already paid the shared-core portability debt.
+- The recommendation surface is now in stop-state, so another family-selection milestone would be churn.
+- The next honest product move is first-class second-language execution in `spec`, not more metadata about possible second-language support.
 
-1. make the seam portability contract explicit
-2. contain Rust-specific lowering and escape-hatch detail
-3. only then discuss broader second-language work honestly
+## Step 0 - Scope Challenge
 
-That roadmap text is directionally correct. M44 is the code milestone that makes it true in the implementation.
+### What already exists
 
-## Resolved Decisions
-
-These were still somewhat open in the design draft. They are now locked.
-
-### 1. M44 is not docs-only
-
-M44 must include one small structural extraction in `spec-core`. If the repo only rewrites docs and leaves policy distributed across multiple modules, the portability boundary is still a slogan.
-
-### 2. The extraction lives in `spec-core`, not a new crate
-
-Add exactly one new module:
-
-- `spec-core/src/portability_contract.rs`
-
-Do not create a new workspace crate. Do not split `spec-core`. Do not introduce packaging or dependency choreography for a boundary that is still stabilizing.
-
-### 3. No new machine-readable gate in M44
-
-M44 does **not** add a new top-level portability schema, a new passport gate kind, or a new CLI mode.
-
-The current truth surfaces are sufficient:
-
-- raw backend markers
-- contamination summary
-- backend execution digest
-- current proof surfaces
-- `escape_hatch_gate`
-
-The job here is to centralize policy ownership behind those surfaces, not to invent a second contract layer.
-
-### 4. The family-analysis stop-state stays frozen
-
-M44 must not reopen family selection. `xtask/src/family/analysis_core/*` remains precedent, not implementation scope, except for wording or integration changes forced by compile-time or docs alignment.
-
-### 5. No broader TypeScript claim
-
-Allowed authored backend-specific detail remains allowed authored detail. It does **not** become shared portability-safe truth. M44 must preserve that line explicitly.
-
-## What Already Exists
-
-| Sub-problem | Existing owner | M44 action |
+| Sub-problem | Existing owner | M45 action |
 |---|---|---|
-| Family-analysis decision seam | `xtask/src/family/analysis_core/*` | reuse as precedent, do not expand |
-| Raw backend-only marker collection | `spec-core/src/backend_execution.rs` | preserve ownership, reclassify through contract helpers where needed |
-| Escape-hatch proof gate | `spec-core/src/escape_hatch.rs` | preserve ownership, align wording/helpers only if needed |
-| Portability projection | `spec-core/src/portability.rs` | preserve ownership, remove inline seam-policy assumptions |
-| Semantic portability verdict consumption | `spec-core/src/semantic_review.rs` | preserve ownership, consume centralized policy |
-| Passport / export / status read-side truth | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | preserve ownership, remove local policy drift |
-| Shared authored seam restrictions | `spec-core/src/validator.rs` | move rule ownership into `portability_contract.rs` |
-| Roadmap and packet-facing milestone language | `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`, `semantic-families/README.md` | rewrite to match landed boundary |
+| authored TS source preservation | `spec-core/src/types.rs`, `spec-core/src/validator.rs` | preserve and make executable for one bounded lane |
+| Rust generation path | `spec-core/src/generator.rs` | preserve unchanged as the default lane |
+| Rust build/test pipeline | `spec-core/src/pipeline.rs`, `spec-cli/src/commands.rs` | preserve unchanged as the default lane |
+| bounded TS packet proof | `xtask/src/family/prove.rs` | reuse as evidence that monotone-up is the right first execution family |
+| semantic family truth | `spec-core/src/semantic_review.rs` | use as the bounded eligibility gate |
+| molecule-test rejection | `spec-core/src/validator.rs` | preserve for M45 |
 
-## Scope
+### Minimum complete change
 
-### In scope
+M45 is complete only if all of this lands together:
 
-1. Add `spec-core/src/portability_contract.rs` as the sole owner of seam portability policy.
-2. Move seam-kind helpers and shared authored-surface rules behind that module.
-3. Move portability classification rules behind that module:
-   - what counts as shared authored seam surface
-   - what counts as backend-only but non-contaminating detail
-   - what counts as contaminating domain lowering
-4. Rewire `validator.rs`, `backend_execution.rs`, `escape_hatch.rs`, `portability.rs`, `semantic_review.rs`, `passport.rs`, `export.rs`, and `spec-cli/src/commands.rs` to consume the centralized contract.
-5. Add direct and command-path regressions that prove the moved policy did not change truth accidentally.
-6. Refresh roadmap and maintainer-facing docs so the code story and written story match.
+1. `spec generate`, `spec build`, `spec test`, and `spec status` accept a target-language switch.
+2. The TypeScript lane emits real generated output for eligible monotone-up units.
+3. The TypeScript lane owns one explicit build contract and one explicit atom-test execution contract.
+4. The TypeScript lane owns one explicit, bounded translation contract for `local_tests.expect`.
+5. TypeScript proof is stored distinctly from Rust proof.
+6. Unsupported units fail before Bun runs.
 
-### Not in scope
+If any one of those is missing, the repo is back to gestures instead of backend support.
 
-- new family promotion work
-- recommendation-policy changes
-- corpus-analysis changes
-- a new crate split
-- first-class TypeScript backend execution
-- widening supported function portability claims
-- changing `spec generate/build/test` ownership boundaries
-- broad `xtask/src/family/*` cleanup unrelated to compile or wording parity
-- a schema-version bump unless an additive read-side field change becomes unavoidable
+### Complexity check
 
-If a schema bump becomes necessary during implementation, stop and make it explicit. The default assumption for M44 is **no schema bump**.
+This remains a lake only if M45 refuses these expansions:
+
+- wrapper-family execution
+- generic `kind:function` parity
+- dependency topology work
+- molecule tests
+- seam kinds
+- package-manager or runtime selection abstraction
+- schema redesign beyond additive proof storage
+
+If the implementation needs any of those to succeed, the milestone is scoped wrong.
+
+### Completeness check
+
+The complete version is still cheap enough to do now:
+
+- real generation
+- real build
+- real test execution
+- real proof separation
+- real negative-path regressions
+
+The shortcut version would be "build only" or "TS metadata plus packet proof only." That would save very little work and keep the product-truth bug alive. Not acceptable.
+
+### Distribution check
+
+No new end-user artifact is introduced here. The distribution surface is the existing CLI. The only runtime prerequisite added by M45 is Bun, and that prerequisite must be documented in `README.md` and surfaced clearly in CLI failure output.
+
+## Locked Decisions
+
+### 1. The first lane is monotone-up only
+
+M45 supports exactly `function.arithmetic_leaf.monotone_up.v1` inside `spec`.
+
+It does not widen first-class backend execution to `function.wrapper.pipeline.v1` even though `xtask family prove --target-language typescript` already allows wrapper packets. Packet proof can stay broader than first-class execution for one milestone.
+
+### 2. The first lane is zero-dependency only
+
+Eligible M45 TypeScript units must have:
+
+- `kind:function`
+- compatibility key `function.arithmetic_leaf.monotone_up.v1`
+- `deps: []`
+
+No dependency imports. No helper topology. No "just one dep" loophole. If a unit depends on another unit, it is outside the first lane.
+
+### 3. Bun is the only TypeScript execution contract
+
+M45 uses Bun only:
+
+- `bun build` for the compile gate
+- `bun` execution for the generated atom-test harness
+
+No `package.json`. No `tsconfig.json`. No `npm`. No `pnpm`. No `tsc`. No runtime auto-detection layer.
+
+### 4. JavaScript `number` is rejected
+
+The numeric contract for M45 is one generated fixed-point helper backed by `bigint`.
+
+Why:
+
+- the current monotone-up fixtures and `apply_tax` semantics depend on exact decimal-scale equality
+- `number` would create fake greens immediately
+- one small generated helper is cheaper than pretending decimal drift is acceptable
+
+### 5. The local-test floor is explicit and AST-bounded
+
+TypeScript atom-test translation in M45 supports only one shape:
+
+```text
+<unit_fn>(Decimal::new(i, s), Decimal::new(i, s), ...) == Decimal::new(i, s)
+```
+
+That means:
+
+- root expression is `==`
+- left side is a call to the current unit function
+- every call argument is `Decimal::new(int, scale)`
+- right side is `Decimal::new(int, scale)`
+
+Anything else fails before generation with a stable error. No Rust fallback. No best effort.
+
+### 6. TypeScript proof never overwrites Rust proof
+
+M45 adds one additive proof surface:
+
+- `target_proofs.rust`
+- `target_proofs.typescript`
+
+Each target-proof entry carries the same truth shape the repo already understands:
+
+- `evidence`
+- `freshness_anchor`
+- `freshness`
+
+Legacy top-level Rust-facing mirrors remain in place for compatibility during M45. They continue to represent Rust, not a cross-target merge.
 
 ## Architecture Contract
 
-### New module
+### Current to target flow
 
-`spec-core/src/portability_contract.rs` becomes the only place allowed to answer these questions:
-
-- Is this unit a seam portability participant?
-- Which authored surfaces are legal shared seam input?
-- Which authored surfaces are illegal shared seam shape?
-- Which backend markers are backend-only but still honest?
-- Which backend markers contaminate portability claims?
-- Which stable reason strings or helper text should consumers reuse?
+```text
+spec generate/build/test/status --target-language typescript
+                    |
+                    v
+         eligibility gate in CLI + validator
+                    |
+                    +--> reject if:
+                    |    - wrong family
+                    |    - deps present
+                    |    - target is .test.spec
+                    |    - expect grammar unsupported
+                    |
+                    v
+          bounded TS backend in spec-core
+                    |
+                    +--> generated unit .ts modules
+                    +--> __spec_ts/runtime.ts
+                    +--> __spec_ts/build_entry.ts
+                    +--> __spec_ts/local_tests.ts
+                    |
+                    +--> bun build __spec_ts/build_entry.ts
+                    +--> bun __spec_ts/local_tests.ts
+                    |
+                    v
+         target_proofs.typescript proof refresh
+                    |
+                    v
+        spec status --target-language typescript
+```
 
 ### Ownership table
 
-| Module | Owns after M44 | Must not own |
+| Module | Owns after M45 | Must not own |
 |---|---|---|
-| `portability_contract.rs` | seam-kind helpers, shared authored-surface policy, marker classification policy, stable helper wording | file IO, CLI rendering, artifact loading, cargo commands, proof evaluation |
-| `backend_execution.rs` | raw marker detection and backend digest material | portability verdict policy, validator policy, semantic policy wording |
-| `escape_hatch.rs` | atom / molecule requirement set and open / closed gate evaluation | marker classification policy, shared authored-surface policy |
-| `portability.rs` | composition of markers, digest, proof surfaces, gate, contamination summary | local seam-policy duplication |
-| `semantic_review.rs` | semantic verdict logic using projected portability truth | inline classification tables for shared vs backend-only semantics |
-| `validator.rs` | hard validation using centralized seam-shape rules | inline duplicate seam restriction strings or rule tables |
-| `passport.rs` / `export.rs` / `spec-cli/src/commands.rs` | projection of already-computed truth | local policy branches about what counts as portability-safe |
-| `xtask/src/family/analysis_core/*` | family-analysis decision logic | seam portability policy for `spec-core` |
-
-### Dependency graph
-
-```text
-AUTHORED SEAM SPEC
-      |
-      v
-portability_contract.rs
-      |
-      +--> validator.rs
-      +--> backend_execution.rs
-      +--> escape_hatch.rs
-      +--> portability.rs
-             ^        ^
-             |        |
-             +--------+
-       raw markers   proof gate
-
-portability.rs
-      |
-      +--> semantic_review.rs
-      +--> passport.rs
-      +--> export.rs
-      +--> spec-cli/src/commands.rs
-
-parallel precedent, unchanged in scope:
-xtask/src/family/analysis_core/*
-```
+| `spec-core/src/types.rs` | shared `TargetLanguage` enum and target identifiers | CLI parsing logic |
+| `spec-core/src/typescript_backend.rs` | bounded TS generation, helper/runtime source, harness emission, expect translation | CLI policy, generic family routing |
+| `spec-core/src/generator.rs` | dispatch into Rust or TS generation entrypoints | Bun execution |
+| `spec-core/src/pipeline.rs` | Cargo runners plus Bun runners | target eligibility policy |
+| `spec-core/src/validator.rs` | bounded-lane semantic eligibility checks and molecule rejection | file emission |
+| `spec-core/src/passport.rs` | additive `target_proofs` storage and projection | CLI rendering policy |
+| `spec-cli/src/commands.rs` | flag parsing, lane routing, target-aware status selection | TS code generation details |
 
 ### Non-negotiable invariants
 
-- `kind:data` and `kind:sum` still reject illegal top-level shared-surface authored shapes as validation errors.
-- Allowed backend-specific authored detail remains valid input.
-- Allowed backend-specific authored detail does **not** become portability-safe shared truth automatically.
-- Helper-only lowering remains backend-only but non-contaminating.
-- Domain lowering remains contaminating.
-- Escape-hatch proof still requires both fresh `atom` and current `molecule`.
-- CLI, passport, export, and semantic review must agree on the same underlying portability truth.
+- Rust remains the default target for every existing workflow.
+- `.test.spec` remains unsupported for TypeScript in M45.
+- Units with `deps` are unsupported in the TS lane.
+- TypeScript proof never overwrites Rust proof.
+- Unsupported units fail before Bun runs.
+- The bounded TS lane never silently widens to wrapper or generic function families.
+- Generated helper/runtime files are emitted once per output root, not once per unit.
+
+## CLI Contract
+
+### `spec generate`
+
+- `spec generate <path> --target-language rust` keeps current behavior.
+- `spec generate <path> --target-language typescript` emits:
+  - one `.ts` module per eligible unit
+  - `__spec_ts/runtime.ts`
+  - `__spec_ts/build_entry.ts`
+  - `__spec_ts/local_tests.ts`
+
+### `spec build`
+
+- Rust path stays Cargo-backed.
+- TS path runs `bun build <output_root>/__spec_ts/build_entry.ts`.
+- TS build is a compile gate only. It does not mint proof.
+
+### `spec test`
+
+- Rust path stays Cargo-backed.
+- TS path runs a TS build pass, then `bun <output_root>/__spec_ts/local_tests.ts`.
+- TS proof is refreshed only by `spec test --target-language typescript`.
+
+### `spec status`
+
+- Add `--target-language rust|typescript`, default `rust`.
+- TS status uses `target_proofs.typescript` freshness and evidence.
+- If no TS proof exists, TS status is `untested`. It must never silently inherit Rust proof.
+
+### `spec validate`
+
+- No new target-language behavior in M45.
+- Validation remains shared, except for the additional bounded-lane eligibility checks that run only when the CLI is about to execute a TS target path.
+
+### `spec export`
+
+- No new target flag in M45.
+- Exported passports carry additive `target_proofs`.
+- Existing Rust-facing top-level fields remain present for compatibility.
+
+## Numeric And Test Translation Contract
+
+### Fixed-point runtime
+
+Emit exactly one generated runtime helper at:
+
+- `<output_root>/__spec_ts/runtime.ts`
+
+That helper owns only:
+
+- decimal construction from `(int, scale)`
+- normalization
+- addition
+- multiplication
+- equality
+
+No generalized decimal library surface. No reusable public runtime story. Just enough for this lane.
+
+### Atom-test translation floor
+
+Translate the parsed Rust `expect` AST, not raw strings.
+
+Accepted M45 grammar:
+
+```text
+<unit_fn>(Decimal::new(i, s), Decimal::new(i, s), ...) == Decimal::new(i, s)
+```
+
+Rejected in M45:
+
+- method calls
+- helper calls
+- non-`==` comparisons
+- boolean combinators
+- non-`Decimal::new` literals
+- tests that reference any unit other than the current one
+
+This is intentionally narrow. A bounded translator is a lake. A general Rust-expression translator is an ocean.
 
 ## File-By-File Implementation Contract
 
 | File | Change | Why |
 |---|---|---|
-| `spec-core/src/portability_contract.rs` | create new typed policy owner | centralize seam portability rules |
-| `spec-core/src/lib.rs` | export the new module | make contract available to all consumers |
-| `spec-core/src/validator.rs` | replace inline seam restriction ownership with contract calls | remove duplicated policy text and drift risk |
-| `spec-core/src/backend_execution.rs` | keep raw marker collection, align any policy naming with contract helpers | preserve raw signal ownership while separating policy |
-| `spec-core/src/escape_hatch.rs` | keep gate ownership, optionally reuse stable helper wording | avoid gate-policy duplication |
-| `spec-core/src/portability.rs` | replace local seam checks and local classification assumptions with contract calls | keep projection layer as projection only |
-| `spec-core/src/semantic_review.rs` | consume centralized marker / contamination meaning | prevent semantic-review-only portability drift |
-| `spec-core/src/passport.rs` | ensure projected proof coverage / markers / gate all flow from centralized contract | keep passport truth aligned |
-| `spec-core/src/export.rs` | same as passport, for export bundles | keep export truth aligned |
-| `spec-cli/src/commands.rs` | same as passport/export, for status and CLI rendering | keep status/export/reporting aligned |
-| `spec-cli/tests/cli.rs` | add command-path regressions | catch live read-side drift |
-| `docs/ai_promotion_and_multilanguage_milestones_v0.1.md` | update milestone wording to the landed boundary | keep roadmap honest |
-| `semantic-families/README.md` | keep packet-facing boundary wording honest | prevent packet docs from implying wider portability |
-| `README.md` | update only if user-facing wording changed materially | keep public surface aligned |
-| `CHANGELOG.md` | update only if user-visible truth changed | avoid fake churn |
+| `spec-core/src/types.rs` | add `TargetLanguage` enum | one shared target identifier across crates |
+| `spec-core/src/lib.rs` | export the TS backend module | keep call sites clean |
+| `spec-core/src/typescript_backend.rs` | new bounded TS backend module | isolate TS generation logic from Rust generation |
+| `spec-core/src/generator.rs` | dispatch by target and retire the TS-ignore regression | make authored TS executable |
+| `spec-core/src/pipeline.rs` | add Bun build/test runners | keep subprocess behavior centralized |
+| `spec-core/src/validator.rs` | add bounded TS eligibility checks | fail unsupported shapes before execution |
+| `spec-cli/src/commands.rs` | add target-language flags and target-aware proof/status routing | keep CLI behavior explicit |
+| `spec-core/src/passport.rs` | add additive `target_proofs` projection and Rust-compat mirrors | separate TS proof from Rust proof |
+| `spec-core/src/export.rs` | pass through additive target proof data | keep machine-readable truth honest |
+| `spec-cli/tests/cli.rs` | add end-to-end bounded-lane and negative-path regressions | lock behavior at the product surface |
+| `README.md` | document Bun prerequisite and bounded lane | keep DX honest |
+| `CHANGELOG.md` | record first-class bounded TS execution | mark user-visible truth change |
 
 ## Implementation Sequence
 
-### Step 1. Freeze the portability contract API
+### Step 1. Freeze target-language primitives
 
-Create `spec-core/src/portability_contract.rs` with:
+Add the shared `TargetLanguage` enum and CLI flag plumbing.
 
-- seam-kind helper(s)
-- shared authored-surface rule helpers
-- backend-marker classification helpers
-- stable string helpers only where multiple consumers would otherwise duplicate the same rule explanation
+Done means:
 
-Do **not** add:
+- every target-aware command parses the same enum
+- Rust remains the default without behavior drift
+- TypeScript selection is explicit at the command boundary
 
-- artifact loading
-- cargo execution
-- CLI formatting
-- read-side rendering
-- dynamic config
+### Step 2. Freeze bounded TS eligibility
 
-Step 1 is done when the call surface is stable enough that downstream work can proceed in parallel.
+Add validator and CLI guards for:
 
-### Step 2. Move validator-owned seam policy behind the contract
+- family must equal `function.arithmetic_leaf.monotone_up.v1`
+- `deps` must be empty
+- `.test.spec` is rejected
+- `local_tests.expect` must match the bounded AST grammar
 
-Replace inline `kind:data` and `kind:sum` rule ownership in `spec-core/src/validator.rs` so the validator becomes a caller, not a policy author.
+Done means unsupported cases fail before generation or Bun.
 
-Behavior must stay the same:
+### Step 3. Add bounded TS generation
 
-- illegal top-level seam shape still fails validation
-- top-level `body.rust` on seam kinds still fails validation
-- backend-specific lowering stays allowed only in the existing backend-specific surfaces
+Create `spec-core/src/typescript_backend.rs` and emit:
 
-### Step 3. Rewire raw marker and projection layers
+- unit modules
+- `__spec_ts/runtime.ts`
+- `__spec_ts/build_entry.ts`
+- `__spec_ts/local_tests.ts`
 
-Update:
+Done means the old regression proving TS is ignored is replaced by one proving TS source is emitted and wired into the generated tree.
 
-- `spec-core/src/backend_execution.rs`
-- `spec-core/src/portability.rs`
-- `spec-core/src/escape_hatch.rs`
+### Step 4. Add Bun pipeline support
 
-Rules for this step:
+Extend `spec-core/src/pipeline.rs` with Bun-backed build/test helpers and thread them through `spec-cli/src/commands.rs`.
 
-- `backend_execution.rs` keeps raw marker collection ownership
-- `portability.rs` stops deriving its own seam policy
-- `escape_hatch.rs` does not become a portability classifier
+Done means:
 
-This step is a refactor of ownership, not a behavior expansion.
+- build status lines name the target language
+- Bun stderr is surfaced verbatim
+- TS build/test use one runner invocation per tree, not per unit
 
-### Step 4. Rewire semantic and read-side consumers
+### Step 5. Add target-aware proof honesty
 
-Update:
+Extend passports with additive `target_proofs` and keep top-level Rust mirrors.
 
-- `spec-core/src/semantic_review.rs`
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
-- `spec-cli/src/commands.rs`
+Done means:
 
-Goal:
+- `spec test --target-language typescript` writes only `target_proofs.typescript`
+- Rust proof remains untouched
+- `spec status --target-language typescript` reads the TS proof path explicitly
+- `spec export` carries both proof surfaces honestly
 
-- semantic review, passport, export, and status all consume the same centralized meaning of:
-  - marker classification
-  - contamination
-  - gate interpretation
+### Step 6. Lock regressions and fixtures
 
-No consumer is allowed to invent a local version of "shared vs backend-only vs contaminating."
+Add aligned, drift, unsupported-near-miss, example-unit, and molecule-negative tests.
 
-### Step 5. Lock regressions before docs
+Done means the full proof wall below is green.
 
-Add or refresh tests first, before widening doc claims.
+### Step 7. Refresh docs
 
-The milestone is not complete if docs say the boundary is explicit but the test suite does not prove it.
+Update `README.md` and `CHANGELOG.md` only after the proof wall is green.
 
-### Step 6. Refresh roadmap and maintainer-facing docs
+Done means the written product boundary exactly matches the landed code.
 
-Required documentation updates:
+## Architecture Review
 
-- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-- `semantic-families/README.md`
+The right architecture is one new backend module plus one new runner branch, not a backend abstraction framework. This is not the moment to invent generic multi-language orchestration.
 
-Conditional updates:
+The lane boundary must be visible in both structure and naming. Use a bounded filename like `typescript_backend.rs`, but keep the module documentation explicit that it is M45 monotone-up-only logic, not a promise of generic TS parity.
 
-- `README.md` if the user-facing wording on portability truth became more explicit
-- `CHANGELOG.md` if command-visible truth changed in a user-noticeable way
+No new crate split is justified. No new config system is justified. No "language plugin" concept is justified.
 
-### Step 7. Run the proof wall and fix parity drift
+## Code Quality Constraints
 
-Do not stop at compile-green. M44 is complete only when the full proof wall is green and all read-side surfaces agree.
+- one new backend module, not a backend abstraction layer
+- one shared `TargetLanguage` enum, not stringly typed target checks in multiple crates
+- no duplicate `run_typescript_*` logic that forks the Rust path structurally when a shared helper would do
+- one generated helper/runtime per output root
+- no widening from leaf-only to dependency-aware semantics in M45
+- keep existing Rust behavior byte-for-byte where possible
+- keep the additive proof schema as small as possible to avoid a parallel export redesign
 
 ## Test Review
 
@@ -347,283 +432,235 @@ Do not stop at compile-green. M44 is complete only when the full proof wall is g
 
 ```bash
 cargo test
-cargo run -p spec-cli -- validate examples/ecommerce/units --format json
-cargo run -p spec-cli -- test examples/ecommerce/units
-cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- generate semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
+cargo run -p spec-cli -- build semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
+cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
+cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/drift/units --target-language typescript
+cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units --target-language typescript
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_plus_tax.test.spec --target-language typescript
+cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
 cargo run -p spec-cli -- export examples/ecommerce/units --format json
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family verify-decision-contract --format json
+cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
 ```
 
-### Expected preserved truth
+### Expected results
 
-- seam validator still rejects illegal top-level authored seam shapes
-- helper-only lowering still projects as backend-only but non-contaminating
-- domain lowering still contaminates portability claims
-- escape-hatch gate still opens when atom proof is stale or molecule proof is missing
-- family-analysis stop-state still points away from inventing a new family
+- aligned monotone-up fixtures pass generation, build, and test
+- drift fixtures execute successfully while semantic-review drift truth remains drift
+- unsupported-near-miss fixtures fail before Bun runs with a stable bounded-lane reason
+- `apply_tax.unit.spec` passes if it stays inside the lane
+- `discount_plus_tax.test.spec` fails fast with a stable molecule-unsupported message
+- `status --target-language typescript` reports TS proof honestly instead of mirroring Rust
+- `export` includes additive TS proof data without deleting Rust proof
 
 ### Code path coverage diagram
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] spec-core/src/portability_contract.rs
-    |
-    ├── seam-kind helpers
-    │   └── direct unit tests required
-    │
-    ├── shared authored-surface rules
-    │   └── validator-backed regressions required
-    │
-    └── contamination policy helpers
-        └── projection / semantic-review regressions required
+[+] target-language CLI plumbing
+    ├── rust default path preserved
+    ├── typescript explicit path added
+    └── status reads target-specific proof
 
-[~] spec-core/src/validator.rs
-    |
-    ├── kind:data shared-surface rejection
-    │   └── must still hard-fail through contract calls
-    │
-    └── kind:sum shared-surface rejection
-        └── must still hard-fail through contract calls
+[+] bounded TS validator gate
+    ├── family == monotone_up
+    ├── deps.is_empty()
+    ├── reject .test.spec
+    └── reject unsupported expect AST
 
-[~] spec-core/src/backend_execution.rs
-    |
-    ├── collect_backend_execution_markers()
-    │   ├── proof-helper marker preserved
-    │   ├── domain-lowering marker preserved
-    │   └── rust-derives marker preserved
-    │
-    └── compute_backend_execution_digest()
-        └── authored-only seam edits must not change digest
+[+] TS generation lane
+    ├── unit module emission
+    ├── runtime helper emission
+    ├── build entry emission
+    └── local test harness emission
 
-[~] spec-core/src/escape_hatch.rs
-    |
-    ├── current_proof_surfaces()
-    │   ├── fresh atom path preserved
-    │   └── current molecule path preserved
-    │
-    └── evaluate_escape_hatch_gate()
-        └── stale atom / missing molecule regression required
+[+] Bun execution lane
+    ├── build_entry compile passes
+    ├── local_tests harness passes
+    ├── Bun stderr surfaces on failure
+    └── runner invoked once per tree
 
-[!] spec-core/src/portability.rs
-    |
-    ├── marker projection
-    │   └── contract-owner parity required
-    │
-    ├── contamination summary
-    │   └── helper-only vs domain-lowering split must be locked
-    │
-    └── full portability projection
-        └── passport / export / status parity required
+[+] target-aware proof lane
+    ├── rust proof untouched by TS run
+    ├── ts proof refreshed by TS run
+    ├── ts status reads ts proof only
+    └── export carries both proofs
 
-[!] spec-core/src/semantic_review.rs
-    |
-    ├── supported seam portability summary
-    │   └── must consume contract-owned meaning
-    │
-    ├── backend-only meaning preserved
-    │   └── regression required
-    │
-    └── backend-only semantics leaked
-        └── regression required
-
-[!] spec-core/src/passport.rs + export.rs + spec-cli/src/commands.rs
-    |
-    ├── projected markers
-    │   └── parity required
-    │
-    ├── proof coverage / gate projection
-    │   └── parity required
-    │
-    └── status / export / text rendering
-        └── command-path regressions required
+[!] negative-path coverage
+    ├── unsupported family rejected
+    ├── deps present rejected
+    ├── unsupported expect shape rejected
+    └── molecule target rejected
 ```
 
-### Required new or refreshed regressions
+### Required regressions
 
-1. Direct unit tests for `portability_contract.rs`.
-2. Validator regressions proving `kind:data` and `kind:sum` restrictions still hard-fail through the new contract owner.
-3. Projection regressions proving:
-   - helper-only lowering is backend-only but not contaminating
-   - domain lowering contaminates portability claims
-4. Escape-hatch regressions proving stale atom or missing molecule proof opens the gate.
-5. Passport / export / status parity tests proving all read-side surfaces agree on markers, proof coverage, and gate state.
-6. CLI command-path regressions in `spec-cli/tests/cli.rs`.
-7. `xtask` parity checks proving M44 did not reopen family-analysis semantics.
+1. Replace the current TS-ignore generator regression with a regression proving authored TS is emitted for the bounded lane.
+2. Add validator regressions for:
+   - wrong family under `--target-language typescript`
+   - non-empty `deps`
+   - unsupported `expect` AST
+   - `.test.spec --target-language typescript`
+3. Add pipeline regressions proving Bun, not Cargo, is used in the TS lane.
+4. Add CLI regressions for aligned, drift, and unsupported-near-miss fixture roots.
+5. Add passport/export/status regressions proving TS proof is additive and separate from Rust proof.
+6. Add one example regression for `examples/ecommerce/units/pricing/apply_tax.unit.spec`.
 
 ### Regression rule
 
-Any behavior that was already true before M44 and could silently become looser or inconsistent during this extraction gets a regression test. No exceptions.
+Any path that can create a silent green TypeScript claim gets a regression test. No exceptions.
 
-That includes:
+## Performance Review
 
-- seam validation strictness
-- contamination classification
-- escape-hatch gate projection
-- read-side parity across passport / export / status
-- frozen family-analysis stop-state
+- Bun must run once per generated tree, not once per unit or per local test.
+- helper/runtime files must be emitted once per output root
+- TS status projection must read existing passport data, not re-run generation
+- M45 must not add package-install or dependency-resolution work to the happy path
 
-## Code Quality Constraints
-
-This plan is intentionally biased toward explicit over clever.
-
-Rules:
-
-- one new module, not a general-purpose abstraction tower
-- no second new policy layer
-- no new crate
-- no broad renaming sweep unless compile-forced
-- no consumer-local copies of seam policy after M44
-- keep the diff focused on policy extraction plus consumer rewiring
-
-Specific code-quality targets:
-
-- remove duplicated seam-policy assumptions
-- keep raw marker collection and policy classification separate
-- keep validation, projection, gate evaluation, and semantic review responsibilities distinct
-- do not mix structural extraction with second-language experimentation
-
-## Performance Constraints
-
-M44 is not a performance milestone, but it can accidentally add churn if done badly.
-
-Do not add:
-
-- filesystem work to read-side projection paths
-- cargo process work to portability projection paths
-- caching or memoization layers
-- new persisted artifacts just to hold portability summaries
-
-Expected cost profile:
-
-- marker collection remains linear in seam method count
-- projection remains cheap and in-process
-- existing `xtask` artifact reuse remains unchanged
+This is not a performance-sensitive runtime feature. The real performance trap is accidental N-times work in generation or subprocess execution.
 
 ## Failure Modes Registry
 
 | Codepath | Failure mode | Test required | Error handling required | User-visible effect if broken |
 |---|---|---:|---:|---|
-| seam validator contract | illegal top-level seam shape silently passes | Y | Y | false green validation |
-| backend marker classification | helper-only and domain-lowering collapse into the same meaning | Y | Y | wrong portability verdict |
-| backend digest | authored-only edits change backend digest | Y | Y | false stale backend-execution signal |
-| escape-hatch gate | stale atom or missing molecule still projects as closed | Y | Y | false green seam portability truth |
-| semantic review | backend-only detail gets treated as portability-safe shared meaning | Y | Y | wrong semantic verdict |
-| passport / export / status | read-side surfaces disagree on markers or gate state | Y | Y | conflicting repo truth |
-| docs and roadmap | milestone language claims broader portability than code proves | Y | N | maintainers steer the roadmap wrong |
-| family-analysis precedent | M44 mutates stop-state semantics accidentally | Y | Y | repo invents a fake next-family move |
+| TS eligibility gate | non-monotone-up unit executes anyway | Y | Y | fake backend support |
+| zero-dependency contract | unit with deps slips through | Y | Y | hidden topology scope creep |
+| expect translator | unsupported Rust-shaped expect silently drops coverage | Y | Y | false green tests |
+| numeric runtime | JS `number` semantics drift from decimal truth | Y | Y | wrong tax math |
+| Bun runner | stderr swallowed or mislabeled as Cargo | Y | Y | operator debugs the wrong system |
+| target proof storage | TS run overwrites Rust proof | Y | Y | corrupted repo truth |
+| TS status projection | status mirrors Rust proof when TS proof is missing | Y | Y | false green read-side surface |
+| molecule rejection | `.test.spec` tries to execute in TS lane | Y | Y | accidental scope expansion |
 
 Critical gap rule:
 
-- Any row above without a regression test is a release blocker for M44.
-- Any bug that can produce a silent green portability claim is a release blocker for M44.
+- Any row above without a regression is a release blocker for M45.
+
+## Developer Experience And Docs Contract
+
+Required:
+
+- `README.md`
+  - document Bun as the only TS prerequisite
+  - document the monotone-up-only boundary
+  - document the zero-dependency requirement
+  - document atom-test grammar limits
+- `CHANGELOG.md`
+  - record first-class bounded TS execution in `spec`
+
+CLI output must also be honest:
+
+- target language named in build/test status lines
+- Bun missing message includes remediation
+- unsupported-lane messages name the exact bounded requirements
+
+Do not document:
+
+- generic TypeScript support
+- wrapper parity
+- molecule parity
+- future runtime configurability
 
 ## Worktree Parallelization Strategy
 
-This plan has one required serial gate, then a real parallel window, then one final integration lane.
+This milestone has one serial contract gate, then two real implementation lanes, then one lock-and-prove lane.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| Step 1. Freeze portability contract API | `spec-core/src/` | — |
-| Step 2. Move validator and raw marker consumers onto the contract | `spec-core/src/` | Step 1 |
-| Step 3. Rewire semantic and read-side projection consumers | `spec-core/src/`, `spec-cli/src/` | Step 1 |
-| Step 4. Refresh docs and compatibility surfaces | `docs/`, `semantic-families/`, `README.md`, `CHANGELOG.md`, `examples/` | Step 1 |
-| Step 5. Merge, rerun proof wall, and fix parity drift | `spec-core/src/`, `spec-cli/src/`, `xtask/src/family/`, `docs/` | Steps 2, 3, 4 |
+| Step 1. Freeze target-language primitives | `spec-core/src/`, `spec-cli/src/` | — |
+| Step 2. Freeze bounded TS eligibility | `spec-core/src/`, `spec-cli/src/` | Step 1 |
+| Step 3. Add bounded TS generation | `spec-core/src/` | Steps 1, 2 |
+| Step 4. Add Bun execution and proof routing | `spec-core/src/`, `spec-cli/src/` | Steps 1, 2 |
+| Step 5. Add regressions, fixtures, docs | `spec-cli/tests/`, `semantic-families/`, `examples/`, docs | Steps 3, 4 |
 
 ### Parallel lanes
 
-- Lane 0: Step 1
-  - Owns: `spec-core/src/portability_contract.rs`, `spec-core/src/lib.rs`
-  - Output: stable contract API that downstream lanes must obey
+- Lane 0: Step 1 -> Step 2
+  - Owns: target-language enum, flag plumbing, bounded eligibility rules
+  - Reason: these are shared contracts every downstream lane depends on
 
-- Lane A: Step 2
-  - Owns: `spec-core/src/validator.rs`, `spec-core/src/backend_execution.rs`
-  - Goal: remove validator-owned policy duplication and align raw marker classification calls
+- Lane A: Step 3
+  - Owns: `spec-core/src/typescript_backend.rs`, `spec-core/src/generator.rs`, `spec-core/src/lib.rs`
+  - Goal: emit the bounded TS output tree
 
-- Lane B: Step 3
-  - Owns: `spec-core/src/escape_hatch.rs`, `spec-core/src/portability.rs`, `spec-core/src/semantic_review.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs`, `spec-cli/tests/cli.rs`
-  - Goal: make all read-side and semantic consumers use the centralized contract
+- Lane B: Step 4
+  - Owns: `spec-core/src/pipeline.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs`
+  - Goal: execute the TS tree and project proof honestly
 
-- Lane C: Step 4
-  - Owns: `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`, `semantic-families/README.md`, optionally `README.md`, optionally `CHANGELOG.md`, any refreshed example truth surfaces
-  - Goal: update written truth after the contract API is frozen
+- Lane C: Step 5
+  - Owns: `spec-cli/tests/cli.rs`, fixture trees, `README.md`, `CHANGELOG.md`
+  - Goal: lock the product surface after A and B are stable
 
-- Lane D: Step 5
-  - Owns: integration, proof wall, parity cleanup
-  - Goal: merge the prior lanes and make the whole milestone green together
+- Lane D: final integration
+  - Owns: merge coordination, proof wall, parity cleanup
+  - Goal: make the whole milestone green together
 
 ### Execution order
 
-1. Launch Lane 0 first. Do not parallelize before the contract API is frozen.
-2. Once Step 1 is stable, launch Lanes A, B, and C in parallel worktrees.
-3. Merge Lane A before finalizing Lane B if B needs any last call-shape or helper adjustments.
-4. Merge Lane C once the wording matches the landed boundary. It does not need to wait for proof-wall completion unless the code truth changed again during integration.
-5. Run Lane D last on the merged branch and rerun the entire proof wall.
+1. Launch Lane 0 first and freeze the shared target-language contract.
+2. Once Lane 0 is merged or stable, launch Lanes A and B in parallel worktrees.
+3. Launch Lane C only after A and B have stable file names, error strings, and proof-shape expectations.
+4. Merge A and B, then run Lane D on the integrated branch.
+5. Run the entire proof wall at the end. Docs do not land ahead of proof.
 
 ### Conflict flags
 
-- Lanes A and B both touch `spec-core/src/`, so Lane 0 must freeze names and signatures first.
-- Lane B is the highest merge-risk lane because it touches both `spec-core` and `spec-cli`.
-- Lane D must own any parity cleanup after the parallel merges. Do not let A or B keep rebasing after D starts.
-- Lane C is low-conflict, but it must not over-claim. Docs must match the landed code, not the hoped-for next milestone.
+- Lanes A and B both touch `spec-core/src/`, so `TargetLanguage`, output-root conventions, and helper filenames must freeze first.
+- Lane B is the highest merge-risk lane because it spans CLI, pipeline, and proof projection.
+- Lane C must not snapshot error strings before Step 2 is stable.
+- Do not let docs merge before the proof wall is green. This milestone is very easy to over-claim.
 
-## Documentation Contract
+## Not In Scope
 
-The documentation work is part of the milestone, not garnish.
-
-Required updates:
-
-- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-  - keep the shared-core / escape-hatch ordering honest
-  - reflect that M44 centralized the portability contract in `spec-core`
-- `semantic-families/README.md`
-  - preserve the M31 / M32 style boundary language without implying broader portability than the code proves
-
-Conditional updates:
-
-- `README.md`
-  - only if command-visible portability wording changed for users
-- `CHANGELOG.md`
-  - only if the milestone changes user-visible truth surfaces or milestone labeling in a way that should be recorded publicly
+- `function.wrapper.pipeline.v1` execution in `spec`
+- any non-monotone-up function family
+- any function unit with `deps`
+- `.test.spec` TypeScript execution
+- `kind:data` or `kind:sum` TypeScript execution
+- generic decimal/runtime reuse beyond the monotone-up helper
+- target-language support in `spec validate`
+- package-manager detection or JS runtime selection
+- schema redesign outside the additive `target_proofs` field
 
 ## Acceptance Criteria
 
-M44 is complete only if all of the following are true:
+M45 is complete only if all of the following are true:
 
-1. `spec-core/src/portability_contract.rs` exists and is the sole policy owner for seam portability rules.
-2. `spec-core/src/validator.rs` no longer owns duplicated seam-policy rules inline.
-3. `spec-core/src/backend_execution.rs` still owns raw marker detection and backend digest material.
-4. `spec-core/src/escape_hatch.rs` still owns proof-surface gate computation.
-5. `spec-core/src/portability.rs` composes truth from centralized contract helpers instead of local seam assumptions.
-6. `spec-core/src/semantic_review.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`, and `spec-cli/src/commands.rs` all project the same portability truth.
-7. Helper-only lowering still remains backend-only but non-contaminating.
-8. Domain lowering still contaminates portability claims.
-9. The escape-hatch gate still requires fresh atom proof and current molecule proof.
-10. The proof wall passes.
-11. `xtask` family-analysis stop-state truth remains unchanged.
-12. The updated docs match the landed code boundary exactly.
-13. The implementation did not widen into new crate extraction, second-language execution, or fresh family-choice work.
+1. `spec generate/build/test/status` accept `--target-language`.
+2. Rust remains the default path with no behavior regression.
+3. `spec generate --target-language typescript` emits a real TS tree for eligible monotone-up units.
+4. The TS tree includes exactly one generated runtime helper and one generated harness per output root.
+5. `spec build --target-language typescript` uses Bun successfully on aligned fixtures.
+6. `spec test --target-language typescript` refreshes TS proof without touching Rust proof.
+7. Units outside the bounded lane fail before Bun runs.
+8. `.test.spec --target-language typescript` fails with a stable unsupported message.
+9. `spec status --target-language typescript` reads TS proof explicitly and never mirrors Rust by accident.
+10. `spec export` carries additive target-proof data.
+11. The proof wall passes.
+12. The docs describe the bounded lane exactly, with no broader claim.
 
 ## Definition Of Done
 
-M44 is done when a maintainer can answer all of these questions by pointing at one place in the code, not by narrating cross-file tribal knowledge:
+M45 is done when a maintainer can answer all of these questions by pointing at code, not caveats:
 
-- What is legal shared seam authored shape?
-- What is backend-only but still honest?
-- What contaminates portability claims?
-- Which modules own validation, gate evaluation, projection, and semantic verdicts?
-- Why does status/export/passport say what they say?
+- Can `spec` execute TypeScript at all?
+- Exactly which units qualify?
+- Exactly which atom-test shapes qualify?
+- Which runtime/toolchain is required?
+- Where is TS proof stored?
+- How do I see TS status without confusing it with Rust status?
+- Why do wrapper families, dependency-bearing units, and molecule tests still fail?
 
-If those answers still require "well, validator does one part, portability does another part, and semantic review kind of knows the rest," then M44 did not finish the job.
+If any answer still starts with "well, sort of" then M45 is not done.
 
 ## Completion Summary
 
-This plan is the smallest complete version of the lake.
+This is the smallest honest second-language backend milestone.
 
-It adds one explicit policy owner. It keeps every other module in its current role. It locks the regressions that matter. It updates the roadmap to match the code. It gives the repo one honest portability contract instead of several half-implicit ones.
+It does not try to make TypeScript a peer of Rust everywhere. It does not reopen family strategy. It does not build JS infrastructure for its own sake.
 
-That is the whole milestone.
+It makes one bounded monotone-up lane real, testable, and visible in the product truth surfaces. Then it stops.
