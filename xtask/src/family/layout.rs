@@ -129,14 +129,6 @@ fn validate_bucket(
                 path.display()
             ))
         })?;
-        let component_count = relative.components().count();
-        if component_count != 2 {
-            return Err(XtaskError::InvalidInput(format!(
-                "units entry `{}` must match units/<namespace>/<case>.unit.spec",
-                path.display()
-            )));
-        }
-
         let filename = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -146,6 +138,16 @@ fn validate_bucket(
                     path.display()
                 ))
             })?;
+        if is_ignored_derived_units_artifact(relative, filename) {
+            continue;
+        }
+        let component_count = relative.components().count();
+        if component_count != 2 {
+            return Err(XtaskError::InvalidInput(format!(
+                "units entry `{}` must match units/<namespace>/<case>.unit.spec",
+                path.display()
+            )));
+        }
 
         if !filename.ends_with(".unit.spec") {
             return Err(XtaskError::InvalidInput(format!(
@@ -171,6 +173,13 @@ fn validate_bucket(
     }
 
     Ok(cases)
+}
+
+fn is_ignored_derived_units_artifact(relative: &Path, filename: &str) -> bool {
+    filename == ".gitignore"
+        || relative.components().count() == 2
+            && (filename.ends_with(".spec.passport.json")
+                || filename.ends_with(".test.evidence.json"))
 }
 
 fn ensure_bucket_root_entries(bucket_root: &Path) -> Result<(), XtaskError> {

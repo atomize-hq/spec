@@ -28,8 +28,8 @@
       "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
     }
   ],
-  "generated_at": "2026-05-10T15:03:05Z",
-  "source_file": "examples/ecommerce/units/pricing/apply_discount.unit.spec",
+  "generated_at": "2026-05-10T18:06:38Z",
+  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m45/integration/examples/ecommerce/units/pricing/apply_discount.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
@@ -50,6 +50,31 @@
     "authored_truth_digest": "sha256:bbc4ed3407164fcb25f710e577c914f0adeff75689da95850dbe7eaab5cd422b",
     "authored_truth_status": "fresh",
     "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "happy_path",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-04-27T11:49:45Z",
+        "provenance": {
+          "git_commit_sha": "40267ec7e35053973e8e6961c5f066b2a0ad5bb1"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:bbc4ed3407164fcb25f710e577c914f0adeff75689da95850dbe7eaab5cd422b"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:bbc4ed3407164fcb25f710e577c914f0adeff75689da95850dbe7eaab5cd422b",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
   },
   "semantic_review": {
     "verdict": "aligned",

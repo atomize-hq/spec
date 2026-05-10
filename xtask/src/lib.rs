@@ -1970,6 +1970,34 @@ gate_d = true
         assert!(matches!(error, XtaskError::InvalidInput(_)));
     }
 
+    #[test]
+    fn packet_layout_validation_ignores_derived_proof_artifacts_under_units() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        write_string(&paths.fixtures.join("aligned/units/.gitignore"), "*.spec.passport.json\n");
+        write_string(
+            &paths
+                .fixtures
+                .join("aligned/units/pricing/checkout_chain3_aligned.spec.passport.json"),
+            "{}\n",
+        );
+        write_string(
+            &paths
+                .fixtures
+                .join("aligned/units/pricing/checkout_chain3_flow.test.evidence.json"),
+            "{}\n",
+        );
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let layout = validate_packet_layout(&paths.root, &manifest, harness).unwrap();
+        assert_eq!(layout.case_filenames.len(), 16);
+    }
+
     #[cfg(unix)]
     #[test]
     fn packet_layout_validation_rejects_symlinks_anywhere_under_fixtures() {

@@ -146,17 +146,13 @@ fn wrapper_pipeline_fixture_unit_relative_path(bucket: &str) -> &'static str {
 
 fn monotone_up_typescript_body(bucket: &str) -> &'static str {
     match bucket {
-        "aligned" => {
-            "    {\n        const taxed = subtotal + subtotal * rate;\n        return round(taxed);\n    }"
-        }
+        "aligned" => "    {\n        return subtotal.add(subtotal.mul(rate));\n    }",
         "drift" => {
-            "    {\n        const taxed = subtotal - subtotal * rate;\n        return round(taxed >= Decimal.ZERO ? taxed : Decimal.ZERO);\n    }"
+            "    {\n        return subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));\n    }"
         }
-        "under_specified" => {
-            "    {\n        const taxed = subtotal + subtotal * rate;\n        return round(taxed);\n    }"
-        }
+        "under_specified" => "    {\n        return subtotal.add(subtotal.mul(rate));\n    }",
         "unsupported_near_miss" => {
-            "    {\n        const taxed = subtotal + subtotal * rate;\n        if (rate === Decimal.ZERO) {\n            return subtotal;\n        }\n        return round(taxed);\n    }"
+            "    {\n        if (rate.eq(Decimal.new(0n, 0n))) {\n            return subtotal;\n        }\n        return subtotal.add(subtotal.mul(rate));\n    }"
         }
         other => panic!("unexpected monotone-up bucket `{other}`"),
     }
@@ -434,8 +430,8 @@ fn rewrite_apply_discount_as_unsupported_near_miss(unit_path: &Path) {
 fn rewrite_apply_tax_as_drift(unit_path: &Path) {
     replace_in_file(
         unit_path,
-        "    {\n        let taxed = subtotal + subtotal * rate;\n        round(taxed)\n    }\n",
-        "    {\n        round((subtotal - subtotal * rate).max(Decimal::ZERO))\n    }\n",
+        "    {\n        subtotal + subtotal * rate\n    }\n",
+        "    {\n        subtotal - subtotal * rate\n    }\n",
     );
     replace_in_file(unit_path, "Decimal::new(10725, 2)", "Decimal::new(9275, 2)");
 }
@@ -449,15 +445,19 @@ fn rewrite_apply_tax_as_under_specified(unit_path: &Path) {
 }
 
 fn rewrite_apply_tax_as_helper_then_clamp(unit_path: &Path) {
-    replace_in_file(unit_path, "round(taxed)", "round(taxed.max(Decimal::ZERO))");
+    replace_in_file(
+        unit_path,
+        "    {\n        subtotal + subtotal * rate\n    }\n",
+        "    {\n        subtotal + (subtotal * rate)\n    }\n",
+    );
 }
 
 #[allow(dead_code)]
 fn rewrite_apply_tax_as_unsupported_near_miss(unit_path: &Path) {
     replace_in_file(
         unit_path,
-        "    {\n        let taxed = subtotal + subtotal * rate;\n        round(taxed)\n    }\n",
-        "    {\n        let taxed = subtotal + subtotal * rate;\n        if rate == Decimal::ZERO {\n            subtotal\n        } else {\n            round(taxed)\n        }\n    }\n",
+        "    {\n        subtotal + subtotal * rate\n    }\n",
+        "    {\n        let taxed = subtotal + subtotal * rate;\n        if rate == Decimal::ZERO {\n            subtotal\n        } else {\n            taxed\n        }\n    }\n",
     );
 }
 

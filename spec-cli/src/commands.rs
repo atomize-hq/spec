@@ -1339,7 +1339,9 @@ fn status_command_for_target(
                 passport.as_ref(),
                 target_language,
             )
-            .filter(|_| target_evidence.is_some());
+            .filter(|_| {
+                target_language == TargetLanguage::Rust || target_evidence.is_some()
+            });
             let markers = projected_truth.markers.clone();
             let proof_coverage = projected_truth.proof_coverage.clone();
             let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
@@ -6692,7 +6694,11 @@ body:
 
         let freshness =
             spec_core::passport::resolve_passport_freshness(&changed, Some(&legacy_passport));
-        let health = compute_health_status(&[], Some(&legacy_passport), freshness.as_ref());
+        let health = compute_health_status(
+            &[],
+            legacy_passport.evidence.as_ref(),
+            freshness.as_ref(),
+        );
 
         assert_eq!(health.status, HealthState::Stale);
         assert_eq!(

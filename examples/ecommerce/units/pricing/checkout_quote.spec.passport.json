@@ -100,8 +100,8 @@
       "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-05-10T15:03:05Z",
-  "source_file": "examples/ecommerce/units/pricing/checkout_quote.unit.spec",
+  "generated_at": "2026-05-10T18:06:38Z",
+  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m45/integration/examples/ecommerce/units/pricing/checkout_quote.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
@@ -128,6 +128,37 @@
     "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205",
     "authored_truth_status": "fresh",
     "backend_execution_status": "fresh"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "discounted_subtotal_basic",
+            "status": "pass"
+          },
+          {
+            "id": "total_basic",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-04-26T18:41:14Z",
+        "provenance": {
+          "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+        "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+        "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      }
+    }
   },
   "markers": [
     {
