@@ -5,12 +5,13 @@ Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**
 Owned authored artifact: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
 Execute from current branch: **`feat/m40-plus`**  
-Current baseline commit: **`7a986a6`**  
+Scope diff anchor commit: **`7a986a6`**  
 Last rewritten: **`2026-05-10`**
 
 ## Summary
 
-- Execute from the current repo root on branch `feat/m40-plus` at baseline `7a986a6` until the parent opens worktrees.
+- Execute from the current repo root on branch `feat/m40-plus`.
+- Use `7a986a6` as the fixed scope diff anchor for boundary checks. It is not a required starting `HEAD`.
 - Keep the true critical path local to the parent for:
   - baseline capture
   - authority freeze
@@ -45,6 +46,7 @@ Last rewritten: **`2026-05-10`**
   - authored source is the milestone deliverable
   - `.runs/**` is parent-owned orchestration state only
   - refreshed passports, molecule evidence, export captures, and `xtask` JSON captures are derived proof output only
+- A clean tree is not required to start. The parent must capture the actual starting `HEAD` and dirty state in baseline artifacts before opening worktrees.
 
 ## Hard Guards
 
@@ -75,6 +77,7 @@ Last rewritten: **`2026-05-10`**
   - schema churn by default
   - a new machine-readable gate
 - The contract-freeze gate is mandatory and first. No worker lane starts before the parent records a frozen API surface.
+- The freeze must record not just new `portability_contract.rs` symbols but also any downstream-visible `backend_execution.rs` marker or helper symbols that worker lanes still consume directly during M44.
 - The parent is the sole owner of:
   - contract API freeze
   - `M44_RUN_ROOT/**`
@@ -118,6 +121,7 @@ Rules:
 
 - Every worker branch must fork from the exact `contract_freeze_commit` captured in `contract-freeze.json`.
 - No worker may fork from a later ad hoc `feat/m40-plus` HEAD after the freeze opens.
+- `feat/m40-plus` is the canonical landing branch. After the proof wall passes on `ws/spec-m44-integration`, the parent fast-forwards `feat/m40-plus` to that integrated commit before closeout.
 - The parent is the sole integrator.
 - The parent merges in this default order:
   1. `ws/spec-m44-validator-markers`
@@ -181,7 +185,8 @@ Execution-record expectations:
 
 - `baseline.json`
   - baseline branch
-  - baseline commit
+  - starting `HEAD`
+  - scope diff anchor commit
   - initial `git status --short`
   - initial authored-surface inventory
 - `authority-freeze.json`
@@ -192,6 +197,7 @@ Execution-record expectations:
 - `contract-freeze.json`
   - `contract_freeze_commit`
   - exported helper/type names
+  - frozen downstream-visible `backend_execution` marker/helper symbols
   - lane ownership map
   - banned post-freeze API drift
 - `merge-log.md`
@@ -282,16 +288,16 @@ Rules:
 |---|---|---|---|---|---|
 | 1 | `task-m44-00-baseline` | gate | parent | primary | repo baseline and dirty-state capture complete |
 | 2 | `task-m44-05-authority-freeze` | gate | parent | primary | `PLAN.md` scope, in-scope files, and hard guards are recorded |
-| 3 | `task/m44-a1-contract-freeze` | task | parent | `ws/spec-m44-contract-freeze` | baseline and authority freeze are complete |
+| 3 | `task-m44-a1-contract-freeze` | task | parent | `ws/spec-m44-contract-freeze` | baseline and authority freeze are complete |
 | 4 | `task-m44-15-worker-launch` | gate | parent | primary | `contract-freeze.json` exists with commit, owned symbols, and banned drift |
-| 5 | `task/m44-b-validator-markers` | task | worker A | `ws/spec-m44-validator-markers` | worker launch gate is open |
-| 6 | `task/m44-c-projection-gate` | task | worker B | `ws/spec-m44-projection-gate` | worker launch gate is open |
-| 7 | `task/m44-d-semantic-readside` | task | worker C | `ws/spec-m44-semantic-readside` | worker launch gate is open |
-| 8 | `task/m44-e-docs` | task | worker D | `ws/spec-m44-docs` | worker launch gate is open |
+| 5 | `task-m44-b-validator-markers` | task | worker A | `ws/spec-m44-validator-markers` | worker launch gate is open |
+| 6 | `task-m44-c-projection-gate` | task | worker B | `ws/spec-m44-projection-gate` | worker launch gate is open |
+| 7 | `task-m44-d-semantic-readside` | task | worker C | `ws/spec-m44-semantic-readside` | worker launch gate is open |
+| 8 | `task-m44-e-docs` | task | worker D | `ws/spec-m44-docs` | worker launch gate is open |
 | 9 | `task-m44-40-merge-window` | gate | parent | primary | all worker handoffs are submitted or explicitly blocked |
-| 10 | `task/m44-f-integration` | task | parent | `ws/spec-m44-integration` | merge window is open |
+| 10 | `task-m44-f-integration` | task | parent | `ws/spec-m44-integration` | merge window is open |
 | 11 | `task-m44-50-proof-wall` | gate | parent | `ws/spec-m44-integration` | integration branch is merged and locally consistent |
-| 12 | `task-m44-60-closeout` | gate | parent | primary | full proof wall is green and acceptance is recorded |
+| 12 | `task-m44-60-closeout` | gate | parent | primary | full proof wall is green, `feat/m40-plus` is fast-forwarded to the integrated commit, and acceptance is recorded |
 
 ## Workstream Plan
 
@@ -314,6 +320,7 @@ Required commands:
 mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m44_shared_core_portability_contract/validation/baseline
 git rev-parse --abbrev-ref HEAD
 git rev-parse --short HEAD
+git merge-base --is-ancestor 7a986a6 HEAD
 git status --short
 git diff --name-only 7a986a6..HEAD
 git diff --stat 7a986a6..HEAD
@@ -331,8 +338,12 @@ Artifacts written:
 Blocked conditions:
 
 - current branch is not `feat/m40-plus`
-- current baseline commit is not `7a986a6`
+- current `HEAD` is not a descendant of the fixed scope diff anchor `7a986a6`
 - repo state is ambiguous enough that the parent cannot distinguish pre-existing unrelated edits from M44 execution state
+
+Notes:
+
+- a non-empty `git status --short` by itself is not a blocker if the starting state is captured and understandable
 
 Restart point if blocked:
 
@@ -382,7 +393,7 @@ Restart point if blocked:
 - record the blocker in `task-m44-05-authority-freeze/blocked.json`
 - restart from `task-m44-05-authority-freeze` after the parent resolves scope authority
 
-### `task/m44-a1-contract-freeze` - parent only
+### `task-m44-a1-contract-freeze` - parent only
 
 Purpose:
 
@@ -396,7 +407,13 @@ Owned files and directories:
 Required commands:
 
 ```bash
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/contract-freeze -b ws/spec-m44-contract-freeze feat/m40-plus
+if git worktree list --porcelain | grep -F "worktree /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/contract-freeze" >/dev/null; then
+  git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/contract-freeze status --short
+elif git show-ref --verify --quiet refs/heads/ws/spec-m44-contract-freeze; then
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/contract-freeze ws/spec-m44-contract-freeze
+else
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/contract-freeze -b ws/spec-m44-contract-freeze feat/m40-plus
+fi
 cargo test -p spec-core -- --color never
 git status --short
 ```
@@ -418,7 +435,7 @@ Restart point if blocked:
 
 - stop before worker launch
 - record the blocker in `task-m44-a1-contract-freeze/blocked.json`
-- restart from `task/m44-a1-contract-freeze` after the parent resolves the contract API shape locally
+- restart from `task-m44-a1-contract-freeze` after the parent resolves the contract API shape locally
 
 Acceptance:
 
@@ -439,6 +456,7 @@ Acceptance:
 - `contract-freeze.json` records:
   - `contract_freeze_commit`
   - frozen helper/type names
+  - frozen downstream-visible `backend_execution` marker/helper symbols
   - frozen lane ownership
   - prohibited drift after launch
 - No consumer rewiring, docs edits, or CLI changes are mixed into this lane.
@@ -460,10 +478,34 @@ Required commands:
 
 ```bash
 git rev-parse --short ws/spec-m44-contract-freeze
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/validator-markers -b ws/spec-m44-validator-markers ws/spec-m44-contract-freeze
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/projection-gate -b ws/spec-m44-projection-gate ws/spec-m44-contract-freeze
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/semantic-readside -b ws/spec-m44-semantic-readside ws/spec-m44-contract-freeze
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/docs -b ws/spec-m44-docs ws/spec-m44-contract-freeze
+if git worktree list --porcelain | grep -F "worktree /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/validator-markers" >/dev/null; then
+  git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/validator-markers status --short
+elif git show-ref --verify --quiet refs/heads/ws/spec-m44-validator-markers; then
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/validator-markers ws/spec-m44-validator-markers
+else
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/validator-markers -b ws/spec-m44-validator-markers ws/spec-m44-contract-freeze
+fi
+if git worktree list --porcelain | grep -F "worktree /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/projection-gate" >/dev/null; then
+  git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/projection-gate status --short
+elif git show-ref --verify --quiet refs/heads/ws/spec-m44-projection-gate; then
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/projection-gate ws/spec-m44-projection-gate
+else
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/projection-gate -b ws/spec-m44-projection-gate ws/spec-m44-contract-freeze
+fi
+if git worktree list --porcelain | grep -F "worktree /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/semantic-readside" >/dev/null; then
+  git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/semantic-readside status --short
+elif git show-ref --verify --quiet refs/heads/ws/spec-m44-semantic-readside; then
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/semantic-readside ws/spec-m44-semantic-readside
+else
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/semantic-readside -b ws/spec-m44-semantic-readside ws/spec-m44-contract-freeze
+fi
+if git worktree list --porcelain | grep -F "worktree /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/docs" >/dev/null; then
+  git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/docs status --short
+elif git show-ref --verify --quiet refs/heads/ws/spec-m44-docs; then
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/docs ws/spec-m44-docs
+else
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/docs -b ws/spec-m44-docs ws/spec-m44-contract-freeze
+fi
 git worktree list
 ```
 
@@ -477,7 +519,7 @@ Artifacts written:
 
 Blocked conditions:
 
-- `contract-freeze.json` is missing or does not identify a single frozen commit
+- `contract-freeze.json` is missing or does not identify a single frozen commit plus frozen downstream-visible backend marker/helper surface
 - a worker worktree or branch cannot be created cleanly from the frozen commit
 - lane ownership is still ambiguous enough that a worker would need to guess file scope
 
@@ -487,7 +529,7 @@ Restart point if blocked:
 - record the blocker in `task-m44-15-worker-launch/blocked.json`
 - restart from `task-m44-15-worker-launch` after worktrees and lane contracts are clean
 
-### `task/m44-b-validator-markers` - worker A
+### `task-m44-b-validator-markers` - worker A
 
 Purpose:
 
@@ -534,9 +576,9 @@ Restart point if blocked:
 
 - stop in `ws/spec-m44-validator-markers`
 - hand the blocker to the parent with the failing command and missing symbol
-- restart from `task/m44-b-validator-markers` after the parent republishes a valid freeze or reassigns the cross-lane fix
+- restart from `task-m44-b-validator-markers` after the parent republishes a valid freeze or reassigns the cross-lane fix
 
-### `task/m44-c-projection-gate` - worker B
+### `task-m44-c-projection-gate` - worker B
 
 Purpose:
 
@@ -585,9 +627,9 @@ Restart point if blocked:
 
 - stop in `ws/spec-m44-projection-gate`
 - hand the blocker to the parent with the failing command and affected projection surface
-- restart from `task/m44-c-projection-gate` after the parent resolves the contract or downstream ownership issue
+- restart from `task-m44-c-projection-gate` after the parent resolves the contract or downstream ownership issue
 
-### `task/m44-d-semantic-readside` - worker C
+### `task-m44-d-semantic-readside` - worker C
 
 Purpose:
 
@@ -640,9 +682,9 @@ Restart point if blocked:
 
 - stop in `ws/spec-m44-semantic-readside`
 - hand the blocker to the parent with the exact parity mismatch and command output
-- restart from `task/m44-d-semantic-readside` after the parent resolves upstream ownership or republishes the freeze
+- restart from `task-m44-d-semantic-readside` after the parent resolves upstream ownership or republishes the freeze
 
-### `task/m44-e-docs` - worker D
+### `task-m44-e-docs` - worker D
 
 Purpose:
 
@@ -691,9 +733,9 @@ Restart point if blocked:
 
 - stop in `ws/spec-m44-docs`
 - hand the blocker to the parent with the exact wording gap or blocked file
-- restart from `task/m44-e-docs` after the parent confirms the code boundary or expands doc scope explicitly
+- restart from `task-m44-e-docs` after the parent confirms the code boundary or expands doc scope explicitly
 
-### `task/m44-f-integration` - parent only
+### `task-m44-f-integration` - parent only
 
 Purpose:
 
@@ -707,7 +749,13 @@ Owned files and directories:
 Required commands:
 
 ```bash
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/integration -b ws/spec-m44-integration ws/spec-m44-contract-freeze
+if git worktree list --porcelain | grep -F "worktree /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/integration" >/dev/null; then
+  git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/integration status --short
+elif git show-ref --verify --quiet refs/heads/ws/spec-m44-integration; then
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/integration ws/spec-m44-integration
+else
+  git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/integration -b ws/spec-m44-integration ws/spec-m44-contract-freeze
+fi
 git merge --no-ff ws/spec-m44-validator-markers
 git merge --no-ff ws/spec-m44-projection-gate
 git merge --no-ff ws/spec-m44-semantic-readside
@@ -759,7 +807,7 @@ Restart point if blocked:
 
 - stop in `ws/spec-m44-integration`
 - record the blocker in `task-m44-f-integration/blocked.json` and `merge-log.md`
-- restart from `task-m44-40-merge-window` if worker relaunch is required, otherwise restart from `task/m44-f-integration` after the parent resolves the narrow in-scope drift
+- restart from `task-m44-40-merge-window` if worker relaunch is required, otherwise restart from `task-m44-f-integration` after the parent resolves the narrow in-scope drift
 
 ### `task-m44-40-merge-window` - parent only
 
@@ -855,13 +903,13 @@ Restart point if blocked:
 
 - stop with the integrated branch intact
 - record the blocker in `task-m44-50-proof-wall/blocked.json` and `acceptance.md`
-- restart from `task/m44-f-integration` after the parent resolves the narrow in-scope proof drift
+- restart from `task-m44-f-integration` after the parent resolves the narrow in-scope proof drift
 
 ### `task-m44-60-closeout` - parent only
 
 Purpose:
 
-- close the run only after proof, scope, and acceptance all agree
+- land the integrated commit back onto `feat/m40-plus` and close the run only after proof, scope, and acceptance all agree
 
 Owned files and artifacts:
 
@@ -874,6 +922,9 @@ Required commands:
 
 ```bash
 mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m44_shared_core_portability_contract/validation/closeout
+git rev-parse --abbrev-ref HEAD
+test "$(git rev-parse --abbrev-ref HEAD)" = "feat/m40-plus"
+git merge --ff-only ws/spec-m44-integration
 git status --short
 git diff --name-only 7a986a6..HEAD
 git diff --stat 7a986a6..HEAD
@@ -889,7 +940,9 @@ Artifacts written:
 
 Blocked conditions:
 
+- closeout is not running from the primary `feat/m40-plus` worktree
 - final diff contains out-of-bounds files
+- `feat/m40-plus` cannot be fast-forwarded cleanly to `ws/spec-m44-integration`
 - acceptance is still relying on unresolved blockers or undocumented scope deviations
 - closeout would require retrospective scope justification instead of an already-clean run
 
@@ -897,7 +950,7 @@ Restart point if blocked:
 
 - stop before declaring M44 complete
 - record the blocker in `task-m44-60-closeout/blocked.json`
-- restart from `task/m44-f-integration` if code drift caused the issue, otherwise restart from `task-m44-40-merge-window` if a lane must be relaunched
+- restart from `task-m44-f-integration` if code drift caused the issue, otherwise restart from `task-m44-40-merge-window` if a lane must be relaunched
 
 ## Scope-Boundary Checks
 
@@ -907,7 +960,7 @@ Required checks:
 
 - capture baseline diff surfaces during `task-m44-00-baseline`
 - capture per-lane name-only diffs during `task-m44-40-merge-window`
-- capture final integrated name-only and stat diffs during `task/m44-f-integration`
+- capture final integrated name-only and stat diffs during `task-m44-f-integration`
 - re-check final name-only and stat diffs during `task-m44-60-closeout`
 
 Required commands:
@@ -937,12 +990,14 @@ M44 has real overlap risk because multiple lanes consume the same new contract b
 Primary conflict flags:
 
 - lane A and lane B both depend on the frozen contract helper names
+- lane A still owns `backend_execution.rs`, but lanes B and C may still consume frozen downstream-visible marker/helper symbols from it during this milestone
 - lane B and lane C both depend on the same projection meaning
 - lane C can expose parity gaps that look like contract gaps but are really projection gaps
 
 Resolution rules:
 
 - only the parent may change `portability_contract.rs` after the worker-launch gate opens
+- lane A may not rename or reshape any frozen downstream-visible `backend_execution.rs` marker/helper symbol after worker launch unless the parent reopens contract freeze and republishes the freeze
 - only lane B may change `portability.rs`
 - only lane C may change `spec-cli/src/commands.rs` or `spec-cli/tests/cli.rs`
 - if lane C needs a `portability.rs` change, it files a blocker to the parent rather than editing lane B's surface
@@ -959,6 +1014,7 @@ Resolution rules:
   - the relevant `PLAN.md` excerpts
   - the lane's owned files
   - the frozen contract API excerpt from `contract-freeze.json`
+  - the frozen downstream-visible `backend_execution.rs` symbol excerpt when that lane still depends on it
   - the lane's required commands
   - the lane's acceptance criteria
   - the hard guards that matter for that lane
@@ -1029,7 +1085,7 @@ M44 is complete only if all of the following are true:
 
 ## Assumptions
 
-- The parent launches from the current baseline branch `feat/m40-plus` at `7a986a6`.
+- The parent launches from the current baseline branch `feat/m40-plus`, with `HEAD` at or ahead of `7a986a6`, and uses `7a986a6` only as the fixed scope diff anchor.
 - The current M44 `PLAN.md` remains the only scope authority during execution.
 - The repo can support disposable worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m44/`.
 - Inline or colocated tests are acceptable for `spec-core` module regressions where no separate test file is already established.
@@ -1045,5 +1101,6 @@ This orchestration plan keeps the only truly dangerous decisions in the parent l
 - let consumers parallelize against that freeze
 - merge in dependency order
 - rerun the entire proof wall locally
+- fast-forward `feat/m40-plus` to the proven integrated commit before closeout
 
 That gives M44 materially better parallelism than M43 without letting multiple workers co-own the same portability policy. The milestone stays bounded to one new module, one centralized contract, consumer rewiring, regression coverage, and doc parity.
