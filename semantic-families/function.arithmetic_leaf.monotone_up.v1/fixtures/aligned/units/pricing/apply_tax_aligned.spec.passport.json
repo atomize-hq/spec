@@ -1,6 +1,6 @@
 {
   "spec_version": "0.3.0",
-  "id": "pricing/apply_tax",
+  "id": "pricing/apply_tax_aligned",
   "intent": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.",
   "contract": {
     "inputs": [
@@ -23,28 +23,12 @@
   ],
   "local_tests": [
     {
-      "id": "basic_tax",
-      "expect": "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
+      "id": "apply_tax_aligned_happy_path",
+      "expect": "apply_tax_aligned(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
     }
   ],
-  "generated_at": "2026-05-10T23:08:46Z",
-  "source_file": "examples/ecommerce/units/pricing/apply_tax.unit.spec",
-  "evidence": {
-    "build_status": "pass",
-    "test_results": [
-      {
-        "id": "basic_tax",
-        "status": "pass"
-      }
-    ],
-    "observed_at": "2026-05-10T23:07:06Z",
-    "provenance": {
-      "git_commit_sha": "467ebd3bd1c2de1d932cddc47cca2ff08c93a1a5"
-    }
-  },
-  "freshness_anchor": {
-    "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe"
-  },
+  "generated_at": "2026-05-10T23:08:41Z",
+  "source_file": "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec",
   "freshness": {
     "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe",
     "authored_truth_status": "fresh",
@@ -52,22 +36,6 @@
   },
   "target_proofs": {
     "rust": {
-      "evidence": {
-        "build_status": "pass",
-        "test_results": [
-          {
-            "id": "basic_tax",
-            "status": "pass"
-          }
-        ],
-        "observed_at": "2026-05-10T23:07:06Z",
-        "provenance": {
-          "git_commit_sha": "467ebd3bd1c2de1d932cddc47cca2ff08c93a1a5"
-        }
-      },
-      "freshness_anchor": {
-        "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe"
-      },
       "freshness": {
         "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe",
         "authored_truth_status": "fresh",
@@ -79,11 +47,11 @@
         "build_status": "pass",
         "test_results": [
           {
-            "id": "basic_tax",
+            "id": "apply_tax_aligned_happy_path",
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-10T23:08:46Z",
+        "observed_at": "2026-05-10T23:08:41Z",
         "provenance": {
           "git_commit_sha": "467ebd3bd1c2de1d932cddc47cca2ff08c93a1a5"
         }
@@ -132,7 +100,7 @@
     "executable_surfaces": [
       {
         "path": "body.rust",
-        "summary": "projects to Rust function apply_tax with 2 input(s)"
+        "summary": "projects to Rust function apply_tax_aligned with 2 input(s)"
       }
     ],
     "evaluator_scope": "supported_function_surface"
