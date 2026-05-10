@@ -13,181 +13,188 @@ Supersedes: **M43 - Promote `function.helper.identity_passthrough.v1`**
 
 ## Executive Verdict
 
-M44 is not another family-promotion milestone.
+M44 is the contract-freeze milestone that has to land before any broader portability or second-language story gets louder.
 
-The branch already proved the Rust family lane honestly enough to stop. The next honest move is to freeze one explicit portability contract for seam units so the repo can say, in code and in read-side truth, which semantics are shared, which details are Rust-only backend execution, and which escape hatches contaminate portability claims.
+The repo already has the raw pieces:
 
-This milestone is **not** docs-only. It includes one small structural extraction inside `spec-core`: add one explicit portability-contract owner, route every seam-portability consumer through it, and keep `xtask` family-analysis logic as precedent rather than reopening it.
+- seam-specific validator restrictions
+- backend-only marker collection
+- escape-hatch proof gating
+- portability projection
+- semantic review consumption
+- passport / export / status read-side truth
+
+What it does not have is one explicit owner for the seam portability policy. Right now the boundary is real in practice but still partly distributed across `validator.rs`, `portability.rs`, `semantic_review.rs`, and read-side consumers. That is close enough to work, but not clean enough to trust when the next backend or portability claim arrives.
+
+M44 fixes that by adding one new module inside `spec-core`, moving the policy there, rewiring all consumers to read from it, and proving that the current truth stays intact.
+
+This is a real code milestone. Not docs-only. Not a new crate. Not TypeScript execution. One bounded extraction lake.
 
 ## Problem Statement
 
-M43 finished the last obvious Rust-family lake on this branch.
+M43 closed the last honest Rust-family promotion loop on this branch.
 
-Current repo truth now says:
+The current branch state already says:
 
-- promoted Rust families are no longer the bottleneck
-- family-analysis can stop honestly instead of inventing a next family
-- the remaining architectural ambiguity is the seam between shared semantic truth and Rust-only backend execution detail
+- promoted Rust families are not the blocker
+- the family-analysis stop-state is real and should stay real
+- the next architectural risk is lying about what is shared-core truth versus what is still Rust-only backend execution detail
 
-That ambiguity is visible in code today:
+That risk is visible in the code today:
 
-- `xtask/src/family/analysis_core/` already freezes the family-analysis decision seam for helper-surface durable hold, decision derivation, and proof-fingerprint normalization
-- `spec-core/src/backend_execution.rs` already identifies backend-only seam markers
-- `spec-core/src/escape_hatch.rs` already computes the atom/molecule gate for seam units
-- `spec-core/src/portability.rs` already projects markers, contamination, digests, and gate state
-- `spec-core/src/semantic_review.rs`, `spec-core/src/passport.rs`, and CLI read-side surfaces already consume that truth
-- `spec-core/src/validator.rs` still hardcodes part of the shared-surface contract inline as literal seam restrictions
+- `spec-core/src/validator.rs` hard-rejects illegal seam authored shapes inline
+- `spec-core/src/backend_execution.rs` classifies raw backend markers
+- `spec-core/src/escape_hatch.rs` computes the atom / molecule gate
+- `spec-core/src/portability.rs` projects markers, contamination, digest, and gate state
+- `spec-core/src/semantic_review.rs` uses that truth to decide supported seam meaning
+- `spec-core/src/passport.rs`, `spec-core/src/export.rs`, and `spec-cli/src/commands.rs` surface the projected truth
+- `xtask/src/family/analysis_core/*` already demonstrates the right pattern on the family-analysis side: one explicit shared decision seam, many consumers
 
-So the seam exists. The problem is that the contract is still spread across multiple files and partly implied by maintainers knowing where to look.
+The missing artifact is not more analysis. The missing artifact is one explicit portability contract owner inside `spec-core`.
 
-If M44 does nothing, the next backend or read-side consumer will either duplicate these rules or quietly smuggle Rust-specific assumptions into a fake shared core.
+## Current Repo Truth
 
-## Repo Truth Basis
+### Live code surfaces
 
-### Live evidence
+- `spec-core/src/backend_execution.rs` already distinguishes:
+  - `DomainLowering`
+  - `ProofHelperLowering`
+  - `BackendRustDerives`
+- `spec-core/src/escape_hatch.rs` already treats seam proof requirements as:
+  - `atom`
+  - `molecule`
+- `spec-core/src/portability.rs` already projects:
+  - portability markers
+  - contamination summary
+  - backend execution digest
+  - proof surfaces
+  - escape-hatch gate
+- `spec-core/src/semantic_review.rs` already differentiates:
+  - backend-only meaning preserved
+  - backend-only semantics leaked
+  - supported seam subsets
+- `spec-core/src/validator.rs` already enforces:
+  - `kind:data` and `kind:sum` may not use top-level `contract`
+  - `kind:data` and `kind:sum` may not use top-level `deps`
+  - `kind:data` and `kind:sum` may not use top-level `imports`
+  - `kind:data` and `kind:sum` may not use top-level `body.typescript`
+  - `kind:data` and `kind:sum` must leave top-level `body.rust` empty
+- `xtask/src/family/analysis_core/*` already proves the repo knows how to freeze a shared decision contract without prematurely extracting a new crate
 
-- `xtask/src/family/analysis_core/helper_surface.rs` already freezes the durable helper-surface hold and follow-on decision tuple.
-- `xtask/src/family/analysis_core/decision_contract.rs` already derives corpus-program decisions from validated analysis truth without path or IO concerns.
-- `spec-core/src/backend_execution.rs` already distinguishes `DomainLowering`, `ProofHelperLowering`, and `BackendRustDerives`.
-- `spec-core/src/escape_hatch.rs` already makes seam proof surfaces explicit: `atom` and `molecule`.
-- `spec-core/src/portability.rs` already exposes marker summaries, contamination summaries, backend digests, and escape-hatch gate projection.
-- `spec-core/src/validator.rs` already enforces that `kind:data` and `kind:sum` must keep top-level `contract`, `deps`, `imports`, and `body.rust` out of the shared authored seam.
-- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md` still says shared-core extraction plus escape-hatch containment must come before broader second-language work.
+### Roadmap truth
 
-### What already exists
+`docs/ai_promotion_and_multilanguage_milestones_v0.1.md` already says the ordering is:
 
-| Sub-problem | Existing owner | M44 decision |
+1. make the seam portability contract explicit
+2. contain Rust-specific lowering and escape-hatch detail
+3. only then discuss broader second-language work honestly
+
+That roadmap text is directionally correct. M44 is the code milestone that makes it true in the implementation.
+
+## Resolved Decisions
+
+These were still somewhat open in the design draft. They are now locked.
+
+### 1. M44 is not docs-only
+
+M44 must include one small structural extraction in `spec-core`. If the repo only rewrites docs and leaves policy distributed across multiple modules, the portability boundary is still a slogan.
+
+### 2. The extraction lives in `spec-core`, not a new crate
+
+Add exactly one new module:
+
+- `spec-core/src/portability_contract.rs`
+
+Do not create a new workspace crate. Do not split `spec-core`. Do not introduce packaging or dependency choreography for a boundary that is still stabilizing.
+
+### 3. No new machine-readable gate in M44
+
+M44 does **not** add a new top-level portability schema, a new passport gate kind, or a new CLI mode.
+
+The current truth surfaces are sufficient:
+
+- raw backend markers
+- contamination summary
+- backend execution digest
+- current proof surfaces
+- `escape_hatch_gate`
+
+The job here is to centralize policy ownership behind those surfaces, not to invent a second contract layer.
+
+### 4. The family-analysis stop-state stays frozen
+
+M44 must not reopen family selection. `xtask/src/family/analysis_core/*` remains precedent, not implementation scope, except for wording or integration changes forced by compile-time or docs alignment.
+
+### 5. No broader TypeScript claim
+
+Allowed authored backend-specific detail remains allowed authored detail. It does **not** become shared portability-safe truth. M44 must preserve that line explicitly.
+
+## What Already Exists
+
+| Sub-problem | Existing owner | M44 action |
 |---|---|---|
-| Family-analysis decision seam | `xtask/src/family/analysis_core/*` | reuse as precedent, no new `xtask` seam work unless compile-forced |
-| Raw backend-only seam markers | `spec-core/src/backend_execution.rs` | keep as the raw marker collector |
-| Escape-hatch proof gate | `spec-core/src/escape_hatch.rs` | keep as the sole gate owner |
-| Portability truth projection | `spec-core/src/portability.rs` | keep as the read-side projection owner |
-| Seam semantic verdict composition | `spec-core/src/semantic_review.rs` | keep as consumer, remove inline policy drift |
-| Passport/status/export truth surfaces | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | keep as consumers, not policy authors |
-| Shared authored-surface restrictions | `spec-core/src/validator.rs` | extract into one explicit contract owner |
+| Family-analysis decision seam | `xtask/src/family/analysis_core/*` | reuse as precedent, do not expand |
+| Raw backend-only marker collection | `spec-core/src/backend_execution.rs` | preserve ownership, reclassify through contract helpers where needed |
+| Escape-hatch proof gate | `spec-core/src/escape_hatch.rs` | preserve ownership, align wording/helpers only if needed |
+| Portability projection | `spec-core/src/portability.rs` | preserve ownership, remove inline seam-policy assumptions |
+| Semantic portability verdict consumption | `spec-core/src/semantic_review.rs` | preserve ownership, consume centralized policy |
+| Passport / export / status read-side truth | `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs` | preserve ownership, remove local policy drift |
+| Shared authored seam restrictions | `spec-core/src/validator.rs` | move rule ownership into `portability_contract.rs` |
+| Roadmap and packet-facing milestone language | `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`, `semantic-families/README.md` | rewrite to match landed boundary |
 
-## Scope Challenge
+## Scope
 
-### 0A. Premise challenge
+### In scope
 
-1. The right problem is not “do more TypeScript now.” The right problem is “freeze the truth boundary that TypeScript would have to obey.”
-2. The right problem is not “extract a new crate.” The code already has one bounded `spec-core` seam. Make that seam explicit before spending packaging overhead.
-3. The right problem is not “rewrite family-analysis again.” `xtask` already has the reusable decision seam. M44 should reuse that precedent, not reopen it.
+1. Add `spec-core/src/portability_contract.rs` as the sole owner of seam portability policy.
+2. Move seam-kind helpers and shared authored-surface rules behind that module.
+3. Move portability classification rules behind that module:
+   - what counts as shared authored seam surface
+   - what counts as backend-only but non-contaminating detail
+   - what counts as contaminating domain lowering
+4. Rewire `validator.rs`, `backend_execution.rs`, `escape_hatch.rs`, `portability.rs`, `semantic_review.rs`, `passport.rs`, `export.rs`, and `spec-cli/src/commands.rs` to consume the centralized contract.
+5. Add direct and command-path regressions that prove the moved policy did not change truth accidentally.
+6. Refresh roadmap and maintainer-facing docs so the code story and written story match.
 
-### 0B. Minimum complete change set
-
-M44 should do the complete version of this lake:
-
-1. define one explicit portability-contract owner in `spec-core`
-2. move seam authored-surface rules and portability-policy tables behind that owner
-3. thread that owner through validator, portability projection, semantic review, passport, export, and status surfaces
-4. lock the contract with regression tests and command-path proofs
-5. rewrite roadmap and user-facing docs so the repo story matches the code
-
-Anything smaller is fake completeness. It would save almost no CC time and leave the same ambiguity behind.
-
-### 0C. Complexity check
-
-This milestone will likely touch more than 8 files, but that is justified because it is one contract-change lake with one new module and many consumers.
-
-The smell threshold still applies:
-
-- **acceptable**: one new module inside `spec-core`, no new crate, no new artifact type
-- **not acceptable**: adding a second new abstraction layer, a new workspace crate, or any second-language execution surface
-
-### 0D. Distribution check
-
-No new end-user distribution artifact is introduced here.
-
-The distribution surface is repo truth:
-
-- `spec-core` source boundaries
-- CLI read-side output truth
-- roadmap and README language
-
-## Accepted Scope
-
-M44 is complete only if all of this lands together:
-
-1. Add one explicit contract owner at `spec-core/src/portability_contract.rs`.
-2. Move seam shared-surface ownership rules out of `validator.rs` literals and behind that contract.
-3. Move portability-policy classification behind that contract:
-   - what is shared authored seam truth
-   - what is backend-only but non-contaminating
-   - what is contaminating domain lowering
-4. Rewire `backend_execution.rs`, `escape_hatch.rs`, `portability.rs`, `semantic_review.rs`, `passport.rs`, `export.rs`, and `spec-cli/src/commands.rs` to consume the explicit contract instead of re-deriving local policy.
-5. Preserve current family-analysis stop-state truth by keeping `xtask/src/family/analysis_core/*` unchanged except for import or wording changes forced by compile or docs alignment.
-6. Lock the command-path proof wall for seam portability truth in validation, test, status, and export flows.
-7. Rewrite the roadmap and active docs so the public story matches the landed boundary.
-
-## Not In Scope
+### Not in scope
 
 - new family promotion work
-- recommendation-policy or corpus-expansion changes
-- a new workspace crate or cross-crate shared portability library
+- recommendation-policy changes
+- corpus-analysis changes
+- a new crate split
 - first-class TypeScript backend execution
 - widening supported function portability claims
-- new JSON schema versions unless a read-side contract change forces one explicit additive field update
-- broad cleanup of unrelated `xtask/src/family/*` code
-- any change to `spec generate/build/test` ownership beyond read-side truth projection
+- changing `spec generate/build/test` ownership boundaries
+- broad `xtask/src/family/*` cleanup unrelated to compile or wording parity
+- a schema-version bump unless an additive read-side field change becomes unavoidable
 
-## Architecture Review
+If a schema bump becomes necessary during implementation, stop and make it explicit. The default assumption for M44 is **no schema bump**.
 
-### Locked architectural decision
+## Architecture Contract
 
-M44 includes **one small extraction**, not a docs-only freeze:
+### New module
 
-- add `spec-core/src/portability_contract.rs`
-- make it the sole owner of seam portability policy
-- keep `backend_execution.rs`, `escape_hatch.rs`, and `portability.rs` as the execution, proof-gate, and projection layers
+`spec-core/src/portability_contract.rs` becomes the only place allowed to answer these questions:
 
-This is the exact answer to the design doc’s open question. The milestone needs one code move to prove the seam is real. It does **not** need a new crate.
+- Is this unit a seam portability participant?
+- Which authored surfaces are legal shared seam input?
+- Which authored surfaces are illegal shared seam shape?
+- Which backend markers are backend-only but still honest?
+- Which backend markers contaminate portability claims?
+- Which stable reason strings or helper text should consumers reuse?
 
-### Locked target boundary
-
-```text
-spec-core/src/
-  portability_contract.rs   <-- NEW, sole policy owner
-  backend_execution.rs      <-- raw marker extraction + digest
-  escape_hatch.rs           <-- atom/molecule gate computation
-  portability.rs            <-- projected portability truth
-  semantic_review.rs        <-- verdict consumer
-  validator.rs              <-- hard authored-shape enforcement consumer
-  passport.rs               <-- passport/status projection consumer
-  export.rs                 <-- export projection consumer
-  lib.rs                    <-- module wiring
-
-spec-cli/src/
-  commands.rs               <-- status/export CLI consumer
-
-xtask/src/family/
-  analysis_core/*           <-- reuse as precedent, do not widen
-```
-
-### Exact ownership map
+### Ownership table
 
 | Module | Owns after M44 | Must not own |
 |---|---|---|
-| `portability_contract.rs` | seam-kind helpers, allowed shared authored surfaces, allowed backend-only surfaces, contamination policy table, stable reason strings/helpers for shared vs Rust-only classification | file IO, cargo commands, artifact loading, latest-artifact reuse, read-side rendering |
-| `backend_execution.rs` | detection of raw backend markers and backend digest material | verdict policy, gate policy, validator policy text |
-| `escape_hatch.rs` | proof-surface requirements and open/closed gate evaluation | marker classification policy, semantic verdict policy |
-| `portability.rs` | composition of markers, contamination summary, gate, and digest into projected portability truth | inline seam policy duplication |
-| `semantic_review.rs` | semantic verdict generation using projected portability truth | ownership of seam policy tables |
-| `validator.rs` | hard validation using contract-owned seam rules | hand-maintained duplicate seam policy strings |
-| `passport.rs`, `export.rs`, `spec-cli/src/commands.rs` | projection of current truth only | new local policy branches about what is shared vs Rust-only |
-| `xtask/src/family/analysis_core/*` | family-analysis decision semantics | seam portability policy for `spec-core` |
-
-### Exact move and rewire plan
-
-| Current owner | Surface | Destination or action | Why |
-|---|---|---|---|
-| `validator.rs` | `kind:data` and `kind:sum` shared-surface restrictions | move rule ownership into `portability_contract.rs`; keep validator as caller | one source of truth |
-| `portability.rs` | local `is_seam` helper and seam ownership assumptions | move seam-kind helper to `portability_contract.rs` | no more local re-derivation |
-| `semantic_review.rs` | inline portability policy branches that assume which markers contaminate | switch to contract-owned classification helpers | keep semantic review a consumer |
-| `backend_execution.rs` | marker kind enums and digest inputs | keep local, but classify through contract-owned policy names where needed | raw signals stay separate from verdict policy |
-| `escape_hatch.rs` | required surfaces and gate wording | keep local, but align wording and shared helpers with contract owner | gate remains explicit |
-| `passport.rs` / `export.rs` / `commands.rs` | projection of markers, gate, proof coverage | rewire only as needed to consume explicit contract/projected truth | keep read-side behavior aligned |
-| roadmap/docs | milestone wording and README seam language | update to reflect exact landed boundary | public story must match code |
+| `portability_contract.rs` | seam-kind helpers, shared authored-surface policy, marker classification policy, stable helper wording | file IO, CLI rendering, artifact loading, cargo commands, proof evaluation |
+| `backend_execution.rs` | raw marker detection and backend digest material | portability verdict policy, validator policy, semantic policy wording |
+| `escape_hatch.rs` | atom / molecule requirement set and open / closed gate evaluation | marker classification policy, shared authored-surface policy |
+| `portability.rs` | composition of markers, digest, proof surfaces, gate, contamination summary | local seam-policy duplication |
+| `semantic_review.rs` | semantic verdict logic using projected portability truth | inline classification tables for shared vs backend-only semantics |
+| `validator.rs` | hard validation using centralized seam-shape rules | inline duplicate seam restriction strings or rule tables |
+| `passport.rs` / `export.rs` / `spec-cli/src/commands.rs` | projection of already-computed truth | local policy branches about what counts as portability-safe |
+| `xtask/src/family/analysis_core/*` | family-analysis decision logic | seam portability policy for `spec-core` |
 
 ### Dependency graph
 
@@ -201,104 +208,142 @@ portability_contract.rs
       +--> backend_execution.rs
       +--> escape_hatch.rs
       +--> portability.rs
-                |
-                +--> semantic_review.rs
-                +--> passport.rs
-                +--> export.rs
-                +--> spec-cli/src/commands.rs
+             ^        ^
+             |        |
+             +--------+
+       raw markers   proof gate
+
+portability.rs
+      |
+      +--> semantic_review.rs
+      +--> passport.rs
+      +--> export.rs
+      +--> spec-cli/src/commands.rs
 
 parallel precedent, unchanged in scope:
 xtask/src/family/analysis_core/*
 ```
 
-### Architecture constraints
+### Non-negotiable invariants
 
-- No `Path`, `fs`, `Write`, or repo-root knowledge inside `portability_contract.rs`.
-- No new policy duplication inside `semantic_review.rs`, `validator.rs`, or CLI projection code.
-- No new crate extraction.
-- No change to family-analysis stop-state semantics.
-- No widening of what counts as portability-safe.
+- `kind:data` and `kind:sum` still reject illegal top-level shared-surface authored shapes as validation errors.
+- Allowed backend-specific authored detail remains valid input.
+- Allowed backend-specific authored detail does **not** become portability-safe shared truth automatically.
+- Helper-only lowering remains backend-only but non-contaminating.
+- Domain lowering remains contaminating.
+- Escape-hatch proof still requires both fresh `atom` and current `molecule`.
+- CLI, passport, export, and semantic review must agree on the same underlying portability truth.
 
-### Architectural verdict
+## File-By-File Implementation Contract
 
-Recommendation: add one explicit contract module inside `spec-core` and stop there.
+| File | Change | Why |
+|---|---|---|
+| `spec-core/src/portability_contract.rs` | create new typed policy owner | centralize seam portability rules |
+| `spec-core/src/lib.rs` | export the new module | make contract available to all consumers |
+| `spec-core/src/validator.rs` | replace inline seam restriction ownership with contract calls | remove duplicated policy text and drift risk |
+| `spec-core/src/backend_execution.rs` | keep raw marker collection, align any policy naming with contract helpers | preserve raw signal ownership while separating policy |
+| `spec-core/src/escape_hatch.rs` | keep gate ownership, optionally reuse stable helper wording | avoid gate-policy duplication |
+| `spec-core/src/portability.rs` | replace local seam checks and local classification assumptions with contract calls | keep projection layer as projection only |
+| `spec-core/src/semantic_review.rs` | consume centralized marker / contamination meaning | prevent semantic-review-only portability drift |
+| `spec-core/src/passport.rs` | ensure projected proof coverage / markers / gate all flow from centralized contract | keep passport truth aligned |
+| `spec-core/src/export.rs` | same as passport, for export bundles | keep export truth aligned |
+| `spec-cli/src/commands.rs` | same as passport/export, for status and CLI rendering | keep status/export/reporting aligned |
+| `spec-cli/tests/cli.rs` | add command-path regressions | catch live read-side drift |
+| `docs/ai_promotion_and_multilanguage_milestones_v0.1.md` | update milestone wording to the landed boundary | keep roadmap honest |
+| `semantic-families/README.md` | keep packet-facing boundary wording honest | prevent packet docs from implying wider portability |
+| `README.md` | update only if user-facing wording changed materially | keep public surface aligned |
+| `CHANGELOG.md` | update only if user-visible truth changed | avoid fake churn |
 
-Why:
+## Implementation Sequence
 
-- it is the smallest complete move
-- it aligns with the already-landed `xtask` `analysis_core` precedent
-- it keeps the change reversible
-- it avoids spending an innovation token on packaging before the seam settles
+### Step 1. Freeze the portability contract API
 
-## Code Quality Review
+Create `spec-core/src/portability_contract.rs` with:
 
-### Problems this plan removes
+- seam-kind helper(s)
+- shared authored-surface rule helpers
+- backend-marker classification helpers
+- stable string helpers only where multiple consumers would otherwise duplicate the same rule explanation
 
-1. **Scattered seam policy**
-   - today the seam rules live partly in validator literals, partly in portability projections, and partly in semantic-review branches
-   - after M44 the seam policy has one named owner
+Do **not** add:
 
-2. **Consumer drift risk**
-   - today passport/export/status consumers can stay green while silently disagreeing with validator or semantic-review assumptions
-   - after M44 all of them consume the same portability contract
+- artifact loading
+- cargo execution
+- CLI formatting
+- read-side rendering
+- dynamic config
 
-3. **Fake shared-core language**
-   - today the code has the pieces, but the contract is still partly a story
-   - after M44 the contract is embodied in one module and one policy table
+Step 1 is done when the call surface is stable enough that downstream work can proceed in parallel.
 
-### Implementation rules
+### Step 2. Move validator-owned seam policy behind the contract
 
-- move policy before tweaking behavior
-- do not mix structural extraction with second-language logic
-- keep existing public read-side behavior stable unless a deliberate portability-truth correction is named in this plan
-- prefer small helper extraction over broad renames
-- preserve explicit naming over clever abstractions
+Replace inline `kind:data` and `kind:sum` rule ownership in `spec-core/src/validator.rs` so the validator becomes a caller, not a policy author.
 
-## Implementation Plan
+Behavior must stay the same:
 
-### Step 1. Freeze the contract surface
+- illegal top-level seam shape still fails validation
+- top-level `body.rust` on seam kinds still fails validation
+- backend-specific lowering stays allowed only in the existing backend-specific surfaces
 
-- Add `spec-core/src/portability_contract.rs`.
-- Define seam-kind helpers and portability policy helpers there.
-- Add module wiring in `spec-core/src/lib.rs`.
-- Keep the contract small and typed.
+### Step 3. Rewire raw marker and projection layers
 
-### Step 2. Move shared authored-surface rules behind the contract
+Update:
 
-- Replace inline `kind:data` and `kind:sum` portability rule ownership in `spec-core/src/validator.rs`.
-- Keep hard validation behavior the same:
-  - illegal shared-surface authored shapes remain validation errors
-  - allowed backend-only details remain valid input, not automatic portability-safe truth
+- `spec-core/src/backend_execution.rs`
+- `spec-core/src/portability.rs`
+- `spec-core/src/escape_hatch.rs`
 
-### Step 3. Rewire raw marker and gate layers to consume the contract
+Rules for this step:
 
-- Update `spec-core/src/backend_execution.rs` to align raw marker naming with the contract.
-- Update `spec-core/src/escape_hatch.rs` only where shared helpers or wording are needed.
-- Update `spec-core/src/portability.rs` to consume the contract instead of local seam assumptions.
+- `backend_execution.rs` keeps raw marker collection ownership
+- `portability.rs` stops deriving its own seam policy
+- `escape_hatch.rs` does not become a portability classifier
 
-### Step 4. Rewire read-side truth consumers
+This step is a refactor of ownership, not a behavior expansion.
 
-- Update `spec-core/src/semantic_review.rs`.
-- Update `spec-core/src/passport.rs`.
-- Update `spec-core/src/export.rs`.
-- Update `spec-cli/src/commands.rs` if status/export JSON or text projection needs one centralized portability path.
+### Step 4. Rewire semantic and read-side consumers
 
-### Step 5. Lock examples, fixtures, and docs
+Update:
 
-- Refresh any example artifacts whose projected portability truth changes.
-- Update `README.md` seam wording if needed.
-- Rewrite `docs/ai_promotion_and_multilanguage_milestones_v0.1.md` so the shared-core/escape-hatch ladder matches the landed boundary.
-- Update `CHANGELOG.md` only if user-facing read-side truth changes.
+- `spec-core/src/semantic_review.rs`
+- `spec-core/src/passport.rs`
+- `spec-core/src/export.rs`
+- `spec-cli/src/commands.rs`
 
-### Step 6. Run the full proof wall
+Goal:
 
-- prove validator, semantic-review, passport, export, and status parity
-- prove family-analysis stop-state remains unchanged
-- prove no new portability claims were accidentally widened
+- semantic review, passport, export, and status all consume the same centralized meaning of:
+  - marker classification
+  - contamination
+  - gate interpretation
+
+No consumer is allowed to invent a local version of "shared vs backend-only vs contaminating."
+
+### Step 5. Lock regressions before docs
+
+Add or refresh tests first, before widening doc claims.
+
+The milestone is not complete if docs say the boundary is explicit but the test suite does not prove it.
+
+### Step 6. Refresh roadmap and maintainer-facing docs
+
+Required documentation updates:
+
+- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+- `semantic-families/README.md`
+
+Conditional updates:
+
+- `README.md` if the user-facing wording on portability truth became more explicit
+- `CHANGELOG.md` if command-visible truth changed in a user-noticeable way
+
+### Step 7. Run the proof wall and fix parity drift
+
+Do not stop at compile-green. M44 is complete only when the full proof wall is green and all read-side surfaces agree.
 
 ## Test Review
 
-### Required proof loop
+### Required proof wall
 
 ```bash
 cargo test
@@ -311,13 +356,13 @@ cargo xtask family corpus-decision --format json
 cargo xtask family verify-decision-contract --format json
 ```
 
-Expected preserved truth:
+### Expected preserved truth
 
-- seam validator still rejects illegal top-level shared-surface authored shapes
-- helper-only lowering remains backend-only but not contaminating
-- domain lowering remains contaminating
-- escape-hatch gate still requires fresh `atom` and `molecule` proof
-- family-analysis stop-state still points to architecture follow-on, not another family
+- seam validator still rejects illegal top-level authored seam shapes
+- helper-only lowering still projects as backend-only but non-contaminating
+- domain lowering still contaminates portability claims
+- escape-hatch gate still opens when atom proof is stale or molecule proof is missing
+- family-analysis stop-state still points away from inventing a new family
 
 ### Code path coverage diagram
 
@@ -326,203 +371,259 @@ CODE PATH COVERAGE
 ===========================
 [+] spec-core/src/portability_contract.rs
     |
-    |-- seam-kind helpers
-    |   `-- [GAP] new direct unit tests required
-    |
-    |-- shared-authored-surface rules
-    |   `-- [GAP] validator-backed regression tests required
-    |
-    `-- contamination policy table
-        `-- [GAP] semantic-review and portability projection tests required
+    ├── seam-kind helpers
+    │   └── direct unit tests required
+    │
+    ├── shared authored-surface rules
+    │   └── validator-backed regressions required
+    │
+    └── contamination policy helpers
+        └── projection / semantic-review regressions required
 
 [~] spec-core/src/validator.rs
     |
-    |-- kind:data shared-surface rejection
-    |   `-- [PASS TESTED] existing seam restriction coverage, refresh through contract owner
-    |
-    `-- kind:sum shared-surface rejection
-        `-- [PASS TESTED] existing seam restriction coverage, refresh through contract owner
+    ├── kind:data shared-surface rejection
+    │   └── must still hard-fail through contract calls
+    │
+    └── kind:sum shared-surface rejection
+        └── must still hard-fail through contract calls
 
 [~] spec-core/src/backend_execution.rs
     |
-    |-- collect_backend_execution_markers()
-    |   |-- [PASS TESTED] proof-helper marker
-    |   |-- [PASS TESTED] domain-lowering marker
-    |   `-- [PASS TESTED] backend-rust-derives marker
-    |
-    `-- compute_backend_execution_digest()
-        `-- [PASS TESTED] authored-only edits do not change digest
+    ├── collect_backend_execution_markers()
+    │   ├── proof-helper marker preserved
+    │   ├── domain-lowering marker preserved
+    │   └── rust-derives marker preserved
+    │
+    └── compute_backend_execution_digest()
+        └── authored-only seam edits must not change digest
 
 [~] spec-core/src/escape_hatch.rs
     |
-    |-- current_proof_surfaces()
-    |   |-- [PASS TESTED] fresh atom path
-    |   `-- [PASS TESTED] current molecule path
-    |
-    `-- evaluate_escape_hatch_gate()
-        |-- [PASS TESTED] closed gate
-        `-- [GAP] stale atom + missing molecule parity regression after contract extraction
+    ├── current_proof_surfaces()
+    │   ├── fresh atom path preserved
+    │   └── current molecule path preserved
+    │
+    └── evaluate_escape_hatch_gate()
+        └── stale atom / missing molecule regression required
 
 [!] spec-core/src/portability.rs
     |
-    |-- collect/summarize markers
-    |   `-- [GAP] direct contract-owner parity tests required
-    |
-    |-- summarize_portability_contamination()
-    |   `-- [GAP] helper-only vs domain-lowering split must be locked
-    |
-    `-- project_portability_truth()
-        `-- [GAP] status/export/passport shared projection parity required
+    ├── marker projection
+    │   └── contract-owner parity required
+    │
+    ├── contamination summary
+    │   └── helper-only vs domain-lowering split must be locked
+    │
+    └── full portability projection
+        └── passport / export / status parity required
 
 [!] spec-core/src/semantic_review.rs
     |
-    |-- supported seam portability summary
-    |   `-- [GAP] direct consumer parity with contract owner required
-    |
-    |-- backend-only meaning preserved
-    |   `-- [PASS TESTED] existing helper-marker verdict coverage
-    |
-    `-- backend-only semantics leaked
-        `-- [PASS TESTED] existing domain-lowering contamination coverage
+    ├── supported seam portability summary
+    │   └── must consume contract-owned meaning
+    │
+    ├── backend-only meaning preserved
+    │   └── regression required
+    │
+    └── backend-only semantics leaked
+        └── regression required
 
 [!] spec-core/src/passport.rs + export.rs + spec-cli/src/commands.rs
     |
-    |-- projected markers
-    |   `-- [GAP] read-side parity tests required
-    |
-    |-- proof coverage / gate projection
-    |   `-- [GAP] status/export current-truth parity required
-    |
-    `-- CLI JSON/text rendering
-        `-- [GAP] command-path regression tests required
-
----------------------------------
-REQUIRED NEW TESTS:
-1. direct unit tests for portability_contract helpers
-2. validator regressions proving rules now route through the contract owner
-3. portability projection regressions for helper-only vs contaminating lowering
-4. passport/export/status parity tests
-5. stale-proof gate regressions
-6. xtask stop-state parity regression proving M44 did not reopen family choice
----------------------------------
+    ├── projected markers
+    │   └── parity required
+    │
+    ├── proof coverage / gate projection
+    │   └── parity required
+    │
+    └── status / export / text rendering
+        └── command-path regressions required
 ```
 
-### Required new tests
+### Required new or refreshed regressions
 
-1. `spec-core` unit tests for `portability_contract.rs`.
+1. Direct unit tests for `portability_contract.rs`.
 2. Validator regressions proving `kind:data` and `kind:sum` restrictions still hard-fail through the new contract owner.
-3. Portability projection regressions proving:
-   - helper-only lowering is backend-only but non-contaminating
+3. Projection regressions proving:
+   - helper-only lowering is backend-only but not contaminating
    - domain lowering contaminates portability claims
 4. Escape-hatch regressions proving stale atom or missing molecule proof opens the gate.
-5. Passport/export/status parity tests proving all read-side surfaces agree on markers, proof coverage, and gate state.
-6. CLI command-path tests in `spec-cli/tests/cli.rs` proving `validate`, `status`, and `export` remain truthful.
-7. `xtask` parity proof proving `family recommend`, `family corpus-decision`, and `verify-decision-contract` remain unchanged.
+5. Passport / export / status parity tests proving all read-side surfaces agree on markers, proof coverage, and gate state.
+6. CLI command-path regressions in `spec-cli/tests/cli.rs`.
+7. `xtask` parity checks proving M44 did not reopen family-analysis semantics.
 
-## Performance Review
+### Regression rule
 
-This milestone is not performance-driven, but it can create accidental churn if done sloppily.
+Any behavior that was already true before M44 and could silently become looser or inconsistent during this extraction gets a regression test. No exceptions.
 
-Performance constraints:
+That includes:
 
-- do not add filesystem or cargo-process work to the read-side path
-- keep marker collection and contamination summarization linear in seam method count
-- avoid recomputing the same portability summary multiple times inside one projection path when a shared local result will do
-- keep `xtask` latest-artifact fingerprint reuse unchanged
+- seam validation strictness
+- contamination classification
+- escape-hatch gate projection
+- read-side parity across passport / export / status
+- frozen family-analysis stop-state
 
-Performance anti-goals:
+## Code Quality Constraints
 
-- no caching layer
-- no global memoization
-- no new persisted artifact just for portability summaries
+This plan is intentionally biased toward explicit over clever.
+
+Rules:
+
+- one new module, not a general-purpose abstraction tower
+- no second new policy layer
+- no new crate
+- no broad renaming sweep unless compile-forced
+- no consumer-local copies of seam policy after M44
+- keep the diff focused on policy extraction plus consumer rewiring
+
+Specific code-quality targets:
+
+- remove duplicated seam-policy assumptions
+- keep raw marker collection and policy classification separate
+- keep validation, projection, gate evaluation, and semantic review responsibilities distinct
+- do not mix structural extraction with second-language experimentation
+
+## Performance Constraints
+
+M44 is not a performance milestone, but it can accidentally add churn if done badly.
+
+Do not add:
+
+- filesystem work to read-side projection paths
+- cargo process work to portability projection paths
+- caching or memoization layers
+- new persisted artifacts just to hold portability summaries
+
+Expected cost profile:
+
+- marker collection remains linear in seam method count
+- projection remains cheap and in-process
+- existing `xtask` artifact reuse remains unchanged
 
 ## Failure Modes Registry
 
-| Codepath | Failure mode | Rescued? | Test? | User sees? | Logged? |
-|---|---|---:|---:|---|---:|
-| seam validator contract | illegal top-level seam shape becomes a warning or silently passes | N | Y | explicit validate failure required | Y |
-| backend marker classification | proof-helper and domain-lowering markers collapse into one meaning | N | Y | wrong portability verdict unless caught | Y |
-| escape-hatch gate | stale atom or missing molecule proof still projects as closed | N | Y | false green portability truth | Y |
-| semantic-review projection | backend-only detail gets treated as portability-safe shared semantics | N | Y | wrong semantic verdict | Y |
-| passport/export/status parity | different read-side surfaces disagree on markers or gate state | N | Y | conflicting repo truth | Y |
-| roadmap/docs | docs claim portability is solved more broadly than code proves | N | Y | maintainers plan the wrong next milestone | Y |
-| family-analysis precedent | M44 accidentally mutates `xtask` stop-state semantics | N | Y | next-family truth reopens incorrectly | Y |
+| Codepath | Failure mode | Test required | Error handling required | User-visible effect if broken |
+|---|---|---:|---:|---|
+| seam validator contract | illegal top-level seam shape silently passes | Y | Y | false green validation |
+| backend marker classification | helper-only and domain-lowering collapse into the same meaning | Y | Y | wrong portability verdict |
+| backend digest | authored-only edits change backend digest | Y | Y | false stale backend-execution signal |
+| escape-hatch gate | stale atom or missing molecule still projects as closed | Y | Y | false green seam portability truth |
+| semantic review | backend-only detail gets treated as portability-safe shared meaning | Y | Y | wrong semantic verdict |
+| passport / export / status | read-side surfaces disagree on markers or gate state | Y | Y | conflicting repo truth |
+| docs and roadmap | milestone language claims broader portability than code proves | Y | N | maintainers steer the roadmap wrong |
+| family-analysis precedent | M44 mutates stop-state semantics accidentally | Y | Y | repo invents a fake next-family move |
 
-Critical-gap rule:
+Critical gap rule:
 
-- any row with `Test = N` is unacceptable for M44
-- any silent green portability claim is unacceptable for M44
+- Any row above without a regression test is a release blocker for M44.
+- Any bug that can produce a silent green portability claim is a release blocker for M44.
 
 ## Worktree Parallelization Strategy
 
-This milestone has one real contract-freeze gate, one safe code-parallel window, and one serialized integration finish.
+This plan has one required serial gate, then a real parallel window, then one final integration lane.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
 | Step 1. Freeze portability contract API | `spec-core/src/` | — |
-| Step 2. Enforce contract in validation and raw marker layers | `spec-core/src/` | Step 1 |
-| Step 3. Rewire read-side projection consumers | `spec-core/src/`, `spec-cli/src/` | Step 1 |
-| Step 4. Refresh docs and example truth surfaces | `docs/`, `README.md`, `CHANGELOG.md`, `examples/` | Step 1 |
-| Step 5. Integrate, rerun proof wall, and fix parity drift | `spec-core/src/`, `spec-cli/src/`, `xtask/src/family/`, `docs/` | Steps 2, 3, 4 |
+| Step 2. Move validator and raw marker consumers onto the contract | `spec-core/src/` | Step 1 |
+| Step 3. Rewire semantic and read-side projection consumers | `spec-core/src/`, `spec-cli/src/` | Step 1 |
+| Step 4. Refresh docs and compatibility surfaces | `docs/`, `semantic-families/`, `README.md`, `CHANGELOG.md`, `examples/` | Step 1 |
+| Step 5. Merge, rerun proof wall, and fix parity drift | `spec-core/src/`, `spec-cli/src/`, `xtask/src/family/`, `docs/` | Steps 2, 3, 4 |
 
 ### Parallel lanes
 
 - Lane 0: Step 1
-  Freeze the API first. This is the contract that every later lane must obey.
+  - Owns: `spec-core/src/portability_contract.rs`, `spec-core/src/lib.rs`
+  - Output: stable contract API that downstream lanes must obey
+
 - Lane A: Step 2
-  Validation plus raw backend-marker alignment. This lane owns `portability_contract.rs`, `validator.rs`, `backend_execution.rs`, and `lib.rs`.
+  - Owns: `spec-core/src/validator.rs`, `spec-core/src/backend_execution.rs`
+  - Goal: remove validator-owned policy duplication and align raw marker classification calls
+
 - Lane B: Step 3
-  Read-side consumer rewiring. This lane owns `escape_hatch.rs`, `portability.rs`, `semantic_review.rs`, `passport.rs`, `export.rs`, `spec-cli/src/commands.rs`, and CLI tests.
+  - Owns: `spec-core/src/escape_hatch.rs`, `spec-core/src/portability.rs`, `spec-core/src/semantic_review.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`, `spec-cli/src/commands.rs`, `spec-cli/tests/cli.rs`
+  - Goal: make all read-side and semantic consumers use the centralized contract
+
 - Lane C: Step 4
-  Docs, roadmap, and example truth surfaces. This lane can run independently once the contract is frozen.
+  - Owns: `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`, `semantic-families/README.md`, optionally `README.md`, optionally `CHANGELOG.md`, any refreshed example truth surfaces
+  - Goal: update written truth after the contract API is frozen
+
 - Lane D: Step 5
-  Final integration and proof wall.
+  - Owns: integration, proof wall, parity cleanup
+  - Goal: merge the prior lanes and make the whole milestone green together
 
 ### Execution order
 
-- Launch Lane 0 first and freeze the portability-contract API.
-- After Step 1 lands, launch Lanes A, B, and C in parallel worktrees.
-- Merge Lane A first if Lane B needs any final contract call-shape adjustments.
-- Merge Lane C whenever docs and example updates are green.
-- Run Lane D last on the merged result to rerun the proof wall and fix any parity drift.
+1. Launch Lane 0 first. Do not parallelize before the contract API is frozen.
+2. Once Step 1 is stable, launch Lanes A, B, and C in parallel worktrees.
+3. Merge Lane A before finalizing Lane B if B needs any last call-shape or helper adjustments.
+4. Merge Lane C once the wording matches the landed boundary. It does not need to wait for proof-wall completion unless the code truth changed again during integration.
+5. Run Lane D last on the merged branch and rerun the entire proof wall.
 
 ### Conflict flags
 
-- Lanes A and B both touch `spec-core/src/`, so Step 1 must freeze names and function signatures before launch.
-- Lanes B and D both touch `spec-cli/src/commands.rs` and read-side parity tests, so D must wait.
-- Lane C is low-conflict, but it must not invent milestone language that outruns the landed code.
+- Lanes A and B both touch `spec-core/src/`, so Lane 0 must freeze names and signatures first.
+- Lane B is the highest merge-risk lane because it touches both `spec-core` and `spec-cli`.
+- Lane D must own any parity cleanup after the parallel merges. Do not let A or B keep rebasing after D starts.
+- Lane C is low-conflict, but it must not over-claim. Docs must match the landed code, not the hoped-for next milestone.
 
-## Docs And Roadmap Updates
+## Documentation Contract
 
-Required documentation updates:
+The documentation work is part of the milestone, not garnish.
+
+Required updates:
 
 - `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-  - rewrite the shared-core and escape-hatch milestone text so it matches the landed M44 boundary
+  - keep the shared-core / escape-hatch ordering honest
+  - reflect that M44 centralized the portability contract in `spec-core`
+- `semantic-families/README.md`
+  - preserve the M31 / M32 style boundary language without implying broader portability than the code proves
+
+Conditional updates:
+
 - `README.md`
-  - keep seam wording honest if any read-side truth surfaces become more explicit
+  - only if command-visible portability wording changed for users
 - `CHANGELOG.md`
-  - only if user-facing command truth or milestone status language changes
+  - only if the milestone changes user-visible truth surfaces or milestone labeling in a way that should be recorded publicly
 
-The docs update is part of the milestone, not cleanup garnish. If the code lands and the roadmap still tells the older story, M44 is incomplete.
-
-## Completion Criteria
+## Acceptance Criteria
 
 M44 is complete only if all of the following are true:
 
-1. `spec-core/src/portability_contract.rs` exists and is the sole seam portability policy owner.
-2. `validator.rs` no longer owns duplicated seam portability policy inline.
-3. `backend_execution.rs`, `escape_hatch.rs`, and `portability.rs` consume the explicit contract without changing their basic responsibilities.
-4. `semantic_review.rs`, `passport.rs`, `export.rs`, and CLI read-side surfaces project the same portability truth.
-5. Existing helper-only and contaminating-domain-lowering verdict behavior remains correct.
-6. The escape-hatch gate still requires fresh atom and molecule proof.
-7. `xtask` family-analysis stop-state truth remains unchanged.
-8. The roadmap and active docs match the landed code boundary.
-9. The implementation did not widen into second-language execution, new crate extraction, or fresh family-choice work.
+1. `spec-core/src/portability_contract.rs` exists and is the sole policy owner for seam portability rules.
+2. `spec-core/src/validator.rs` no longer owns duplicated seam-policy rules inline.
+3. `spec-core/src/backend_execution.rs` still owns raw marker detection and backend digest material.
+4. `spec-core/src/escape_hatch.rs` still owns proof-surface gate computation.
+5. `spec-core/src/portability.rs` composes truth from centralized contract helpers instead of local seam assumptions.
+6. `spec-core/src/semantic_review.rs`, `spec-core/src/passport.rs`, `spec-core/src/export.rs`, and `spec-cli/src/commands.rs` all project the same portability truth.
+7. Helper-only lowering still remains backend-only but non-contaminating.
+8. Domain lowering still contaminates portability claims.
+9. The escape-hatch gate still requires fresh atom proof and current molecule proof.
+10. The proof wall passes.
+11. `xtask` family-analysis stop-state truth remains unchanged.
+12. The updated docs match the landed code boundary exactly.
+13. The implementation did not widen into new crate extraction, second-language execution, or fresh family-choice work.
+
+## Definition Of Done
+
+M44 is done when a maintainer can answer all of these questions by pointing at one place in the code, not by narrating cross-file tribal knowledge:
+
+- What is legal shared seam authored shape?
+- What is backend-only but still honest?
+- What contaminates portability claims?
+- Which modules own validation, gate evaluation, projection, and semantic verdicts?
+- Why does status/export/passport say what they say?
+
+If those answers still require "well, validator does one part, portability does another part, and semantic review kind of knows the rest," then M44 did not finish the job.
 
 ## Completion Summary
 
-If M44 lands cleanly, the repo stops hand-waving about portability.
+This plan is the smallest complete version of the lake.
 
-Maintainers get one explicit place in `spec-core` that defines the seam contract. Validator, semantic review, passport, export, and status all read from the same policy instead of re-deriving it. `xtask` keeps its already-explicit family-analysis seam untouched, and the roadmap stops implying that broader portability or second-language execution has already been earned.
+It adds one explicit policy owner. It keeps every other module in its current role. It locks the regressions that matter. It updates the roadmap to match the code. It gives the repo one honest portability contract instead of several half-implicit ones.
+
+That is the whole milestone.
