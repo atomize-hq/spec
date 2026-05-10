@@ -1,29 +1,33 @@
-//! Bounded M45 TypeScript backend generation.
+//! Bounded M46 TypeScript backend generation.
 //!
-//! This module is intentionally narrow. It only renders the first-class M45
+//! This module is intentionally narrow. It only renders the first-class M46
 //! TypeScript lane for:
 //! - `kind:function`
 //! - compatibility key `function.arithmetic_leaf.monotone_up.v1`
-//! - `deps: []`
+//! - `deps: []` or exactly one direct local helper dep
 //!
 //! It does not promise generic TypeScript parity, molecule parity, seam-kind
 //! support, dependency-bearing units, proof routing, or Bun execution.
 
+use crate::semantic_review::{
+    evaluate_semantic_review_with_context, SemanticReviewContext, SemanticSupportStatus,
+};
 use crate::syntax::validate_expect_expr;
 use crate::types::{
-    Body, Intent, LoadedSpec, LocalTest, NormalizedUnit, ResolvedSpec, SpecSource, SpecStruct,
-    TYPESCRIPT_BUILD_ENTRY_PATH, TYPESCRIPT_LOCAL_TESTS_PATH, TYPESCRIPT_RUNTIME_HELPER_PATH,
-    UnitExtensions,
+    Body, DepRef, Intent, LoadedSpec, LocalTest, NormalizedUnit, ResolvedSpec, SpecSource,
+    SpecStruct, UnitExtensions, TYPESCRIPT_BUILD_ENTRY_PATH, TYPESCRIPT_LOCAL_TESTS_PATH,
+    TYPESCRIPT_RUNTIME_HELPER_PATH,
 };
 use crate::validator::{
-    TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE, validate_typescript_execution_target_spec,
+    validate_typescript_execution_target_spec_with_specs, TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
+    TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE, TYPESCRIPT_TARGET_COMPATIBILITY_KEY,
 };
 use crate::{Result, SpecError};
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 
 pub fn generate_typescript_unit_module(spec: &ResolvedSpec) -> Result<String> {
-    validate_typescript_resolved_spec(spec)?;
     render_typescript_unit_module(spec)
 }
 
@@ -33,12 +37,17 @@ pub fn generate_typescript_tree(units: &[NormalizedUnit]) -> Result<BTreeMap<Pat
         .map(extract_typescript_spec)
         .collect::<Result<Vec<_>>>()?;
     specs.sort_by(|left, right| left.id.cmp(&right.id));
+    let specs_by_id = build_typescript_loaded_specs_by_id(&specs);
+
+    for spec in &specs {
+        validate_typescript_tree_spec(spec, &specs_by_id)?;
+    }
 
     let mut tree = BTreeMap::new();
     for spec in &specs {
         tree.insert(
             typescript_path_for_unit(spec),
-            render_typescript_unit_module(spec)?,
+            render_typescript_unit_module_unchecked(spec)?,
         );
     }
 
@@ -60,13 +69,10 @@ pub fn generate_typescript_tree(units: &[NormalizedUnit]) -> Result<BTreeMap<Pat
 
 fn extract_typescript_spec(unit: &NormalizedUnit) -> Result<&ResolvedSpec> {
     match unit {
-        NormalizedUnit::Function(spec) => {
-            validate_typescript_resolved_spec(spec)?;
-            Ok(spec)
-        }
+        NormalizedUnit::Function(spec) => Ok(spec),
         _ => Err(SpecError::Generator {
             message: format!(
-                "unit '{}' is not eligible for the bounded M45 TypeScript lane: {}",
+                "unit '{}' is not eligible for the bounded M46 TypeScript lane: {}",
                 unit.id(),
                 TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE
             ),
@@ -75,6 +81,14 @@ fn extract_typescript_spec(unit: &NormalizedUnit) -> Result<&ResolvedSpec> {
 }
 
 fn validate_typescript_resolved_spec(spec: &ResolvedSpec) -> Result<()> {
+    let specs_by_id = HashMap::from([(spec.id.clone(), typescript_loaded_spec(spec))]);
+    validate_typescript_resolved_spec_with_specs(spec, &specs_by_id)
+}
+
+fn validate_typescript_resolved_spec_with_specs(
+    spec: &ResolvedSpec,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> Result<()> {
     if spec
         .body_typescript
         .as_deref()
@@ -84,13 +98,84 @@ fn validate_typescript_resolved_spec(spec: &ResolvedSpec) -> Result<()> {
     {
         return Err(SpecError::Generator {
             message: format!(
-                "unit '{}' is not eligible for the bounded M45 TypeScript lane: body.typescript is required",
+                "unit '{}' is not eligible for the bounded M46 TypeScript lane: body.typescript is required",
                 spec.id
             ),
         });
     }
 
-    let loaded = LoadedSpec {
+    validate_typescript_execution_target_spec_with_specs(&typescript_loaded_spec(spec), specs_by_id)
+}
+
+fn validate_typescript_tree_spec(
+    spec: &ResolvedSpec,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> Result<()> {
+    if spec
+        .body_typescript
+        .as_deref()
+        .map(str::trim)
+        .filter(|body| !body.is_empty())
+        .is_none()
+    {
+        return Err(SpecError::Generator {
+            message: format!(
+                "unit '{}' is not eligible for the bounded M46 TypeScript lane: body.typescript is required",
+                spec.id
+            ),
+        });
+    }
+
+    let loaded = typescript_loaded_spec(spec);
+    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+    let Some(review) = evaluate_semantic_review_with_context(&loaded, &semantic_review_context)
+    else {
+        return Err(SpecError::Generator {
+            message: format!(
+                "unit '{}' is not eligible for the bounded M46 TypeScript lane: missing supported semantic review",
+                spec.id
+            ),
+        });
+    };
+
+    if review.effective_support_status() != SemanticSupportStatus::Supported {
+        return Err(SpecError::Generator {
+            message: format!(
+                "unit '{}' is not eligible for the bounded M46 TypeScript lane: semantic review is {}",
+                spec.id, review.compatibility_key
+            ),
+        });
+    }
+
+    match review.compatibility_key.as_str() {
+        TYPESCRIPT_TARGET_COMPATIBILITY_KEY => {
+            validate_typescript_execution_target_spec_with_specs(&loaded, specs_by_id)
+        }
+        TYPESCRIPT_HELPER_COMPATIBILITY_KEY if spec.deps.is_empty() => Ok(()),
+        TYPESCRIPT_HELPER_COMPATIBILITY_KEY => Err(SpecError::Generator {
+            message: format!(
+                "unit '{}' is not eligible for the bounded M46 TypeScript lane: helper units must have deps: []",
+                spec.id
+            ),
+        }),
+        _ => Err(SpecError::Generator {
+            message: format!(
+                "unit '{}' is not eligible for the bounded M46 TypeScript lane: semantic family '{}' is unsupported",
+                spec.id, review.compatibility_key
+            ),
+        }),
+    }
+}
+
+fn build_typescript_loaded_specs_by_id(specs: &[&ResolvedSpec]) -> HashMap<String, LoadedSpec> {
+    specs
+        .iter()
+        .map(|spec| (spec.id.clone(), typescript_loaded_spec(spec)))
+        .collect()
+}
+
+fn typescript_loaded_spec(spec: &ResolvedSpec) -> LoadedSpec {
+    LoadedSpec {
         source: SpecSource {
             file_path: format!("{}.unit.spec", spec.id),
             id: spec.id.clone(),
@@ -113,14 +198,20 @@ fn validate_typescript_resolved_spec(spec: &ResolvedSpec) -> Result<()> {
             spec_version: spec.spec_version.clone(),
             extensions: UnitExtensions::default(),
         },
-    };
-
-    validate_typescript_execution_target_spec(&loaded)
+    }
 }
 
 fn render_typescript_unit_module(spec: &ResolvedSpec) -> Result<String> {
-    let runtime_import =
-        relative_import(&typescript_path_for_unit(spec), Path::new(TYPESCRIPT_RUNTIME_HELPER_PATH));
+    validate_typescript_resolved_spec(spec)?;
+    render_typescript_unit_module_unchecked(spec)
+}
+
+fn render_typescript_unit_module_unchecked(spec: &ResolvedSpec) -> Result<String> {
+    let runtime_import = relative_import(
+        &typescript_path_for_unit(spec),
+        Path::new(TYPESCRIPT_RUNTIME_HELPER_PATH),
+    );
+    let helper_import = render_typescript_helper_import(spec)?;
     let signature = render_typescript_signature(spec)?;
     let body = render_typescript_body(
         spec.body_typescript
@@ -133,9 +224,40 @@ fn render_typescript_unit_module(spec: &ResolvedSpec) -> Result<String> {
         output.push_str(&doc_comment);
     }
     output.push_str(&format!(
-        "import {{ Decimal }} from \"{runtime_import}\";\n\n{signature} {body}\n"
+        "import {{ Decimal }} from \"{runtime_import}\";\n"
     ));
+    if let Some(helper_import) = helper_import {
+        output.push_str(&helper_import);
+        output.push('\n');
+    }
+    output.push_str(&format!("\n{signature} {body}\n"));
     Ok(output)
+}
+
+fn render_typescript_helper_import(spec: &ResolvedSpec) -> Result<Option<String>> {
+    match spec.deps.as_slice() {
+        [] => Ok(None),
+        [dep] => {
+            let parsed = DepRef::parse(dep).map_err(|err| SpecError::Generator {
+                message: format!(
+                    "invalid helper dep '{}' reached bounded TypeScript generator: {}",
+                    dep, err
+                ),
+            })?;
+            let helper_path = typescript_path_for_unit_id(parsed.unit_id());
+            let import_path = relative_import(&typescript_path_for_unit(spec), &helper_path);
+            Ok(Some(format!(
+                "import {{ {} }} from \"{import_path}\";",
+                parsed.callable_name()
+            )))
+        }
+        deps => Err(SpecError::Generator {
+            message: format!(
+                "bounded TypeScript generator expected at most one direct helper dep; found {}",
+                deps.len()
+            ),
+        }),
+    }
 }
 
 fn render_typescript_signature(spec: &ResolvedSpec) -> Result<String> {
@@ -161,7 +283,10 @@ fn render_typescript_signature(spec: &ResolvedSpec) -> Result<String> {
         .transpose()?
         .unwrap_or_default();
 
-    Ok(format!("export function {}({params}){returns}", spec.fn_name))
+    Ok(format!(
+        "export function {}({params}){returns}",
+        spec.fn_name
+    ))
 }
 
 fn map_contract_type(ty: &str) -> Result<&'static str> {
@@ -413,8 +538,7 @@ fn render_integer_literal(expr: &syn::Expr) -> Result<String> {
             }) = unary.expr.as_ref()
             else {
                 return Err(SpecError::Generator {
-                    message: "bounded TypeScript local test expected integer literal"
-                        .to_string(),
+                    message: "bounded TypeScript local test expected integer literal".to_string(),
                 });
             };
             Ok(format!("-{}", int.base10_digits()))
@@ -426,11 +550,17 @@ fn render_integer_literal(expr: &syn::Expr) -> Result<String> {
 }
 
 fn typescript_path_for_unit(spec: &ResolvedSpec) -> PathBuf {
+    typescript_path_for_unit_id(&spec.id)
+}
+
+fn typescript_path_for_unit_id(unit_id: &str) -> PathBuf {
     let mut path = PathBuf::new();
-    if !spec.module_path.is_empty() {
-        path.push(spec.module_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+    if let Some((module_path, fn_name)) = unit_id.rsplit_once('/') {
+        path.push(module_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+        path.push(format!("{fn_name}.ts"));
+    } else {
+        path.push(format!("{unit_id}.ts"));
     }
-    path.push(format!("{}.ts", spec.fn_name));
     path
 }
 
@@ -473,4 +603,129 @@ fn path_components(path: &Path) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Contract, UnitExtensions};
+    use indexmap::IndexMap;
+
+    fn monotone_up_spec(id: &str, deps: Vec<&str>, typescript_body: &str) -> ResolvedSpec {
+        let fn_name = id.rsplit('/').next().unwrap_or(id);
+        ResolvedSpec::from_spec(SpecStruct {
+            id: id.to_string(),
+            kind: "function".to_string(),
+            intent: Intent {
+                why: format!("TypeScript fixture for {id}."),
+            },
+            contract: Some(Contract {
+                inputs: Some(IndexMap::from([
+                    ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                    ("rate".to_string(), "rust_decimal::Decimal".to_string()),
+                ])),
+                returns: Some("rust_decimal::Decimal".to_string()),
+                invariants: vec!["output >= subtotal".to_string()],
+            }),
+            deps: deps.into_iter().map(str::to_string).collect(),
+            imports: vec!["rust_decimal::Decimal".to_string()],
+            body: Body {
+                rust: "{ subtotal + subtotal * rate }".to_string(),
+                typescript: Some(typescript_body.to_string()),
+            },
+            local_tests: vec![LocalTest {
+                id: "happy_path".to_string(),
+                expect: format!(
+                    "{fn_name}(Decimal::new(1000, 2), Decimal::new(7, 2)) == Decimal::new(1070, 2)"
+                ),
+            }],
+            links: None,
+            spec_version: Some("0.3.0".to_string()),
+            extensions: UnitExtensions::default(),
+        })
+    }
+
+    fn helper_spec(id: &str) -> ResolvedSpec {
+        let fn_name = id.rsplit('/').next().unwrap_or(id);
+        ResolvedSpec::from_spec(SpecStruct {
+            id: id.to_string(),
+            kind: "function".to_string(),
+            intent: Intent {
+                why: format!("TypeScript helper fixture for {id}."),
+            },
+            contract: Some(Contract {
+                inputs: Some(IndexMap::from([(
+                    "value".to_string(),
+                    "rust_decimal::Decimal".to_string(),
+                )])),
+                returns: Some("rust_decimal::Decimal".to_string()),
+                invariants: vec![],
+            }),
+            deps: vec![],
+            imports: vec![
+                "rust_decimal::Decimal".to_string(),
+                "rust_decimal::RoundingStrategy".to_string(),
+            ],
+            body: Body {
+                rust: "{ value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero) }"
+                    .to_string(),
+                typescript: Some("return value;".to_string()),
+            },
+            local_tests: vec![LocalTest {
+                id: "happy_path".to_string(),
+                expect: format!("{fn_name}(Decimal::new(1000, 2)) == Decimal::new(1000, 2)"),
+            }],
+            links: None,
+            spec_version: Some("0.3.0".to_string()),
+            extensions: UnitExtensions::default(),
+        })
+    }
+
+    #[test]
+    fn typescript_tree_renders_helper_imports_with_shared_context() {
+        let helper = helper_spec("money/round");
+        let leaf = monotone_up_spec(
+            "pricing/deep/apply_tax",
+            vec!["money/round"],
+            "return round(subtotal.add(subtotal.mul(rate)));",
+        );
+
+        let tree = generate_typescript_tree(&[
+            NormalizedUnit::Function(leaf),
+            NormalizedUnit::Function(helper),
+        ])
+        .expect("helper-aware tree should generate");
+
+        assert!(tree.contains_key(&PathBuf::from("money/round.ts")));
+        let leaf_module = tree
+            .get(&PathBuf::from("pricing/deep/apply_tax.ts"))
+            .expect("leaf module should be emitted");
+        assert!(leaf_module.contains("import { Decimal } from \"../../__spec_ts/runtime.ts\";"));
+        assert!(leaf_module.contains("import { round } from \"../../money/round.ts\";"));
+
+        let local_tests = tree
+            .get(&PathBuf::from("__spec_ts/local_tests.ts"))
+            .expect("local test harness should be emitted");
+        assert!(local_tests
+            .contains("import { apply_tax as __spec$pricing$deep$apply_tax } from \"../pricing/deep/apply_tax.ts\";"));
+        assert!(local_tests.contains("__spec$pricing$deep$apply_tax"));
+    }
+
+    #[test]
+    fn typescript_tree_preserves_zero_dep_unit_modules() {
+        let leaf = monotone_up_spec(
+            "pricing/apply_tax",
+            vec![],
+            "return subtotal.add(subtotal.mul(rate));",
+        );
+
+        let tree = generate_typescript_tree(&[NormalizedUnit::Function(leaf)])
+            .expect("zero-dep tree should still generate");
+
+        let leaf_module = tree
+            .get(&PathBuf::from("pricing/apply_tax.ts"))
+            .expect("leaf module should be emitted");
+        assert!(leaf_module.contains("import { Decimal } from \"../__spec_ts/runtime.ts\";"));
+        assert!(!leaf_module.contains("import { round }"));
+    }
 }
