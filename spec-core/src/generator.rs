@@ -11,7 +11,7 @@ use crate::syntax::validate_expect_expr;
 use crate::types::{
     DepRef, LocalTest, MethodReceiver, NormalizedDataSeam, NormalizedSumSeam, NormalizedUnit,
     ResolvedMoleculeTest, ResolvedSpec, RustDataSeamLowering, RustInherentMethodLowering,
-    RustSumSeamLowering, has_callable_collision,
+    RustSumSeamLowering, TargetLanguage, has_callable_collision,
 };
 use crate::{Result, SpecError};
 use indexmap::IndexMap;
@@ -428,7 +428,11 @@ fn validate_rust_derives(owner: &str, derives: &[String]) -> Result<()> {
 }
 
 pub fn generate_normalized_unit_code(unit: &NormalizedUnit) -> Result<String> {
-    generate_normalized_unit_code_with_options(unit, &GenerateOptions::default())
+    generate_normalized_unit_code_with_options_for_target(
+        unit,
+        &GenerateOptions::default(),
+        TargetLanguage::Rust,
+    )
 }
 
 pub fn generate_unit_code(unit: &NormalizedUnit) -> Result<String> {
@@ -439,11 +443,7 @@ pub fn generate_normalized_unit_code_with_options(
     unit: &NormalizedUnit,
     options: &GenerateOptions,
 ) -> Result<String> {
-    match unit {
-        NormalizedUnit::Function(spec) => generate_code_with_options(spec, options),
-        NormalizedUnit::Data(unit) => generate_data_seam_code_with_options(unit, options),
-        NormalizedUnit::Sum(unit) => generate_sum_seam_code_with_options(unit, options),
-    }
+    generate_normalized_unit_code_with_options_for_target(unit, options, TargetLanguage::Rust)
 }
 
 pub fn generate_unit_code_with_options(
@@ -451,6 +451,55 @@ pub fn generate_unit_code_with_options(
     options: &GenerateOptions,
 ) -> Result<String> {
     generate_normalized_unit_code_with_options(unit, options)
+}
+
+pub fn generate_normalized_unit_code_for_target(
+    unit: &NormalizedUnit,
+    target_language: TargetLanguage,
+) -> Result<String> {
+    generate_normalized_unit_code_with_options_for_target(
+        unit,
+        &GenerateOptions::default(),
+        target_language,
+    )
+}
+
+pub fn generate_normalized_unit_code_with_options_for_target(
+    unit: &NormalizedUnit,
+    options: &GenerateOptions,
+    target_language: TargetLanguage,
+) -> Result<String> {
+    match target_language {
+        TargetLanguage::Rust => match unit {
+            NormalizedUnit::Function(spec) => generate_code_with_options(spec, options),
+            NormalizedUnit::Data(unit) => generate_data_seam_code_with_options(unit, options),
+            NormalizedUnit::Sum(unit) => generate_sum_seam_code_with_options(unit, options),
+        },
+        TargetLanguage::TypeScript => match unit {
+            NormalizedUnit::Function(spec) => {
+                crate::typescript_backend::generate_typescript_unit_module(spec)
+            }
+            _ => Err(SpecError::Generator {
+                message: format!(
+                    "unit '{}' is not eligible for the bounded M45 TypeScript lane: only kind:function units are supported",
+                    unit.id()
+                ),
+            }),
+        },
+    }
+}
+
+pub fn generate_unit_code_for_target(
+    unit: &NormalizedUnit,
+    target_language: TargetLanguage,
+) -> Result<String> {
+    generate_normalized_unit_code_for_target(unit, target_language)
+}
+
+pub fn generate_typescript_output_tree(
+    units: &[NormalizedUnit],
+) -> Result<BTreeMap<PathBuf, String>> {
+    crate::typescript_backend::generate_typescript_tree(units)
 }
 
 fn render_constructor_body(
@@ -1131,7 +1180,7 @@ mod tests {
         MethodReceiver, NormalizedConstructor, NormalizedDataField, NormalizedDataSeam,
         NormalizedMethod, NormalizedSumSeam, NormalizedSumVariant, NormalizedSumVariantField,
         NormalizedUnit, ResolvedMoleculeTest, ResolvedSpec, RustDataSeamBackend,
-        RustSumSeamBackend, SpecStruct, UnitExtensions,
+        RustSumSeamBackend, SpecStruct, TargetLanguage, UnitExtensions,
     };
     use indexmap::IndexMap;
     #[cfg(unix)]
@@ -1215,6 +1264,40 @@ mod tests {
 
     fn test_spec(deps: Vec<&str>, body: &str) -> ResolvedSpec {
         test_spec_with(deps, vec![], body)
+    }
+
+    fn typescript_lane_spec(id: &str) -> ResolvedSpec {
+        let fn_name = id.rsplit('/').next().unwrap_or(id);
+        ResolvedSpec::from_spec(SpecStruct {
+            id: id.to_string(),
+            kind: "function".to_string(),
+            intent: Intent {
+                why: "Return the subtotal after applying the tax rate.".to_string(),
+            },
+            contract: Some(Contract {
+                inputs: Some(IndexMap::from([
+                    ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                    ("rate".to_string(), "rust_decimal::Decimal".to_string()),
+                ])),
+                returns: Some("rust_decimal::Decimal".to_string()),
+                invariants: vec!["output >= subtotal".to_string()],
+            }),
+            deps: vec![],
+            imports: vec!["rust_decimal::Decimal".to_string()],
+            body: Body {
+                rust: "{ subtotal + subtotal * rate }".to_string(),
+                typescript: Some("return subtotal.add(subtotal.mul(rate));".to_string()),
+            },
+            local_tests: vec![LocalTest {
+                id: "taxes_subtotal".to_string(),
+                expect: format!(
+                    "{fn_name}(Decimal::new(1000, 2), Decimal::new(7, 2)) == Decimal::new(1070, 2)"
+                ),
+            }],
+            links: None,
+            spec_version: Some("0.3.0".to_string()),
+            extensions: UnitExtensions::default(),
+        })
     }
 
     fn test_data_seam() -> NormalizedDataSeam {
@@ -1357,22 +1440,19 @@ mod tests {
     }
 
     #[test]
-    fn generate_code_ignores_authored_typescript_body() {
-        let spec = ResolvedSpec {
-            body_typescript: Some("return 0;".to_string()),
-            ..test_spec_with(
-                vec![],
-                vec!["rust_decimal::Decimal"],
-                "{\n    Decimal::ZERO\n}",
-            )
-        };
+    fn generate_typescript_target_emits_authored_typescript_body() {
+        let spec = typescript_lane_spec("pricing/apply_tax");
 
-        let code = generate_code(&spec).unwrap();
-        assert_eq!(
-            code,
-            "use rust_decimal::Decimal;\n\npub fn apply_discount() {\n    Decimal::ZERO\n}\n"
-        );
-        assert!(!code.contains("return 0;"));
+        let code = generate_unit_code_for_target(
+            &NormalizedUnit::Function(spec),
+            TargetLanguage::TypeScript,
+        )
+        .unwrap();
+
+        assert!(code.contains("import { Decimal } from \"../__spec_ts/runtime.ts\";"));
+        assert!(code.contains("export function apply_tax(subtotal: Decimal, rate: Decimal): Decimal"));
+        assert!(code.contains("return subtotal.add(subtotal.mul(rate));"));
+        assert!(!code.contains("subtotal + subtotal * rate"));
     }
 
     #[test]
@@ -1856,6 +1936,33 @@ mod tests {
         let dispatched = generate_normalized_unit_code(&NormalizedUnit::Function(spec)).unwrap();
 
         assert_eq!(dispatched, direct);
+    }
+
+    #[test]
+    fn generate_typescript_output_tree_emits_unit_modules_and_frozen_helpers_once() {
+        let specs = vec![
+            NormalizedUnit::Function(typescript_lane_spec("pricing/apply_tax")),
+            NormalizedUnit::Function(typescript_lane_spec("checkout/apply_vat")),
+        ];
+
+        let tree = generate_typescript_output_tree(&specs).unwrap();
+
+        assert_eq!(tree.len(), 5);
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_tax.ts")));
+        assert!(tree.contains_key(&PathBuf::from("checkout/apply_vat.ts")));
+        assert!(tree.contains_key(&PathBuf::from("__spec_ts/runtime.ts")));
+        assert!(tree.contains_key(&PathBuf::from("__spec_ts/build_entry.ts")));
+        assert!(tree.contains_key(&PathBuf::from("__spec_ts/local_tests.ts")));
+
+        let build_entry = tree.get(&PathBuf::from("__spec_ts/build_entry.ts")).unwrap();
+        assert!(build_entry.contains("import \"./runtime.ts\";"));
+        assert!(build_entry.contains("import { apply_tax as __spec$pricing$apply_tax } from \"../pricing/apply_tax.ts\";"));
+        assert!(build_entry.contains("import { apply_vat as __spec$checkout$apply_vat } from \"../checkout/apply_vat.ts\";"));
+
+        let local_tests = tree.get(&PathBuf::from("__spec_ts/local_tests.ts")).unwrap();
+        assert!(local_tests.contains("Decimal.new(1000n, 2n)"));
+        assert!(local_tests.contains("__spec$pricing$apply_tax"));
+        assert!(local_tests.contains("__spec$checkout$apply_vat"));
     }
 
     #[test]

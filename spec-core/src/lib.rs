@@ -22,6 +22,7 @@ pub mod plan;
 pub mod portability;
 pub mod portability_contract;
 pub mod semantic_review;
+pub mod typescript_backend;
 mod syntax;
 pub mod types;
 pub mod validator;
