@@ -1,10 +1,10 @@
-use crate::backend_execution::is_helper_or_example_method;
 use crate::generator::{lower_data_seam, lower_sum_seam};
 use crate::normalizer::normalize_unit;
 use crate::portability::{
     PortabilityContaminationSummary, PortabilityMarkerSummary, summarize_portability_contamination,
     summarize_portability_markers,
 };
+use crate::portability_contract::{is_helper_or_example_method, is_portability_seam_kind};
 use crate::types::{
     AuthoredDataShape, AuthoredSumShape, DepRef, LoadedSpec, NormalizedUnit, UnitKind,
     callable_name,
@@ -663,7 +663,8 @@ pub fn project_semantic_review_with_context(
             SemanticProjectionMode::Preserve => None,
             SemanticProjectionMode::Refresh => Some(match unit_kind {
                 UnitKind::Function => unsupported_function_review(spec, context, &mut stack),
-                UnitKind::Data | UnitKind::Sum => unsupported_surface_review(unit_kind),
+                kind if is_portability_seam_kind(kind) => unsupported_surface_review(kind),
+                _ => unreachable!("non-function unit kinds are portability seams"),
             }),
         },
     }
@@ -726,7 +727,8 @@ pub fn evaluate_semantic_review_with_context(
         }
         SupportedSurface::Unsupported(unit_kind) => Some(match unit_kind {
             UnitKind::Function => unsupported_function_review(spec, context, &mut stack),
-            UnitKind::Data | UnitKind::Sum => unsupported_surface_review(unit_kind),
+            kind if is_portability_seam_kind(kind) => unsupported_surface_review(kind),
+            _ => unreachable!("non-function unit kinds are portability seams"),
         }),
     }
 }
@@ -750,7 +752,8 @@ fn supported_surface_for_spec(
         UnitKind::Data if spec.spec.id == "pricing/checkout_quote" => {
             SupportedSurface::DataCheckoutQuote
         }
-        UnitKind::Data | UnitKind::Sum => SupportedSurface::Unsupported(unit_kind),
+        kind if is_portability_seam_kind(kind) => SupportedSurface::Unsupported(kind),
+        _ => unreachable!("all unit kinds are covered above"),
     };
     stack.remove(&spec.spec.id);
     Some(surface)

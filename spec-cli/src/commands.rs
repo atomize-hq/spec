@@ -26,11 +26,11 @@ use spec_core::molecule_evidence::{
 };
 use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
-    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker, PassportMarkerId,
-    PassportProjectionContext, PassportTestResult, apply_projected_passport_truth,
-    build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
-    compute_contract_hash, ensure_gitignore_entry, project_passport_truth_with_context,
-    read_passport, rfc3339_now, write_passport,
+    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
+    PassportProjectionContext, PassportProofCoverage, PassportTestResult,
+    apply_projected_passport_truth, build_passport_preserving_proof_state_with_context,
+    build_passport_with_evidence, compute_contract_hash, ensure_gitignore_entry,
+    project_passport_truth_with_context, read_passport, rfc3339_now, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
@@ -38,9 +38,6 @@ use spec_core::pipeline::{
 };
 use spec_core::plan::{
     PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
-};
-use spec_core::portability::{
-    PortabilityMarkerKind, PortabilityProjectionContext, project_portability_truth,
 };
 use spec_core::semantic_review::{
     SemanticHealthEffect, SemanticProjectionMode, SemanticReview, SemanticReviewContext,
@@ -176,6 +173,8 @@ struct JsonStatusEntry {
     freshness: Option<PassportFreshness>,
     #[serde(skip_serializing_if = "Option::is_none")]
     markers: Option<Vec<PassportMarker>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proof_coverage: Option<Vec<PassportProofCoverage>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     escape_hatch_gate: Option<EscapeHatchGate>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -866,27 +865,6 @@ fn apply_semantic_review_to_health(
     }
 }
 
-fn passport_markers_from_portability(
-    portability: Option<&spec_core::portability::PortabilityProjection>,
-) -> Option<Vec<PassportMarker>> {
-    let markers = portability?
-        .markers
-        .iter()
-        .map(|marker| PassportMarker {
-            id: match marker.kind {
-                PortabilityMarkerKind::DomainLowering
-                | PortabilityMarkerKind::ProofHelperLowering => {
-                    PassportMarkerId::MethodLoweringRustBody
-                }
-                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
-            },
-            path: marker.path.clone(),
-        })
-        .collect::<Vec<_>>();
-
-    (!markers.is_empty()).then_some(markers)
-}
-
 fn freshness_stale_reason(freshness: Option<&PassportFreshness>) -> Option<String> {
     let freshness = freshness?;
     match (
@@ -1301,11 +1279,6 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             specs_by_id: &specs_by_id,
             semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
-        let portability_context = PortabilityProjectionContext {
-            molecule_tests: &molecule_report.tests,
-            molecule_evidence_by_id: &molecule_evidence_by_id,
-            specs_by_id: &specs_by_id,
-        };
 
         let mut units = Vec::with_capacity(validation_specs.root_specs.len());
         for spec in &validation_specs.root_specs {
@@ -1329,11 +1302,10 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 &semantic_review_context,
             );
             let freshness = projected_truth.freshness.clone();
+            let markers = projected_truth.markers.clone();
+            let proof_coverage = projected_truth.proof_coverage.clone();
+            let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
             let semantic_review = projected_truth.semantic_review.clone();
-            let portability =
-                project_portability_truth(spec, passport.as_ref(), &portability_context);
-            let markers = passport_markers_from_portability(portability.as_ref());
-            let escape_hatch_gate = portability.and_then(|projection| projection.escape_hatch_gate);
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
@@ -1356,6 +1328,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 evidence_at: health.evidence_at,
                 freshness,
                 markers,
+                proof_coverage,
                 escape_hatch_gate,
                 semantic_review,
             });
@@ -1381,6 +1354,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                         evidence_at: health.evidence_at,
                         freshness: None,
                         markers: None,
+                        proof_coverage: None,
                         escape_hatch_gate: None,
                         semantic_review: None,
                     });
@@ -1400,6 +1374,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 evidence_at: health.evidence_at,
                 freshness: None,
                 markers: None,
+                proof_coverage: None,
                 escape_hatch_gate: None,
                 semantic_review: None,
             });
