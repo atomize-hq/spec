@@ -14,9 +14,14 @@ Packet rules for M23:
 
 ## M31 / M32 Boundary
 
-- `M31` is the shared-core extraction and escape-hatch containment milestone.
-  This README still documents promoted packet truth; it is not the place to
-  imply wider portability than the code actually proves.
+- `M31` is the explicit seam portability contract plus escape-hatch
+  containment milestone. This README still documents promoted packet truth; it
+  is not the place to imply wider portability than the code actually proves.
+- `M44` is the bounded follow-on that centralizes that seam portability policy
+  in `spec-core/src/portability_contract.rs`. Its scope is one new module,
+  consumer rewiring, regression coverage, and doc parity; it does not imply new
+  crate extraction, broader second-language execution, fresh family-choice
+  work, or schema churn by default.
 - `M32` is one bounded second-language promotion path for
   `function.arithmetic_leaf.monotone_up.v1`.
 - `function.wrapper.pipeline.v1` remains promoted Rust-family truth plus
