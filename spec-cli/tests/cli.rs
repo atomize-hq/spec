@@ -3253,6 +3253,10 @@ fn cargo_available() -> bool {
     Command::new("cargo").arg("--version").output().is_ok()
 }
 
+fn bun_available() -> bool {
+    Command::new("bun").arg("--version").output().is_ok()
+}
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -4177,6 +4181,93 @@ fn read_passport(passport_path: &Path) -> String {
 
 fn read_passport_json(passport_path: &Path) -> Value {
     serde_json::from_str(&read_passport(passport_path)).unwrap()
+}
+
+fn write_bounded_typescript_apply_tax_fixture(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    let spec_path = units_dir.join("pricing/apply_tax.unit.spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal + subtotal * rate
+    }
+  typescript: |
+    {
+        return subtotal.add(subtotal.mul(rate));
+    }
+local_tests:
+  - id: basic_tax
+    expect: apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)
+"#,
+    );
+    spec_path
+}
+
+fn write_typescript_near_miss_fixture(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    let spec_path = units_dir.join("pricing/apply_discount.unit.spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount to a subtotal while keeping the result nonnegative.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output <= subtotal
+    - output >= 0
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        (subtotal - subtotal * rate).max(Decimal::ZERO)
+    }
+  typescript: |
+    {
+        return subtotal.sub(subtotal.mul(rate)).max(Decimal.zero());
+    }
+local_tests:
+  - id: happy_path
+    expect: apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
+"#,
+    );
+    spec_path
+}
+
+#[cfg(unix)]
+fn path_with_fake_bun(project_dir: &Path, script_body: &str) -> std::ffi::OsString {
+    let fake_bin_dir = project_dir.join("fake-bin");
+    write_executable_file(&fake_bin_dir, "bun", script_body);
+    let mut path_override = std::ffi::OsString::from(fake_bin_dir.as_os_str());
+    path_override.push(":");
+    path_override.push(std::env::var_os("PATH").unwrap_or_default());
+    path_override
 }
 
 fn write_pricing_project(project_dir: &Path, target_has_tests: bool) -> PathBuf {
@@ -14743,4 +14834,303 @@ fn export_additively_includes_data_seam_truth() {
     assert_eq!(checkout_quote["constructors"][0]["id"], "new");
     assert_eq!(checkout_quote["methods"][0]["id"], "discounted_subtotal");
     assert_eq!(checkout_quote["backends"]["rust"]["derives"][0], "Clone");
+}
+
+#[test]
+fn validate_does_not_accept_target_language_flag() {
+    let output = run(&[
+        "validate",
+        "examples/ecommerce/units",
+        "--target-language",
+        "typescript",
+    ]);
+    assert!(
+        !output.status.success(),
+        "validate should reject --target-language"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--target-language"), "{stderr}");
+}
+
+#[test]
+fn typescript_aligned_fixture_single_file_test_succeeds_and_status_is_target_specific() {
+    if !bun_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_bounded_typescript_apply_tax_fixture(temp_dir.path());
+
+    let test_output = run_in(
+        temp_dir.path(),
+        &[
+            "test",
+            spec_path.strip_prefix(temp_dir.path()).unwrap().to_str().unwrap(),
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "bounded TypeScript fixture should pass end-to-end",
+        &test_output,
+    );
+
+    let passport_path = temp_dir.path().join("units/pricing/apply_tax.spec.passport.json");
+    let passport = read_passport_json(&passport_path);
+    assert!(passport.get("evidence").is_none(), "{passport}");
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+
+    let rust_status_output = run_in(temp_dir.path(), &["status", "units", "--format", "json"]);
+    assert!(
+        !rust_status_output.status.success(),
+        "rust status should remain non-green without rust proof"
+    );
+    let rust_status_json = parse_stdout_json(&rust_status_output);
+    let rust_unit = status_units(&rust_status_json)
+        .iter()
+        .find(|entry| entry["id"] == "pricing/apply_tax")
+        .expect("expected apply_tax rust status row");
+    assert_eq!(rust_unit["status"], "untested");
+
+    let typescript_status_output = run_in(
+        temp_dir.path(),
+        &[
+            "status",
+            "units",
+            "--target-language",
+            "typescript",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success(
+        "TypeScript status should use the TypeScript target proof",
+        &typescript_status_output,
+    );
+    let typescript_status_json = parse_stdout_json(&typescript_status_output);
+    let typescript_unit = status_units(&typescript_status_json)
+        .iter()
+        .find(|entry| entry["id"] == "pricing/apply_tax")
+        .expect("expected apply_tax typescript status row");
+    assert_eq!(typescript_unit["status"], "valid");
+}
+
+#[test]
+fn typescript_status_detects_drift_after_typescript_body_change() {
+    if !bun_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_bounded_typescript_apply_tax_fixture(temp_dir.path());
+
+    let test_output = run_in(
+        temp_dir.path(),
+        &[
+            "test",
+            spec_path.strip_prefix(temp_dir.path()).unwrap().to_str().unwrap(),
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "bounded TypeScript fixture should pass before drift",
+        &test_output,
+    );
+
+    let updated = fs::read_to_string(&spec_path)
+        .unwrap()
+        .replace(
+            "return subtotal.add(subtotal.mul(rate));",
+            "return subtotal.add(subtotal.mul(rate)).add(Decimal.new(1, 2));",
+        );
+    fs::write(&spec_path, updated).unwrap();
+
+    let status_output = run_in(
+        temp_dir.path(),
+        &[
+            "status",
+            "units",
+            "--target-language",
+            "typescript",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !status_output.status.success(),
+        "drifted TypeScript proof should be non-green"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|entry| entry["id"] == "pricing/apply_tax")
+        .expect("expected apply_tax status row after drift");
+    assert_eq!(unit["status"], "stale");
+    assert!(
+        unit["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("changed since last test"),
+        "{status_json}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_near_miss_rejects_before_bun_runs() {
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_typescript_near_miss_fixture(temp_dir.path());
+    let marker_path = temp_dir.path().join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        temp_dir.path(),
+        &[
+            "test",
+            spec_path.strip_prefix(temp_dir.path()).unwrap().to_str().unwrap(),
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "near-miss TypeScript target should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("function.arithmetic_leaf.monotone_up.v1"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "bounded-lane rejection should happen before Bun build/test execution"
+    );
+}
+
+#[test]
+fn typescript_example_apply_tax_single_file_test_succeeds() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "example apply_tax should succeed in the bounded TypeScript lane",
+        &output,
+    );
+
+    let passport = read_passport_json(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_molecule_test_is_rejected_before_bun_runs() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let marker_path = ecommerce_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&ecommerce_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/discount_plus_tax.test.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "TypeScript molecule tests should be rejected in M45"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            ".test.spec is not supported for --target-language typescript in M45; molecule tests remain Rust-only"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "molecule rejection should happen before Bun build/test execution"
+    );
+}
+
+#[test]
+fn export_additively_preserves_rust_proof_and_includes_typescript_proof() {
+    if !cargo_available() || !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+
+    let rust_test_output = run_in(&ecommerce_dir, &["test", "units/pricing/apply_tax.unit.spec"]);
+    assert_output_success("rust proof should succeed before export", &rust_test_output);
+
+    let typescript_test_output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "TypeScript proof should succeed before export",
+        &typescript_test_output,
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", "units", "--format", "json"]);
+    assert_output_success(
+        "export should include additive TypeScript target proofs",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == "pricing/apply_tax")
+        .expect("expected apply_tax passport in export");
+    assert_eq!(passport["evidence"]["build_status"], "pass");
+    assert_eq!(passport["target_proofs"]["rust"]["evidence"]["build_status"], "pass");
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
 }

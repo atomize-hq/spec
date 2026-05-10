@@ -4,12 +4,11 @@
 
 ### Added
 
-- **Helper-surface runtime support for the live `money/round` wedge** — `spec-core` now routes the current zero-dep, one-Decimal-input helper shape through `function.helper.identity_passthrough.v1` instead of dropping it to generic unsupported-function truth.
+- **First-class bounded TypeScript execution in M45** — `spec generate`, `spec build`, `spec test`, and `spec status` now accept `--target-language typescript` for exactly `kind:function` units classified as `function.arithmetic_leaf.monotone_up.v1` with `deps: []`. Bun is the only execution prerequisite, the generated helper surface is frozen at `__spec_ts/runtime.ts`, `__spec_ts/build_entry.ts`, and `__spec_ts/local_tests.ts`, and proof writes add `target_proofs.typescript` without replacing the Rust proof surface.
 
 ### Changed
 
-- **Fresh helper proof now stays truthful on read-side surfaces** — the checked-in `examples/shared-spec` passport and `spec status` / `spec export` now preserve supported helper semantic-review truth for `money/round` instead of surfacing `unsupported.function.v1`.
-- **Family-analysis operator truth now treats the helper wedge as supported-unpromoted substrate** — `cargo xtask family inventory --format json` publishes `function.helper.identity_passthrough.v1` as runtime-supported, coverage moves the three helper units into `supported_unpromoted_family_units`, and recommendation output no longer surfaces `helper_surface_not_promotable` as live unsupported pressure.
+- **The M45 TypeScript lane stays explicitly bounded** — only atom tests execute in this lane, `local_tests.expect` remains limited to direct `Decimal::new(int, scale)` equality checks against the current unit, `.test.spec` stays unsupported for `--target-language typescript`, and `spec validate` plus `spec export` do not gain `--target-language`.
 
 ## 0.14.0 - 2026-05-07
 
