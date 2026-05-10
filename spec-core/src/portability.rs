@@ -1,20 +1,13 @@
-use crate::backend_execution::{
-    BackendExecutionMarkerKind, collect_backend_execution_markers,
-    compute_backend_execution_digest as compute_backend_execution_digest_from_boundary,
-    summarize_backend_execution_markers,
-};
+use crate::backend_execution::compute_backend_execution_digest as compute_backend_execution_digest_from_boundary;
 use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_escape_hatch_gate};
 use crate::molecule_evidence::MoleculeEvidence;
 use crate::passport::Passport;
-use crate::types::{LoadedMoleculeTest, LoadedSpec, UnitKind};
+pub use crate::portability_contract::PortabilityMarkerKind;
+use crate::portability_contract::{
+    classify_method_portability_marker, is_portability_seam_spec,
+};
+use crate::types::{LoadedMoleculeTest, LoadedSpec};
 use std::collections::HashMap;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PortabilityMarkerKind {
-    DomainLowering,
-    ProofHelperLowering,
-    BackendRustDerives,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortabilityMarker {
@@ -58,42 +51,63 @@ pub struct PortabilityProjection {
 }
 
 pub fn collect_portability_markers(spec: &LoadedSpec) -> Vec<PortabilityMarker> {
-    if !is_seam(spec) {
+    if !is_portability_seam_spec(spec) {
         return Vec::new();
     }
 
-    collect_backend_execution_markers(spec)
-        .into_iter()
-        .map(|marker| PortabilityMarker {
-            kind: match marker.kind {
-                BackendExecutionMarkerKind::DomainLowering => PortabilityMarkerKind::DomainLowering,
-                BackendExecutionMarkerKind::ProofHelperLowering => {
-                    PortabilityMarkerKind::ProofHelperLowering
-                }
-                BackendExecutionMarkerKind::BackendRustDerives => {
-                    PortabilityMarkerKind::BackendRustDerives
-                }
-            },
-            path: marker.path,
-        })
-        .collect()
+    let mut markers = Vec::new();
+    if spec
+        .spec
+        .extensions
+        .backends
+        .as_ref()
+        .and_then(|backends| backends.rust.as_ref())
+        .map(|rust| !rust.derives.is_empty())
+        .unwrap_or(false)
+    {
+        markers.push(PortabilityMarker {
+            kind: PortabilityMarkerKind::BackendRustDerives,
+            path: "backends.rust.derives".to_string(),
+        });
+    }
+
+    for method in &spec.spec.extensions.methods {
+        if let Some(kind) = classify_method_portability_marker(method) {
+            markers.push(PortabilityMarker {
+                kind,
+                path: format!("methods.{}.lowering.rust.body", method.id),
+            });
+        }
+    }
+
+    markers
 }
 
 pub fn summarize_portability_markers(spec: &LoadedSpec) -> Option<PortabilityMarkerSummary> {
-    if !is_seam(spec) {
+    if !is_portability_seam_spec(spec) {
         return None;
     }
 
-    let summary = summarize_backend_execution_markers(spec);
-    Some(PortabilityMarkerSummary {
-        has_domain_lowering: summary.has_domain_lowering,
-        has_proof_helper_lowering: summary.has_proof_helper_lowering,
-        has_backend_rust_derives: summary.has_backend_rust_derives,
-    })
+    let mut summary = PortabilityMarkerSummary::default();
+    for marker in collect_portability_markers(spec) {
+        match marker.kind {
+            PortabilityMarkerKind::DomainLowering => {
+                summary.has_domain_lowering = true;
+            }
+            PortabilityMarkerKind::ProofHelperLowering => {
+                summary.has_proof_helper_lowering = true;
+            }
+            PortabilityMarkerKind::BackendRustDerives => {
+                summary.has_backend_rust_derives = true;
+            }
+        }
+    }
+
+    Some(summary)
 }
 
 pub fn compute_portability_backend_digest(spec: &LoadedSpec) -> Option<String> {
-    is_seam(spec)
+    is_portability_seam_spec(spec)
         .then(|| compute_backend_execution_digest_from_boundary(spec))
         .flatten()
         .map(|digest| format!("sha256:{digest}"))
@@ -104,7 +118,7 @@ pub fn evaluate_portability_gate(
     passport: Option<&Passport>,
     context: &PortabilityProjectionContext<'_>,
 ) -> Option<EscapeHatchGate> {
-    if !is_seam(spec) {
+    if !is_portability_seam_spec(spec) {
         return None;
     }
 
@@ -122,7 +136,7 @@ pub fn project_portability_truth(
     passport: Option<&Passport>,
     context: &PortabilityProjectionContext<'_>,
 ) -> Option<PortabilityProjection> {
-    if !is_seam(spec) {
+    if !is_portability_seam_spec(spec) {
         return None;
     }
 
@@ -152,16 +166,19 @@ pub fn project_portability_truth(
 pub fn summarize_portability_contamination(
     spec: &LoadedSpec,
 ) -> Option<PortabilityContaminationSummary> {
-    let summary = summarize_portability_markers(spec)?;
-    Some(PortabilityContaminationSummary {
-        has_backend_only_detail: summary.has_proof_helper_lowering
-            || summary.has_backend_rust_derives,
-        has_contaminating_domain_lowering: summary.has_domain_lowering,
-    })
-}
+    if !is_portability_seam_spec(spec) {
+        return None;
+    }
 
-fn is_seam(spec: &LoadedSpec) -> bool {
-    matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum))
+    let markers = collect_portability_markers(spec);
+    Some(PortabilityContaminationSummary {
+        has_backend_only_detail: markers
+            .iter()
+            .any(|marker| marker.kind.is_backend_only_detail()),
+        has_contaminating_domain_lowering: markers
+            .iter()
+            .any(|marker| marker.kind.contaminates_portability_claims()),
+    })
 }
 
 #[cfg(test)]
@@ -267,6 +284,13 @@ mod tests {
             PortabilityProofSurfaces {
                 atom: true,
                 molecule: true,
+            }
+        );
+        assert_eq!(
+            projection.contamination_summary,
+            PortabilityContaminationSummary {
+                has_backend_only_detail: true,
+                has_contaminating_domain_lowering: true,
             }
         );
         assert_eq!(
