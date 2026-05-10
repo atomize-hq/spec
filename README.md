@@ -47,6 +47,35 @@ spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
 
+## Bounded TypeScript lane (M45)
+
+`spec` now exposes one bounded TypeScript execution lane. It is intentionally narrow:
+
+- Bun is the only TypeScript prerequisite. The lane shells out to `bun`; no alternate Node, npm, or tsx contract is supported.
+- Eligible units are exactly `kind: function` specs that classify to `function.arithmetic_leaf.monotone_up.v1` and declare `deps: []`.
+- TypeScript execution is atom-only. Only `local_tests` run in this lane; `.test.spec` molecule tests remain Rust-only and are rejected for `--target-language typescript`.
+- The accepted `local_tests.expect` grammar is deliberately small: `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)`. The left-hand side must be a direct call to the current unit, and both the arguments and expected value must use integer-literal `Decimal::new(...)` forms.
+
+Commands available in this lane:
+
+```bash
+spec generate <units-dir> --target-language typescript
+spec build <units-dir> --target-language typescript
+spec test <path> --target-language typescript
+spec status <unit-or-root> --target-language typescript
+```
+
+The generated helper filenames are frozen in M45:
+
+- `__spec_ts/runtime.ts`
+- `__spec_ts/build_entry.ts`
+- `__spec_ts/local_tests.ts`
+
+Commands that do not widen for M45:
+
+- `spec validate` does not accept `--target-language`
+- `spec export` does not accept `--target-language`
+
 ## Spec format
 
 Each unit is a YAML document with these common required fields:
