@@ -1,12 +1,11 @@
-use crate::types::{AuthoredMethod, LoadedSpec, UnitKind};
+use crate::portability_contract::{
+    classify_method_portability_marker,
+    is_helper_or_example_method as contract_is_helper_or_example_method, is_portability_seam_spec,
+    PortabilityMarkerKind,
+};
+use crate::types::{AuthoredMethod, LoadedSpec};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-
-const ACCEPTED_EXAMPLE_HELPER_IDS: &[&str] = &[
-    "percentage_example",
-    "fixed_amount_example",
-    "fixed_amount_capped_example",
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BackendExecutionMarkerKind {
@@ -35,7 +34,7 @@ struct SeamBackendExecutionSurface<'a> {
 }
 
 pub fn collect_backend_execution_markers(spec: &LoadedSpec) -> Vec<BackendExecutionMarker> {
-    if !matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum)) {
+    if !is_portability_seam_spec(spec) {
         return Vec::new();
     }
 
@@ -86,7 +85,7 @@ pub fn summarize_backend_execution_markers(spec: &LoadedSpec) -> BackendExecutio
 }
 
 pub fn compute_backend_execution_digest(spec: &LoadedSpec) -> Option<String> {
-    if !matches!(spec.spec.unit_kind(), Ok(UnitKind::Data | UnitKind::Sum)) {
+    if !is_portability_seam_spec(spec) {
         return None;
     }
 
@@ -127,38 +126,21 @@ pub fn compute_backend_execution_digest(spec: &LoadedSpec) -> Option<String> {
 pub fn classify_method_lowering_marker(
     method: &AuthoredMethod,
 ) -> Option<BackendExecutionMarkerKind> {
-    method
-        .lowering
-        .as_ref()
-        .and_then(|lowering| lowering.rust.as_ref())?;
-
-    Some(if is_helper_or_example_method(method) {
-        BackendExecutionMarkerKind::ProofHelperLowering
-    } else {
-        BackendExecutionMarkerKind::DomainLowering
-    })
+    classify_method_portability_marker(method).map(backend_execution_marker_kind)
 }
 
 pub fn is_helper_or_example_method(method: &AuthoredMethod) -> bool {
-    has_helper_or_example_shape(method) && has_accepted_helper_or_example_name(method.id.as_str())
+    contract_is_helper_or_example_method(method)
 }
 
-fn has_helper_or_example_shape(method: &AuthoredMethod) -> bool {
-    method.receiver == "shared_ref"
-        && method
-            .contract
-            .as_ref()
-            .and_then(|contract| contract.returns.as_deref())
-            == Some("bool")
-        && method
-            .contract
-            .as_ref()
-            .and_then(|contract| contract.inputs.as_ref())
-            .is_none_or(|inputs| inputs.is_empty())
-}
-
-fn has_accepted_helper_or_example_name(method_id: &str) -> bool {
-    method_id.ends_with("_holds") || ACCEPTED_EXAMPLE_HELPER_IDS.contains(&method_id)
+fn backend_execution_marker_kind(kind: PortabilityMarkerKind) -> BackendExecutionMarkerKind {
+    match kind {
+        PortabilityMarkerKind::DomainLowering => BackendExecutionMarkerKind::DomainLowering,
+        PortabilityMarkerKind::ProofHelperLowering => {
+            BackendExecutionMarkerKind::ProofHelperLowering
+        }
+        PortabilityMarkerKind::BackendRustDerives => BackendExecutionMarkerKind::BackendRustDerives,
+    }
 }
 
 fn sha256_digest(json: &str) -> String {
