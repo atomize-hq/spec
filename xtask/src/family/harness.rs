@@ -1,6 +1,6 @@
-use crate::XtaskError;
 use crate::family::paths::FamilyId;
 use crate::family::report::{ArtifactKind, CertificationReport, GateId, SuiteDefinition};
+use crate::XtaskError;
 
 pub(crate) const TERMINAL_UNSUPPORTED_CATCH_ALL: &str = "unsupported.function.v1";
 
@@ -8,25 +8,31 @@ pub const CHAIN3_PRECEDENCE: u64 = 1;
 pub const WRAPPER_PIPELINE_PRECEDENCE: u64 = 2;
 pub const MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE: u64 = 3;
 pub const MONOTONE_UP_PRECEDENCE: u64 = 4;
+pub const HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE: u64 = 5;
 
-pub const CHAIN3_MUST_NOT_SHADOW: [&str; 3] = [
+pub const CHAIN3_MUST_NOT_SHADOW: [&str; 4] = [
     "function.wrapper.pipeline.v1",
     "function.arithmetic_leaf.monotone_down_nonnegative.v1",
     "function.arithmetic_leaf.monotone_up.v1",
+    "function.helper.identity_passthrough.v1",
 ];
-pub const MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW: [&str; 1] =
-    ["function.arithmetic_leaf.monotone_up.v1"];
-pub const MONOTONE_UP_MUST_NOT_SHADOW: [&str; 1] = [TERMINAL_UNSUPPORTED_CATCH_ALL];
+pub const MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW: [&str; 2] = [
+    "function.arithmetic_leaf.monotone_up.v1",
+    "function.helper.identity_passthrough.v1",
+];
+pub const MONOTONE_UP_MUST_NOT_SHADOW: [&str; 1] = ["function.helper.identity_passthrough.v1"];
+pub const HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW: [&str; 1] = [TERMINAL_UNSUPPORTED_CATCH_ALL];
 pub const WRAPPER_PIPELINE_MUST_NOT_SHADOW: [&str; 3] = [
     "function.arithmetic_leaf.monotone_down_nonnegative.v1",
     "function.arithmetic_leaf.monotone_up.v1",
-    TERMINAL_UNSUPPORTED_CATCH_ALL,
+    "function.helper.identity_passthrough.v1",
 ];
 
 pub const CHAIN3_SUITE_SLUG: &str = "m21_chain3_";
 pub const WRAPPER_PIPELINE_SUITE_SLUG: &str = "wrapper_pipeline_";
 pub const MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG: &str = "monotone_down_nonnegative_";
 pub const MONOTONE_UP_SUITE_SLUG: &str = "monotone_up_";
+pub const HELPER_IDENTITY_PASSTHROUGH_SUITE_SLUG: &str = "helper_identity_passthrough_";
 
 const CHAIN3_SUMMARY: &str =
     "Straight-line three-call wrapper pipeline over supported function deps.";
@@ -36,6 +42,8 @@ const MONOTONE_DOWN_NONNEGATIVE_SUMMARY: &str =
     "Straight-line arithmetic leaf with zero-or-one helper dep and nonnegative clamp semantics.";
 const MONOTONE_UP_SUMMARY: &str =
     "Straight-line arithmetic leaf with zero-or-one helper dep and monotone-up semantics.";
+const HELPER_IDENTITY_PASSTHROUGH_SUMMARY: &str =
+    "Straight-line unary Decimal helper with no deps and either passthrough or round-like body.";
 
 const CHAIN3_STARTER_CASES: [StarterCaseDefinition; 16] = [
     StarterCaseDefinition {
@@ -190,6 +198,25 @@ const MONOTONE_UP_STARTER_CASES: [StarterCaseDefinition; 4] = [
     StarterCaseDefinition {
         bucket: "unsupported_near_miss",
         path: "fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec",
+    },
+];
+
+const HELPER_IDENTITY_PASSTHROUGH_STARTER_CASES: [StarterCaseDefinition; 4] = [
+    StarterCaseDefinition {
+        bucket: "aligned",
+        path: "fixtures/aligned/units/money/round.unit.spec",
+    },
+    StarterCaseDefinition {
+        bucket: "drift",
+        path: "fixtures/drift/units/money/round.unit.spec",
+    },
+    StarterCaseDefinition {
+        bucket: "under_specified",
+        path: "fixtures/under_specified/units/money/round.unit.spec",
+    },
+    StarterCaseDefinition {
+        bucket: "unsupported_near_miss",
+        path: "fixtures/unsupported_near_miss/units/money/round.unit.spec",
     },
 ];
 
@@ -652,6 +679,71 @@ pub(crate) const MONOTONE_UP_CERTIFY_SUITES: [SuiteDefinition; 2] = [
     },
 ];
 
+pub(crate) const HELPER_IDENTITY_PASSTHROUGH_PROVE_SUITES: [SuiteDefinition; 3] = [
+    SuiteDefinition {
+        name: "spec-core:helper_identity_passthrough_classifier_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-core",
+            "--lib",
+            "helper_identity_passthrough_classifier_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "semantic_review::tests::helper_identity_passthrough_classifier_direct_passthrough_aligned_fixture_routes_to_supported_helper",
+            "semantic_review::tests::helper_identity_passthrough_classifier_round_like_aligned_fixture_routes_to_supported_helper",
+            "semantic_review::tests::helper_identity_passthrough_classifier_drift_fixture_reports_semantic_drift",
+            "semantic_review::tests::helper_identity_passthrough_classifier_under_specified_fixture_reports_vague_truth",
+            "semantic_review::tests::helper_identity_passthrough_classifier_unsupported_near_miss_stays_unsupported",
+        ],
+    },
+    SuiteDefinition {
+        name: "spec-cli:helper_identity_passthrough_truth_surfaces_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-cli",
+            "--test",
+            "cli",
+            "helper_identity_passthrough_truth_surfaces_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "helper_identity_passthrough_truth_surfaces_preserve_supported_semantic_review",
+        ],
+    },
+    SuiteDefinition {
+        name: "spec-core:helper_identity_passthrough_classifier_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-core",
+            "--lib",
+            "helper_identity_passthrough_classifier_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "semantic_review::tests::helper_identity_passthrough_classifier_direct_passthrough_aligned_fixture_routes_to_supported_helper",
+            "semantic_review::tests::helper_identity_passthrough_classifier_round_like_aligned_fixture_routes_to_supported_helper",
+            "semantic_review::tests::helper_identity_passthrough_classifier_drift_fixture_reports_semantic_drift",
+            "semantic_review::tests::helper_identity_passthrough_classifier_under_specified_fixture_reports_vague_truth",
+            "semantic_review::tests::helper_identity_passthrough_classifier_unsupported_near_miss_stays_unsupported",
+        ],
+    },
+];
+
+pub(crate) const HELPER_IDENTITY_PASSTHROUGH_CERTIFY_SUITES: [SuiteDefinition; 0] = [];
+
 const CHAIN3_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 3] = [
     ProveSuiteDefinition {
         suite: CHAIN3_PROVE_SUITES[0],
@@ -709,6 +801,21 @@ const MONOTONE_UP_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 3] = [
     ProveSuiteDefinition {
         suite: MONOTONE_UP_PROVE_SUITES[2],
         gate: GateId::GateB,
+    },
+];
+
+const HELPER_IDENTITY_PASSTHROUGH_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 3] = [
+    ProveSuiteDefinition {
+        suite: HELPER_IDENTITY_PASSTHROUGH_PROVE_SUITES[0],
+        gate: GateId::GateA,
+    },
+    ProveSuiteDefinition {
+        suite: HELPER_IDENTITY_PASSTHROUGH_PROVE_SUITES[1],
+        gate: GateId::GateB,
+    },
+    ProveSuiteDefinition {
+        suite: HELPER_IDENTITY_PASSTHROUGH_PROVE_SUITES[2],
+        gate: GateId::GateC,
     },
 ];
 
@@ -852,11 +959,47 @@ const MONOTONE_UP_HARNESS: FamilyHarness = FamilyHarness {
     certify_suites: &MONOTONE_UP_CERTIFY_SUITES,
 };
 
-const FAMILY_REGISTRY: [FamilyHarness; 4] = [
+const HELPER_IDENTITY_PASSTHROUGH_HARNESS: FamilyHarness = FamilyHarness {
+    family: "function.helper.identity_passthrough.v1",
+    summary: HELPER_IDENTITY_PASSTHROUGH_SUMMARY,
+    suite_slug: HELPER_IDENTITY_PASSTHROUGH_SUITE_SLUG,
+    scaffold: ScaffoldDefinition {
+        unit_namespace: "money",
+        template: StarterTemplate::GenericPlaceholder,
+        starter_cases: &HELPER_IDENTITY_PASSTHROUGH_STARTER_CASES,
+        smoke: SmokeContract {
+            scaffold_exact_match_paths: &DEFAULT_SCAFFOLD_EXACT_MATCH_PATHS,
+            scaffold_file_contracts: &EMPTY_SMOKE_FILE_CONTRACTS,
+        },
+    },
+    routing: LockedManifestRouting {
+        precedence: HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE,
+        must_not_shadow: &HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW,
+    },
+    shape: LockedManifestShape {
+        dep_min: 0,
+        dep_max: 0,
+        control_flow: "straight_line_only",
+        return_style: "let_then_return_or_direct_return",
+        loops: false,
+        branching: false,
+        requires_supported_function_deps: false,
+    },
+    args: LockedManifestArgs {
+        threading: "ordered_passthrough",
+        allow_nested_argument_expressions: false,
+        allow_literal_only_extra_args: false,
+    },
+    prove_suites: &HELPER_IDENTITY_PASSTHROUGH_PROVE_SUITE_DEFINITIONS,
+    certify_suites: &HELPER_IDENTITY_PASSTHROUGH_CERTIFY_SUITES,
+};
+
+const FAMILY_REGISTRY: [FamilyHarness; 5] = [
     CHAIN3_HARNESS,
     WRAPPER_PIPELINE_HARNESS,
     MONOTONE_DOWN_NONNEGATIVE_HARNESS,
     MONOTONE_UP_HARNESS,
+    HELPER_IDENTITY_PASSTHROUGH_HARNESS,
 ];
 
 const PROVE_LATEST_REQUIRED_GATES: [GateId; 3] = [GateId::GateA, GateId::GateB, GateId::GateC];
