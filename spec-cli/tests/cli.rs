@@ -5301,6 +5301,73 @@ fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
 }
 
 #[test]
+fn spec_status_and_export_reproject_marked_seam_markers_and_proof_coverage_from_current_truth() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    let passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let mut seeded_passport = read_passport_json(&passport_path);
+    seeded_passport["markers"] = serde_json::json!([
+        {
+            "id": "backend_rust_derives",
+            "path": "backends.rust.derives"
+        }
+    ]);
+    seeded_passport["proof_coverage"] = serde_json::json!([
+        {
+            "id": "variant.none",
+            "surfaces": ["implicit_only"]
+        }
+    ]);
+    fs::write(
+        &passport_path,
+        serde_json::to_string_pretty(&seeded_passport).unwrap(),
+    )
+    .unwrap();
+
+    let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert_output_success(
+        "status should reproject current marked-seam markers and proof coverage",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let status_unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .unwrap();
+
+    assert_ne!(
+        status_unit["markers"], seeded_passport["markers"],
+        "{status_json}"
+    );
+    assert_ne!(
+        status_unit["proof_coverage"], seeded_passport["proof_coverage"],
+        "{status_json}"
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
+    assert_output_success(
+        "export should reproject current marked-seam markers and proof coverage",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .unwrap();
+
+    assert_eq!(status_unit["markers"], exported_passport["markers"]);
+    assert_eq!(
+        status_unit["proof_coverage"],
+        exported_passport["proof_coverage"]
+    );
+    assert_eq!(
+        status_unit["escape_hatch_gate"],
+        exported_passport["escape_hatch_gate"]
+    );
+}
+
+#[test]
 fn spec_status_text_lists_units_even_without_semantic_review_story() {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path();
