@@ -1,0 +1,92 @@
+{
+  "spec_version": "0.3.0",
+  "id": "money/round",
+  "intent": "Round monetary values (placeholder for compilation proof).",
+  "contract": {
+    "inputs": [
+      {
+        "name": "value",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal"
+  },
+  "deps": [],
+  "local_tests": [
+    {
+      "id": "basic_round",
+      "expect": "round(Decimal::new(10000, 2)) == Decimal::new(10000, 2)"
+    }
+  ],
+  "generated_at": "2026-05-10T23:08:41Z",
+  "source_file": "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units/money/round.unit.spec",
+  "freshness": {
+    "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "freshness": {
+        "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    },
+    "typescript": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "basic_round",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-10T23:08:41Z",
+        "provenance": {
+          "git_commit_sha": "467ebd3bd1c2de1d932cddc47cca2ff08c93a1a5"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:93a83c7b07e3de56ef1adf6c5387919f2b4276cb3d704371b2bed98aafa1ef39"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:93a83c7b07e3de56ef1adf6c5387919f2b4276cb3d704371b2bed98aafa1ef39",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  },
+  "semantic_review": {
+    "verdict": "aligned",
+    "compatibility_key": "function.helper.identity_passthrough.v1",
+    "support_status": "supported",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Round monetary values (placeholder for compilation proof)."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "1 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "body.typescript",
+        "summary": "authored TypeScript body present"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function round with 1 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
+  },
+  "contract_hash": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8"
+}
