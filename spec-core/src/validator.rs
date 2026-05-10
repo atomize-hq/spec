@@ -5,13 +5,14 @@
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
 use crate::graph::top_level_deps;
+use crate::portability_contract::{shared_surface_violation_message, SharedSeamAuthoredShapeRule};
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
-    AuthoredField, Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec,
-    MethodReceiver, QualifiedUnitRef, UnitKind, callable_name, has_callable_collision,
-    ordered_unique_deps, type_name_for_identifier, type_name_for_unit_id,
+    callable_name, has_callable_collision, ordered_unique_deps, type_name_for_identifier,
+    type_name_for_unit_id, AuthoredField, Contract, DepRef, DepRefParseError, LoadedMoleculeTest,
+    LoadedSpec, MethodReceiver, QualifiedUnitRef, UnitKind,
 };
-use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
+use crate::{Result, SpecError, SpecWarning, AUTHORED_SPEC_VERSION};
 use indexmap::IndexMap;
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
@@ -439,14 +440,6 @@ fn validate_body_rust_block(spec: &LoadedSpec) -> Result<()> {
     Ok(())
 }
 
-fn reject_top_level_typescript_body(spec: &LoadedSpec, message: &'static str) -> Result<()> {
-    if spec.spec.body.typescript.is_some() {
-        return Err(semantic_error(spec, message));
-    }
-
-    Ok(())
-}
-
 fn validate_contract_types(contract: &Contract, field_root: &str, path: &str) -> Result<()> {
     if let Some(inputs) = &contract.inputs {
         for (name, type_str) in inputs {
@@ -479,77 +472,67 @@ fn validate_contract_types(contract: &Contract, field_root: &str, path: &str) ->
 }
 
 fn validate_data_escape_hatches(spec: &LoadedSpec) -> Result<()> {
-    if spec.spec.contract.is_some() {
+    validate_shared_seam_authored_shape(spec, UnitKind::Data)
+}
+
+fn validate_sum_escape_hatches(spec: &LoadedSpec) -> Result<()> {
+    validate_shared_seam_authored_shape(spec, UnitKind::Sum)?;
+    if spec.spec.extensions.data.is_some() {
         return Err(semantic_error(
             spec,
-            "kind:data must not use top-level contract; shared seam semantics belong in data.fields, constructors, and methods",
+            shared_surface_violation_message(
+                UnitKind::Sum,
+                SharedSeamAuthoredShapeRule::SumDataFields,
+            ),
         ));
     }
-    if !spec.spec.deps.is_empty() {
+    if !spec.spec.extensions.constructors.is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:data must not use top-level deps; attach deps to individual methods instead",
-        ));
-    }
-    if !spec.spec.imports.is_empty() {
-        return Err(semantic_error(
-            spec,
-            "kind:data must not use top-level imports; that is an invalid shared-surface authored shape. Rust-specific details are only authored in methods[].lowering.rust.body and backends.rust.derives, and any portability contamination is decided later",
-        ));
-    }
-    reject_top_level_typescript_body(
-        spec,
-        "kind:data must not declare top-level body.typescript; that is an invalid shared-surface authored shape, not a portability verdict",
-    )?;
-    if !spec.spec.body.rust.trim().is_empty() {
-        return Err(semantic_error(
-            spec,
-            "kind:data must leave top-level body.rust empty; that authored slot is outside the shared seam surface. Rust-specific lowering belongs in methods[].lowering.rust.body, and portability consequences are decided later",
+            shared_surface_violation_message(
+                UnitKind::Sum,
+                SharedSeamAuthoredShapeRule::SumConstructors,
+            ),
         ));
     }
 
     Ok(())
 }
 
-fn validate_sum_escape_hatches(spec: &LoadedSpec) -> Result<()> {
+fn validate_shared_seam_authored_shape(spec: &LoadedSpec, kind: UnitKind) -> Result<()> {
+    debug_assert!(matches!(kind, UnitKind::Data | UnitKind::Sum));
+
     if spec.spec.contract.is_some() {
         return Err(semantic_error(
             spec,
-            "kind:sum must not use top-level contract; shared seam semantics belong in sum.variants and methods",
+            shared_surface_violation_message(kind, SharedSeamAuthoredShapeRule::TopLevelContract),
         ));
     }
     if !spec.spec.deps.is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:sum must not use top-level deps; attach deps to individual methods instead",
+            shared_surface_violation_message(kind, SharedSeamAuthoredShapeRule::TopLevelDeps),
         ));
     }
     if !spec.spec.imports.is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:sum must not use top-level imports; that is an invalid shared-surface authored shape. Rust-specific details are only authored in methods[].lowering.rust.body and backends.rust.derives, and any portability contamination is decided later",
+            shared_surface_violation_message(kind, SharedSeamAuthoredShapeRule::TopLevelImports),
         ));
     }
-    reject_top_level_typescript_body(
-        spec,
-        "kind:sum must not declare top-level body.typescript; that is an invalid shared-surface authored shape, not a portability verdict",
-    )?;
+    if spec.spec.body.typescript.is_some() {
+        return Err(semantic_error(
+            spec,
+            shared_surface_violation_message(
+                kind,
+                SharedSeamAuthoredShapeRule::TopLevelTypescriptBody,
+            ),
+        ));
+    }
     if !spec.spec.body.rust.trim().is_empty() {
         return Err(semantic_error(
             spec,
-            "kind:sum must leave top-level body.rust empty; that authored slot is outside the shared seam surface. Rust-specific lowering belongs in methods[].lowering.rust.body, and portability consequences are decided later",
-        ));
-    }
-    if spec.spec.extensions.data.is_some() {
-        return Err(semantic_error(
-            spec,
-            "kind:sum must not declare data.fields; sum seams own variants instead",
-        ));
-    }
-    if !spec.spec.extensions.constructors.is_empty() {
-        return Err(semantic_error(
-            spec,
-            "kind:sum must not declare constructors; enum cases are authored via sum.variants",
+            shared_surface_violation_message(kind, SharedSeamAuthoredShapeRule::TopLevelRustBody),
         ));
     }
 
@@ -2277,10 +2260,9 @@ local_tests:
         let result = validate_semantic(&spec);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("body.rust must not contain use statements")
-        );
+        assert!(err
+            .to_string()
+            .contains("body.rust must not contain use statements"));
     }
 
     #[test]
@@ -2737,12 +2719,10 @@ local_tests:
         };
         let result = validate_semantic(&spec);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("body.rust must not contain use statements")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("body.rust must not contain use statements"));
     }
 
     #[test]
@@ -2750,12 +2730,10 @@ local_tests:
         // `try` is reserved since Rust 2018 and was previously missing from the list
         let result = validate_rust_keywords("pricing/try", "test.unit.spec");
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Rust reserved keyword")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Rust reserved keyword"));
     }
 
     #[test]
@@ -4097,11 +4075,9 @@ methods:
             2,
             "expected empty-covers and implicit-import warnings"
         );
-        assert!(
-            warnings
-                .iter()
-                .any(|warning| matches!(warning, SpecWarning::MoleculeTestNoCoveredUnits { .. }))
-        );
+        assert!(warnings
+            .iter()
+            .any(|warning| matches!(warning, SpecWarning::MoleculeTestNoCoveredUnits { .. })));
         assert!(warnings.iter().any(|warning| matches!(
             warning,
             SpecWarning::MoleculeImplicitImportsDeprecated { .. }
