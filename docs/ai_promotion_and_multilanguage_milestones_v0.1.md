@@ -3,15 +3,19 @@
 **Status:** Active roadmap
 **Date:** 2026-04-30
 
-> This draft now reflects two things that changed the ladder materially:
+> This draft now reflects three things that changed the ladder materially:
 > M26 is no longer a proposal, it landed, and M27 narrowed from a vague
 > "ranking engine" milestone into a repo-truth coverage-accounting milestone
-> with a smaller, more honest first corpus.
+> with a smaller, more honest first corpus. It also reflects the bounded M44
+> landing: seam portability policy is now centralized in
+> `spec-core/src/portability_contract.rs` without implying a new crate split,
+> broader second-language execution, fresh family-choice work, or schema churn
+> by default.
 
 ## Purpose
 
-This document gives the current landing description for five late-sequence
-milestones:
+This document gives the current landing description for the current
+late-sequence milestones plus the later bounded M44 follow-on:
 
 - `M26` — landed
 - `M27` — landed
@@ -19,6 +23,8 @@ milestones:
 - `M31` — after recommendation-quality hardening
 - `M32` — landed as one bounded second-language pilot for
   `function.arithmetic_leaf.monotone_up.v1`
+- `M44` — landed as bounded portability-contract centralization in
+  `spec-core/src/portability_contract.rs`
 
 The shared premise remains the same:
 
@@ -221,9 +227,9 @@ in a small corpus."
 
 - that corpus expansion is unnecessary
 - that the next family is definitely known already
-- that shared-core extraction should start immediately afterward
+- that portability-contract centralization should start immediately afterward
 
-### M31 — Shared-Core Extraction + Escape-Hatch Containment
+### M31 — Explicit Seam Portability Contract + Escape-Hatch Containment
 **Status:** After M27.5
 
 **Why this is the next milestone now**
@@ -241,7 +247,7 @@ scope.
 
 M31 is the seam-only milestone that has to land first:
 
-- extract the shared core so the seam portability boundary is explicit
+- make the seam portability contract explicit as repo-owned policy
 - contain Rust-specific lowering and escape-hatch detail instead of letting it
   blur into shared authored shape
 - keep the read-side truth honest about when backend-specific detail contaminates
@@ -249,15 +255,19 @@ M31 is the seam-only milestone that has to land first:
 
 **What it needs to land on**
 
-- The seam portability contract is explicit enough that shared-core extraction is
-  a real code boundary, not a slogan.
+- The seam portability contract is explicit enough that shared-surface policy
+  can live in one repo-owned module instead of scattered checks and repeated
+  wording.
 - Illegal shared-surface authored shapes stay hard validation errors.
 - Allowed backend-specific seam detail remains valid authored input, but it is
   not automatically treated as portability-safe.
 - Escape-hatch containment is defined before second-language work tries to reuse
   the same proof surfaces.
 - The canonical example and corpus inputs are treated as compatibility surfaces,
-  not demo garnish, when the shared-core boundary changes.
+  not demo garnish, when the seam portability boundary changes.
+- The milestone stays bounded to one policy module, consumer rewiring,
+  regression coverage, and doc parity rather than expanding into a new crate
+  boundary or schema-change program.
 
 **What this proves**
 
@@ -265,19 +275,20 @@ M31 is the seam-only milestone that has to land first:
   "language-portable."
 - The team has identified which seam surfaces are shared truth and which
   backend-specific details must stay contained.
-- Second-language work would start from an honest shared-core boundary rather
-  than cargo-cult portability language.
+- Future second-language work would start from an honest portability-contract
+  boundary rather than cargo-cult portability language.
 
 **What this does not prove**
 
 - That a second language already works
 - That function portability is solved
 - That M32 has already been earned
+- That a new crate extraction is required
 
 ### M32 — One Bounded Second-Language Promotion Path
 **Status:** Landed, bounded
 
-After M31 made the seam boundary explicit, M32 stopped being a generic
+After the seam portability contract became explicit, M32 stopped being a generic
 portability aspiration and became one concrete executable-truth pilot.
 
 M32 proves one bounded second-language promotion path for
@@ -312,17 +323,54 @@ M32 proves one bounded second-language promotion path for
 - Finished parity across arbitrary language features
 - That the portability kernel is complete
 
+### M44 — Portability Contract Centralization
+**Status:** Landed, bounded
+
+M44 is the narrow implementation follow-on that freezes seam portability policy
+in `spec-core/src/portability_contract.rs`. It keeps the M31 boundary executable
+and shared without reopening family-choice work or widening second-language
+scope.
+
+**What landed**
+
+- one new policy module:
+  `spec-core/src/portability_contract.rs`
+- centralized seam-kind detection, shared-surface authored-shape rules, and the
+  portability-marker vocabulary used to distinguish backend-only detail from
+  portability contamination
+- the bounded milestone contract that this policy change is carried by consumer
+  rewiring, regression coverage, and doc parity instead of a broader
+  architecture or schema program
+
+**What this proves**
+
+- seam portability policy now has one canonical home in repo code
+- portability consumers can share one vocabulary for backend-only detail versus
+  portability contamination
+- the architecture boundary tightened without implying a new crate split or
+  broader language support
+
+**What this does not prove**
+
+- broader second-language backend execution
+- a new promoted family or recommendation decision
+- schema churn by default
+- that portability is "done"
+
 ## Suggested Ordering Logic
 
 1. `M26` first, because the operator model had to become real.
 2. `M27` second, because next-family choice should become evidence-driven.
 3. `M27.5` third, because evidence-driven is not the same thing as
    recommendation-quality good enough for roadmap steering.
-4. `M31` next, because second-language work without shared-core extraction and
-   escape-hatch containment would be fake confidence.
+4. `M31` next, because second-language work without an explicit seam
+   portability contract and escape-hatch containment would be fake confidence.
 5. `M32` after M27.5 and M31, as the bounded
    `function.arithmetic_leaf.monotone_up.v1` second-language pilot and not a
    broader portability claim.
+6. `M44` later, as the bounded centralization of that seam portability contract
+   into `spec-core/src/portability_contract.rs` rather than a new crate split,
+   schema migration, or broader backend program.
 
 ## M33 — Recommendation-Quality Promotion Decisions
 **Status:** In progress, bounded
@@ -344,8 +392,10 @@ family move. The bounded second-language proof remains the existing
 ## One-Line Summary
 
 `M26` made family promotion AI-operable, `M27` made next-family choice
-evidence-driven, `M27.5` hardens recommendation quality, `M31` isolates
-the shared core from Rust-specific escape hatches, and `M32` proves one bounded
-second-language promotion path for `function.arithmetic_leaf.monotone_up.v1`
-while keeping broader portability claims out of scope; `M33` makes the
-maintainer-facing recommendation verdict explicit without widening that proof.
+evidence-driven, `M27.5` hardens recommendation quality, `M31` makes seam
+portability policy explicit and contains Rust-specific escape hatches, `M32`
+proves one bounded second-language promotion path for
+`function.arithmetic_leaf.monotone_up.v1`, and `M44` later centralized that
+policy in `spec-core/src/portability_contract.rs` without widening portability
+claims; `M33` makes the maintainer-facing recommendation verdict explicit
+without broadening that proof.
