@@ -1,518 +1,591 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260509-155219.md -->
-# M41 - Helper-Surface Semantic Review Substrate
+# M42 - Decision-Contract Verifier Stop-State Parity
 
 Status: **authority plan**  
-Milestone family: **semantic-review-substrate**  
+Milestone family: **family-decision-contract-truth**  
 Implementation readiness: **ready-now**  
 Next artifact kind: **authority_plan**  
 Autoplan ready: **yes**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
 Last rewritten: **2026-05-09**  
-Source design doc: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260509-163237.md`**  
-Related test plan: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260509-163237.md`**
+Source design doc: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260509-195035.md`**  
+Source test plan: **`/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260509-195035.md`**  
+Supersedes: **the branch-local M41 helper-route authority plan**
 
 ## Executive Verdict
 
-M40+ is done.
+M42 is a narrow verifier-truth repair.
 
-The next honest move is one bounded capability expansion in the runtime semantic reviewer for the existing `money/round` helper wedge. The repo already proved this wedge is real, already proved it should not be promoted as the next semantic-family packet, and still reports it to users as generic unsupported pressure. That is the lie M41 retires.
+The live decision kernel already tells the truthful post-M41 story: there is no actionable next family move, so the correct outcome is a stop-state. The only broken surface is `cargo xtask family verify-decision-contract --format json`, which still freezes a retired helper-surface follow-on tuple and therefore fails on truthful HEAD artifacts.
 
-M41 ships exactly one new supported helper route end to end:
+This milestone fixes that verifier drift, centralizes the frozen floor beside the decision-contract seam that already owns the live truth, and adds enough regression coverage that this exact mismatch cannot silently return.
 
-- runtime semantic review in `spec-core`
-- read-side truth in passport, status, and export surfaces
-- operator truth in `xtask` inventory, coverage, and recommendation outputs
+## Problem Statement
 
-This is a substrate milestone, not a packet-promotion milestone.
+The branch currently has a split-brain maintainer story:
 
-## Design Basis
+```text
+recommend                    -> truthful stop-state
+corpus-decision              -> truthful stop-state
+verify-decision-contract     -> retired helper-surface floor -> FAIL
+```
 
-This plan follows the approved design doc at:
+The live truthful state on this branch is:
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260509-163237.md`
+- `recommendation_status = insufficient_real_corpus`
+- `decision_status = not_recommended`
+- `open_blockers = []`
+- `missing_evidence = []`
+- `stale_evidence = []`
+- `decision_action = stop`
+- `decision_basis_code = no_actionable_candidate`
+- `required_next_action = record_stop_without_new_milestone`
 
-The design doc locks four decisions:
+Today, `xtask/src/family/verify.rs` still hard-codes the old helper-surface floor in its frozen-floor check. That means the verifier rejects the same repo state that the live kernel says is correct.
 
-1. The helper wedge is a real repo-visible surface.
-2. The blocker is reviewer capability, not missing corpus.
-3. The right fix is runtime-supported substrate truth, not the next promoted packet.
-4. The complete version includes read-side truth refresh, not just a classifier tweak.
+This is a consumer-parity bug, not a recommendation-policy bug.
 
-## Live Repo Basis
+## Repo Truth Basis
 
-Current repo truth:
+### Code truth
 
-- `examples/shared-spec/units/money/round.spec.passport.json` still records `compatibility_key = "unsupported.function.v1"`.
-- `examples/ecommerce/units/money/round.unit.spec` and `examples/shared-spec/units/money/round.unit.spec` are the live helper examples.
-- `xtask/src/family/analysis_core/helper_surface.rs` freezes the current helper wedge fingerprint:
-  - `function_dep_arity = 0`
-  - `contract_input_count = 1`
-  - `has_return = true`
-  - `authored_body_kind = "neither"`
-- `spec-core/src/semantic_review.rs` currently exposes four supported function routes and no helper route.
-- `xtask/src/family/inventory.rs` and `xtask/src/family/coverage.rs` already have supported-unpromoted plumbing.
-- `cargo xtask family recommend --format json` currently reports the helper cluster as `helper_surface_not_promotable`.
+- `xtask/src/family/analysis_core/decision_contract.rs` already owns `derive_corpus_program_decision_contract()`.
+- `xtask/src/family/analysis_core/mod.rs` already exists as the shared export seam for analysis-core helpers.
+- `xtask/src/family/verify.rs` still owns a verifier-local frozen floor through `frozen_helper_surface_floor_result()`.
+- `xtask/src/family/verify.rs` test seeding still assumes the retired helper-surface durable-hold path.
+- `xtask/src/lib.rs` already covers CLI dispatch for `family verify-decision-contract --help` and non-JSON format rejection.
 
-That is enough evidence. More corpus does not help. Better reviewer understanding does.
+### Command truth
 
-## Scope Challenge
+The branch-local command story that this plan must preserve is:
+
+```text
+cargo xtask family recommend --format json
+  -> recommendation_status = "insufficient_real_corpus"
+  -> decision_status = "not_recommended"
+  -> open_blockers = []
+
+cargo xtask family corpus-decision --format json
+  -> decision_action = "stop"
+  -> decision_basis_code = "no_actionable_candidate"
+  -> required_next_action = "record_stop_without_new_milestone"
+
+cargo xtask family verify-decision-contract --format json
+  -> currently fails because the verifier still expects the retired helper-surface tuple
+```
+
+## Step 0 - Scope Challenge
 
 ### What already exists
 
-| Sub-problem | Existing owner | M41 decision |
+| Sub-problem | Existing owner | M42 decision |
 |---|---|---|
-| runtime supported function routing | `spec-core/src/semantic_review.rs` | extend the existing route table, do not add a second evaluator |
-| helper wedge fingerprinting | `xtask/src/family/analysis_core/helper_surface.rs` | reuse as the retirement proof source, do not widen it into policy |
-| supported-unpromoted coverage bucket | `xtask/src/family/coverage.rs` | reuse directly, do not invent a new coverage category |
-| runtime inventory publication | `xtask/src/family/inventory.rs` | add one explicit metadata entry, do not fake a packet |
-| recommendation hold logic | `xtask/src/family/recommend.rs` plus `xtask/src/lib.rs` tests | retire helper pressure by reclassification, not by patching around it |
-| read-side projection behavior | existing passport/status/export behavior plus `spec-cli/tests/cli.rs` | default expectation is test-only proof refresh, not new CLI behavior |
-| canonical helper examples | `examples/ecommerce/units/money/round.unit.spec`, `examples/shared-spec/units/money/round.unit.spec` | anchor the route on real examples, not synthetic-only fixtures |
+| Live decision derivation | `xtask/src/family/analysis_core/decision_contract.rs` | reuse directly, do not replace |
+| Shared analysis-core seam | `xtask/src/family/analysis_core/mod.rs` | extend exports only if needed |
+| Maintainer verifier | `xtask/src/family/verify.rs` | refresh to truthful stop-state parity |
+| Verifier fixture seeding | `xtask/src/family/verify.rs` tests | reseed to truthful stop-state |
+| CLI dispatch contract | `xtask/src/lib.rs` | keep command name and `--format json` behavior unchanged |
+| Live proof loop | `recommend`, `corpus-decision`, `verify-decision-contract` | reuse as acceptance harness |
 
 ### Minimum complete change
 
-M41 is complete only if all of this lands together:
+M42 is complete only if all of this lands together:
 
-1. `spec-core/src/semantic_review.rs` gains one explicit supported helper route for the current zero-dep, one-input, one-return identity/passthrough helper shape.
-2. The new route participates in the existing supported verdict ladder:
-   - aligned
-   - under specified
-   - semantic drift
-   - unsupported near miss remains unsupported
-3. `xtask` inventory, coverage, and recommendation outputs treat the helper wedge as supported-unpromoted substrate truth instead of unsupported pressure.
-4. Checked-in read surfaces prove the new truth:
-   - canonical helper passport
-   - status/export projection coverage
-   - xtask regression coverage
-5. The milestone does not invent a promotion story:
-   - no new `semantic-families/function.*` packet
-   - no `family new/smoke/prove/certify` loop
-   - no broader helper taxonomy
+1. The frozen expected stop-state is authored once, beside the decision-contract seam that already derives the live truth.
+2. `verify.rs` consumes that shared stop-state contract instead of a verifier-local helper-surface literal tuple.
+3. `verify.rs` tests seed the truthful stop-state and still prove fail-paths for real contract drift.
+4. CLI dispatch behavior stays unchanged, with `xtask/src/lib.rs` touched only if existing command-facing assertions require it.
+5. The live three-command maintainer loop passes on HEAD.
 
-### Concrete blast radius
+### Complexity check
 
-M41 should stay inside these concrete files unless proof exposes a real bug:
+This is intentionally a small wedge. The expected implementation surface is:
 
-| Area | Expected files |
-|---|---|
-| runtime reviewer | `spec-core/src/semantic_review.rs` |
-| read-side proof | `spec-cli/tests/cli.rs`, `examples/shared-spec/units/money/round.spec.passport.json` |
-| operator truth | `xtask/src/family/inventory.rs`, `xtask/src/family/coverage.rs`, `xtask/src/lib.rs` |
-| docs and teaching surfaces | `semantic-families/README.md`, `CHANGELOG.md` |
+- `xtask/src/family/analysis_core/decision_contract.rs`
+- `xtask/src/family/analysis_core/mod.rs`
+- `xtask/src/family/verify.rs`
+- `xtask/src/lib.rs` only if command-surface tests need refresh
 
-That is 8 concrete files across 4 ownership zones.
+That is 3 required files, 1 conditional file, and no new module tree. If implementation starts touching `recommend.rs`, `decision_kernel.rs`, `promotion_artifacts.rs`, or schema versioning code, the milestone has drifted out of scope.
 
-Default expectation: no production `spec-cli/src/*.rs` changes. If read-side tests expose a real projection bug, stop and amend the plan instead of silently widening scope.
+### Search check
 
-### Stop conditions
+`[Layer 1]` The repo already has the seam we should use.
 
-Stop and rewrite the plan if implementation tries to do any of this:
+The built-in solution here is the existing `analysis_core` decision-contract layer, not a new constants module, not a schema bump, and not another verifier-local tuple. This is a reuse problem, not a new architecture problem.
 
-- add a new packet under `semantic-families/`
-- introduce a second helper route
-- introduce a generic helper taxonomy
-- add new CLI flags or schema versions
-- touch corpus manifests or decision-kernel policy instead of retiring the wedge through runtime support
-- widen the route beyond the current decimal helper shape without new design approval
+### TODOS cross-reference
 
-### TODO cross-reference
+Existing deferred work in [TODOS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/TODOS.md) does not block M42:
 
-Relevant existing TODOs:
-
-- `Cross-crate family-analysis shared core`
 - `Generalized multi-wedge decision layer`
+- `Cross-crate family-analysis shared core`
 
-Neither blocks M41. Both stay deferred. M41 should make both smaller by removing fake unsupported pressure from the helper lane.
+M42 must not partially do either one. It should only remove the stale verifier-local branch so those later follow-ons, if ever needed, start from a truthful base.
 
 ### Completeness check
 
-The tempting shortcut is a `spec-core`-only route addition.
+Reject the shortcut where we only swap literal values inside `verify.rs`.
 
-Reject that.
+That would make today's failure go green while leaving the root cause alive: the verifier would still own a second source of decision-contract truth. The complete version is still a small lake, and it costs almost nothing more.
 
-If runtime truth changes but status/export/passport and inventory/coverage/recommendation continue to report unsupported helper pressure, the product becomes less trustworthy. The full blast radius is still a small lake, and this repo is already set up to carry the complete version.
+### Distribution check
+
+No new binary, package, container, or release pipeline is introduced. Distribution is unchanged and out of scope.
 
 ## Architecture Contract
 
-### Locked target boundary
+### Current to target
 
 ```text
-authored helper unit (.unit.spec)
-            |
-            v
-spec-core/src/semantic_review.rs
-  SupportedFunctionRoute::HelperIdentityPassthrough
-            |
-            +--> supported SemanticReview verdicts
-            |
-            +--> spec-cli passport/status/export projection truth
-            |
-            +--> xtask inventory runtime_supported_routes
-            |
-            +--> xtask family coverage supported_unpromoted counts
-            |
-            `--> recommendation no longer sees helper wedge as unsupported pressure
+CURRENT
+  recommendation.latest.json -> truthful stop-state
+  corpus-program-decision.latest.json -> truthful stop-state
+  verify.rs -> frozen helper-surface floor -> FAIL
+
+TARGET
+  recommendation.latest.json -> truthful stop-state
+  corpus-program-decision.latest.json -> truthful stop-state
+  verify.rs -> shared frozen stop-state floor -> PASS
 ```
 
-### Route contract
+### Dependency graph
 
-Add one new runtime-supported function route:
+```text
+FamilyRecommendationAnalysisArtifact
+            |
+            v
+xtask/src/family/analysis_core/decision_contract.rs
+  ├── corpus_program_basis_snapshot()
+  ├── derive_corpus_program_decision_contract()
+  └── NEW: frozen_truthful_stop_state_contract()
+            |
+            v
+xtask/src/family/analysis_core/mod.rs
+            |
+            v
+xtask/src/family/verify.rs
+  ├── artifact validation
+  ├── basis snapshot parity
+  ├── derived decision parity
+  └── frozen floor parity against shared stop-state
+            |
+            v
+JSON report + CLI exit status
+```
 
-- route marker: `HelperIdentityPassthrough`
-- compatibility key: `function.helper.identity_passthrough.v1`
+### Ownership map
 
-The route must remain brutally narrow:
+| File | Owns after M42 | Must not own |
+|---|---|---|
+| `xtask/src/family/analysis_core/decision_contract.rs` | live decision derivation and the shared frozen truthful stop-state contract | verifier I/O, JSON rendering, CLI behavior |
+| `xtask/src/family/analysis_core/mod.rs` | export surface for decision-contract helpers | duplicated contract logic |
+| `xtask/src/family/verify.rs` | artifact loading, parity checks, report rendering, fixture seeding | independent policy truth about what the stop-state should be |
+| `xtask/src/lib.rs` | CLI dispatch tests only | duplicated decision-contract expectations |
 
-- zero deps
-- exactly one input
-- input type is `Decimal`
-- return type is `Decimal`
-- authored semantics are identity/passthrough helper intent
-- executable body is consistent with passthrough semantics
+### Locked truthful stop-state
 
-Anything with control flow, additional deps, extra inputs, or broader helper semantics stays unsupported.
+The shared frozen floor introduced by M42 must encode exactly this tuple:
 
-### Routing-order decision
+```text
+recommendation_status = insufficient_real_corpus
+decision_status       = not_recommended
+open_blockers         = []
+missing_evidence      = []
+stale_evidence        = []
+decision_action       = stop
+decision_basis_code   = no_actionable_candidate
+required_next_action  = record_stop_without_new_milestone
+```
 
-Add the route at the end of `SUPPORTED_FUNCTION_ROUTING_ORDER`, immediately before terminal unsupported fallback.
+There is no ambiguity here. These values are the contract.
+
+### Public contract decision
+
+M42 does **not** change the outward machine-readable verifier surface.
+
+That means:
+
+- keep the command name unchanged
+- keep `--format json` as the only supported format
+- keep the JSON check key `checks.frozen_helper_surface_floor`
+- keep the failure reason `frozen_helper_surface_floor_mismatch`
 
 Why:
 
-- lowest shadow risk
-- minimal churn to existing route precedence
-- the shape cannot steal wrapper or arithmetic routes because it is zero-dep and one-input
+- this is the minimal diff
+- the user-facing problem is false verifier failure, not naming polish
+- the repo search shows no need to widen this wedge into a public contract cleanup
 
-### File ownership map
+### Internal naming decision
 
-| File | Owns after M41 | Must not own |
+Internal Rust helper and test names should become honest stop-state names where doing so does not widen the public surface.
+
+Allowed:
+
+- rename local Rust helper names and local test names from helper-surface wording to stop-state wording
+- add comments that explain the legacy outward JSON naming
+
+Not allowed:
+
+- changing outward JSON field names
+- changing outward failure-reason strings
+- turning M42 into a schema cleanup milestone
+
+## Implementation Contract
+
+### Step 1 - Add the shared frozen truthful stop-state contract
+
+Files:
+
+- `xtask/src/family/analysis_core/decision_contract.rs`
+- `xtask/src/family/analysis_core/mod.rs`
+
+Do:
+
+- add one explicit helper that returns the frozen post-M41 truthful stop-state contract
+- place it beside `derive_corpus_program_decision_contract()`
+- make the helper hold the exact fields listed in the locked tuple above
+- export the helper through `analysis_core/mod.rs` if `verify.rs` consumes it through the seam
+
+Do not:
+
+- change `derive_corpus_program_decision_contract()`
+- change recommendation policy
+- add a second verifier-only copy of the same tuple
+
+Done when:
+
+- `decision_contract.rs` can answer both:
+  - what the live kernel derives
+  - what the verifier should freeze as the truthful stop-state floor
+
+### Step 2 - Rewire the verifier to consume the shared stop-state
+
+Files:
+
+- `xtask/src/family/verify.rs`
+
+Do:
+
+- replace verifier-local literal comparisons in the frozen-floor check with comparisons against the shared truthful stop-state helper
+- preserve the existing check structure:
+  - recommendation analysis validation
+  - corpus-program-decision validation
+  - basis snapshot parity
+  - derived decision parity
+  - frozen floor parity
+- keep pass/fail behavior unchanged:
+  - JSON only
+  - pass returns exit 0
+  - fail returns the existing invalid-input exit path with JSON emitted
+- rename internal helper/test identifiers to stop-state wording if that does not affect the public JSON surface
+
+Do not:
+
+- remove the frozen-floor check
+- collapse the verifier into "derived parity is enough"
+- rewrite the JSON report schema
+
+Done when:
+
+- `build_report()` passes on truthful stop-state artifacts
+- the frozen-floor check still fails when any frozen field drifts
+
+### Step 3 - Reseed verifier fixtures and regression tests
+
+Files:
+
+- `xtask/src/family/verify.rs`
+
+Do:
+
+- reseed `fixture_analysis_artifact()` to produce the truthful stop-state basis
+- ensure `seeded_workspace()` writes a truthful stop-state decision artifact by deriving from that basis
+- refresh or add tests that prove:
+  - truthful stop-state passes
+  - stale evidence fails
+  - basis snapshot drift fails
+  - derived decision drift fails
+  - frozen stop-state floor drift fails
+  - non-JSON format still rejects
+
+Preferred local test naming:
+
+- `verifier_passes_on_truthful_stop_state_floor`
+- `verifier_reports_truthful_stop_state_floor_mismatch`
+
+Do not:
+
+- keep helper-surface-specific pass fixtures
+- write vague fail tests that only assert "some mismatch happened"
+
+Done when:
+
+- the verifier fixture is no longer helper-surface-specific
+- fail-path assertions describe real stop-state drift, not obsolete follow-on drift
+
+### Step 4 - Audit CLI-dispatch coverage
+
+Files:
+
+- `xtask/src/lib.rs` only if needed
+
+Do:
+
+- rerun CLI tests that cover `family verify-decision-contract --help`
+- rerun CLI tests that cover non-JSON format rejection
+- update assertions only if the verifier refactor changed intentionally locked surfaced text
+
+Do not:
+
+- widen M42 into a general CLI wording cleanup
+- touch `xtask/src/lib.rs` unless the existing dispatch tests require it
+
+Done when:
+
+- `xtask/src/lib.rs` is either untouched or only minimally refreshed for verifier dispatch assertions
+
+## File-Level Change Contract
+
+| File | Change required | Notes |
 |---|---|---|
-| `spec-core/src/semantic_review.rs` | route recognition, compatibility key, verdict ladder, routing order | packet promotion logic, inventory policy |
-| `spec-cli/tests/cli.rs` | preserve/refresh/status/export assertions for supported helper truth | semantic-review classifier logic |
-| `examples/shared-spec/units/money/round.spec.passport.json` | canonical checked-in proof surface | new policy or new schema |
-| `xtask/src/family/inventory.rs` | runtime inventory metadata for the helper route | fake packet scaffolding |
-| `xtask/src/family/coverage.rs` | supported-unpromoted counts and helper-cluster retirement truth | new coverage classes |
-| `xtask/src/lib.rs` | integration expectations for inventory/coverage/recommendation | runtime classifier logic |
-| `semantic-families/README.md` | operator-facing explanation of supported-unpromoted helper truth | packet-promotion guidance for M41 |
-| `CHANGELOG.md` | release teaching surface | design rationale beyond shipped outcome |
+| `xtask/src/family/analysis_core/decision_contract.rs` | yes | add shared frozen truthful stop-state helper |
+| `xtask/src/family/analysis_core/mod.rs` | likely | export the helper if needed |
+| `xtask/src/family/verify.rs` | yes | consume helper, reseed fixtures, refresh tests |
+| `xtask/src/lib.rs` | conditional | only if existing command-facing tests need updates |
+| `xtask/src/family/recommend.rs` | no | policy is already truthful |
+| `xtask/src/family/helper_surface.rs` | no | not part of this consumer-parity fix |
+| `PLAN.md` | yes | this authority plan |
+| `ORCH_PLAN.md` | no | no orchestration rewrite in M42 |
 
-## Implementation Plan
+## Test Contract
 
-### Step 1: Add the runtime route in `spec-core`
+### Test framework
 
-Files:
+This repo is Rust. The authoritative harness for M42 is:
 
-- `spec-core/src/semantic_review.rs`
+- focused verifier coverage through `cargo test -p xtask verify`
+- broader confirmation through `cargo test -p xtask`
+- live maintainer proof through the three command loop
 
-Do:
-
-- add `HelperIdentityPassthrough` to the supported route enum and routing order
-- add the compatibility key constant
-- implement the exact route-match predicate for the current helper shape
-- prove all four verdict states for the helper route:
-  - aligned
-  - under specified
-  - semantic drift
-  - unsupported near miss
-
-Do not:
-
-- create a helper mini-framework
-- widen the matcher beyond the current decimal helper wedge
-- reorder existing wrapper/arithmetic routes
-
-Done when:
-
-- helper-aligned examples return supported helper truth
-- near misses stay on `unsupported.function.v1`
-
-### Step 2: Refresh read-side proof surfaces
-
-Files:
-
-- `spec-cli/tests/cli.rs`
-- `examples/shared-spec/units/money/round.spec.passport.json`
-
-Do:
-
-- add regression coverage proving fresh helper proof survives preserve/status/export projection
-- refresh the checked-in helper passport to the new compatibility key and supported review truth
-
-Do not:
-
-- widen CLI behavior casually
-- change production `spec-cli/src/*.rs` unless tests expose a real bug
-
-Done when:
-
-- a fresh helper passport projects supported helper truth consistently across read surfaces
-- stale or mismatched proof still demotes exactly the way existing supported routes do
-
-### Step 3: Refresh operator truth in `xtask`
-
-Files:
-
-- `xtask/src/family/inventory.rs`
-- `xtask/src/family/coverage.rs`
-- `xtask/src/lib.rs`
-
-Do:
-
-- publish the helper route as runtime-supported and supported-unpromoted
-- add inventory metadata for the helper route
-- update coverage and recommendation expectations so the helper cluster retires by reclassification
-- keep promoted-family counts unchanged
-
-Do not:
-
-- invent a new inventory category
-- patch recommendation with a one-off exception
-- fake a promoted family for the helper route
-
-Done when:
-
-- helper units move from unsupported pressure to supported-unpromoted truth
-- recommendation stops surfacing `helper_surface_not_promotable` as live pressure for this wedge
-
-### Step 4: Refresh repo teaching surfaces
-
-Files:
-
-- `semantic-families/README.md`
-- `CHANGELOG.md`
-
-Do:
-
-- document that the helper wedge is now supported substrate truth
-- document that M41 does not create a new promoted packet
-
-Do not:
-
-- rewrite family-promotion guidance broadly
-- imply generic helper understanding
-
-Done when:
-
-- a maintainer can read the repo docs and understand why the helper wedge is now supported but still unpromoted
-
-## Test Review
-
-### Architecture diagram
-
-```text
-money/round.unit.spec
-      |
-      v
-evaluate_semantic_review()
-      |
-      +--> supported helper verdicts in spec-core tests
-      |
-      +--> passport/status/export projection in spec-cli tests
-      |
-      +--> runtime_supported_routes inventory in xtask tests
-      |
-      +--> coverage supported_unpromoted counts in xtask tests
-      |
-      `--> recommendation no longer reports helper unsupported pressure
-```
-
-### Code-path coverage diagram
+### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] spec-core helper route
-    |
-    ├── [GAP] aligned helper review
-    ├── [GAP] vague helper intent -> under specified
-    ├── [GAP] contradictory helper body -> semantic drift
-    └── [GAP] control-flow near miss -> unsupported
+[+] xtask/src/family/analysis_core/decision_contract.rs
+    │
+    ├── derive_corpus_program_decision_contract()
+    │   ├── [EXISTING] recommended -> pivot_to_family_promotion_run
+    │   ├── [EXISTING] blocked + missing/stale evidence -> spend_corpus_run_1
+    │   ├── [EXISTING] blocked non-helper -> pivot_to_recommendation_policy_run
+    │   └── [EXISTING] no actionable candidate -> stop
+    │
+    └── NEW frozen truthful stop-state helper
+        ├── [MUST ADD] emits the locked truthful stop-state tuple
+        └── [MUST ADD] agrees with derive() on the stop branch
 
-[+] spec-cli read-side projection
-    |
-    ├── [GAP] preserve fresh helper passport truth
-    ├── [GAP] status projects supported helper review
-    └── [GAP] export projects supported helper review
+[+] xtask/src/family/verify.rs
+    │
+    ├── recommendation_analysis_validation
+    │   └── [EXISTING] missing/invalid artifact fail paths
+    │
+    ├── corpus_program_decision_validation
+    │   └── [EXISTING] missing/invalid decision artifact fail paths
+    │
+    ├── basis_snapshot_parity_result()
+    │   ├── [EXISTING] matching snapshot passes
+    │   └── [EXISTING] drifted snapshot fails
+    │
+    ├── derived_decision_parity_result()
+    │   ├── [EXISTING] matching derived decision passes
+    │   └── [EXISTING] drifted derived decision fails
+    │
+    └── frozen floor parity
+        ├── [MUST ADD] truthful stop-state passes
+        ├── [MUST ADD] stale evidence fails
+        ├── [MUST ADD] stop-state field drift fails
+        └── [MUST ADD] retired helper-surface pass fixture is gone
 
-[+] xtask operator truth
-    |
-    ├── [GAP] inventory lists helper route as supported-unpromoted
-    ├── [GAP] coverage moves helper units out of unsupported pressure
-    └── [GAP] recommendation stops surfacing helper hold text
+[+] CLI DISPATCH
+    │
+    ├── [EXISTING] --help exits 0
+    └── [EXISTING] --format yaml exits 2
 
-[+] docs / teaching surfaces
-    |
-    ├── [GAP] semantic-families README explains supported-unpromoted helper truth
-    └── [GAP] changelog records the user-visible semantic review shift
+[+] MAINTAINER FLOW
+    │
+    ├── [MUST PROVE] recommend -> corpus-decision -> verify loop agrees on stop-state
+    └── [MUST PROVE] verify returns exit 0 on current branch truth
+
+─────────────────────────────────
+COVERAGE TARGET: 100% of changed verifier paths
+REQUIRED GAPS TO FILL: 5
+  1. shared frozen truthful stop-state helper test
+  2. truthful stop-state verifier pass test
+  3. frozen stop-state drift fail test
+  4. stale-evidence fail test against stop-state fixture
+  5. live three-command acceptance proof
+─────────────────────────────────
 ```
 
-### Required proof loop
+### Required test additions
+
+Add or refresh tests so every changed branch is proven:
+
+1. `decision_contract.rs` unit test that the shared frozen helper returns the exact locked stop-state tuple.
+2. `decision_contract.rs` unit test that the frozen helper and `derive_corpus_program_decision_contract()` agree for a truthful no-actionable-candidate basis.
+3. `verify.rs` pass test for truthful stop-state artifacts.
+4. `verify.rs` fail test that mutates each critical frozen field:
+   - `recommendation_status`
+   - `open_blockers`
+   - `decision_action`
+   - `decision_basis_code`
+   - `required_next_action`
+5. `verify.rs` fail test for stale evidence on otherwise truthful stop-state artifacts.
+6. `xtask` command proof that `family verify-decision-contract --format yaml` still exits 2.
+
+### Regression rule
+
+This is a regression fix. A regression test is mandatory.
+
+The broken behavior already exists on HEAD: truthful artifacts produced by the live kernel fail verifier parity because of an obsolete frozen tuple. M42 is not complete unless at least one test would have failed before the change and now passes after it.
+
+### Manual proof loop
+
+Run exactly:
 
 ```bash
-cargo test -p spec-core semantic_review
-cargo test -p spec-cli --test cli
+cargo test -p xtask verify
 cargo test -p xtask
-cargo xtask family inventory --format json
-cargo xtask family coverage --format json
 cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
+cargo xtask family verify-decision-contract --format json
 ```
 
-### Expected post-M41 truth
+Expected final outcome:
 
-- `money/round`-style helper units return supported helper semantic review truth
-- helper route appears in `runtime_supported_routes`
-- helper route appears in `supported_unpromoted_families`
-- helper units stop contributing to unsupported helper-cluster pressure
-- no new packet is introduced
-
-Coverage expectation:
-
-- current snapshot in repo tests is `28 / 17 / 0 / 11`
-- expected post-M41 snapshot is `28 / 17 / 3 / 8`
-
-If the corpus shifts before landing, preserve the same semantic delta instead of forcing stale absolute numbers:
-
-- `promoted_family_units` unchanged
-- `supported_unpromoted_family_units` increases by the helper-unit count being retired
-- `unsupported_function_units` decreases by the same amount
-
-### Test plan artifact
-
-Authoritative QA handoff artifact:
-
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260509-163237.md`
+- `recommend` emits `insufficient_real_corpus`
+- `corpus-decision` emits `stop` and `record_stop_without_new_milestone`
+- `verify-decision-contract` exits 0 and reports overall pass
 
 ## Failure Modes Registry
 
-| Surface | Failure | Test required | Error handling exists | User-visible impact | Severity |
+| Codepath | Real failure | Test covers it | Error handling exists | User sees | Critical gap before M42 lands |
 |---|---|---|---|---|---|
-| `semantic_review.rs` | route overmatches and falsely supports arbitrary helpers | yes | no runtime guard beyond matcher | silent false confidence | high |
-| `semantic_review.rs` | route undermatches and leaves `money/round` unsupported | yes | fallback remains unsupported | obvious product lie remains | high |
-| `spec-cli` read surfaces | supported helper proof is dropped or misprojected | yes | existing stale logic should apply | user sees inconsistent truth across commands | high |
-| `xtask` inventory | runtime route exists but inventory omits it | yes | metadata validation exists | maintainer sees stale operator truth | medium |
-| `xtask` coverage | helper units remain in unsupported pressure | yes | none beyond test expectations | recommendation continues to teach the wrong lesson | high |
-| docs | repo still describes helper wedge as unsupported pressure | yes | none | human readers cargo-cult the old story | medium |
+| shared frozen truthful stop-state helper | helper returns stale or partial tuple | must add | compile-time + unit-test boundary only | verifier silently freezes wrong floor later | yes |
+| verifier frozen-floor parity | truthful stop-state still compared against retired helper tuple | must add | yes, verifier fails loudly | maintainer sees false failure | yes |
+| stale-evidence gate | stale evidence accidentally passes after refactor | must add | yes, explicit failure reason exists | maintainer gets false green | yes |
+| basis snapshot parity | analysis artifact drifts without decision snapshot refresh | existing + keep | yes | verifier fails clearly | no |
+| derived decision parity | decision artifact semantic fields drift from kernel | existing + keep | yes | verifier fails clearly | no |
+| CLI format guard | non-JSON format starts passing or emitting ambiguous output | existing + keep | yes | maintainer gets confusing CLI behavior | no |
 
-Critical gap rule:
+Critical-gap rule for M42:
 
-Any path that has no test, no guardrail, and would silently over-claim semantic support is a release blocker for M41.
+Any failure mode that has no regression test and would create a false green or false red verifier result is release-blocking for this milestone.
 
-## Error & Rescue Registry
+## Performance Review
 
-| ID | Gap | Rescue |
+There is no material runtime performance work in M42.
+
+The change is bounded to comparing a different frozen tuple during verifier execution. The real risk is contract drift, not latency, memory, or scale. The right investment is shared truth and sharper regression tests.
+
+## Error And Rescue Registry
+
+| Risk | Why it matters | Rescue |
 |---|---|---|
-| ER-1 | helper route overmatches | tighten matcher and keep explicit near-miss tests |
-| ER-2 | helper route undermatches | anchor tests and checked-in passport on canonical helper examples |
-| ER-3 | runtime truth diverges from operator truth | land inventory and coverage refresh in the same milestone |
-| ER-4 | preserve/export drops helper truth | add explicit read-side regression coverage before changing docs |
-| ER-5 | recommendation still surfaces retired pressure | update xtask integration expectations instead of policy prose |
+| Verifier accepts the wrong stop-state | turns the guard into theater | add field-by-field negative tests for recommendation status, blockers, decision action, basis code, and required next action |
+| Hidden consumer depends on old JSON naming | renaming could break downstream parsing | do not change outward JSON names in M42 |
+| Fixture drift hides live command drift | green unit tests but broken real command | run the live three-command proof loop before closing the milestone |
+| Implementation widens into policy change | turns a lake into an ocean | hard stop if `recommend.rs` or decision-policy semantics become necessary |
+
+## What Already Exists
+
+The repo already has most of what this milestone needs:
+
+- a real decision kernel in `xtask/src/family/analysis_core/decision_contract.rs`
+- a shared export seam in `xtask/src/family/analysis_core/mod.rs`
+- a verifier command with validation and parity checks in `xtask/src/family/verify.rs`
+- CLI dispatch tests in `xtask/src/lib.rs`
+
+M42 reuses all of that. It does not invent a parallel path.
+
+## NOT in scope
+
+- changing recommendation policy
+- changing `derive_corpus_program_decision_contract()` semantics
+- changing helper-surface durable-hold behavior outside verifier parity
+- deleting the frozen-floor check entirely
+- changing outward JSON field names or failure-reason strings
+- introducing a new verifier schema version
+- broader cleanup of `xtask/src/lib.rs`
+- new milestone selection, packet promotion, or corpus-expansion work
+- `ORCH_PLAN.md` rewrites
 
 ## Worktree Parallelization Strategy
-
-This plan has real parallelization value because the work splits cleanly across module boundaries once the route contract is fixed.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| 1. Runtime helper route | `spec-core/src/` | — |
-| 2. Read-side proof refresh | `spec-cli/tests/`, `examples/shared-spec/units/money/` | 1 |
-| 3. Operator truth refresh | `xtask/src/family/`, `xtask/src/` | 1 |
-| 4. Docs and release notes | `semantic-families/`, repo root docs | 2, 3 |
+| Step 1. Shared frozen truthful stop-state helper | `xtask/src/family/analysis_core/` | — |
+| Step 2. Verifier consumer refactor | `xtask/src/family/verify.rs` | Step 1 |
+| Step 3. Verifier fixture and regression refresh | `xtask/src/family/verify.rs` | Step 2 |
+| Step 4. CLI dispatch audit | `xtask/src/lib.rs` | Step 2 |
 
 ### Parallel lanes
 
-- Lane A: Step 1, runtime helper route in `spec-core/src/`
-- Lane B: Step 2, read-side proof refresh in `spec-cli/tests/` and `examples/shared-spec/units/money/`, starts after Lane A defines the compatibility key and matcher contract
-- Lane C: Step 3, operator truth refresh in `xtask/src/family/` and `xtask/src/`, starts after Lane A defines the compatibility key and route marker
-- Lane D: Step 4, docs in `semantic-families/` and repo root docs, starts after Lanes B and C settle the final user-visible truth
+Sequential implementation, no safe parallelization opportunity.
+
+Why:
+
+- the wedge is intentionally tiny
+- Steps 2 and 3 both center on `xtask/src/family/verify.rs`
+- Step 4 is conditional and only becomes meaningful after verifier behavior is stable
 
 ### Execution order
 
-1. Launch Lane A first. It is the contract-setting lane.
-2. After Lane A lands or reaches a stable patch, launch Lane B and Lane C in parallel worktrees.
-3. Merge Lane B and Lane C.
-4. Run Lane D last so docs describe the actual landed truth, not the intended truth.
+1. Land Step 1.
+2. Land Steps 2 and 3 sequentially in the same worktree.
+3. Audit Step 4 last, only if command-facing tests actually require a touch in `xtask/src/lib.rs`.
 
 ### Conflict flags
 
-- Lanes B and C should not touch the same modules. Keep the helper passport update in Lane B only.
-- Lane C owns `xtask` expectations. Lane B should not patch `xtask` fixtures or counts.
-- Lane D should not start early. Otherwise it will race the final route name, counts, or recommendation wording.
+No parallel lanes are recommended. Splitting Steps 2 and 3 across worktrees would create avoidable merge conflicts in `xtask/src/family/verify.rs` for no real speed gain.
 
-If the implementation ends up touching production `spec-cli/src/*.rs`, collapse Lane B back into sequential execution after Lane A. That is a scope-change signal, not a free parallel win.
+## Acceptance Criteria
 
-## NOT in scope
+M42 is complete only if all of the following are true:
 
-- promoting a helper semantic-family packet
-- generic helper understanding
-- additional helper routes
-- non-decimal helper types
-- corpus expansion or manifest changes
-- new CLI flags or output schemas
-- cross-crate shared-core extraction
-- second-language backend execution work
+1. `cargo xtask family verify-decision-contract --format json` passes on the current truthful stop-state.
+2. The verifier still fails on basis snapshot drift, derived decision drift, stale evidence, and frozen-floor drift.
+3. The frozen floor lives in `analysis_core`, not as duplicated literals inside `verify.rs`.
+4. No family-selection policy files change.
+5. The outward command surface stays bounded:
+   - same command name
+   - same `--format json` restriction
+   - same outward JSON check key and failure-reason names
+6. `xtask/src/lib.rs` is either untouched or only minimally refreshed for verifier dispatch tests.
 
-## Dream State Delta
+## Proof Loop
 
-After M41, the repo is not done with helper semantics. It is done with one helper lie.
-
-What improves:
-
-- helper pressure stops polluting the unsupported-function lane
-- maintainers stop reading architecture-follow-on policy as a substitute for missing runtime support
-- developers see truthful helper support directly in runtime, status, export, passport, inventory, and coverage surfaces
-
-What stays deferred:
-
-- broader helper semantics
-- cross-crate shared-core reuse
-- multi-wedge decision-kernel generalization
-- second-language expansion
-
-## Cross-Phase Theme
-
-Retire the lie completely.
-
-This milestone only wins if the helper wedge is removed from every surface that claims to tell the truth. Runtime-only support is not a smaller correct version. It is a split-brain version.
-
-## Decision Audit Trail
-
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-|---|---|---|---|---|---|---|
-| 1 | Scope | Make M41 a substrate milestone, not a promotion milestone | mechanical | explicit over clever | frozen analysis already says helper surface is real but not promotable | packet promotion |
-| 2 | Scope | Carry read-side truth in the same milestone | mechanical | choose completeness | runtime-only support would make the repo less trustworthy | `spec-core`-only fix |
-| 3 | Architecture | Keep the route limited to one decimal identity/passthrough helper shape | mechanical | pragmatic | retires the visible wedge without creating a helper taxonomy | generic helper support |
-| 4 | Architecture | Append the route at the end of supported routing order | taste | minimal diff | lowest shadow risk and least routing churn | inserting earlier in route order |
-| 5 | Tooling | Publish helper truth as supported-unpromoted | mechanical | DRY | existing plumbing already models runtime-supported but unpromoted routes | new inventory category |
-| 6 | Testing | Require read-side and xtask regressions, not just runtime tests | mechanical | boil the lake | status/export/passport/inventory/coverage are the user-facing truth surfaces | skipping blast-radius proof |
-| 7 | Execution | Split post-route work into read-side and xtask lanes | taste | systems over heroes | parallelism is safe only after the route contract is fixed | fully sequential implementation |
+```bash
+cargo test -p xtask verify
+cargo test -p xtask
+cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
+cargo xtask family verify-decision-contract --format json
+```
 
 ## Completion Summary
 
-| Review surface | Result |
-|---|---|
-| Step 0: Scope challenge | scope accepted, no reduction needed |
-| Architecture review | one new route, no new framework |
-| Code quality review | no new abstraction layer, explicit naming, minimal diff |
-| Test review | full coverage diagram written, runtime + read-side + xtask proof required |
-| Performance review | negligible runtime risk, no extra passes allowed |
-| What already exists | written |
-| NOT in scope | written |
-| Failure modes | written |
-| Error & rescue | written |
-| Parallelization | 4 steps, 4 lanes, 2 parallel post-route lanes |
-| Test plan artifact | linked |
-| Lake score | chose the complete option over the shortcut |
-
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | drafted | helper wedge is a substrate capability gap, not a packet-promotion lane |
-| Codex Review | `codex review` | Independent 2nd opinion | 0 | unavailable | session policy did not allow delegated outside-voice review |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | drafted | complete blast radius is runtime support plus read-side and xtask truth refresh |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | no user-facing UI scope |
-| DX Review | `/plan-devex-review` | Developer-facing truth surfaces | 1 | drafted | helper truth must change everywhere developers actually read it |
-
-**VERDICT:** READY TO IMPLEMENT. M41 is now a single cohesive implementation contract with explicit scope, proof, and worktree parallelization boundaries.
+- Step 0: Scope Challenge — scope accepted as a narrow verifier-truth repair
+- Architecture — shared decision-contract seam remains the single truth owner
+- Code Quality — duplicated frozen tuples are forbidden after M42
+- Tests — 5 required gaps must be closed
+- Performance — 0 material runtime concerns
+- What already exists — written
+- NOT in scope — written
+- Failure modes — critical verifier false-red and false-green paths explicitly covered
+- Parallelization — sequential only, no safe worktree split
+- Lake score — complete version chosen over the verifier-local literal swap
