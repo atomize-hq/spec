@@ -6,7 +6,10 @@
 
 use crate::graph::top_level_deps;
 use crate::portability_contract::{SharedSeamAuthoredShapeRule, shared_surface_violation_message};
-use crate::semantic_review::{SemanticSupportStatus, evaluate_semantic_review};
+use crate::semantic_review::{
+    SemanticReviewContext, SemanticSupportStatus, evaluate_semantic_review,
+    evaluate_semantic_review_with_context,
+};
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
     AuthoredField, Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec,
@@ -30,14 +33,22 @@ static COMPILED_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 static COMPILED_TEST_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 
 pub const TYPESCRIPT_TARGET_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
+pub const TYPESCRIPT_HELPER_COMPATIBILITY_KEY: &str =
+    "function.helper.identity_passthrough.v1";
 pub const TYPESCRIPT_MOLECULE_UNSUPPORTED_MESSAGE: &str =
-    ".test.spec is not supported for --target-language typescript in M45; molecule tests remain Rust-only";
+    ".test.spec is not supported for --target-language typescript in M46; molecule tests remain Rust-only";
 pub const TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript target currently supports only kind:function units in M45";
-pub const TYPESCRIPT_DEPS_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript target requires deps: [] in M45; dependency-bearing units are unsupported";
+    "TypeScript target currently supports only kind:function units in M46";
+pub const TYPESCRIPT_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript target requires deps: [] or exactly one direct local helper dep in M46";
+pub const TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript target does not support cross-library helper deps in M46; the direct helper dep must be local to the loaded unit set";
+pub const TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript target requires the direct helper dep to exist in the same loaded unit set in M46";
+pub const TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript target requires the direct helper dep to classify as function.helper.identity_passthrough.v1 in M46";
 pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M45";
+    "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M46";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ValidationOptions {
@@ -285,20 +296,27 @@ fn validate_function_semantic(spec: &LoadedSpec, options: &ValidationOptions) ->
 }
 
 pub fn validate_typescript_execution_target_spec(spec: &LoadedSpec) -> Result<()> {
+    let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+    validate_typescript_execution_target_spec_with_specs(spec, &specs_by_id)
+}
+
+pub fn validate_typescript_execution_target_spec_with_specs(
+    spec: &LoadedSpec,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> Result<()> {
     if spec.spec.unit_kind().map_err(|message| semantic_error(spec, message))? != UnitKind::Function
     {
         return Err(semantic_error(spec, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE));
     }
 
-    if !spec.spec.deps.is_empty() {
-        return Err(semantic_error(spec, TYPESCRIPT_DEPS_UNSUPPORTED_MESSAGE));
-    }
+    validate_typescript_helper_dep_contract(spec, specs_by_id)?;
 
-    let Some(review) = evaluate_semantic_review(spec) else {
+    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+    let Some(review) = evaluate_semantic_review_with_context(spec, &semantic_review_context) else {
         return Err(semantic_error(
             spec,
             format!(
-                "TypeScript target requires compatibility key {} in M45",
+                "TypeScript target requires compatibility key {} in M46",
                 TYPESCRIPT_TARGET_COMPATIBILITY_KEY
             ),
         ));
@@ -310,13 +328,81 @@ pub fn validate_typescript_execution_target_spec(spec: &LoadedSpec) -> Result<()
         return Err(semantic_error(
             spec,
             format!(
-                "TypeScript target requires compatibility key {} in M45; found {}",
+                "TypeScript target requires compatibility key {} in M46; found {}",
                 TYPESCRIPT_TARGET_COMPATIBILITY_KEY, review.compatibility_key
             ),
         ));
     }
 
     validate_typescript_local_test_expect_shape(spec)
+}
+
+fn validate_typescript_helper_dep_contract(
+    spec: &LoadedSpec,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> Result<()> {
+    match spec.spec.deps.as_slice() {
+        [] => Ok(()),
+        [dep] => {
+            let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
+            if parsed.library_alias().is_some() {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "{}: '{}'",
+                        TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE,
+                        parsed.authored()
+                    ),
+                ));
+            }
+
+            let Some(helper_spec) = specs_by_id.get(parsed.unit_id()) else {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "{}: '{}'",
+                        TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE,
+                        parsed.unit_id()
+                    ),
+                ));
+            };
+
+            let Some(helper_review) = evaluate_semantic_review(helper_spec) else {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "{}: '{}'",
+                        TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE,
+                        parsed.unit_id()
+                    ),
+                ));
+            };
+
+            if helper_review.effective_support_status() != SemanticSupportStatus::Supported
+                || helper_review.compatibility_key != TYPESCRIPT_HELPER_COMPATIBILITY_KEY
+            {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "{}: '{}' resolved to {}",
+                        TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE,
+                        parsed.unit_id(),
+                        helper_review.compatibility_key
+                    ),
+                ));
+            }
+
+            Ok(())
+        }
+        deps => Err(semantic_error(
+            spec,
+            format!(
+                "{}; found {} direct deps",
+                TYPESCRIPT_DEP_ARITY_UNSUPPORTED_MESSAGE,
+                deps.len()
+            ),
+        )),
+    }
 }
 
 pub fn validate_typescript_local_test_expect_shape(spec: &LoadedSpec) -> Result<()> {
@@ -1604,6 +1690,48 @@ mod tests {
                 local_tests: vec![LocalTest {
                     id: "taxes_subtotal".to_string(),
                     expect: "apply_tax(Decimal::new(1000, 2), Decimal::new(7, 2)) == Decimal::new(1070, 2)".to_string(),
+                }],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions::default(),
+            },
+        }
+    }
+
+    fn create_typescript_helper_spec() -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: "units/money/round.unit.spec".to_string(),
+                id: "money/round".to_string(),
+            },
+            spec: SpecStruct {
+                id: "money/round".to_string(),
+                kind: "function".to_string(),
+                intent: Intent {
+                    why: "Round a decimal value to two fractional digits for pricing flows."
+                        .to_string(),
+                },
+                contract: Some(Contract {
+                    inputs: Some(IndexMap::from([(
+                        "value".to_string(),
+                        "rust_decimal::Decimal".to_string(),
+                    )])),
+                    returns: Some("rust_decimal::Decimal".to_string()),
+                    invariants: vec![],
+                }),
+                deps: vec![],
+                imports: vec![
+                    "rust_decimal::Decimal".to_string(),
+                    "rust_decimal::RoundingStrategy".to_string(),
+                ],
+                body: Body {
+                    rust: "{ value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero) }"
+                        .to_string(),
+                    typescript: Some("return value;".to_string()),
+                },
+                local_tests: vec![LocalTest {
+                    id: "rounds_decimal".to_string(),
+                    expect: "round(Decimal::new(1005, 2)) == Decimal::new(1005, 2)".to_string(),
                 }],
                 links: None,
                 spec_version: Some("0.3.0".to_string()),
@@ -4141,13 +4269,100 @@ methods:
     }
 
     #[test]
-    fn typescript_target_rejects_dependency_bearing_units() {
+    fn typescript_target_accepts_one_local_helper_dep_with_context() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.deps = vec!["money/round".to_string()];
+        spec.spec.body.rust =
+            "{ let taxed = subtotal + subtotal * rate; round(taxed).max(Decimal::ZERO) }"
+                .to_string();
+        spec.spec.body.typescript =
+            Some("return round(subtotal.add(subtotal.mul(rate))).max(Decimal.zero());".to_string());
+
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (helper.spec.id.clone(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("one local helper dep should be eligible in M46");
+    }
+
+    #[test]
+    fn typescript_target_rejects_more_than_one_dep() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.deps = vec!["money/round".to_string(), "money/round_two".to_string()];
+
+        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(TYPESCRIPT_DEP_ARITY_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn typescript_target_rejects_cross_library_helper_dep() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.deps = vec!["shared::money/round".to_string()];
+
+        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn typescript_target_rejects_missing_local_helper_dep() {
         let mut spec = create_typescript_lane_function_spec();
         spec.spec.deps = vec!["money/round".to_string()];
 
         let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
         assert!(
-            err.to_string().contains(TYPESCRIPT_DEPS_UNSUPPORTED_MESSAGE),
+            err.to_string()
+                .contains(TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn typescript_target_rejects_wrong_helper_family() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.deps = vec!["pricing/apply_discount".to_string()];
+        spec.spec.body.rust =
+            "{ let taxed = subtotal + subtotal * rate; apply_discount(taxed, rate) }".to_string();
+        spec.spec.body.typescript =
+            Some("return apply_discount(subtotal.add(subtotal.mul(rate)), rate);".to_string());
+
+        let mut wrong_helper = create_typescript_lane_function_spec();
+        wrong_helper.spec.id = "pricing/apply_discount".to_string();
+        wrong_helper.source.id = "pricing/apply_discount".to_string();
+        wrong_helper.source.file_path = "units/pricing/apply_discount.unit.spec".to_string();
+        wrong_helper.spec.intent.why =
+            "Return the subtotal after applying the discount rate and clamping at zero."
+                .to_string();
+        wrong_helper.spec.contract.as_mut().unwrap().invariants =
+            vec!["output <= subtotal".to_string(), "output >= 0".to_string()];
+        wrong_helper.spec.body.rust =
+            "{ (subtotal - subtotal * rate).max(Decimal::ZERO) }".to_string();
+        wrong_helper.spec.body.typescript =
+            Some("return subtotal.sub(subtotal.mul(rate)).max(Decimal.zero());".to_string());
+        wrong_helper.spec.local_tests[0].expect =
+            "apply_discount(Decimal::new(1000, 2), Decimal::new(7, 2)) == Decimal::new(930, 2)"
+                .to_string();
+
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (wrong_helper.spec.id.clone(), wrong_helper),
+        ]);
+
+        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains(TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -4173,7 +4388,7 @@ methods:
         let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
         assert!(
             err.to_string()
-                .contains("TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1 in M45"),
+                .contains("TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1 in M46"),
             "unexpected error: {err}"
         );
     }
@@ -4198,7 +4413,7 @@ methods:
         let err = validate_typescript_molecule_target(&test).unwrap_err();
         assert!(
             err.to_string()
-                .contains(".test.spec is not supported for --target-language typescript in M45"),
+                .contains(".test.spec is not supported for --target-language typescript in M46"),
             "unexpected error: {err}"
         );
     }
