@@ -6076,7 +6076,35 @@ mod tests {
     }
 
     #[test]
-    fn helper_identity_passthrough_classifier_aligned_fixture_routes_to_supported_helper() {
+    fn helper_identity_passthrough_classifier_direct_passthrough_aligned_fixture_routes_to_supported_helper(
+    ) {
+        let review = evaluate_semantic_review(&helper_identity_passthrough_spec(
+            "money/round",
+            "Echo the provided value unchanged for downstream pricing flows.",
+            r#"{
+            value
+        }"#,
+        ))
+        .unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+        assert_eq!(
+            review.evaluator_scope,
+            EvaluatorScope::SupportedFunctionSurface
+        );
+    }
+
+    #[test]
+    fn helper_identity_passthrough_classifier_round_like_aligned_fixture_routes_to_supported_helper(
+    ) {
         let review = evaluate_semantic_review(&helper_identity_passthrough_spec(
             "money/round",
             "Round a decimal value to two fractional digits for pricing flows.",
