@@ -8,9 +8,7 @@ use crate::family::paths::{
     FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
 };
 use crate::family::promotion_artifacts::{
-    CorpusProgramDecisionAction, CorpusProgramDecisionArtifact, CorpusProgramDecisionBasisCode,
-    DecisionReason, DecisionStatus, EvidenceState, FamilyRecommendationAnalysisArtifact,
-    RecommendationStatus, RequiredNextAction,
+    CorpusProgramDecisionArtifact, FamilyRecommendationAnalysisArtifact,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -704,11 +702,9 @@ mod tests {
         FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
     };
     use crate::family::promotion_artifacts::{
-        ConfidenceLevel, CorpusProgramDecisionArtifact, DecisionSummary, DifficultyTier,
-        EvidenceState, EvidenceSummary, FamilyRecommendationAnalysisArtifact,
-        PromotionArtifactKind, RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-        RecommendationCandidateEntry, RecommendationConfidence, RecommendationDelta,
-        RecommendationDifficulty, RecommendationLeverage,
+        CorpusProgramDecisionArtifact, DecisionSummary, EvidenceState, EvidenceSummary,
+        FamilyRecommendationAnalysisArtifact, PromotionArtifactKind,
+        RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RecommendationCandidateEntry, RecommendationDelta,
     };
     use std::fs;
     use std::path::Path;

@@ -6075,7 +6075,10 @@ fn helper_identity_passthrough_truth_surfaces_preserve_supported_semantic_review
     assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
 
     let export_output = run_in(project_dir, &["export", "units"]);
-    assert_output_success("helper semantic review export should succeed", &export_output);
+    assert_output_success(
+        "helper semantic review export should succeed",
+        &export_output,
+    );
     let export_json = parse_stdout_json(&export_output);
     let exported_passport = export_json["passports"]
         .as_array()

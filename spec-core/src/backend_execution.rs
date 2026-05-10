@@ -1,7 +1,6 @@
 use crate::portability_contract::{
-    classify_method_portability_marker,
+    PortabilityMarkerKind, classify_method_portability_marker,
     is_helper_or_example_method as contract_is_helper_or_example_method, is_portability_seam_spec,
-    PortabilityMarkerKind,
 };
 use crate::types::{AuthoredMethod, LoadedSpec};
 use serde::Serialize;

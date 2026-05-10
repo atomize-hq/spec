@@ -5,14 +5,14 @@
 //! 2. Semantic validation (Rust keywords, deps, etc.)
 
 use crate::graph::top_level_deps;
-use crate::portability_contract::{shared_surface_violation_message, SharedSeamAuthoredShapeRule};
+use crate::portability_contract::{SharedSeamAuthoredShapeRule, shared_surface_violation_message};
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
-    callable_name, has_callable_collision, ordered_unique_deps, type_name_for_identifier,
-    type_name_for_unit_id, AuthoredField, Contract, DepRef, DepRefParseError, LoadedMoleculeTest,
-    LoadedSpec, MethodReceiver, QualifiedUnitRef, UnitKind,
+    AuthoredField, Contract, DepRef, DepRefParseError, LoadedMoleculeTest, LoadedSpec,
+    MethodReceiver, QualifiedUnitRef, UnitKind, callable_name, has_callable_collision,
+    ordered_unique_deps, type_name_for_identifier, type_name_for_unit_id,
 };
-use crate::{Result, SpecError, SpecWarning, AUTHORED_SPEC_VERSION};
+use crate::{AUTHORED_SPEC_VERSION, Result, SpecError, SpecWarning};
 use indexmap::IndexMap;
 use serde_json::Value;
 use serde_yaml_bw::Value as YamlValue;
@@ -2260,9 +2260,10 @@ local_tests:
         let result = validate_semantic(&spec);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("body.rust must not contain use statements"));
+        assert!(
+            err.to_string()
+                .contains("body.rust must not contain use statements")
+        );
     }
 
     #[test]
@@ -2719,10 +2720,12 @@ local_tests:
         };
         let result = validate_semantic(&spec);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("body.rust must not contain use statements"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("body.rust must not contain use statements")
+        );
     }
 
     #[test]
@@ -2730,10 +2733,12 @@ local_tests:
         // `try` is reserved since Rust 2018 and was previously missing from the list
         let result = validate_rust_keywords("pricing/try", "test.unit.spec");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Rust reserved keyword"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Rust reserved keyword")
+        );
     }
 
     #[test]
@@ -4075,9 +4080,11 @@ methods:
             2,
             "expected empty-covers and implicit-import warnings"
         );
-        assert!(warnings
-            .iter()
-            .any(|warning| matches!(warning, SpecWarning::MoleculeTestNoCoveredUnits { .. })));
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| matches!(warning, SpecWarning::MoleculeTestNoCoveredUnits { .. }))
+        );
         assert!(warnings.iter().any(|warning| matches!(
             warning,
             SpecWarning::MoleculeImplicitImportsDeprecated { .. }

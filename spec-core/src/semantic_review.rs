@@ -6079,8 +6079,8 @@ mod tests {
     }
 
     #[test]
-    fn helper_identity_passthrough_classifier_direct_passthrough_aligned_fixture_routes_to_supported_helper(
-    ) {
+    fn helper_identity_passthrough_classifier_direct_passthrough_aligned_fixture_routes_to_supported_helper()
+     {
         let review = evaluate_semantic_review(&helper_identity_passthrough_spec(
             "money/round",
             "Echo the provided value unchanged for downstream pricing flows.",
@@ -6106,8 +6106,8 @@ mod tests {
     }
 
     #[test]
-    fn helper_identity_passthrough_classifier_round_like_aligned_fixture_routes_to_supported_helper(
-    ) {
+    fn helper_identity_passthrough_classifier_round_like_aligned_fixture_routes_to_supported_helper()
+     {
         let review = evaluate_semantic_review(&helper_identity_passthrough_spec(
             "money/round",
             "Round a decimal value to two fractional digits for pricing flows.",

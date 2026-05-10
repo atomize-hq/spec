@@ -1,6 +1,6 @@
+use crate::XtaskError;
 use crate::family::paths::FamilyId;
 use crate::family::report::{ArtifactKind, CertificationReport, GateId, SuiteDefinition};
-use crate::XtaskError;
 
 pub(crate) const TERMINAL_UNSUPPORTED_CATCH_ALL: &str = "unsupported.function.v1";
 

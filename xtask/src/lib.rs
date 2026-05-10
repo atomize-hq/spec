@@ -297,17 +297,17 @@ mod tests {
             CHAIN3_SUITE_SLUG, FamilyHarness, HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW,
             HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE, HELPER_IDENTITY_PASSTHROUGH_SUITE_SLUG,
             LockedManifestArgs, LockedManifestRouting, LockedManifestShape,
-            MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
-            MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
-            MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
-            MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
-            MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
-            ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
-            TERMINAL_UNSUPPORTED_CATCH_ALL, WRAPPER_PIPELINE_CERTIFY_SUITES,
-            WRAPPER_PIPELINE_MUST_NOT_SHADOW, WRAPPER_PIPELINE_PRECEDENCE,
-            WRAPPER_PIPELINE_PROVE_SUITES, WRAPPER_PIPELINE_SUITE_SLUG, family_harness,
-            family_harness_in, registered_harnesses_in_routing_order_from,
-            require_family_harness_in, validate_suite_ownership,
+            MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES, MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW,
+            MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE, MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES,
+            MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG, MONOTONE_UP_CERTIFY_SUITES,
+            MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE, MONOTONE_UP_PROVE_SUITES,
+            MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition, ScaffoldDefinition, SmokeContract,
+            StarterCaseDefinition, StarterTemplate, TERMINAL_UNSUPPORTED_CATCH_ALL,
+            WRAPPER_PIPELINE_CERTIFY_SUITES, WRAPPER_PIPELINE_MUST_NOT_SHADOW,
+            WRAPPER_PIPELINE_PRECEDENCE, WRAPPER_PIPELINE_PROVE_SUITES,
+            WRAPPER_PIPELINE_SUITE_SLUG, family_harness, family_harness_in,
+            registered_harnesses_in_routing_order_from, require_family_harness_in,
+            validate_suite_ownership,
         },
         inventory,
         layout::validate_packet_layout,
@@ -2702,10 +2702,7 @@ gate_d = true
             helper.routing_predecessor.as_deref(),
             Some("function.arithmetic_leaf.monotone_up.v1")
         );
-        assert_eq!(
-            helper.routing_successors,
-            vec!["unsupported.function.v1"]
-        );
+        assert_eq!(helper.routing_successors, vec!["unsupported.function.v1"]);
         assert_eq!(
             helper.canonical_seed_paths,
             vec![

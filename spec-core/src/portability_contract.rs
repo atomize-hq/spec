@@ -15,10 +15,7 @@ pub enum PortabilityMarkerKind {
 
 impl PortabilityMarkerKind {
     pub fn is_backend_only_detail(self) -> bool {
-        matches!(
-            self,
-            Self::ProofHelperLowering | Self::BackendRustDerives
-        )
+        matches!(self, Self::ProofHelperLowering | Self::BackendRustDerives)
     }
 
     pub fn contaminates_portability_claims(self) -> bool {

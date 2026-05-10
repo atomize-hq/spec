@@ -3,9 +3,7 @@ use crate::escape_hatch::{EscapeHatchGate, current_proof_surfaces, evaluate_esca
 use crate::molecule_evidence::MoleculeEvidence;
 use crate::passport::Passport;
 pub use crate::portability_contract::PortabilityMarkerKind;
-use crate::portability_contract::{
-    classify_method_portability_marker, is_portability_seam_spec,
-};
+use crate::portability_contract::{classify_method_portability_marker, is_portability_seam_spec};
 use crate::types::{LoadedMoleculeTest, LoadedSpec};
 use std::collections::HashMap;
 
