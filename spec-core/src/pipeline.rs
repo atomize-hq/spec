@@ -40,6 +40,10 @@ pub fn cargo_available() -> bool {
     Command::new("cargo").arg("--version").output().is_ok()
 }
 
+pub fn bun_available() -> bool {
+    Command::new("bun").arg("--version").output().is_ok()
+}
+
 /// Find the crate root for a given path.
 ///
 /// Prefers the nearest member crate over the workspace root so that
@@ -134,6 +138,41 @@ pub fn run_cargo_test(
     let args = cargo_test_args(filter);
     let arg_refs = args.iter().map(|arg| arg.as_str()).collect::<Vec<_>>();
     run_cargo(crate_root, &arg_refs, cargo_target_dir, timeout)
+}
+
+pub fn run_bun_build(
+    output_root: &Path,
+    entry_path: &Path,
+    timeout: Option<Duration>,
+    verbosity: Verbosity,
+) -> Result<CargoResult> {
+    if matches!(verbosity, Verbosity::Normal) {
+        eprintln!("spec: running bun build (typescript) in {}", output_root.display());
+    }
+    let build_dir = tempfile::TempDir::new().context("failed to create temporary Bun build dir")?;
+    let outfile = build_dir.path().join("bundle.js");
+    let args = vec![
+        "build".to_string(),
+        entry_path.display().to_string(),
+        "--outfile".to_string(),
+        outfile.display().to_string(),
+    ];
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    run_plain_command(Path::new("bun"), output_root, &arg_refs, timeout)
+}
+
+pub fn run_bun_test(
+    output_root: &Path,
+    entry_path: &Path,
+    timeout: Option<Duration>,
+    verbosity: Verbosity,
+) -> Result<CargoResult> {
+    if matches!(verbosity, Verbosity::Normal) {
+        eprintln!("spec: running bun test (typescript) in {}", output_root.display());
+    }
+    let args = vec!["run".to_string(), entry_path.display().to_string()];
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    run_plain_command(Path::new("bun"), output_root, &arg_refs, timeout)
 }
 
 fn cargo_test_args(filter: Option<&str>) -> Vec<String> {
@@ -286,23 +325,54 @@ fn run_cargo(
     cargo_target_dir: &Path,
     timeout: Option<Duration>,
 ) -> Result<CargoResult> {
-    run_command(Path::new("cargo"), cwd, args, cargo_target_dir, timeout)
+    run_cargo_command(Path::new("cargo"), cwd, args, cargo_target_dir, timeout)
 }
 
-fn run_command(
+fn run_cargo_command(
     program: &Path,
     cwd: &Path,
     args: &[&str],
     cargo_target_dir: &Path,
     timeout: Option<Duration>,
 ) -> Result<CargoResult> {
-    let mut child = Command::new(program)
+    run_command_with_env(
+        program,
+        cwd,
+        args,
+        timeout,
+        &[
+            ("CARGO_TARGET_DIR", cargo_target_dir.as_os_str()),
+            ("CARGO_TERM_COLOR", std::ffi::OsStr::new("never")),
+        ],
+    )
+}
+
+fn run_plain_command(
+    program: &Path,
+    cwd: &Path,
+    args: &[&str],
+    timeout: Option<Duration>,
+) -> Result<CargoResult> {
+    run_command_with_env(program, cwd, args, timeout, &[])
+}
+
+fn run_command_with_env(
+    program: &Path,
+    cwd: &Path,
+    args: &[&str],
+    timeout: Option<Duration>,
+    envs: &[(&str, &std::ffi::OsStr)],
+) -> Result<CargoResult> {
+    let mut command = Command::new(program);
+    command
         .current_dir(cwd)
-        .env("CARGO_TARGET_DIR", cargo_target_dir)
-        .env("CARGO_TERM_COLOR", "never")
         .args(args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    let mut child = command
         .spawn()
         .with_context(|| format!("failed to spawn {}", program.display()))?;
 
@@ -339,7 +409,8 @@ fn run_command(
         drop(stderr_handle);
         let timeout_secs = timeout.expect("timed_out implies Some timeout").as_secs();
         let stderr_msg = format!(
-            "spec: cargo {} timed out after {}s\n",
+            "spec: {} {} timed out after {}s\n",
+            program.display(),
             args.join(" "),
             timeout_secs
         );
@@ -758,11 +829,10 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
     fn run_command_marks_timeout_and_reports_it() {
         let tmp = TempDir::new().unwrap();
         // Command sleeps 10s so the 2s timeout fires first; as_secs() returns "2s" in message.
-        let result = run_command(
+        let result = run_plain_command(
             Path::new("/bin/sh"),
             tmp.path(),
             &["-c", "sleep 10"],
-            &tmp.path().join("target"),
             Some(Duration::from_secs(2)),
         )
         .unwrap();
@@ -780,11 +850,10 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
     #[test]
     fn run_command_preserves_output_without_timeout() {
         let tmp = TempDir::new().unwrap();
-        let result = run_command(
+        let result = run_plain_command(
             Path::new("/bin/sh"),
             tmp.path(),
             &["-c", "echo ok-stdout; echo ok-stderr >&2"],
-            &tmp.path().join("target"),
             Some(Duration::from_secs(1)),
         )
         .unwrap();

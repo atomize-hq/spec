@@ -16,7 +16,7 @@ use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
 use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
 use crate::passport::{
     ArtifactProvenance, Passport, PassportProjectionContext, apply_projected_passport_truth,
-    passport_path_for, project_passport_truth_with_context,
+    passport_path_for, project_passport_truth_with_context, refresh_passport_target_proofs,
 };
 use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
 use crate::semantic_review::{SemanticProjectionMode, SemanticReviewContext};
@@ -205,6 +205,7 @@ fn enrich_passports_for_export(
         .into_iter()
         .map(|mut passport| {
             if let Some(spec) = specs.iter().find(|spec| spec.spec.id == passport.id) {
+                refresh_passport_target_proofs(&mut passport, spec);
                 let projected_truth = project_passport_truth_with_context(
                     spec,
                     Some(&passport),

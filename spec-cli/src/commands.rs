@@ -28,13 +28,16 @@ use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
     ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
     PassportProjectionContext, PassportProofCoverage, PassportTestResult,
-    apply_projected_passport_truth, build_passport_preserving_proof_state_with_context,
-    build_passport_with_evidence, compute_contract_hash, ensure_gitignore_entry,
-    project_passport_truth_with_context, read_passport, rfc3339_now, write_passport,
+    apply_projected_passport_truth,
+    build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
+    compute_contract_hash, ensure_gitignore_entry, passport_evidence_for_target,
+    passport_target_proof, project_passport_truth_with_context, read_passport,
+    resolve_passport_freshness_for_target, rfc3339_now, target_proof_for_write, write_passport,
 };
 use spec_core::pipeline::{
-    ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
-    parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
+    ParsedCargoTestResult, Verbosity, bun_available, cargo_available, output_module_prefix,
+    parse_cargo_test_output, run_bun_build, run_bun_test, run_cargo_build, run_cargo_test,
+    workspace_root_for, zero_tests_ran,
 };
 use spec_core::plan::{
     PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
@@ -53,7 +56,8 @@ use spec_core::validator::{
     QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
     validate_molecule_test_covers, validate_molecule_test_semantic,
     validate_no_duplicate_molecule_test_ids, validate_no_duplicate_qualified_ids,
-    validate_qualified_deps_exist_with_options,
+    validate_qualified_deps_exist_with_options, validate_typescript_execution_target_spec,
+    validate_typescript_molecule_target,
 };
 #[cfg(test)]
 use spec_core::validator::{validate_deps_exist_with_options, validate_no_duplicate_ids};
@@ -758,7 +762,7 @@ struct HealthStatus {
 
 fn compute_health_status(
     errors: &[JsonErrorEntry],
-    passport: Option<&spec_core::passport::Passport>,
+    evidence: Option<&PassportEvidence>,
     freshness: Option<&PassportFreshness>,
 ) -> HealthStatus {
     // 1. invalid
@@ -770,7 +774,6 @@ fn compute_health_status(
         };
     }
 
-    let evidence = passport.and_then(|p| p.evidence.as_ref());
     let evidence_at = evidence.map(|e| e.observed_at.clone());
 
     // 2. failing — build failure or any test fail (requires evidence; failing beats stale)
@@ -800,9 +803,7 @@ fn compute_health_status(
     }
 
     // 3. stale — authored/backend freshness changed since last test.
-    if passport.is_some()
-        && let Some(reason) = freshness_stale_reason(freshness)
-    {
+    if let Some(reason) = freshness_stale_reason(freshness) {
         return HealthStatus {
             status: HealthState::Stale,
             reason: Some(reason),
@@ -1135,7 +1136,6 @@ fn status_command_for_target(
     format: OutputFormat,
     target_language: TargetLanguage,
 ) -> Result<()> {
-    let _ = target_language;
     let root_context = match load_workspace_context(path) {
         Ok(context) => context,
         Err(err) if matches!(format, OutputFormat::Json) => {
@@ -1329,17 +1329,23 @@ fn status_command_for_target(
                 &projection_context,
                 &semantic_review_context,
             );
-            let freshness = projected_truth.freshness.clone();
+            let freshness = resolve_passport_freshness_for_target(
+                spec,
+                passport.as_ref(),
+                target_language,
+            );
             let markers = projected_truth.markers.clone();
             let proof_coverage = projected_truth.proof_coverage.clone();
             let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
             let semantic_review = projected_truth.semantic_review.clone();
+            let target_evidence =
+                passport.as_ref().and_then(|passport| passport_evidence_for_target(passport, target_language));
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
             let health = apply_semantic_review_to_health(
                 apply_escape_hatch_gate_to_health(
-                    compute_health_status(&errors, passport.as_ref(), freshness.as_ref()),
+                    compute_health_status(&errors, target_evidence, freshness.as_ref()),
                     escape_hatch_gate.as_ref(),
                 ),
                 semantic_review.as_ref(),
@@ -1880,7 +1886,9 @@ fn generate_command_for_target(
     output: Option<&Path>,
     target_language: TargetLanguage,
 ) -> Result<()> {
-    let _ = target_language;
+    if target_language == TargetLanguage::TypeScript {
+        return generate_typescript_command(path, output);
+    }
     if path.is_file() {
         bail!(
             "❌ spec generate requires a directory path — pass the units directory, not a single file"
@@ -1955,6 +1963,469 @@ fn generate_command_for_target(
         )?;
     }
     Ok(())
+}
+
+fn generate_typescript_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec generate requires a directory path — pass the units directory, not a single file"
+        );
+    }
+
+    let context = load_workspace_context(path)?;
+    let spec_root = path;
+    let explicit_output = output.map(PathBuf::from);
+    let crate_root = match explicit_output {
+        Some(_) => resolve_default_crate_root(spec_root, &context).ok(),
+        None => Some(resolve_default_crate_root(spec_root, &context)?),
+    };
+    let project_root = context
+        .repo_root
+        .clone()
+        .or_else(|| context.workspace_root.clone())
+        .or_else(|| crate_root.clone())
+        .unwrap_or(absolutize_from_current_dir(Path::new("."))?);
+    let resolved_output = explicit_output.unwrap_or_else(|| {
+        crate_root
+            .expect("missing default crate root")
+            .join("src/generated")
+    });
+    let generated =
+        generate_typescript_specs(path, &resolved_output, &project_root, &context, "generated")?;
+    if !generated.specs.is_empty() {
+        finalize_passports(
+            &PassportWritePlan {
+                passport_root: spec_root,
+                gate_root: spec_root,
+                specs: &generated.specs,
+                gate_specs: &generated.specs,
+            },
+            &generated.generated_at,
+            None,
+            None,
+            None,
+            false,
+        )?;
+    }
+    Ok(())
+}
+
+fn generate_typescript_specs(
+    path: &Path,
+    output: &Path,
+    project_root: &Path,
+    context: &WorkspaceContext,
+    test_name_prefix: &str,
+) -> Result<GeneratedSpecs> {
+    let mut validation_specs = collect_validation_specs(path, context)?;
+    let specs: Vec<LoadedSpec> = validation_specs
+        .local_specs()
+        .into_iter()
+        .cloned()
+        .collect();
+    let total_files = validation_specs.total_files;
+    let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
+    let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
+
+    if total_files == 0 {
+        let mut errors = DiagnosticMap::new();
+        let mut warnings = DiagnosticMap::new();
+        for err in loader_errors {
+            push_error(&mut errors, err);
+        }
+        for warning in loader_warnings {
+            push_warning(&mut warnings, warning);
+        }
+
+        let output_base = ensure_output_marker(output, project_root)?;
+        let generated_rel_paths = HashSet::<PathBuf>::new();
+        clean_output_dir(&output_base, &generated_rel_paths, project_root).with_context(|| {
+            format!("Failed to clean output directory {}", output_base.display())
+        })?;
+
+        if !warnings.is_empty() {
+            print_diagnostics(&warnings);
+        }
+        if !errors.is_empty() {
+            print_diagnostics(&errors);
+            let file_count = count_unique_files(&errors);
+            bail!(
+                "❌ {} file{}, {} error{}",
+                file_count,
+                pluralize(file_count),
+                count_messages(&errors),
+                pluralize(count_messages(&errors))
+            );
+        }
+
+        println!("0 units found, nothing to generate.");
+        return Ok(GeneratedSpecs {
+            specs,
+            generated_at: rfc3339_now(),
+        });
+    }
+
+    let validation_options = ValidationOptions {
+        strict_deps: true,
+        allow_unsafe_local_test_expect: context.config.validation.allow_unsafe_local_test_expect,
+    };
+    let (validation_errors, validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
+    let mut errors = DiagnosticMap::new();
+    let mut warnings = DiagnosticMap::new();
+    for err in loader_errors {
+        push_error(&mut errors, err);
+    }
+    for err in validation_errors {
+        push_error(&mut errors, err);
+    }
+    for warning in loader_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    for warning in validation_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    for err in validate_library_crate_aliases(validation_specs.local_specs(), path, context) {
+        push_error(&mut errors, err);
+    }
+    for spec in &specs {
+        match &spec.spec.body.typescript {
+            Some(_) => {}
+            None => push_error(
+                &mut errors,
+                spec_core::SpecError::SemanticValidation {
+                    message: "TypeScript target requires body.typescript in M45".to_string(),
+                    path: spec.source.file_path.clone(),
+                },
+            ),
+        }
+        if let Err(err) = validate_typescript_execution_target_spec(spec) {
+            push_error(&mut errors, err);
+        }
+    }
+
+    if !warnings.is_empty() {
+        print_diagnostics(&warnings);
+    }
+    if !errors.is_empty() {
+        print_diagnostics(&errors);
+        let file_count = count_unique_files(&errors);
+        bail!(
+            "❌ {} file{}, {} error{}",
+            file_count,
+            pluralize(file_count),
+            count_messages(&errors),
+            pluralize(count_messages(&errors))
+        );
+    }
+
+    let output_base = ensure_output_marker(output, project_root)?;
+    let generated_at = rfc3339_now();
+    write_typescript_output(&output_base, project_root, &specs, test_name_prefix)?;
+
+    let generated_count = specs.len() + 3;
+    println!(
+        "Generated {} file{}",
+        generated_count,
+        pluralize(generated_count)
+    );
+    Ok(GeneratedSpecs { specs, generated_at })
+}
+
+fn write_typescript_output(
+    output_base: &Path,
+    project_root: &Path,
+    specs: &[LoadedSpec],
+    test_name_prefix: &str,
+) -> Result<()> {
+    let mut generated_rel_paths = HashSet::<PathBuf>::new();
+    for spec in specs {
+        let rel_path = typescript_path_for_spec(spec);
+        let content = render_typescript_unit(spec)?;
+        let output_path = output_base.join(&rel_path);
+        write_generated_file(&output_path.display().to_string(), &content)
+            .with_context(|| format!("Failed to write {}", output_path.display()))?;
+        generated_rel_paths.insert(rel_path);
+    }
+
+    let runtime_rel = PathBuf::from(spec_core::types::TYPESCRIPT_RUNTIME_HELPER_PATH);
+    let runtime_path = output_base.join(&runtime_rel);
+    write_generated_file(&runtime_path.display().to_string(), &typescript_runtime_source())
+        .with_context(|| format!("Failed to write {}", runtime_path.display()))?;
+    generated_rel_paths.insert(runtime_rel);
+
+    let build_entry_rel = PathBuf::from(spec_core::types::TYPESCRIPT_BUILD_ENTRY_PATH);
+    let build_entry_path = output_base.join(&build_entry_rel);
+    write_generated_file(
+        &build_entry_path.display().to_string(),
+        &render_typescript_build_entry(specs),
+    )
+    .with_context(|| format!("Failed to write {}", build_entry_path.display()))?;
+    generated_rel_paths.insert(build_entry_rel);
+
+    let local_tests_rel = PathBuf::from(spec_core::types::TYPESCRIPT_LOCAL_TESTS_PATH);
+    let local_tests_path = output_base.join(&local_tests_rel);
+    write_generated_file(
+        &local_tests_path.display().to_string(),
+        &render_typescript_local_tests(specs, test_name_prefix)?,
+    )
+    .with_context(|| format!("Failed to write {}", local_tests_path.display()))?;
+    generated_rel_paths.insert(local_tests_rel);
+
+    clean_output_dir(output_base, &generated_rel_paths, project_root)
+        .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
+
+    Ok(())
+}
+
+fn typescript_path_for_spec(spec: &LoadedSpec) -> PathBuf {
+    let mut path = PathBuf::new();
+    for segment in spec.spec.id.split('/') {
+        path.push(segment);
+    }
+    path.set_extension("ts");
+    path
+}
+
+fn typescript_function_name(spec: &LoadedSpec) -> &str {
+    spec.spec
+        .id
+        .rsplit('/')
+        .next()
+        .unwrap_or(spec.spec.id.as_str())
+}
+
+fn render_typescript_unit(spec: &LoadedSpec) -> Result<String> {
+    let contract = spec.spec.contract.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("missing contract for TypeScript target {}", spec.spec.id)
+    })?;
+    let params = contract
+        .inputs
+        .as_ref()
+        .map(|inputs| {
+            inputs
+                .keys()
+                .map(|name| format!("{name}: Decimal"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    let body = normalize_typescript_body(
+        spec.spec
+            .body
+            .typescript
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("missing TypeScript body for {}", spec.spec.id))?,
+    );
+    let runtime_import = relative_typescript_import(
+        &typescript_path_for_spec(spec),
+        Path::new(spec_core::types::TYPESCRIPT_RUNTIME_HELPER_PATH),
+    );
+    let runtime_import = normalize_typescript_import_path(&runtime_import);
+
+    Ok(format!(
+        "import {{ Decimal }} from \"{runtime_import}\";\n\nexport function {}({params}): Decimal {{\n    const __spec_result = (() => {body})();\n    return Decimal.from(__spec_result);\n}}\n",
+        typescript_function_name(spec)
+    ))
+}
+
+fn normalize_typescript_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.starts_with('{') {
+        format!("{trimmed} ")
+    } else {
+        format!("{{ return {trimmed}; }} ")
+    }
+}
+
+fn normalize_typescript_import_path(path: &Path) -> String {
+    let rendered = path
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/");
+    let rendered = if rendered.starts_with('.') {
+        rendered
+    } else {
+        format!("./{rendered}")
+    };
+    rendered.trim_end_matches(".ts").to_string()
+}
+
+fn relative_typescript_import(from_file: &Path, to_file: &Path) -> PathBuf {
+    let from_dir = from_file.parent().unwrap_or_else(|| Path::new(""));
+    let from_parts = from_dir
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(segment) => Some(segment.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let to_parts = to_file
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(segment) => Some(segment.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let shared = from_parts
+        .iter()
+        .zip(&to_parts)
+        .take_while(|(left, right)| left == right)
+        .count();
+    let mut relative = PathBuf::new();
+    for _ in shared..from_parts.len() {
+        relative.push("..");
+    }
+    for part in &to_parts[shared..] {
+        relative.push(part);
+    }
+    if relative.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        relative
+    }
+}
+
+fn render_typescript_build_entry(specs: &[LoadedSpec]) -> String {
+    let mut lines = Vec::new();
+    for spec in specs {
+        let import_path = normalize_typescript_import_path(&relative_typescript_import(
+            Path::new(spec_core::types::TYPESCRIPT_BUILD_ENTRY_PATH),
+            &typescript_path_for_spec(spec),
+        ));
+        lines.push(format!("import \"{import_path}\";"));
+    }
+    if lines.is_empty() {
+        lines.push("export {};".to_string());
+    }
+    lines.join("\n") + "\n"
+}
+
+fn render_typescript_local_tests(specs: &[LoadedSpec], test_name_prefix: &str) -> Result<String> {
+    let mut imports = vec![
+        "import { Decimal, __specAssert, __specPrintSummary } from \"./runtime\";".to_string(),
+    ];
+    let mut tests = Vec::new();
+
+    for spec in specs {
+        let import_path = normalize_typescript_import_path(&relative_typescript_import(
+            Path::new(spec_core::types::TYPESCRIPT_LOCAL_TESTS_PATH),
+            &typescript_path_for_spec(spec),
+        ));
+        let fn_name = typescript_function_name(spec);
+        imports.push(format!("import {{ {fn_name} }} from \"{import_path}\";"));
+        for local_test in &spec.spec.local_tests {
+            let expr = translate_typescript_expect(&local_test.expect)?;
+            let test_name = expected_typescript_test_name(spec, local_test, test_name_prefix);
+            tests.push(format!(
+                "    {{ name: {test_name:?}, run: () => __specAssert(() => {expr}) }},"
+            ));
+        }
+    }
+
+    Ok(format!(
+        "{imports}\n\nconst tests = [\n{tests}\n];\n\nlet failed = 0;\nfor (const test of tests) {{\n    try {{\n        test.run();\n        console.log(`test ${{test.name}} ... ok`);\n    }} catch (error) {{\n        failed += 1;\n        console.log(`test ${{test.name}} ... FAILED`);\n        const message = error instanceof Error ? error.message : String(error);\n        console.error(message);\n    }}\n}}\n__specPrintSummary(tests.length, failed);\nif (failed > 0) {{\n    process.exit(1);\n}}\n",
+        imports = imports.join("\n"),
+        tests = tests.join("\n")
+    ))
+}
+
+fn expected_typescript_test_name(
+    spec: &LoadedSpec,
+    local_test: &spec_core::types::LocalTest,
+    test_name_prefix: &str,
+) -> String {
+    let mut parts = Vec::new();
+    if !test_name_prefix.is_empty() {
+        parts.push(test_name_prefix.to_string());
+    }
+    for segment in spec.spec.id.split('/') {
+        parts.push(segment.to_string());
+    }
+    parts.push("tests".to_string());
+    parts.push(local_test.id.clone());
+    parts.join("::")
+}
+
+fn translate_typescript_expect(expect: &str) -> Result<String> {
+    let (left, right) = split_expect_equality(expect)?;
+    Ok(format!(
+        "Decimal.equal({}, {})",
+        translate_decimal_expr(left.trim()),
+        translate_decimal_expr(right.trim())
+    ))
+}
+
+fn split_expect_equality(expect: &str) -> Result<(&str, &str)> {
+    let mut depth = 0usize;
+    let bytes = expect.as_bytes();
+    let mut idx = None;
+    let mut i = 0usize;
+    while i + 1 < bytes.len() {
+        match bytes[i] as char {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            '=' if depth == 0 && bytes[i + 1] as char == '=' => {
+                idx = Some(i);
+                break;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    let idx = idx.ok_or_else(|| anyhow::anyhow!("unsupported TypeScript local_tests.expect shape"))?;
+    Ok((&expect[..idx], &expect[idx + 2..]))
+}
+
+fn translate_decimal_expr(expr: &str) -> String {
+    expr.replace("Decimal::new", "Decimal.new")
+}
+
+fn typescript_runtime_source() -> String {
+    r#"export class Decimal {
+    constructor(private readonly value: number) {}
+
+    static new(intValue: number, scale: number): Decimal {
+        return new Decimal(intValue / Math.pow(10, scale));
+    }
+
+    static from(value: Decimal | number): Decimal {
+        return value instanceof Decimal ? value : new Decimal(value);
+    }
+
+    static equal(left: Decimal | number, right: Decimal | number): boolean {
+        return Math.abs(Decimal.from(left).value - Decimal.from(right).value) < 1e-9;
+    }
+
+    add(other: Decimal | number): Decimal {
+        return new Decimal(this.value + Decimal.from(other).value);
+    }
+
+    mul(other: Decimal | number): Decimal {
+        return new Decimal(this.value * Decimal.from(other).value);
+    }
+
+    valueOf(): number {
+        return this.value;
+    }
+}
+
+export function __specAssert(run: () => boolean): boolean {
+    const ok = run();
+    if (!ok) {
+        throw new Error("test returned false");
+    }
+    return ok;
+}
+
+export function __specPrintSummary(total: number, failed: number): void {
+    if (failed === 0) {
+        console.log(`test result: ok. ${total} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out`);
+        return;
+    }
+    console.log(`test result: FAILED. ${total - failed} passed; ${failed} failed; 0 ignored; 0 measured; 0 filtered out`);
+}
+"#
+    .to_string()
 }
 
 fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
@@ -2515,6 +2986,62 @@ fn build_command(
     )
 }
 
+fn build_typescript_command(
+    path: &Path,
+    output: Option<&Path>,
+    crate_root_flag: Option<&Path>,
+    context: &WorkspaceContext,
+) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec build requires a directory path — pass the units directory, not a single file"
+        );
+    }
+    if !bun_available() {
+        bail!("❌ bun not found — install Bun or ensure bun is on PATH");
+    }
+
+    let ctx = resolve_pipeline_context(path, crate_root_flag, context)?;
+    let resolved_output = output
+        .map(PathBuf::from)
+        .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
+    let generated =
+        generate_typescript_specs(path, &resolved_output, &ctx.project_root, context, "generated")?;
+    if generated.specs.is_empty() {
+        return Ok(());
+    }
+    if !generated.specs.is_empty() {
+        finalize_passports(
+            &PassportWritePlan {
+                passport_root: path,
+                gate_root: path,
+                specs: &generated.specs,
+                gate_specs: &generated.specs,
+            },
+            &generated.generated_at,
+            None,
+            None,
+            None,
+            false,
+        )?;
+    }
+    let result = run_bun_build(
+        &resolved_output,
+        Path::new(spec_core::types::TYPESCRIPT_BUILD_ENTRY_PATH),
+        ctx.timeout,
+        Verbosity::Normal,
+    )?;
+    print!("{}", result.stdout);
+    eprint!("{}", result.stderr);
+    if result.timed_out {
+        bail!("❌ bun build timed out{}", timeout_suffix(ctx.timeout));
+    }
+    if result.exit_code != 0 {
+        bail!("❌ bun build failed");
+    }
+    Ok(())
+}
+
 fn build_command_for_target(
     path: &Path,
     output: Option<&Path>,
@@ -2522,7 +3049,9 @@ fn build_command_for_target(
     context: &WorkspaceContext,
     target_language: TargetLanguage,
 ) -> Result<()> {
-    let _ = target_language;
+    if target_language == TargetLanguage::TypeScript {
+        return build_typescript_command(path, output, crate_root_flag, context);
+    }
     if path.is_file() {
         bail!(
             "❌ spec build requires a directory path — pass the units directory, not a single file"
@@ -2613,6 +3142,170 @@ fn test_command(
     )
 }
 
+fn test_typescript_command(
+    path: &Path,
+    output: Option<&Path>,
+    crate_root_flag: Option<&Path>,
+    context: &WorkspaceContext,
+) -> Result<()> {
+    if !bun_available() {
+        bail!("❌ bun not found — install Bun or ensure bun is on PATH");
+    }
+
+    if path.is_file() && output.is_some() {
+        bail!(
+            "❌ spec test does not accept --output for a single file — file-scoped tests use an isolated internal output tree"
+        );
+    }
+
+    if path.is_file() && is_molecule_test_spec(path) {
+        let test =
+            load_molecule_test_file(path).with_context(|| format!("Failed to load {}", path.display()))?;
+        validate_typescript_molecule_target(&test)?;
+        unreachable!("typescript molecule validation always errors in M45");
+    }
+
+    let mut temp_output_root: Option<tempfile::TempDir> = None;
+    let mut target_spec: Option<LoadedSpec> = None;
+    let passport_root = if path.is_file() {
+        target_spec = Some(load_file(path).with_context(|| format!("Failed to load {}", path.display()))?);
+        path.parent().unwrap_or(path).to_path_buf()
+    } else {
+        path.to_path_buf()
+    };
+
+    let (resolved_output, project_root, module_root, timeout) = if path.is_file() {
+        let temp_dir =
+            tempfile::TempDir::new().with_context(|| "Failed to create temporary TypeScript test scope")?;
+        let output_root = temp_dir.path().join("src/generated");
+        let project_root = temp_dir.path().to_path_buf();
+        temp_output_root = Some(temp_dir);
+        (
+            output_root,
+            project_root.clone(),
+            project_root,
+            context.config.pipeline.timeout_secs.map(Duration::from_secs),
+        )
+    } else {
+        let ctx = resolve_pipeline_context(path, crate_root_flag, context)?;
+        (
+            output.map(PathBuf::from)
+                .unwrap_or_else(|| ctx.crate_root.join("src/generated")),
+            ctx.project_root,
+            ctx.crate_root,
+            ctx.timeout,
+        )
+    };
+
+    let test_name_prefix = output_module_prefix(
+        &resolved_output,
+        &module_root,
+        &std::env::current_dir().context("failed to resolve current working directory")?,
+    )
+    .unwrap_or_else(|_| "generated".to_string());
+    let generated = generate_typescript_specs(
+        path,
+        &resolved_output,
+        &project_root,
+        context,
+        &test_name_prefix,
+    )?;
+    let _temp_output_root = temp_output_root;
+
+    if generated.specs.is_empty() {
+        return Ok(());
+    }
+
+    let passport_write_plan = passport_write_plan(
+        path,
+        &passport_root,
+        &passport_root,
+        &generated.specs,
+        target_spec.as_ref(),
+    );
+    let provenance = resolve_git_provenance(&passport_root);
+    let build_result = run_bun_build(
+        &resolved_output,
+        Path::new(spec_core::types::TYPESCRIPT_BUILD_ENTRY_PATH),
+        timeout,
+        Verbosity::Normal,
+    )?;
+    print!("{}", build_result.stdout);
+    eprint!("{}", build_result.stderr);
+    if build_result.timed_out {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_typescript_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+        bail!("❌ bun build timed out{}", timeout_suffix(timeout));
+    }
+    if build_result.exit_code != 0 {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_failure_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_typescript_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+        bail!("❌ bun build failed");
+    }
+
+    let test_result = run_bun_test(
+        &resolved_output,
+        Path::new(spec_core::types::TYPESCRIPT_LOCAL_TESTS_PATH),
+        timeout,
+        Verbosity::Normal,
+    )?;
+    print!("{}", test_result.stdout);
+    eprint!("{}", test_result.stderr);
+    if test_result.timed_out {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_typescript_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+        bail!("❌ bun test timed out{}", timeout_suffix(timeout));
+    }
+    if target_spec.is_some() && zero_tests_ran(&test_result.stdout) {
+        bail!("❌ bun test matched 0 tests");
+    }
+
+    let parsed_test_results = parse_cargo_test_output(&test_result.stdout);
+    let observed_at = rfc3339_now();
+    let evidence_by_spec = build_typescript_test_evidence(
+        passport_write_plan.specs,
+        &test_name_prefix,
+        &parsed_test_results,
+        &observed_at,
+        provenance.as_ref(),
+    )?;
+    let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+    finalize_typescript_test_passports(
+        &passport_write_plan,
+        &generated.generated_at,
+        &evidence_by_spec,
+        contract_hash_by_spec.as_ref(),
+    )?;
+    if test_result.exit_code != 0 {
+        bail!("❌ bun test failed");
+    }
+    Ok(())
+}
+
 fn test_command_for_target(
     path: &Path,
     output: Option<&Path>,
@@ -2620,7 +3313,9 @@ fn test_command_for_target(
     context: &WorkspaceContext,
     target_language: TargetLanguage,
 ) -> Result<()> {
-    let _ = target_language;
+    if target_language == TargetLanguage::TypeScript {
+        return test_typescript_command(path, output, crate_root_flag, context);
+    }
     if !cargo_available() {
         bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
     }
@@ -3201,6 +3896,63 @@ fn finalize_test_passports(
     )
 }
 
+fn finalize_typescript_test_passports(
+    plan: &PassportWritePlan<'_>,
+    generated_at: &str,
+    evidence_by_spec: &BTreeMap<String, PassportEvidence>,
+    contract_hash_by_spec: Option<&BTreeMap<String, String>>,
+) -> Result<()> {
+    let gate_context = build_live_escape_hatch_context(plan.gate_root, plan.gate_specs, None);
+    let projection_context = PassportProjectionContext {
+        molecule_tests: &gate_context.molecule_tests,
+        molecule_evidence_by_id: &gate_context.molecule_evidence_by_id,
+        specs_by_id: &gate_context.specs_by_id,
+        semantic_projection_mode: SemanticProjectionMode::Refresh,
+    };
+    let semantic_review_context = SemanticReviewContext::new(&gate_context.specs_by_id);
+
+    for spec in plan.specs {
+        let source_path = Path::new(&spec.source.file_path);
+        let existing = read_passport(source_path).ok().flatten();
+        let contract_hash = contract_hash_by_spec
+            .and_then(|map| map.get(&spec.spec.id))
+            .cloned()
+            .or_else(|| existing.as_ref().and_then(|passport| passport.contract_hash.clone()))
+            .or_else(|| compute_contract_hash(spec));
+        let mut passport = build_passport_preserving_proof_state_with_context(
+            spec,
+            generated_at,
+            existing.as_ref(),
+            contract_hash,
+            &semantic_review_context,
+        );
+        let target_proof = target_proof_for_write(
+            spec,
+            existing
+                .as_ref()
+                .and_then(|passport| passport_target_proof(passport, TargetLanguage::TypeScript)),
+            evidence_by_spec.get(&spec.spec.id).cloned(),
+            TargetLanguage::TypeScript,
+            true,
+        );
+        let mut target_proofs = passport.target_proofs.clone().unwrap_or_default();
+        target_proofs.typescript = Some(target_proof);
+        passport.target_proofs = Some(target_proofs);
+
+        let projected_truth = project_passport_truth_with_context(
+            spec,
+            Some(&passport),
+            &projection_context,
+            &semantic_review_context,
+        );
+        apply_projected_passport_truth(&mut passport, projected_truth);
+        write_passport(&passport, source_path)
+            .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
+    }
+
+    Ok(())
+}
+
 fn refresh_covered_seam_passports(
     passport_root: &Path,
     gate_root: &Path,
@@ -3358,6 +4110,47 @@ fn build_test_evidence(
             });
         }
 
+        evidence_by_spec.insert(
+            spec.spec.id.clone(),
+            PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results,
+                observed_at: observed_at.to_string(),
+                provenance: provenance.cloned(),
+            },
+        );
+    }
+
+    Ok(evidence_by_spec)
+}
+
+fn build_typescript_test_evidence(
+    specs: &[LoadedSpec],
+    test_name_prefix: &str,
+    parsed_test_results: &HashMap<String, ParsedCargoTestResult>,
+    observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> Result<BTreeMap<String, PassportEvidence>> {
+    let mut evidence_by_spec = BTreeMap::new();
+
+    for spec in specs {
+        let mut test_results = Vec::new();
+        for local_test in &spec.spec.local_tests {
+            let full_name = expected_typescript_test_name(spec, local_test, test_name_prefix);
+            let observed = parsed_test_results.get(&full_name);
+            let (status, reason) = match observed {
+                Some(result) => (result.status.clone(), result.reason.clone()),
+                None => (
+                    "unknown".to_string(),
+                    Some("test not found in bun output".to_string()),
+                ),
+            };
+            test_results.push(PassportTestResult {
+                id: local_test.id.clone(),
+                status,
+                reason,
+            });
+        }
         evidence_by_spec.insert(
             spec.spec.id.clone(),
             PassportEvidence {
