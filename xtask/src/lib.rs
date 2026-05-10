@@ -803,6 +803,7 @@ mod tests {
                 "function.wrapper.pipeline.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
+                "function.helper.identity_passthrough.v1",
                 "unsupported.function.v1",
             ]
         );
@@ -1723,6 +1724,7 @@ must_not_shadow = [
   "function.wrapper.pipeline.v1",
   "function.arithmetic_leaf.monotone_down_nonnegative.v1",
   "function.arithmetic_leaf.monotone_up.v1",
+  "function.helper.identity_passthrough.v1",
 ]
 
 [shape]
@@ -5211,6 +5213,7 @@ must_not_shadow = [
   "function.wrapper.pipeline.v1",
   "function.arithmetic_leaf.monotone_down_nonnegative.v1",
   "function.arithmetic_leaf.monotone_up.v1",
+  "function.helper.identity_passthrough.v1",
 ]
 
 [shape]
