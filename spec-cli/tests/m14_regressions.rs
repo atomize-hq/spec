@@ -269,11 +269,11 @@ fn write_semantic_review_molecule(
     intent: &str,
     body: &str,
 ) -> PathBuf {
-    let path = wedge_root.join("units/pricing/discount_strategy_semantic_review.test.spec");
+    let path = wedge_root.join("units/pricing/discount_policy_semantic_review.test.spec");
     fs::write(
         &path,
         format!(
-            "id: {id}\nspec_version: \"0.3.0\"\nintent:\n  why: {intent}\ncovers:\n  - pricing/discount_strategy\nimports:\n  - rust_decimal::Decimal\nbody:\n  rust: |\n{body}\n"
+            "id: {id}\nspec_version: \"0.3.0\"\nintent:\n  why: {intent}\ncovers:\n  - pricing/discount_policy\nimports:\n  - rust_decimal::Decimal\nbody:\n  rust: |\n{body}\n"
         ),
     )
     .unwrap();
@@ -632,8 +632,9 @@ fn contradictory_checkout_quote_molecule_body() -> &'static str {
 
 fn remove_discount_policy_noise(fixture_root: &Path) {
     let _ = fs::remove_file(fixture_root.join("units/pricing/discount_strategy.unit.spec"));
-    let _ =
-        fs::remove_file(fixture_root.join("units/pricing/discount_strategy_checkout_flow.test.spec"));
+    let _ = fs::remove_file(
+        fixture_root.join("units/pricing/discount_strategy_checkout_flow.test.spec"),
+    );
 }
 
 #[test]
@@ -655,7 +656,7 @@ fn spec_build_does_not_clear_unit_staleness_without_retest() {
     );
     assert_success(&test_output, "spec test");
 
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
     let source = fs::read_to_string(&unit_path).unwrap();
     fs::write(
         &unit_path,
@@ -678,7 +679,7 @@ fn spec_build_does_not_clear_unit_staleness_without_retest() {
     assert_success(&build_output, "spec build");
 
     let stored_passport =
-        read_json(&fixture_dst.join("units/pricing/discount_policy.spec.passport.json"));
+        read_json(&fixture_dst.join("units/pricing/discount_strategy.spec.passport.json"));
 
     let status_output = run_spec(
         &fixture_dst,
@@ -686,7 +687,7 @@ fn spec_build_does_not_clear_unit_staleness_without_retest() {
     );
     assert_exit_code(&status_output, 1, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let unit = status_unit(&status_json, "pricing/discount_policy");
+    let unit = status_unit(&status_json, "pricing/discount_strategy");
 
     assert_eq!(unit["status"], "stale");
     assert_eq!(unit["reason"], "authored truth changed since last test");
@@ -710,7 +711,7 @@ fn spec_export_matches_status_for_legacy_passports_missing_freshness() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let units_dir = fixture_dst.join("units");
     let output_dir = fixture_dst.join("src/generated");
-    let passport_path = fixture_dst.join("units/pricing/discount_policy.spec.passport.json");
+    let passport_path = fixture_dst.join("units/pricing/discount_strategy.spec.passport.json");
 
     let test_output = run_spec(
         &fixture_dst,
@@ -738,7 +739,7 @@ fn spec_export_matches_status_for_legacy_passports_missing_freshness() {
     )
     .unwrap();
 
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
     let source = fs::read_to_string(&unit_path).unwrap();
     fs::write(
         &unit_path,
@@ -755,12 +756,12 @@ fn spec_export_matches_status_for_legacy_passports_missing_freshness() {
     );
     assert_exit_code(&status_output, 1, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
 
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(&export_output, "spec export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let passport = exported_passport(&export_json, "pricing/discount_policy");
+    let passport = exported_passport(&export_json, "pricing/discount_strategy");
 
     assert_eq!(status_unit["status"], "stale");
     assert_eq!(status_unit["freshness"]["authored_truth_status"], "stale");
@@ -823,9 +824,9 @@ notes:
 #[test]
 fn canonical_escape_hatch_gate_closes_across_truth_surfaces() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
-    let molecule_path = fixture_dst.join("units/pricing/discount_policy_checkout_flow.test.spec");
-    let passport_path = fixture_dst.join("units/pricing/discount_policy.spec.passport.json");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
+    let molecule_path = fixture_dst.join("units/pricing/discount_strategy_checkout_flow.test.spec");
+    let passport_path = fixture_dst.join("units/pricing/discount_strategy.spec.passport.json");
 
     let unit_test_output = run_spec(&fixture_dst, &["test", unit_path.to_str().unwrap()]);
     assert_success(&unit_test_output, "single-file unit spec test");
@@ -860,7 +861,7 @@ fn canonical_escape_hatch_gate_closes_across_truth_surfaces() {
     );
     assert_success(&status_output, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let discount_policy_status = status_unit(&status_json, "pricing/discount_policy");
+    let discount_policy_status = status_unit(&status_json, "pricing/discount_strategy");
     assert_eq!(discount_policy_status["status"], "valid");
     assert_eq!(
         discount_policy_status["escape_hatch_gate"]["status"],
@@ -874,7 +875,7 @@ fn canonical_escape_hatch_gate_closes_across_truth_surfaces() {
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(&export_output, "spec export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    let exported = exported_passport(&export_json, "pricing/discount_strategy");
     assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
     assert_eq!(
         proof_coverage_surfaces(exported, "variant.none"),
@@ -894,9 +895,9 @@ fn canonical_escape_hatch_gate_closes_across_truth_surfaces() {
 #[test]
 fn stale_marked_seam_reopens_gate_for_status_and_export() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
-    let molecule_path = fixture_dst.join("units/pricing/discount_policy_checkout_flow.test.spec");
-    let passport_path = fixture_dst.join("units/pricing/discount_policy.spec.passport.json");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
+    let molecule_path = fixture_dst.join("units/pricing/discount_strategy_checkout_flow.test.spec");
+    let passport_path = fixture_dst.join("units/pricing/discount_strategy.spec.passport.json");
 
     let unit_test_output = run_spec(&fixture_dst, &["test", unit_path.to_str().unwrap()]);
     assert_success(&unit_test_output, "single-file unit spec test");
@@ -923,7 +924,7 @@ fn stale_marked_seam_reopens_gate_for_status_and_export() {
     );
     assert_exit_code(&status_output, 1, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
     assert_eq!(status_unit["status"], "stale");
     assert_eq!(status_unit["escape_hatch_gate"]["status"], "open");
     assert_eq!(
@@ -938,7 +939,7 @@ fn stale_marked_seam_reopens_gate_for_status_and_export() {
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(&export_output, "spec export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    let exported = exported_passport(&export_json, "pricing/discount_strategy");
     assert_eq!(exported["escape_hatch_gate"]["status"], "open");
     assert_eq!(
         proof_coverage_surfaces(exported, "variant.none"),
@@ -957,9 +958,9 @@ fn stale_marked_seam_reopens_gate_for_status_and_export() {
 #[test]
 fn single_file_unit_test_leaves_gate_open_when_molecule_proof_is_missing() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
-    let molecule_path = fixture_dst.join("units/pricing/discount_policy_checkout_flow.test.spec");
-    let passport_path = fixture_dst.join("units/pricing/discount_policy.spec.passport.json");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
+    let molecule_path = fixture_dst.join("units/pricing/discount_strategy_checkout_flow.test.spec");
+    let passport_path = fixture_dst.join("units/pricing/discount_strategy.spec.passport.json");
 
     fs::remove_file(&molecule_path).unwrap();
 
@@ -983,7 +984,7 @@ fn single_file_unit_test_leaves_gate_open_when_molecule_proof_is_missing() {
     );
     assert_exit_code(&status_output, 1, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
     assert_eq!(status_unit["status"], "incomplete");
     assert_eq!(
         status_unit["reason"],
@@ -994,7 +995,7 @@ fn single_file_unit_test_leaves_gate_open_when_molecule_proof_is_missing() {
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(&export_output, "spec export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    let exported = exported_passport(&export_json, "pricing/discount_strategy");
     assert_eq!(exported["escape_hatch_gate"]["status"], "open");
     assert_eq!(
         proof_coverage_surfaces(exported, "variant.none"),
@@ -1009,9 +1010,9 @@ fn single_file_unit_test_leaves_gate_open_when_molecule_proof_is_missing() {
 #[test]
 fn single_file_molecule_test_refreshes_covered_passport_gate() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
-    let molecule_path = fixture_dst.join("units/pricing/discount_policy_checkout_flow.test.spec");
-    let passport_path = fixture_dst.join("units/pricing/discount_policy.spec.passport.json");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
+    let molecule_path = fixture_dst.join("units/pricing/discount_strategy_checkout_flow.test.spec");
+    let passport_path = fixture_dst.join("units/pricing/discount_strategy.spec.passport.json");
 
     let unit_test_output = run_spec(&fixture_dst, &["test", unit_path.to_str().unwrap()]);
     assert_success(&unit_test_output, "single-file unit spec test");
@@ -1038,8 +1039,8 @@ fn marked_seam_without_atom_proof_reports_gate_open() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let units_dir = fixture_dst.join("units");
     let output_dir = fixture_dst.join("src/generated");
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
-    let passport_path = fixture_dst.join("units/pricing/discount_policy.spec.passport.json");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/discount_strategy.spec.passport.json");
 
     let source = fs::read_to_string(&unit_path).unwrap();
     fs::write(
@@ -1047,13 +1048,13 @@ fn marked_seam_without_atom_proof_reports_gate_open() {
         source.replace(
             r#"local_tests:
   - id: variant_none
-    expect: 'DiscountPolicy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO && DiscountPolicy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)'
+    expect: 'DiscountStrategy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO && DiscountStrategy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)'
   - id: variant_percentage
-    expect: DiscountPolicy::None.percentage_example_holds()
+    expect: DiscountStrategy::None.percentage_example_holds()
   - id: variant_fixed_amount
-    expect: DiscountPolicy::None.fixed_amount_example_holds()
+    expect: DiscountStrategy::None.fixed_amount_example_holds()
   - id: behavior_fixed_amount_capped
-    expect: DiscountPolicy::None.fixed_amount_capped_behavior_holds()
+    expect: DiscountStrategy::None.fixed_amount_capped_behavior_holds()
 "#,
             "local_tests: []\n",
         ),
@@ -1090,7 +1091,7 @@ fn marked_seam_without_atom_proof_reports_gate_open() {
     );
     assert_exit_code(&status_output, 1, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
     assert_eq!(status_unit["status"], "incomplete");
     assert_eq!(
         status_unit["escape_hatch_gate"]["missing_surfaces"],
@@ -1100,7 +1101,7 @@ fn marked_seam_without_atom_proof_reports_gate_open() {
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(&export_output, "spec export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    let exported = exported_passport(&export_json, "pricing/discount_strategy");
     assert_eq!(exported["escape_hatch_gate"]["status"], "open");
     assert_eq!(
         proof_coverage_surfaces(exported, "variant.none"),
@@ -1117,8 +1118,8 @@ fn backend_only_drift_reprojects_truth_surfaces_consistently() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let units_dir = fixture_dst.join("units");
     let output_dir = fixture_dst.join("src/generated");
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
-    let passport_path = fixture_dst.join("units/pricing/discount_policy.spec.passport.json");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
+    let passport_path = fixture_dst.join("units/pricing/discount_strategy.spec.passport.json");
 
     let test_output = run_spec(
         &fixture_dst,
@@ -1161,12 +1162,12 @@ fn backend_only_drift_reprojects_truth_surfaces_consistently() {
     );
     assert_exit_code(&status_output, 1, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
 
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(&export_output, "spec export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    let exported = exported_passport(&export_json, "pricing/discount_strategy");
 
     for surface in [&stored_passport, status_unit, exported] {
         assert_eq!(surface["freshness"]["authored_truth_status"], "fresh");
@@ -1189,7 +1190,7 @@ fn export_omits_molecule_proof_coverage_when_molecule_evidence_is_stale() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let units_dir = fixture_dst.join("units");
     let output_dir = fixture_dst.join("src/generated");
-    let unit_path = fixture_dst.join("units/pricing/discount_policy.unit.spec");
+    let unit_path = fixture_dst.join("units/pricing/discount_strategy.unit.spec");
 
     let test_output = run_spec(
         &fixture_dst,
@@ -1231,12 +1232,12 @@ fn export_omits_molecule_proof_coverage_when_molecule_evidence_is_stale() {
     );
     assert_exit_code(&status_output, 1, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
 
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(&export_output, "spec export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    let exported = exported_passport(&export_json, "pricing/discount_strategy");
 
     assert_eq!(
         proof_coverage_surfaces(exported, "variant.none"),
@@ -1258,7 +1259,7 @@ fn export_omits_molecule_proof_coverage_when_molecule_evidence_failed() {
     let units_dir = fixture_dst.join("units");
     let output_dir = fixture_dst.join("src/generated");
     let evidence_path =
-        fixture_dst.join("units/pricing/discount_policy_checkout_flow.test.evidence.json");
+        fixture_dst.join("units/pricing/discount_strategy_checkout_flow.test.evidence.json");
 
     let test_output = run_spec(
         &fixture_dst,
@@ -1288,12 +1289,12 @@ fn export_omits_molecule_proof_coverage_when_molecule_evidence_failed() {
     );
     assert_exit_code(&status_output, 1, "spec status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_policy");
+    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
 
     let export_output = run_spec(&fixture_dst, &["export", fixture_dst.to_str().unwrap()]);
     assert_success(&export_output, "spec export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_policy");
+    let exported = exported_passport(&export_json, "pricing/discount_strategy");
 
     assert_eq!(
         proof_coverage_surfaces(exported, "variant.none"),
@@ -1313,18 +1314,18 @@ fn export_omits_molecule_proof_coverage_when_molecule_evidence_failed() {
 fn canonical_semantic_review_wedge_projects_aligned_state() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let wedge_root = semantic_review_fixture_root(&fixture_dst, "aligned");
-    let unit_path = wedge_root.join("units/pricing/discount_strategy.unit.spec");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
     let molecule_path = write_semantic_review_molecule(
         &wedge_root,
-        "pricing/discount_strategy_semantic_review_aligned",
+        "pricing/discount_policy_semantic_review_aligned",
         "Close the canonical aligned wedge by proving the authored discount semantics through a molecule test.",
         r#"    {
         let subtotal = Decimal::new(1500, 2);
-        let none = crate::pricing::discount_strategy::DiscountStrategy::None;
+        let none = crate::pricing::discount_policy::DiscountPolicy::None;
         assert_eq!(none.discount_amount(subtotal), Decimal::ZERO);
         assert_eq!(none.discounted_subtotal(subtotal), subtotal);
 
-        let percentage = crate::pricing::discount_strategy::DiscountStrategy::Percentage {
+        let percentage = crate::pricing::discount_policy::DiscountPolicy::Percentage {
             rate: Decimal::new(10, 2),
         };
         assert_eq!(
@@ -1336,14 +1337,14 @@ fn canonical_semantic_review_wedge_projects_aligned_state() {
             Decimal::new(9000, 2)
         );
 
-        let capped = crate::pricing::discount_strategy::DiscountStrategy::FixedAmount {
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
             amount: Decimal::new(2000, 2),
         };
         assert_eq!(capped.discount_amount(subtotal), subtotal);
         assert_eq!(capped.discounted_subtotal(subtotal), Decimal::ZERO);
     }"#,
     );
-    let passport_path = wedge_root.join("units/pricing/discount_strategy.spec.passport.json");
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -1382,7 +1383,7 @@ fn canonical_semantic_review_wedge_projects_aligned_state() {
     );
     assert_success(&status_output, "aligned wedge status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
     assert_eq!(status_unit["status"], "valid");
     assert!(status_unit["reason"].is_null());
     assert_eq!(status_unit["escape_hatch_gate"]["status"], "closed");
@@ -1396,7 +1397,7 @@ fn canonical_semantic_review_wedge_projects_aligned_state() {
     let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
     assert_success(&export_output, "aligned wedge export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_strategy");
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
     assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
     assert_semantic_review(
         &exported["semantic_review"],
@@ -1410,14 +1411,14 @@ fn canonical_semantic_review_wedge_projects_aligned_state() {
 fn contradictory_lowering_wedge_projects_backend_only_semantics_leaked() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let wedge_root = semantic_review_fixture_root(&fixture_dst, "semantic_drift");
-    let unit_path = wedge_root.join("units/pricing/discount_strategy.unit.spec");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
     let molecule_path = write_semantic_review_molecule(
         &wedge_root,
-        "pricing/discount_strategy_semantic_review_semantic_drift",
+        "pricing/discount_policy_semantic_review_semantic_drift",
         "Close the contradictory-lowering wedge so semantic review is the only failing signal.",
         r#"    {
         let subtotal = Decimal::new(1500, 2);
-        let uncapped = crate::pricing::discount_strategy::DiscountStrategy::FixedAmount {
+        let uncapped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
             amount: Decimal::new(2000, 2),
         };
 
@@ -1428,7 +1429,7 @@ fn contradictory_lowering_wedge_projects_backend_only_semantics_leaked() {
         );
     }"#,
     );
-    let passport_path = wedge_root.join("units/pricing/discount_strategy.spec.passport.json");
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -1467,7 +1468,7 @@ fn contradictory_lowering_wedge_projects_backend_only_semantics_leaked() {
     );
     assert_exit_code(&status_output, 1, "semantic drift wedge status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
     assert_eq!(status_unit["status"], "failing");
     assert_eq!(
         status_unit["reason"],
@@ -1484,7 +1485,7 @@ fn contradictory_lowering_wedge_projects_backend_only_semantics_leaked() {
     let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
     assert_success(&export_output, "semantic drift wedge export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_strategy");
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
     assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
     assert_semantic_review(
         &exported["semantic_review"],
@@ -1498,14 +1499,14 @@ fn contradictory_lowering_wedge_projects_backend_only_semantics_leaked() {
 fn under_specified_wedge_projects_incomplete_health_consistently() {
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let wedge_root = semantic_review_fixture_root(&fixture_dst, "under_specified");
-    let unit_path = wedge_root.join("units/pricing/discount_strategy.unit.spec");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
     let molecule_path = write_semantic_review_molecule(
         &wedge_root,
-        "pricing/discount_strategy_semantic_review_under_specified",
+        "pricing/discount_policy_semantic_review_under_specified",
         "Close the vague-authorship wedge so status reflects semantic under-specification rather than missing proof.",
         r#"    {
         let subtotal = Decimal::new(1500, 2);
-        let capped = crate::pricing::discount_strategy::DiscountStrategy::FixedAmount {
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
             amount: Decimal::new(2000, 2),
         };
 
@@ -1513,7 +1514,7 @@ fn under_specified_wedge_projects_incomplete_health_consistently() {
         assert_eq!(capped.discounted_subtotal(subtotal), Decimal::ZERO);
     }"#,
     );
-    let passport_path = wedge_root.join("units/pricing/discount_strategy.spec.passport.json");
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -1552,7 +1553,7 @@ fn under_specified_wedge_projects_incomplete_health_consistently() {
     );
     assert_exit_code(&status_output, 1, "under-specified wedge status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
     assert_eq!(status_unit["status"], "incomplete");
     assert_eq!(
         status_unit["reason"],
@@ -1569,7 +1570,7 @@ fn under_specified_wedge_projects_incomplete_health_consistently() {
     let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
     assert_success(&export_output, "under-specified wedge export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_strategy");
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
     assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
     assert_semantic_review(
         &exported["semantic_review"],
@@ -1584,14 +1585,14 @@ fn bool_domain_predicate_wedge_projects_under_specified_instead_of_false_green()
     let (_temp_dir, fixture_dst) = copied_ecommerce_fixture();
     let wedge_root =
         semantic_review_fixture_root(&fixture_dst, "false_green_bool_domain_predicate");
-    let unit_path = wedge_root.join("units/pricing/discount_strategy.unit.spec");
+    let unit_path = wedge_root.join("units/pricing/discount_policy.unit.spec");
     let molecule_path = write_semantic_review_molecule(
         &wedge_root,
-        "pricing/discount_strategy_semantic_review_false_green_bool_domain_predicate",
+        "pricing/discount_policy_semantic_review_false_green_bool_domain_predicate",
         "Close the bool-domain-predicate wedge so semantic review surfaces the extra authored method instead of treating it like proof glue.",
         r#"    {
         let subtotal = Decimal::new(1500, 2);
-        let capped = crate::pricing::discount_strategy::DiscountStrategy::FixedAmount {
+        let capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
             amount: Decimal::new(2000, 2),
         };
 
@@ -1600,7 +1601,7 @@ fn bool_domain_predicate_wedge_projects_under_specified_instead_of_false_green()
         assert!(capped.has_cap());
     }"#,
     );
-    let passport_path = wedge_root.join("units/pricing/discount_strategy.spec.passport.json");
+    let passport_path = wedge_root.join("units/pricing/discount_policy.spec.passport.json");
 
     let unit_test_output = run_spec(
         &fixture_dst,
@@ -1642,7 +1643,7 @@ fn bool_domain_predicate_wedge_projects_under_specified_instead_of_false_green()
     );
     assert_exit_code(&status_output, 1, "bool-domain-predicate wedge status");
     let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
-    let status_unit = status_unit(&status_json, "pricing/discount_strategy");
+    let status_unit = status_unit(&status_json, "pricing/discount_policy");
     assert_eq!(status_unit["status"], "incomplete");
     assert_eq!(
         status_unit["reason"],
@@ -1659,7 +1660,7 @@ fn bool_domain_predicate_wedge_projects_under_specified_instead_of_false_green()
     let export_output = run_spec(&fixture_dst, &["export", wedge_root.to_str().unwrap()]);
     assert_success(&export_output, "bool-domain-predicate wedge export");
     let export_json: Value = serde_json::from_slice(&export_output.stdout).unwrap();
-    let exported = exported_passport(&export_json, "pricing/discount_strategy");
+    let exported = exported_passport(&export_json, "pricing/discount_policy");
     assert_eq!(exported["escape_hatch_gate"]["status"], "closed");
     assert_semantic_review(
         &exported["semantic_review"],
@@ -2811,7 +2812,7 @@ fn helper_then_clamp_apply_tax_wedge_projects_valid_state() {
         "authored semantics and executable lowering agree on the supported function surface",
     );
 
-    let discount_policy = status_unit(&status_json, "pricing/discount_policy");
+    let discount_policy = status_unit(&status_json, "pricing/discount_strategy");
     assert_eq!(discount_policy["status"], "incomplete");
     assert_eq!(
         discount_policy["reason"],
