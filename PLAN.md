@@ -1,584 +1,430 @@
-<!-- /autoplan refresh: unified authority plan rewritten for single-threaded execution clarity on 2026-05-10 -->
-# M46 Completion And Landing Plan
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260510-215928.md -->
+# M47 Post-M46 Shared-Core Portability Follow-On Authority Plan
 
 Status: **authority plan**  
-Milestone family: **second-language-backend**  
-Implementation readiness: **ready-now**  
+Milestone family: **shared-core-portability**  
+Implementation readiness: **authority artifact ready for review**  
+Next artifact kind: **authority_plan**  
 Autoplan ready: **yes**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
-Current primary head: **`a976a1f`**  
-Authoritative integration head: **`ccefca8`**  
-Authoritative execution root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration`**  
-Last rewritten: **2026-05-10**
+Current primary head: **`fff21c5`**  
+Last rewritten: **2026-05-11**
 
 Primary source artifacts:
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-m46-completion-plan-20260510-201930.md`
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-202402.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260510-215928.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-221405.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260510-215928.md`
 
-Related repo artifacts:
-- `ORCH_PLAN.md`
-- `.runs/m46_helper_aware_monotone_up_typescript/merge-log.md`
-- `.runs/m46_helper_aware_monotone_up_typescript/acceptance.md`
+Related repo surfaces:
 - `.runs/m46_helper_aware_monotone_up_typescript/closeout.md`
+- `.runs/m40_plus_selector_contract_hardening/replay-inputs/restore-point.md`
+- `ORCH_PLAN.md`
+- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
+- `xtask/src/family/analysis_core/`
+- `xtask/src/family/recommend.rs`
+- `xtask/src/family/verify.rs`
 
 ## Executive Verdict
 
-M46 code is already integrated at `ccefca8`. The remaining work is operational, not architectural:
+M46 closed one bounded TypeScript truth surface.
 
-1. rerun the frozen M46 proof wall from the authoritative integration worktree
-2. write acceptance and closeout from observed outputs
-3. land the integrated truth onto `feat/m40-plus`
-4. rerun the narrow proof on the landed branch
+It did not settle the broader shared-core portability question. The repo still needs one fresh post-M46 authority artifact that says, without hand-waving, which family-analysis decision semantics are actually shared across consumers and which surfaces remain local to `xtask`, local to Rust, or milestone-specific.
 
-Default landing path is **Option A: fast-forward `feat/m40-plus` directly to `ccefca8`**.
+M47 is that artifact. Nothing more.
 
-Use **Option B: one bounded continuation commit on top of `ccefca8`** only if the fresh rerun or the branch move exposes one real unfinished M46 defect.
-
-Cherry-pick reconstruction onto `feat/m40-plus` is forbidden.
+This is an authority-only milestone. It does not authorize a new family wedge, a broader TypeScript lane, a crate split, or backend widening.
 
 ## Goal
 
-Finish M46 honestly.
+Freeze the post-M46 portability boundary tightly enough that a later implementation milestone can be judged honestly.
 
-That means:
+This plan is complete only if it names, explicitly and in one place:
 
-- prove the helper-aware monotone-up TypeScript lane against the real integrated code
-- preserve the intentionally non-green mixed-root TypeScript status contract
-- land the integrated M46 truth onto `feat/m40-plus`
-- write closeout from observed results, not expectation and not memory
+1. the exact candidate seam
+2. the exact surfaces that must stay local
+3. the live proof floor
+4. the trigger table for any later implementation milestone
+5. the exact non-goals that block family churn and backend widening
+6. the first honest future execution split, if a trigger ever fires
 
-## Current State
+## Live Validated Basis
 
-| Surface | Current truth | Why it matters |
+### Branch truth, verified on 2026-05-11
+
+The current branch truth is live, not inherited folklore:
+
+- `cargo xtask family verify-decision-contract --format json`
+  - `overall_verdict = "pass"`
+- `cargo xtask family corpus-decision --format json`
+  - `recommendation_status = "insufficient_real_corpus"`
+  - `decision_status = "not_recommended"`
+  - `decision_action = "stop"`
+  - `decision_basis_code = "no_actionable_candidate"`
+  - `required_next_action = "record_stop_without_new_milestone"`
+- `cargo test -p xtask`
+  - `146` tests passed
+
+Cargo emitted package-cache and build-directory lock waits during the command runs. That is operational noise, not semantic failure. The semantic outputs above are the truth surface this plan is allowed to rely on.
+
+### Why this matters
+
+The branch is currently doing the honest thing: refusing to invent another family milestone from weak evidence.
+
+That refusal does not answer the portability question by itself. It tells the repo what **not** to do next. It does not define what logic is actually shared, what remains local, or what proof would justify a future portability claim.
+
+That missing contract is the M47 job.
+
+## Scope Challenge
+
+### What already exists
+
+| Sub-problem | Existing owner | Reuse verdict |
 | --- | --- | --- |
-| Integrated code | `ccefca8` in `ws/spec-m46-integration` | this is the authoritative M46 implementation |
-| Primary branch | `feat/m40-plus` at `a976a1f` | future work will branch from here, so this must be advanced |
-| Acceptance artifact | scaffold exists | still needs observed results recorded |
-| Closeout artifact | scaffold exists | still needs exact SHAs and command outcomes recorded |
-| Repo-root authority plan | this file | must tell one coherent landing story |
+| durable helper-surface classification | `xtask/src/family/analysis_core/helper_surface.rs` | shared seam candidate |
+| bounded corpus-program decision derivation | `xtask/src/family/analysis_core/decision_contract.rs` | shared seam candidate |
+| normalized semantic proof fingerprints | `xtask/src/family/analysis_core/proof_fingerprint.rs` | shared seam candidate |
+| write-side caller of shared semantics | `xtask/src/family/recommend.rs` | counts as owner-adjacent producer, not extraction pressure by itself |
+| independent read-side consumer | `xtask/src/family/verify.rs` | real reuse pressure, first independent consumer |
+| compatibility re-export wrappers | `xtask/src/family/helper_surface.rs`, `xtask/src/family/decision_kernel.rs` | local shims, not seam owners |
+| artifact schemas and validation | `xtask/src/family/promotion_artifacts.rs` | local contract surface, not portability-safe shared core |
+| CLI wiring and path lookup | `xtask/src/family/mod.rs`, `xtask/src/family/paths.rs`, `xtask/src/lib.rs` | local orchestration only |
+| bounded second-language proof | `.runs/m46_helper_aware_monotone_up_typescript/closeout.md` | proof context only, not broad portability proof |
+| prior authority framing | `.runs/m40_plus_selector_contract_hardening/replay-inputs/restore-point.md` | reuse and refresh, do not reinvent |
 
-## Done Means
+### Minimum complete M47
 
-M46 is done only when all five conditions are true:
+M47 is the smallest honest lake only if it delivers all of the following in this file:
 
-1. the frozen proof wall is rerun from the authoritative execution root and matches expected truth
-2. `acceptance.md` records the exact command outcomes from that rerun
-3. `closeout.md` records the exact integrated SHA and the exact landed SHA
-4. `feat/m40-plus` points at the landed M46 head
-5. the landed branch rerun matches the integration truth for the narrow M46 validation surface
+1. one concrete seam definition updated for post-M46 truth
+2. one explicit shared-vs-local ownership map
+3. one exact trigger table for later implementation
+4. one proof floor tied to live commands and current artifacts
+5. one explicit non-goals block
+6. one future implementation split with dependency order and parallelization rules
 
-If any one of those is missing, M46 is not done.
+Anything less is another ambiguous checkpoint note dressed up as strategy.
 
-## Step 0 - Scope Challenge
+### Complexity, completeness, distribution
 
-### Minimum complete change
+- Files intentionally changed by M47: `PLAN.md`
+- New runtime classes or services: `0`
+- New distribution work: none
+- New backend support: none
 
-The minimum honest change set is:
+This is the correct size.
 
-1. rerun proof from `ccefca8`
-2. choose Option A or Option B from evidence
-3. finalize acceptance and closeout
-4. land onto `feat/m40-plus`
-5. rerun narrow post-landing validation
+If the plan grows into backend widening, schema churn, family selection, or cross-crate extraction, it has failed the scope test.
 
-Anything beyond that is scope creep.
+## Authorization Boundary
 
-### Complexity check
-
-This plan touches multiple truth surfaces, but only one code surface:
-
-- the integration worktree at `ccefca8`
-- `.runs/m46_helper_aware_monotone_up_typescript/` artifacts
-- the primary branch ref for `feat/m40-plus`
-- this repo-root authority document
-
-That is engineered enough. Reopening implementation design, adding new TypeScript families, or inventing a new milestone here would be overbuilt.
-
-### Completeness check
-
-The bad shortcut is "integration already looked good once, so just move the branch."
-
-That saves almost nothing and leaves the repo exposed to the exact failure this milestone is trying to avoid: split truth between the integrated worktree and the branch everyone will actually use.
-
-The complete version is still cheap:
-
-- rerun the full proof wall once from the authoritative execution root
-- land from the integrated head only
-- rerun narrow landed-branch proof
-- record both SHAs in closeout
-
-Do the complete version.
-
-### Distribution check
-
-This plan does **not** introduce a new distributable artifact. Distribution is already solved at the repo level and is unaffected by M46 closeout. No new CI/CD or publish work is required for this landing.
-
-## Scope
-
-### In scope
-
-- rerunning the frozen proof wall on `ccefca8`
-- finalizing acceptance and closeout from observed outputs
-- deciding between Option A and Option B from fresh evidence
-- landing the integrated truth onto `feat/m40-plus`
-- rerunning narrow post-landing validation
-
-### Out of scope
-
-- wrapper TypeScript execution
-- cross-library TypeScript helper imports
-- generic multi-dependency TypeScript execution
-- any new post-M46 milestone selection
-- dead-code warning cleanup unless it blocks landing
-- broad documentation rewrites outside M46 acceptance and closeout truth
-
-## What Already Exists
-
-| Sub-problem | Existing source of truth | Reuse verdict |
-| --- | --- | --- |
-| M46 code | integration worktree at `ccefca8` | authoritative, reuse as-is |
-| M46 delta history | `.runs/m46_helper_aware_monotone_up_typescript/merge-log.md` | authoritative context |
-| Acceptance scaffold | `.runs/m46_helper_aware_monotone_up_typescript/acceptance.md` | finalize, do not recreate |
-| Closeout scaffold | `.runs/m46_helper_aware_monotone_up_typescript/closeout.md` | finalize, do not recreate |
-| Test surface definition | `spensermcconnell-feat-m40-plus-test-plan-20260510-202402.md` | authoritative QA input |
-| Repo-root orchestration context | `ORCH_PLAN.md` | supporting context only |
-
-## Delta Audit
-
-Observed M46 delta from `a976a1f` to `ccefca8`:
-
-- core code: `spec-core/src/typescript_backend.rs`, `spec-core/src/validator.rs`, `spec-cli/src/commands.rs`
-- CLI coverage: `spec-cli/tests/cli.rs`
-- canonical example truth: `examples/ecommerce/units/money/round.unit.spec`, `examples/ecommerce/units/pricing/apply_tax.unit.spec`
-- packet proof truth: aligned monotone-up fixture helper and apply-tax unit specs plus refreshed passports
-- public contract: `README.md`, `CHANGELOG.md`
-
-Engineering implication:
-
-- this is not a trivial branch-pointer move
-- but it is still one coherent M46 delta already assembled on one head
-- rebuilding that delta manually on `feat/m40-plus` would create two competing truth surfaces
-
-## Locked Decisions
-
-### 1. Hold scope
-
-This is a completion-and-landing plan, not a new feature plan.
-
-### 2. `ccefca8` is the authoritative starting point
-
-All proof and landing work begins from the integration worktree head, not from `feat/m40-plus`.
-
-### 3. Fresh rerun is required
-
-Prior observed proof on `ccefca8` is useful supporting evidence, but it does **not** replace the fresh rerun required for closure.
-
-### 4. Option A is the default landing path
-
-If the fresh proof wall matches expected truth, fast-forward `feat/m40-plus` directly to `ccefca8`.
-
-### 5. Option B is bounded contingency only
-
-If the fresh rerun or the branch move exposes one real unfinished M46 defect, fix it on top of `ccefca8`, rerun the proof wall, then land that new head.
-
-### 6. A bounded continuation fix has a hard boundary
-
-An Option B fix is allowed only if all of the following are true:
-
-- it stays inside the existing M46 delta surface
-- it does not add new family support or widen the milestone contract
-- it does not require new architecture or new milestone planning
-- it can be proven with the same frozen proof wall plus the landed-branch rerun
-
-If a needed fix breaks those boundaries, stop and re-scope instead of smuggling new work into M46.
-
-### 7. Cherry-pick reconstruction is forbidden
-
-Do not manually replay selected M46 commits onto `feat/m40-plus`.
-
-### 8. Closeout must record one green trust surface and one intentional red surface
-
-The closeout must record:
-
-- one canonical green surface:
-  - `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript`
-- one intentional non-green surface:
-  - `cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json`
-
-## Architecture Contract
-
-### Truth-surface diagram
+The live branch stop-state is:
 
 ```text
-repo-root authority
-  PLAN.md
-     |
-     v
-run artifacts
-  acceptance.md / closeout.md / merge-log.md
-     |
-     v
-integration code truth
-  ws/spec-m46-integration @ ccefca8
-     |
-     v
-fresh proof wall rerun
-  cargo test / spec test / spec status
-     |
-     v
-landing decision
-  Option A: fast-forward feat/m40-plus -> ccefca8
-  Option B: bounded fix on ccefca8 -> rerun -> land new head
-     |
-     v
-primary branch truth
-  feat/m40-plus @ landed M46 head
-     |
-     v
-post-landing narrow rerun
-  canonical green + mixed-root non-green parity
+recommendation_status = insufficient_real_corpus
+decision_status = not_recommended
+decision_action = stop
+decision_basis_code = no_actionable_candidate
+required_next_action = record_stop_without_new_milestone
 ```
 
-### Landing topology
+That stop-state still governs family-selection truth.
 
-| Path | What it means | When allowed | Verdict |
+### Authorized now
+
+- one authority artifact that refreshes the shared-core portability boundary against post-M46 truth
+- one explicit contract for what is shared vs local
+- one trigger table for later implementation
+
+### Not authorized now
+
+- another Rust-family wedge
+- broader TypeScript execution work
+- local seam extraction by momentum
+- cross-crate extraction by adjacency
+- generic multi-backend architecture work
+- renewed corpus or recommendation-policy churn
+
+Critical rule: M47 does **not** turn the current stop-state into implementation approval. It only makes future approval criteria explicit.
+
+## Candidate Seam
+
+The shared seam remains the smallest reusable family-analysis decision boundary:
+
+```text
+candidate seam
+  helper-surface durable-hold classification
+  bounded corpus-program decision derivation
+  normalized proof-fingerprint helpers
+```
+
+Current code anchors:
+
+- `xtask/src/family/analysis_core/helper_surface.rs`
+- `xtask/src/family/analysis_core/decision_contract.rs`
+- `xtask/src/family/analysis_core/proof_fingerprint.rs`
+
+Current consumers:
+
+- `xtask/src/family/recommend.rs`
+- `xtask/src/family/verify.rs`
+
+### Shared vs local ownership map
+
+| Surface | Ownership | Why |
+| --- | --- | --- |
+| `analysis_core/helper_surface.rs` | shared seam | owns durable helper-surface classification semantics |
+| `analysis_core/decision_contract.rs` | shared seam | owns bounded next-action derivation and locked stop-state truth |
+| `analysis_core/proof_fingerprint.rs` | shared seam | owns semantic fingerprint normalization independent of artifact churn |
+| `recommend.rs` | local consumer | uses shared semantics, but also owns command execution, artifact write policy, and recommendation assembly |
+| `verify.rs` | local consumer | uses shared semantics, but owns verifier-only JSON output and artifact loading |
+| `helper_surface.rs`, `decision_kernel.rs` | local compatibility wrappers | re-export shims only; adjacency is not ownership |
+| `promotion_artifacts.rs` | local artifact boundary | schema and validator surface, not portability-safe shared semantics |
+| `mod.rs`, `paths.rs`, `lib.rs` | local orchestration | CLI dispatch, path lookup, write locations, command plumbing |
+| target-language execution policy | local backend ownership | M46 proved one bounded TypeScript surface, not a shared execution layer |
+
+### Hard boundary
+
+The following must stay local even if a later seam move is authorized:
+
+```text
+must stay local
+  xtask CLI wiring
+  artifact latest-path lookup
+  command-specific JSON rendering
+  proof-wall file locations
+  milestone-specific closeout wording
+  backend lowering details
+  TypeScript execution policy
+  spec generate/build/test ownership
+```
+
+The repo must not extract "all of `xtask/src/family/`" just because the files live near each other. That is adjacency bias, not architecture.
+
+## Architecture Surface
+
+### Dependency graph
+
+```text
+unsupported coverage truth
+        │
+        ▼
+recommend.rs
+  collects coverage and recommendation artifacts
+        │
+        ▼
+analysis_core/helper_surface.rs
+  durable helper-surface classification
+        │
+        ▼
+analysis_core/decision_contract.rs
+  bounded corpus-program decision derivation
+        │
+        ▼
+analysis_core/proof_fingerprint.rs
+  semantic fingerprint normalization
+        │
+        ├──────────────► recommendation.latest.json
+        │
+        ├──────────────► corpus-program-decision.latest.json
+        │
+        └──────────────► verify.rs
+                         re-derives and verifies parity against frozen floor
+
+outside seam, must stay local
+  promotion_artifacts.rs
+  mod.rs
+  paths.rs
+  lib.rs
+  render_json_bytes
+  target-language execution policy
+```
+
+### Production-failure lens
+
+For each real codepath this plan depends on:
+
+- if `analysis_core/*` semantics drift without the artifacts changing, `verify.rs` must fail parity
+- if artifact schemas drift without the shared semantics changing, `promotion_artifacts.rs` may change locally without broadening the seam
+- if someone widens TypeScript claims from M46 proof alone, the plan must reject that as a category error
+
+That is the whole architecture game here. Keep shared semantics tiny. Keep everything else local until proof says otherwise.
+
+## Alternatives Considered
+
+| Approach | Pros | Cons | Verdict |
 | --- | --- | --- | --- |
-| Option A | fast-forward `feat/m40-plus` directly to `ccefca8` | fresh rerun matches expected truth exactly | preferred |
-| Option B | one bounded M46 continuation commit on top of `ccefca8`, then land that head | fresh rerun or branch move exposes one real bounded defect | contingency only |
-| Rejected path | manual cherry-pick reconstruction onto `feat/m40-plus` | never | forbidden |
+| Do nothing after M46 | obeys the stop-state literally | leaves the portability boundary implicit and re-arguable | reject |
+| Refresh the bounded authority artifact now | smallest honest lake, resolves ambiguity without fake implementation | requires discipline to stay explicit | choose |
+| Broaden TypeScript immediately | visible product motion | skips the shared/local honesty step and spends an innovation token early | reject |
+| Reopen Rust-family promotion | familiar workflow | directly contradicts current stop-state | reject |
+| Jump to cross-crate extraction | sounds architectural | spends scope before real reuse pressure exists | reject |
 
-## Ordered Execution Plan
+## Trigger Table
 
-### Step 1. Freeze the execution root
+Current reuse pressure is:
 
-Run all proof-wall commands from:
+- `recommend.rs` is the owner-adjacent producer
+- `verify.rs` is the first independent consumer
 
-`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration`
+That is real signal, but it is still not enough to authorize extraction.
 
-Actions:
+| Follow-on | Current state after M46 | Exact trigger | Authorized next move | Still does not count |
+| --- | --- | --- | --- | --- |
+| local extraction inside `xtask/src/family/` | not triggered | one additional independent in-tree consumer, beyond `recommend.rs` and `verify.rs`, needs the same bounded `analysis_core/*` semantics | author a local implementation milestone for a still-local seam extraction | `recommend.rs` alone, `verify.rs` alone, compatibility shims, artifact validators, cleanup-only edits |
+| cross-crate family-analysis shared core | not triggered | one non-`xtask` crate needs the same bounded semantics without importing local command glue | author a separate implementation plan that may cross crate boundaries | in-tree `xtask` reuse pressure only |
+| broader portability or backend claim | not triggered | a concrete backend or portability consumer needs the same bounded semantics **and** the shared/local boundary survives proof without pulling in execution policy | author a separate portability implementation plan | bounded M46 TypeScript proof by itself |
+| renewed family-selection work | not triggered | live evidence names a specific next-family winner with stronger proof than the current stop-state | author a separate family-promotion plan | unsupported pressure, historical momentum, or "we should probably keep going" |
 
-- verify HEAD is `ccefca8`
-- record `ccefca8` as the authoritative starting SHA in `acceptance.md` and `closeout.md`
-- refuse to run the proof wall from `feat/m40-plus`
+## Proof Floor
 
-Exit gate:
-
-- execution root is explicit in the run record
-- authoritative integrated SHA is recorded before proof begins
-
-### Step 2. Rerun the frozen M46 proof wall
-
-Run the exact command set in the next section. Record observed stdout/stderr and exit status. Do not paraphrase while the run is still in progress.
-
-If a command fails unexpectedly:
-
-- rerun once only if the failure is clearly environmental
-- otherwise treat it as real evidence and move to the landing decision step with failure recorded
-
-Exit gate:
-
-- every command has one recorded observed outcome
-- the rerun either confirms the expected truth or identifies the exact mismatch
-
-### Step 3. Decide landing path from evidence
-
-Decision rule:
-
-- choose **Option A** if every proof-wall result matches expected truth
-- choose **Option B** only if proof or landing exposes one bounded M46 defect
-- stop and re-scope if the needed fix breaks the Option B boundary
-
-The chosen path must be written down in both `acceptance.md` and `closeout.md` with a one-line reason.
-
-Exit gate:
-
-- landing path is explicit
-- scope remains bounded
-
-### Step 4. Finalize acceptance from observed truth
-
-`acceptance.md` must record:
-
-- authoritative execution root
-- authoritative integrated SHA
-- exact proof-wall command list
-- observed outcome for each command
-- explicit statement that the mixed-root TypeScript status remains intentionally non-green
-
-Exit gate:
-
-- acceptance is no longer a scaffold
-- no command outcome is implicit or hand-waved
-
-### Step 5. Draft closeout from observed truth
-
-`closeout.md` must record:
-
-- exact integrated SHA
-- provisional landing path
-- canonical green trust surface
-- intentional non-green trust surface
-- current limitation that `.test.spec --target-language typescript` remains unsupported
-
-At this step, the closeout may still leave the landed SHA blank until the branch move completes. Everything else should be ready.
-
-Exit gate:
-
-- closeout is truthful and mostly complete
-- only the landed SHA and post-landing confirmation remain open
-
-### Step 6. Land onto `feat/m40-plus`
-
-Branch move rules:
-
-- if Option A, fast-forward `feat/m40-plus` directly to `ccefca8`
-- if Option B, land the new bounded continuation head instead
-- do not cherry-pick
-- do not rebuild the delta on the primary branch
-
-Exit gate:
-
-- `feat/m40-plus` points at the landed M46 head
-- landed SHA is known exactly
-
-### Step 7. Rerun narrow validation on the landed branch
-
-From `feat/m40-plus`, rerun only the narrow parity surface:
-
-- `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript`
-- `cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json`
-
-This rerun is mandatory. Integration-only proof is not enough because future work will branch from `feat/m40-plus`, not from the integration worktree.
-
-Exit gate:
-
-- landed branch matches integration truth for the canonical green surface
-- landed branch matches integration truth for the mixed-root intentional non-green surface
-
-### Step 8. Finalize closeout and repo-root authority
-
-Finish `closeout.md` with:
-
-- exact landed SHA
-- post-landing parity result
-- explicit statement that M46 is closed on `feat/m40-plus`
-
-This file remains the repo-root authority plan and should not need another rewrite after closeout unless facts change.
-
-Exit gate:
-
-- one coherent landing story
-- no ambiguity about what landed, what was proven, and what remains intentionally unsupported
-
-## Required Proof Wall
+### Required commands
 
 ```bash
-cargo test -p spec-core -- --color never
-cargo test -p spec-cli --test cli -- --color never
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units --target-language typescript
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_plus_tax.test.spec --target-language typescript
-cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
+.agents/skills/next-milestone/scripts/collect_signals.sh
+cargo xtask family verify-decision-contract --format json
+cargo xtask family corpus-decision --format json
+cargo test -p xtask
 ```
 
-## Expected Truth
+### Expected approval truth
 
-| Surface | Expected result | Why it matters |
-| --- | --- | --- |
-| `cargo test -p spec-core` | pass | core regression safety |
-| `cargo test -p spec-cli --test cli` | pass | CLI regression safety |
-| aligned monotone-up packet | pass | positive TypeScript packet proof |
-| unsupported near miss packet | fail before Bun | bounded-lane rejection still works |
-| `pricing/apply_tax.unit.spec` in TypeScript | pass | canonical green helper-aware trust surface |
-| `discount_plus_tax.test.spec` in TypeScript | fail before Bun | molecule TypeScript execution is still intentionally unsupported |
-| `spec status examples/ecommerce --target-language typescript --format json` | exit `1` | mixed-root non-green contract remains truthful |
+- `verify-decision-contract` stays green
+- `corpus-decision` stays on `stop` with `record_stop_without_new_milestone`
+- `xtask` analysis-core and verifier coverage stays green
+- M46 remains the only second-language proof this plan cites
 
-Additional required details for the final `spec status` result:
+### Live verified subset for this rewrite
 
-- `pricing/apply_tax` is `valid`
-- `money/round`, `pricing/apply_discount`, `pricing/calculate_total`, `pricing/checkout_quote`, and `pricing/discount_policy` are `untested`
-- no Rust proof inheritance appears in the TypeScript status view
+As of 2026-05-11:
 
-## Test And Validation Strategy
+- `cargo xtask family verify-decision-contract --format json` returned `overall_verdict = "pass"`
+- `cargo xtask family corpus-decision --format json` returned `decision_action = "stop"` and `required_next_action = "record_stop_without_new_milestone"`
+- `cargo test -p xtask` passed `146` tests
 
-### QA artifact
+## Validation and Test Strategy
 
-Primary QA-facing artifact:
+This is an authority-only milestone, so the proof surface is command truth plus manual contract review, not new runtime behavior.
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-202402.md`
-
-This plan depends on that artifact. It adds one critical requirement the QA artifact alone does not fully enforce: **post-landing parity rerun on `feat/m40-plus`**.
-
-### Coverage diagram
+### Coverage map
 
 ```text
-INTEGRATION HEAD PROOF
-======================
-[+] Core regression
-    └── [REQUIRED] cargo test -p spec-core
-
-[+] CLI regression
-    └── [REQUIRED] cargo test -p spec-cli --test cli
-
-[+] Positive packet proof
-    └── [REQUIRED] aligned monotone-up fixture passes in TypeScript
-
-[+] Negative packet proof
-    └── [REQUIRED] unsupported near miss fails before Bun
-
-[+] Canonical green trust surface
-    └── [REQUIRED] pricing/apply_tax.unit.spec passes in TypeScript
-
-[+] Intentional molecule rejection
-    └── [REQUIRED] discount_plus_tax.test.spec fails before Bun
-
-[+] Mixed-root status truth surface
-    └── [REQUIRED] status exits 1 with expected non-green contract
-
-LANDED BRANCH PARITY
-====================
-[+] Canonical green parity
-    └── [REQUIRED] rerun apply_tax TypeScript proof from feat/m40-plus
-
-[+] Mixed-root non-green parity
-    └── [REQUIRED] rerun status JSON from feat/m40-plus
+M47 PROOF FLOOR
+================
+[GREEN] cargo xtask family verify-decision-contract --format json
+[GREEN] cargo xtask family corpus-decision --format json
+[GREEN] cargo test -p xtask
+[MANUAL] PLAN.md remains authority-only
+[MANUAL] PLAN.md keeps analysis_core/* as seam owner
+[MANUAL] PLAN.md keeps wrappers, artifact schemas, and CLI glue local
+[MANUAL] M46 closeout remains the only second-language proof cited
 ```
 
-### Test gaps
+### Test expectations
 
-There is only one meaningful remaining test gap in the current draft flow:
+| Surface | Why it matters | Coverage type | Required result |
+| --- | --- | --- | --- |
+| `analysis_core/helper_surface.rs` | frozen helper-surface contract | unit tests | still green |
+| `analysis_core/decision_contract.rs` | locked stop-state and follow-on derivation | unit tests + command proof | still green |
+| `analysis_core/proof_fingerprint.rs` | semantic stability vs artifact churn | unit tests | still green |
+| `verify.rs` | first independent consumer and parity gate | unit tests + command proof | still green |
+| `PLAN.md` authorization boundary | prevents false implementation claims | manual review | must stay authority-only |
+| M46 closeout truth | prevents overclaiming TypeScript portability | artifact review | must stay bounded |
 
-- **missing mandatory landed-branch parity rerun**
+### Regression rule for this milestone
 
-This plan closes that gap explicitly in Step 7. No additional broad test expansion is required for M46 closeout.
+If a future edit changes this plan from "authority-only" to "implementation-authorizing" without satisfying the trigger table, treat that as a regression. The plan is wrong even if the code still compiles.
 
-### Prior observed proof note
+## Error and Rescue Registry
 
-Prior observed proof on `ccefca8` already indicated the expected results above, including the intentionally failing molecule TypeScript surface and the intentionally non-green mixed-root status.
-
-That prior observation makes Option A likely.
-
-It does **not** remove the requirement to rerun the proof wall fresh before landing.
-
-## Acceptance And Closeout Contract
-
-### `acceptance.md` must contain
-
-- execution timestamp
-- execution root
-- authoritative integrated SHA
-- exact command list
-- exact outcome for each command
-- explicit landing-path decision
-
-### `closeout.md` must contain
-
-- authoritative integrated SHA
-- exact landed SHA
-- canonical green trust surface
-- intentional non-green trust surface
-- note that `.test.spec --target-language typescript` remains unsupported
-- statement that future milestone selection is out of scope for this closeout
-
-### Writing rule
-
-Do not write "M46 shipped" language until Step 7 passes on `feat/m40-plus`.
-
-## Error And Rescue Registry
-
-| Failure | Why it happens | Required rescue |
-| --- | --- | --- |
-| proof wall fails on `ccefca8` | M46 is not actually done | stay on Option B only if the fix is bounded, otherwise stop and re-scope |
-| rerun is skipped because prior proof looked good | process shortcut | rerun anyway, no exceptions |
-| closeout drifts from actual results | artifact written from expectation | write only from recorded outputs |
-| `feat/m40-plus` receives partial M46 truth | wrong base or cherry-pick reconstruction | land only from integration head or bounded continuation head |
-| landed branch diverges from integration truth | branch moved without rerun | Step 7 is mandatory |
+| Failure | Detection surface | Immediate rescue | Why this is enough |
+| --- | --- | --- | --- |
+| someone reads `stop` as "no portability work needed" | proof floor vs plan language | restate that stop blocks family churn, not boundary definition | keeps refusal from masquerading as resolution |
+| someone reads M46 as broad backend proof | M46 closeout and this plan | point back to the explicit unsupported `.test.spec --target-language typescript` truth | blocks fake portability confidence |
+| command glue gets pulled into seam scope | ownership map and architecture review | keep `promotion_artifacts.rs`, `paths.rs`, `mod.rs`, `lib.rs`, and rendering local | prevents adjacency from becoming fake cohesion |
+| someone claims extraction from current reuse pressure | trigger table | keep implementation frozen until a second independent consumer appears | prevents stealth architecture work from weak signal |
 
 ## Failure Modes Registry
 
-| Risk | Severity | Test coverage | Error handling | Outcome if missed |
+| Failure mode | Test or proof surface | Error handling exists | User-visible outcome | Critical gap |
 | --- | --- | --- | --- | --- |
-| M46 closes without landing on `feat/m40-plus` | Critical | no, unless Step 7 happens | process gate only | future work starts from stale branch truth |
-| manual reconstruction onto `feat/m40-plus` | Critical | no | policy gate only | competing truth surfaces |
-| proof wall runs only on integration head | Critical | partial | none if skipped | false confidence about the branch that matters |
-| closeout omits one or both SHAs | High | no | documentation gate only | later readers cannot verify what landed |
-| mixed-root red surface is reported without the canonical green surface | High | yes, if closeout records both | documentation gate only | milestone sounds more broken than it is |
-| dead-code warnings are mistaken for a landing blocker | Low | yes, warnings are visible | human judgment | unnecessary scope expansion |
+| family churn resumes by momentum | `collect_signals.sh` plus `corpus-decision` | yes | visible, because the stop-state would drift | No |
+| M46 is overstated as broad TypeScript support | M46 closeout + plan review | yes | visible, because claims would exceed landed proof | No |
+| wrappers are mistaken for seam owners | ownership map + architecture section | yes | visible, because the plan names the true owners | No |
+| local extraction is treated as already authorized | trigger table + proof floor | yes | visible, because the trigger row is still false | No |
 
-Critical-gap rule for this plan:
+No critical gaps are open if the repo follows the boundary in this file.
 
-- if post-landing rerun is missing, M46 is not done
-- if closeout does not record both SHAs, M46 is not done
-- if landing occurs by cherry-pick reconstruction, M46 is not done
+## Not In Scope
 
-## Non-Blocking Engineering Notes
+The following are explicitly deferred:
 
-Current proof flows still emit dead-code warnings for `status_command`, `generate_command`, `build_command`, and `test_command` in `spec-cli/src/commands.rs`.
+- promoting another Rust family
+- renewing corpus or recommendation-policy work
+- broadening TypeScript beyond what M46 landed
+- generic multi-backend execution work
+- `spec-core` or cross-crate extraction by default
+- schema churn
+- command-path refactors justified only by adjacency
+- dead-code cleanup unless a later implementation milestone scopes it directly
 
-That cleanup is **not** part of M46 closeout unless it turns into a real landing blocker.
+## Deferred to Existing TODO Surfaces
+
+No new `TODOS.md` item is created by M47.
+
+Reason: this milestone is not missing implementation tasks, it is intentionally refusing to authorize them yet. The deferred work already belongs to later implementation milestones, gated by the trigger table above.
 
 ## Worktree Parallelization Strategy
 
-This plan has **limited safe parallelism**. The critical path is mostly sequential because most steps depend on the same truth surfaces: the integration worktree, the `.runs/m46...` artifacts, and the final branch ref.
+### M47 itself
 
-### Dependency table
+Sequential implementation, no parallelization opportunity.
+
+Reason: this milestone is one authority artifact in `PLAN.md`. Splitting one boundary document across worktrees would create merge noise without buying real throughput.
+
+### First authorized implementation milestone, if a trigger later fires
+
+#### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| freeze execution root and rerun proof wall | `.worktrees/spec-m46/integration`, `.runs/m46_helper_aware_monotone_up_typescript/` | — |
-| acceptance capture | `.runs/m46_helper_aware_monotone_up_typescript/` | freeze execution root and rerun proof wall |
-| closeout drafting | `.runs/m46_helper_aware_monotone_up_typescript/`, repo-root authority docs | freeze execution root and rerun proof wall |
-| branch landing | git refs for `feat/m40-plus`, integration worktree | acceptance capture |
-| post-landing validation | primary branch checkout, `.runs/m46_helper_aware_monotone_up_typescript/` | branch landing |
-| final closeout finalize | `.runs/m46_helper_aware_monotone_up_typescript/`, repo-root authority docs | post-landing validation |
+| freeze seam interface | `xtask/src/family/analysis_core/` | — |
+| rewire in-tree consumers | `xtask/src/family/` | freeze seam interface |
+| docs and authority sync | repo-root plans, `.runs/`, docs artifacts | freeze seam interface |
+| command-surface adoption | `xtask/src/family/`, `xtask/src/` | rewire in-tree consumers |
 
-### Parallel lanes
+#### Parallel lanes
 
-Lane A: freeze execution root -> rerun proof wall -> acceptance capture  
-Lane B: draft closeout shell after proof starts, then fill only from observed outputs  
-Lane C: branch landing -> post-landing validation -> final closeout finalize
+- `Lane A`: freeze seam interface
+- `Lane B`: rewire in-tree consumers, after `Lane A`
+- `Lane C`: docs and authority sync, after `Lane A`
+- `Lane D`: command-surface adoption, after `Lane B`
 
-### Execution order
+#### Execution order
 
-1. Launch Lane A first. It owns the evidence that everything else depends on.
-2. Lane B may prepare structure in parallel after Lane A begins, but it may not finalize result text until Lane A completes.
-3. Launch Lane C only after Lane A confirms the landing path and acceptance is written.
+Launch `Lane A` first.
 
-### Conflict flags
+After `Lane A` merges or is proven stable, launch `Lane B` and `Lane C` in parallel.
 
-- Lane A and Lane B both touch `.runs/m46_helper_aware_monotone_up_typescript/`. Keep one writer responsible for final artifact content.
-- Lane A and Lane C both depend on the authoritative integrated head. Do not move `feat/m40-plus` before Lane A completes.
-- Lane B and Lane C both affect final closeout wording. Final closeout ownership stays with the parent after post-landing validation.
+Launch `Lane D` only after `Lane B` lands, because command-surface adoption depends on the consumer rewires being settled.
 
-### Parallelization verdict
+#### Conflict flags
 
-Treat this as **one primary sequential lane with one light drafting lane**.
+- `Lane B` and `Lane D` both touch `xtask/src/family/`, so they should stay sequential
+- `Lane C` is safe to run beside `Lane B` because it lives in docs and authority artifacts, not the runtime modules
 
-This is not a good candidate for broad multi-worktree implementation fan-out.
+## Acceptance Checklist
 
-## NOT in scope
+- [ ] one concrete seam definition updated for post-M46 truth
+- [ ] one explicit shared-vs-local ownership map
+- [ ] one exact trigger table
+- [ ] one proof floor tied to live commands and current artifacts
+- [ ] one explicit non-goals block
+- [ ] one future execution split for the first authorized implementation milestone
+- [ ] zero implementation authority claimed beyond this artifact
 
-- selecting or naming the next milestone after M46
-- widening TypeScript support beyond the helper-aware monotone-up lane
-- changing the mixed-root TypeScript status contract
-- cleaning dead-code warnings unless they block landing
-- doing new feature or architecture work while closing M46
+## Next Actions
 
-## Completion Checklist
-
-- [ ] execution root fixed to `ws/spec-m46-integration`
-- [ ] authoritative integrated SHA recorded as `ccefca8`
-- [ ] frozen proof wall rerun from integration worktree
-- [ ] acceptance updated from observed outputs
-- [ ] landing path explicitly chosen as Option A or Option B
-- [ ] `feat/m40-plus` advanced to the landed M46 head
-- [ ] narrow landed-branch rerun completed
-- [ ] closeout updated with integrated SHA and landed SHA
-- [ ] closeout records canonical green surface and intentional non-green surface
-- [ ] repo-root authority story is coherent and final
-
-## One-Line Summary
-
-M46 is already built at `ccefca8`; the remaining honest work is to rerun the frozen proof wall from the integration worktree, finalize acceptance and closeout from observed results, land that truth onto `feat/m40-plus`, rerun narrow branch parity, and record both the canonical green TypeScript surface and the still-intentional mixed-root non-green status.
+1. Review this authority plan as the single source of truth for post-M46 portability boundaries.
+2. Keep implementation frozen unless a future trigger in this plan turns true.
+3. If a trigger turns true, author a separate implementation milestone instead of mutating M47 into code scope.
