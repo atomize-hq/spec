@@ -611,7 +611,12 @@ fn path_components(path: &Path) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Contract, UnitExtensions};
+    use crate::semantic_review::evaluate_semantic_review_with_context;
+    use crate::types::{
+        AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
+        AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Contract,
+        LoadedSpec, UnitExtensions,
+    };
     use indexmap::IndexMap;
 
     fn monotone_up_spec(id: &str, deps: Vec<&str>, typescript_body: &str) -> ResolvedSpec {
@@ -684,6 +689,124 @@ mod tests {
         })
     }
 
+    fn supported_data_seam_spec(id: &str) -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: format!("{id}.unit.spec"),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "data".to_string(),
+                intent: Intent {
+                    why: format!("TypeScript context seam fixture for {id}."),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions {
+                    data: Some(AuthoredDataShape {
+                        fields: IndexMap::from([
+                            (
+                                "subtotal".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "discount_rate".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                            (
+                                "tax_rate".to_string(),
+                                AuthoredField {
+                                    type_: "Decimal".to_string(),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![AuthoredConstructor {
+                        id: "new".to_string(),
+                        intent: Intent {
+                            why: "Create a quote".to_string(),
+                        },
+                        contract: Some(Contract {
+                            inputs: Some(IndexMap::from([
+                                ("subtotal".to_string(), "Decimal".to_string()),
+                                ("discount_rate".to_string(), "Decimal".to_string()),
+                                ("tax_rate".to_string(), "Decimal".to_string()),
+                            ])),
+                            returns: None,
+                            invariants: vec![],
+                        }),
+                        initializes: IndexMap::from([
+                            ("subtotal".to_string(), "subtotal".to_string()),
+                            ("discount_rate".to_string(), "discount_rate".to_string()),
+                            ("tax_rate".to_string(), "tax_rate".to_string()),
+                        ]),
+                    }],
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "discounted_subtotal".to_string(),
+                            intent: Intent {
+                                why: "Compute discounted subtotal".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_discount".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: "{ apply_discount(self.subtotal, self.discount_rate) }"
+                                        .to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "total".to_string(),
+                            intent: Intent {
+                                why: "Compute total".to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: None,
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec!["pricing/apply_tax".to_string()],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body:
+                                        "{ apply_tax(self.discounted_subtotal(), self.tax_rate) }"
+                                            .to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: Some(AuthoredBackends {
+                        rust: Some(AuthoredRustBackend {
+                            derives: vec![
+                                "Clone".to_string(),
+                                "Debug".to_string(),
+                                "PartialEq".to_string(),
+                            ],
+                        }),
+                    }),
+                    sum: None,
+                },
+            },
+        }
+    }
+
     #[test]
     fn typescript_tree_renders_helper_imports_with_shared_context() {
         let helper = helper_spec("money/round");
@@ -730,5 +853,28 @@ mod tests {
             .expect("leaf module should be emitted");
         assert!(leaf_module.contains("import { Decimal } from \"../__spec_ts/runtime.ts\";"));
         assert!(!leaf_module.contains("import { round }"));
+    }
+
+    #[test]
+    fn typescript_validation_does_not_regress_with_supported_seam_context() {
+        let helper = helper_spec("money/round");
+        let leaf = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["money/round"],
+            "return round(subtotal.add(subtotal.mul(rate)));",
+        );
+        let seam = supported_data_seam_spec("pricing/checkout_quote");
+        let specs_by_id = HashMap::from([
+            (leaf.id.clone(), typescript_loaded_spec(&leaf)),
+            (helper.id.clone(), typescript_loaded_spec(&helper)),
+            (seam.spec.id.clone(), seam.clone()),
+        ]);
+        let context = SemanticReviewContext::new(&specs_by_id);
+        let seam_review = evaluate_semantic_review_with_context(&seam, &context)
+            .expect("supported seam review expected in context");
+
+        assert_eq!(seam_review.compatibility_key, "data.pricing_quote.v1");
+        assert!(validate_typescript_tree_spec(&helper, &specs_by_id).is_ok());
+        assert!(validate_typescript_tree_spec(&leaf, &specs_by_id).is_ok());
     }
 }
