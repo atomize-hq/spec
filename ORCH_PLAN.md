@@ -1,93 +1,92 @@
-# M47 Authority-Plan Completion Orchestration Plan
+# M48 Shared-Core Portability Slice 1 Orchestration Plan
 
 ## 1. Title + Metadata
 
-Status: **authoritative orchestration plan for completing and closing the current M47 `PLAN.md` session**  
-Supersedes: **the prior M46 landing-oriented `ORCH_PLAN.md`**  
+Status: **authoritative orchestration plan for executing M48 Lane A**  
+Supersedes: **the stale M47 closeout-oriented `ORCH_PLAN.md`**  
 Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
+Plan title: **`M48: Shared-Core Portability Follow-On, Slice 1 Implementation Plan`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
 Kickoff branch: **`feat/m40-plus`**  
-Kickoff HEAD: **`fff21c5d34732cecb61d3fa8a187e2f6096712b7`**  
-Observed kickoff dirty source: **`PLAN.md` is already modified in the working tree and must be preserved, not normalized**  
-Historical read-only context roots:  
-- **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m40_plus_shared_core_portability_follow_on/`**
-- **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/`**
-Canonical M47 run artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m47_post_m46_shared_core_portability_follow_on/`**  
-Primary execution mode: **one parent-owned sequential authority lane**  
-Permitted parallelism: **at most one support worker, launched only after the parent captures the full proof floor, for draft-only review and closeout writing**  
-Forbidden parallelism: **any worker lane that reruns authoritative commands, edits repo source, interprets trigger truth independently, or turns M47 into implementation work**  
-No landing path: **there is no branch-move, merge, cherry-pick, or integration phase in M47**  
+Kickoff HEAD: **`0283db1be641d04374bceec313c85d230f98c1be`**  
+Kickoff short HEAD: **`0283db1`**  
+Kickoff tree expectation: **clean**  
+Primary write scope: **Lane A only, parent-owned edits inside `xtask/src/family/analysis_core/*`**  
+Read-only proof surfaces:  
+- **`xtask/src/family/recommend.rs`**
+- **`xtask/src/family/verify.rs`**
+- **`xtask/src/family/promotion_artifacts.rs`**
+- **`xtask/src/family/helper_surface.rs`**
+- **`xtask/src/family/decision_kernel.rs`**
+Canonical M48 run artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m48_shared_core_portability_slice1_lane_a/`**  
+Primary execution mode: **one parent-owned sequential code lane**  
+Permitted parallelism: **up to 2 bounded support workers, read-only only, after the parent freezes baseline truth**  
+Forbidden parallelism: **any split source-edit lane inside `xtask/src/family/analysis_core/`, any worker-owned truth interpretation, any worker-owned repo source edit**  
 Last rewritten: **2026-05-11**
 
 ## 2. Summary
 
-This document is an execution contract for finishing the current M47 authority-plan session. It is not an implementation plan and it is not an extraction plan.
+M48 is the first execution slice after the M47 authority stop. It is not a new architecture search and it is not a consumer-rewire milestone.
 
-The parent agent owns the only real critical path:
+The seam already exists. The only honest critical path is for the parent agent to freeze and prove the existing `xtask/src/family/analysis_core/*` owner surface in one sequential lane:
 
-1. capture kickoff truth and existing dirtiness
-2. snapshot the current derived family-analysis latest artifacts
-3. rerun the exact M47 proof floor
-4. audit `PLAN.md` against the live proof floor, live code ownership surfaces, and the bounded M46 closeout truth
-5. decide whether the current `PLAN.md` already passes as written or needs one bounded parent-only authority correction
-6. finalize acceptance and closeout artifacts, or stop with a blocker record
+1. `xtask/src/family/analysis_core/mod.rs`
+2. `xtask/src/family/analysis_core/helper_surface.rs`
+3. `xtask/src/family/analysis_core/decision_contract.rs`
+4. `xtask/src/family/analysis_core/proof_fingerprint.rs`
 
-The only honest worker use in M47 is post-capture drafting. A worker may help draft review-readiness or acceptance prose from parent-captured artifacts. A worker may not own truth. A worker may not rerun cargo commands. A worker may not author or edit `PLAN.md`. Any broader fan-out across `analysis_core`, `recommend`, `verify`, docs, or artifact schemas would be fake parallelism because the current trigger table does not authorize implementation at all.
+Everything downstream remains a proof wall, not implementation scope. `recommend.rs`, `verify.rs`, `promotion_artifacts.rs`, and the two shims stay read-only unless the parent explicitly enters the narrow compile-only exception allowed by `PLAN.md`.
 
-The session succeeds only if the parent can prove all of the following from observed results:
+The live proof floor is already known at kickoff and must remain true after the slice lands:
 
-- the live proof floor still passes on the current branch
-- `verify-decision-contract` remains green
-- `corpus-decision` remains `stop` with `record_stop_without_new_milestone`
-- the candidate shared seam remains bounded to:
-  - `xtask/src/family/analysis_core/helper_surface.rs`
-  - `xtask/src/family/analysis_core/decision_contract.rs`
-  - `xtask/src/family/analysis_core/proof_fingerprint.rs`
-- the current consumers remain:
-  - `xtask/src/family/recommend.rs`
-  - `xtask/src/family/verify.rs`
-- local-only surfaces remain local:
-  - wrappers
-  - `promotion_artifacts.rs`
-  - CLI wiring
-  - path lookup
-  - rendering
-  - backend execution policy
-- the trigger table in `PLAN.md` still does not authorize implementation or extraction
-- M46 remains bounded second-language proof only
-- no authored repo change occurs outside `PLAN.md` and the new M47 run artifacts
+- `./.agents/skills/next-milestone/scripts/collect_signals.sh`
+  - branch `feat/m40-plus`
+  - clean tree
+  - `recommendation_status = insufficient_real_corpus`
+  - `decision_status = not_recommended`
+  - `decision_action = stop`
+  - `required_next_action = record_stop_without_new_milestone`
+- `cargo xtask family verify-decision-contract --format json`
+  - `overall_verdict = "pass"`
+- `cargo xtask family corpus-decision --format json`
+  - `decision_action = "stop"`
+  - `decision_basis_code = "no_actionable_candidate"`
+  - `required_next_action = "record_stop_without_new_milestone"`
+- `cargo test -p xtask`
+  - green
+  - `146` tests passed at the validated kickoff floor
+
+Support workers are still useful, but only honestly. They may help with read-only downstream audit and acceptance drafting after the parent captures baseline truth. They do not own semantics, commands of record, source edits, or final acceptance.
 
 ## 3. Hard Guards
 
-- `PLAN.md` is the sole scope authority for this session.
-- M47 is an authority-plan completion session. It is not a feature sprint, extraction sprint, portability implementation sprint, or family-selection rerun.
-- The current trigger table remains non-authorizing until the parent proves otherwise from live outputs. No worker may infer implementation readiness from adjacency, prior milestones, or historical intent.
-- Existing dirtiness must be preserved. At kickoff, `git status --short` already reports `M PLAN.md`. No task may clean, reset, or silently overwrite that state.
-- The only authored source file that may change during M47 completion is `PLAN.md`, and only the parent may edit it.
-- `PLAN.md` may be edited only if the proof-floor rerun or source audit exposes factual drift, stale wording, or a boundary mismatch inside the authority artifact itself.
-- If the parent can accept the current `PLAN.md` without change, it must do so. Do not rewrite the plan for style churn.
-- No worker may edit:
-  - `PLAN.md`
-  - `xtask/src/family/**`
-  - `spec-core/**`
-  - `semantic-families/**`
-  - `docs/**`
-  - any historical `.runs/` root
-- Historical run roots are read-only reference inputs:
-  - `.runs/m40_plus_shared_core_portability_follow_on/`
-  - `.runs/m46_helper_aware_monotone_up_typescript/`
-- The parent must treat direct command outputs as authoritative over helper-script summaries.
-- `.agents/skills/next-milestone/scripts/collect_signals.sh` is informative, not authoritative. It does not overrule the raw outputs from:
-  - `cargo xtask family verify-decision-contract --format json`
-  - `cargo xtask family corpus-decision --format json`
-  - `cargo test -p xtask`
-- Proof-floor reruns may refresh derived latest artifacts under:
-  - `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-  - `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-  - `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-- Derived artifact churn is allowed only at those latest-artifact paths and only if captured explicitly under the M47 run root.
-- There is no merge gate, no landing gate, and no branch-move gate in M47.
-- If acceptance would require code changes outside `PLAN.md`, stop immediately and write `blocked.json`. Do not smuggle implementation into the authority closeout.
+- `PLAN.md` is the sole scope authority for M48 execution.
+- M48 executes Lane A only. It does not authorize Lane B consumer rewires, CLI rewiring, path lookup changes, schema changes, backend widening, crate extraction, or new abstraction layers.
+- The parent agent is the only source-edit owner for:
+  - `xtask/src/family/analysis_core/mod.rs`
+  - `xtask/src/family/analysis_core/helper_surface.rs`
+  - `xtask/src/family/analysis_core/decision_contract.rs`
+  - `xtask/src/family/analysis_core/proof_fingerprint.rs`
+- Seam-local tests inside those files are parent-owned. The only allowed non-seam proof-test write surface is `xtask/src/lib.rs`, and only if a narrow existing `xtask` test there must be tightened to prove the frozen seam contract or downstream parity within Lane A.
+- `recommend.rs`, `verify.rs`, `promotion_artifacts.rs`, `helper_surface.rs`, and `decision_kernel.rs` are read-only proof surfaces by default.
+- The only allowed exception outside `analysis_core/*` is the narrow `PLAN.md` compile-only proof fix:
+  - parent-only
+  - separately justified in the M48 run root
+  - no semantic change
+  - no ownership change
+  - no routing change
+  - no output-meaning change
+- No worker may edit repo source, run authoritative `cargo xtask` or `cargo test` commands, or decide whether proof truth is acceptable.
+- No worker may reinterpret the stop-state basis or widen scope because files are adjacent.
+- No new module, trait, helper layer, schema field, CLI flag, file move, or facade owner file is allowed in this slice.
+- `analysis_core/*` is one coupled seam vocabulary and one proof wall. There is no safe code-parallelization opportunity inside it.
+- `collect_signals.sh` is advisory only. Raw command outputs remain authoritative over helper-script summaries.
+- The parent must stop if the kickoff rerun no longer matches the validated proof floor before any source edit begins.
+- `PLAN.md` and `ORCH_PLAN.md` are authority inputs during execution. They are not runtime edit surfaces.
+- Historical run roots are read-only inputs only:
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m40_plus_shared_core_portability_follow_on/`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m47_post_m46_shared_core_portability_follow_on/`
 
 ## 4. Execution Topology
 
@@ -95,68 +94,75 @@ The session succeeds only if the parent can prove all of the following from obse
 
 | Lane ID | Branch | Worktree path | Owner | Authority level | Purpose |
 | --- | --- | --- | --- | --- | --- |
-| `lane/m47-parent-authority` | `feat/m40-plus` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | Parent | **authoritative** | baseline freeze, artifact snapshot, proof-floor reruns, boundary audit, any allowed `PLAN.md` correction, final acceptance |
-| `lane/m47-worker-support-draft` | `ws/spec-m47-support-draft` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m47/support-draft` | Worker | support-only, disabled by default | draft-only review-readiness and acceptance prose from parent-captured artifacts |
+| `lane/m48-parent-authority` | `feat/m40-plus` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | Parent | **authoritative** | capture baseline, freeze run contract, perform all seam edits, run all proof gates, integrate acceptance |
+| `lane/m48-worker-proof-audit` | `ws/m48-proof-audit` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m48/proof-audit` | Worker | support-only | read-only downstream-proof audit from parent-captured artifacts and repo files |
+| `lane/m48-worker-acceptance` | `ws/m48-acceptance` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m48/acceptance` | Worker | support-only | draft acceptance and closeout prose from parent-captured artifacts |
 
 ### 4.2 Topology rules
 
-- `lane/m47-parent-authority` is the only lane allowed to run authoritative commands.
-- `lane/m47-parent-authority` is the only lane allowed to interpret whether the proof floor matches the current M47 contract.
-- `lane/m47-parent-authority` is the only lane allowed to decide whether `PLAN.md` needs a bounded correction.
-- `lane/m47-parent-authority` is the only lane allowed to write:
-  - `acceptance.md`
-  - `closeout.md`
-  - `run-state.json`
-  - `blocked.json`
-- `lane/m47-worker-support-draft` may launch only after:
-  - kickoff baseline is frozen
-  - the parent has captured the full proof floor
-  - the parent has written read-only review inputs under the M47 run root
-- The worker lane may write draft-only artifacts under:
-  - `drafts/review-readiness.md`
-  - `drafts/acceptance-outline.md`
-- The worker lane may not run cargo, spec, git branch movement, or source edits.
-- Concurrency cap is `1` worker. If the parent is still interpreting proof truth, the worker must remain disabled.
+- `lane/m48-parent-authority` is the only lane allowed to edit repo source.
+- `lane/m48-parent-authority` is the only lane allowed to run:
+  - `./.agents/skills/next-milestone/scripts/collect_signals.sh`
+  - `cargo xtask family verify-decision-contract --format json`
+  - `cargo xtask family corpus-decision --format json`
+  - `cargo test -p xtask`
+- `lane/m48-parent-authority` is the only lane allowed to write canonical authoritative M48 run artifacts outside `drafts/`.
+- `lane/m48-worker-proof-audit` may launch only after:
+  - baseline branch/head/status is frozen
+  - kickoff proof-floor outputs are captured
+  - the parent has written the read-only audit inputs under the M48 run root
+- `lane/m48-worker-acceptance` may launch only after:
+  - the final proof-wall sweep is complete
+  - the parent has decided there is no unresolved blocker
+- Worker lanes may read any repo path needed for audit, but may write only `drafts/` outputs and parent-requested summaries.
+- Worker outputs are advisory. The parent decides whether a flagged issue is real and whether it changes execution.
+- Maximum support concurrency is `2` workers.
+- If the parent enters the compile-only exception review, all worker activity pauses until the exception is accepted or the run is stopped.
 
 ### 4.3 Honest parallelism statement
 
-M47 critical-path work is sequential-only.
+M48 has one real implementation lane and zero honest code-splitting opportunities.
 
 Reason:
 
-- the proof floor is one shared truth surface
-- the trigger table is one parent-owned interpretation surface
-- the allowed authored source surface is effectively one file: `PLAN.md`
-- there is no real module-isolated implementation work to split
+- every real edit lives in the same seam directory
+- helper-surface, decision-contract, and proof-fingerprint semantics share one vocabulary and one proof wall
+- the downstream acceptance surface is global, not lane-local
+- splitting edits across worktrees would trade throughput for merge conflict and semantic skew risk
 
-The only honest parallelism is after the parent already owns the truth and wants drafting help. Anything broader would create merge noise and false certainty without increasing throughput.
+Support workers are allowed only because they do not own source truth. They compress review time, not implementation time.
 
 ## 5. Canonical Run-State And Artifact Surfaces
 
-All canonical M47 run-state authority lives under:
+All canonical M48 execution state lives under:
 
-`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m47_post_m46_shared_core_portability_follow_on/`
+`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m48_shared_core_portability_slice1_lane_a/`
 
 ### 5.1 Canonical artifact set
 
 | Path | Role | Owner |
 | --- | --- | --- |
-| `baseline.json` | kickoff branch/head/dirty-state snapshot | Parent |
-| `authority-freeze.json` | frozen scope, lane, and writable-surface contract | Parent |
-| `in-scope-files.txt` | exact writable surfaces for this session | Parent |
+| `baseline.json` | kickoff branch/head/status and proof-floor expectation snapshot | Parent |
+| `authority-freeze.json` | frozen writable surface, read-only surface, and lane contract | Parent |
+| `in-scope-files.txt` | exact allowed source-edit surfaces | Parent |
 | `out-of-scope-files.txt` | explicit forbidden-touch surfaces | Parent |
-| `queue.json` | active execution queue and lane state | Parent |
+| `queue.json` | live lane and task queue | Parent |
 | `tasks.json` | durable task ledger | Parent |
-| `run-state.json` | final run summary and verdict | Parent |
 | `session-log.md` | chronological execution log | Parent |
-| `acceptance.md` | proof-floor and authority-review acceptance ledger | Parent |
+| `acceptance.md` | final proof and acceptance ledger | Parent |
 | `closeout.md` | operator-facing closeout | Parent |
-| `blocked.json` | required if M47 cannot close cleanly | Parent |
-| `authority-snapshot/PLAN.md` | kickoff copy of the current authority artifact | Parent |
-| `authority-snapshot/ORCH_PLAN.md` | kickoff copy of this orchestration contract | Parent |
-| `drafts/review-readiness.md` | optional support-only draft artifact | Worker |
-| `drafts/acceptance-outline.md` | optional support-only draft artifact | Worker |
-| `validation/` | raw command captures, derived-artifact snapshots, and review notes | Parent-owned tree |
+| `blocked.json` | blocker artifact if the run stops incomplete | Parent |
+| `authority-snapshot/PLAN.md` | kickoff copy of the authority plan input | Parent |
+| `authority-snapshot/ORCH_PLAN.md` | kickoff copy of the orchestration input | Parent |
+| `validation/baseline/*` | kickoff command captures and notes | Parent |
+| `validation/proof-floor/*` | kickoff and final authoritative command captures | Parent |
+| `validation/derived-artifacts/*` | pre/post latest-artifact snapshots and diffs | Parent |
+| `validation/source-audit/*` | parent-owned seam-contract review notes | Parent |
+| `validation/downstream-audit/*` | parent-owned downstream parity review notes | Parent |
+| `validation/final/*` | final git, proof, and acceptance checklist captures | Parent |
+| `drafts/proof-audit.md` | optional worker downstream audit draft | Worker |
+| `drafts/acceptance-outline.md` | optional worker acceptance draft | Worker |
+| `drafts/closeout-outline.md` | optional worker closeout draft | Worker |
 
 ### 5.2 Required `baseline.json` contents
 
@@ -170,32 +176,29 @@ All canonical M47 run-state authority lives under:
 - `branch`
 - `head_sha`
 - `head_short_sha`
-- `plan_dirty_at_kickoff`
 - `git_status_short`
+- `expected_proof_floor`
+- `allowed_parent_write_surfaces`
+- `allowed_support_lanes`
+- `read_only_proof_surfaces`
 - `historical_reference_roots`
-- `proof_floor_commands`
-- `allowed_authored_source_surfaces`
-- `allowed_derived_artifact_surfaces`
 
 ### 5.3 Required `authority-freeze.json` contents
 
 `authority-freeze.json` must record:
 
 - current milestone title from `PLAN.md`
-- statement that `PLAN.md` is authority-only and not implementation-authorizing
-- exact candidate seam paths
-- exact current consumer paths
-- exact local-only surfaces that must stay local
-- parent-authoritative lane
-- optional support-only lane
-- worker prohibition list
-- run artifact root
-- historical read-only inputs
-- explicit rule that only `PLAN.md` may be edited as authored source, parent-only, and only if proof review requires it
-- explicit rule that all other repo-source edits are forbidden
-- explicit rule that there is no landing path in M47
+- statement that M48 is Lane A only
+- exact parent-owned source-edit surfaces
+- exact read-only downstream proof surfaces
+- exact worker prohibition list
+- canonical run root
+- support lane definitions
+- explicit no-code-parallelization statement for `analysis_core/*`
+- compile-only exception rule from `PLAN.md`
+- final proof gate commands
 
-### 5.4 Allowed `tasks.json` statuses
+### 5.4 Allowed `tasks.json` states
 
 Each `tasks.json` entry must include at least:
 
@@ -222,7 +225,7 @@ Allowed `status` values are:
 - `done`
 - `cancelled`
 
-### 5.5 Minimal required `validation/` tree
+### 5.5 Minimal required validation tree
 
 ```text
 validation/
@@ -230,13 +233,16 @@ validation/
     branch.txt
     head.txt
     git-status-short.txt
-    plan-working.diff
     kickoff-notes.md
   proof-floor/
     00-collect-signals.txt
     01-verify-decision-contract.json
     02-corpus-decision.json
     03-cargo-test-p-xtask.txt
+    10-final-collect-signals.txt
+    11-final-verify-decision-contract.json
+    12-final-corpus-decision.json
+    13-final-cargo-test-p-xtask.txt
     proof-floor-summary.md
   derived-artifacts/
     pre-coverage.latest.json
@@ -249,72 +255,76 @@ validation/
     recommendation.latest.diff
     corpus-program-decision.latest.diff
     derived-artifact-summary.md
-  authority-review/
-    shared-vs-local-ownership.md
-    trigger-table-check.md
-    m46-bounded-proof-check.md
-    implementation-boundary-check.md
-    plan-rewrite-needed.md
+  source-audit/
+    facade-export-inventory.md
+    helper-surface-contract.md
+    decision-contract-branches.md
+    proof-fingerprint-normalization.md
+    exception-review.md
+  downstream-audit/
+    read-only-consumer-check.md
+    shim-immutability-check.md
+    command-surface-parity.md
   final/
     final-git-status-short.txt
-    final-plan.diff
+    final-diff-summary.md
     acceptance-checklist.md
 ```
 
-If one of the three latest analysis artifacts is missing at kickoff, the parent must write:
+If any kickoff latest artifact is missing, record the missing state explicitly:
 
 - `pre-coverage.latest.missing.txt`
 - `pre-recommendation.latest.missing.txt`
 - `pre-corpus-program-decision.latest.missing.txt`
 
-instead of fabricating pre-state JSON.
+### 5.6 Capture rules
 
-### 5.6 Validation capture rules
-
-- Every command capture file must include:
+- Every command capture must include:
   - command
   - working directory
   - timestamp
   - exit code
   - raw stdout
   - raw stderr
-- `validation/proof-floor/01-verify-decision-contract.json` must preserve the raw JSON output exactly as emitted by `cargo xtask family verify-decision-contract --format json`.
-- `validation/proof-floor/02-corpus-decision.json` must preserve the raw JSON output exactly as emitted by `cargo xtask family corpus-decision --format json`.
-- `validation/proof-floor/03-cargo-test-p-xtask.txt` must preserve the full `cargo test -p xtask` terminal output, including the final pass count.
-- `validation/derived-artifacts/pre-*` and `post-*` files must be byte-for-byte copies of the live latest-artifact files, not reformatted JSON.
-- `validation/derived-artifacts/*.diff` must be generated from those byte copies, not from live files after the fact.
-- `validation/authority-review/*.md` must cite exact repo paths used in the review.
-- Worker lanes may write only under `drafts/`. They may not write under `validation/`, `acceptance.md`, or `closeout.md`.
+- `01-verify-decision-contract.json`, `02-corpus-decision.json`, `11-final-verify-decision-contract.json`, and `12-final-corpus-decision.json` must preserve raw JSON exactly as emitted.
+- The `cargo test -p xtask` capture files must preserve full terminal output, including the final pass count.
+- Latest-artifact pre/post files must be byte-for-byte copies of the live `.latest.json` files.
+- Latest-artifact diffs must be generated from the captured pre/post byte copies, not from reformatted JSON.
+- Worker lanes may not write under `validation/`, `acceptance.md`, `closeout.md`, or `blocked.json`.
 
 ## 6. Workstream Plan
 
 ### 6.1 Task order
 
-| Order | Task ID | Lane | Owner | Default state |
+| Order | Task ID | Lane | Owner | State |
 | --- | --- | --- | --- | --- |
-| 1 | `gate-m47-00-baseline-freeze` | `lane/m47-parent-authority` | Parent | required |
-| 2 | `gate-m47-05-authority-freeze` | `lane/m47-parent-authority` | Parent | required |
-| 3 | `task-m47-10-derived-artifact-snapshot` | `lane/m47-parent-authority` | Parent | required |
-| 4 | `gate-m47-15-proof-floor` | `lane/m47-parent-authority` | Parent | required |
-| 5 | `task-m47-20-authority-boundary-audit` | `lane/m47-parent-authority` | Parent | required |
-| 6 | `task-m47-25-support-draft` | `lane/m47-worker-support-draft` | Worker | optional |
-| 7 | `gate-m47-30-parent-decision` | `lane/m47-parent-authority` | Parent | required |
-| 8 | `task-m47-35-parent-plan-correction` | `lane/m47-parent-authority` | Parent | conditional |
-| 9 | `gate-m47-40-final-acceptance` | `lane/m47-parent-authority` | Parent | required |
-| 10 | `gate-m47-45-closeout` | `lane/m47-parent-authority` | Parent | required |
+| 1 | `gate-m48-00-baseline-freeze` | `lane/m48-parent-authority` | Parent | required |
+| 2 | `gate-m48-05-authority-freeze` | `lane/m48-parent-authority` | Parent | required |
+| 3 | `task-m48-10-pre-edit-artifact-snapshot` | `lane/m48-parent-authority` | Parent | required |
+| 4 | `gate-m48-15-kickoff-proof-floor` | `lane/m48-parent-authority` | Parent | required |
+| 5 | `task-m48-20-seam-facade-freeze` | `lane/m48-parent-authority` | Parent | required |
+| 6 | `task-m48-25-helper-surface-freeze` | `lane/m48-parent-authority` | Parent | required |
+| 7 | `task-m48-30-decision-contract-freeze` | `lane/m48-parent-authority` | Parent | required |
+| 8 | `task-m48-35-proof-fingerprint-freeze` | `lane/m48-parent-authority` | Parent | required |
+| 9 | `task-m48-40-readonly-downstream-audit` | `lane/m48-worker-proof-audit` | Worker | optional |
+| 10 | `gate-m48-42-compile-only-exception-review` | `lane/m48-parent-authority` | Parent | conditional |
+| 11 | `gate-m48-45-proof-wall-sweep` | `lane/m48-parent-authority` | Parent | required |
+| 12 | `task-m48-50-acceptance-draft` | `lane/m48-worker-acceptance` | Worker | optional |
+| 13 | `gate-m48-55-parent-acceptance` | `lane/m48-parent-authority` | Parent | required |
+| 14 | `gate-m48-60-closeout` | `lane/m48-parent-authority` | Parent | required |
 
-### 6.2 `gate-m47-00-baseline-freeze`
+### 6.2 `gate-m48-00-baseline-freeze`
 
-Lane: `lane/m47-parent-authority`  
+Lane: `lane/m48-parent-authority`  
 Owner: Parent
 
 Owned surfaces:
 
 - `baseline.json`
 - `session-log.md`
-- `validation/baseline/*`
 - `authority-snapshot/PLAN.md`
 - `authority-snapshot/ORCH_PLAN.md`
+- `validation/baseline/*`
 
 Required commands:
 
@@ -323,26 +333,29 @@ git branch --show-current
 git rev-parse HEAD
 git rev-parse --short=7 HEAD
 git status --short
-git diff -- PLAN.md
 ```
 
 Required artifact actions:
 
-- copy the current `PLAN.md` into `authority-snapshot/PLAN.md`
-- copy the current `ORCH_PLAN.md` into `authority-snapshot/ORCH_PLAN.md`
-- record the kickoff `git status --short` exactly as observed
-- record the kickoff `git diff -- PLAN.md` exactly as observed
+- copy the starting `PLAN.md` to `authority-snapshot/PLAN.md`
+- copy the starting `ORCH_PLAN.md` to `authority-snapshot/ORCH_PLAN.md`
+- treat both copies as read-only audit snapshots for the remainder of the run
 
 Acceptance:
 
-- branch is recorded as `feat/m40-plus`
-- HEAD is recorded as `fff21c5d34732cecb61d3fa8a187e2f6096712b7`
-- existing `PLAN.md` dirtiness is captured rather than modified
-- the parent has frozen the exact starting authority inputs for later comparison
+- branch is `feat/m40-plus`
+- HEAD is `0283db1be641d04374bceec313c85d230f98c1be`
+- kickoff tree is clean or any unexpected dirtiness is recorded before work continues
+- the parent has frozen the starting state before any source edit or proof rerun
+- the authority inputs are snapshotted before execution for later audit
 
-### 6.3 `gate-m47-05-authority-freeze`
+Stop rule:
 
-Lane: `lane/m47-parent-authority`  
+- if branch or head does not match the expected kickoff basis and the divergence is not explicitly accepted, stop before M48 begins
+
+### 6.3 `gate-m48-05-authority-freeze`
+
+Lane: `lane/m48-parent-authority`  
 Owner: Parent
 
 Owned surfaces:
@@ -355,14 +368,17 @@ Owned surfaces:
 
 Required contents for `in-scope-files.txt`:
 
-- `PLAN.md`
-- `.runs/m47_post_m46_shared_core_portability_follow_on/**`
-
-Required contents for `out-of-scope-files.txt`:
-
+- `xtask/src/family/analysis_core/mod.rs`
 - `xtask/src/family/analysis_core/helper_surface.rs`
 - `xtask/src/family/analysis_core/decision_contract.rs`
 - `xtask/src/family/analysis_core/proof_fingerprint.rs`
+- `xtask/src/lib.rs` only if a narrow existing proof test there becomes necessary to prove the seam contract or downstream parity
+- `.runs/m48_shared_core_portability_slice1_lane_a/**`
+
+Required contents for `out-of-scope-files.txt`:
+
+- `PLAN.md`
+- `ORCH_PLAN.md`
 - `xtask/src/family/recommend.rs`
 - `xtask/src/family/verify.rs`
 - `xtask/src/family/promotion_artifacts.rs`
@@ -370,29 +386,25 @@ Required contents for `out-of-scope-files.txt`:
 - `xtask/src/family/decision_kernel.rs`
 - `xtask/src/family/mod.rs`
 - `xtask/src/family/paths.rs`
-- `xtask/src/lib.rs`
+- `xtask/src/lib.rs` runtime logic outside any unavoidable existing proof tests
 - `spec-core/**`
 - `semantic-families/**`
 - `docs/**`
-- `.runs/m40_plus_shared_core_portability_follow_on/**`
-- `.runs/m46_helper_aware_monotone_up_typescript/**`
 
 Acceptance:
 
-- writable scope is frozen to `PLAN.md` plus new M47 run artifacts
-- the parent has written an explicit forbidden-touch list
-- worker scope is frozen to draft-only outputs
+- writable scope is frozen to the four seam files plus the narrow proof exceptions allowed by `PLAN.md`
+- worker scope is frozen to draft-only support output
+- downstream consumers and shims are explicitly locked read-only
 
-### 6.4 `task-m47-10-derived-artifact-snapshot`
+### 6.4 `task-m48-10-pre-edit-artifact-snapshot`
 
-Lane: `lane/m47-parent-authority`  
+Lane: `lane/m48-parent-authority`  
 Owner: Parent
 
 Owned surfaces:
 
 - `validation/derived-artifacts/pre-*`
-- `validation/derived-artifacts/post-*`
-- `validation/derived-artifacts/*.diff`
 - `validation/derived-artifacts/derived-artifact-summary.md`
 
 Kickoff snapshot sources:
@@ -404,33 +416,31 @@ Kickoff snapshot sources:
 Required actions:
 
 - capture byte-for-byte pre-state copies before any proof-floor rerun
-- after the proof floor, capture byte-for-byte post-state copies
-- compute explicit diffs for each latest artifact
-- record whether proof-floor churn was:
-  - `none`
-  - `coverage_only`
-  - `recommendation_and_decision_refresh`
-  - `unexpected`
+- record whether each file was present, missing, or stale by timestamp only
+- note whether the `.latest.json` surfaces already reflect the validated kickoff floor
 
 Acceptance:
 
-- any latest-artifact refresh is documented exactly
-- no artifact churn outside the allowed analysis latest paths is accepted as routine
+- pre-edit latest artifacts are frozen before any command refresh
+- later artifact churn can be compared against a known pre-edit basis
 
-### 6.5 `gate-m47-15-proof-floor`
+### 6.5 `gate-m48-15-kickoff-proof-floor`
 
-Lane: `lane/m47-parent-authority`  
+Lane: `lane/m48-parent-authority`  
 Owner: Parent
 
 Owned surfaces:
 
-- `validation/proof-floor/*`
-- `session-log.md`
+- `validation/proof-floor/00-collect-signals.txt`
+- `validation/proof-floor/01-verify-decision-contract.json`
+- `validation/proof-floor/02-corpus-decision.json`
+- `validation/proof-floor/03-cargo-test-p-xtask.txt`
+- `validation/proof-floor/proof-floor-summary.md`
 
 Required commands, run in this exact order:
 
 ```bash
-.agents/skills/next-milestone/scripts/collect_signals.sh
+./.agents/skills/next-milestone/scripts/collect_signals.sh
 cargo xtask family verify-decision-contract --format json
 cargo xtask family corpus-decision --format json
 cargo test -p xtask
@@ -438,352 +448,452 @@ cargo test -p xtask
 
 Expected truth:
 
-- `collect_signals.sh` may summarize the repo state, but the parent must treat it as advisory only
-- `verify-decision-contract` must report `overall_verdict = "pass"`
-- `corpus-decision` must report:
+- `collect_signals.sh` reports branch `feat/m40-plus`, clean tree, and the known stop-state summary
+- `verify-decision-contract` reports `overall_verdict = "pass"`
+- `corpus-decision` reports:
   - `decision_action = "stop"`
   - `decision_basis_code = "no_actionable_candidate"`
   - `required_next_action = "record_stop_without_new_milestone"`
-- `cargo test -p xtask` must be green
+- `cargo test -p xtask` is green
 
-Interpretation rule for the `cargo test -p xtask` count:
+Pass-count handling:
 
-- the last known live narrative says `146` tests passed
-- if the command is still green but the count differs, record the observed count exactly and treat it as a plan-audit question, not automatic failure
-- if the command fails, M47 cannot close
+- the validated kickoff floor says `146` tests passed
+- if the command stays green but the count differs, record the observed count exactly and treat it as an execution-review question, not automatic success
+- if the command fails, M48 does not start
 
 Acceptance:
 
 - all four proof-floor captures exist
-- raw outputs support the exact stop-state the current M47 plan claims
-- any divergence is recorded before the parent begins plan review
+- the parent has a live baseline before any seam edit begins
+- any divergence from the expected stop-state basis is captured before the run proceeds
 
-### 6.6 `task-m47-20-authority-boundary-audit`
+### 6.6 `task-m48-20-seam-facade-freeze`
 
-Lane: `lane/m47-parent-authority`  
+Lane: `lane/m48-parent-authority`  
 Owner: Parent
 
 Owned surfaces:
 
-- `validation/authority-review/shared-vs-local-ownership.md`
-- `validation/authority-review/trigger-table-check.md`
-- `validation/authority-review/m46-bounded-proof-check.md`
-- `validation/authority-review/implementation-boundary-check.md`
-- `validation/authority-review/plan-rewrite-needed.md`
+- `xtask/src/family/analysis_core/mod.rs`
+- `validation/source-audit/facade-export-inventory.md`
 
-Required review inputs:
+Required inspection commands:
 
-- `PLAN.md`
+```bash
+rg -n "pub use|pub mod" xtask/src/family/analysis_core/mod.rs
+rg -n "analysis_core" xtask/src/family/recommend.rs xtask/src/family/verify.rs xtask/src/family/promotion_artifacts.rs xtask/src/family/helper_surface.rs xtask/src/family/decision_kernel.rs
+```
+
+Required work:
+
+- make the export inventory explicit
+- group exports by semantic concern, not accidental file order
+- preserve the frozen facade inventory described by `PLAN.md`
+- avoid adding new owner surfaces or silent new exports
+
+Acceptance:
+
+- the facade is the sole approved seam entry point
+- every approved seam export remains reachable through `analysis_core`
+- no consumer change is required to understand seam ownership
+
+Stop rule:
+
+- if a missing export implies a new owner file or a downstream semantic patch, stop and re-scope
+
+### 6.7 `task-m48-25-helper-surface-freeze`
+
+Lane: `lane/m48-parent-authority`  
+Owner: Parent
+
+Owned surfaces:
+
 - `xtask/src/family/analysis_core/helper_surface.rs`
+- `validation/source-audit/helper-surface-contract.md`
+
+Required inspection commands:
+
+```bash
+rg -n "classify_helper_surface|durable_non_promotable_helper_surface_candidate_tuple|recommendation_.*helper_surface|HELPER_SURFACE_FINGERPRINT" xtask/src/family/analysis_core/helper_surface.rs
+```
+
+Required work:
+
+- preserve the exact durable-hold tuple contract
+- preserve the exact helper-surface follow-on tuple contract
+- keep `classify_helper_surface()` narrow
+- add explicit proof for contradictory inputs and malformed fingerprint inputs
+
+Acceptance:
+
+- wrong primary reason rejects classification
+- non-`unknown` overlap rejects classification
+- `real_example_hits = 0` rejects classification
+- malformed or semantically wrong fingerprints reject classification
+- the file remains a classifier, not a policy surface
+
+Stop rule:
+
+- if helper-surface truth now requires broader reason codes, overlap logic, or consumer-specific exceptions, stop and write `blocked.json`
+
+### 6.8 `task-m48-30-decision-contract-freeze`
+
+Lane: `lane/m48-parent-authority`  
+Owner: Parent
+
+Owned surfaces:
+
 - `xtask/src/family/analysis_core/decision_contract.rs`
+- `validation/source-audit/decision-contract-branches.md`
+
+Required inspection commands:
+
+```bash
+rg -n "decision_contract_stop_state_tuple|corpus_program_basis_snapshot|basis_snapshot_requires_helper_surface_follow_on|derive_corpus_program_decision_contract" xtask/src/family/analysis_core/decision_contract.rs
+```
+
+Required work:
+
+- preserve the exact stop-state tuple
+- preserve the exact basis snapshot projection
+- add explicit proof for the five real branches named by `PLAN.md`
+- keep default stop behavior unchanged
+
+Acceptance:
+
+- promotion-ready branch is explicit
+- blocked-on-evidence branch is explicit
+- helper-surface follow-on branch is explicit
+- policy-interpretation blocker branch is explicit
+- default stop branch is explicit
+- `corpus-decision` still returns the same stop tuple unless the basis actually changes
+
+Stop rule:
+
+- if a new policy surface or a sixth meaningful branch is required to explain current behavior, stop and write `blocked.json`
+
+### 6.9 `task-m48-35-proof-fingerprint-freeze`
+
+Lane: `lane/m48-parent-authority`  
+Owner: Parent
+
+Owned surfaces:
+
 - `xtask/src/family/analysis_core/proof_fingerprint.rs`
+- `validation/source-audit/proof-fingerprint-normalization.md`
+
+Required inspection commands:
+
+```bash
+rg -n "normalized_.*proof_fingerprint|normalized_for_recommend_determinism|fingerprint" xtask/src/family/analysis_core/proof_fingerprint.rs
+```
+
+Required work:
+
+- preserve exact normalization fields for coverage, recommendation, and corpus-decision artifacts
+- prove timestamp and bookkeeping churn do not change fingerprints when semantics are unchanged
+- prove semantic-field drift does change fingerprints
+- keep serialization local and boring
+
+Acceptance:
+
+- coverage fingerprint ignores timestamp and path churn only
+- recommendation fingerprint ignores `generated_at` and delta churn only
+- corpus-decision fingerprint ignores non-semantic churn only
+- semantic drift changes the relevant fingerprint
+- no schema change or helper-layer introduction is needed to keep fingerprints truthful
+
+Stop rule:
+
+- if normalization requires external helpers, schema widening, or consumer rewrites to stay correct, stop and re-scope
+
+### 6.10 `task-m48-40-readonly-downstream-audit`
+
+Lane: `lane/m48-worker-proof-audit`  
+Owner: Worker  
+Default: disabled until the parent completes `gate-m48-15-kickoff-proof-floor`
+
+Owned surfaces:
+
+- `drafts/proof-audit.md`
+
+Read-only review inputs:
+
 - `xtask/src/family/recommend.rs`
 - `xtask/src/family/verify.rs`
 - `xtask/src/family/promotion_artifacts.rs`
-- `.runs/m46_helper_aware_monotone_up_typescript/closeout.md`
-- `.runs/m40_plus_shared_core_portability_follow_on/acceptance.md`
-- `.runs/m40_plus_shared_core_portability_follow_on/closeout.md`
-- the M47 proof-floor captures
+- `xtask/src/family/helper_surface.rs`
+- `xtask/src/family/decision_kernel.rs`
+- the parent-captured kickoff proof-floor outputs
+- the parent-captured seam diff summary
 
-Required review verdicts:
+Allowed commands:
 
-- `shared-vs-local-ownership.md`
-  - confirms the shared seam is still exactly the three `analysis_core/*` files
-  - confirms `recommend.rs` and `verify.rs` are current consumers
-  - confirms wrappers, artifact schemas, CLI wiring, paths, rendering, and backend execution policy remain local-only
-- `trigger-table-check.md`
-  - confirms each current trigger row remains untriggered
-  - confirms current reuse pressure is real but still insufficient to authorize extraction
-- `m46-bounded-proof-check.md`
-  - confirms M46 remains bounded TypeScript proof only
-  - confirms `.test.spec --target-language typescript` remains unsupported and must not be widened by implication
-- `implementation-boundary-check.md`
-  - confirms the current `PLAN.md` remains authority-only
-  - confirms it does not authorize implementation, extraction, backend widening, or renewed family-selection work
-- `plan-rewrite-needed.md`
-  - must end in exactly one parent decision:
-    - `no_rewrite_required`
-    - `parent_rewrite_required`
-    - `blocked_external_drift`
+```bash
+rg -n "analysis_core|helper_surface|decision_contract|proof_fingerprint" xtask/src/family/recommend.rs xtask/src/family/verify.rs xtask/src/family/promotion_artifacts.rs xtask/src/family/helper_surface.rs xtask/src/family/decision_kernel.rs
+sed -n '1,220p' xtask/src/family/recommend.rs
+sed -n '1,220p' xtask/src/family/verify.rs
+sed -n '1,220p' xtask/src/family/promotion_artifacts.rs
+```
+
+Required output:
+
+- identify any place where downstream behavior appears coupled to unstated seam semantics
+- identify whether shims still look compatibility-only
+- identify any place where the parent should tighten proof or wording before final acceptance
+
+Worker prohibitions:
+
+- no repo source edits
+- no `cargo` commands
+- no git mutation
+- no final truth claims
 
 Acceptance:
 
-- the parent has one explicit review artifact for each authority question
-- the parent has named whether `PLAN.md` is already acceptable as written
+- the parent receives a narrow read-only audit
+- any flagged risk is expressed as a bounded concern, not a source edit request
 
-### 6.7 `task-m47-25-support-draft`
+### 6.11 `gate-m48-42-compile-only-exception-review`
 
-Lane: `lane/m47-worker-support-draft`  
-Owner: Worker  
-Default: disabled
+Lane: `lane/m48-parent-authority`  
+Owner: Parent  
+Default: skipped unless the proof wall reveals a compile-only issue outside `analysis_core/*`
 
 Owned surfaces:
 
-- `drafts/review-readiness.md`
-- `drafts/acceptance-outline.md`
+- `validation/source-audit/exception-review.md`
+- `blocked.json` if the exception is rejected
 
-Allowed inputs:
+Required decision record:
 
-- `authority-snapshot/PLAN.md`
-- `authority-snapshot/ORCH_PLAN.md`
-- `validation/proof-floor/*`
-- `validation/derived-artifacts/derived-artifact-summary.md`
-- `validation/authority-review/*`
-
-Forbidden actions:
-
-- no cargo commands
-- no git commands other than read-only status if the parent explicitly allows it
-- no edits to repo source
-- no edits to canonical acceptance or closeout artifacts
+- why the issue is compile-only rather than semantic
+- exact file touched
+- why the change stays inside the narrow `PLAN.md` exception
+- why stopping is worse than the bounded fix
 
 Acceptance:
 
-- drafts are grounded only in parent-captured artifacts
-- the parent can discard the drafts with zero impact on canonical run truth
+- either the exception is rejected and the run stops
+- or the exception is accepted with explicit justification before any out-of-seam edit occurs
 
-### 6.8 `gate-m47-30-parent-decision`
+### 6.12 `gate-m48-45-proof-wall-sweep`
 
-Lane: `lane/m47-parent-authority`  
+Lane: `lane/m48-parent-authority`  
 Owner: Parent
 
-Decision branches:
-
-- `Decision A: accept current PLAN.md`
-  - use when `plan-rewrite-needed.md` concludes `no_rewrite_required`
-  - skip `task-m47-35-parent-plan-correction`
-  - proceed directly to final acceptance
-- `Decision B: bounded parent-only PLAN.md correction`
-  - use when `plan-rewrite-needed.md` concludes `parent_rewrite_required`
-  - correction scope remains authority-only
-  - no worker ownership
-  - no code or runtime edits
-- `Decision C: block the milestone`
-  - use when `plan-rewrite-needed.md` concludes `blocked_external_drift`
-  - write `blocked.json`
-  - stop without improvising implementation
-
-Blocking conditions:
-
-- `verify-decision-contract` no longer passes
-- `corpus-decision` no longer returns `stop` plus `record_stop_without_new_milestone`
-- the shared-vs-local ownership boundary no longer matches the code
-- closing M47 would require edits outside `PLAN.md`
-- the trigger table has become true and the correct next move is a new implementation plan rather than an M47 closeout
-
-### 6.9 `task-m47-35-parent-plan-correction`
-
-Lane: `lane/m47-parent-authority`  
-Owner: Parent  
-Default: conditional
-
 Owned surfaces:
 
-- `PLAN.md`
-- `validation/final/final-plan.diff`
-- `validation/authority-review/plan-rewrite-needed.md`
+- `validation/proof-floor/10-final-collect-signals.txt`
+- `validation/proof-floor/11-final-verify-decision-contract.json`
+- `validation/proof-floor/12-final-corpus-decision.json`
+- `validation/proof-floor/13-final-cargo-test-p-xtask.txt`
+- `validation/derived-artifacts/post-*`
+- `validation/derived-artifacts/*.diff`
+- `validation/downstream-audit/*`
 
-Allowed correction scope:
+Required commands, run in this exact order:
 
-- refresh stale live-proof wording
-- tighten ownership or local-only boundary wording
-- tighten the trigger-table wording if the current code or proof floor demands it
-- correct any authority drift introduced by current branch truth
+```bash
+./.agents/skills/next-milestone/scripts/collect_signals.sh
+cargo xtask family verify-decision-contract --format json
+cargo xtask family corpus-decision --format json
+cargo test -p xtask
+```
 
-Forbidden correction scope:
+Required review outputs:
 
-- no new implementation authorization
-- no new candidate seam
-- no new backend claim
-- no new family-promotion authorization
-- no schema or runtime edits
-
-Rerun rule after correction:
-
-- if the edit changes claimed live command truth or trigger interpretation, rerun:
-  - `cargo xtask family verify-decision-contract --format json`
-  - `cargo xtask family corpus-decision --format json`
-- if the edit only tightens prose around already-captured truth, do not rerun cargo unnecessarily
+- `read-only-consumer-check.md`
+- `shim-immutability-check.md`
+- `command-surface-parity.md`
 
 Acceptance:
 
-- the final `PLAN.md` is still authority-only
-- all edits are bounded to the authority artifact itself
+- `collect_signals.sh` still lands on the same stop-state summary
+- `verify-decision-contract` still passes
+- `corpus-decision` still emits:
+  - `decision_action = "stop"`
+  - `decision_basis_code = "no_actionable_candidate"`
+  - `required_next_action = "record_stop_without_new_milestone"`
+- `cargo test -p xtask` is green
+- latest-artifact churn, if any, is documented and bounded
+- downstream read-only surfaces remain unchanged unless the compile-only exception was explicitly accepted
 
-### 6.10 `gate-m47-40-final-acceptance`
+Stop rule:
 
-Lane: `lane/m47-parent-authority`  
+- if downstream behavior drifts, a read-only surface needs a semantic edit, or the stop tuple changes, stop the run and record the blocker
+
+### 6.13 `task-m48-50-acceptance-draft`
+
+Lane: `lane/m48-worker-acceptance`  
+Owner: Worker  
+Default: disabled until the parent completes `gate-m48-45-proof-wall-sweep`
+
+Owned surfaces:
+
+- `drafts/acceptance-outline.md`
+- `drafts/closeout-outline.md`
+
+Read-only inputs:
+
+- final proof-floor captures
+- derived-artifact summary
+- parent source diff summary
+- worker downstream audit summary, if present
+
+Required output:
+
+- acceptance outline tied to command truth
+- closeout outline tied to scope and stop-state preservation
+- any wording the parent should tighten before finalizing acceptance
+
+Worker prohibitions:
+
+- no repo source edits
+- no command reruns
+- no final acceptance decision
+
+### 6.14 `gate-m48-55-parent-acceptance`
+
+Lane: `lane/m48-parent-authority`  
 Owner: Parent
 
 Owned surfaces:
 
 - `acceptance.md`
-- `run-state.json`
-- `validation/final/final-git-status-short.txt`
 - `validation/final/acceptance-checklist.md`
+- `validation/final/final-diff-summary.md`
+- `validation/final/final-git-status-short.txt`
 
-`acceptance.md` must record:
+Acceptance checklist:
 
-- branch and final HEAD
-- whether `PLAN.md` changed during the session
-- the exact proof-floor command list
-- per-command observed exit status
-- the exact observed `verify-decision-contract` verdict
-- the exact observed `corpus-decision` tuple
-- the exact observed `cargo test -p xtask` pass/fail result and pass count if green
-- derived-artifact churn summary
-- shared-vs-local ownership verdict
-- trigger-table verdict
-- M46 bounded-proof verdict
-- final decision:
-  - `accepted_without_plan_rewrite`
-  - `accepted_with_parent_plan_rewrite`
-  - `blocked`
+- only allowed source surfaces changed
+- `analysis_core/mod.rs` is the sole approved seam facade
+- helper-surface tuple semantics are frozen and explicitly tested
+- decision-contract tuple semantics are frozen and explicitly tested
+- proof-fingerprint normalization rules are frozen and explicitly tested
+- compatibility shims remain compatibility-only
+- `recommend.rs`, `verify.rs`, and `promotion_artifacts.rs` still behave the same
+- kickoff and final proof floors both support the same stop-state truth
+- no scope leakage into consumers, schemas, CLI wiring, path lookup, or backend policy
 
 Acceptance:
 
-- the parent has written one clear verdict with machine-evidence support
-- all required review questions are answered in canonical artifacts
+- the parent can explain the entire slice as a seam freeze and proof-hardening run, not a hidden consumer rewire
+- any optional worker findings are either resolved or explicitly rejected with reason
 
-### 6.11 `gate-m47-45-closeout`
+### 6.15 `gate-m48-60-closeout`
 
-Lane: `lane/m47-parent-authority`  
+Lane: `lane/m48-parent-authority`  
 Owner: Parent
 
 Owned surfaces:
 
 - `closeout.md`
-- `tasks.json`
-- `queue.json`
-- `session-log.md`
+- `blocked.json` if needed
+- final `tasks.json`
+- final `queue.json`
 
-`closeout.md` must record:
+Required closeout contents:
 
-- concise operator summary of the M47 result
-- whether the current `PLAN.md` was accepted as-is or corrected by the parent
-- the exact live stop-state preserved at closeout
-- the exact bounded candidate seam preserved at closeout
-- why M47 used sequential parent ownership
-- why broader worker fan-out was intentionally rejected
-- any residual follow-up, explicitly marked as outside M47
+- actual touched source surfaces
+- final proof outcomes
+- latest-artifact churn summary
+- whether any compile-only exception was invoked
+- deferred follow-on items that remain out of scope for M48
+- explicit statement that Lane B, extraction, and backend follow-ons remain separate decisions
 
-Final session states:
+Acceptance:
 
-- `closed_green`
-- `closed_green_with_parent_plan_rewrite`
-- `blocked_no_authority_closeout`
+- the run can be audited from `baseline.json`, `authority-freeze.json`, `tasks.json`, `acceptance.md`, and `closeout.md` alone
+- the closeout does not overclaim future consumer rewires or extraction readiness
 
 ## 7. Context-Control Rules
 
-- Parent keeps only these live canonical inputs in working context:
+- The parent keeps only these items live in working context:
   - `PLAN.md`
   - `ORCH_PLAN.md`
   - `tasks.json`
-  - `validation/proof-floor/proof-floor-summary.md`
-  - `validation/authority-review/*.md`
-- Historical reference artifacts are read-only and should be summarized, not copied into live prompt context wholesale.
-- Worker prompts contain only:
-  - owned draft files
-  - exact input artifact paths
-  - forbidden actions
-  - the rule that the worker does not own truth
+  - latest proof-floor summary
+  - current seam diff summary
+- Each worker prompt contains only:
+  - its owned file set
+  - exact relevant `PLAN.md` excerpts
+  - allowed commands
+  - forbidden touch surfaces
+  - parent-captured proof outputs
 - Workers return only:
-  - changed draft files
-  - a brief summary
-  - blockers or ambiguities
-- Workers do not write canonical run-state files.
-- Close the worker immediately after its draft is either consumed or discarded.
-- Do not poll aggressively. Use task completion sentinels or explicit waits.
+  - files reviewed
+  - commands run and exit codes
+  - bounded findings
+  - blocker notes
+- Workers do not write canonical authoritative run artifacts. `drafts/` is the only shared exception.
+- The parent reviews worker summaries and narrow diffs only. Full worker transcripts do not become part of the main execution context.
+- Close each worker immediately after its draft is consumed.
+- Prefer sentinels, explicit handoff files, or long waits over tight polling loops.
 
 ## 8. Tests And Acceptance
 
-### 8.1 Proof-floor acceptance
+### 8.1 Required command gates
 
-- `cargo xtask family verify-decision-contract --format json` reports `overall_verdict == "pass"`.
-- `cargo xtask family corpus-decision --format json` reports:
-  - `decision_action == "stop"`
-  - `decision_basis_code == "no_actionable_candidate"`
-  - `required_next_action == "record_stop_without_new_milestone"`
-- `cargo test -p xtask` is green.
+Kickoff and final proof gates both run:
 
-### 8.2 Boundary acceptance
+```bash
+./.agents/skills/next-milestone/scripts/collect_signals.sh
+cargo xtask family verify-decision-contract --format json
+cargo xtask family corpus-decision --format json
+cargo test -p xtask
+```
 
-- the bounded shared seam remains exactly:
-  - `xtask/src/family/analysis_core/helper_surface.rs`
-  - `xtask/src/family/analysis_core/decision_contract.rs`
-  - `xtask/src/family/analysis_core/proof_fingerprint.rs`
-- the current consumers remain exactly:
-  - `xtask/src/family/recommend.rs`
-  - `xtask/src/family/verify.rs`
-- local-only surfaces remain local:
-  - wrappers
-  - `promotion_artifacts.rs`
-  - CLI wiring
-  - paths
-  - rendering
-  - backend execution policy
+Required final outcomes:
 
-### 8.3 Authority acceptance
+- `recommendation_status = insufficient_real_corpus`
+- `decision_status = not_recommended`
+- `decision_action = stop`
+- `decision_basis_code = no_actionable_candidate`
+- `required_next_action = record_stop_without_new_milestone`
+- `overall_verdict = pass`
+- all `xtask` tests green
 
-- `PLAN.md` remains authority-only.
-- The trigger table still does not authorize:
-  - local seam extraction
-  - cross-crate extraction
-  - broader portability implementation
-  - renewed family-selection work
-- M46 remains bounded second-language proof only.
+### 8.2 Source-level acceptance
 
-### 8.4 Scope acceptance
+- `xtask/src/family/analysis_core/mod.rs`
+  - export inventory is explicit, grouped, and unchanged in meaning
+- `xtask/src/family/analysis_core/helper_surface.rs`
+  - contradictory inputs and malformed fingerprint inputs are explicitly proven
+- `xtask/src/family/analysis_core/decision_contract.rs`
+  - each real branch is explicitly proven
+- `xtask/src/family/analysis_core/proof_fingerprint.rs`
+  - semantic drift changes fingerprints and bookkeeping churn does not
 
-- no repo source changed outside `PLAN.md`
-- no worker edited source
-- any derived artifact churn stayed confined to:
-  - `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-  - `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-  - `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+### 8.3 Downstream acceptance
+
+- read-only consumers remain unchanged in semantics
+- command-surface truth remains unchanged
+- compatibility shims remain compatibility-only
+- any compile-only exception is visibly documented and justified
 
 ## 9. Assumptions And Stop Conditions
 
 ### 9.1 Assumptions
 
-- The kickoff branch remains `feat/m40-plus`.
-- The kickoff authoritative HEAD remains `fff21c5d34732cecb61d3fa8a187e2f6096712b7`.
-- The current working-tree `PLAN.md` modification is intentional repo state and must be preserved.
-- Historical `.runs/` roots are useful context but not live authority.
-- Cargo command lock waits are operational noise unless they prevent completion.
+- the kickoff branch remains `feat/m40-plus`
+- the kickoff HEAD remains `0283db1be641d04374bceec313c85d230f98c1be`
+- the validated proof floor from 2026-05-11 is still reproducible when M48 begins
+- the existing seam files named in `PLAN.md` are still the true owner surfaces
+- support workers are optional convenience, not required for correctness
 
 ### 9.2 Immediate stop conditions
 
-Stop the session and write `blocked.json` if any of the following occurs:
+- kickoff proof floor no longer matches the validated stop-state basis
+- a downstream consumer or shim needs a semantic edit
+- a new owner surface, helper layer, schema field, CLI change, or backend change appears necessary
+- fingerprint normalization cannot stay truthful without widening scope
+- the parent cannot explain an out-of-seam change as compile-only under the narrow `PLAN.md` exception
+- unexpected dirtiness appears in the worktree and cannot be attributed safely
+- external changes land during the run and invalidate the frozen baseline
 
-- `verify-decision-contract` fails
-- `corpus-decision` no longer returns the current stop-state tuple
-- `cargo test -p xtask` fails
-- the candidate seam or current-consumer set no longer matches the current M47 authority plan
-- closing M47 would require edits outside `PLAN.md`
-- the correct next move is a new implementation plan rather than an authority closeout
-- the parent cannot distinguish historical context from current branch truth
+### 9.3 Completion statement
 
-## 10. Future Triggered Implementation Split Reference
-
-This section is preserved only so the current M47 session closes without losing the first honest implementation split promised by `PLAN.md`. It is not executable during M47.
-
-| Step | Modules touched | Depends on |
-| --- | --- | --- |
-| freeze seam interface | `xtask/src/family/analysis_core/` | — |
-| rewire in-tree consumers | `xtask/src/family/` | freeze seam interface |
-| docs and authority sync | repo-root plans, `.runs/`, docs artifacts | freeze seam interface |
-| command-surface adoption | `xtask/src/family/`, `xtask/src/` | rewire in-tree consumers |
-
-Future lane order, only if a trigger later turns true:
-
-- `Lane A`: freeze seam interface
-- `Lane B`: rewire in-tree consumers, after `Lane A`
-- `Lane C`: docs and authority sync, after `Lane A`
-- `Lane D`: command-surface adoption, after `Lane B`
-
-Current M47 rule:
-
-- keep this split as reference only
-- do not pre-launch any of these lanes
-- do not turn this future split into present authorization
+M48 is complete only when the seam is frozen, the proof wall is green, the downstream stop-state truth is unchanged, and the run artifacts make that claim auditable without reading any worker transcript.
