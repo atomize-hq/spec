@@ -679,7 +679,7 @@ fn seed_semantic_status_artifacts(units_dir: &Path) {
     write_molecule_evidence(&molecule_evidence, &molecule_path).unwrap();
 }
 
-fn supported_checkout_quote_semantic_review(
+fn supported_pricing_quote_semantic_review(
     verdict: SemanticVerdict,
     reason_codes: Vec<SemanticReasonCode>,
     summary: &str,
@@ -704,8 +704,8 @@ fn seed_supported_data_semantic_status_artifacts(
 ) {
     const GENERATED_AT: &str = "2026-04-21T00:00:00Z";
 
-    let unit_path = units_dir.join("pricing/checkout_quote.unit.spec");
-    let molecule_path = units_dir.join("pricing/checkout_quote_flow.test.spec");
+    let unit_path = units_dir.join("pricing/pricing_quote.unit.spec");
+    let molecule_path = units_dir.join("pricing/pricing_quote_flow.test.spec");
 
     let spec = load_file(&unit_path).unwrap();
     let molecule_test = load_molecule_test_file(&molecule_path).unwrap();
@@ -1369,9 +1369,9 @@ body:
     );
     write_spec(
         &units_dir,
-        "pricing/checkout_quote.unit.spec",
+        "pricing/pricing_quote.unit.spec",
         r#"
-id: pricing/checkout_quote
+id: pricing/pricing_quote
 kind: data
 spec_version: "0.3.0"
 intent:
@@ -1428,7 +1428,7 @@ methods:
           }
 local_tests:
   - id: total_basic
-    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
+    expect: PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
 backends:
   rust:
     derives:
@@ -1439,17 +1439,17 @@ backends:
     );
     write_spec(
         &units_dir,
-        "pricing/checkout_quote_flow.test.spec",
+        "pricing/pricing_quote_flow.test.spec",
         r#"
-id: pricing/checkout_quote_flow
+id: pricing/pricing_quote_flow
 intent:
   why: Verify the generated checkout quote seam composes with pricing helpers.
 covers:
-  - pricing/checkout_quote
+  - pricing/pricing_quote
 body:
   rust: |
     {
-        let quote = CheckoutQuote::new(
+        let quote = PricingQuote::new(
             rust_decimal::Decimal::new(10000, 2),
             rust_decimal::Decimal::new(10, 2),
             rust_decimal::Decimal::new(725, 4),
@@ -5309,7 +5309,7 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
     fs::remove_file(ecommerce_dir.join("units/pricing/discount_plus_tax.test.evidence.json"))
         .unwrap();
     fs::remove_file(
-        ecommerce_dir.join("units/pricing/discount_policy_checkout_flow.test.evidence.json"),
+        ecommerce_dir.join("units/pricing/discount_strategy_checkout_flow.test.evidence.json"),
     )
     .unwrap();
 
@@ -5320,22 +5320,22 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
     );
 
     let json = parse_stdout_json(&output);
-    let checkout_quote = status_units(&json)
+    let pricing_quote = status_units(&json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
-    assert_eq!(checkout_quote["status"], "incomplete", "{json}");
+    assert_eq!(pricing_quote["status"], "incomplete", "{json}");
     assert_eq!(
-        checkout_quote["reason"], "missing required escape-hatch proof: molecule",
+        pricing_quote["reason"], "missing required escape-hatch proof: molecule",
         "{json}"
     );
-    let discount_policy = status_units(&json)
+    let discount_strategy = status_units(&json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
-    assert_eq!(discount_policy["status"], "incomplete", "{json}");
+    assert_eq!(discount_strategy["status"], "incomplete", "{json}");
     assert_eq!(
-        discount_policy["reason"], "missing required escape-hatch proof: molecule",
+        discount_strategy["reason"], "missing required escape-hatch proof: molecule",
         "{json}"
     );
     assert!(
@@ -5358,7 +5358,7 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
 #[test]
 fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
-    let passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let passport_path = ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
     let mut seeded_passport = read_passport_json(&passport_path);
     seeded_passport["escape_hatch_gate"] = serde_json::json!({
         "status": "open",
@@ -5381,7 +5381,7 @@ fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
     let status_json = parse_stdout_json(&status_output);
     let status_unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
     assert_eq!(status_unit["status"], "valid", "{status_json}");
     assert_eq!(
@@ -5399,7 +5399,7 @@ fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
         .unwrap();
 
     assert_eq!(
@@ -5412,7 +5412,7 @@ fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
 #[test]
 fn spec_status_and_export_reproject_marked_seam_markers_and_proof_coverage_from_current_truth() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
-    let passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let passport_path = ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
     let mut seeded_passport = read_passport_json(&passport_path);
     seeded_passport["markers"] = serde_json::json!([
         {
@@ -5440,7 +5440,7 @@ fn spec_status_and_export_reproject_marked_seam_markers_and_proof_coverage_from_
     let status_json = parse_stdout_json(&status_output);
     let status_unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
 
     assert_ne!(
@@ -5462,7 +5462,7 @@ fn spec_status_and_export_reproject_marked_seam_markers_and_proof_coverage_from_
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
         .unwrap();
 
     assert_eq!(status_unit["markers"], exported_passport["markers"]);
@@ -5479,63 +5479,63 @@ fn spec_status_and_export_reproject_marked_seam_markers_and_proof_coverage_from_
 #[test]
 fn seam_cli_status_and_export_preserve_legacy_semantic_reviews() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
-    let data_passport_path = ecommerce_dir.join("units/pricing/checkout_quote.spec.passport.json");
-    let sum_passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let data_passport_path = ecommerce_dir.join("units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path = ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
     let seeded_data_review = seed_passport_semantic_review_compatibility_key(
         &data_passport_path,
-        DATA_SEAM_LEGACY_COMPATIBILITY_KEY,
+        DATA_SEAM_COMPATIBILITY_KEY,
     );
     let seeded_sum_review = seed_passport_semantic_review_compatibility_key(
         &sum_passport_path,
-        SUM_SEAM_LEGACY_COMPATIBILITY_KEY,
+        SUM_SEAM_COMPATIBILITY_KEY,
     );
 
     let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
     assert_output_success(
-        "status should preserve legacy seam semantic reviews from checked-in passports",
+        "status should preserve canonical seam semantic reviews from checked-in passports",
         &status_output,
     );
     let status_json = parse_stdout_json(&status_output);
-    let checkout_quote = status_units(&status_json)
+    let pricing_quote = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
-    assert_eq!(checkout_quote["status"], "valid", "{status_json}");
-    assert_eq!(checkout_quote["semantic_review"], seeded_data_review, "{status_json}");
-    let discount_policy = status_units(&status_json)
+    assert_eq!(pricing_quote["status"], "valid", "{status_json}");
+    assert_eq!(pricing_quote["semantic_review"], seeded_data_review, "{status_json}");
+    let discount_strategy = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
-    assert_eq!(discount_policy["status"], "valid", "{status_json}");
+    assert_eq!(discount_strategy["status"], "valid", "{status_json}");
     assert_eq!(
-        discount_policy["semantic_review"], seeded_sum_review,
+        discount_strategy["semantic_review"], seeded_sum_review,
         "{status_json}"
     );
 
     let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
     assert_output_success(
-        "export should preserve legacy seam semantic reviews from checked-in passports",
+        "export should preserve canonical seam semantic reviews from checked-in passports",
         &export_output,
     );
     let export_json = parse_stdout_json(&export_output);
-    let exported_checkout_quote = export_json["passports"]
+    let exported_pricing_quote = export_json["passports"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/checkout_quote")
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(
-        exported_checkout_quote["semantic_review"], seeded_data_review,
+        exported_pricing_quote["semantic_review"], seeded_data_review,
         "{export_json}"
     );
-    let exported_discount_policy = export_json["passports"]
+    let exported_discount_strategy = export_json["passports"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
         .unwrap();
     assert_eq!(
-        exported_discount_policy["semantic_review"], seeded_sum_review,
+        exported_discount_strategy["semantic_review"], seeded_sum_review,
         "{export_json}"
     );
 }
@@ -5543,79 +5543,79 @@ fn seam_cli_status_and_export_preserve_legacy_semantic_reviews() {
 #[test]
 fn seam_cli_legacy_semantic_reviews_preserve_incomplete_health_semantics() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
-    let data_passport_path = ecommerce_dir.join("units/pricing/checkout_quote.spec.passport.json");
-    let sum_passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let data_passport_path = ecommerce_dir.join("units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path = ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
     let seeded_data_review = seed_passport_semantic_review_compatibility_key(
         &data_passport_path,
-        DATA_SEAM_LEGACY_COMPATIBILITY_KEY,
+        DATA_SEAM_COMPATIBILITY_KEY,
     );
     let seeded_sum_review = seed_passport_semantic_review_compatibility_key(
         &sum_passport_path,
-        SUM_SEAM_LEGACY_COMPATIBILITY_KEY,
+        SUM_SEAM_COMPATIBILITY_KEY,
     );
 
     fs::remove_file(ecommerce_dir.join("units/pricing/checkout_flow.test.evidence.json")).unwrap();
     fs::remove_file(ecommerce_dir.join("units/pricing/discount_plus_tax.test.evidence.json"))
         .unwrap();
     fs::remove_file(
-        ecommerce_dir.join("units/pricing/discount_policy_checkout_flow.test.evidence.json"),
+        ecommerce_dir.join("units/pricing/discount_strategy_checkout_flow.test.evidence.json"),
     )
     .unwrap();
 
     let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
     assert!(
         !status_output.status.success(),
-        "open marked-seam gates should keep status non-green even when legacy reviews are preserved"
+        "open marked-seam gates should keep status non-green even when canonical reviews are preserved"
     );
     let status_json = parse_stdout_json(&status_output);
-    let checkout_quote = status_units(&status_json)
+    let pricing_quote = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
-    assert_eq!(checkout_quote["status"], "incomplete", "{status_json}");
+    assert_eq!(pricing_quote["status"], "incomplete", "{status_json}");
     assert_eq!(
-        checkout_quote["reason"], "missing required escape-hatch proof: molecule",
+        pricing_quote["reason"], "missing required escape-hatch proof: molecule",
         "{status_json}"
     );
-    assert_eq!(checkout_quote["semantic_review"], seeded_data_review, "{status_json}");
-    let discount_policy = status_units(&status_json)
+    assert_eq!(pricing_quote["semantic_review"], seeded_data_review, "{status_json}");
+    let discount_strategy = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
-    assert_eq!(discount_policy["status"], "incomplete", "{status_json}");
+    assert_eq!(discount_strategy["status"], "incomplete", "{status_json}");
     assert_eq!(
-        discount_policy["reason"], "missing required escape-hatch proof: molecule",
+        discount_strategy["reason"], "missing required escape-hatch proof: molecule",
         "{status_json}"
     );
     assert_eq!(
-        discount_policy["semantic_review"], seeded_sum_review,
+        discount_strategy["semantic_review"], seeded_sum_review,
         "{status_json}"
     );
 
     let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
     assert_output_success(
-        "export should preserve legacy seam reviews while marked-seam gates are open",
+        "export should preserve canonical seam reviews while marked-seam gates are open",
         &export_output,
     );
     let export_json = parse_stdout_json(&export_output);
-    let exported_checkout_quote = export_json["passports"]
+    let exported_pricing_quote = export_json["passports"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/checkout_quote")
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(
-        exported_checkout_quote["semantic_review"], seeded_data_review,
+        exported_pricing_quote["semantic_review"], seeded_data_review,
         "{export_json}"
     );
-    let exported_discount_policy = export_json["passports"]
+    let exported_discount_strategy = export_json["passports"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
         .unwrap();
     assert_eq!(
-        exported_discount_policy["semantic_review"], seeded_sum_review,
+        exported_discount_strategy["semantic_review"], seeded_sum_review,
         "{export_json}"
     );
 }
@@ -5623,32 +5623,32 @@ fn seam_cli_legacy_semantic_reviews_preserve_incomplete_health_semantics() {
 #[test]
 fn seam_cli_legacy_semantic_reviews_preserve_stale_health_semantics() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
-    let data_passport_path = ecommerce_dir.join("units/pricing/checkout_quote.spec.passport.json");
-    let sum_passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let data_passport_path = ecommerce_dir.join("units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path = ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
     let seeded_data_review = seed_passport_semantic_review_compatibility_key(
         &data_passport_path,
-        DATA_SEAM_LEGACY_COMPATIBILITY_KEY,
+        DATA_SEAM_COMPATIBILITY_KEY,
     );
     let seeded_sum_review = seed_passport_semantic_review_compatibility_key(
         &sum_passport_path,
-        SUM_SEAM_LEGACY_COMPATIBILITY_KEY,
+        SUM_SEAM_COMPATIBILITY_KEY,
     );
 
-    let checkout_quote_spec_path = ecommerce_dir.join("units/pricing/checkout_quote.unit.spec");
-    let checkout_quote_source = fs::read_to_string(&checkout_quote_spec_path).unwrap();
+    let pricing_quote_spec_path = ecommerce_dir.join("units/pricing/pricing_quote.unit.spec");
+    let pricing_quote_source = fs::read_to_string(&pricing_quote_spec_path).unwrap();
     fs::write(
-        &checkout_quote_spec_path,
-        checkout_quote_source.replace(
+        &pricing_quote_spec_path,
+        pricing_quote_source.replace(
             "Quote a checkout total from subtotal plus discount and tax rates.",
             "Quote a checkout total from subtotal plus discount and tax rates with revised authored intent.",
         ),
     )
     .unwrap();
-    let discount_policy_spec_path = ecommerce_dir.join("units/pricing/discount_policy.unit.spec");
-    let discount_policy_source = fs::read_to_string(&discount_policy_spec_path).unwrap();
+    let discount_strategy_spec_path = ecommerce_dir.join("units/pricing/discount_strategy.unit.spec");
+    let discount_strategy_source = fs::read_to_string(&discount_strategy_spec_path).unwrap();
     fs::write(
-        &discount_policy_spec_path,
-        discount_policy_source.replace(
+        &discount_strategy_spec_path,
+        discount_strategy_source.replace(
             "Represent mutually exclusive discount strategies for checkout pricing.",
             "Represent mutually exclusive discount strategies for checkout pricing with revised authored intent.",
         ),
@@ -5658,65 +5658,65 @@ fn seam_cli_legacy_semantic_reviews_preserve_stale_health_semantics() {
     let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
     assert!(
         !status_output.status.success(),
-        "stale authored truth should keep status non-green even when legacy reviews are preserved"
+        "stale authored truth should keep status non-green even when canonical reviews are preserved"
     );
     let status_json = parse_stdout_json(&status_output);
-    let checkout_quote = status_units(&status_json)
+    let pricing_quote = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
-    assert_eq!(checkout_quote["status"], "stale", "{status_json}");
+    assert_eq!(pricing_quote["status"], "stale", "{status_json}");
     assert_eq!(
-        checkout_quote["reason"], "authored truth changed since last test",
+        pricing_quote["reason"], "authored truth changed since last test",
         "{status_json}"
     );
-    assert_eq!(checkout_quote["semantic_review"], seeded_data_review, "{status_json}");
-    let discount_policy = status_units(&status_json)
+    assert_eq!(pricing_quote["semantic_review"], seeded_data_review, "{status_json}");
+    let discount_strategy = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
-    assert_eq!(discount_policy["status"], "stale", "{status_json}");
+    assert_eq!(discount_strategy["status"], "stale", "{status_json}");
     assert_eq!(
-        discount_policy["reason"], "authored truth changed since last test",
+        discount_strategy["reason"], "authored truth changed since last test",
         "{status_json}"
     );
     assert_eq!(
-        discount_policy["semantic_review"], seeded_sum_review,
+        discount_strategy["semantic_review"], seeded_sum_review,
         "{status_json}"
     );
 
     let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
     assert_output_success(
-        "export should preserve legacy seam reviews when authored seam truth is stale",
+        "export should preserve canonical seam reviews when authored seam truth is stale",
         &export_output,
     );
     let export_json = parse_stdout_json(&export_output);
-    let exported_checkout_quote = export_json["passports"]
+    let exported_pricing_quote = export_json["passports"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/checkout_quote")
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(
-        exported_checkout_quote["freshness"]["authored_truth_status"],
+        exported_pricing_quote["freshness"]["authored_truth_status"],
         "stale"
     );
     assert_eq!(
-        exported_checkout_quote["semantic_review"], seeded_data_review,
+        exported_pricing_quote["semantic_review"], seeded_data_review,
         "{export_json}"
     );
-    let exported_discount_policy = export_json["passports"]
+    let exported_discount_strategy = export_json["passports"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
         .unwrap();
     assert_eq!(
-        exported_discount_policy["freshness"]["authored_truth_status"],
+        exported_discount_strategy["freshness"]["authored_truth_status"],
         "stale"
     );
     assert_eq!(
-        exported_discount_policy["semantic_review"], seeded_sum_review,
+        exported_discount_strategy["semantic_review"], seeded_sum_review,
         "{export_json}"
     );
 }
@@ -5728,8 +5728,8 @@ fn seam_cli_test_refresh_rewrites_legacy_semantic_review_keys_canonically() {
     }
 
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
-    let data_passport_path = ecommerce_dir.join("units/pricing/checkout_quote.spec.passport.json");
-    let sum_passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let data_passport_path = ecommerce_dir.join("units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path = ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
     let seeded_data_review = seed_passport_semantic_review_compatibility_key(
         &data_passport_path,
         DATA_SEAM_LEGACY_COMPATIBILITY_KEY,
@@ -5743,7 +5743,7 @@ fn seam_cli_test_refresh_rewrites_legacy_semantic_review_keys_canonically() {
         &ecommerce_dir,
         &[
             "test",
-            "units/pricing/checkout_quote.unit.spec",
+            "units/pricing/pricing_quote.unit.spec",
             "--crate-root",
             ".",
         ],
@@ -5756,7 +5756,7 @@ fn seam_cli_test_refresh_rewrites_legacy_semantic_review_keys_canonically() {
         &ecommerce_dir,
         &[
             "test",
-            "units/pricing/discount_policy.unit.spec",
+            "units/pricing/discount_strategy.unit.spec",
             "--crate-root",
             ".",
         ],
@@ -5785,20 +5785,20 @@ fn seam_cli_test_refresh_rewrites_legacy_semantic_review_keys_canonically() {
         &status_output,
     );
     let status_json = parse_stdout_json(&status_output);
-    let checkout_quote = status_units(&status_json)
+    let pricing_quote = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(
-        checkout_quote["semantic_review"]["compatibility_key"],
+        pricing_quote["semantic_review"]["compatibility_key"],
         DATA_SEAM_COMPATIBILITY_KEY
     );
-    let discount_policy = status_units(&status_json)
+    let discount_strategy = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
     assert_eq!(
-        discount_policy["semantic_review"]["compatibility_key"],
+        discount_strategy["semantic_review"]["compatibility_key"],
         SUM_SEAM_COMPATIBILITY_KEY
     );
 
@@ -5808,24 +5808,24 @@ fn seam_cli_test_refresh_rewrites_legacy_semantic_review_keys_canonically() {
         &export_output,
     );
     let export_json = parse_stdout_json(&export_output);
-    let exported_checkout_quote = export_json["passports"]
+    let exported_pricing_quote = export_json["passports"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/checkout_quote")
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(
-        exported_checkout_quote["semantic_review"]["compatibility_key"],
+        exported_pricing_quote["semantic_review"]["compatibility_key"],
         DATA_SEAM_COMPATIBILITY_KEY
     );
-    let exported_discount_policy = export_json["passports"]
+    let exported_discount_strategy = export_json["passports"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
         .unwrap();
     assert_eq!(
-        exported_discount_policy["semantic_review"]["compatibility_key"],
+        exported_discount_strategy["semantic_review"]["compatibility_key"],
         SUM_SEAM_COMPATIBILITY_KEY
     );
 }
@@ -5874,7 +5874,7 @@ fn spec_status_text_stays_neutral_for_unsupported_surface_in_preserve_mode() {
 fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_review() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let passport_path = units_dir.join("pricing/checkout_quote.spec.passport.json");
+    let passport_path = units_dir.join("pricing/pricing_quote.spec.passport.json");
 
     seed_supported_data_semantic_status_artifacts(&units_dir, None);
     let seeded_passport = read_passport_json(&passport_path);
@@ -5893,7 +5893,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
     assert_eq!(status_json["schema_version"], 3);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "valid", "{status_json}");
     assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
@@ -5906,7 +5906,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/checkout_quote")
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(passport["semantic_review"], seeded_review, "{export_json}");
 }
@@ -5915,7 +5915,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
 fn spec_status_demotes_supported_data_review_to_incomplete() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let review = supported_checkout_quote_semantic_review(
+    let review = supported_pricing_quote_semantic_review(
         SemanticVerdict::UnderSpecified,
         vec![SemanticReasonCode::MissingSemanticMethods],
         "authored semantic surfaces are too weak for honest evaluation",
@@ -5930,7 +5930,7 @@ fn spec_status_demotes_supported_data_review_to_incomplete() {
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "incomplete", "{status_json}");
     assert_eq!(
@@ -5949,7 +5949,7 @@ fn spec_status_demotes_supported_data_review_to_incomplete() {
 fn spec_status_demotes_supported_data_review_to_failing() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let review = supported_checkout_quote_semantic_review(
+    let review = supported_pricing_quote_semantic_review(
         SemanticVerdict::SemanticDrift,
         vec![SemanticReasonCode::MethodBodyMissingCapBehavior],
         "executable lowering contradicts authored semantic claims",
@@ -5964,7 +5964,7 @@ fn spec_status_demotes_supported_data_review_to_failing() {
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "failing", "{status_json}");
     assert_eq!(
@@ -5982,8 +5982,8 @@ fn spec_status_demotes_supported_data_review_to_failing() {
 fn spec_status_keeps_stale_base_health_over_supported_data_semantic_review() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let passport_path = units_dir.join("pricing/checkout_quote.spec.passport.json");
-    let review = supported_checkout_quote_semantic_review(
+    let passport_path = units_dir.join("pricing/pricing_quote.spec.passport.json");
+    let review = supported_pricing_quote_semantic_review(
         SemanticVerdict::SemanticDrift,
         vec![SemanticReasonCode::MethodBodyMissingCapBehavior],
         "executable lowering contradicts authored semantic claims",
@@ -5991,7 +5991,7 @@ fn spec_status_keeps_stale_base_health_over_supported_data_semantic_review() {
     seed_supported_data_semantic_status_artifacts(&units_dir, Some(review));
     let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
 
-    let unit_path = units_dir.join("pricing/checkout_quote.unit.spec");
+    let unit_path = units_dir.join("pricing/pricing_quote.unit.spec");
     let source = fs::read_to_string(&unit_path).unwrap();
     fs::write(
         &unit_path,
@@ -6007,7 +6007,7 @@ fn spec_status_keeps_stale_base_health_over_supported_data_semantic_review() {
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "stale", "{status_json}");
     assert_eq!(
@@ -6025,8 +6025,8 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
 
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let passport_path = units_dir.join("pricing/checkout_quote.spec.passport.json");
-    let review = supported_checkout_quote_semantic_review(
+    let passport_path = units_dir.join("pricing/pricing_quote.spec.passport.json");
+    let review = supported_pricing_quote_semantic_review(
         SemanticVerdict::Aligned,
         vec![],
         "seeded supported data review",
@@ -6042,7 +6042,7 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "valid", "{status_json}");
     assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
@@ -6054,7 +6054,7 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/checkout_quote")
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(
         exported_passport["semantic_review"], seeded_review,
@@ -13644,11 +13644,11 @@ changes:
       validate:
         - pricing/apply_tax
         - pricing/calculate_total
-        - pricing/checkout_quote
+        - pricing/pricing_quote
       molecule_tests:
         - pricing/checkout_flow
         - pricing/discount_plus_tax
-        - pricing/discount_policy_checkout_flow
+        - pricing/discount_strategy_checkout_flow
       notes:
         - "current blast radius stays fully covered"
 notes:
@@ -13689,11 +13689,11 @@ changes:
       validate:
         - pricing/apply_tax
         - pricing/calculate_total
-        - pricing/checkout_quote
+        - pricing/pricing_quote
       molecule_tests:
         - pricing/checkout_flow
         - pricing/discount_plus_tax
-        - pricing/discount_policy_checkout_flow
+        - pricing/discount_strategy_checkout_flow
 "#;
 
 fn setup_m10_plan_fixture(
@@ -13852,7 +13852,7 @@ fn plan_validate_remove_plan_uses_current_graph_impact() {
         serde_json::json!([
             "pricing/checkout_flow",
             "pricing/discount_plus_tax",
-            "pricing/discount_policy_checkout_flow"
+            "pricing/discount_strategy_checkout_flow"
         ])
     );
 }
