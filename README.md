@@ -128,10 +128,10 @@ pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
 }
 ```
 
-For `kind: data`, one `.unit.spec` file authors a top-level data seam with shared fields plus one or more nested constructors and one or more nested methods. A minimal seam based on the canonical M12 `pricing/checkout_quote` example looks like:
+For `kind: data`, one `.unit.spec` file authors a top-level data seam with shared fields plus one or more nested constructors and one or more nested methods. A minimal seam based on the canonical M50 `pricing/pricing_quote` example looks like:
 
 ```yaml
-id: pricing/checkout_quote
+id: pricing/pricing_quote
 kind: data
 intent:
   why: Quote a checkout total from subtotal plus discount and tax rates.
@@ -238,16 +238,16 @@ The ecommerce example demonstrates the canonical M13 migration wedge alongside t
 - `pricing/apply_discount`
 - `pricing/apply_tax`
 - `pricing/calculate_total`
-- `pricing/discount_policy` (`kind: sum`)
-- `pricing/checkout_quote` (`kind: data`)
+- `pricing/discount_strategy` (`kind: sum`)
+- `pricing/pricing_quote` (`kind: data`)
 - `pricing/checkout_flow`
-- `pricing/discount_policy_checkout_flow`
+- `pricing/discount_strategy_checkout_flow`
 - `pricing/discount_plus_tax`
 - `plans/refactors/checkout-tax-refactor.plan.spec`
-- `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs` (hand-written Rust baseline for the canonical M13 seam)
-- `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs` (hand-written Rust baseline for the canonical M12 data seam)
+- `examples/ecommerce/src/raw_baseline/pricing/discount_strategy.rs` (hand-written Rust baseline for the canonical pricing sum seam)
+- `examples/ecommerce/src/raw_baseline/pricing/pricing_quote.rs` (hand-written Rust baseline for the canonical pricing data seam)
 
-Recorded adversarial calibration for the M13 wedge is locked: `pricing/discount_policy` scored `19`, `pricing/checkout_quote` scored `16`, and `pricing/discount_plus_tax` scored `14`. Canonical wedge remains `pricing/discount_policy`.
+Recorded adversarial calibration for the canonical wedge is locked: `pricing/discount_strategy` scored `19`, `pricing/pricing_quote` scored `16`, and `pricing/discount_plus_tax` scored `14`. Canonical wedge remains `pricing/discount_strategy`.
 
 The example crate is intentionally minimal. It provides a realistic place to keep unit specs, hand-written Rust baselines for the M12 and M13 migration wedges, and a Rust project scaffold that can host generated output. The checked-in `pricing/*.test.evidence.json` files are generated artifacts for this canonical example, not hand-authored source.
 
@@ -279,13 +279,13 @@ spec plan export <file>                   # emit dedicated plan bundle to stdout
 spec plan export <file> --output <file>   # write dedicated plan bundle to file
 ```
 
-Canonical M13 example loop from the repo root:
+Canonical ecommerce example loop from the repo root:
 
 ```bash
-cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_strategy.unit.spec --format json
 cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
 cargo run -p spec-cli -- status examples/ecommerce --format json
 ```
 
