@@ -1,216 +1,203 @@
-# M48 Shared-Core Portability Slice 1 Orchestration Plan
+# M49 Reusable Seam Semantic-Review Substrate Slice 1 Orchestration Plan
 
-## 1. Title + Metadata
-
-Status: **authoritative orchestration plan for executing M48 Lane A**  
-Supersedes: **the stale M47 closeout-oriented `ORCH_PLAN.md`**  
+Status: **authoritative orchestration plan for executing M49**  
+Supersedes: **the stale M48 `ORCH_PLAN.md`**  
 Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
-Plan title: **`M48: Shared-Core Portability Follow-On, Slice 1 Implementation Plan`**  
+Plan title: **`M49: Reusable Seam Semantic-Review Substrate, Slice 1 Implementation Plan`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
+Primary execution branch: **`feat/m40-plus`**  
 Kickoff tree expectation: **clean**  
-Primary write scope: **Lane A only, parent-owned edits inside `xtask/src/family/analysis_core/*`**  
-Read-only proof surfaces:  
-- **`xtask/src/family/recommend.rs`**
-- **`xtask/src/family/verify.rs`**
-- **`xtask/src/family/promotion_artifacts.rs`**
-- **`xtask/src/family/helper_surface.rs`**
-- **`xtask/src/family/decision_kernel.rs`**
-Canonical M48 run artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m48_shared_core_portability_slice1_lane_a/`**  
-Primary execution mode: **one parent-owned sequential code lane**  
-Permitted parallelism: **up to 2 bounded support workers, read-only only, after the parent freezes baseline truth**  
-Forbidden parallelism: **any split source-edit lane inside `xtask/src/family/analysis_core/`, any worker-owned truth interpretation, any worker-owned repo source edit**  
+Primary write scope: **`spec-core/src/semantic_review.rs`**  
+Proof-wall surfaces: **`spec-core/src/export.rs`**, **`spec-core/src/typescript_backend.rs`**, **`spec-cli/src/commands.rs`**, **`spec-cli/tests/cli.rs`**  
+Canonical M49 run root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m49_reusable_seam_semantic_review_substrate_slice1/`**  
+Worker model: **GPT-5.4 with `reasoning_effort=high`**  
+Maximum concurrency after freeze: **2 workers**  
 Last rewritten: **2026-05-11**
 
-## 2. Summary
+## Summary
 
-M48 is the first execution slice after the M47 authority stop. It is not a new architecture search and it is not a consumer-rewire milestone.
+- Execute from the repo-root authority lane at `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on branch `feat/m40-plus`.
+- Keep the serialized critical path local to the parent agent:
+  1. baseline freeze
+  2. authority freeze
+  3. WS-CONTRACT semantic contract work in `spec-core/src/semantic_review.rs`
+  4. contract freeze gate
+  5. WS-INT integration
+  6. final validation and closeout
+- Parallelism is allowed only after the contract freeze gate is written and green. The only honest post-freeze parallel work is:
+  - WS-PROOF-CORE on `spec-core/src/export.rs` and `spec-core/src/typescript_backend.rs`
+  - WS-PROOF-CLI on `spec-cli/src/commands.rs` and `spec-cli/tests/cli.rs`
+- There are no human approval gates in M49. The contract freeze is the only orchestration gate before parallelism.
+- The parent agent remains the only integrator and the only writer of orchestration state under `.runs/m49_reusable_seam_semantic_review_substrate_slice1/`.
+- Use these concrete lanes, paths, and branches:
+  - Parent authority lane: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on `feat/m40-plus`
+  - WS-PROOF-CORE worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m49/proof-core` on `ws/m49-proof-core`
+  - WS-PROOF-CLI worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m49/proof-cli` on `ws/m49-proof-cli`
+  - WS-INT integration worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m49/int` on `ws/m49-int`
+- Primary planning and proof inputs are:
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
+  - `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md`
 
-The seam already exists. The only honest critical path is for the parent agent to freeze and prove the existing `xtask/src/family/analysis_core/*` owner surface in one sequential lane:
+## Hard Guards
 
-1. `xtask/src/family/analysis_core/mod.rs`
-2. `xtask/src/family/analysis_core/helper_surface.rs`
-3. `xtask/src/family/analysis_core/decision_contract.rs`
-4. `xtask/src/family/analysis_core/proof_fingerprint.rs`
+- `PLAN.md` is the sole scope authority for M49 execution.
+- Kickoff must start from a clean worktree. If `git status --short` is not clean, stop before any source edit.
+- Execute on `feat/m40-plus`. If the run begins on another branch, stop and record the divergence instead of improvising a new branch topology.
+- Parent-owned production edit surface before parallelism is only `spec-core/src/semantic_review.rs`.
+- Lane ownership is strict:
+  - WS-CONTRACT owns `spec-core/src/semantic_review.rs`
+  - WS-PROOF-CORE owns `spec-core/src/export.rs` and `spec-core/src/typescript_backend.rs`
+  - WS-PROOF-CLI owns `spec-cli/src/commands.rs` and `spec-cli/tests/cli.rs`
+  - WS-INT owns orchestration artifacts, merge mechanics, and validation captures only
+- No worker may edit `spec-core/src/semantic_review.rs`.
+- No worker may begin before `contract-freeze.json` exists and records `contract_freeze_commit`.
+- The contract freeze gate must lock all six `PLAN.md` decisions:
+  - `SupportedSeamFamily` variant names
+  - canonical keys `sum.discount_strategy.v1` and `data.pricing_quote.v1`
+  - legacy keys `sum.discount_policy.v1` and `data.checkout_quote.v1`
+  - preserve matching policy: canonical-or-legacy only for the matching family
+  - refresh policy: canonical key only
+  - near-miss policy: renamed vocabulary stays unsupported
+- M49 does not authorize:
+  - `xtask/**`
+  - schema changes
+  - export JSON contract redesign
+  - new CLI flags
+  - new crates
+  - new workspace members
+  - TypeScript product-scope expansion
+  - new abstraction layers, registries, or module splits beyond this slice
+- The proof-wall surfaces are proof walls, not scope expansion lanes. Prefer tests there. Production edits are allowed only if needed to preserve truthful behavior already required by `PLAN.md`.
+- If any lane requires edits outside the five in-scope repo files, stop and re-scope.
+- `PLAN.md` and `ORCH_PLAN.md` are authority inputs during execution. They are not runtime deliverables for the run itself.
 
-Everything downstream remains a proof wall, not implementation scope. `recommend.rs`, `verify.rs`, `promotion_artifacts.rs`, and the two shims stay read-only unless the parent explicitly enters the narrow compile-only exception allowed by `PLAN.md`.
+## Worktree And Branch Inventory
 
-The live proof floor is already known at kickoff and must remain true after the slice lands:
+| Lane | Workstream | Path | Branch | Owner | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| `lane/m49-parent-authority` | `WS-CONTRACT` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | `feat/m40-plus` | Parent | baseline, authority freeze, semantic contract work, contract freeze gate |
+| `lane/m49-proof-core` | `WS-PROOF-CORE` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m49/proof-core` | `ws/m49-proof-core` | Worker | export and TypeScript proof-wall work after freeze |
+| `lane/m49-proof-cli` | `WS-PROOF-CLI` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m49/proof-cli` | `ws/m49-proof-cli` | Worker | CLI proof-wall work after freeze |
+| `lane/m49-int` | `WS-INT` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m49/int` | `ws/m49-int` | Parent | merge worker lanes, run integrated proof, prepare validated result |
+| `lane/m49-parent-closeout` | `finalize` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | `feat/m40-plus` | Parent | fast-forward or merge validated integration result, final closeout captures |
 
-- `./.agents/skills/next-milestone/scripts/collect_signals.sh`
-  - clean tree
-  - `recommendation_status = insufficient_real_corpus`
-  - `decision_status = not_recommended`
-  - `decision_action = stop`
-  - `required_next_action = record_stop_without_new_milestone`
-- `cargo xtask family verify-decision-contract --format json`
-  - `overall_verdict = "pass"`
-- `cargo xtask family corpus-decision --format json`
-  - `decision_action = "stop"`
-  - `decision_basis_code = "no_actionable_candidate"`
-  - `required_next_action = "record_stop_without_new_milestone"`
-- `cargo test -p xtask`
-  - green
-  - `146` tests passed at the validated kickoff floor
+## Canonical Orchestration State
 
-Support workers are still useful, but only honestly. They may help with read-only downstream audit and acceptance drafting after the parent captures baseline truth. They do not own semantics, commands of record, source edits, or final acceptance.
+All authoritative M49 run state lives under:
 
-## 3. Hard Guards
+`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m49_reusable_seam_semantic_review_substrate_slice1/`
 
-- `PLAN.md` is the sole scope authority for M48 execution.
-- M48 executes Lane A only. It does not authorize Lane B consumer rewires, CLI rewiring, path lookup changes, schema changes, backend widening, crate extraction, or new abstraction layers.
-- The parent agent is the only source-edit owner for:
-  - `xtask/src/family/analysis_core/mod.rs`
-  - `xtask/src/family/analysis_core/helper_surface.rs`
-  - `xtask/src/family/analysis_core/decision_contract.rs`
-  - `xtask/src/family/analysis_core/proof_fingerprint.rs`
-- Seam-local tests inside those files are parent-owned. The only allowed non-seam proof-test write surface is `xtask/src/lib.rs`, and only if a narrow existing `xtask` test there must be tightened to prove the frozen seam contract or downstream parity within Lane A.
-- `recommend.rs`, `verify.rs`, `promotion_artifacts.rs`, `helper_surface.rs`, and `decision_kernel.rs` are read-only proof surfaces by default.
-- The only allowed exception outside `analysis_core/*` is the narrow `PLAN.md` compile-only proof fix:
-  - parent-only
-  - separately justified in the M48 run root
-  - no semantic change
-  - no ownership change
-  - no routing change
-  - no output-meaning change
-- No worker may edit repo source, run authoritative `cargo xtask` or `cargo test` commands, or decide whether proof truth is acceptable.
-- No worker may reinterpret the stop-state basis or widen scope because files are adjacent.
-- No new module, trait, helper layer, schema field, CLI flag, file move, or facade owner file is allowed in this slice.
-- `analysis_core/*` is one coupled seam vocabulary and one proof wall. There is no safe code-parallelization opportunity inside it.
-- `collect_signals.sh` is advisory only. Raw command outputs remain authoritative over helper-script summaries.
-- The parent must stop if the kickoff rerun no longer matches the validated proof floor before any source edit begins.
-- `PLAN.md` and `ORCH_PLAN.md` are authority inputs during execution. They are not runtime edit surfaces.
-- Historical run roots are read-only inputs only:
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m40_plus_shared_core_portability_follow_on/`
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/`
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m47_post_m46_shared_core_portability_follow_on/`
-
-## 4. Execution Topology
-
-### 4.1 Lane map
-
-| Lane ID | Worktree path | Owner | Authority level | Purpose |
-| --- | --- | --- | --- | --- |
-| `lane/m48-parent-authority` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | Parent | **authoritative** | capture baseline, freeze run contract, perform all seam edits, run all proof gates, integrate acceptance |
-| `lane/m48-worker-proof-audit` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m48/proof-audit` | Worker | support-only | read-only downstream-proof audit from parent-captured artifacts and repo files |
-| `lane/m48-worker-acceptance` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m48/acceptance` | Worker | support-only | draft acceptance and closeout prose from parent-captured artifacts |
-
-### 4.2 Topology rules
-
-- `lane/m48-parent-authority` is the only lane allowed to edit repo source.
-- `lane/m48-parent-authority` is the only lane allowed to run:
-  - `./.agents/skills/next-milestone/scripts/collect_signals.sh`
-  - `cargo xtask family verify-decision-contract --format json`
-  - `cargo xtask family corpus-decision --format json`
-  - `cargo test -p xtask`
-- `lane/m48-parent-authority` is the only lane allowed to write canonical authoritative M48 run artifacts outside `drafts/`.
-- `lane/m48-worker-proof-audit` may launch only after:
-  - baseline worktree status is frozen
-  - kickoff proof-floor outputs are captured
-  - the parent has written the read-only audit inputs under the M48 run root
-- `lane/m48-worker-acceptance` may launch only after:
-  - the final proof-wall sweep is complete
-  - the parent has decided there is no unresolved blocker
-- Worker lanes may read any repo path needed for audit, but may write only `drafts/` outputs and parent-requested summaries.
-- Worker outputs are advisory. The parent decides whether a flagged issue is real and whether it changes execution.
-- Maximum support concurrency is `2` workers.
-- If the parent enters the compile-only exception review, all worker activity pauses until the exception is accepted or the run is stopped.
-
-### 4.3 Honest parallelism statement
-
-M48 has one real implementation lane and zero honest code-splitting opportunities.
-
-Reason:
-
-- every real edit lives in the same seam directory
-- helper-surface, decision-contract, and proof-fingerprint semantics share one vocabulary and one proof wall
-- the downstream acceptance surface is global, not lane-local
-- splitting edits across worktrees would trade throughput for merge conflict and semantic skew risk
-
-Support workers are allowed only because they do not own source truth. They compress review time, not implementation time.
-
-## 5. Canonical Run-State And Artifact Surfaces
-
-All canonical M48 execution state lives under:
-
-`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m48_shared_core_portability_slice1_lane_a/`
-
-### 5.1 Canonical artifact set
+Canonical file-of-record surfaces:
 
 | Path | Role | Owner |
 | --- | --- | --- |
-| `baseline.json` | kickoff worktree-status and proof-floor expectation snapshot | Parent |
-| `authority-freeze.json` | frozen writable surface, read-only surface, and lane contract | Parent |
-| `in-scope-files.txt` | exact allowed source-edit surfaces | Parent |
+| `baseline.json` | kickoff branch, commit, and worktree snapshot | Parent |
+| `authority-freeze.json` | frozen scope, lane ownership, and command contract | Parent |
+| `contract-freeze.json` | frozen seam contract and worker fork basis | Parent |
+| `worktrees.json` | worktree path and branch inventory | Parent |
+| `in-scope-files.txt` | exact writable repo surfaces | Parent |
 | `out-of-scope-files.txt` | explicit forbidden-touch surfaces | Parent |
-| `queue.json` | live lane and task queue | Parent |
 | `tasks.json` | durable task ledger | Parent |
+| `queue.json` | lane queue and dependency state | Parent |
 | `session-log.md` | chronological execution log | Parent |
-| `acceptance.md` | final proof and acceptance ledger | Parent |
-| `closeout.md` | operator-facing closeout | Parent |
-| `blocked.json` | blocker artifact if the run stops incomplete | Parent |
-| `authority-snapshot/PLAN.md` | kickoff copy of the authority plan input | Parent |
-| `authority-snapshot/ORCH_PLAN.md` | kickoff copy of the orchestration input | Parent |
-| `validation/baseline/*` | kickoff command captures and notes | Parent |
-| `validation/proof-floor/*` | kickoff and final authoritative command captures | Parent |
-| `validation/derived-artifacts/*` | pre/post latest-artifact snapshots and diffs | Parent |
-| `validation/source-audit/*` | parent-owned seam-contract review notes | Parent |
-| `validation/downstream-audit/*` | parent-owned downstream parity review notes | Parent |
-| `validation/final/*` | final git, proof, and acceptance checklist captures | Parent |
-| `drafts/proof-audit.md` | optional worker downstream audit draft | Worker |
-| `drafts/acceptance-outline.md` | optional worker acceptance draft | Worker |
-| `drafts/closeout-outline.md` | optional worker closeout draft | Worker |
+| `acceptance.md` | final proof and completion ledger | Parent |
+| `blocked.json` | blocker artifact on incomplete termination | Parent |
+| `authority-snapshot/PLAN.md` | kickoff authority snapshot | Parent |
+| `authority-snapshot/ORCH_PLAN.md` | kickoff orchestration snapshot | Parent |
+| `validation/kickoff/*` | baseline command captures | Parent |
+| `validation/ws-contract/*` | semantic-review and freeze captures | Parent |
+| `validation/ws-proof-core/*` | worker proof-core captures copied into authority root | Parent |
+| `validation/ws-proof-cli/*` | worker proof-cli captures copied into authority root | Parent |
+| `validation/ws-int/*` | integration merge and proof captures | Parent |
+| `validation/final/*` | final branch-state and acceptance captures | Parent |
 
-### 5.2 Required `baseline.json` contents
+## Per-Task Sentinel Directories
+
+Every orchestration task has a sentinel root under:
+
+`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m49_reusable_seam_semantic_review_substrate_slice1/tasks/<TASK_ID>/`
+
+Each sentinel directory must contain at least:
+
+| File | Required contents |
+| --- | --- |
+| `sentinel.json` | `task_id`, `workstream`, `lane`, `owner`, `owned_files`, `status`, `started_at`, `completed_at`, `blocker_status`, `last_command_status`, `notes_summary` |
+| `commands.ndjson` | one record per command with `command`, `cwd`, `started_at`, `completed_at`, `exit_code`, `stdout_path`, `stderr_path` |
+| `owned-files.txt` | exact owned repo files for that task |
+| `result.md` | concise parent-authored summary of outcome, blockers, and next action |
+
+Rules for task sentinels:
+
+- Only the parent writes authoritative sentinel files under `.runs/m49.../tasks/**`.
+- Workers may report command results and changed files, but the parent records them into the sentinel directories.
+- A task is not complete until its sentinel has `status: done` and `completed_at`.
+- A blocked task must set `blocker_status: blocked` and name the exact file or contract leak that stopped progress.
+
+## File-Of-Record Details
 
 `baseline.json` must record:
 
 - `run_id`
-- `kickoff_timestamp`
 - `repo_root`
-- `authority_plan_path`
-- `authority_orch_path`
+- `working_branch`
+- `kickoff_timestamp`
 - `git_status_short`
-- `expected_proof_floor`
-- `allowed_parent_write_surfaces`
-- `allowed_support_lanes`
-- `read_only_proof_surfaces`
-- `historical_reference_roots`
-
-Optional audit metadata may also record the observed branch or commit, but they are non-gating and must not be used as stop conditions for M48 execution.
-
-### 5.3 Required `authority-freeze.json` contents
+- `kickoff_commit`
+- `kickoff_commit_short`
+- `plan_path`
+- `orch_plan_path`
+- `primary_write_scope`
+- `proof_wall_surfaces`
+- `test_plan_input`
 
 `authority-freeze.json` must record:
 
-- current milestone title from `PLAN.md`
-- statement that M48 is Lane A only
-- exact parent-owned source-edit surfaces
-- exact read-only downstream proof surfaces
-- exact worker prohibition list
-- canonical run root
-- support lane definitions
-- explicit no-code-parallelization statement for `analysis_core/*`
-- compile-only exception rule from `PLAN.md`
-- final proof gate commands
+- statement that the parent owns the serialized critical path
+- exact lane ownership
+- maximum concurrency `2`
+- explicit statement that no worker starts before contract freeze
+- exact targeted proof commands
+- exact conditional broader proof commands
+- exact stop rules for cross-lane scope leaks
 
-### 5.4 Allowed `tasks.json` states
+`contract-freeze.json` must record:
 
-Each `tasks.json` entry must include at least:
+- `run_id`
+- `contract_freeze_commit`
+- `contract_freeze_commit_short`
+- `contract_freeze_branch`
+- `supported_seam_family_variants`
+- `canonical_keys`
+- `legacy_keys`
+- `preserve_matching_policy`
+- `refresh_policy`
+- `near_miss_policy`
+- `lane_b_branch`
+- `lane_b_path`
+- `lane_c_branch`
+- `lane_c_path`
+- `lane_int_branch`
+- `lane_int_path`
+- `targeted_commands_green`
+- `freeze_summary`
+
+`tasks.json` must record per task:
 
 - `id`
-- `title`
+- `workstream`
 - `lane`
 - `owner`
 - `status`
 - `depends_on`
-- `owned_surfaces`
+- `owned_files`
 - `required_commands`
 - `writes`
 - `started_at`
 - `completed_at`
 - `notes`
 
-Allowed `status` values are:
+Allowed `tasks.json` statuses are:
 
 - `pending`
 - `ready`
@@ -220,675 +207,301 @@ Allowed `status` values are:
 - `done`
 - `cancelled`
 
-### 5.5 Minimal required validation tree
+## Workstream Plan
 
-```text
-validation/
-  baseline/
-    git-status-short.txt
-    kickoff-notes.md
-  proof-floor/
-    00-collect-signals.txt
-    01-verify-decision-contract.json
-    02-corpus-decision.json
-    03-cargo-test-p-xtask.txt
-    10-final-collect-signals.txt
-    11-final-verify-decision-contract.json
-    12-final-corpus-decision.json
-    13-final-cargo-test-p-xtask.txt
-    proof-floor-summary.md
-  derived-artifacts/
-    pre-coverage.latest.json
-    pre-recommendation.latest.json
-    pre-corpus-program-decision.latest.json
-    post-coverage.latest.json
-    post-recommendation.latest.json
-    post-corpus-program-decision.latest.json
-    coverage.latest.diff
-    recommendation.latest.diff
-    corpus-program-decision.latest.diff
-    derived-artifact-summary.md
-  source-audit/
-    facade-export-inventory.md
-    helper-surface-contract.md
-    decision-contract-branches.md
-    proof-fingerprint-normalization.md
-    exception-review.md
-  downstream-audit/
-    read-only-consumer-check.md
-    shim-immutability-check.md
-    command-surface-parity.md
-  final/
-    final-git-status-short.txt
-    final-diff-summary.md
-    acceptance-checklist.md
-```
+### WS-CONTRACT (`lane/m49-parent-authority`, parent only, sequential)
 
-If any kickoff latest artifact is missing, record the missing state explicitly:
+Purpose: freeze authority, implement the semantic-review contract, and create the only gate before parallelism.
 
-- `pre-coverage.latest.missing.txt`
-- `pre-recommendation.latest.missing.txt`
-- `pre-corpus-program-decision.latest.missing.txt`
+Tasks in WS-CONTRACT:
 
-### 5.6 Capture rules
+1. `task-m49-contract-baseline-freeze`
+2. `task-m49-contract-authority-freeze`
+3. `task-m49-contract-semantic-contract`
+4. `task-m49-contract-freeze-gate`
 
-- Every command capture must include:
-  - command
-  - working directory
-  - timestamp
-  - exit code
-  - raw stdout
-  - raw stderr
-- `01-verify-decision-contract.json`, `02-corpus-decision.json`, `11-final-verify-decision-contract.json`, and `12-final-corpus-decision.json` must preserve raw JSON exactly as emitted.
-- The `cargo test -p xtask` capture files must preserve full terminal output, including the final pass count.
-- Latest-artifact pre/post files must be byte-for-byte copies of the live `.latest.json` files.
-- Latest-artifact diffs must be generated from the captured pre/post byte copies, not from reformatted JSON.
-- Worker lanes may not write under `validation/`, `acceptance.md`, `closeout.md`, or `blocked.json`.
+Owned files:
 
-## 6. Workstream Plan
-
-### 6.1 Task order
-
-| Order | Task ID | Lane | Owner | State |
-| --- | --- | --- | --- | --- |
-| 1 | `gate-m48-00-baseline-freeze` | `lane/m48-parent-authority` | Parent | required |
-| 2 | `gate-m48-05-authority-freeze` | `lane/m48-parent-authority` | Parent | required |
-| 3 | `task-m48-10-pre-edit-artifact-snapshot` | `lane/m48-parent-authority` | Parent | required |
-| 4 | `gate-m48-15-kickoff-proof-floor` | `lane/m48-parent-authority` | Parent | required |
-| 5 | `task-m48-20-seam-facade-freeze` | `lane/m48-parent-authority` | Parent | required |
-| 6 | `task-m48-25-helper-surface-freeze` | `lane/m48-parent-authority` | Parent | required |
-| 7 | `task-m48-30-decision-contract-freeze` | `lane/m48-parent-authority` | Parent | required |
-| 8 | `task-m48-35-proof-fingerprint-freeze` | `lane/m48-parent-authority` | Parent | required |
-| 9 | `task-m48-40-readonly-downstream-audit` | `lane/m48-worker-proof-audit` | Worker | optional |
-| 10 | `gate-m48-42-compile-only-exception-review` | `lane/m48-parent-authority` | Parent | conditional |
-| 11 | `gate-m48-45-proof-wall-sweep` | `lane/m48-parent-authority` | Parent | required |
-| 12 | `task-m48-50-acceptance-draft` | `lane/m48-worker-acceptance` | Worker | optional |
-| 13 | `gate-m48-55-parent-acceptance` | `lane/m48-parent-authority` | Parent | required |
-| 14 | `gate-m48-60-closeout` | `lane/m48-parent-authority` | Parent | required |
-
-### 6.2 `gate-m48-00-baseline-freeze`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
-
-Owned surfaces:
-
-- `baseline.json`
-- `session-log.md`
-- `authority-snapshot/PLAN.md`
-- `authority-snapshot/ORCH_PLAN.md`
-- `validation/baseline/*`
+- `spec-core/src/semantic_review.rs`
+- all `.runs/m49_reusable_seam_semantic_review_substrate_slice1/**` orchestration artifacts
 
 Required commands:
 
 ```bash
 git status --short
-```
-
-Optional audit-only commands:
-
-```bash
 git branch --show-current
 git rev-parse HEAD
 git rev-parse --short=7 HEAD
-```
-
-Required artifact actions:
-
-- copy the starting `PLAN.md` to `authority-snapshot/PLAN.md`
-- copy the starting `ORCH_PLAN.md` to `authority-snapshot/ORCH_PLAN.md`
-- treat both copies as read-only audit snapshots for the remainder of the run
-
-Acceptance:
-
-- kickoff tree is clean or any unexpected dirtiness is recorded before work continues
-- the parent has frozen the starting state before any source edit or proof rerun
-- the authority inputs are snapshotted before execution for later audit
-
-Stop rule:
-
-- if the worktree is not clean and the dirtiness is not explicitly accepted, stop before M48 begins
-
-### 6.3 `gate-m48-05-authority-freeze`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
-
-Owned surfaces:
-
-- `authority-freeze.json`
-- `in-scope-files.txt`
-- `out-of-scope-files.txt`
-- `queue.json`
-- `tasks.json`
-
-Required contents for `in-scope-files.txt`:
-
-- `xtask/src/family/analysis_core/mod.rs`
-- `xtask/src/family/analysis_core/helper_surface.rs`
-- `xtask/src/family/analysis_core/decision_contract.rs`
-- `xtask/src/family/analysis_core/proof_fingerprint.rs`
-- `xtask/src/lib.rs` only if a narrow existing proof test there becomes necessary to prove the seam contract or downstream parity
-- `.runs/m48_shared_core_portability_slice1_lane_a/**`
-
-Required contents for `out-of-scope-files.txt`:
-
-- `PLAN.md`
-- `ORCH_PLAN.md`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/verify.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/decision_kernel.rs`
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/paths.rs`
-- `xtask/src/lib.rs` runtime logic outside any unavoidable existing proof tests
-- `spec-core/**`
-- `semantic-families/**`
-- `docs/**`
-
-Acceptance:
-
-- writable scope is frozen to the four seam files plus the narrow proof exceptions allowed by `PLAN.md`
-- worker scope is frozen to draft-only support output
-- downstream consumers and shims are explicitly locked read-only
-
-### 6.4 `task-m48-10-pre-edit-artifact-snapshot`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
-
-Owned surfaces:
-
-- `validation/derived-artifacts/pre-*`
-- `validation/derived-artifacts/derived-artifact-summary.md`
-
-Kickoff snapshot sources:
-
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-
-Required actions:
-
-- capture byte-for-byte pre-state copies before any proof-floor rerun
-- record whether each file was present, missing, or stale by timestamp only
-- note whether the `.latest.json` surfaces already reflect the validated kickoff floor
-
-Acceptance:
-
-- pre-edit latest artifacts are frozen before any command refresh
-- later artifact churn can be compared against a known pre-edit basis
-
-### 6.5 `gate-m48-15-kickoff-proof-floor`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
-
-Owned surfaces:
-
-- `validation/proof-floor/00-collect-signals.txt`
-- `validation/proof-floor/01-verify-decision-contract.json`
-- `validation/proof-floor/02-corpus-decision.json`
-- `validation/proof-floor/03-cargo-test-p-xtask.txt`
-- `validation/proof-floor/proof-floor-summary.md`
-
-Required commands, run in this exact order:
-
-```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family verify-decision-contract --format json
-cargo xtask family corpus-decision --format json
-cargo test -p xtask
-```
-
-Expected truth:
-
-- `collect_signals.sh` reports a clean tree and the known stop-state summary
-- `verify-decision-contract` reports `overall_verdict = "pass"`
-- `corpus-decision` reports:
-  - `decision_action = "stop"`
-  - `decision_basis_code = "no_actionable_candidate"`
-  - `required_next_action = "record_stop_without_new_milestone"`
-- `cargo test -p xtask` is green
-
-Pass-count handling:
-
-- the validated kickoff floor says `146` tests passed
-- if the command stays green but the count differs, record the observed count exactly and treat it as an execution-review question, not automatic success
-- if the command fails, M48 does not start
-
-Acceptance:
-
-- all four proof-floor captures exist
-- the parent has a live baseline before any seam edit begins
-- any divergence from the expected stop-state basis is captured before the run proceeds
-
-### 6.6 `task-m48-20-seam-facade-freeze`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
-
-Owned surfaces:
-
-- `xtask/src/family/analysis_core/mod.rs`
-- `validation/source-audit/facade-export-inventory.md`
-
-Required inspection commands:
-
-```bash
-rg -n "pub use|pub mod" xtask/src/family/analysis_core/mod.rs
-rg -n "analysis_core" xtask/src/family/recommend.rs xtask/src/family/verify.rs xtask/src/family/promotion_artifacts.rs xtask/src/family/helper_surface.rs xtask/src/family/decision_kernel.rs
+cargo test -p spec-core semantic_review
 ```
 
 Required work:
 
-- make the export inventory explicit
-- group exports by semantic concern, not accidental file order
-- preserve the frozen facade inventory described by `PLAN.md`
-- avoid adding new owner surfaces or silent new exports
+- snapshot kickoff `PLAN.md` and `ORCH_PLAN.md`
+- write `baseline.json`, `authority-freeze.json`, `worktrees.json`, `in-scope-files.txt`, `out-of-scope-files.txt`, `tasks.json`, and `queue.json`
+- implement the M49 contract in `spec-core/src/semantic_review.rs`
+- add the semantic-review proofs required by `PLAN.md`
+- create the contract-freeze checkpoint commit
+- create the worker branches and worker worktrees from the exact freeze commit
+- create the integration worktree from the exact freeze commit
 
-Acceptance:
+WS-CONTRACT acceptance:
 
-- the facade is the sole approved seam entry point
-- every approved seam export remains reachable through `analysis_core`
-- no consumer change is required to understand seam ownership
+- kickoff worktree is clean and branch is `feat/m40-plus`
+- `spec-core/src/semantic_review.rs` is the only production edit surface touched before parallelism
+- the six contract-freeze decisions are fully locked in code and recorded in `contract-freeze.json`
+- `cargo test -p spec-core semantic_review` is green on the freeze commit
+- the worker and integration worktrees all point at the exact `contract_freeze_commit`
+- no worker has started before `contract-freeze.json` is written
 
-Stop rule:
+WS-CONTRACT stop rules:
 
-- if a missing export implies a new owner file or a downstream semantic patch, stop and re-scope
+- if the worktree is dirty, stop before M49 begins
+- if `cargo test -p spec-core semantic_review` is red, do not parallelize
+- if any freeze decision is still moving, do not parallelize
+- if creating the exact shared freeze basis fails, collapse the run back to parent-only sequential execution or stop
 
-### 6.7 `task-m48-25-helper-surface-freeze`
+### WS-PROOF-CORE (`lane/m49-proof-core`, worker, post-freeze only)
 
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
+Purpose: prove the export and TypeScript read-side truth walls after the semantic contract is frozen.
 
-Owned surfaces:
+Task in WS-PROOF-CORE:
 
-- `xtask/src/family/analysis_core/helper_surface.rs`
-- `validation/source-audit/helper-surface-contract.md`
+- `task-m49-proof-core`
 
-Required inspection commands:
+Owned files:
+
+- `spec-core/src/export.rs`
+- `spec-core/src/typescript_backend.rs`
+
+Required commands:
 
 ```bash
-rg -n "classify_helper_surface|durable_non_promotable_helper_surface_candidate_tuple|recommendation_.*helper_surface|HELPER_SURFACE_FINGERPRINT" xtask/src/family/analysis_core/helper_surface.rs
+cargo test -p spec-core export
+cargo test -p spec-core typescript_backend
 ```
 
 Required work:
 
-- preserve the exact durable-hold tuple contract
-- preserve the exact helper-surface follow-on tuple contract
-- keep `classify_helper_surface()` narrow
-- add explicit proof for contradictory inputs and malformed fingerprint inputs
+- prove export preserve accepts legacy seam keys only for the matching family during the migration window
+- prove export preserve does not invent supported seam truth
+- prove refreshed seam truth reads back canonically
+- prove bounded TypeScript validation does not regress when family-routed seam support exists in context
+- prefer tests over production logic changes
+- keep behavior narrow and compatibility-preserving
 
-Acceptance:
+WS-PROOF-CORE acceptance:
 
-- wrong primary reason rejects classification
-- non-`unknown` overlap rejects classification
-- `real_example_hits = 0` rejects classification
-- malformed or semantically wrong fingerprints reject classification
-- the file remains a classifier, not a policy surface
+- only the two owned files are changed
+- `cargo test -p spec-core export` is green
+- `cargo test -p spec-core typescript_backend` is green
+- any production logic change stays within existing behavior required by `PLAN.md`
+- no canonical key, legacy key, or near-miss policy is redefined in this lane
 
-Stop rule:
+WS-PROOF-CORE stop rules:
 
-- if helper-surface truth now requires broader reason codes, overlap logic, or consumer-specific exceptions, stop and write `blocked.json`
+- if work requires `spec-core/src/semantic_review.rs`, stop this worker and return the blocker to the parent
+- if work requires a CLI file, stop this worker and return the blocker to the parent
+- if the fix implies schema or TypeScript product-scope changes, stop and re-scope
 
-### 6.8 `task-m48-30-decision-contract-freeze`
+### WS-PROOF-CLI (`lane/m49-proof-cli`, worker, post-freeze only)
 
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
+Purpose: prove status/export/test CLI truth surfaces against the frozen semantic contract.
 
-Owned surfaces:
+Task in WS-PROOF-CLI:
 
-- `xtask/src/family/analysis_core/decision_contract.rs`
-- `validation/source-audit/decision-contract-branches.md`
+- `task-m49-proof-cli`
 
-Required inspection commands:
+Owned files:
+
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+
+Required commands:
 
 ```bash
-rg -n "decision_contract_stop_state_tuple|corpus_program_basis_snapshot|basis_snapshot_requires_helper_surface_follow_on|derive_corpus_program_decision_contract" xtask/src/family/analysis_core/decision_contract.rs
+cargo test -p spec-cli cli
 ```
 
 Required work:
 
-- preserve the exact stop-state tuple
-- preserve the exact basis snapshot projection
-- add explicit proof for the five real branches named by `PLAN.md`
-- keep default stop behavior unchanged
+- prove `spec status --format json` preserve behavior for legacy seam passports
+- prove `spec export` preserve behavior for legacy seam passports
+- prove refresh rewrites seam semantic review keys canonically
+- preserve stale and incomplete seam health semantics
+- prefer `cli.rs` tests
+- change `commands.rs` only if alias-aware preserve logic is duplicated there and must be fixed to remain truthful
 
-Acceptance:
+WS-PROOF-CLI acceptance:
 
-- promotion-ready branch is explicit
-- blocked-on-evidence branch is explicit
-- helper-surface follow-on branch is explicit
-- policy-interpretation blocker branch is explicit
-- default stop branch is explicit
-- `corpus-decision` still returns the same stop tuple unless the basis actually changes
+- only the two owned files are changed
+- `cargo test -p spec-cli cli` is green
+- CLI status/export preserve matrix covers canonical and legacy seam keys
+- refresh behavior is canonical-only
+- stale and incomplete seam semantics remain unchanged
+- no CLI JSON contract or flag surface changes are introduced
 
-Stop rule:
+WS-PROOF-CLI stop rules:
 
-- if a new policy surface or a sixth meaningful branch is required to explain current behavior, stop and write `blocked.json`
+- if work requires `spec-core/src/semantic_review.rs`, stop this worker and return the blocker to the parent
+- if work requires `spec-core/src/export.rs` or `spec-core/src/typescript_backend.rs`, stop this worker and return the blocker to the parent
+- if the fix implies new CLI flags or JSON contract changes, stop and re-scope
 
-### 6.9 `task-m48-35-proof-fingerprint-freeze`
+### WS-INT (`lane/m49-int`, parent only)
 
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
+Purpose: integrate the frozen worker lanes in a dedicated integration worktree, run the integrated proof set, and prepare the validated result for `feat/m40-plus`.
 
-Owned surfaces:
+Task sequence in WS-INT:
 
-- `xtask/src/family/analysis_core/proof_fingerprint.rs`
-- `validation/source-audit/proof-fingerprint-normalization.md`
+1. `task-m49-int-merge-proof-core`
+2. `task-m49-int-merge-proof-cli`
+3. `task-m49-int-targeted-proof`
+4. `task-m49-int-broader-proof-sweep` when required
+5. `task-m49-int-promote-validated-result`
 
-Required inspection commands:
+Owned files:
 
-```bash
-rg -n "normalized_.*proof_fingerprint|normalized_for_recommend_determinism|fingerprint" xtask/src/family/analysis_core/proof_fingerprint.rs
-```
+- merge state in `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m49/int`
+- `.runs/m49_reusable_seam_semantic_review_substrate_slice1/**`
+- no net-new product-scope ownership beyond merge mechanics and validation
 
-Required work:
+Merge order:
 
-- preserve exact normalization fields for coverage, recommendation, and corpus-decision artifacts
-- prove timestamp and bookkeeping churn do not change fingerprints when semantics are unchanged
-- prove semantic-field drift does change fingerprints
-- keep serialization local and boring
+1. create `ws/m49-int` from `contract_freeze_commit`
+2. merge `ws/m49-proof-core` into `ws/m49-int`
+3. merge `ws/m49-proof-cli` into `ws/m49-int`
+4. run targeted proof commands in the integration worktree
+5. run broader proof commands if the trigger conditions are met
+6. if green, fast-forward or merge the validated `ws/m49-int` result back onto `feat/m40-plus` from the repo-root authority lane
+7. capture final status and acceptance on `feat/m40-plus`
 
-Acceptance:
+Conflict rules:
 
-- coverage fingerprint ignores timestamp and path churn only
-- recommendation fingerprint ignores `generated_at` and delta churn only
-- corpus-decision fingerprint ignores non-semantic churn only
-- semantic drift changes the relevant fingerprint
-- no schema change or helper-layer introduction is needed to keep fingerprints truthful
+- If the conflict is a straightforward merge mechanic in a lane-owned file and the frozen contract is not being reopened, the parent may resolve it in WS-INT.
+- If the conflict or failing proof requires semantic changes in a lane-owned file and ownership is clear, bounce the change back to that lane owner and rerun that workstream from the frozen basis.
+- If the conflict or failing proof requires reopening `spec-core/src/semantic_review.rs`, canonical keys, legacy keys, preserve policy, refresh policy, or near-miss policy, stop both worker lanes and collapse back to parent-owned serialized repair on `feat/m40-plus`.
+- WS-INT does not invent new product scope. It integrates, validates, and either accepts, bounces, or collapses.
 
-Stop rule:
-
-- if normalization requires external helpers, schema widening, or consumer rewrites to stay correct, stop and re-scope
-
-### 6.10 `task-m48-40-readonly-downstream-audit`
-
-Lane: `lane/m48-worker-proof-audit`  
-Owner: Worker  
-Default: disabled until the parent completes `gate-m48-15-kickoff-proof-floor`
-
-Owned surfaces:
-
-- `drafts/proof-audit.md`
-
-Read-only review inputs:
-
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/verify.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/decision_kernel.rs`
-- the parent-captured kickoff proof-floor outputs
-- the parent-captured seam diff summary
-
-Allowed commands:
+Required commands for targeted proof:
 
 ```bash
-rg -n "analysis_core|helper_surface|decision_contract|proof_fingerprint" xtask/src/family/recommend.rs xtask/src/family/verify.rs xtask/src/family/promotion_artifacts.rs xtask/src/family/helper_surface.rs xtask/src/family/decision_kernel.rs
-sed -n '1,220p' xtask/src/family/recommend.rs
-sed -n '1,220p' xtask/src/family/verify.rs
-sed -n '1,220p' xtask/src/family/promotion_artifacts.rs
+cargo test -p spec-core semantic_review
+cargo test -p spec-core export
+cargo test -p spec-core typescript_backend
+cargo test -p spec-cli cli
 ```
 
-Required output:
-
-- identify any place where downstream behavior appears coupled to unstated seam semantics
-- identify whether shims still look compatibility-only
-- identify any place where the parent should tighten proof or wording before final acceptance
-
-Worker prohibitions:
-
-- no repo source edits
-- no `cargo` commands
-- no git mutation
-- no final truth claims
-
-Acceptance:
-
-- the parent receives a narrow read-only audit
-- any flagged risk is expressed as a bounded concern, not a source edit request
-
-### 6.11 `gate-m48-42-compile-only-exception-review`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent  
-Default: skipped unless the proof wall reveals a compile-only issue outside `analysis_core/*`
-
-Owned surfaces:
-
-- `validation/source-audit/exception-review.md`
-- `blocked.json` if the exception is rejected
-
-Required decision record:
-
-- why the issue is compile-only rather than semantic
-- exact file touched
-- why the change stays inside the narrow `PLAN.md` exception
-- why stopping is worse than the bounded fix
-
-Acceptance:
-
-- either the exception is rejected and the run stops
-- or the exception is accepted with explicit justification before any out-of-seam edit occurs
-
-### 6.12 `gate-m48-45-proof-wall-sweep`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
-
-Owned surfaces:
-
-- `validation/proof-floor/10-final-collect-signals.txt`
-- `validation/proof-floor/11-final-verify-decision-contract.json`
-- `validation/proof-floor/12-final-corpus-decision.json`
-- `validation/proof-floor/13-final-cargo-test-p-xtask.txt`
-- `validation/derived-artifacts/post-*`
-- `validation/derived-artifacts/*.diff`
-- `validation/downstream-audit/*`
-
-Required commands, run in this exact order:
+Conditional broader commands when shared projection behavior was touched broadly:
 
 ```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family verify-decision-contract --format json
-cargo xtask family corpus-decision --format json
-cargo test -p xtask
+cargo test -p spec-core
+cargo test -p spec-cli
 ```
 
-Required review outputs:
+WS-INT acceptance:
 
-- `read-only-consumer-check.md`
-- `shim-immutability-check.md`
-- `command-surface-parity.md`
+- the integration worktree starts from the exact `contract_freeze_commit`
+- both worker branches merge in the recorded order
+- all four targeted proof commands are green on `ws/m49-int`
+- the broader proof sweep runs and passes whenever triggered by `PLAN.md` conditions
+- no proof-wall diff reopens WS-CONTRACT decisions
+- the validated integration result is moved back onto `feat/m40-plus` without additional product-scope edits outside the five in-scope repo files
 
-Acceptance:
+WS-INT stop rules:
 
-- `collect_signals.sh` still lands on the same stop-state summary
-- `verify-decision-contract` still passes
-- `corpus-decision` still emits:
-  - `decision_action = "stop"`
-  - `decision_basis_code = "no_actionable_candidate"`
-  - `required_next_action = "record_stop_without_new_milestone"`
-- `cargo test -p xtask` is green
-- latest-artifact churn, if any, is documented and bounded
-- downstream read-only surfaces remain unchanged unless the compile-only exception was explicitly accepted
+- if merge conflict resolution requires creative semantic redesign, stop and bounce or collapse instead of improvising in WS-INT
+- if targeted proof is red, do not promote the integration branch
+- if broader proof is required and red, do not promote the integration branch
+- if final promotion back to `feat/m40-plus` cannot preserve the validated commit content, stop and record a blocker
 
-Stop rule:
+## Cross-Lane Scope Leak Policy
 
-- if downstream behavior drifts, a read-only surface needs a semantic edit, or the stop tuple changes, stop the run and record the blocker
+- If a worker needs `spec-core/src/semantic_review.rs`, parallelism is no longer honest. Stop that worker immediately. The parent either:
+  - collapses back to parent-only serialized repair on `feat/m40-plus`, or
+  - stops the run and records a blocker if reopening the freeze contract would exceed M49 scope
+- If WS-PROOF-CORE needs a CLI-owned file, or WS-PROOF-CLI needs a proof-core-owned file, the worker must not cross the boundary. The parent either:
+  - bounces the requested change to the owning worker if the frozen contract is unchanged, or
+  - cancels both workers and moves remaining source work into parent-owned serialized completion if ownership is now coupled
+- WS-INT may resolve only merge mechanics and validation fallout that do not change the frozen contract. WS-INT is not a hidden fourth implementation lane.
+- Any scope leak into `xtask/**`, schema surfaces, or CLI contract redesign is an immediate stop and re-scope event.
 
-### 6.13 `task-m48-50-acceptance-draft`
+## Worker Prompt And Return Contract
 
-Lane: `lane/m48-worker-acceptance`  
-Owner: Worker  
-Default: disabled until the parent completes `gate-m48-45-proof-wall-sweep`
+The parent must pass each worker only:
 
-Owned surfaces:
+- owned files
+- exact relevant `PLAN.md` excerpt
+- exact frozen contract excerpt from `contract-freeze.json`
+- required commands
+- forbidden touch surfaces
 
-- `drafts/acceptance-outline.md`
-- `drafts/closeout-outline.md`
+Workers must return only:
 
-Read-only inputs:
+- changed files
+- commands run with exit codes
+- blockers
+- unresolved assumptions
 
-- final proof-floor captures
-- derived-artifact summary
-- parent source diff summary
-- worker downstream audit summary, if present
+Worker output rules:
 
-Required output:
+- workers do not write `.runs/m49_reusable_seam_semantic_review_substrate_slice1/**`
+- workers do not merge branches
+- workers do not reinterpret scope
+- workers do not return full transcripts as required context
+- the parent reviews narrow diffs and narrow summaries only
+- the parent does not ingest full worker transcripts into main context
+- the parent records accepted worker outcomes in the task sentinel directories and `session-log.md`
 
-- acceptance outline tied to command truth
-- closeout outline tied to scope and stop-state preservation
-- any wording the parent should tighten before finalizing acceptance
+## Tests And Acceptance
 
-Worker prohibitions:
+Primary proof input:
 
-- no repo source edits
-- no command reruns
-- no final acceptance decision
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md`
 
-### 6.14 `gate-m48-55-parent-acceptance`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
-
-Owned surfaces:
-
-- `acceptance.md`
-- `validation/final/acceptance-checklist.md`
-- `validation/final/final-diff-summary.md`
-- `validation/final/final-git-status-short.txt`
-
-Acceptance checklist:
-
-- only allowed source surfaces changed
-- `analysis_core/mod.rs` is the sole approved seam facade
-- helper-surface tuple semantics are frozen and explicitly tested
-- decision-contract tuple semantics are frozen and explicitly tested
-- proof-fingerprint normalization rules are frozen and explicitly tested
-- compatibility shims remain compatibility-only
-- `recommend.rs`, `verify.rs`, and `promotion_artifacts.rs` still behave the same
-- kickoff and final proof floors both support the same stop-state truth
-- no scope leakage into consumers, schemas, CLI wiring, path lookup, or backend policy
-
-Acceptance:
-
-- the parent can explain the entire slice as a seam freeze and proof-hardening run, not a hidden consumer rewire
-- any optional worker findings are either resolved or explicitly rejected with reason
-
-### 6.15 `gate-m48-60-closeout`
-
-Lane: `lane/m48-parent-authority`  
-Owner: Parent
-
-Owned surfaces:
-
-- `closeout.md`
-- `blocked.json` if needed
-- final `tasks.json`
-- final `queue.json`
-
-Required closeout contents:
-
-- actual touched source surfaces
-- final proof outcomes
-- latest-artifact churn summary
-- whether any compile-only exception was invoked
-- deferred follow-on items that remain out of scope for M48
-- explicit statement that Lane B, extraction, and backend follow-ons remain separate decisions
-
-Acceptance:
-
-- the run can be audited from `baseline.json`, `authority-freeze.json`, `tasks.json`, `acceptance.md`, and `closeout.md` alone
-- the closeout does not overclaim future consumer rewires or extraction readiness
-
-## 7. Context-Control Rules
-
-- The parent keeps only these items live in working context:
-  - `PLAN.md`
-  - `ORCH_PLAN.md`
-  - `tasks.json`
-  - latest proof-floor summary
-  - current seam diff summary
-- Each worker prompt contains only:
-  - its owned file set
-  - exact relevant `PLAN.md` excerpts
-  - allowed commands
-  - forbidden touch surfaces
-  - parent-captured proof outputs
-- Workers return only:
-  - files reviewed
-  - commands run and exit codes
-  - bounded findings
-  - blocker notes
-- Workers do not write canonical authoritative run artifacts. `drafts/` is the only shared exception.
-- The parent reviews worker summaries and narrow diffs only. Full worker transcripts do not become part of the main execution context.
-- Close each worker immediately after its draft is consumed.
-- Prefer sentinels, explicit handoff files, or long waits over tight polling loops.
-
-## 8. Tests And Acceptance
-
-### 8.1 Required command gates
-
-Kickoff and final proof gates both run:
+Targeted proof commands required by `PLAN.md`:
 
 ```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family verify-decision-contract --format json
-cargo xtask family corpus-decision --format json
-cargo test -p xtask
+cargo test -p spec-core semantic_review
+cargo test -p spec-core export
+cargo test -p spec-core typescript_backend
+cargo test -p spec-cli cli
 ```
 
-Required final outcomes:
+Conditional broader proof commands required by `PLAN.md` when shared projection behavior was touched broadly:
 
-- `recommendation_status = insufficient_real_corpus`
-- `decision_status = not_recommended`
-- `decision_action = stop`
-- `decision_basis_code = no_actionable_candidate`
-- `required_next_action = record_stop_without_new_milestone`
-- `overall_verdict = pass`
-- all `xtask` tests green
+```bash
+cargo test -p spec-core
+cargo test -p spec-cli
+```
 
-### 8.2 Source-level acceptance
+M49 is complete only when all of the following are true:
 
-- `xtask/src/family/analysis_core/mod.rs`
-  - export inventory is explicit, grouped, and unchanged in meaning
-- `xtask/src/family/analysis_core/helper_surface.rs`
-  - contradictory inputs and malformed fingerprint inputs are explicitly proven
-- `xtask/src/family/analysis_core/decision_contract.rs`
-  - each real branch is explicitly proven
-- `xtask/src/family/analysis_core/proof_fingerprint.rs`
-  - semantic drift changes fingerprints and bookkeeping churn does not
+- WS-CONTRACT froze the seam-family contract and recorded it in `contract-freeze.json`
+- WS-PROOF-CORE proved export and TypeScript truth walls without widening behavior
+- WS-PROOF-CLI proved CLI preserve/refresh truth surfaces without changing CLI contract shape
+- WS-INT merged both worker lanes in the dedicated integration worktree and all targeted proof commands are green there
+- the broader proof sweep ran and passed when triggered
+- the validated integration result was promoted back onto `feat/m40-plus`
+- the final diff stays within:
+  - `spec-core/src/semantic_review.rs`
+  - `spec-core/src/export.rs`
+  - `spec-core/src/typescript_backend.rs`
+  - `spec-cli/src/commands.rs`
+  - `spec-cli/tests/cli.rs`
+  - `.runs/m49_reusable_seam_semantic_review_substrate_slice1/**`
+- `acceptance.md` closes the exact M49 failure modes from `PLAN.md`:
+  - unseen seam ids with supported shape route to supported families
+  - legacy preserve alias migration is real
+  - refresh canonicalization is real
+  - wrapper dependency support remains intact
+  - renamed-vocabulary near misses stay unsupported
+  - TypeScript bounded-lane behavior is not regressed
 
-### 8.3 Downstream acceptance
+## Assumptions
 
-- read-only consumers remain unchanged in semantics
-- command-surface truth remains unchanged
-- compatibility shims remain compatibility-only
-- any compile-only exception is visibly documented and justified
-
-## 9. Assumptions And Stop Conditions
-
-### 9.1 Assumptions
-
-- the kickoff worktree is clean when M48 begins or any accepted dirtiness is explicitly recorded
-- the validated proof floor from 2026-05-11 is still reproducible when M48 begins
-- the existing seam files named in `PLAN.md` are still the true owner surfaces
-- support workers are optional convenience, not required for correctness
-
-### 9.2 Immediate stop conditions
-
-- kickoff proof floor no longer matches the validated stop-state basis
-- a downstream consumer or shim needs a semantic edit
-- a new owner surface, helper layer, schema field, CLI change, or backend change appears necessary
-- fingerprint normalization cannot stay truthful without widening scope
-- the parent cannot explain an out-of-seam change as compile-only under the narrow `PLAN.md` exception
-- unexpected dirtiness appears in the worktree and cannot be attributed safely
-- external changes land during the run and invalidate the frozen baseline
-
-### 9.3 Completion statement
-
-M48 is complete only when the seam is frozen, the proof wall is green, the downstream stop-state truth is unchanged, and the run artifacts make that claim auditable without reading any worker transcript.
+- `feat/m40-plus` is the live M49 execution branch and remains the authority branch for final closeout.
+- A local checkpoint commit after WS-CONTRACT is required and acceptable so all post-freeze lanes fork from one frozen basis.
+- Maximum honest concurrency for M49 is `2` workers. A third worker is not justified by the current `PLAN.md` scope.
+- Proof-wall files may end up tests-only. If they require production edits, those edits remain compatibility-preserving and behaviorally narrow.
+- No `xtask` changes are allowed or needed for M49.
+- `.runs/m49_reusable_seam_semantic_review_substrate_slice1/**` is run-state and audit data, not authored product surface.

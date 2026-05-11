@@ -1,624 +1,679 @@
-# M48: Shared-Core Portability Follow-On, Slice 1 Implementation Plan
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260511-110901.md -->
+# M49: Reusable Seam Semantic-Review Substrate, Slice 1 Implementation Plan
 
 Status: **implementation plan**  
-Milestone: **M48**  
-Milestone family: **shared-core-portability**  
-Implementation readiness: **ready for review and bounded execution**  
-Plan scope: **Lane A only, freeze seam interface**  
+Milestone: **M49**  
+Milestone family: **semantic-review-core**  
+Implementation readiness: **ready for bounded execution**  
+Plan scope: **generalize supported seam routing away from literal unit ids, keep seam vocabulary explicit**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
 Execution precondition: **clean worktree**  
 Last rewritten: **2026-05-11**
 
+Supersedes:
+- the prior repo-root plan captured at [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260511-110901.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260511-110901.md)
+
 Primary source artifacts:
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-085549.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m47_post_m46_shared_core_portability_follow_on/closeout.md`
+- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-105634.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-105634.md)
+- [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md)
+- [docs/recommendation_corpus_expansion_program_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/recommendation_corpus_expansion_program_v0.1.md)
+- [docs/semantic_family_capability_corpus_guide_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/semantic_family_capability_corpus_guide_v0.1.md)
 
 Primary repo surfaces:
-- `xtask/src/family/analysis_core/mod.rs`
-- `xtask/src/family/analysis_core/helper_surface.rs`
-- `xtask/src/family/analysis_core/decision_contract.rs`
-- `xtask/src/family/analysis_core/proof_fingerprint.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/verify.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/decision_kernel.rs`
+- [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs)
+- [spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs)
+- [spec-core/src/typescript_backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/typescript_backend.rs)
+- [spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs)
+- [spec-cli/tests/cli.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/cli.rs)
 
 Companion test artifact:
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-090108.md`
+- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md)
 
 ## Executive Summary
 
-M47 finished the authority freeze. M48 is the first bounded implementation slice that can follow it without lying about what the repo has actually authorized.
+M48 finished servant architecture work. M49 needs to move back to the product core.
 
-The seam already exists in code. Lane A does not invent a new architecture. It freezes the existing `xtask/src/family/analysis_core/*` seam tightly enough that later consumer rewires have one stable semantic target and do not reopen the seam-definition fight.
+The repo already ships real seam semantic review for one `sum` surface and one `data` surface. The problem is not that seam review is fake. The problem is that the supported path still enters through literal unit ids in `supported_surface_for_spec(...)`, which means the current capability is example-specific instead of family-specific.
 
-If Lane A is done correctly, all of the following remain true at the same time:
+This plan fixes exactly that. It generalizes supported seam routing one level up, proves the same supported seam families on unseen unit ids, keeps the authored and executable vocabulary intentionally narrow, and preserves downstream status/export/passport behavior. No new ontology. No generic seam understanding claim. No adjacent architecture side quest.
 
-1. `analysis_core/*` is the only approved semantic owner surface.
-2. `recommend.rs`, `verify.rs`, and `promotion_artifacts.rs` keep the same behavior.
-3. the repo still lands on the same stop-state truth:
-   - `decision_action = stop`
-   - `decision_basis_code = no_actionable_candidate`
-   - `required_next_action = record_stop_without_new_milestone`
+If this lands cleanly, the repo will be able to say something honest and stronger than it can say today: supported seam review is no longer tied to `pricing/discount_policy` and `pricing/checkout_quote`, but it is still bounded to the exact semantic families the evaluator actually understands.
 
 ## Decision This Plan Makes
 
 This plan authorizes exactly one slice:
 
-1. freeze the seam facade in `analysis_core/mod.rs`
-2. freeze helper-surface semantics in `helper_surface.rs`
-3. freeze decision-contract semantics in `decision_contract.rs`
-4. freeze proof-fingerprint semantics in `proof_fingerprint.rs`
-5. prove zero downstream drift with seam-local tests plus command-surface parity
+1. Replace literal unit-id seam routing in `semantic_review.rs` with explicit supported seam-family routing.
+2. Adopt canonical family keys:
+   - `sum.discount_strategy.v1`
+   - `data.pricing_quote.v1`
+3. Preserve backward compatibility during one migration window:
+   - `Preserve` accepts either the canonical key or the legacy key for the same family.
+   - Legacy keys are:
+     - `sum.discount_policy.v1`
+     - `data.checkout_quote.v1`
+4. `Refresh` always emits the new canonical family key.
+5. Add unseen-unit-id proof for both seam families and prove read-side truth surfaces do not regress.
+6. Keep the supported seam vocabulary exact:
+   - same supported variants, fields, constructors, method ids, and body-shape classifiers
+   - no renamed-vocabulary support in this milestone
 
 This plan does not authorize:
 
-- consumer rewires
-- CLI wiring changes
-- latest-path lookup changes
-- schema changes
-- backend widening
-- shim cleanup
-- crate extraction
-- new abstraction layers
-
-If any of those become necessary to land Lane A, Lane A is scoped incorrectly and must stop.
+- generic seam understanding
+- new supported function families
+- corpus expansion or promotion work
+- shared-core portability follow-on work
+- CLI/schema redesign
+- TypeScript parity expansion
+- new abstraction layers, traits, or module splits beyond this slice
 
 ## Live Validated Basis
 
-Validated from a clean worktree on 2026-05-11.
-
-Commands run:
-
-```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family verify-decision-contract --format json
-cargo xtask family corpus-decision --format json
-cargo test -p xtask
-```
+Validated from the current tree on `feat/m40-plus` at commit `151f1e9` by reading the active implementation.
 
 Observed truth:
 
-- `collect_signals.sh`
-  - dirty status: clean
-  - `recommendation_status = insufficient_real_corpus`
-  - `decision_status = not_recommended`
-  - `decision_action = stop`
-  - `required_next_action = record_stop_without_new_milestone`
-- `cargo xtask family verify-decision-contract --format json`
-  - `overall_verdict = "pass"`
-  - all five checks passed
-- `cargo xtask family corpus-decision --format json`
-  - `decision_action = "stop"`
-  - `decision_basis_code = "no_actionable_candidate"`
-  - `required_next_action = "record_stop_without_new_milestone"`
-- `cargo test -p xtask`
-  - `146` tests passed
+- `supported_surface_for_spec(...)` in [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs) still hard-codes:
+  - `pricing/discount_policy`
+  - `pricing/checkout_quote`
+- `family_b_deps_are_supported(...)` already treats supported `sum` and `data` surfaces as valid dependency surfaces for wrapper-family evaluation.
+- `project_semantic_review_with_context(...)` preserves supported truth only when `evaluator_scope` and `compatibility_key` match exactly, which means key migration must be handled explicitly.
+- `spec-core/src/export.rs`, `spec-cli/src/commands.rs`, and `spec-cli/tests/cli.rs` already encode preserve-vs-refresh truth-surface behavior and will fail loudly if compatibility handling changes sloppily.
+- `spec-core/src/typescript_backend.rs` gates bounded TypeScript support off supported semantic review. It is a proof wall, not new write scope.
 
-Lane A is only allowed to tighten interface and proof. It is not allowed to reinterpret this basis, spend corpus run 1, or quietly widen the seam because the files sit next to each other.
+This is the whole opportunity. The evaluators are already real. The missing move is reusable routing plus compatibility-proof discipline.
 
 ## Step 0: Scope Challenge
 
-### What already exists
+### What Already Exists
 
 | Sub-problem | Existing owner | Reuse verdict |
 | --- | --- | --- |
-| semantic seam facade | `xtask/src/family/analysis_core/mod.rs` | already exists, freeze it rather than reinvent it |
-| helper-surface classification and durable-hold tuple | `xtask/src/family/analysis_core/helper_surface.rs` | already exists, harden exact contract |
-| basis snapshot and derived decision semantics | `xtask/src/family/analysis_core/decision_contract.rs` | already exists, harden exact contract |
-| semantic proof fingerprint normalization | `xtask/src/family/analysis_core/proof_fingerprint.rs` | already exists, harden exact contract |
-| write-side consumer | `xtask/src/family/recommend.rs` | proof surface only, do not rewire in Lane A |
-| read-side parity consumer | `xtask/src/family/verify.rs` | proof surface only, do not rewire in Lane A |
-| local validator consumer | `xtask/src/family/promotion_artifacts.rs` | keep local, do not treat as seam ownership |
-| compatibility shims | `xtask/src/family/helper_surface.rs`, `xtask/src/family/decision_kernel.rs` | preserve unchanged in Lane A |
-| CLI wiring, path lookup, JSON rendering | `xtask/src/family/mod.rs`, `xtask/src/family/paths.rs`, `xtask/src/lib.rs`, coverage/recommend rendering helpers | explicitly local, out of scope |
+| supported seam routing entry point | `spec-core/src/semantic_review.rs::supported_surface_for_spec` | reuse, replace literal id checks with family detection |
+| supported sum evaluator | `evaluate_supported_sum_semantic_review(...)` | reuse, route into it through a family contract |
+| supported data evaluator | `evaluate_supported_checkout_quote_data_review(...)` | reuse, route into it through a family contract |
+| preserve vs refresh projection | `project_semantic_review_with_context(...)` | reuse, extend to canonical-plus-legacy alias matching |
+| wrapper dependency support | `family_b_deps_are_supported(...)` | reuse, make it depend on family-routed seams instead of example ids |
+| passport/export preserve behavior | `spec-core/src/export.rs` | proof wall only |
+| CLI status/build/test/export projection | `spec-cli/src/commands.rs` | proof wall only |
+| bounded TypeScript semantic gate | `spec-core/src/typescript_backend.rs` | proof wall only |
+| end-to-end truth-surface regression coverage | `spec-cli/tests/cli.rs` | extend, do not redesign |
 
-### Minimum complete slice
+### Minimum Complete Slice
 
-Lane A is the smallest honest implementation only if it does all of this and nothing more:
+This is the smallest honest implementation:
 
-1. freezes the `analysis_core` facade and ownership boundary
-2. freezes helper-surface, decision-contract, and proof-fingerprint semantics
-3. adds or tightens seam-local proof where current tests are too implicit
-4. proves downstream command surfaces still land on the same truth
+1. introduce a seam-family layer
+2. route supported seams by semantic family instead of literal id
+3. choose and ship canonical seam family keys
+4. preserve legacy keys only in `Preserve`
+5. prove unseen unit ids for both seam families
+6. prove no read-side drift in export/status/passport/TypeScript gating
 
-Anything beyond that is a different slice. Anything less leaves the seam under-specified and forces the next slice to rediscover the contract mid-flight.
+Anything smaller is a refactor with no substrate gain. Anything larger turns a lake into an ocean.
 
-### Complexity, completeness, and distribution
+### Complexity, Completeness, and Distribution
 
-- Primary write scope: `4` files under `xtask/src/family/analysis_core/`
-- Allowed secondary proof touch scope: existing `xtask` tests only if required to keep the proof wall truthful
-- New runtime classes or services: `0`
-- New infrastructure: `0`
-- New distribution work: `0`
-- TODO cross-reference: no existing `TODOS.md` item blocks Lane A; broader portability, backend, and extraction work remains deferred there
+- Primary production write scope: `1` file, [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs)
+- Allowed production proof-surface touches: `4` files, only if required to preserve truthful behavior
+- Required test/proof surfaces: `4` files
+- New crates, services, schema families, or runtime infrastructure: `0`
+- Distribution work: `0`, this milestone changes semantic review internals only
+- Complete version vs shortcut: choose the complete version, because alias-aware preserve logic plus unseen-id proof is the real deliverable
 
-This is the complete version of the slice, not a shortcut. The alternative shortcut would be to freeze comments and stop at command-level parity. That saves almost nothing and leaves later rewires arguing over behavior that should have been locked now. Not worth it.
+### Locked Plan Decisions
 
-### Locked plan decisions
+These decisions are resolved and should not be reopened mid-implementation:
 
-These are resolved. They should not be reopened during implementation:
+1. Canonical seam family keys are `sum.discount_strategy.v1` and `data.pricing_quote.v1`.
+2. Legacy keys are accepted only in `Preserve`, never emitted by `Refresh`.
+3. The milestone stays one-file-first. No new `semantic_review/` submodule tree.
+4. Detection is family-by-shape only. It must not consult literal unit ids, file paths, or fuzzy intent text.
+5. Detection remains explicit and vocabulary-bound. No fuzzy intent inference, no widened synonym set, no approximate matching.
+6. Unseen-id proof is required for both seam families before the slice is done.
+7. Wrapper-family support must keep working when its seam deps are routed through the new family layer.
+8. Function names may be cleaned up for clarity, but canonical compatibility keys and preserve semantics are the real contract.
+9. If landing this requires changing CLI JSON shape, export bundle schema, or TypeScript target policy, stop and re-scope.
 
-- Compatibility shims stay unchanged in Lane A. No deprecation comments, no new logic, no ownership shift.
-- `recommend.rs`, `verify.rs`, and `promotion_artifacts.rs` are proof surfaces, not write scope. If Lane A needs semantic behavior changes there, stop and re-scope.
-- No new schema fields, CLI flags, path rules, or rendering helpers are allowed in this slice.
-- No new abstraction layer is allowed. Use explicit functions and tests inside the existing `analysis_core/*` files.
-- Any implementation that touches more than the four seam files plus existing proof tests is presumed overbuilt until it proves otherwise.
+### Abort and Re-scope Triggers
 
-### Abort and re-scope triggers
+Stop and write a follow-on plan if any of these become necessary:
 
-Stop Lane A and write a follow-on plan instead if any of the following happen:
-
-1. a downstream consumer needs behavior change to compile or stay truthful
-2. a shim needs new logic, even if the logic looks tiny
-3. command output needs to change to express the seam freeze
-4. artifact JSON fields need to change to keep fingerprints or parity working
-5. the seam cannot be frozen without introducing a fifth owner file or a new helper layer
+1. a new seam family key needs new schema fields or new public JSON shape
+2. `spec-cli` command behavior must change beyond compatibility preservation
+3. supported seam detection cannot be expressed without widening the supported vocabulary
+4. `semantic_review.rs` needs to split into a new framework just to hold two seam families
+5. a downstream proof wall needs semantic behavior changes instead of simple alias-preserve support
 
 ## Architecture and Ownership
 
-### Seam ownership matrix
+### Supported Seam Family Contract
 
-| Surface | Role | Lane A rule |
-| --- | --- | --- |
-| `analysis_core/mod.rs` | seam facade | sole approved import surface for seam semantics |
-| `analysis_core/helper_surface.rs` | helper-surface classification contract | freeze exact classifier and durable-hold tuple semantics |
-| `analysis_core/decision_contract.rs` | corpus-decision contract | freeze exact basis snapshot and decision derivation semantics |
-| `analysis_core/proof_fingerprint.rs` | semantic fingerprint contract | freeze normalization rules for reuse parity |
-| `recommend.rs` | write-side consumer | behavior must remain identical |
-| `verify.rs` | read-side parity consumer | behavior must remain identical |
-| `promotion_artifacts.rs` | local validator consumer | remains local, not promoted to seam ownership |
-| `helper_surface.rs`, `decision_kernel.rs` | compatibility shims | unchanged, compatibility-only |
-| CLI / paths / rendering / schemas | local orchestration | out of scope |
+Use one explicit family layer inside [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs):
 
-### Frozen facade inventory
+```rust
+enum SupportedSeamFamily {
+    SumDiscountStrategyV1,
+    DataPricingQuoteV1,
+}
 
-The facade in `xtask/src/family/analysis_core/mod.rs` must explicitly and stably expose exactly these semantic surfaces, grouped by concern rather than accidental file order:
-
-Decision contract exports:
-
-- `DecisionContractStopStateTuple`
-- `DerivedCorpusProgramDecision`
-- `basis_activates_helper_surface_follow_on`
-- `basis_snapshot_requires_helper_surface_follow_on`
-- `corpus_program_basis_snapshot`
-- `decision_contract_stop_state_tuple`
-- `derive_corpus_program_decision_contract`
-
-Helper-surface exports:
-
-- `HELPER_SURFACE_FINGERPRINT`
-- `HelperSurfaceDisposition`
-- `HelperSurfaceSignal`
-- `classify_helper_surface`
-- `durable_non_promotable_helper_surface_candidate_tuple`
-- `recommendation_matches_helper_surface_durable_hold_tuple`
-- `recommendation_uses_helper_surface_durable_hold_tuple`
-
-Proof-fingerprint exports:
-
-- `normalized_corpus_program_decision_proof_fingerprint`
-- `normalized_coverage_proof_fingerprint`
-- `normalized_for_recommend_determinism`
-- `normalized_recommendation_proof_fingerprint`
-
-Lane A may reorder or comment these exports for clarity. It may not silently add new seam exports or move ownership out of the facade.
-
-### Dependency graph
-
-```text
-analysis_core seam
-  mod.rs
-    ├── helper_surface.rs
-    ├── decision_contract.rs
-    └── proof_fingerprint.rs
-          │
-          ├──────────────► recommend.rs
-          │                local writer / assembler
-          │
-          ├──────────────► verify.rs
-          │                local parity gate
-          │
-          ├──────────────► promotion_artifacts.rs
-          │                local validator consumer
-          │
-          ├──────────────► helper_surface.rs shim
-          │                compatibility only
-          │
-          └──────────────► decision_kernel.rs shim
-                           compatibility only
-
-outside Lane A
-  xtask CLI wiring
-  latest-path lookup
-  JSON rendering
-  artifact schemas
-  backend execution policy
+enum SupportedSurface {
+    Function(SupportedFunctionFamily),
+    Seam(SupportedSeamFamily),
+    Unsupported(UnitKind),
+}
 ```
 
-### Invariants that must still be true after the slice lands
+Required helper functions:
 
-1. `analysis_core/*` remains the only semantic owner surface.
-2. downstream consumers still produce the same stop-state truth.
-3. proof fingerprints remain semantic, not timestamp-driven.
-4. helper-surface handling remains a narrow classifier, not a policy engine.
-5. decision derivation remains explicit, branch-bounded, and readable in one sitting.
+- `supported_seam_surface(...) -> Option<SupportedSeamFamily>`
+- `detect_sum_discount_strategy_family(...) -> bool`
+- `detect_data_pricing_quote_family(...) -> bool`
+- `canonical_seam_compatibility_key(...) -> &'static str`
+- `legacy_seam_compatibility_keys(...) -> &'static [&'static str]`
+- `supported_surface_matches_existing_review(...) -> bool`
 
-### Production failure lens
+That last helper is important. It centralizes the migration rule so preserve logic does not fork quietly.
 
-- If `analysis_core/*` semantics drift during cleanup, `verify-decision-contract` must fail.
-- If fingerprint normalization starts ignoring real semantic fields, artifact reuse becomes silently wrong.
-- If shims or local validators regain semantic ownership, later consumer rewires will target the wrong boundary.
-- If a consumer needs behavior change to accommodate Lane A, the seam was not actually frozen and the slice is scoped incorrectly.
+Detection inputs are also part of the contract:
+
+- allowed: authored seam shape, lowered executable shape, existing explicit classifier helpers
+- not allowed: `spec.spec.id`, path-name heuristics, intent-text substring matching, new synonym tables
+
+Naming rule:
+
+- if `evaluate_supported_checkout_quote_data_review(...)` gets renamed for clarity, that is acceptable
+- if it stays named for the old example unit, that is also acceptable
+- either way, the exported compatibility keys and the supported-family detection behavior are the source of truth
+
+### Routing Flow
+
+```text
+evaluate_semantic_review_with_context(...)
+  │
+  └── supported_surface_for_spec(...)
+        ├── supported_function_surface(...) -> existing function routing
+        ├── supported_seam_surface(...)
+        │     ├── detect_sum_discount_strategy_family(...)
+        │     └── detect_data_pricing_quote_family(...)
+        └── Unsupported(UnitKind)
+              │
+              ├── Function -> unsupported_function_review(...)
+              └── Sum/Data -> unsupported_surface_review(...)
+
+project_semantic_review_with_context(...)
+  │
+  ├── Preserve -> accept canonical key or legacy alias for matching seam family
+  └── Refresh  -> emit canonical family key only
+```
+
+### Family Boundaries
+
+`SumDiscountStrategyV1` still means the current exact authored and executable shape:
+
+- variants: `none`, `percentage`, `fixed_amount`
+- methods: `discount_amount`, `discounted_subtotal`
+- same explicit classifier expectations already encoded in the evaluator
+
+`DataPricingQuoteV1` still means the current exact authored and executable shape:
+
+- fields: `subtotal`, `discount_rate`, `tax_rate`
+- constructor: `new`
+- methods: `discounted_subtotal`, `total`
+- same supported body classifiers already used for `checkout_quote`
+
+Anything outside that vocabulary remains unsupported in M49. That is good discipline, not missing ambition.
+
+### Dependency Graph
+
+```text
+semantic_review.rs
+  ├── SupportedFunctionFamily routing                (unchanged contract)
+  ├── SupportedSeamFamily routing                    (new explicit layer)
+  │     ├── SumDiscountStrategyV1
+  │     └── DataPricingQuoteV1
+  ├── evaluate_supported_sum_semantic_review(...)   (reused)
+  ├── evaluate_supported_checkout_quote_data_review(...) (reused)
+  └── project_semantic_review_with_context(...)
+          │
+          ├── export.rs                    preserve/read-side truth wall
+          ├── spec-cli commands.rs         status/build/test/export truth wall
+          ├── typescript_backend.rs        bounded target eligibility wall
+          └── spec-cli/tests/cli.rs        end-to-end regression wall
+```
+
+### Invariants
+
+All of these must still be true after the slice lands:
+
+1. wrapper-family semantic review still accepts supported seam deps
+2. unsupported renamed seam vocabulary still stays unsupported
+3. `Preserve` never invents fresh supported seam truth
+4. `Refresh` never emits legacy seam keys
+5. stale or failing base health still outranks semantic-read-side optimism
+6. bounded TypeScript gating stays identical except for consuming canonical family truth where relevant
+
+### Contract Freeze Gate
+
+Parallel follow-on work does not start until all of these are locked in `semantic_review.rs` on the main working branch:
+
+1. `SupportedSeamFamily` variant names
+2. canonical keys:
+   - `sum.discount_strategy.v1`
+   - `data.pricing_quote.v1`
+3. legacy keys:
+   - `sum.discount_policy.v1`
+   - `data.checkout_quote.v1`
+4. preserve matching policy: canonical-or-legacy only for the matching family
+5. refresh policy: canonical key only
+6. near-miss policy: renamed vocabulary stays unsupported
+
+This freeze gate is the handoff boundary. If any of these are still moving, do not start parallel proof-wall work.
 
 ## Implementation Contract
 
-### Allowed write scope
+### Primary Write Scope
 
-Primary write files:
+Primary write scope is:
 
-- `xtask/src/family/analysis_core/mod.rs`
-- `xtask/src/family/analysis_core/helper_surface.rs`
-- `xtask/src/family/analysis_core/decision_contract.rs`
-- `xtask/src/family/analysis_core/proof_fingerprint.rs`
+- [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs)
 
-Allowed secondary proof surfaces only if unavoidable:
+Production changes allowed there:
 
-- seam-local tests inside those same files
-- existing `xtask` tests that prove downstream parity
+1. add `SupportedSeamFamily`
+2. replace `SumDiscountPolicy` / `DataCheckoutQuote` surface variants with family routing
+3. add canonical-plus-legacy compatibility helpers
+4. update preserve matching logic
+5. update wrapper dep support to recognize the new seam surface variant
+6. add unseen-id and alias-preserve tests in the same file
 
-### Read-only proof surfaces
+### Allowed Proof-Surface Touches
 
-These files are validation targets, not write scope:
+Allowed only if needed to preserve truthfulness:
 
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/verify.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/decision_kernel.rs`
+- [spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs)
+- [spec-core/src/typescript_backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/typescript_backend.rs)
+- [spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs)
+- [spec-cli/tests/cli.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/cli.rs)
 
-Allowed exception:
+Expected use:
 
-- a compile-only proof fix that does not alter semantics, ownership, routing, or output meaning
+- mostly tests
+- minimal alias-aware preservation if current equality checks are duplicated elsewhere
+- no behavior widening, no output-shape redesign
 
-If the only way forward is a semantic edit in one of these files, stop.
+### Forbidden Scope
 
-### Workstream dependency map
+Do not touch:
 
-| Workstream | Primary files | Depends on | Done when |
-| --- | --- | --- | --- |
-| 1. Freeze seam facade | `analysis_core/mod.rs` | — | export inventory is explicit, grouped, and unchanged in meaning |
-| 2. Freeze helper-surface semantics | `analysis_core/helper_surface.rs` | 1 | classifier and durable-hold tuples are explicit and fully tested |
-| 3. Freeze decision-contract semantics | `analysis_core/decision_contract.rs` | 1 | all real branches are proven explicitly with the same stop-state truth |
-| 4. Freeze proof-fingerprint semantics | `analysis_core/proof_fingerprint.rs` | 1 | semantic drift changes hashes, bookkeeping churn does not |
-| 5. Proof wall sweep | seam files plus existing tests/commands | 1, 2, 3, 4 | all command parity checks stay green with no downstream drift |
+- `xtask/src/family/*`
+- repo-root authority docs beyond this plan
+- schema versions
+- export JSON contract
+- TypeScript target-lane product scope
+- molecule execution behavior
+- new public CLI flags
 
-### Workstream 1: Freeze the seam facade
+## Implementation Sequence
 
-Target file:
+### Step 1: Introduce canonical seam-family routing
 
-- `xtask/src/family/analysis_core/mod.rs`
+Inside `semantic_review.rs`:
 
-Required work:
+1. add `SupportedSeamFamily`
+2. change `SupportedSurface` to use `Seam(SupportedSeamFamily)`
+3. add canonical and legacy key helpers
+4. add seam-family-to-evaluator-scope mapping
 
-1. make the export inventory explicit and stable
-2. group exports by semantic area, not accidental file order
-3. add module-level ownership comments only if they remove ambiguity
-4. confirm all approved seam entry points are re-exported from this facade and only this facade
+Definition of done:
 
-Done when:
+- no literal unit-id seams remain in the `SupportedSurface` enum
+- compatibility key policy is centralized in helper functions, not inlined across matches
+- the six-item contract freeze gate above is fully decided and does not change after this step merges
 
-- a later consumer can target `analysis_core::{...}` without guessing which submodule owns which semantics
+### Step 2: Replace literal unit-id routing with semantic family detection
 
-Stop and re-scope if:
+Replace:
 
-- a missing export implies a new owner surface or a consumer-side ownership patch
+- `UnitKind::Sum if spec.spec.id == "pricing/discount_policy"`
+- `UnitKind::Data if spec.spec.id == "pricing/checkout_quote"`
 
-### Workstream 2: Freeze helper-surface semantics
+With:
 
-Target file:
+- `UnitKind::Sum` -> detect `SumDiscountStrategyV1` by current authored plus executable shape
+- `UnitKind::Data` -> detect `DataPricingQuoteV1` by current authored plus executable shape
 
-- `xtask/src/family/analysis_core/helper_surface.rs`
+Constraint:
 
-Required work:
+- detectors may reuse existing packet-build helpers and existing role-match helpers
+- detectors must not read or branch on `spec.spec.id`
+- detectors must not widen accepted vocabulary
 
-1. preserve the exact durable-hold tuple contract
-2. preserve the exact helper-surface follow-on tuple contract
-3. keep `classify_helper_surface()` narrow:
-   - primary reason must be `unsupported_function_surface`
-   - overlap family must stay `unknown`
-   - `real_example_hits` must be positive
-   - shape fingerprint must match the frozen helper-surface shape
-4. add explicit tests for contradictory inputs and malformed fingerprint inputs
+Definition of done:
 
-Done when:
+- an unseen unit id with the same supported shape routes to a supported seam family
+- a renamed-field or renamed-method near miss still routes to unsupported
 
-- the file remains an exact classifier, not a policy-expansion surface
+### Step 3: Keep evaluator logic explicit and bounded
 
-Stop and re-scope if:
+Do not invent a generic seam evaluator abstraction. Keep the current evaluators and route into them by family.
 
-- the classifier needs additional reason codes, broader overlap logic, or consumer-specific exceptions
+Allowed refactor:
 
-### Workstream 3: Freeze decision-contract semantics
+- parameterize compatibility key emission
+- rename evaluator entry points if that improves clarity
 
-Target file:
+Not allowed:
 
-- `xtask/src/family/analysis_core/decision_contract.rs`
+- trait-based evaluator registry
+- dynamic rule tables
+- splitting into a new architecture layer for two families
 
-Required work:
+Definition of done:
 
-1. preserve the exact stop-state tuple returned by `decision_contract_stop_state_tuple()`
-2. preserve the exact basis snapshot projection from recommendation analysis artifacts
-3. preserve the five real decision branches:
-   - promotion-ready candidate
-   - plausible candidate blocked on missing or stale evidence
-   - helper-surface follow-on
-   - policy-interpretation blocker
-   - default stop
-4. add explicit tests for each branch instead of relying on transitive command coverage
+- current canonical fixtures still produce the same verdicts
+- evaluator readability remains one-sitting readable
 
-Done when:
+### Step 4: Ship the compatibility-key migration window
 
-- `cargo xtask family corpus-decision --format json` keeps the current stop tuple unless the input basis actually changes
+Required behavior:
 
-Stop and re-scope if:
+- `Refresh` emits:
+  - `sum.discount_strategy.v1`
+  - `data.pricing_quote.v1`
+- `Preserve` accepts:
+  - canonical key for matching family
+  - legacy key for matching family
+- `Preserve` still drops:
+  - mismatched family key
+  - unsupported review on supported seam surface
+  - stale invented supported review
 
-- a fifth branch or a new policy interpretation surface is needed to explain existing behavior
+Definition of done:
 
-### Workstream 4: Freeze proof-fingerprint semantics
+- legacy fresh passports survive `status` and `export` on preserve paths during the migration window
+- a fresh refresh writes canonical keys only
 
-Target file:
+### Step 5: Prove downstream truth surfaces
 
-- `xtask/src/family/analysis_core/proof_fingerprint.rs`
+Required proof walls:
 
-Required work:
+1. `spec-core/src/export.rs`
+2. `spec-cli/src/commands.rs`
+3. `spec-core/src/typescript_backend.rs`
+4. `spec-cli/tests/cli.rs`
 
-1. preserve the exact normalization fields for coverage, recommendation, and corpus decision artifacts
-2. prove that timestamp, inventory-path, inventory-sha, and recommendation-delta churn do not change fingerprints when semantics are unchanged
-3. prove that semantic-field drift does change fingerprints
-4. keep serialization local and boring
+Goal:
 
-Done when:
+- read-side truth remains truthful
+- semantic health demotion behavior remains unchanged
+- TypeScript bounded-lane gating does not regress when supported seam truth exists in context
+- downstream proof-wall edits stay behavioral-noop except for alias-aware preserve compatibility and canonical refresh expectations
 
-- artifact reuse remains semantic, not timestamp-driven
+### Step 6: Finish with proof-first validation
 
-Stop and re-scope if:
+Required command set:
 
-- normalization requires schema changes or external helper layers to stay truthful
+```bash
+cargo test -p spec-core semantic_review
+cargo test -p spec-core export
+cargo test -p spec-core typescript_backend
+cargo test -p spec-cli cli
+```
 
-### Workstream 5: Hold downstream behavior fixed
+If any alias-preserve logic touches shared projection behavior in a broader way, run:
 
-Proof surfaces:
-
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/verify.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/decision_kernel.rs`
-
-Required rule:
-
-- these files are read-only for Lane A unless a compile-only proof fix is unavoidable
-
-Done when:
-
-- command output and parity behavior stay unchanged after Lane A
-
-Stop and re-scope if:
-
-- any of these files need semantic edits, new ownership comments, or updated public truth
+```bash
+cargo test -p spec-core
+cargo test -p spec-cli
+```
 
 ## Code Quality Guardrails
 
-- No new module, trait, or helper layer.
-- No semantic duplication between seam files and consumers.
-- No policy broadening hidden inside naming cleanup.
-- No file moves.
-- Comments are allowed only where they lock ownership or invariants that tests alone do not make obvious.
-- If a cleanup makes behavior easier to read but harder to prove, reject the cleanup.
-- Bias toward explicit over clever. Four small obvious tests beat one meta-test nobody trusts.
+This plan is explicit over clever on purpose.
 
-## Validation and Test Strategy
+- Keep the seam-family contract in one file.
+- Prefer small private helpers over generic registries.
+- Reuse existing packet-build and classifier functions instead of duplicating authored/executable parsing.
+- Do not create new near-identical sum/data detectors if a narrow helper can express the shared alias policy.
+- Do not copy compatibility-key matching logic into export or CLI code if the semantic-review layer can answer the question once.
 
-### Required command proof gate
+The user preference here is obvious: engineered enough, minimal diff, aggressively DRY, but no premature abstraction circus.
 
-```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family verify-decision-contract --format json
-cargo xtask family corpus-decision --format json
-cargo test -p xtask
-```
+## Test Review
 
-Required outcomes:
+100 percent coverage is the goal for the changed code paths. This slice changes semantic routing, projection compatibility, and downstream truth preservation. Every branch listed below needs proof.
 
-- `recommendation_status = insufficient_real_corpus`
-- `decision_status = not_recommended`
-- `decision_action = stop`
-- `decision_basis_code = no_actionable_candidate`
-- `required_next_action = record_stop_without_new_milestone`
-- `overall_verdict = pass`
-- all `xtask` tests green
-
-### Code path coverage diagram
+### Code Path Coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] xtask/src/family/analysis_core/mod.rs
-    └── facade re-exports
-        ├── [PLAN TEST] exact export inventory remains stable
-        └── [PLAN TEST] helper, decision, and fingerprint APIs stay reachable from facade
+[+] spec-core/src/semantic_review.rs
+    │
+    ├── supported_surface_for_spec()
+    │   ├── [EXISTING] canonical sum id -> supported seam
+    │   ├── [EXISTING] canonical data id -> supported seam
+    │   ├── [ADD]      unseen sum id, same variants + methods -> SumDiscountStrategyV1
+    │   ├── [ADD]      unseen data id, same fields + methods -> DataPricingQuoteV1
+    │   └── [ADD]      renamed-vocabulary near miss -> Unsupported(UnitKind)
+    │
+    ├── family_b_deps_are_supported()
+    │   ├── [EXISTING] wrapper deps accept canonical seam ids
+    │   └── [ADD]      wrapper deps accept unseen seam ids routed by family
+    │
+    ├── project_semantic_review_with_context(Preserve)
+    │   ├── [EXISTING] canonical current key preserved
+    │   ├── [ADD]      legacy sum key preserved for matching family
+    │   ├── [ADD]      legacy data key preserved for matching family
+    │   ├── [ADD]      canonical key preserved for matching family
+    │   └── [ADD]      mismatched seam family key dropped
+    │
+    └── project_semantic_review_with_context(Refresh)
+        ├── [ADD]      sum refresh emits sum.discount_strategy.v1
+        └── [ADD]      data refresh emits data.pricing_quote.v1
 
-[+] xtask/src/family/analysis_core/helper_surface.rs
-    ├── classify_helper_surface()
-    │   ├── [PLAN TEST] accepts exact helper-surface signal
-    │   ├── [PLAN TEST] rejects wrong primary reason code
-    │   ├── [PLAN TEST] rejects non-unknown overlap family
-    │   ├── [PLAN TEST] rejects zero real-example hits
-    │   └── [PLAN TEST] rejects malformed or non-matching fingerprint
-    ├── durable_non_promotable_helper_surface_candidate_tuple()
-    │   └── [PLAN TEST] exact tuple fields stay frozen
-    └── helper_surface_follow_on_decision_tuple()
-        └── [PLAN TEST] exact decision tuple stays frozen
+[+] spec-core/src/export.rs
+    │
+    ├── load_passports_for_specs()
+    │   ├── [EXISTING] canonical current data key preserved
+    │   ├── [ADD]      legacy sum key preserved on unseen-id family match
+    │   └── [ADD]      legacy data key preserved on unseen-id family match
+    │
+    └── build_export_bundle()
+        ├── [EXISTING] preserve does not invent missing supported data review
+        └── [ADD]      preserve carries legacy seam key through migration window
 
-[+] xtask/src/family/analysis_core/decision_contract.rs
-    ├── decision_contract_stop_state_tuple()
-    │   └── [PLAN TEST] exact stop tuple stays frozen
-    ├── corpus_program_basis_snapshot()
-    │   └── [PLAN TEST] basis snapshot projection stays exact
-    ├── basis_snapshot_requires_helper_surface_follow_on()
-    │   ├── [PLAN TEST] exact helper-surface blocker path
-    │   └── [PLAN TEST] stale or missing evidence rejects helper-surface follow-on
-    └── derive_corpus_program_decision_contract()
-        ├── [PLAN TEST] promotion-ready branch
-        ├── [PLAN TEST] blocked-on-evidence branch
-        ├── [PLAN TEST] helper-surface follow-on branch
-        ├── [PLAN TEST] policy-interpretation blocker branch
-        └── [PLAN TEST] default stop branch
+[+] spec-core/src/typescript_backend.rs
+    │
+    └── validate_typescript_tree_spec()
+        └── [ADD]      supported seam truth in shared context does not break bounded TS validation
 
-[+] xtask/src/family/analysis_core/proof_fingerprint.rs
-    ├── normalized_coverage_proof_fingerprint()
-    │   ├── [PLAN TEST] timestamp/path churn ignored
-    │   └── [PLAN TEST] semantic cluster drift changes hash
-    ├── normalized_recommendation_proof_fingerprint()
-    │   ├── [PLAN TEST] generated_at and delta churn ignored
-    │   └── [PLAN TEST] semantic decision drift changes hash
-    └── normalized_corpus_program_decision_proof_fingerprint()
-        ├── [PLAN TEST] generated_at churn ignored
-        └── [PLAN TEST] semantic decision tuple drift changes hash
-
-DOWNSTREAM PROOF SURFACES
-===========================
-[+] recommend.rs
-    └── [PLAN TEST] recommendation.latest.json reuse behavior unchanged
-
-[+] verify.rs
-    └── [PLAN TEST] verify-decision-contract remains pass across all checks
-
-[+] promotion_artifacts.rs
-    └── [PLAN TEST] local validator contract still accepts frozen seam outputs
+[+] spec-cli/tests/cli.rs
+    │
+    ├── status/export preserve matrix
+    │   ├── [ADD]      legacy seam passport survives status on preserve path
+    │   ├── [ADD]      legacy seam passport survives export on preserve path
+    │   └── [ADD]      refresh rewrites passport semantic_review to canonical family key
+    │
+    └── seam health semantics
+        ├── [EXISTING] incomplete gate still demotes otherwise-valid seam
+        └── [EXISTING] stale seam still reports stale after authored change
 
 ─────────────────────────────────
-REQUIRED RESULT: all listed tests exist or are tightened, and all command proof
-surfaces remain green with unchanged stop-state truth.
+PLANNED NEW COVERAGE: 15 paths
+  semantic_review.rs: 8
+  export.rs: 3
+  typescript_backend.rs: 1
+  cli.rs: 3
+CRITICAL REGRESSION TESTS: 4
+  preserve legacy sum key
+  preserve legacy data key
+  refresh canonical sum key
+  refresh canonical data key
 ─────────────────────────────────
 ```
 
-### Required test additions by file
+### User-Visible and Command-Visible Flows
 
-| File | Test gap to close | Assertion that must be added |
-| --- | --- | --- |
-| `analysis_core/mod.rs` | facade inventory is only implied | prove approved exports remain reachable from the facade |
-| `helper_surface.rs` | malformed fingerprint rejection is not explicit | malformed JSON and semantically wrong fingerprints must both reject classification |
-| `helper_surface.rs` | contradictory signal coverage is incomplete | wrong reason code, non-`unknown` overlap, and `real_example_hits = 0` must all reject classification |
-| `decision_contract.rs` | branch proof is too transitive | add one explicit test per real branch plus default stop |
-| `proof_fingerprint.rs` | recommendation semantic drift test is missing | semantic decision change must alter recommendation fingerprint even when bookkeeping is stable |
-| downstream proof wall | shim immutability is mostly social | verify command parity stays green and shims remain compatibility-only by review and unchanged behavior |
+```text
+TRUTH SURFACE FLOW COVERAGE
+===========================
+[+] spec status --format json
+    ├── [ADD] legacy seam review in passport remains visible during preserve window
+    ├── [EXISTING] stale authored change still drops fresh supported truth
+    └── [EXISTING] incomplete escape-hatch gate still wins over green wishful thinking
 
-### Failure-mode coverage
+[+] spec export
+    ├── [ADD] legacy seam review survives preserve projection
+    └── [ADD] refreshed seam review emits canonical family key only
 
-| Failure mode | Test or proof surface | Error handling exists | User-visible outcome | Critical gap |
-| --- | --- | --- | --- | --- |
-| helper-surface cleanup widens classification | helper-surface unit tests + `verify-decision-contract` | yes | visible, stop-state parity fails | No |
-| decision-contract cleanup changes stop tuple | decision-contract unit tests + `corpus-decision` | yes | visible, output tuple changes | No |
-| recommendation fingerprint ignores real semantic drift | proof-fingerprint unit tests | partial until explicit test exists | silent artifact reuse bug | Yes until test is added |
-| shims regain semantic ownership | manual file review + unchanged downstream behavior + green proof wall | partial | silent future boundary drift | Yes if shims are edited |
-| consumer behavior changes to accommodate seam freeze | `cargo test -p xtask` + command proof wall | yes | visible in commands or tests | No |
+[+] spec test / passport write path
+    └── [ADD] refreshed seam review rewrites passport semantic_review key canonically
 
-Lane A is not complete if either critical gap remains open.
+[+] bounded TypeScript lane
+    └── [ADD] supported seam context does not poison TS eligibility logic
+```
 
-## Not In Scope
+### Required Test Files and Assertions
 
-| Item | Why it is deferred |
+| File | Test additions required |
 | --- | --- |
-| `recommend.rs` rewires | that is Lane B, not interface freeze |
-| `verify.rs` rewires | that is Lane B, not interface freeze |
-| `promotion_artifacts.rs` rewires or schema changes | validator policy stays local in Lane A |
-| `helper_surface.rs` and `decision_kernel.rs` shim cleanup | deprecation churn is not required to freeze semantics |
-| CLI wiring, latest-path lookup, JSON rendering | local orchestration, not seam semantics |
-| `ORCH_PLAN.md` rewrite | this plan replaces execution intent for Lane A, not orchestration history |
-| cross-crate extraction | current reuse pressure still does not justify it |
-| TypeScript or broader backend work | M46 remains bounded proof only |
-| recommendation-policy or family-selection follow-on | live basis still says stop |
+| `spec-core/src/semantic_review.rs` | unseen sum id routes to canonical family, unseen data id routes to canonical family, legacy preserve alias accepted, refresh emits canonical key, wrapper deps still supported through family routing, renamed-vocabulary near misses stay unsupported |
+| `spec-core/src/export.rs` | passport preserve accepts legacy seam keys for matching family, export bundle preserve keeps legacy key alive during migration |
+| `spec-core/src/typescript_backend.rs` | semantic review context containing family-routed seam support does not regress bounded TS validation |
+| `spec-cli/tests/cli.rs` | command matrix for preserve vs refresh on seam passports using legacy and canonical keys |
 
-## TODOS.md Handling
+### Test Plan Artifact
 
-No new `TODOS.md` entry is required for Lane A.
+The companion QA-oriented artifact lives at:
 
-Reason:
+- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md)
 
-- this slice already has a bounded implementation owner and bounded write scope
-- broader portability, backend, and extraction work is already deferred elsewhere
-- inventing a new TODO here would duplicate existing follow-up surfaces without clarifying scope
+It should stay short and command-focused so `/qa` or `/qa-only` can consume it directly.
+
+## Failure Modes
+
+| Codepath | Real failure mode | Test coverage required | Error handling today | User-visible impact | Critical gap if missed |
+| --- | --- | --- | --- | --- | --- |
+| seam detection | unseen seam id still falls back to unsupported | yes | falls back silently to unsupported | supported substrate claim is fake | yes |
+| preserve alias matching | legacy fresh passport dropped during status/export | yes | current exact-match preserve will drop it | user loses previously valid proof after upgrade | yes |
+| refresh key emission | refresh keeps writing legacy keys | yes | none, would look green but block migration | public contract stays repo-specific forever | yes |
+| wrapper dep support | family-B wrapper no longer recognizes seam deps | yes | wrapper route falls out of supported subset | previously supported wrappers degrade to unsupported | yes |
+| near-miss rejection | renamed seam vocabulary accidentally accepted | yes | none if detection widens too far | evaluator overclaims understanding | yes |
+| TS bounded lane | shared supported seam context trips TS validation | yes | generator errors early | unrelated TypeScript workflow regresses | no |
+
+## Performance Review
+
+No major runtime or memory risk is justified here, but there are two guardrails:
+
+1. Do not parse the same executable body repeatedly inside the same evaluation path if a local helper can hold the result once. `status`, `export`, and `test` already walk many specs, so accidental double work compounds.
+2. Do not introduce new cross-spec scans outside the existing dependency-resolution and context lookups. This slice should stay constant-factor work on top of the current evaluator, not a new graph walk.
+
+If implementation keeps the change inside existing packet-build and classifier flow, performance should remain effectively unchanged.
+
+## NOT in Scope
+
+These were considered and are explicitly deferred:
+
+- generic renamed seam vocabulary support, because M49 is about reusability of the current honest subset, not wider semantic inference
+- new seam families, because live recommendation state still does not authorize family-promotion theater
+- CLI/schema changes, because the value here is semantic substrate truth, not surface churn
+- TypeScript seam support expansion, because the current TS lane is a proof wall only
+- cross-crate/shared-core extraction, because this is not another servant-architecture milestone
+- docs or README rewrites outside brief key-name updates if needed after landing, because they do not block the core slice
 
 ## Worktree Parallelization Strategy
 
-### Dependency table
+This plan has a real parallelization opportunity after the semantic contract is frozen.
+
+### Dependency Table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| freeze seam facade | `xtask/src/family/analysis_core/` | — |
-| freeze helper-surface contract | `xtask/src/family/analysis_core/` | freeze seam facade |
-| freeze decision-contract semantics | `xtask/src/family/analysis_core/` | freeze seam facade |
-| freeze fingerprint semantics | `xtask/src/family/analysis_core/` | freeze seam facade |
-| seam proof sweep | `xtask/src/family/analysis_core/`, existing `xtask` tests, command proof wall | all prior steps |
+| A. Core seam-family routing and alias policy | `spec-core::semantic_review` | — |
+| B. Export and TypeScript proof walls | `spec-core::export`, `spec-core::typescript_backend` | A |
+| C. CLI preserve/refresh proof matrix | `spec-cli::commands`, `spec-cli::tests` | A |
 
-### Parallel lanes
+Lane ownership is strict:
 
-Sequential implementation, no safe parallelization opportunity.
+- `Lane A` owns `spec-core/src/semantic_review.rs`
+- `Lane B` owns `spec-core/src/export.rs` and `spec-core/src/typescript_backend.rs`
+- `Lane C` owns `spec-cli/src/commands.rs` and `spec-cli/tests/cli.rs`
 
-Why:
+If a lane needs to edit another lane's owned file, stop and collapse back to sequential execution.
 
-- every real step touches the same primary module directory
-- helper-surface, decision-contract, and proof-fingerprint semantics all roll up into one shared seam vocabulary
-- the proof wall is not lane-local, it is the same parity surface for every step
+### Parallel Lanes
 
-Trying to split this across worktrees creates merge conflict and semantic skew risk faster than it creates throughput.
+- `Lane A`: Step A, sequential, establishes the contract and canonical key names.
+- `Lane B`: Step B, can start after Lane A freezes key names and preserve semantics.
+- `Lane C`: Step C, can start after Lane A for command-surface proof.
 
-### Execution order
+ASCII execution map:
 
-1. freeze the facade contract in `analysis_core/mod.rs`
-2. harden `helper_surface.rs`, `decision_contract.rs`, and `proof_fingerprint.rs`
-3. run the seam proof sweep
-4. stop immediately if any downstream behavior drift appears
+```text
+Lane A  semantic_review.rs
+  │
+  ├── freeze family enum + canonical keys + legacy aliases + preserve/refresh rules
+  │
+  ├──────────────┬──────────────
+  │              │
+  ▼              ▼
+Lane B         Lane C
+export.rs      commands.rs + cli.rs
+typescript     preserve/refresh matrix
+proof walls
+  │              │
+  └──────┬───────┘
+         ▼
+   integrated validation
+```
 
-### Conflict flags
+### Execution Order
 
-- Any lane split inside `xtask/src/family/analysis_core/` is a merge-conflict risk.
-- Any lane that touches downstream consumers turns this into Lane B and violates the plan.
-- Any lane that introduces new helpers to reduce merge conflict is itself overbuilding the slice.
+1. Launch `Lane A` first.
+2. Do not launch downstream work just because `Lane A` compiles. Launch it only after the contract freeze gate is explicitly satisfied.
+3. Once `Lane A` compiles and the contract freeze gate is locked, launch `Lane B` and `Lane C` in parallel worktrees.
+4. Merge `Lane B` and `Lane C`.
+5. Run the full proof command set once on the integrated branch.
 
-## Acceptance Checklist
+### Conflict Flags
 
-- [ ] `analysis_core/mod.rs` is the sole approved seam facade
-- [ ] helper-surface tuple semantics are frozen and explicitly tested
-- [ ] decision-contract tuple semantics are frozen and explicitly tested
-- [ ] proof-fingerprint normalization rules are frozen and explicitly tested
-- [ ] compatibility shims remain compatibility-only and unchanged
-- [ ] `recommend.rs`, `verify.rs`, and `promotion_artifacts.rs` keep the same behavior
-- [ ] `collect_signals.sh` still reports the same stop-state summary
-- [ ] `cargo xtask family verify-decision-contract --format json` still passes
-- [ ] `cargo xtask family corpus-decision --format json` still emits the same stop tuple
-- [ ] `cargo test -p xtask` stays green
-- [ ] no scope leakage into consumers, CLI surfaces, schemas, or backend policy
+- `Lane B` and `Lane C` both depend on the exact canonical key strings from `Lane A`. Freeze those strings before parallel work starts.
+- `Lane B` and `Lane C` should not both edit `spec-core/src/semantic_review.rs`. If they do, parallelization failed and should be collapsed back to sequential.
+- `Lane C` will be noisy if `Lane A` has not already stabilized the preserve-vs-refresh expectations. Do not let CLI tests become the place where the semantic contract is decided.
+
+## Implementation Checklist
+
+1. Replace seam `SupportedSurface` id variants with `SupportedSeamFamily`.
+2. Add canonical and legacy seam key helpers.
+3. Route sum seams by semantic family, not literal id.
+4. Route data seams by semantic family, not literal id.
+5. Freeze the seam contract: enum names, canonical keys, legacy keys, preserve rules, refresh rules, near-miss rejection rules.
+6. Keep current evaluator vocabulary exact.
+7. Update preserve logic to accept canonical plus legacy key aliases for the same family.
+8. Update refresh logic to emit canonical keys only.
+9. Prove wrapper-family deps still accept family-routed seams.
+10. Add export preserve tests for legacy seam passports.
+11. Add CLI status/export/test matrix tests for legacy and canonical seam keys.
+12. Add TS-context regression proof if needed.
+13. Run targeted package tests, then full package tests if any proof wall needed broader touch.
 
 ## Completion Summary
 
-- Step 0: scope accepted as-is, bounded to `analysis_core/*`
-- Architecture: existing seam reused, not reinvented
-- Code quality target: explicit over clever, minimal diff, no new abstraction layer
-- Test strategy: seam-local branch coverage plus command proof wall
-- Failure modes: `2` critical gaps remain open if recommendation semantic-drift proof or shim immutability discipline is skipped
-- Not in scope: written
+- Step 0: Scope Challenge, scope accepted as-is
+- Architecture Review: 1 core architecture change, keep it one-file-first
+- Code Quality Review: explicit-over-clever guardrails written
+- Test Review: coverage diagram produced, 15 planned new paths identified
+- Performance Review: 0 major findings, 2 guardrails
+- NOT in scope: written
 - What already exists: written
-- TODOS.md updates: none required
-- Parallelization: single lane, sequential only
+- Failure modes: 5 critical gaps flagged
+- Parallelization: 3 steps, 2 downstream lanes parallel after core contract freeze
+- Lake Score: 5/5 major recommendations chose the complete option over the shortcut
 
-## Next Step
+## Recommended Next Action
 
-Implement Lane A only.
-
-Do not reopen consumer rewires, command-surface adoption, docs sync, or backend scope while this slice is in flight. If Lane A lands cleanly, the next honest discussion is whether a separate Lane B plan is still worth doing against the now-frozen seam.
+Execute `Lane A` first in [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs). Treat the contract freeze gate as the mandatory handoff point. Do not touch export, CLI, or TypeScript proof walls until the canonical family keys, legacy aliases, and preserve-vs-refresh rules are frozen.
