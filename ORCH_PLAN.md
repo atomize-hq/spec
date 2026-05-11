@@ -1,159 +1,316 @@
-# M46 Orchestration Plan
+# M46 Completion And Landing Orchestration Plan
 
-Status: **authoritative kickoff and execution contract for M46 helper-aware monotone-up TypeScript execution**  
-Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
-Owned authored artifact: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`**  
+## 1. Title + Metadata
+
+Status: **authoritative orchestration plan for completing and landing the current M46 PLAN.md session**  
+Supersedes: **the prior implementation-oriented `ORCH_PLAN.md`**  
+Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
-Execute from current branch: **`feat/m40-plus`**  
-Scope diff anchor commit: **`ce0e16d`**  
-Last rewritten: **`2026-05-10`**
+Current landing branch at kickoff: **`feat/m40-plus`**  
+Current landing-branch HEAD at kickoff: **`991012f3f2112507d3ed9943eb96dacfc8bfa9be`**  
+Authoritative integrated M46 head at kickoff: **`ccefca8`**  
+Authoritative execution root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration`**  
+Authoritative execution branch name: **`ws/spec-m46-integration`**  
+Run artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/`**  
+Primary execution mode: **one parent-owned sequential lane**  
+Permitted parallelism: **one light support lane on the happy path, one bounded repair lane only if Option B activates**  
+Default landing path: **Option A: fast-forward `feat/m40-plus` directly to `ccefca8` after fresh proof parity is confirmed**  
+Forbidden landing path: **any cherry-pick reconstruction onto `feat/m40-plus`**  
+Last rewritten: **2026-05-10**
 
-## Summary
+## 2. Summary
 
-- Execute from the current repo root on branch `feat/m40-plus`.
-- Use `ce0e16d` as the fixed M46 scope diff anchor because it is the M45 landing tip and the last known-green boundary before helper-aware widening begins.
-- Keep the true critical path in the parent lane for:
-  - baseline capture
-  - authority freeze
-  - validator contract freeze
-  - backend intake
-  - CLI ownership cleanup
-  - integration intake
-  - final proof wall
-  - closeout
-- Launch exactly two early worker lanes after the validator contract is frozen:
-  - backend helper generation and harness
-  - proof-source refresh and product coverage
-- Launch one late worker lane only after the integrated code path is stable:
-  - docs closeout
-- Worker concurrency cap is **2** before integration intake and **1** after docs launch.
-- Worker model assumption is fixed for all worker lanes:
-  - `model = GPT-5.4`
-  - `reasoning_effort = high`
-- Use dedicated `spec-m46` worktrees and branches:
-  - primary baseline: `/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-  - `ws/spec-m46-contract-freeze` at `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/contract-freeze`
-  - `ws/spec-m46-backend-helper` at `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/backend-helper`
-  - `ws/spec-m46-proof-assets` at `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/proof-assets`
-  - `ws/spec-m46-docs-closeout` at `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/docs-closeout`
-  - `ws/spec-m46-integration` at `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration`
-- Keep orchestration state in one canonical parent-owned run root:
-  - `PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec`
-  - `M46_RUN_ROOT=$PRIMARY_ROOT/.runs/m46_helper_aware_monotone_up_typescript`
-  - queue: `$M46_RUN_ROOT/queue.json`
-  - task state: `$M46_RUN_ROOT/tasks.json`
-  - session log: `$M46_RUN_ROOT/session-log.md`
-  - baseline record: `$M46_RUN_ROOT/baseline.json`
-  - authority freeze: `$M46_RUN_ROOT/authority-freeze.json`
-  - contract freeze: `$M46_RUN_ROOT/contract-freeze.json`
-  - acceptance ledger: `$M46_RUN_ROOT/acceptance.md`
-  - merge ledger: `$M46_RUN_ROOT/merge-log.md`
-  - closeout: `$M46_RUN_ROOT/closeout.md`
-- Treat authored source, run-state artifacts, and derived proof artifacts as different classes:
-  - authored source is the milestone deliverable
-  - `.runs/**` is parent-owned orchestration state only
-  - refreshed passports, evidence, generated TypeScript trees, and validation captures are derived outputs only
-- Worker worktrees do not become independent sources of truth for orchestration, approvals, or acceptance. Workers return code changes plus narrow summaries only. The parent writes all run artifacts back to `PRIMARY_ROOT`.
+This document is an execution contract, not a code implementation plan. M46 code is already integrated. The remaining work is operational: rerun the exact proof wall from the authoritative integration worktree, interpret the observed truth, finalize `acceptance.md` and `closeout.md` from those observations, land the integrated truth onto `feat/m40-plus`, and rerun the narrow landed-branch parity surface.
 
-## Hard Guards
+The critical path stays with the parent agent. The authoritative execution lane is `ws/spec-m46-integration` at `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration`. The landing lane is the repo root on `feat/m40-plus`. The only support lane permitted on the happy path is a light closeout-drafting lane. A bounded repair lane may exist only if Option B activates. Support lanes do not own branch movement, proof interpretation, path choice, or final acceptance.
 
-- `PLAN.md` is the sole scope authority. `ORCH_PLAN.md` is the execution contract, not a second product spec.
-- M46 scope is exactly:
-  - `kind:function`
-  - Bun only
-  - atom tests only
-  - `function.arithmetic_leaf.monotone_up.v1` only
-  - `deps: []` or exactly one direct helper dep
-  - that one direct dep must classify as `function.helper.identity_passthrough.v1`
-  - the helper unit must exist in the same loaded unit set and generated output tree
-- M46 does not widen into:
-  - wrapper execution
-  - molecule execution
-  - multi-dep execution
-  - seam kinds
-  - cross-library TypeScript resolution
-  - any function family beyond `function.arithmetic_leaf.monotone_up.v1`
-  - `spec validate --target-language`
-  - `spec export --target-language`
-- Rust remains the default target everywhere.
-- TypeScript proof remains additive only:
-  - `target_proofs.rust`
-  - `target_proofs.typescript`
-- TypeScript proof must never overwrite Rust proof.
-- `.test.spec --target-language typescript` remains unsupported and must fail before Bun runs.
-- The parent owns the validator contract freeze. No worker may redefine helper eligibility, helper presence rules, or frozen unsupported-lane wording.
-- The parent owns `spec-cli/src/commands.rs`. Workers do not patch CLI generator ownership or CLI routing.
-- The parent owns any fallback edits to:
-  - `spec-core/src/pipeline.rs`
-  - `spec-core/src/passport.rs`
-  - `spec-core/src/export.rs`
-- `examples/ecommerce/units/pricing/apply_tax.unit.spec` is explicitly reopened for M46 because the canonical ecommerce proof source must exercise the helper topology for real.
-- `semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/**` is explicitly reopened for M46 because the packet proof source must also exercise the helper topology for real.
-- A fake green is any run where helper-aware TypeScript code lands but the checked proof sources still remain zero-dep, or where TypeScript read-side success is satisfied only by Rust proof.
-- The parent does not resolve semantic disagreements creatively during integration. It either:
-  - applies the already-locked `PLAN.md` contract literally, or
-  - bounces the lane back to the owner
-- No worker may edit:
-  - `PLAN.md`
-  - `ORCH_PLAN.md`
-  - `.runs/**`
-  - another lane’s files
-  - parent-reserved fallback surfaces
-- Do not revert or overwrite unrelated user changes. Integrate around the current repo state.
+The session succeeds only if the parent can prove all of the following from observed results:
 
-## Execution Topology
+- the fresh integration-root proof wall matches the expected M46 truth
+- `acceptance.md` records the exact command outcomes
+- `closeout.md` records the exact integrated SHA and exact landed SHA
+- `feat/m40-plus` points at the landed M46 head
+- the mandatory post-landing narrow rerun matches the integration truth
 
-| Role | Branch | Worktree | Owner | Scope |
-|---|---|---|---|---|
-| primary baseline | `feat/m40-plus` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | parent | authority, run-state, final landing |
-| contract freeze | `ws/spec-m46-contract-freeze` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/contract-freeze` | parent | `spec-core/src/validator.rs`, frozen TS eligibility, frozen helper file names, frozen unsupported wording |
-| backend helper lane | `ws/spec-m46-backend-helper` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/backend-helper` | worker A | `spec-core/src/typescript_backend.rs` and only directly adjacent backend tests in that file or module |
-| proof assets lane | `ws/spec-m46-proof-assets` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/proof-assets` | worker B | `examples/ecommerce/units/pricing/apply_tax.unit.spec`, `semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/**`, `spec-cli/tests/cli.rs` |
-| docs closeout lane | `ws/spec-m46-docs-closeout` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/docs-closeout` | worker C | `README.md`, `CHANGELOG.md` only |
-| integration | `ws/spec-m46-integration` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration` | parent | merge intake, CLI ownership cleanup, fallback surfaces if proven necessary, proof wall, final acceptance |
+## 3. Hard Guards
 
-Rules:
+- `PLAN.md` is the sole scope authority for this session.
+- This plan must not drift into an implementation campaign. On the happy path, no product source changes are expected.
+- The parent must treat `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration` at `ccefca8` as the only authoritative pre-landing execution surface.
+- The parent must treat `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on `feat/m40-plus` as the only authoritative landing and post-landing parity surface.
+- The exact proof wall from `PLAN.md` is frozen and must be run verbatim.
+- The exact post-landing narrow rerun from `PLAN.md` is frozen and must be run verbatim.
+- `acceptance.md` and `closeout.md` under `.runs/m46_helper_aware_monotone_up_typescript/` are run artifacts. They must be written from observed results, not memory, expectation, or paraphrase.
+- The closeout must preserve two explicit trust surfaces:
+  - the canonical green TypeScript surface
+  - the intentional non-green TypeScript status surface
+- Option A is the default path.
+- Option B is bounded contingency only. It may activate only if the rerun or branch move exposes one real unfinished M46 defect.
+- Option B may not broaden scope, reopen milestone design, or introduce parallel code fan-out.
+- Cherry-pick reconstruction onto `feat/m40-plus` is forbidden.
+- If the defect is not bounded, the parent must stop the session and write `blocked.json` rather than force a landing.
+- Workers do not own:
+  - final proof interpretation
+  - branch movement
+  - path decision
+  - final acceptance
+  - final run-state truth
+- Workers must be closed immediately after their output is merged, consumed, or rejected.
 
-- Worker A and worker B must fork from the exact `contract_freeze_commit` recorded in `contract-freeze.json`.
-- Worker C must fork from the exact `docs_base_commit` recorded by the parent after code and proof assets are integrated.
-- `feat/m40-plus` is the canonical landing branch. After the proof wall passes on `ws/spec-m46-integration`, the parent fast-forwards `feat/m40-plus` to that integrated commit before closeout.
-- The parent is the sole integrator.
-- Merge order is fixed:
-  1. `ws/spec-m46-backend-helper`
-  2. parent-only CLI ownership cleanup on `ws/spec-m46-integration`
-  3. `ws/spec-m46-proof-assets`
-  4. `ws/spec-m46-docs-closeout`
-- Worker B stays one lane on purpose:
-  - the helper-aware proof-source rewrite and the CLI coverage both depend on the same frozen helper topology contract
-  - they must agree on the exact success and failure surfaces
-  - keeping them together avoids a second rebase point where proof-source topology and CLI assertions could drift independently
+## 4. Execution Topology
 
-## Canonical Run-State And Artifact Surfaces
+### 4.1 Lane map
 
-### Authored source deliverables
+| Lane ID | Branch | Worktree path | Owner | Authority level | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| `lane/m46-parent-integration-exec` | `ws/spec-m46-integration` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration` | Parent | **authoritative execution** | Verify `ccefca8`, run the full proof wall, interpret rerun truth |
+| `lane/m46-parent-landing` | `feat/m40-plus` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | Parent | **authoritative landing** | Record kickoff branch state, land the approved head, run mandatory post-landing parity |
+| `lane/m46-worker-closeout-draft` | `ws/spec-m46-closeout-draft` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/closeout-draft` | Worker | support-only | Draft closeout prose or artifact-audit notes from parent-supplied results |
+| `lane/m46-worker-option-b-repair` | `ws/spec-m46-option-b-repair` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/option-b-repair` | Worker | support-only, disabled by default | Produce one bounded continuation repair on top of `ccefca8` if Option B activates |
 
-Only these authored surfaces are in-bounds by default for M46:
+### 4.2 Topology rules
 
-- `spec-core/src/validator.rs`
-- `spec-core/src/typescript_backend.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/cli.rs`
-- `examples/ecommerce/units/pricing/apply_tax.unit.spec`
-- `semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/**`
-- `README.md`
-- `CHANGELOG.md`
+- `lane/m46-parent-integration-exec` is the only lane allowed to determine whether the proof wall matches expected truth.
+- `lane/m46-parent-landing` is the only lane allowed to move `feat/m40-plus` and the only lane allowed to decide that post-landing parity is satisfied.
+- `lane/m46-worker-closeout-draft` may read parent-captured results and draft text, but it is not authoritative and may not mutate canonical branch state.
+- `lane/m46-worker-option-b-repair` does not exist unless the parent explicitly activates Option B in run-state artifacts.
+- The happy path is one sequential parent lane with one optional light drafting lane.
+- There is no broad worker fan-out across code modules because M46 code is already integrated.
 
-Parent-reserved fallback authored surfaces:
+### 4.3 Expected worktree namespace
 
-- `spec-core/src/pipeline.rs`
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
+The session should use these exact worktree branches and paths:
 
-Inline tests follow the ownership of the file they live in.
+| Branch | Path | Required state |
+| --- | --- | --- |
+| `ws/spec-m46-integration` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration` | checked out at authoritative integrated head `ccefca8` |
+| `ws/spec-m46-closeout-draft` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/closeout-draft` | optional, support-only, created only if used |
+| `ws/spec-m46-option-b-repair` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/option-b-repair` | optional, disabled unless Option B activates |
+| `feat/m40-plus` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | kickoff landing lane, starts at `991012f3f2112507d3ed9943eb96dacfc8bfa9be` |
 
-### Parent-owned run-state artifacts
+## 5. Canonical Run-State And Artifact Surfaces
 
-Required parent-owned artifacts under `M46_RUN_ROOT`:
+All canonical run-state authority for this session lives under:
+
+`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/`
+
+### 5.1 Canonical artifact set
+
+| Path | Role | Owner |
+| --- | --- | --- |
+| `baseline.json` | kickoff baseline truth | Parent |
+| `authority-freeze.json` | frozen execution assumptions and writable scope | Parent |
+| `contract-freeze.json` | frozen proof contract and expected truth | Parent |
+| `in-scope-files.txt` | exact writable surfaces for the session | Parent |
+| `out-of-scope-files.txt` | explicit forbidden-touch surfaces | Parent |
+| `queue.json` | current runnable queue and active lane state | Parent |
+| `tasks.json` | durable task ledger with task IDs and statuses | Parent |
+| `run-state.json` | session summary with SHAs, path choice, and gate state | Parent |
+| `session-log.md` | chronological execution log | Parent |
+| `merge-log.md` | landing path narrative and branch movement record | Parent |
+| `acceptance.md` | observed command outcomes and acceptance ledger | Parent |
+| `closeout.md` | final closeout record | Parent |
+| `blocked.json` | required only if the session must stop instead of landing | Parent |
+| `validation/` | raw command captures and verification evidence | Parent-owned tree, support lanes may write only explicitly assigned non-authoritative draft captures |
+
+### 5.2 Required `baseline.json` contents
+
+`baseline.json` must record:
+
+- `run_id`
+- `kickoff_timestamp`
+- `repo_root`
+- `landing_branch`
+- `landing_branch_start_sha`
+- `authoritative_integrated_branch`
+- `authoritative_integrated_sha`
+- `authoritative_execution_root`
+- `option_a_default`
+- `forbidden_path` set to cherry-pick reconstruction
+- current `git status --short` for the repo root
+- current `git status --short` for the integration worktree
+- any pre-existing dirtiness in `.runs/m46_helper_aware_monotone_up_typescript/`
+
+### 5.3 Required `authority-freeze.json` contents
+
+`authority-freeze.json` must record:
+
+- path to `PLAN.md`
+- path to this `ORCH_PLAN.md`
+- parent-authoritative lanes
+- support-only lanes
+- exact branch and worktree topology
+- statement that M46 code is already integrated
+- statement that the happy path expects no product-source edits
+- statement that `acceptance.md` and `closeout.md` are run artifacts
+- default path set to Option A
+- Option B activation rule
+- explicit statement that cherry-pick reconstruction is forbidden
+
+### 5.4 Required `contract-freeze.json` contents
+
+`contract-freeze.json` must record:
+
+- the exact frozen proof-wall command list
+- the exact frozen post-landing narrow rerun command list
+- the exact expected truth for each proof-wall command
+- the exact expected TypeScript status assertions
+- the exact canonical green surface command
+- the exact intentional non-green surface command
+- the exact rule that `.test.spec --target-language typescript` remains unsupported for this milestone closeout
+- the exact rule that no Rust proof inheritance may appear in the TypeScript status view
+- the exact acceptance invariants from `PLAN.md`
+
+### 5.5 Required `merge-log.md` contents
+
+`merge-log.md` must record:
+
+- kickoff `feat/m40-plus` SHA
+- authoritative integrated SHA
+- selected path: Option A or Option B
+- exact landing command executed
+- before and after SHAs for `feat/m40-plus`
+- if Option B activates, the exact defect trigger and repair head SHA
+- if a branch move is blocked, the exact reason
+- final landed SHA
+- final parity verdict
+
+### 5.6 Required `acceptance.md` contents
+
+`acceptance.md` must record:
+
+- authoritative execution root
+- authoritative integrated SHA
+- the exact proof-wall command list
+- per-command observed exit status
+- per-command observed truth summary
+- expected-versus-observed verdict for each command
+- explicit statement that the mixed-root TypeScript status result is intentionally non-green
+- explicit statement that `pricing/apply_tax` is the canonical green surface
+- explicit path decision with one-line reason
+- post-landing parity results for the narrow rerun
+- final acceptance or non-acceptance verdict
+
+### 5.7 Required `closeout.md` contents
+
+`closeout.md` must record:
+
+- exact integrated SHA
+- exact landed SHA
+- landing path actually used
+- concise operator-level summary of what was completed
+- canonical green surface command and observed result
+- intentional non-green surface command and observed result
+- exact statement that `.test.spec --target-language typescript` remains unsupported in this closeout
+- statement that future milestone selection is out of scope
+- any residual follow-up items that are explicitly outside M46
+- final statement that M46 is or is not closed on `feat/m40-plus`
+
+### 5.8 Allowed `tasks.json` statuses
+
+Each `tasks.json` entry must include at least:
+
+- `id`
+- `title`
+- `lane`
+- `owner`
+- `status`
+- `depends_on`
+- `owned_surfaces`
+- `required_commands`
+- `writes`
+- `started_at`
+- `completed_at`
+- `notes`
+
+Allowed `status` values are:
+
+- `pending`
+- `ready`
+- `in_progress`
+- `submitted`
+- `blocked`
+- `merged`
+- `done`
+- `cancelled`
+
+### 5.9 Minimal required `validation/` tree
+
+The session must maintain a minimal validation capture tree under:
+
+`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/validation/`
+
+Required structure:
+
+```text
+validation/
+  baseline/
+    repo-root-branch.txt
+    repo-root-head.txt
+    repo-root-status-short.txt
+    integration-head.txt
+    integration-status-short.txt
+  proof-wall/
+    01-spec-core.txt
+    02-spec-cli-cli-test.txt
+    03-aligned-packet-typescript.txt
+    04-unsupported-near-miss-typescript.txt
+    05-apply-tax-unit-typescript.txt
+    06-discount-plus-tax-molecule-typescript.txt
+    07-status-ecommerce-typescript.json.txt
+    proof-wall-summary.md
+  landing/
+    landing-branch-head-before.txt
+    landing-command.txt
+    landing-branch-head-after.txt
+  post-landing/
+    01-apply-tax-unit-typescript.txt
+    02-status-ecommerce-typescript.json.txt
+    parity-summary.md
+  closeout/
+    closeout-checklist.md
+  repair/
+    option-b-trigger.md
+    focused-repro.txt
+    repair-head.txt
+    repair-proof-wall-summary.md
+```
+
+### 5.10 Validation capture rules
+
+- Every capture file must include:
+  - command
+  - working directory
+  - timestamp
+  - exit code
+  - raw stdout
+  - raw stderr, if any
+- `validation/proof-wall/07-status-ecommerce-typescript.json.txt` must preserve the raw JSON status output exactly as emitted.
+- `validation/landing/landing-command.txt` must preserve the exact branch-movement command used.
+- `validation/post-landing/02-status-ecommerce-typescript.json.txt` must preserve the raw landed-branch JSON status output exactly as emitted.
+- `validation/repair/` must exist only if Option B activates.
+- Support lanes may contribute only explicitly assigned draft captures under `validation/closeout/` or `validation/repair/`. Canonical proof and landing captures remain parent-owned.
+
+## 6. Workstream Plan
+
+### 6.1 Task order
+
+| Order | Task ID | Lane | Owner | Default state |
+| --- | --- | --- | --- | --- |
+| 1 | `task/m46-a1-kickoff-freeze` | `lane/m46-parent-landing` and `lane/m46-parent-integration-exec` | Parent | required |
+| 2 | `task/m46-a2-proof-wall` | `lane/m46-parent-integration-exec` | Parent | required |
+| 3 | `task/m46-a3-path-decision` | `lane/m46-parent-integration-exec` | Parent | required |
+| 4 | `task/m46-b-closeout-draft` | `lane/m46-worker-closeout-draft` | Worker | optional, happy path only |
+| 5 | `task/m46-c-option-b-repair` | `lane/m46-worker-option-b-repair` | Worker | disabled unless Option B activates |
+| 6 | `task/m46-d1-land-and-verify` | `lane/m46-parent-landing` | Parent | required |
+| 7 | `task/m46-d2-closeout-finalize` | `lane/m46-parent-landing` | Parent | required |
+
+### 6.2 `task/m46-a1-kickoff-freeze`
+
+Lane: `lane/m46-parent-landing` and `lane/m46-parent-integration-exec`  
+Owner: Parent
+
+Owned surfaces:
 
 - `baseline.json`
 - `authority-freeze.json`
@@ -164,861 +321,509 @@ Required parent-owned artifacts under `M46_RUN_ROOT`:
 - `tasks.json`
 - `run-state.json`
 - `session-log.md`
+- `validation/baseline/*`
+
+Required commands:
+
+```bash
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec branch --show-current
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec status --short
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration rev-parse HEAD
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration status --short
+```
+
+Acceptance / exit gate:
+
+- repo root confirmed on `feat/m40-plus`
+- repo-root HEAD confirmed as `991012f3f2112507d3ed9943eb96dacfc8bfa9be`
+- integration worktree HEAD confirmed as `ccefca8`
+- authoritative execution root recorded exactly
+- proof wall frozen before any proof command is run
+- writable and non-writable surfaces explicitly frozen
+
+What gets written to run-state artifacts:
+
+- `baseline.json` kickoff truth
+- `authority-freeze.json` topology and guard freeze
+- `contract-freeze.json` proof contract freeze
+- `in-scope-files.txt` listing writable run artifacts only on the happy path
+- `out-of-scope-files.txt` listing product source and unrelated repo surfaces as forbidden unless Option B activates
+- `queue.json` setting `task/m46-a2-proof-wall` as next
+- `tasks.json` marking `task/m46-a1-kickoff-freeze` done
+
+### 6.3 `task/m46-a2-proof-wall`
+
+Lane: `lane/m46-parent-integration-exec`  
+Owner: Parent
+
+Owned surfaces:
+
+- `acceptance.md`
+- `run-state.json`
+- `session-log.md`
+- `queue.json`
+- `tasks.json`
+- `validation/proof-wall/*`
+
+Required commands:
+
+```bash
+cargo test -p spec-core -- --color never
+cargo test -p spec-cli --test cli -- --color never
+cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
+cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units --target-language typescript
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_plus_tax.test.spec --target-language typescript
+cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
+```
+
+Acceptance / exit gate:
+
+- all seven commands executed from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration`
+- each command captured under `validation/proof-wall/`
+- expected-versus-observed comparison recorded
+- status JSON assertions checked explicitly
+- no landing action occurs yet
+
+What gets written to run-state artifacts:
+
+- `acceptance.md` updated with exact proof-wall command table and observed results
+- `run-state.json` updated with `proof_wall_complete`
+- `queue.json` advanced to `task/m46-a3-path-decision`
+- `tasks.json` marking `task/m46-a2-proof-wall` done
+- `validation/proof-wall/proof-wall-summary.md` summarizing expected versus observed truth
+
+### 6.4 `task/m46-a3-path-decision`
+
+Lane: `lane/m46-parent-integration-exec`  
+Owner: Parent
+
+Owned surfaces:
+
+- `run-state.json`
+- `queue.json`
+- `tasks.json`
+- `acceptance.md`
+- `closeout.md`
+- `merge-log.md`
+- `blocked.json` if the session cannot proceed
+
+Required commands:
+
+```bash
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec merge-base --is-ancestor 991012f3f2112507d3ed9943eb96dacfc8bfa9be ccefca8
+```
+
+Acceptance / exit gate:
+
+- Option A selected if and only if the proof wall matches expected truth and the fast-forward path remains valid
+- Option B selected only if one bounded unfinished M46 defect is explicitly identified
+- blocked-stop selected if the defect is not bounded or if more than one substantive defect appears
+
+What gets written to run-state artifacts:
+
+- `run-state.json` updated with `path_choice`
+- `acceptance.md` updated with path-decision reason
+- `closeout.md` initialized with integrated SHA and provisional path
+- `merge-log.md` initialized with kickoff and path-decision entries
+- `queue.json` advanced either to `task/m46-b-closeout-draft`, `task/m46-c-option-b-repair`, or blocked state
+- `blocked.json` written if the session must stop
+- `tasks.json` marking `task/m46-a3-path-decision` done or blocked
+
+### 6.5 `task/m46-b-closeout-draft`
+
+Lane: `lane/m46-worker-closeout-draft`  
+Owner: Worker  
+Activation: Optional, only after `task/m46-a3-path-decision` selects Option A or after the repaired head has already passed the proof wall on Option B
+
+Owned surfaces:
+
+- `validation/closeout/closeout-checklist.md`
+- optional non-authoritative draft notes in the closeout-draft worktree
+- no canonical branch refs
+- no canonical proof captures
+- no canonical run-state files
+
+Required commands:
+
+- none required beyond any parent-assigned read-only inspection commands
+- if the worker runs commands, they must be recorded and returned to the parent
+
+Acceptance / exit gate:
+
+- worker returns a concise closeout draft pack containing:
+  - proposed acceptance wording
+  - proposed closeout wording
+  - artifact completeness checklist
+  - unresolved assumptions, if any
+- worker does not mutate canonical landing or execution truth
+- worker is closed immediately after the parent consumes or rejects the draft
+
+What gets written to run-state artifacts:
+
+- parent may copy useful checklist notes into `validation/closeout/closeout-checklist.md`
+- `tasks.json` updated by the parent to `done` or `cancelled`
+- no canonical artifact becomes authoritative until the parent writes it
+
+### 6.6 `task/m46-c-option-b-repair`
+
+Lane: `lane/m46-worker-option-b-repair`  
+Owner: Worker  
+Activation: Disabled by default. Created only if the parent explicitly activates Option B.
+
+Owned surfaces:
+
+- exactly the bounded defect surfaces named by the parent in the Option B activation record
+- `validation/repair/option-b-trigger.md`
+- `validation/repair/focused-repro.txt`
+- `validation/repair/repair-head.txt`
+- no branch movement on `feat/m40-plus`
+- no changes outside the parent-approved bounded defect surface
+
+Required commands:
+
+- one parent-specified focused repro command that demonstrates the defect
+- any parent-specified bounded verification command
+- `git rev-parse HEAD` in the repair worktree when the proposed repair head is ready
+
+Acceptance / exit gate:
+
+- worker produces exactly one bounded continuation repair on top of `ccefca8`
+- worker returns:
+  - changed files
+  - commands run
+  - blockers
+  - unresolved assumptions
+- worker does not broaden scope
+- if the worker cannot keep the repair bounded, it must stop and report blocked status instead of improvising
+
+What gets written to run-state artifacts:
+
+- `validation/repair/option-b-trigger.md` written by the parent at activation time
+- `validation/repair/focused-repro.txt` capture
+- `validation/repair/repair-head.txt` with proposed repair SHA
+- `queue.json` updated by the parent to re-enter `task/m46-a2-proof-wall` against the repair head
+- `tasks.json` marking `task/m46-c-option-b-repair` submitted, blocked, or done
+- `blocked.json` written if the repair cannot remain bounded
+
+### 6.7 `task/m46-d1-land-and-verify`
+
+Lane: `lane/m46-parent-landing`  
+Owner: Parent
+
+Owned surfaces:
+
+- branch ref `feat/m40-plus`
 - `merge-log.md`
 - `acceptance.md`
 - `closeout.md`
-- `blocked.json` on blocked termination
-- `validation/**`
+- `run-state.json`
+- `queue.json`
+- `tasks.json`
+- `validation/landing/*`
+- `validation/post-landing/*`
 
-Required contents:
-
-| Artifact | Must record |
-|---|---|
-| `baseline.json` | `run_id`, current branch, starting `HEAD`, scope diff anchor `ce0e16d`, initial `git status --short`, whether `PLAN.md` or `ORCH_PLAN.md` were already dirty, and the exact baseline timestamp |
-| `authority-freeze.json` | authority plan path, frozen in-scope authored files, frozen out-of-scope files, parent-reserved fallback surfaces, reopened proof-source surfaces, hard-guard summary, and the explicit statement that canonical ecommerce proof must become helper-aware |
-| `contract-freeze.json` | `contract_freeze_commit`, frozen helper filenames, exact TypeScript helper eligibility contract, exact unsupported boundaries, exact pre-Bun failure classes, and any frozen error strings or stable message fragments that downstream tests may assert |
-| `merge-log.md` | every merge intake attempt, merge order, merge base used, parent repair files, exact reason for any bounce, exact reason for any reopened fallback surface, and the commit ids for preview, post-cleanup, and final integrated heads |
-| `acceptance.md` | proof-wall command outcomes, expected versus actual result for each command family, zero-dep preservation verdict, helper-aware proof separation verdict, fake-green check, final bounded-lane checklist, and final accept or reject decision |
-| `closeout.md` | landed scope summary, final diff boundary verdict, proof-wall summary, remaining risks, deferred follow-ups outside M46, and whether any parent-reserved fallback surfaces were actually touched |
-
-### Queue and task state semantics
-
-`tasks.json` is the authoritative machine-readable state file for the run.
-
-Each task entry must record:
-
-- `id`
-- `order`
-- `title`
-- `owner`
-- `branch`
-- `worktree`
-- `status`
-- `depends_on`
-- `owned_paths`
-- `required_commands`
-- `acceptance_summary`
-- `sentinel_dir`
-- `handoff_commit`
-- `started_at`
-- `completed_at`
-- `blocked_reason`
-- `restart_from`
-- `notes`
-
-Allowed `status` values are:
-
-- `pending`
-- `ready`
-- `in_progress`
-- `submitted`
-- `merged`
-- `blocked`
-- `bounced`
-- `done`
-- `cancelled`
-
-`queue.json` is the parent-generated runnable projection. It must record:
-
-- current runnable task ids in order
-- the single `active_task`
-- open gates
-- blocked gates
-- whether worker concurrency slots are available
-- the current integration head if integration exists
-- the next required human or parent-only action
-
-`run-state.json` must record:
-
-- `run_id`
-- `current_phase`
-- `scope_anchor_commit`
-- `contract_freeze_commit`
-- `docs_base_commit`
-- `integration_head`
-- `proof_wall_state`
-- `final_status`
-
-### Expected validation records
-
-Minimum expected validation records:
-
-- `validation/baseline/git-status.short.txt`
-- `validation/baseline/git-diff.scope-anchor-name-only.txt`
-- `validation/baseline/git-diff.scope-anchor-stat.txt`
-- `validation/authority/in-scope-files.txt`
-- `validation/authority/out-of-scope-files.txt`
-- `validation/authority/plan-summary.txt`
-- `validation/contract-freeze/spec-core-tests.txt`
-- `validation/contract-freeze/validator-contract-notes.txt`
-- `validation/backend-intake/spec-core-tests.txt`
-- `validation/backend-intake/spec-generate-monotone-up-typescript.txt`
-- `validation/backend-intake/spec-build-monotone-up-typescript.txt`
-- `validation/cli-cleanup/spec-cli-tests.txt`
-- `validation/cli-cleanup/commands-routing-notes.txt`
-- `validation/proof-assets/spec-test-packet-aligned-typescript.txt`
-- `validation/proof-assets/spec-test-example-apply-tax-typescript.txt`
-- `validation/proof-assets/spec-test-molecule-negative-typescript.txt`
-- `validation/proof-assets/spec-status-example-typescript.json`
-- `validation/merge/final-name-only.diff`
-- `validation/merge/final-stat.diff`
-- `validation/proof-wall/cargo-test.txt`
-- `validation/proof-wall/spec-generate-packet-aligned-typescript.txt`
-- `validation/proof-wall/spec-build-packet-aligned-typescript.txt`
-- `validation/proof-wall/spec-test-packet-aligned-typescript.txt`
-- `validation/proof-wall/spec-test-packet-drift-typescript.txt`
-- `validation/proof-wall/spec-test-packet-unsupported-near-miss-typescript.txt`
-- `validation/proof-wall/spec-test-example-apply-tax-typescript.txt`
-- `validation/proof-wall/spec-test-molecule-negative-typescript.txt`
-- `validation/proof-wall/spec-status-example-typescript.json`
-- `validation/proof-wall/spec-export-example.json`
-- `validation/proof-wall/family-prove-typescript.txt`
-- `validation/closeout/final-git-status.short.txt`
-
-### Per-task sentinels
-
-Required sentinel directories:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-00-baseline/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-05-authority-freeze/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-10-contract-freeze/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-15-worker-launch/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-a-backend-helper/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-25-backend-intake/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-30-cli-ownership/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-b-proof-assets/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-40-docs-launch/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-c-docs-closeout/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-f-integration/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-50-proof-wall/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/task-m46-60-closeout/`
-
-Each sentinel directory may contain:
-
-- `started.json`
-- `status.json`
-- `done.json`
-- `blocked.json`
-
-## Queue And Gates
-
-| Order | ID | Kind | Owner | Worktree | Opens when |
-|---|---|---|---|---|---|
-| 1 | `task-m46-00-baseline` | gate | parent | primary | repo baseline and dirty-state capture complete |
-| 2 | `task-m46-05-authority-freeze` | gate | parent | primary | `PLAN.md` scope, in-scope files, and hard guards are recorded |
-| 3 | `task-m46-10-contract-freeze` | task | parent | `ws/spec-m46-contract-freeze` | baseline and authority freeze are complete |
-| 4 | `task-m46-15-worker-launch` | gate | parent | primary | `contract-freeze.json` exists with one frozen commit and frozen wording |
-| 5 | `task-m46-a-backend-helper` | task | worker A | `ws/spec-m46-backend-helper` | worker launch gate is open |
-| 6 | `task-m46-b-proof-assets` | task | worker B | `ws/spec-m46-proof-assets` | worker launch gate is open |
-| 7 | `task-m46-25-backend-intake` | gate | parent | `ws/spec-m46-integration` | backend lane is submitted or explicitly blocked |
-| 8 | `task-m46-30-cli-ownership` | task | parent | `ws/spec-m46-integration` | backend intake is green |
-| 9 | `task-m46-40-docs-launch` | gate | parent | primary | proof-assets lane is merged and code truth is stable |
-| 10 | `task-m46-c-docs-closeout` | task | worker C | `ws/spec-m46-docs-closeout` | docs launch gate is open |
-| 11 | `task-m46-f-integration` | task | parent | `ws/spec-m46-integration` | docs lane is submitted or explicitly blocked |
-| 12 | `task-m46-50-proof-wall` | gate | parent | `ws/spec-m46-integration` | integrated branch is merged and locally consistent |
-| 13 | `task-m46-60-closeout` | gate | parent | primary | full proof wall is green, `feat/m40-plus` is ready to fast-forward |
-
-## Workstream Plan
-
-### `task-m46-00-baseline` - parent only
-
-Purpose:
-
-- capture the exact M46 baseline before any M46 worktree opens
-
-Required commands:
+Required commands for Option A:
 
 ```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/validation/baseline
-git rev-parse --abbrev-ref HEAD
-git rev-parse --short HEAD
-git merge-base --is-ancestor ce0e16d HEAD
-git status --short
-git diff --name-only ce0e16d..HEAD
-git diff --stat ce0e16d..HEAD
-```
-
-Blocked conditions:
-
-- current branch is not `feat/m40-plus`
-- current `HEAD` is not a descendant of `ce0e16d`
-- repo state is ambiguous enough that the parent cannot distinguish pre-existing unrelated edits from M46 execution state
-
-Restart point if blocked:
-
-- stop before worktree creation
-- restart from `task-m46-00-baseline` after the parent re-establishes the correct branch and baseline
-
-### `task-m46-05-authority-freeze` - parent only
-
-Purpose:
-
-- freeze the authoritative M46 scope, reopened proof surfaces, parent-reserved fallback surfaces, and hard guards
-
-Required commands:
-
-```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/validation/authority
-sed -n '1,500p' PLAN.md
-git ls-files spec-core/src spec-cli/src README.md CHANGELOG.md semantic-families examples
-```
-
-Acceptance:
-
-- `apply_tax.unit.spec` is explicitly reopened as the canonical helper-aware ecommerce proof source
-- monotone-up packet fixtures are explicitly reopened as the helper-aware packet proof source
-- `pipeline.rs`, `passport.rs`, and `export.rs` remain parent-reserved only
-- the frozen out-of-scope list explicitly excludes wrapper, seam, molecule, multi-dep, and cross-library TypeScript work
-
-Blocked conditions:
-
-- `PLAN.md` scope is unclear, contradictory, or changes mid-run
-- the parent cannot freeze reopened proof-source surfaces cleanly
-- the parent identifies mandatory authored files outside the authorized M46 surface
-
-Restart point if blocked:
-
-- stop before editing the contract-freeze lane
-- restart from `task-m46-05-authority-freeze` after the parent resolves scope authority
-
-### `task-m46-10-contract-freeze` - parent only
-
-Purpose:
-
-- lock the helper-aware validator contract and frozen unsupported boundaries before parallel implementation begins
-
-Owned files:
-
-- `spec-core/src/validator.rs`
-
-Required commands:
-
-```bash
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/contract-freeze -b ws/spec-m46-contract-freeze feat/m40-plus
-cargo test -p spec-core -- --color never
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/contract-freeze status --short
-```
-
-Acceptance:
-
-- one shared frozen TypeScript eligibility contract exists and is recorded
-- the contract is exactly:
-  - zero deps allowed
-  - one direct dep allowed only if semantically classified as `function.helper.identity_passthrough.v1`
-  - helper must exist in the same loaded unit set and generated tree
-  - dep count `> 1` fails before Bun
-  - wrong helper family fails before Bun
-  - cross-library helper dep fails for this lane
-  - `.test.spec` stays unsupported
-- frozen generated helper filenames are recorded:
-  - `__spec_ts/runtime.ts`
-  - `__spec_ts/build_entry.ts`
-  - `__spec_ts/local_tests.ts`
-- frozen unsupported-lane wording is specific enough that worker B can assert against it without guessing
-
-Blocked conditions:
-
-- the parent cannot stabilize eligibility, helper filenames, or failure wording cleanly enough for parallel work
-- the bounded TS gate still depends on backend generation or pipeline behavior to decide basic eligibility
-- freezing the validator contract would require reopening worker-owned or out-of-scope files
-
-Restart point if blocked:
-
-- stop before worker launch
-- restart from `task-m46-10-contract-freeze` after the parent resolves the contract locally
-
-### `task-m46-15-worker-launch` - parent only
-
-Purpose:
-
-- launch the first two worker lanes from one frozen commit and record exact ownership plus banned drift
-
-Required commands:
-
-```bash
-git rev-parse --short ws/spec-m46-contract-freeze
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/backend-helper -b ws/spec-m46-backend-helper ws/spec-m46-contract-freeze
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/proof-assets -b ws/spec-m46-proof-assets ws/spec-m46-contract-freeze
-git worktree list
-```
-
-Acceptance:
-
-- worker A and worker B both fork from the exact `contract_freeze_commit`
-- worker A prompt contains only backend-helper scope
-- worker B prompt contains only proof-source and CLI coverage scope
-- both workers receive exact commands, frozen names, hard guards, and bounce rules
-
-Blocked conditions:
-
-- `contract-freeze.json` is missing or does not identify a single frozen commit
-- worker worktrees or branches cannot be created cleanly from the frozen commit
-- lane ownership is ambiguous enough that a worker would need to guess file scope
-
-Restart point if blocked:
-
-- stop before issuing worker prompts
-- restart from `task-m46-15-worker-launch` after worktrees and lane contracts are clean
-
-### `task-m46-a-backend-helper` - worker A
-
-Purpose:
-
-- make helper-aware monotone-up generation and harness execution truthful in the backend without owning routing, proof storage, or docs
-
-Owned files:
-
-- `spec-core/src/typescript_backend.rs`
-- directly adjacent unit tests in `spec-core/src/typescript_backend.rs`
-- directly adjacent helper-emission assertions only if they live in that module
-
-Must not touch:
-
-- `spec-core/src/validator.rs`
-- `spec-cli/src/commands.rs`
-- `spec-core/src/pipeline.rs`
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
-- packet fixtures
-- ecommerce example
-- CLI tests
-- docs
-
-Required commands:
-
-```bash
-cargo test -p spec-core -- --color never
-cargo run -p spec-cli -- generate semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- build semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-git status --short
-```
-
-Acceptance:
-
-- helper-aware monotone-up generation emits the helper module into the same output tree
-- the generated leaf module imports the helper through the truthful relative path
-- the generated local test harness still works for helper-aware units
-- the implementation stays topology-specific and does not introduce generic dep-graph scheduling
-- zero-dep M45 behavior is preserved in backend tests or existing command behavior
-- the lane is merge-safe only if the required commands pass and changed files stay inside owned paths
-
-Blocked conditions:
-
-- a required fix crosses into validator, CLI, pipeline, proof-storage, export, or docs ownership
-- a failing command indicates routing or proof-surface drift rather than backend generation drift
-- the frozen helper filenames or validator contract no longer suffice for backend generation
-
-Restart point if blocked:
-
-- stop in `ws/spec-m46-backend-helper`
-- report the blocked file, exact failing command, and violated frozen assumption
-- restart from `task-m46-a-backend-helper` after the parent republishes a valid freeze or reassigns the cross-lane fix
-
-### `task-m46-b-proof-assets` - worker B
-
-Purpose:
-
-- refresh one real helper-aware packet proof source and one real helper-aware ecommerce proof source, then lock product coverage against that same topology
-
-Owned files:
-
-- `examples/ecommerce/units/pricing/apply_tax.unit.spec`
-- `semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/**`
-- `spec-cli/tests/cli.rs`
-
-Must not touch:
-
-- `spec-core/src/validator.rs`
-- `spec-core/src/typescript_backend.rs`
-- `spec-cli/src/commands.rs`
-- `spec-core/src/pipeline.rs`
-- `spec-core/src/passport.rs`
-- `spec-core/src/export.rs`
-- docs
-
-Required commands:
-
-```bash
-cargo test -p spec-cli --test cli -- --color never
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units --target-language typescript
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec checkout feat/m40-plus
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec merge --ff-only ccefca8
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
 cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_plus_tax.test.spec --target-language typescript
 cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
-git status --short
 ```
 
-Acceptance:
-
-- the packet aligned proof source actually becomes helper-aware, not merely renamed
-- the ecommerce `apply_tax` proof source actually becomes helper-aware, not merely restated
-- the negative path signal proves the worker exercised the helper topology boundary:
-  - unsupported near miss fails before Bun
-  - molecule target still fails before Bun
-- `spec-cli/tests/cli.rs` covers:
-  - helper-aware monotone-up success
-  - wrong helper family rejection
-  - missing helper rejection
-  - dep count `> 1` rejection
-  - molecule rejection still intact
-  - TypeScript proof separation from Rust proof
-  - zero-dep preservation at the product surface
-- `cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json` is an expected non-green truth surface for M46:
-  - command exits `1`
-  - `pricing/apply_tax` is `valid`
-  - `money/round`, `pricing/apply_discount`, `pricing/calculate_total`, `pricing/checkout_quote`, and `pricing/discount_policy` are `untested`
-  - no Rust proof inheritance appears in the TypeScript status view
-- the lane is merge-safe only if the required commands produce their expected outcomes and changed files stay inside owned paths
-
-Blocked conditions:
-
-- CLI assertions require validator wording that was not frozen
-- proof-source refresh requires backend, CLI routing, pipeline, proof-storage, export, or docs changes
-- the helper-aware packet and helper-aware ecommerce example cannot be made truthful under the bounded one-helper contract
-
-Restart point if blocked:
-
-- stop in `ws/spec-m46-proof-assets`
-- report the blocked file, exact failing command, and violated frozen assumption
-- restart from `task-m46-b-proof-assets` after the parent resolves the upstream issue
-
-### `task-m46-25-backend-intake` - parent only
-
-Purpose:
-
-- merge the backend lane into the integration worktree and prove the backend surface is stable enough for parent-owned CLI cleanup
-
-Owned files and artifacts:
-
-- `M46_RUN_ROOT/merge-log.md`
-- `M46_RUN_ROOT/validation/backend-intake/**`
-- `ws/spec-m46-integration`
-
-Required commands:
+Required commands for Option B:
 
 ```bash
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration -b ws/spec-m46-integration ws/spec-m46-contract-freeze
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration merge --no-ff ws/spec-m46-backend-helper
-cargo test -p spec-core -- --color never
-cargo run -p spec-cli -- generate semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- build semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration status --short
-```
-
-Acceptance:
-
-- backend lane merges cleanly onto the frozen contract base
-- parent repair is limited to merge mechanics only
-- if backend semantics disagree with the frozen contract, the parent bounces worker A instead of reinterpreting the plan
-- the post-merge backend preview head is recorded in `merge-log.md`
-
-Blocked conditions:
-
-- merge conflicts cannot be resolved without semantic reinterpretation
-- the merged backend preview fails required generate or build commands
-- backend lane drift reaches non-owned files
-
-Restart point if blocked:
-
-- stop in `ws/spec-m46-integration`
-- record the blocker in `merge-log.md`
-- restart from `task-m46-a-backend-helper` if worker A must reland, otherwise restart from `task-m46-25-backend-intake`
-
-### `task-m46-30-cli-ownership` - parent only
-
-Purpose:
-
-- collapse duplicate CLI-side TypeScript generator ownership after backend truth exists, and reopen fallback surfaces only if evidence proves it is necessary
-
-Owned files:
-
-- `spec-cli/src/commands.rs`
-- parent-reserved fallback surfaces only if proven necessary:
-  - `spec-core/src/pipeline.rs`
-  - `spec-core/src/passport.rs`
-  - `spec-core/src/export.rs`
-
-Required commands:
-
-```bash
-cargo test -p spec-cli --test cli -- --color never
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration status --short
-```
-
-Acceptance:
-
-- `commands.rs` routes and reports only
-- `typescript_backend.rs` remains the single generator owner
-- any fallback change to `pipeline.rs`, `passport.rs`, or `export.rs` must be justified in `merge-log.md` by a specific failing command
-- the parent does not widen M46 while fixing CLI ownership
-- the post-cleanup head is recorded as the base that proof-assets must merge onto
-
-Blocked conditions:
-
-- parent cleanup would require semantic changes outside `PLAN.md`
-- routing cleanup requires unfrozen validator drift
-- fallback surfaces would need speculative edits rather than evidence-backed edits
-
-Restart point if blocked:
-
-- stop in `ws/spec-m46-integration`
-- record the blocker in `merge-log.md`
-- restart from `task-m46-10-contract-freeze` if the validator contract was insufficient, otherwise restart from `task-m46-30-cli-ownership`
-
-### `task-m46-40-docs-launch` - parent only
-
-Purpose:
-
-- merge proof assets onto the stable code path, then fork the late docs lane from that stable integrated head
-
-Required commands:
-
-```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration merge --no-ff ws/spec-m46-proof-assets
-cargo test -p spec-cli --test cli -- --color never
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration rev-parse --short HEAD
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/docs-closeout -b ws/spec-m46-docs-closeout "$(git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration rev-parse HEAD)"
-```
-
-Acceptance:
-
-- proof-assets lane merges onto the post-cleanup integration head
-- parent repair is limited to merge mechanics only
-- if proof assets semantically disagree with the frozen contract or the integrated backend path, the parent bounces worker B
-- `docs_base_commit` is recorded after proof-assets merge, not before
-
-Blocked conditions:
-
-- proof-assets merge requires creative semantic resolution
-- integrated proof-assets tree fails required CLI tests
-- proof-assets drift reaches non-owned files
-
-Restart point if blocked:
-
-- stop before docs launch
-- record the blocker in `merge-log.md`
-- restart from `task-m46-b-proof-assets` if worker B must reland, otherwise restart from `task-m46-40-docs-launch`
-
-### `task-m46-c-docs-closeout` - worker C
-
-Purpose:
-
-- move user-facing docs only after code and proof behavior are stable
-
-Owned files:
-
-- `README.md`
-- `CHANGELOG.md`
-
-Must not touch:
-
-- any code files
-- any test files
-- any fixtures
-- any examples
-- any run artifacts
-
-Required commands:
-
-```bash
-cargo test -p spec-cli --test cli -- --color never
-cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
-cargo run -p spec-cli -- export examples/ecommerce/units --format json
-git status --short
-```
-
-Acceptance:
-
-- README states exactly the bounded M46 lane and no broader claim
-- CHANGELOG records only the helper-aware monotone-up widening
-- `cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json` is an expected non-green truth surface for M46 docs:
-  - command exits `1`
-  - the bounded TypeScript lane is documented as per-eligible-unit, not whole-root green
-  - no wording implies that the entire ecommerce root is proven in TypeScript
-- docs lane remains low-risk and late by design
-- the lane is merge-safe only if changed files stay inside owned paths and required commands produce their expected outcomes
-
-Blocked conditions:
-
-- truthful docs would require broader product claims than the landed code allows
-- docs lane appears to need code, test, fixture, or example edits
-- CLI outputs are still unstable enough that docs would guess
-
-Restart point if blocked:
-
-- stop in `ws/spec-m46-docs-closeout`
-- report the blocked file or wording gap
-- restart from `task-m46-c-docs-closeout` after the parent resolves the upstream instability
-
-### `task-m46-f-integration` - parent only
-
-Purpose:
-
-- merge docs, re-check scope boundaries, and prepare the exact integrated branch that faces the proof wall
-
-Required commands:
-
-```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration merge --no-ff ws/spec-m46-docs-closeout
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration diff --name-only ce0e16d..HEAD
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration diff --stat ce0e16d..HEAD
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration status --short
-```
-
-Acceptance:
-
-- final integrated diff stays inside frozen authored surfaces plus derived proof output and parent-owned run state
-- no silent drift is introduced in:
-  - helper filenames
-  - validator contract
-  - unsupported boundaries
-  - proof separation
-  - command flag boundaries
-- the parent does not normalize a widened milestone during integration
-
-Blocked conditions:
-
-- merge conflicts cannot be resolved without reopening ownership or widening scope
-- final integrated tree requires out-of-scope authored files
-- proof-wall preparation depends on an unfrozen new surface
-
-Restart point if blocked:
-
-- stop in `ws/spec-m46-integration`
-- record the blocker in `merge-log.md`
-- restart from the owning lane or from `task-m46-30-cli-ownership`, depending on where drift began
-
-### `task-m46-50-proof-wall` - parent only
-
-Purpose:
-
-- run and record the exact M46 proof wall on the integrated branch and treat any unexpected result as a stop condition
-
-Required commands:
-
-```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/validation/proof-wall
-cargo test
-cargo run -p spec-cli -- generate semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- build semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/drift/units --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units --target-language typescript
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec checkout feat/m40-plus
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec merge --ff-only <approved_repair_sha>
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/spec rev-parse HEAD
 cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_plus_tax.test.spec --target-language typescript
 cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
-cargo run -p spec-cli -- export examples/ecommerce/units --format json
-cargo xtask family prove function.arithmetic_leaf.monotone_up.v1 --target-language typescript
 ```
 
-Expected results by command family:
+Acceptance / exit gate:
 
-- `cargo test`
-  - full repo test suite passes
-  - zero-dep monotone-up regressions stay green
-  - helper-aware proof separation regressions stay green
-- `spec generate` on packet aligned units
-  - generated tree includes helper-aware modules and frozen helper files
-  - output tree is same-generated-tree honest, not cross-library resolved
-- `spec build` on packet aligned units
-  - Bun build succeeds for the helper-aware packet
-- `spec test` on packet aligned units
-  - helper-aware packet succeeds in the TS lane
-  - this is one of the two required checked helper-aware proof sources
-- `spec test` on packet drift units
-  - drift behavior remains truthful and does not silently greenlight the wrong semantics
-- `spec test` on packet unsupported near miss
-  - failure occurs before Bun executes unsupported semantics
-  - near miss remains unsupported, not silently promoted
-- `spec test` on ecommerce `apply_tax.unit.spec`
-  - helper-aware ecommerce example succeeds in the TS lane
-  - this is the second required checked helper-aware proof source
-- `spec test` on `discount_plus_tax.test.spec`
-  - molecule target is rejected for TypeScript before Bun runs
-  - this remains an explicit boundary check in M46
-- `spec status` on ecommerce root
-  - command exits `1`
-  - reads only `target_proofs.typescript`
-  - reports TypeScript truth without inheriting Rust proof
-  - reflects the helper-aware example as freshly proven in the TS lane
-  - `pricing/apply_tax` is `valid`
-  - `money/round`, `pricing/apply_discount`, `pricing/calculate_total`, `pricing/checkout_quote`, and `pricing/discount_policy` are `untested`
-- `spec export` on ecommerce units
-  - additive proof truth is preserved
-  - Rust proof remains untouched by TypeScript execution
-- `cargo xtask family prove ... --target-language typescript`
-  - family-level proof remains green after helper-aware widening
+- `feat/m40-plus` moved by fast-forward only
+- exact landed SHA recorded
+- post-landing `apply_tax.unit.spec` TypeScript rerun matches integration truth
+- post-landing TypeScript status JSON rerun matches integration truth
+- no parity drift is tolerated
 
-Blocked conditions:
+What gets written to run-state artifacts:
 
-- any proof-wall command fails
-- either checked proof source remains zero-dep after the supposed helper-aware code landed
-- TypeScript proof overwrites Rust proof or status mirrors Rust truth
-- molecule target reaches Bun instead of failing at the boundary
-- fixing the failure would require out-of-scope files or widened milestone semantics
+- `merge-log.md` with exact landing command and before/after SHAs
+- `acceptance.md` with post-landing parity results
+- `closeout.md` with landed SHA and parity result
+- `run-state.json` with `landed_sha` and `post_landing_parity_complete`
+- `validation/landing/*` captures
+- `validation/post-landing/*` captures
+- `tasks.json` marking `task/m46-d1-land-and-verify` done or blocked
 
-Restart point if blocked:
+### 6.8 `task/m46-d2-closeout-finalize`
 
-- stop with the integrated branch intact
-- record the blocker in `acceptance.md` and `blocked.json`
-- restart from the narrowest upstream owner that can fix the evidence-backed failure
+Lane: `lane/m46-parent-landing`  
+Owner: Parent
 
-### `task-m46-60-closeout` - parent only
+Owned surfaces:
 
-Purpose:
-
-- fast-forward the proven integration branch onto `feat/m40-plus` and close the run only after scope, proof, and docs all agree
+- `acceptance.md`
+- `closeout.md`
+- `merge-log.md`
+- `queue.json`
+- `tasks.json`
+- `run-state.json`
+- `session-log.md`
+- `blocked.json` if final acceptance fails
 
 Required commands:
 
-```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m46_helper_aware_monotone_up_typescript/validation/closeout
-test "$(git rev-parse --abbrev-ref HEAD)" = "feat/m40-plus"
-git merge --ff-only ws/spec-m46-integration
-git status --short
-git diff --name-only ce0e16d..HEAD
-git diff --stat ce0e16d..HEAD
-```
+- no new product-validation commands required beyond any final SHA or status reads needed to complete the record
+- if any final verification command is run, it must be captured in `validation/closeout/`
 
-Acceptance:
+Acceptance / exit gate:
 
-- `feat/m40-plus` fast-forwards cleanly to the proven integration head
-- final diff remains in-bounds
-- closeout records whether parent-reserved fallback surfaces were untouched or touched with evidence-backed justification
-- final status is green only if the fake-green check is explicitly passed
+- all gates have passed
+- `acceptance.md` contains the exact command outcomes and final verdict
+- `closeout.md` contains exact integrated and landed SHAs plus the two trust surfaces
+- all canonical artifacts agree on the final truth
+- if any final inconsistency remains, the session stops in blocked state rather than declaring completion
 
-Blocked conditions:
+What gets written to run-state artifacts:
 
-- closeout is not running from the primary `feat/m40-plus` worktree
-- final diff contains out-of-bounds authored files
-- `feat/m40-plus` cannot fast-forward cleanly to `ws/spec-m46-integration`
-- acceptance still relies on unresolved blockers or undocumented scope deviations
+- final `acceptance.md`
+- final `closeout.md`
+- final `merge-log.md`
+- `run-state.json` with `final_acceptance_state`
+- `queue.json` closed out
+- `tasks.json` marking session-complete tasks done
+- `blocked.json` if final acceptance cannot be truthfully declared
 
-Restart point if blocked:
+## 7. Gate Definitions
 
-- stop before declaring M46 complete
-- record the blocker in `closeout.md`
-- restart from the narrowest upstream task that caused the boundary failure
+### Gate 1: Kickoff integrity
 
-## Scope-Boundary Checks
+Pass only if:
 
-Required checks:
+- repo root is `feat/m40-plus`
+- kickoff SHA is `991012f3f2112507d3ed9943eb96dacfc8bfa9be`
+- authoritative integration SHA is `ccefca8`
+- authoritative execution root is recorded exactly
+- proof and landing topology are frozen in run-state artifacts
 
-- capture baseline diff surfaces during `task-m46-00-baseline`
-- capture per-lane merge intake behavior in `merge-log.md`
-- capture final integrated name-only and stat diffs during `task-m46-f-integration`
-- re-check final name-only and stat diffs during `task-m46-60-closeout`
+### Gate 2: Proof-wall completeness
 
-Required commands:
+Pass only if:
 
-```bash
-git diff --name-only ce0e16d..HEAD
-git diff --stat ce0e16d..HEAD
-```
+- all seven proof-wall commands have been run from `ws/spec-m46-integration`
+- each command has a capture file under `validation/proof-wall/`
+- each command has an expected-versus-observed entry in `acceptance.md`
 
-Boundary rule:
+### Gate 3: Truth match and path choice
 
-- every changed file in the final diff must be one of:
-  - a frozen M46 authored surface
-  - a derived proof artifact changed only by proof commands
-  - a parent-owned `.runs/**` execution artifact
+Pass only if:
 
-Blocked rule:
+- Option A or Option B is explicitly selected
+- the reason for the choice is recorded
+- blocked-stop is chosen instead of improvisation if the defect is not bounded
 
-- any out-of-bounds authored diff is a blocker, not a follow-up idea
-- do not silently absorb opportunistic refactors, broader TypeScript ambition, or unrelated cleanup into M46
-- if a required fix truly needs a new authored surface, stop and reopen authority explicitly instead of normalizing it during integration
+### Gate 4: Landing eligibility
 
-## Context-Control Rules
+Pass only if:
 
-### Parent prompt rules
+- the approved landed head is identified exactly
+- the branch move is a fast-forward
+- cherry-pick reconstruction is not used
 
-- Every worker prompt must include only:
-  - the lane’s owned file set
-  - the exact relevant `PLAN.md` excerpts
-  - the recorded `contract_freeze_commit`
-  - frozen helper filenames and frozen message fragments that matter for that lane
+### Gate 5: Post-landing parity
+
+Pass only if:
+
+- the landed-branch `apply_tax.unit.spec` TypeScript rerun matches the integration truth
+- the landed-branch TypeScript status JSON rerun matches the integration truth
+- parity is recorded in both `acceptance.md` and `closeout.md`
+
+### Gate 6: Closeout completeness
+
+Pass only if:
+
+- `acceptance.md` contains the full proof-wall ledger
+- `closeout.md` contains exact integrated and landed SHAs
+- the canonical green surface is named and observed
+- the intentional non-green surface is named and observed
+- all canonical run-state artifacts agree on the final result
+
+## 8. Context-Control Rules
+
+- The parent keeps a deliberately small active context set:
+  - `PLAN.md`
+  - this `ORCH_PLAN.md`
+  - exact kickoff SHA and integrated SHA
+  - exact proof-wall command list
+  - exact post-landing rerun command list
+  - `.runs/m46_helper_aware_monotone_up_typescript/` canonical artifacts
+- The parent does not hold broad implementation context unless Option B activates and a bounded defect requires it.
+- Workers receive only a minimal task packet containing:
+  - relevant `PLAN.md` excerpt
+  - relevant `ORCH_PLAN.md` excerpt
+  - task ID
+  - owned paths
   - required commands
-  - explicit forbidden touch surfaces
-  - lane-local acceptance criteria
-  - bounce rules
-- Do not paste the full repo state or full orchestration history into worker prompts.
-- The parent reviews narrow diffs plus command outcomes. It does not absorb giant worker transcripts into main context.
-- Every scope exception, freeze reopening, merge-order deviation, and fallback-surface reopening must be written to `session-log.md` or `merge-log.md`.
-
-### Worker return rules
-
-- Each worker must return only:
-  - changed files
+  - expected outputs
+  - forbidden-touch surfaces
+- Workers must not be asked to infer missing milestone scope or reinterpret expected truth.
+- Workers must return only:
+  - changed files or draft outputs
   - commands run
-  - exit codes
-  - handoff commit
-  - blockers or unresolved assumptions
-  - whether the lane is safe to merge
-- Workers do not write `M46_RUN_ROOT/*`.
-- Workers do not write acceptance narratives, merge records, or orchestration state.
-- Close each worker immediately after merge or bounce. Do not keep idle workers live after their lane has either landed or been rejected.
+  - blockers
+  - unresolved assumptions
+- Workers must not return broad repo advice, substitute test plans, or parallelize new work on their own.
+- The closeout drafting worker must be closed immediately after the parent consumes or rejects the draft.
+- The Option B repair worker must be closed immediately after:
+  - the repair head is accepted for parent rerun
+  - the repair is rejected
+  - the task is blocked
+- If any worker starts touching non-owned surfaces, the parent must terminate that lane and keep the session in the primary parent lane.
+- The parent remains the only source of truth for run-state artifacts and the only agent allowed to declare completion.
 
-### Integration discipline rules
+## 9. Tests And Acceptance
 
-- The parent is the only integrator.
-- The parent may resolve only:
-  - merge mechanics
-  - line-level non-semantic conflicts
-  - evidence-backed parent-owned cleanup in `commands.rs` and reserved fallback surfaces
-- The parent may not:
-  - reinterpret helper eligibility
-  - redefine packet topology
-  - redefine proof-source intent
-  - widen the TypeScript lane
-- If two lanes disagree semantically, the parent either applies `PLAN.md` literally or bounces the offending lane. It does not invent a compromise in integration.
+### 9.1 Kickoff integrity checklist
 
-## Tests And Acceptance
+- [ ] `feat/m40-plus` confirmed at repo root
+- [ ] kickoff SHA recorded as `991012f3f2112507d3ed9943eb96dacfc8bfa9be`
+- [ ] `ws/spec-m46-integration` confirmed at `ccefca8`
+- [ ] authoritative execution root recorded exactly
+- [ ] `baseline.json`, `authority-freeze.json`, and `contract-freeze.json` written
+- [ ] `in-scope-files.txt` and `out-of-scope-files.txt` written
 
-### Required proof wall
+### 9.2 Proof-wall checklist
 
-The parent integration lane must run the exact M46 wall listed in `task-m46-50-proof-wall`.
+- [ ] `cargo test -p spec-core -- --color never` run and captured
+- [ ] `cargo test -p spec-cli --test cli -- --color never` run and captured
+- [ ] aligned packet TypeScript test run and captured
+- [ ] unsupported near miss TypeScript test run and captured
+- [ ] `apply_tax.unit.spec` TypeScript test run and captured
+- [ ] `discount_plus_tax.test.spec` TypeScript test run and captured
+- [ ] TypeScript `spec status` JSON run and captured
+- [ ] expected-versus-observed verdict written for all seven commands
+- [ ] status JSON assertions checked explicitly
+- [ ] intentional non-green status result called out explicitly
 
-### Mandatory non-goal checks
+### 9.3 Path-decision checklist
 
-These are release-critical and must be covered by tests or command-path assertions even when they are not separate proof-wall commands:
+- [ ] Option A or Option B selected explicitly
+- [ ] one-line reason recorded in `acceptance.md`
+- [ ] one-line reason recorded in `merge-log.md`
+- [ ] `run-state.json` updated with `path_choice`
+- [ ] blocked-stop selected instead of improvisation if the defect is not bounded
 
-- `spec validate` still has no TypeScript target support
-- `spec export` still has no TypeScript target support
-- `.test.spec --target-language typescript` fails before Bun runs
-- units outside `function.arithmetic_leaf.monotone_up.v1` fail before Bun runs
-- wrong helper family fails before Bun runs
-- missing helper fails before Bun runs
-- multi-dep units fail before Bun runs
-- cross-library helper refs fail for this lane
-- zero-dep monotone-up behavior is preserved
-- Rust remains the default target everywhere
+### 9.4 Landing checklist
 
-### Milestone acceptance checklist
+- [ ] pre-landing `feat/m40-plus` SHA captured
+- [ ] exact landing command captured in `validation/landing/landing-command.txt`
+- [ ] landing performed by fast-forward only
+- [ ] exact landed SHA captured
+- [ ] `merge-log.md` updated with before and after SHAs
+- [ ] no cherry-pick reconstruction used
 
-M46 is complete only if all of the following are true:
+### 9.5 Post-landing parity checklist
 
-1. The M45 zero-dep monotone-up lane still passes unchanged.
-2. A monotone-up unit with exactly one helper passthrough dep executes in the TypeScript lane.
-3. The helper dep is accepted only when it classifies as `function.helper.identity_passthrough.v1`.
-4. Missing helper-in-tree fails before Bun runs.
-5. More than one direct dep fails before Bun runs.
-6. `.test.spec --target-language typescript` remains unsupported.
-7. `spec-cli/src/commands.rs` no longer owns a second TypeScript generator path.
-8. The checked packet proof source is helper-aware for real.
-9. The checked ecommerce proof source is helper-aware for real.
-10. The final acceptance ledger explicitly passes the fake-green check.
-11. Rust proof remains untouched by TypeScript execution.
-12. `status --target-language typescript` reads only TS proof.
-13. `export` remains additive and honest.
-14. README and CHANGELOG describe only the bounded M46 lane.
-15. The full proof wall passes.
+- [ ] landed-branch `apply_tax.unit.spec` TypeScript rerun executed
+- [ ] landed-branch TypeScript status JSON rerun executed
+- [ ] both captures written under `validation/post-landing/`
+- [ ] canonical green surface matches integration truth
+- [ ] intentional non-green status surface matches integration truth
+- [ ] parity result recorded in `acceptance.md`
+- [ ] parity result recorded in `closeout.md`
 
-## Assumptions
+### 9.6 Closeout completeness checklist
 
-- The parent launches from `feat/m40-plus` with `HEAD` at or ahead of `ce0e16d`.
-- Bun is available by the time the proof wall runs, or missing-Bun messaging is actionable enough to fail honestly.
-- Existing helper-family semantic truth remains authoritative and does not require new family-design work in M46.
-- The monotone-up packet can be refreshed with packet-local helper units in the same general style already used by the monotone-down packet.
-- `apply_tax.unit.spec` can be reopened without widening the example library beyond one direct helper dep.
-- Any required changes to `pipeline.rs`, `passport.rs`, or `export.rs` are narrow enough for parent-only cleanup and do not imply a schema redesign.
+- [ ] `acceptance.md` contains exact proof-wall command outcomes
+- [ ] `closeout.md` contains exact integrated SHA `ccefca8`
+- [ ] `closeout.md` contains exact landed SHA
+- [ ] canonical green surface command is named exactly
+- [ ] intentional non-green surface command is named exactly
+- [ ] `.test.spec --target-language typescript` remaining unsupported is stated explicitly
+- [ ] `run-state.json`, `merge-log.md`, `acceptance.md`, and `closeout.md` agree
+- [ ] final acceptance decision is truthfully recorded
+
+## 10. Contingency Matrix
+
+| Condition | Parent action | Worker action | Result |
+| --- | --- | --- | --- |
+| proof wall matches expected truth exactly | select Option A | closeout drafting worker may optionally assist | land `ccefca8`, run parity, finalize closeout |
+| one command fails due to obvious environment noise | allow one documented retry | none required | remain in current task |
+| one real unfinished M46 defect appears and is bounded | activate Option B | bounded repair worker may repair only named surfaces | parent reruns full proof wall against repair head |
+| defect is not bounded | write `blocked.json` | no repair lane or immediate repair-lane shutdown | stop and re-scope |
+| branch move exposes parity drift | stop landing session | no broad recovery lane | session remains incomplete until resolved |
+| any recovery path requires cherry-pick reconstruction | reject path immediately | none | stop and re-scope |
+
+### 10.1 Option B activation protocol
+
+Option B activates only through this protocol:
+
+1. The parent completes `task/m46-a2-proof-wall` and identifies one real unfinished M46 defect.
+2. The parent records the trigger in `validation/repair/option-b-trigger.md`.
+3. The parent updates `run-state.json` with:
+   - `path_choice: option_b`
+   - `option_b_trigger`
+   - bounded defect summary
+4. The parent updates `tasks.json` to set `task/m46-c-option-b-repair` to `ready`.
+5. The parent creates or enables `ws/spec-m46-option-b-repair` at `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/option-b-repair`.
+6. The parent gives the repair worker only:
+   - the exact defect statement
+   - the exact allowed touch surfaces
+   - the exact focused repro command
+   - the explicit ban on scope expansion
+7. The repair worker produces one bounded continuation head on top of `ccefca8` or returns blocked.
+8. The parent records the proposed repair SHA in `validation/repair/repair-head.txt`.
+9. The parent reruns the full frozen proof wall against the repair head before any landing action occurs.
+10. Only if the repair head now matches the same expected truth may the parent proceed to `task/m46-d1-land-and-verify`.
+
+### 10.2 Option B boundaries
+
+The repair worker may own only:
+
+- the smallest set of defect-specific surfaces explicitly named by the parent
+- focused repro and repair validation captures
+- one continuation head on top of `ccefca8`
+
+The repair worker may not own:
+
+- branch movement on `feat/m40-plus`
+- run-state truth
+- final proof interpretation
+- milestone-scope changes
+- documentation rewrites unrelated to the bounded defect
+- broad cleanup
+
+### 10.3 Blocked-stop protocol
+
+If the defect is not bounded, if more than one substantive defect appears, or if the repair worker cannot stay within the approved surfaces:
+
+- the parent must stop the session
+- `blocked.json` must be written
+- `queue.json` must show blocked state
+- `tasks.json` must mark the blocking task as `blocked`
+- `closeout.md` must remain non-final
+- no landing action occurs
+
+## 11. Assumptions
+
+- `PLAN.md` is the current and authoritative M46 completion plan.
+- `ccefca8` is the authoritative integrated M46 head at kickoff.
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration` is the authoritative execution root at kickoff.
+- `feat/m40-plus` at kickoff is `991012f3f2112507d3ed9943eb96dacfc8bfa9be`.
+- `.runs/m46_helper_aware_monotone_up_typescript/` remains the canonical run-artifact root for this session.
+- The happy path is operational only and should not require product-source edits.
+- The expected M46 truth still includes:
+  - one canonical green TypeScript surface
+  - one intentional non-green TypeScript status surface
+- The closeout drafting lane is optional and support-only.
+- The Option B repair lane is disabled by default and exists only if the parent explicitly activates it.
+- If any fact here changes during execution, the parent must update run-state artifacts and continue to honor the hard guards rather than silently drifting scope.
