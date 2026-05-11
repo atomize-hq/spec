@@ -146,7 +146,9 @@ fn wrapper_pipeline_fixture_unit_relative_path(bucket: &str) -> &'static str {
 
 fn monotone_up_typescript_body(bucket: &str) -> &'static str {
     match bucket {
-        "aligned" => "    {\n        return subtotal.add(subtotal.mul(rate));\n    }",
+        "aligned" => {
+            "    {\n        const taxed = subtotal.add(subtotal.mul(rate));\n        return round(taxed);\n    }"
+        }
         "drift" => {
             "    {\n        return subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));\n    }"
         }
@@ -430,7 +432,7 @@ fn rewrite_apply_discount_as_unsupported_near_miss(unit_path: &Path) {
 fn rewrite_apply_tax_as_drift(unit_path: &Path) {
     replace_in_file(
         unit_path,
-        "    {\n        subtotal + subtotal * rate\n    }\n",
+        "    {\n        let taxed = subtotal + subtotal * rate;\n        round(taxed)\n    }\n",
         "    {\n        subtotal - subtotal * rate\n    }\n",
     );
     replace_in_file(unit_path, "Decimal::new(10725, 2)", "Decimal::new(9275, 2)");
@@ -439,7 +441,7 @@ fn rewrite_apply_tax_as_drift(unit_path: &Path) {
 fn rewrite_apply_tax_as_under_specified(unit_path: &Path) {
     replace_in_file(
         unit_path,
-        "Add sales tax to a subtotal using a rate expressed as a decimal fraction.",
+        "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.",
         "todo",
     );
 }
@@ -447,8 +449,8 @@ fn rewrite_apply_tax_as_under_specified(unit_path: &Path) {
 fn rewrite_apply_tax_as_helper_then_clamp(unit_path: &Path) {
     replace_in_file(
         unit_path,
-        "    {\n        subtotal + subtotal * rate\n    }\n",
-        "    {\n        subtotal + (subtotal * rate)\n    }\n",
+        "    {\n        let taxed = subtotal + subtotal * rate;\n        round(taxed)\n    }\n",
+        "    {\n        let taxed = subtotal + (subtotal * rate);\n        round(taxed)\n    }\n",
     );
 }
 
@@ -456,8 +458,8 @@ fn rewrite_apply_tax_as_helper_then_clamp(unit_path: &Path) {
 fn rewrite_apply_tax_as_unsupported_near_miss(unit_path: &Path) {
     replace_in_file(
         unit_path,
-        "    {\n        subtotal + subtotal * rate\n    }\n",
-        "    {\n        let taxed = subtotal + subtotal * rate;\n        if rate == Decimal::ZERO {\n            subtotal\n        } else {\n            taxed\n        }\n    }\n",
+        "    {\n        let taxed = subtotal + subtotal * rate;\n        round(taxed)\n    }\n",
+        "    {\n        let taxed = subtotal + subtotal * rate;\n        if rate == Decimal::ZERO {\n            subtotal\n        } else {\n            round(taxed)\n        }\n    }\n",
     );
 }
 
@@ -2437,7 +2439,7 @@ fn monotone_up_truth_surface_stale_status_and_export_preserve_last_proven_review
 
     replace_in_file(
         &unit_path,
-        "Add sales tax to a subtotal using a rate expressed as a decimal fraction.",
+        "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.",
         "Add sales tax to a subtotal using a rate expressed as a decimal fraction with revised authored truth.",
     );
 

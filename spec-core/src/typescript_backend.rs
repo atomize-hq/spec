@@ -10,17 +10,17 @@
 //! support, dependency-bearing units, proof routing, or Bun execution.
 
 use crate::semantic_review::{
-    evaluate_semantic_review_with_context, SemanticReviewContext, SemanticSupportStatus,
+    SemanticReviewContext, SemanticSupportStatus, evaluate_semantic_review_with_context,
 };
 use crate::syntax::validate_expect_expr;
 use crate::types::{
     Body, DepRef, Intent, LoadedSpec, LocalTest, NormalizedUnit, ResolvedSpec, SpecSource,
-    SpecStruct, UnitExtensions, TYPESCRIPT_BUILD_ENTRY_PATH, TYPESCRIPT_LOCAL_TESTS_PATH,
-    TYPESCRIPT_RUNTIME_HELPER_PATH,
+    SpecStruct, TYPESCRIPT_BUILD_ENTRY_PATH, TYPESCRIPT_LOCAL_TESTS_PATH,
+    TYPESCRIPT_RUNTIME_HELPER_PATH, UnitExtensions,
 };
 use crate::validator::{
-    validate_typescript_execution_target_spec_with_specs, TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
-    TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE, TYPESCRIPT_TARGET_COMPATIBILITY_KEY,
+    TYPESCRIPT_HELPER_COMPATIBILITY_KEY, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE,
+    TYPESCRIPT_TARGET_COMPATIBILITY_KEY, validate_typescript_execution_target_spec_with_specs,
 };
 use crate::{Result, SpecError};
 use std::collections::BTreeMap;
@@ -502,7 +502,10 @@ fn render_local_test_block(spec: &ResolvedSpec, local_test: &LocalTest) -> Resul
         expected,
         local_test.id,
         local_test.id,
-        format!("bounded TypeScript local test failed: {}#{}", spec.id, local_test.id)
+        format!(
+            "bounded TypeScript local test failed: {}#{}",
+            spec.id, local_test.id
+        )
     ))
 }
 

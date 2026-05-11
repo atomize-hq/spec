@@ -33,22 +33,17 @@ static COMPILED_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 static COMPILED_TEST_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 
 pub const TYPESCRIPT_TARGET_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
-pub const TYPESCRIPT_HELPER_COMPATIBILITY_KEY: &str =
-    "function.helper.identity_passthrough.v1";
-pub const TYPESCRIPT_MOLECULE_UNSUPPORTED_MESSAGE: &str =
-    ".test.spec is not supported for --target-language typescript in M46; molecule tests remain Rust-only";
+pub const TYPESCRIPT_HELPER_COMPATIBILITY_KEY: &str = "function.helper.identity_passthrough.v1";
+pub const TYPESCRIPT_MOLECULE_UNSUPPORTED_MESSAGE: &str = ".test.spec is not supported for --target-language typescript in M46; molecule tests remain Rust-only";
 pub const TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE: &str =
     "TypeScript target currently supports only kind:function units in M46";
 pub const TYPESCRIPT_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript target requires deps: [] or exactly one direct local helper dep in M46";
-pub const TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript target does not support cross-library helper deps in M46; the direct helper dep must be local to the loaded unit set";
+pub const TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE: &str = "TypeScript target does not support cross-library helper deps in M46; the direct helper dep must be local to the loaded unit set";
 pub const TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE: &str =
     "TypeScript target requires the direct helper dep to exist in the same loaded unit set in M46";
-pub const TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript target requires the direct helper dep to classify as function.helper.identity_passthrough.v1 in M46";
-pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M46";
+pub const TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires the direct helper dep to classify as function.helper.identity_passthrough.v1 in M46";
+pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M46";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ValidationOptions {
@@ -304,7 +299,11 @@ pub fn validate_typescript_execution_target_spec_with_specs(
     spec: &LoadedSpec,
     specs_by_id: &HashMap<String, LoadedSpec>,
 ) -> Result<()> {
-    if spec.spec.unit_kind().map_err(|message| semantic_error(spec, message))? != UnitKind::Function
+    if spec
+        .spec
+        .unit_kind()
+        .map_err(|message| semantic_error(spec, message))?
+        != UnitKind::Function
     {
         return Err(semantic_error(spec, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE));
     }
@@ -460,7 +459,12 @@ fn is_decimal_new_expr(expr: &syn::Expr, allow_negative_value: bool) -> bool {
     let syn::Expr::Path(path) = call.func.as_ref() else {
         return false;
     };
-    let segments: Vec<_> = path.path.segments.iter().map(|segment| segment.ident.to_string()).collect();
+    let segments: Vec<_> = path
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect();
     if segments.as_slice() != ["Decimal", "new"] {
         return false;
     }
@@ -4402,14 +4406,16 @@ methods:
 
         let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
         assert!(
-            err.to_string().contains(TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE),
+            err.to_string()
+                .contains(TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
 
     #[test]
     fn typescript_target_rejects_molecule_specs_before_execution() {
-        let test = create_molecule_test_spec("pricing/discount_plus_tax", vec!["pricing/apply_tax"]);
+        let test =
+            create_molecule_test_spec("pricing/discount_plus_tax", vec!["pricing/apply_tax"]);
         let err = validate_typescript_molecule_target(&test).unwrap_err();
         assert!(
             err.to_string()

@@ -1450,7 +1450,9 @@ mod tests {
         .unwrap();
 
         assert!(code.contains("import { Decimal } from \"../__spec_ts/runtime.ts\";"));
-        assert!(code.contains("export function apply_tax(subtotal: Decimal, rate: Decimal): Decimal"));
+        assert!(
+            code.contains("export function apply_tax(subtotal: Decimal, rate: Decimal): Decimal")
+        );
         assert!(code.contains("return subtotal.add(subtotal.mul(rate));"));
         assert!(!code.contains("subtotal + subtotal * rate"));
     }
@@ -1954,12 +1956,20 @@ mod tests {
         assert!(tree.contains_key(&PathBuf::from("__spec_ts/build_entry.ts")));
         assert!(tree.contains_key(&PathBuf::from("__spec_ts/local_tests.ts")));
 
-        let build_entry = tree.get(&PathBuf::from("__spec_ts/build_entry.ts")).unwrap();
+        let build_entry = tree
+            .get(&PathBuf::from("__spec_ts/build_entry.ts"))
+            .unwrap();
         assert!(build_entry.contains("import \"./runtime.ts\";"));
-        assert!(build_entry.contains("import { apply_tax as __spec$pricing$apply_tax } from \"../pricing/apply_tax.ts\";"));
-        assert!(build_entry.contains("import { apply_vat as __spec$checkout$apply_vat } from \"../checkout/apply_vat.ts\";"));
+        assert!(build_entry.contains(
+            "import { apply_tax as __spec$pricing$apply_tax } from \"../pricing/apply_tax.ts\";"
+        ));
+        assert!(build_entry.contains(
+            "import { apply_vat as __spec$checkout$apply_vat } from \"../checkout/apply_vat.ts\";"
+        ));
 
-        let local_tests = tree.get(&PathBuf::from("__spec_ts/local_tests.ts")).unwrap();
+        let local_tests = tree
+            .get(&PathBuf::from("__spec_ts/local_tests.ts"))
+            .unwrap();
         assert!(local_tests.contains("Decimal.new(1000n, 2n)"));
         assert!(local_tests.contains("__spec$pricing$apply_tax"));
         assert!(local_tests.contains("__spec$checkout$apply_vat"));

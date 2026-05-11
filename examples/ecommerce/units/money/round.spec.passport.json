@@ -13,8 +13,8 @@
   },
   "deps": [],
   "local_tests": [],
-  "generated_at": "2026-05-10T23:07:21Z",
-  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration/examples/ecommerce/units/money/round.unit.spec",
+  "generated_at": "2026-05-11T14:39:07Z",
+  "source_file": "examples/ecommerce/units/money/round.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [],

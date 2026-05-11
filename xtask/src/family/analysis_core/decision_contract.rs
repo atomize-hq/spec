@@ -199,54 +199,7 @@ mod tests {
 
     #[test]
     fn helper_surface_follow_on_activation_uses_validated_basis_truth() {
-        let tuple = durable_non_promotable_helper_surface_candidate_tuple();
-        let basis = FamilyRecommendationAnalysisArtifact {
-            schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
-            artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-            generated_at: "2026-05-05T00:00:00Z".to_string(),
-            coverage_path: "coverage.json".to_string(),
-            coverage_sha256: "sha".to_string(),
-            recommendation_status: RecommendationStatus::NoStrongCandidate,
-            ranked_candidates: vec![RecommendationCandidateEntry {
-                candidate_id: "fixture".to_string(),
-                cluster_ids: vec!["cluster".to_string()],
-                primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
-                overlap_family: "unknown".to_string(),
-                promotion_readiness: tuple.promotion_readiness,
-                hold_reasons: vec![tuple.hold_reason],
-                next_step_status: tuple.next_step_status,
-                next_step_detail: tuple.next_step_detail,
-                leverage: RecommendationLeverage {
-                    real_example_hits: 2,
-                    promotion_relevant_regression_hits: 1,
-                    boundary_only_hits: 0,
-                    total_units_in_cluster: 3,
-                },
-                difficulty: RecommendationDifficulty {
-                    tier: DifficultyTier::Hard,
-                    why: "fixture".to_string(),
-                },
-                confidence: RecommendationConfidence {
-                    level: ConfidenceLevel::Low,
-                    why: "fixture".to_string(),
-                },
-                rationale: "fixture".to_string(),
-            }],
-            decision_summary: crate::family::promotion_artifacts::DecisionSummary {
-                decision_status: DecisionStatus::NotRecommended,
-                top_candidate_id: Some("fixture".to_string()),
-                open_blockers: vec![DecisionReason::HelperSurfaceNotPromotable],
-                warnings: vec![DecisionReason::RegressionWarning],
-                summary: "fixture".to_string(),
-            },
-            evidence_summary: crate::family::promotion_artifacts::EvidenceSummary {
-                missing_evidence: Vec::new(),
-                stale_evidence: Vec::new(),
-                warnings: vec![DecisionReason::RegressionWarning],
-                summary: "fixture".to_string(),
-            },
-            delta_from_previous: RecommendationDelta::no_previous_artifact(),
-        };
+        let basis = helper_surface_follow_on_basis_fixture();
 
         let snapshot = corpus_program_basis_snapshot(&basis);
         assert!(basis_snapshot_requires_helper_surface_follow_on(&snapshot));
@@ -281,13 +234,149 @@ mod tests {
 
     #[test]
     fn stop_state_tuple_matches_kernel_stop_decision() {
+        let basis = stop_basis_fixture();
+
+        let tuple = decision_contract_stop_state_tuple();
+        let derived = derive_corpus_program_decision_contract(&basis).unwrap();
+        let snapshot = corpus_program_basis_snapshot(&basis);
+
+        assert_eq!(snapshot.recommendation_status, tuple.recommendation_status);
+        assert_eq!(snapshot.decision_status, tuple.decision_status);
+        assert_eq!(snapshot.open_blockers, tuple.open_blockers);
+        assert_eq!(snapshot.missing_evidence, tuple.missing_evidence);
+        assert_eq!(snapshot.stale_evidence, tuple.stale_evidence);
+        assert_eq!(derived.decision_action, tuple.decision_action);
+        assert_eq!(derived.decision_basis_code, tuple.decision_basis_code);
+        assert_eq!(derived.required_next_action, tuple.required_next_action);
+    }
+
+    #[test]
+    fn decision_contract_exposes_promotion_ready_branch() {
         let basis = FamilyRecommendationAnalysisArtifact {
+            recommendation_status: RecommendationStatus::Ranked,
+            decision_summary: crate::family::promotion_artifacts::DecisionSummary {
+                decision_status: DecisionStatus::Recommended,
+                top_candidate_id: Some("fixture".to_string()),
+                open_blockers: Vec::new(),
+                warnings: Vec::new(),
+                summary: "fixture".to_string(),
+            },
+            ranked_candidates: vec![helper_surface_candidate_fixture()],
+            ..analysis_basis_fixture()
+        };
+
+        let derived = derive_corpus_program_decision_contract(&basis).unwrap();
+        assert_eq!(
+            derived.decision_action,
+            crate::family::promotion_artifacts::CorpusProgramDecisionAction::PivotToFamilyPromotionRun
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            crate::family::promotion_artifacts::CorpusProgramDecisionBasisCode::PromotionReadyCandidate
+        );
+        assert_eq!(
+            derived.required_next_action,
+            crate::family::promotion_artifacts::RequiredNextAction::AuthorFamilyPromotionPlan
+        );
+    }
+
+    #[test]
+    fn decision_contract_exposes_blocked_on_evidence_branch() {
+        let basis = FamilyRecommendationAnalysisArtifact {
+            recommendation_status: RecommendationStatus::NoStrongCandidate,
+            decision_summary: crate::family::promotion_artifacts::DecisionSummary {
+                decision_status: DecisionStatus::BlockedForNow,
+                top_candidate_id: Some("fixture".to_string()),
+                open_blockers: vec![DecisionReason::ThinRealExampleSupport],
+                warnings: Vec::new(),
+                summary: "fixture".to_string(),
+            },
+            evidence_summary: crate::family::promotion_artifacts::EvidenceSummary {
+                missing_evidence: vec![EvidenceState::ThinRealExampleSupport],
+                stale_evidence: Vec::new(),
+                warnings: Vec::new(),
+                summary: "fixture".to_string(),
+            },
+            ..analysis_basis_fixture()
+        };
+
+        let derived = derive_corpus_program_decision_contract(&basis).unwrap();
+        assert_eq!(
+            derived.decision_action,
+            crate::family::promotion_artifacts::CorpusProgramDecisionAction::SpendCorpusRun1
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            crate::family::promotion_artifacts::CorpusProgramDecisionBasisCode::PlausibleCandidateMissingEvidence
+        );
+        assert_eq!(
+            derived.required_next_action,
+            crate::family::promotion_artifacts::RequiredNextAction::AuthorCorpusExpansionPlan
+        );
+    }
+
+    #[test]
+    fn decision_contract_exposes_helper_surface_follow_on_branch() {
+        let basis = helper_surface_follow_on_basis_fixture();
+
+        let derived = derive_corpus_program_decision_contract(&basis).unwrap();
+        assert_eq!(
+            derived.decision_action,
+            crate::family::promotion_artifacts::CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            crate::family::promotion_artifacts::CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface
+        );
+        assert_eq!(
+            derived.required_next_action,
+            crate::family::promotion_artifacts::RequiredNextAction::AuthorArchitectureFollowOnPlan
+        );
+    }
+
+    #[test]
+    fn decision_contract_exposes_policy_interpretation_blocker_branch() {
+        let basis = FamilyRecommendationAnalysisArtifact {
+            recommendation_status: RecommendationStatus::NoStrongCandidate,
+            decision_summary: crate::family::promotion_artifacts::DecisionSummary {
+                decision_status: DecisionStatus::BlockedForNow,
+                top_candidate_id: Some("fixture".to_string()),
+                open_blockers: vec![DecisionReason::RegressionWarning],
+                warnings: Vec::new(),
+                summary: "fixture".to_string(),
+            },
+            evidence_summary: crate::family::promotion_artifacts::EvidenceSummary {
+                missing_evidence: Vec::new(),
+                stale_evidence: Vec::new(),
+                warnings: Vec::new(),
+                summary: "fixture".to_string(),
+            },
+            ..analysis_basis_fixture()
+        };
+
+        let derived = derive_corpus_program_decision_contract(&basis).unwrap();
+        assert_eq!(
+            derived.decision_action,
+            crate::family::promotion_artifacts::CorpusProgramDecisionAction::PivotToRecommendationPolicyRun
+        );
+        assert_eq!(
+            derived.decision_basis_code,
+            crate::family::promotion_artifacts::CorpusProgramDecisionBasisCode::PolicyInterpretationBlocker
+        );
+        assert_eq!(
+            derived.required_next_action,
+            crate::family::promotion_artifacts::RequiredNextAction::AuthorRecommendationPolicyPlan
+        );
+    }
+
+    fn analysis_basis_fixture() -> FamilyRecommendationAnalysisArtifact {
+        FamilyRecommendationAnalysisArtifact {
             schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
             artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
-            generated_at: "2026-05-09T00:00:00Z".to_string(),
+            generated_at: "2026-05-05T00:00:00Z".to_string(),
             coverage_path: "coverage.json".to_string(),
             coverage_sha256: "sha".to_string(),
-            recommendation_status: RecommendationStatus::InsufficientRealCorpus,
+            recommendation_status: RecommendationStatus::NoStrongCandidate,
             ranked_candidates: Vec::new(),
             decision_summary: crate::family::promotion_artifacts::DecisionSummary {
                 decision_status: DecisionStatus::NotRecommended,
@@ -303,19 +392,63 @@ mod tests {
                 summary: "fixture".to_string(),
             },
             delta_from_previous: RecommendationDelta::no_previous_artifact(),
-        };
+        }
+    }
 
-        let tuple = decision_contract_stop_state_tuple();
-        let derived = derive_corpus_program_decision_contract(&basis).unwrap();
-        let snapshot = corpus_program_basis_snapshot(&basis);
+    fn helper_surface_follow_on_basis_fixture() -> FamilyRecommendationAnalysisArtifact {
+        FamilyRecommendationAnalysisArtifact {
+            recommendation_status: RecommendationStatus::NoStrongCandidate,
+            ranked_candidates: vec![helper_surface_candidate_fixture()],
+            decision_summary: crate::family::promotion_artifacts::DecisionSummary {
+                decision_status: DecisionStatus::NotRecommended,
+                top_candidate_id: Some("fixture".to_string()),
+                open_blockers: vec![DecisionReason::HelperSurfaceNotPromotable],
+                warnings: vec![DecisionReason::RegressionWarning],
+                summary: "fixture".to_string(),
+            },
+            evidence_summary: crate::family::promotion_artifacts::EvidenceSummary {
+                missing_evidence: Vec::new(),
+                stale_evidence: Vec::new(),
+                warnings: vec![DecisionReason::RegressionWarning],
+                summary: "fixture".to_string(),
+            },
+            ..analysis_basis_fixture()
+        }
+    }
 
-        assert_eq!(snapshot.recommendation_status, tuple.recommendation_status);
-        assert_eq!(snapshot.decision_status, tuple.decision_status);
-        assert_eq!(snapshot.open_blockers, tuple.open_blockers);
-        assert_eq!(snapshot.missing_evidence, tuple.missing_evidence);
-        assert_eq!(snapshot.stale_evidence, tuple.stale_evidence);
-        assert_eq!(derived.decision_action, tuple.decision_action);
-        assert_eq!(derived.decision_basis_code, tuple.decision_basis_code);
-        assert_eq!(derived.required_next_action, tuple.required_next_action);
+    fn helper_surface_candidate_fixture() -> RecommendationCandidateEntry {
+        let tuple = durable_non_promotable_helper_surface_candidate_tuple();
+        RecommendationCandidateEntry {
+            candidate_id: "fixture".to_string(),
+            cluster_ids: vec!["cluster".to_string()],
+            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            overlap_family: "unknown".to_string(),
+            promotion_readiness: tuple.promotion_readiness,
+            hold_reasons: vec![tuple.hold_reason],
+            next_step_status: tuple.next_step_status,
+            next_step_detail: tuple.next_step_detail,
+            leverage: RecommendationLeverage {
+                real_example_hits: 2,
+                promotion_relevant_regression_hits: 1,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 3,
+            },
+            difficulty: RecommendationDifficulty {
+                tier: DifficultyTier::Hard,
+                why: "fixture".to_string(),
+            },
+            confidence: RecommendationConfidence {
+                level: ConfidenceLevel::Low,
+                why: "fixture".to_string(),
+            },
+            rationale: "fixture".to_string(),
+        }
+    }
+
+    fn stop_basis_fixture() -> FamilyRecommendationAnalysisArtifact {
+        FamilyRecommendationAnalysisArtifact {
+            recommendation_status: RecommendationStatus::InsufficientRealCorpus,
+            ..analysis_basis_fixture()
+        }
     }
 }

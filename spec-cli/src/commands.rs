@@ -29,11 +29,11 @@ use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
     ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
     PassportProjectionContext, PassportProofCoverage, PassportTestResult,
-    apply_projected_passport_truth,
-    build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
-    compute_contract_hash, ensure_gitignore_entry, passport_evidence_for_target,
-    passport_target_proof, project_passport_truth_with_context, read_passport,
-    resolve_passport_freshness_for_target, rfc3339_now, target_proof_for_write, write_passport,
+    apply_projected_passport_truth, build_passport_preserving_proof_state_with_context,
+    build_passport_with_evidence, compute_contract_hash, ensure_gitignore_entry,
+    passport_evidence_for_target, passport_target_proof, project_passport_truth_with_context,
+    read_passport, resolve_passport_freshness_for_target, rfc3339_now, target_proof_for_write,
+    write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, bun_available, cargo_available, output_module_prefix,
@@ -429,9 +429,11 @@ impl Command {
             Self::Status(args) => {
                 status_command_for_target(&args.path, args.format, args.target_language)
             }
-            Self::Generate(args) => {
-                generate_command_for_target(&args.path, args.output.as_deref(), args.target_language)
-            }
+            Self::Generate(args) => generate_command_for_target(
+                &args.path,
+                args.output.as_deref(),
+                args.target_language,
+            ),
             Self::Build(args) => {
                 let context = load_workspace_context(&args.path)?;
                 build_command_for_target(
@@ -1127,10 +1129,6 @@ fn zero_roots_status_entry(path: &Path) -> JsonErrorEntry {
     }
 }
 
-fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
-    status_command_for_target(path, format, TargetLanguage::Rust)
-}
-
 fn status_command_for_target(
     path: &Path,
     format: OutputFormat,
@@ -1329,18 +1327,14 @@ fn status_command_for_target(
                 &projection_context,
                 &semantic_review_context,
             );
-            let target_evidence =
-                passport
-                    .as_ref()
-                    .and_then(|passport| passport_evidence_for_target(passport, target_language));
-            let freshness = resolve_passport_freshness_for_target(
-                spec,
-                passport.as_ref(),
-                target_language,
-            )
-            .filter(|_| {
-                target_language == TargetLanguage::Rust || target_evidence.is_some()
-            });
+            let target_evidence = passport
+                .as_ref()
+                .and_then(|passport| passport_evidence_for_target(passport, target_language));
+            let freshness =
+                resolve_passport_freshness_for_target(spec, passport.as_ref(), target_language)
+                    .filter(|_| {
+                        target_language == TargetLanguage::Rust || target_evidence.is_some()
+                    });
             let markers = projected_truth.markers.clone();
             let proof_coverage = projected_truth.proof_coverage.clone();
             let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
@@ -1882,6 +1876,7 @@ fn emit_plan_validate_failure(
     }
 }
 
+#[cfg(test)]
 fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
     generate_command_for_target(path, output, TargetLanguage::Rust)
 }
@@ -2126,9 +2121,8 @@ fn generate_typescript_specs(
             .with_context(|| format!("Failed to write {}", output_path.display()))?;
         generated_rel_paths.insert(rel_path);
     }
-    clean_output_dir(&output_base, &generated_rel_paths, project_root).with_context(|| {
-        format!("Failed to clean output directory {}", output_base.display())
-    })?;
+    clean_output_dir(&output_base, &generated_rel_paths, project_root)
+        .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
 
     let generated_count = specs.len() + 3;
     println!(
@@ -2136,7 +2130,10 @@ fn generate_typescript_specs(
         generated_count,
         pluralize(generated_count)
     );
-    Ok(GeneratedSpecs { specs, generated_at })
+    Ok(GeneratedSpecs {
+        specs,
+        generated_at,
+    })
 }
 
 fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
@@ -2682,21 +2679,6 @@ fn canonicalize_existing_dir(path: &Path) -> Result<PathBuf> {
     Ok(canonical)
 }
 
-fn build_command(
-    path: &Path,
-    output: Option<&Path>,
-    crate_root_flag: Option<&Path>,
-    context: &WorkspaceContext,
-) -> Result<()> {
-    build_command_for_target(
-        path,
-        output,
-        crate_root_flag,
-        context,
-        TargetLanguage::Rust,
-    )
-}
-
 fn build_typescript_command(
     path: &Path,
     output: Option<&Path>,
@@ -2716,8 +2698,13 @@ fn build_typescript_command(
     let resolved_output = output
         .map(PathBuf::from)
         .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
-    let generated =
-        generate_typescript_specs(path, &resolved_output, &ctx.project_root, context, "generated")?;
+    let generated = generate_typescript_specs(
+        path,
+        &resolved_output,
+        &ctx.project_root,
+        context,
+        "generated",
+    )?;
     if generated.specs.is_empty() {
         return Ok(());
     }
@@ -2838,21 +2825,6 @@ fn build_command_for_target(
     Ok(())
 }
 
-fn test_command(
-    path: &Path,
-    output: Option<&Path>,
-    crate_root_flag: Option<&Path>,
-    context: &WorkspaceContext,
-) -> Result<()> {
-    test_command_for_target(
-        path,
-        output,
-        crate_root_flag,
-        context,
-        TargetLanguage::Rust,
-    )
-}
-
 fn test_typescript_command(
     path: &Path,
     output: Option<&Path>,
@@ -2870,8 +2842,8 @@ fn test_typescript_command(
     }
 
     if path.is_file() && is_molecule_test_spec(path) {
-        let test =
-            load_molecule_test_file(path).with_context(|| format!("Failed to load {}", path.display()))?;
+        let test = load_molecule_test_file(path)
+            .with_context(|| format!("Failed to load {}", path.display()))?;
         validate_typescript_molecule_target(&test)?;
         unreachable!("typescript molecule validation always errors in M46");
     }
@@ -2879,15 +2851,16 @@ fn test_typescript_command(
     let mut temp_output_root: Option<tempfile::TempDir> = None;
     let mut target_spec: Option<LoadedSpec> = None;
     let passport_root = if path.is_file() {
-        target_spec = Some(load_file(path).with_context(|| format!("Failed to load {}", path.display()))?);
+        target_spec =
+            Some(load_file(path).with_context(|| format!("Failed to load {}", path.display()))?);
         path.parent().unwrap_or(path).to_path_buf()
     } else {
         path.to_path_buf()
     };
 
     let (resolved_output, project_root, module_root, timeout) = if path.is_file() {
-        let temp_dir =
-            tempfile::TempDir::new().with_context(|| "Failed to create temporary TypeScript test scope")?;
+        let temp_dir = tempfile::TempDir::new()
+            .with_context(|| "Failed to create temporary TypeScript test scope")?;
         let output_root = temp_dir.path().join("src/generated");
         let project_root = temp_dir.path().to_path_buf();
         temp_output_root = Some(temp_dir);
@@ -2895,12 +2868,17 @@ fn test_typescript_command(
             output_root,
             project_root.clone(),
             project_root,
-            context.config.pipeline.timeout_secs.map(Duration::from_secs),
+            context
+                .config
+                .pipeline
+                .timeout_secs
+                .map(Duration::from_secs),
         )
     } else {
         let ctx = resolve_pipeline_context(path, crate_root_flag, context)?;
         (
-            output.map(PathBuf::from)
+            output
+                .map(PathBuf::from)
                 .unwrap_or_else(|| ctx.crate_root.join("src/generated")),
             ctx.project_root,
             ctx.crate_root,
@@ -3629,7 +3607,11 @@ fn finalize_typescript_test_passports(
         let contract_hash = contract_hash_by_spec
             .and_then(|map| map.get(&spec.spec.id))
             .cloned()
-            .or_else(|| existing.as_ref().and_then(|passport| passport.contract_hash.clone()))
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .and_then(|passport| passport.contract_hash.clone())
+            })
             .or_else(|| compute_contract_hash(spec));
         let mut passport = build_passport_preserving_proof_state_with_context(
             spec,
@@ -5676,23 +5658,27 @@ mod tests {
 
     #[test]
     fn validate_and_export_do_not_accept_target_language() {
-        assert!(TestCli::try_parse_from([
-            "spec",
-            "validate",
-            "examples/ecommerce/units",
-            "--target-language",
-            "typescript",
-        ])
-        .is_err());
+        assert!(
+            TestCli::try_parse_from([
+                "spec",
+                "validate",
+                "examples/ecommerce/units",
+                "--target-language",
+                "typescript",
+            ])
+            .is_err()
+        );
 
-        assert!(TestCli::try_parse_from([
-            "spec",
-            "export",
-            "examples/ecommerce/units",
-            "--target-language",
-            "typescript",
-        ])
-        .is_err());
+        assert!(
+            TestCli::try_parse_from([
+                "spec",
+                "export",
+                "examples/ecommerce/units",
+                "--target-language",
+                "typescript",
+            ])
+            .is_err()
+        );
     }
 
     fn benchmark_loaded_spec(index: usize, tests_per_spec: usize) -> LoadedSpec {
@@ -5926,7 +5912,7 @@ extra_field: nope
 
         let apply_tax = fs::read_to_string(output_dir.join("pricing/apply_tax.rs")).unwrap();
         assert!(apply_tax.contains(
-            "/// Add sales tax to a subtotal using a rate expressed as a decimal fraction.\n"
+            "/// Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.\n"
         ));
         assert!(apply_tax.contains("pub fn apply_tax("));
     }
@@ -6398,11 +6384,8 @@ body:
 
         let freshness =
             spec_core::passport::resolve_passport_freshness(&changed, Some(&legacy_passport));
-        let health = compute_health_status(
-            &[],
-            legacy_passport.evidence.as_ref(),
-            freshness.as_ref(),
-        );
+        let health =
+            compute_health_status(&[], legacy_passport.evidence.as_ref(), freshness.as_ref());
 
         assert_eq!(health.status, HealthState::Stale);
         assert_eq!(

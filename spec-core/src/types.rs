@@ -1338,7 +1338,10 @@ mod tests {
 
     #[test]
     fn target_language_parses_frozen_values() {
-        assert_eq!("rust".parse::<TargetLanguage>().unwrap(), TargetLanguage::Rust);
+        assert_eq!(
+            "rust".parse::<TargetLanguage>().unwrap(),
+            TargetLanguage::Rust
+        );
         assert_eq!(
             "typescript".parse::<TargetLanguage>().unwrap(),
             TargetLanguage::TypeScript

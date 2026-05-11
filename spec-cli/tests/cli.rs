@@ -14865,7 +14865,11 @@ fn typescript_aligned_fixture_single_file_test_succeeds_and_status_is_target_spe
         temp_dir.path(),
         &[
             "test",
-            spec_path.strip_prefix(temp_dir.path()).unwrap().to_str().unwrap(),
+            spec_path
+                .strip_prefix(temp_dir.path())
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "--target-language",
             "typescript",
         ],
@@ -14875,7 +14879,9 @@ fn typescript_aligned_fixture_single_file_test_succeeds_and_status_is_target_spe
         &test_output,
     );
 
-    let passport_path = temp_dir.path().join("units/pricing/apply_tax.spec.passport.json");
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
     let passport = read_passport_json(&passport_path);
     assert!(passport.get("evidence").is_none(), "{passport}");
     assert_eq!(
@@ -14935,7 +14941,11 @@ fn typescript_status_detects_drift_after_typescript_body_change() {
         temp_dir.path(),
         &[
             "test",
-            spec_path.strip_prefix(temp_dir.path()).unwrap().to_str().unwrap(),
+            spec_path
+                .strip_prefix(temp_dir.path())
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "--target-language",
             "typescript",
         ],
@@ -14945,12 +14955,10 @@ fn typescript_status_detects_drift_after_typescript_body_change() {
         &test_output,
     );
 
-    let updated = fs::read_to_string(&spec_path)
-        .unwrap()
-        .replace(
-            "return subtotal.add(subtotal.mul(rate));",
-            "return subtotal.add(subtotal.mul(rate)).add(Decimal.new(1, 2));",
-        );
+    let updated = fs::read_to_string(&spec_path).unwrap().replace(
+        "return subtotal.add(subtotal.mul(rate));",
+        "return subtotal.add(subtotal.mul(rate)).add(Decimal.new(1, 2));",
+    );
     fs::write(&spec_path, updated).unwrap();
 
     let status_output = run_in(
@@ -14999,7 +15007,11 @@ fn typescript_near_miss_rejects_before_bun_runs() {
         temp_dir.path(),
         &[
             "test",
-            spec_path.strip_prefix(temp_dir.path()).unwrap().to_str().unwrap(),
+            spec_path
+                .strip_prefix(temp_dir.path())
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "--target-language",
             "typescript",
         ],
@@ -15043,7 +15055,8 @@ fn typescript_example_apply_tax_single_file_test_succeeds() {
         &output,
     );
 
-    let passport = read_passport_json(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    let passport =
+        read_passport_json(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
     assert_eq!(
         passport["target_proofs"]["typescript"]["evidence"]["build_status"],
         "pass"
@@ -15100,7 +15113,10 @@ fn export_additively_preserves_rust_proof_and_includes_typescript_proof() {
 
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
 
-    let rust_test_output = run_in(&ecommerce_dir, &["test", "units/pricing/apply_tax.unit.spec"]);
+    let rust_test_output = run_in(
+        &ecommerce_dir,
+        &["test", "units/pricing/apply_tax.unit.spec"],
+    );
     assert_output_success("rust proof should succeed before export", &rust_test_output);
 
     let typescript_test_output = run_in(
@@ -15130,7 +15146,10 @@ fn export_additively_preserves_rust_proof_and_includes_typescript_proof() {
         .find(|entry| entry["id"] == "pricing/apply_tax")
         .expect("expected apply_tax passport in export");
     assert_eq!(passport["evidence"]["build_status"], "pass");
-    assert_eq!(passport["target_proofs"]["rust"]["evidence"]["build_status"], "pass");
+    assert_eq!(
+        passport["target_proofs"]["rust"]["evidence"]["build_status"],
+        "pass"
+    );
     assert_eq!(
         passport["target_proofs"]["typescript"]["evidence"]["build_status"],
         "pass"

@@ -318,7 +318,9 @@ pub fn build_passport_preserving_proof_state_with_context(
     let existing_target_proofs = preserved_target_proofs(existing);
     let rust_target_proof = target_proof_for_write(
         spec,
-        existing_target_proofs.as_ref().and_then(|proofs| proofs.rust.as_ref()),
+        existing_target_proofs
+            .as_ref()
+            .and_then(|proofs| proofs.rust.as_ref()),
         existing.and_then(|passport| passport.evidence.clone()),
         TargetLanguage::Rust,
         false,
@@ -661,7 +663,10 @@ pub fn passport_target_proof(
     target_language: TargetLanguage,
 ) -> Option<&PassportTargetProof> {
     match target_language {
-        TargetLanguage::Rust => passport.target_proofs.as_ref().and_then(|proofs| proofs.rust.as_ref()),
+        TargetLanguage::Rust => passport
+            .target_proofs
+            .as_ref()
+            .and_then(|proofs| proofs.rust.as_ref()),
         TargetLanguage::TypeScript => passport
             .target_proofs
             .as_ref()
@@ -965,7 +970,9 @@ fn preserved_target_proofs(passport: Option<&Passport>) -> Option<PassportTarget
     })
 }
 
-fn stored_target_proof_anchor(proof: Option<&PassportTargetProof>) -> Option<PassportFreshnessSnapshot> {
+fn stored_target_proof_anchor(
+    proof: Option<&PassportTargetProof>,
+) -> Option<PassportFreshnessSnapshot> {
     proof
         .and_then(|proof| proof.freshness_anchor.clone())
         .or_else(|| {

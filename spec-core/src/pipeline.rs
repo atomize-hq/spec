@@ -147,11 +147,14 @@ pub fn run_bun_build(
     verbosity: Verbosity,
 ) -> Result<CargoResult> {
     if matches!(verbosity, Verbosity::Normal) {
-        eprintln!("spec: running bun build (typescript) in {}", output_root.display());
+        eprintln!(
+            "spec: running bun build (typescript) in {}",
+            output_root.display()
+        );
     }
     let build_dir = tempfile::TempDir::new().context("failed to create temporary Bun build dir")?;
     let outfile = build_dir.path().join("bundle.js");
-    let args = vec![
+    let args = [
         "build".to_string(),
         entry_path.display().to_string(),
         "--outfile".to_string(),
@@ -168,9 +171,12 @@ pub fn run_bun_test(
     verbosity: Verbosity,
 ) -> Result<CargoResult> {
     if matches!(verbosity, Verbosity::Normal) {
-        eprintln!("spec: running bun test (typescript) in {}", output_root.display());
+        eprintln!(
+            "spec: running bun test (typescript) in {}",
+            output_root.display()
+        );
     }
-    let args = vec!["run".to_string(), entry_path.display().to_string()];
+    let args = ["run".to_string(), entry_path.display().to_string()];
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     run_plain_command(Path::new("bun"), output_root, &arg_refs, timeout)
 }

@@ -125,6 +125,20 @@ mod tests {
     }
 
     #[test]
+    fn recommendation_fingerprint_changes_when_semantics_change() {
+        let artifact = recommendation_artifact_fixture();
+        let baseline = normalized_recommendation_proof_fingerprint(&artifact).unwrap();
+
+        let mut changed = artifact.clone();
+        changed.decision_summary.top_candidate_id = Some("different-candidate".to_string());
+
+        assert_ne!(
+            normalized_recommendation_proof_fingerprint(&changed).unwrap(),
+            baseline
+        );
+    }
+
+    #[test]
     fn corpus_decision_fingerprint_changes_only_on_semantic_change() {
         let artifact = corpus_decision_artifact_fixture();
         let baseline = normalized_corpus_program_decision_proof_fingerprint(&artifact).unwrap();
@@ -133,6 +147,15 @@ mod tests {
         churned.generated_at = "2026-05-06T03:00:00Z".to_string();
         assert_eq!(
             normalized_corpus_program_decision_proof_fingerprint(&churned).unwrap(),
+            baseline
+        );
+
+        let mut provenance_changed = artifact.clone();
+        provenance_changed.analysis_basis_path =
+            ".semantic-family-artifacts/family-promotion/analysis/other.latest.json".to_string();
+        provenance_changed.analysis_basis_sha256 = "other-analysis-sha".to_string();
+        assert_ne!(
+            normalized_corpus_program_decision_proof_fingerprint(&provenance_changed).unwrap(),
             baseline
         );
 

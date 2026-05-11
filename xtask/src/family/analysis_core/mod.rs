@@ -2,6 +2,7 @@ pub(crate) mod decision_contract;
 pub(crate) mod helper_surface;
 pub(crate) mod proof_fingerprint;
 
+// Decision derivation is the seam's stop-state and pivot contract surface.
 #[allow(unused_imports)]
 pub(crate) use decision_contract::{
     DecisionContractStopStateTuple, DerivedCorpusProgramDecision,
@@ -9,6 +10,7 @@ pub(crate) use decision_contract::{
     corpus_program_basis_snapshot, decision_contract_stop_state_tuple,
     derive_corpus_program_decision_contract,
 };
+// Helper-surface classification stays a narrow seam-local classifier contract.
 #[allow(unused_imports)]
 pub(crate) use helper_surface::{
     HELPER_SURFACE_FINGERPRINT, HelperSurfaceDisposition, HelperSurfaceSignal,
@@ -16,6 +18,7 @@ pub(crate) use helper_surface::{
     recommendation_matches_helper_surface_durable_hold_tuple,
     recommendation_uses_helper_surface_durable_hold_tuple,
 };
+// Proof fingerprints are exported as the seam's semantic reuse surface.
 #[allow(unused_imports)]
 pub(crate) use proof_fingerprint::{
     normalized_corpus_program_decision_proof_fingerprint, normalized_coverage_proof_fingerprint,

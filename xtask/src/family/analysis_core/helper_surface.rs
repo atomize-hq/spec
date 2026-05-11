@@ -137,6 +137,7 @@ mod tests {
         classify_helper_surface, decision_matches_helper_surface_follow_on_tuple,
         durable_non_promotable_helper_surface_candidate_tuple,
         recommendation_matches_helper_surface_durable_hold_tuple,
+        recommendation_uses_helper_surface_durable_hold_tuple,
     };
     use crate::family::promotion_artifacts::RecommendationStatus;
     use crate::family::promotion_artifacts::{
@@ -149,26 +150,57 @@ mod tests {
 
     #[test]
     fn helper_surface_classifies_durable_non_promotable_helper_surface() {
-        let signal = HelperSurfaceSignal {
-            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
-            overlap_family: "unknown",
-            real_example_hits: 2,
-            shape_fingerprint: HELPER_SURFACE_FINGERPRINT,
-        };
-
         assert_eq!(
-            classify_helper_surface(&signal),
+            classify_helper_surface(&helper_surface_signal_fixture()),
             Some(HelperSurfaceDisposition::DurableNonPromotableHelperSurface)
         );
     }
 
     #[test]
-    fn helper_surface_rejects_non_matching_signal() {
+    fn helper_surface_rejects_wrong_primary_reason() {
         let signal = HelperSurfaceSignal {
-            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedControlFlow,
+            ..helper_surface_signal_fixture()
+        };
+
+        assert_eq!(classify_helper_surface(&signal), None);
+    }
+
+    #[test]
+    fn helper_surface_rejects_non_unknown_overlap() {
+        let signal = HelperSurfaceSignal {
             overlap_family: "function.wrapper.pipeline*",
-            real_example_hits: 2,
-            shape_fingerprint: HELPER_SURFACE_FINGERPRINT,
+            ..helper_surface_signal_fixture()
+        };
+
+        assert_eq!(classify_helper_surface(&signal), None);
+    }
+
+    #[test]
+    fn helper_surface_rejects_zero_real_example_hits() {
+        let signal = HelperSurfaceSignal {
+            real_example_hits: 0,
+            ..helper_surface_signal_fixture()
+        };
+
+        assert_eq!(classify_helper_surface(&signal), None);
+    }
+
+    #[test]
+    fn helper_surface_rejects_malformed_shape_fingerprint() {
+        let signal = HelperSurfaceSignal {
+            shape_fingerprint: "{not-json",
+            ..helper_surface_signal_fixture()
+        };
+
+        assert_eq!(classify_helper_surface(&signal), None);
+    }
+
+    #[test]
+    fn helper_surface_rejects_semantically_wrong_shape_fingerprint() {
+        let signal = HelperSurfaceSignal {
+            shape_fingerprint: "{\"schema_version\":1,\"function_dep_arity\":0,\"callable_dep_topology_class\":\"no_deps_or_helper\",\"contract_input_count\":2,\"has_return\":true,\"authored_body_kind\":\"neither\"}",
+            ..helper_surface_signal_fixture()
         };
 
         assert_eq!(classify_helper_surface(&signal), None);
@@ -176,34 +208,27 @@ mod tests {
 
     #[test]
     fn helper_surface_candidate_tuple_matches_exact_frozen_contract() {
-        let tuple = durable_non_promotable_helper_surface_candidate_tuple();
-        let candidate = RecommendationCandidateEntry {
-            candidate_id: "fixture".to_string(),
-            cluster_ids: vec!["cluster".to_string()],
-            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
-            overlap_family: "unknown".to_string(),
-            promotion_readiness: tuple.promotion_readiness,
-            hold_reasons: vec![tuple.hold_reason],
-            next_step_status: tuple.next_step_status,
-            next_step_detail: tuple.next_step_detail,
-            leverage: RecommendationLeverage {
-                real_example_hits: 2,
-                promotion_relevant_regression_hits: 1,
-                boundary_only_hits: 0,
-                total_units_in_cluster: 3,
-            },
-            difficulty: RecommendationDifficulty {
-                tier: crate::family::promotion_artifacts::DifficultyTier::Hard,
-                why: "fixture".to_string(),
-            },
-            confidence: RecommendationConfidence {
-                level: crate::family::promotion_artifacts::ConfidenceLevel::Low,
-                why: "fixture".to_string(),
-            },
-            rationale: "fixture".to_string(),
-        };
+        let candidate = helper_surface_candidate_fixture();
 
         assert!(recommendation_matches_helper_surface_durable_hold_tuple(
+            &candidate
+        ));
+        assert!(recommendation_uses_helper_surface_durable_hold_tuple(
+            &candidate
+        ));
+    }
+
+    #[test]
+    fn helper_surface_candidate_tuple_rejects_contradictory_hold_state() {
+        let candidate = RecommendationCandidateEntry {
+            next_step_detail: crate::family::promotion_artifacts::NextStepDetail::ReadyForPromotion,
+            ..helper_surface_candidate_fixture()
+        };
+
+        assert!(recommendation_uses_helper_surface_durable_hold_tuple(
+            &candidate
+        ));
+        assert!(!recommendation_matches_helper_surface_durable_hold_tuple(
             &candidate
         ));
     }
@@ -240,5 +265,43 @@ mod tests {
         assert!(!decision_matches_helper_surface_follow_on_tuple(
             &contradictory_artifact
         ));
+    }
+
+    fn helper_surface_signal_fixture() -> HelperSurfaceSignal<'static> {
+        HelperSurfaceSignal {
+            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            overlap_family: "unknown",
+            real_example_hits: 2,
+            shape_fingerprint: HELPER_SURFACE_FINGERPRINT,
+        }
+    }
+
+    fn helper_surface_candidate_fixture() -> RecommendationCandidateEntry {
+        let tuple = durable_non_promotable_helper_surface_candidate_tuple();
+        RecommendationCandidateEntry {
+            candidate_id: "fixture".to_string(),
+            cluster_ids: vec!["cluster".to_string()],
+            primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
+            overlap_family: "unknown".to_string(),
+            promotion_readiness: tuple.promotion_readiness,
+            hold_reasons: vec![tuple.hold_reason],
+            next_step_status: tuple.next_step_status,
+            next_step_detail: tuple.next_step_detail,
+            leverage: RecommendationLeverage {
+                real_example_hits: 2,
+                promotion_relevant_regression_hits: 1,
+                boundary_only_hits: 0,
+                total_units_in_cluster: 3,
+            },
+            difficulty: RecommendationDifficulty {
+                tier: crate::family::promotion_artifacts::DifficultyTier::Hard,
+                why: "fixture".to_string(),
+            },
+            confidence: RecommendationConfidence {
+                level: crate::family::promotion_artifacts::ConfidenceLevel::Low,
+                why: "fixture".to_string(),
+            },
+            rationale: "fixture".to_string(),
+        }
     }
 }

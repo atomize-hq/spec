@@ -1978,7 +1978,10 @@ gate_d = true
         scaffold::run(temp_dir.path(), family.as_str()).unwrap();
         seed_valid_manifest(&paths.manifest, family.as_str());
         seed_valid_cases(&paths);
-        write_string(&paths.fixtures.join("aligned/units/.gitignore"), "*.spec.passport.json\n");
+        write_string(
+            &paths.fixtures.join("aligned/units/.gitignore"),
+            "*.spec.passport.json\n",
+        );
         write_string(
             &paths
                 .fixtures
