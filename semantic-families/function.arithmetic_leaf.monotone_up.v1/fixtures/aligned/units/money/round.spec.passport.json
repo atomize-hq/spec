@@ -12,20 +12,14 @@
     "returns": "Decimal"
   },
   "deps": [],
-  "local_tests": [],
-  "generated_at": "2026-05-10T23:07:21Z",
-  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration/examples/ecommerce/units/money/round.unit.spec",
-  "evidence": {
-    "build_status": "pass",
-    "test_results": [],
-    "observed_at": "2026-04-26T18:41:14Z",
-    "provenance": {
-      "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+  "local_tests": [
+    {
+      "id": "basic_round",
+      "expect": "round(Decimal::new(10000, 2)) == Decimal::new(10000, 2)"
     }
-  },
-  "freshness_anchor": {
-    "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7"
-  },
+  ],
+  "generated_at": "2026-05-10T23:08:41Z",
+  "source_file": "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units/money/round.unit.spec",
   "freshness": {
     "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7",
     "authored_truth_status": "fresh",
@@ -33,19 +27,31 @@
   },
   "target_proofs": {
     "rust": {
+      "freshness": {
+        "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    },
+    "typescript": {
       "evidence": {
         "build_status": "pass",
-        "test_results": [],
-        "observed_at": "2026-04-26T18:41:14Z",
+        "test_results": [
+          {
+            "id": "basic_round",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-10T23:08:41Z",
         "provenance": {
-          "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+          "git_commit_sha": "467ebd3bd1c2de1d932cddc47cca2ff08c93a1a5"
         }
       },
       "freshness_anchor": {
-        "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7"
+        "authored_truth_digest": "sha256:93a83c7b07e3de56ef1adf6c5387919f2b4276cb3d704371b2bed98aafa1ef39"
       },
       "freshness": {
-        "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7",
+        "authored_truth_digest": "sha256:93a83c7b07e3de56ef1adf6c5387919f2b4276cb3d704371b2bed98aafa1ef39",
         "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }

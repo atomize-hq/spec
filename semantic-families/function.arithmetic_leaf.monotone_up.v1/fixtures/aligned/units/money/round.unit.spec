@@ -18,3 +18,6 @@ body:
     {
         return value;
     }
+local_tests:
+  - id: basic_round
+    expect: round(Decimal::new(10000, 2)) == Decimal::new(10000, 2)

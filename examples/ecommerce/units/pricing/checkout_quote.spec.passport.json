@@ -100,8 +100,8 @@
       "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-05-10T18:06:38Z",
-  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m45/integration/examples/ecommerce/units/pricing/checkout_quote.unit.spec",
+  "generated_at": "2026-05-10T23:07:21Z",
+  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration/examples/ecommerce/units/pricing/checkout_quote.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [

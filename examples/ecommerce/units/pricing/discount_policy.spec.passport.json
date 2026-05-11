@@ -143,8 +143,8 @@
       "expect": "DiscountPolicy::None.fixed_amount_capped_behavior_holds()"
     }
   ],
-  "generated_at": "2026-05-10T18:06:38Z",
-  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m45/integration/examples/ecommerce/units/pricing/discount_policy.unit.spec",
+  "generated_at": "2026-05-10T23:07:21Z",
+  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration/examples/ecommerce/units/pricing/discount_policy.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [

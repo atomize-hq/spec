@@ -57,8 +57,7 @@ use spec_core::validator::{
     QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
     validate_molecule_test_covers, validate_molecule_test_semantic,
     validate_no_duplicate_molecule_test_ids, validate_no_duplicate_qualified_ids,
-    validate_qualified_deps_exist_with_options, validate_typescript_execution_target_spec,
-    validate_typescript_molecule_target,
+    validate_qualified_deps_exist_with_options, validate_typescript_molecule_target,
 };
 #[cfg(test)]
 use spec_core::validator::{validate_deps_exist_with_options, validate_no_duplicate_ids};
@@ -2094,22 +2093,6 @@ fn generate_typescript_specs(
     for err in validate_library_crate_aliases(validation_specs.local_specs(), path, context) {
         push_error(&mut errors, err);
     }
-    for spec in &specs {
-        match &spec.spec.body.typescript {
-            Some(_) => {}
-            None => push_error(
-                &mut errors,
-                spec_core::SpecError::SemanticValidation {
-                    message: "TypeScript target requires body.typescript in M45".to_string(),
-                    path: spec.source.file_path.clone(),
-                },
-            ),
-        }
-        if let Err(err) = validate_typescript_execution_target_spec(spec) {
-            push_error(&mut errors, err);
-        }
-    }
-
     if !warnings.is_empty() {
         print_diagnostics(&warnings);
     }
@@ -2154,302 +2137,6 @@ fn generate_typescript_specs(
         pluralize(generated_count)
     );
     Ok(GeneratedSpecs { specs, generated_at })
-}
-
-fn write_typescript_output(
-    output_base: &Path,
-    project_root: &Path,
-    specs: &[LoadedSpec],
-    test_name_prefix: &str,
-) -> Result<()> {
-    let mut generated_rel_paths = HashSet::<PathBuf>::new();
-    for spec in specs {
-        let rel_path = typescript_path_for_spec(spec);
-        let content = render_typescript_unit(spec)?;
-        let output_path = output_base.join(&rel_path);
-        write_generated_file(&output_path.display().to_string(), &content)
-            .with_context(|| format!("Failed to write {}", output_path.display()))?;
-        generated_rel_paths.insert(rel_path);
-    }
-
-    let runtime_rel = PathBuf::from(spec_core::types::TYPESCRIPT_RUNTIME_HELPER_PATH);
-    let runtime_path = output_base.join(&runtime_rel);
-    write_generated_file(&runtime_path.display().to_string(), &typescript_runtime_source())
-        .with_context(|| format!("Failed to write {}", runtime_path.display()))?;
-    generated_rel_paths.insert(runtime_rel);
-
-    let build_entry_rel = PathBuf::from(spec_core::types::TYPESCRIPT_BUILD_ENTRY_PATH);
-    let build_entry_path = output_base.join(&build_entry_rel);
-    write_generated_file(
-        &build_entry_path.display().to_string(),
-        &render_typescript_build_entry(specs),
-    )
-    .with_context(|| format!("Failed to write {}", build_entry_path.display()))?;
-    generated_rel_paths.insert(build_entry_rel);
-
-    let local_tests_rel = PathBuf::from(spec_core::types::TYPESCRIPT_LOCAL_TESTS_PATH);
-    let local_tests_path = output_base.join(&local_tests_rel);
-    write_generated_file(
-        &local_tests_path.display().to_string(),
-        &render_typescript_local_tests(specs, test_name_prefix)?,
-    )
-    .with_context(|| format!("Failed to write {}", local_tests_path.display()))?;
-    generated_rel_paths.insert(local_tests_rel);
-
-    clean_output_dir(output_base, &generated_rel_paths, project_root)
-        .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
-
-    Ok(())
-}
-
-fn typescript_path_for_spec(spec: &LoadedSpec) -> PathBuf {
-    let mut path = PathBuf::new();
-    for segment in spec.spec.id.split('/') {
-        path.push(segment);
-    }
-    path.set_extension("ts");
-    path
-}
-
-fn typescript_function_name(spec: &LoadedSpec) -> &str {
-    spec.spec
-        .id
-        .rsplit('/')
-        .next()
-        .unwrap_or(spec.spec.id.as_str())
-}
-
-fn render_typescript_unit(spec: &LoadedSpec) -> Result<String> {
-    let contract = spec.spec.contract.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("missing contract for TypeScript target {}", spec.spec.id)
-    })?;
-    let params = contract
-        .inputs
-        .as_ref()
-        .map(|inputs| {
-            inputs
-                .keys()
-                .map(|name| format!("{name}: Decimal"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
-        .unwrap_or_default();
-    let body = normalize_typescript_body(
-        spec.spec
-            .body
-            .typescript
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("missing TypeScript body for {}", spec.spec.id))?,
-    );
-    let runtime_import = relative_typescript_import(
-        &typescript_path_for_spec(spec),
-        Path::new(spec_core::types::TYPESCRIPT_RUNTIME_HELPER_PATH),
-    );
-    let runtime_import = normalize_typescript_import_path(&runtime_import);
-
-    Ok(format!(
-        "import {{ Decimal }} from \"{runtime_import}\";\n\nexport function {}({params}): Decimal {{\n    const __spec_result = (() => {body})();\n    return Decimal.from(__spec_result);\n}}\n",
-        typescript_function_name(spec)
-    ))
-}
-
-fn normalize_typescript_body(body: &str) -> String {
-    let trimmed = body.trim();
-    if trimmed.starts_with('{') {
-        format!("{trimmed} ")
-    } else {
-        format!("{{ return {trimmed}; }} ")
-    }
-}
-
-fn normalize_typescript_import_path(path: &Path) -> String {
-    let rendered = path
-        .to_string_lossy()
-        .replace(std::path::MAIN_SEPARATOR, "/");
-    let rendered = if rendered.starts_with('.') {
-        rendered
-    } else {
-        format!("./{rendered}")
-    };
-    rendered.trim_end_matches(".ts").to_string()
-}
-
-fn relative_typescript_import(from_file: &Path, to_file: &Path) -> PathBuf {
-    let from_dir = from_file.parent().unwrap_or_else(|| Path::new(""));
-    let from_parts = from_dir
-        .components()
-        .filter_map(|component| match component {
-            std::path::Component::Normal(segment) => Some(segment.to_string_lossy().to_string()),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let to_parts = to_file
-        .components()
-        .filter_map(|component| match component {
-            std::path::Component::Normal(segment) => Some(segment.to_string_lossy().to_string()),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let shared = from_parts
-        .iter()
-        .zip(&to_parts)
-        .take_while(|(left, right)| left == right)
-        .count();
-    let mut relative = PathBuf::new();
-    for _ in shared..from_parts.len() {
-        relative.push("..");
-    }
-    for part in &to_parts[shared..] {
-        relative.push(part);
-    }
-    if relative.as_os_str().is_empty() {
-        PathBuf::from(".")
-    } else {
-        relative
-    }
-}
-
-fn render_typescript_build_entry(specs: &[LoadedSpec]) -> String {
-    let mut lines = Vec::new();
-    for spec in specs {
-        let import_path = normalize_typescript_import_path(&relative_typescript_import(
-            Path::new(spec_core::types::TYPESCRIPT_BUILD_ENTRY_PATH),
-            &typescript_path_for_spec(spec),
-        ));
-        lines.push(format!("import \"{import_path}\";"));
-    }
-    if lines.is_empty() {
-        lines.push("export {};".to_string());
-    }
-    lines.join("\n") + "\n"
-}
-
-fn render_typescript_local_tests(specs: &[LoadedSpec], test_name_prefix: &str) -> Result<String> {
-    let mut imports = vec![
-        "import { Decimal, __specAssert, __specPrintSummary } from \"./runtime\";".to_string(),
-    ];
-    let mut tests = Vec::new();
-
-    for spec in specs {
-        let import_path = normalize_typescript_import_path(&relative_typescript_import(
-            Path::new(spec_core::types::TYPESCRIPT_LOCAL_TESTS_PATH),
-            &typescript_path_for_spec(spec),
-        ));
-        let fn_name = typescript_function_name(spec);
-        imports.push(format!("import {{ {fn_name} }} from \"{import_path}\";"));
-        for local_test in &spec.spec.local_tests {
-            let expr = translate_typescript_expect(&local_test.expect)?;
-            let test_name = expected_typescript_test_name(spec, local_test, test_name_prefix);
-            tests.push(format!(
-                "    {{ name: {test_name:?}, run: () => __specAssert(() => {expr}) }},"
-            ));
-        }
-    }
-
-    Ok(format!(
-        "{imports}\n\nconst tests = [\n{tests}\n];\n\nlet failed = 0;\nfor (const test of tests) {{\n    try {{\n        test.run();\n        console.log(`test ${{test.name}} ... ok`);\n    }} catch (error) {{\n        failed += 1;\n        console.log(`test ${{test.name}} ... FAILED`);\n        const message = error instanceof Error ? error.message : String(error);\n        console.error(message);\n    }}\n}}\n__specPrintSummary(tests.length, failed);\nif (failed > 0) {{\n    process.exit(1);\n}}\n",
-        imports = imports.join("\n"),
-        tests = tests.join("\n")
-    ))
-}
-
-fn expected_typescript_test_name(
-    spec: &LoadedSpec,
-    local_test: &spec_core::types::LocalTest,
-    test_name_prefix: &str,
-) -> String {
-    let mut parts = Vec::new();
-    if !test_name_prefix.is_empty() {
-        parts.push(test_name_prefix.to_string());
-    }
-    for segment in spec.spec.id.split('/') {
-        parts.push(segment.to_string());
-    }
-    parts.push("tests".to_string());
-    parts.push(local_test.id.clone());
-    parts.join("::")
-}
-
-fn translate_typescript_expect(expect: &str) -> Result<String> {
-    let (left, right) = split_expect_equality(expect)?;
-    Ok(format!(
-        "Decimal.equal({}, {})",
-        translate_decimal_expr(left.trim()),
-        translate_decimal_expr(right.trim())
-    ))
-}
-
-fn split_expect_equality(expect: &str) -> Result<(&str, &str)> {
-    let mut depth = 0usize;
-    let bytes = expect.as_bytes();
-    let mut idx = None;
-    let mut i = 0usize;
-    while i + 1 < bytes.len() {
-        match bytes[i] as char {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            '=' if depth == 0 && bytes[i + 1] as char == '=' => {
-                idx = Some(i);
-                break;
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    let idx = idx.ok_or_else(|| anyhow::anyhow!("unsupported TypeScript local_tests.expect shape"))?;
-    Ok((&expect[..idx], &expect[idx + 2..]))
-}
-
-fn translate_decimal_expr(expr: &str) -> String {
-    expr.replace("Decimal::new", "Decimal.new")
-}
-
-fn typescript_runtime_source() -> String {
-    r#"export class Decimal {
-    constructor(private readonly value: number) {}
-
-    static new(intValue: number, scale: number): Decimal {
-        return new Decimal(intValue / Math.pow(10, scale));
-    }
-
-    static from(value: Decimal | number): Decimal {
-        return value instanceof Decimal ? value : new Decimal(value);
-    }
-
-    static equal(left: Decimal | number, right: Decimal | number): boolean {
-        return Math.abs(Decimal.from(left).value - Decimal.from(right).value) < 1e-9;
-    }
-
-    add(other: Decimal | number): Decimal {
-        return new Decimal(this.value + Decimal.from(other).value);
-    }
-
-    mul(other: Decimal | number): Decimal {
-        return new Decimal(this.value * Decimal.from(other).value);
-    }
-
-    valueOf(): number {
-        return this.value;
-    }
-}
-
-export function __specAssert(run: () => boolean): boolean {
-    const ok = run();
-    if (!ok) {
-        throw new Error("test returned false");
-    }
-    return ok;
-}
-
-export function __specPrintSummary(total: number, failed: number): void {
-    if (failed === 0) {
-        console.log(`test result: ok. ${total} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out`);
-        return;
-    }
-    console.log(`test result: FAILED. ${total - failed} passed; ${failed} failed; 0 ignored; 0 measured; 0 filtered out`);
-}
-"#
-    .to_string()
 }
 
 fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
@@ -3186,7 +2873,7 @@ fn test_typescript_command(
         let test =
             load_molecule_test_file(path).with_context(|| format!("Failed to load {}", path.display()))?;
         validate_typescript_molecule_target(&test)?;
-        unreachable!("typescript molecule validation always errors in M45");
+        unreachable!("typescript molecule validation always errors in M46");
     }
 
     let mut temp_output_root: Option<tempfile::TempDir> = None;
@@ -4147,6 +3834,23 @@ fn build_test_evidence(
     }
 
     Ok(evidence_by_spec)
+}
+
+fn expected_typescript_test_name(
+    spec: &LoadedSpec,
+    local_test: &spec_core::types::LocalTest,
+    test_name_prefix: &str,
+) -> String {
+    let mut parts = Vec::new();
+    if !test_name_prefix.is_empty() {
+        parts.push(test_name_prefix.to_string());
+    }
+    for segment in spec.spec.id.split('/') {
+        parts.push(segment.to_string());
+    }
+    parts.push("tests".to_string());
+    parts.push(local_test.id.clone());
+    parts.join("::")
 }
 
 fn build_typescript_test_evidence(

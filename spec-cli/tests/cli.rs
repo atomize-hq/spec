@@ -15011,7 +15011,9 @@ fn typescript_near_miss_rejects_before_bun_runs() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("function.arithmetic_leaf.monotone_up.v1"),
+        stderr.contains(
+            "semantic family 'function.arithmetic_leaf.monotone_down_nonnegative.v1' is unsupported"
+        ),
         "{stderr}"
     );
     assert!(
@@ -15075,12 +15077,12 @@ fn typescript_molecule_test_is_rejected_before_bun_runs() {
     );
     assert!(
         !output.status.success(),
-        "TypeScript molecule tests should be rejected in M45"
+        "TypeScript molecule tests should be rejected in M46"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            ".test.spec is not supported for --target-language typescript in M45; molecule tests remain Rust-only"
+            ".test.spec is not supported for --target-language typescript in M46; molecule tests remain Rust-only"
         ),
         "{stderr}"
     );

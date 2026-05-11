@@ -2,7 +2,7 @@ id: pricing/apply_tax
 kind: function
 spec_version: "0.3.0"
 intent:
-  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.
 contract:
   inputs:
     subtotal: Decimal
@@ -10,16 +10,20 @@ contract:
   returns: Decimal
   invariants:
     - output >= subtotal
+deps:
+  - money/round
 imports:
   - rust_decimal::Decimal
 body:
   rust: |
     {
-        subtotal + subtotal * rate
+        let taxed = subtotal + subtotal * rate;
+        round(taxed)
     }
   typescript: |
     {
-        return subtotal.add(subtotal.mul(rate));
+        const taxed = subtotal.add(subtotal.mul(rate));
+        return round(taxed);
     }
 local_tests:
   - id: basic_tax
