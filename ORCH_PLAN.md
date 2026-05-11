@@ -7,9 +7,6 @@ Supersedes: **the stale M47 closeout-oriented `ORCH_PLAN.md`**
 Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
 Plan title: **`M48: Shared-Core Portability Follow-On, Slice 1 Implementation Plan`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
-Kickoff branch: **`feat/m40-plus`**  
-Kickoff HEAD: **`0283db1be641d04374bceec313c85d230f98c1be`**  
-Kickoff short HEAD: **`0283db1`**  
 Kickoff tree expectation: **clean**  
 Primary write scope: **Lane A only, parent-owned edits inside `xtask/src/family/analysis_core/*`**  
 Read-only proof surfaces:  
@@ -40,7 +37,6 @@ Everything downstream remains a proof wall, not implementation scope. `recommend
 The live proof floor is already known at kickoff and must remain true after the slice lands:
 
 - `./.agents/skills/next-milestone/scripts/collect_signals.sh`
-  - branch `feat/m40-plus`
   - clean tree
   - `recommendation_status = insufficient_real_corpus`
   - `decision_status = not_recommended`
@@ -92,11 +88,11 @@ Support workers are still useful, but only honestly. They may help with read-onl
 
 ### 4.1 Lane map
 
-| Lane ID | Branch | Worktree path | Owner | Authority level | Purpose |
-| --- | --- | --- | --- | --- | --- |
-| `lane/m48-parent-authority` | `feat/m40-plus` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | Parent | **authoritative** | capture baseline, freeze run contract, perform all seam edits, run all proof gates, integrate acceptance |
-| `lane/m48-worker-proof-audit` | `ws/m48-proof-audit` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m48/proof-audit` | Worker | support-only | read-only downstream-proof audit from parent-captured artifacts and repo files |
-| `lane/m48-worker-acceptance` | `ws/m48-acceptance` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m48/acceptance` | Worker | support-only | draft acceptance and closeout prose from parent-captured artifacts |
+| Lane ID | Worktree path | Owner | Authority level | Purpose |
+| --- | --- | --- | --- | --- |
+| `lane/m48-parent-authority` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | Parent | **authoritative** | capture baseline, freeze run contract, perform all seam edits, run all proof gates, integrate acceptance |
+| `lane/m48-worker-proof-audit` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m48/proof-audit` | Worker | support-only | read-only downstream-proof audit from parent-captured artifacts and repo files |
+| `lane/m48-worker-acceptance` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m48/acceptance` | Worker | support-only | draft acceptance and closeout prose from parent-captured artifacts |
 
 ### 4.2 Topology rules
 
@@ -108,7 +104,7 @@ Support workers are still useful, but only honestly. They may help with read-onl
   - `cargo test -p xtask`
 - `lane/m48-parent-authority` is the only lane allowed to write canonical authoritative M48 run artifacts outside `drafts/`.
 - `lane/m48-worker-proof-audit` may launch only after:
-  - baseline branch/head/status is frozen
+  - baseline worktree status is frozen
   - kickoff proof-floor outputs are captured
   - the parent has written the read-only audit inputs under the M48 run root
 - `lane/m48-worker-acceptance` may launch only after:
@@ -142,7 +138,7 @@ All canonical M48 execution state lives under:
 
 | Path | Role | Owner |
 | --- | --- | --- |
-| `baseline.json` | kickoff branch/head/status and proof-floor expectation snapshot | Parent |
+| `baseline.json` | kickoff worktree-status and proof-floor expectation snapshot | Parent |
 | `authority-freeze.json` | frozen writable surface, read-only surface, and lane contract | Parent |
 | `in-scope-files.txt` | exact allowed source-edit surfaces | Parent |
 | `out-of-scope-files.txt` | explicit forbidden-touch surfaces | Parent |
@@ -173,15 +169,14 @@ All canonical M48 execution state lives under:
 - `repo_root`
 - `authority_plan_path`
 - `authority_orch_path`
-- `branch`
-- `head_sha`
-- `head_short_sha`
 - `git_status_short`
 - `expected_proof_floor`
 - `allowed_parent_write_surfaces`
 - `allowed_support_lanes`
 - `read_only_proof_surfaces`
 - `historical_reference_roots`
+
+Optional audit metadata may also record the observed branch or commit, but they are non-gating and must not be used as stop conditions for M48 execution.
 
 ### 5.3 Required `authority-freeze.json` contents
 
@@ -230,8 +225,6 @@ Allowed `status` values are:
 ```text
 validation/
   baseline/
-    branch.txt
-    head.txt
     git-status-short.txt
     kickoff-notes.md
   proof-floor/
@@ -329,10 +322,15 @@ Owned surfaces:
 Required commands:
 
 ```bash
+git status --short
+```
+
+Optional audit-only commands:
+
+```bash
 git branch --show-current
 git rev-parse HEAD
 git rev-parse --short=7 HEAD
-git status --short
 ```
 
 Required artifact actions:
@@ -343,15 +341,13 @@ Required artifact actions:
 
 Acceptance:
 
-- branch is `feat/m40-plus`
-- HEAD is `0283db1be641d04374bceec313c85d230f98c1be`
 - kickoff tree is clean or any unexpected dirtiness is recorded before work continues
 - the parent has frozen the starting state before any source edit or proof rerun
 - the authority inputs are snapshotted before execution for later audit
 
 Stop rule:
 
-- if branch or head does not match the expected kickoff basis and the divergence is not explicitly accepted, stop before M48 begins
+- if the worktree is not clean and the dirtiness is not explicitly accepted, stop before M48 begins
 
 ### 6.3 `gate-m48-05-authority-freeze`
 
@@ -448,7 +444,7 @@ cargo test -p xtask
 
 Expected truth:
 
-- `collect_signals.sh` reports branch `feat/m40-plus`, clean tree, and the known stop-state summary
+- `collect_signals.sh` reports a clean tree and the known stop-state summary
 - `verify-decision-contract` reports `overall_verdict = "pass"`
 - `corpus-decision` reports:
   - `decision_action = "stop"`
@@ -878,8 +874,7 @@ Required final outcomes:
 
 ### 9.1 Assumptions
 
-- the kickoff branch remains `feat/m40-plus`
-- the kickoff HEAD remains `0283db1be641d04374bceec313c85d230f98c1be`
+- the kickoff worktree is clean when M48 begins or any accepted dirtiness is explicitly recorded
 - the validated proof floor from 2026-05-11 is still reproducible when M48 begins
 - the existing seam files named in `PLAN.md` are still the true owner surfaces
 - support workers are optional convenience, not required for correctness

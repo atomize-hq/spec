@@ -7,7 +7,7 @@ Implementation readiness: **ready for review and bounded execution**
 Plan scope: **Lane A only, freeze seam interface**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
-Current HEAD: **`81efb6a`**  
+Execution precondition: **clean worktree**  
 Last rewritten: **2026-05-11**
 
 Primary source artifacts:
@@ -69,7 +69,7 @@ If any of those become necessary to land Lane A, Lane A is scoped incorrectly an
 
 ## Live Validated Basis
 
-Validated on `feat/m40-plus` at `81efb6a` on 2026-05-11.
+Validated from a clean worktree on 2026-05-11.
 
 Commands run:
 
@@ -83,7 +83,6 @@ cargo test -p xtask
 Observed truth:
 
 - `collect_signals.sh`
-  - branch: `feat/m40-plus`
   - dirty status: clean
   - `recommendation_status = insufficient_real_corpus`
   - `decision_status = not_recommended`
