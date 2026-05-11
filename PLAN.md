@@ -1,471 +1,483 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260510-162051.md -->
-# M46 - Make Helper-Aware Monotone-Up TypeScript Execution Real
+<!-- /autoplan refresh: unified from completion + test plan sources on 2026-05-10 -->
+# M46 Completion And Landing Plan
 
-Status: **authority plan candidate**
-Milestone family: **second-language-backend**
-Implementation readiness: **ready-now**
-Next artifact kind: **authority_plan**
-Autoplan ready: **yes**
-Base branch: **main**
-Working branch: **feat/m40-plus**
+Status: **authority plan candidate**  
+Milestone family: **second-language-backend**  
+Implementation readiness: **ready-now**  
+Next artifact kind: **authority_plan**  
+Autoplan ready: **yes**  
+Base branch: **main**  
+Working branch: **feat/m40-plus**  
+Current primary head: **`a976a1f`**  
+Authoritative integration head: **`ccefca8`**  
+Authoritative execution root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration`**  
 Last rewritten: **2026-05-10**
+
 Primary sources:
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260510-162051.md`
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-163500.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m45_bounded_typescript_lane/closeout.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/README.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/semantic-families/README.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/validator.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/typescript_backend.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs`
-Supersedes: **M45 - Make TypeScript Real For One Bounded Monotone-Up Lane**
-Related test artifact:
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-163500.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-m46-completion-plan-20260510-201930.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-202402.md`
+
+Supersedes:
+- prior repo-root `PLAN.md` for M46 feature implementation
+- the standalone M46 completion-plan draft above as the single-source authority document
+
+Related artifact:
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
 
 ## Executive Verdict
 
-M45 made one honest TypeScript lane real, but only for the degenerate `deps: []` version of monotone-up.
+M46 feature work is already integrated at `ccefca8`. The remaining job is not more feature design. It is proof, closeout, and clean landing onto `feat/m40-plus`.
 
-M46 closes the next actual product-truth gap and nothing more:
+The preferred path is:
 
-- keep `kind:function` only
-- keep Bun only
-- keep atom tests only
-- keep `function.arithmetic_leaf.monotone_up.v1` only
-- expand from `deps: []` to `deps: [] | [one helper dep]`
-- require that helper dep to classify as `function.helper.identity_passthrough.v1`
-- require the helper unit to exist in the same generated output tree
-- keep wrapper execution, molecule execution, multi-dep execution, seam kinds, and cross-library TypeScript resolution out of scope
+1. run the frozen M46 proof wall from the integration worktree
+2. write closeout from observed results
+3. fast-forward `feat/m40-plus` to the integrated head
+4. rerun narrow validation on the landed branch
 
-This is not broader TypeScript parity. It is one bounded follow-on that makes the shipped product line up with repo truth the repo already claims.
+Use a bounded follow-up commit on top of `ccefca8` only if proof or landing exposes one last real M46 defect. Manual cherry-pick reconstruction onto `feat/m40-plus` is not allowed.
 
-## Product Truth Gap
+## Goal
 
-Right now the repo says two incompatible things:
-
-- the TypeScript execution lane exists for monotone-up units, but only for `deps: []`
-- the promoted monotone-up family and semantic-review truth already treat the optional `money/round` helper shape as a real supported shape
-
-That means the semantic family contract says "this unit shape is real" while the product says "you still cannot run it in the TypeScript lane."
-
-That mismatch is the milestone. Fix the product. Do not widen the milestone.
-
-## Repo Truth Basis
-
-### Live code surfaces
-
-- `spec-core/src/validator.rs` still hard-rejects dependency-bearing TypeScript targets with the frozen M45 `deps: []` rule.
-- `spec-core/src/typescript_backend.rs` is explicitly built around the zero-dep monotone-up lane.
-- `spec-core/src/semantic_review.rs` already supports helper units under `function.helper.identity_passthrough.v1`.
-- `spec-cli/src/commands.rs` still contains legacy CLI-side TypeScript rendering helpers that should not remain a second source of generator truth.
-- `README.md` still documents the TypeScript lane as `deps: []` only.
-- `semantic-families/README.md` already documents the monotone-up family as allowing the optional helper shape.
-- `examples/ecommerce/units/pricing/apply_tax.unit.spec` still has no helper dep today, so the current canonical example does not exercise the new topology.
-
-### Branch truth
-
-- branch anchor is `feat/m40-plus`
-- M45 landed at `ce0e16d`
-- M45 closeout already identified dead CLI-side TS helper code as real cleanup debt
-- the next honest move is backend truth, not more family-selection work
-
-## Step 0 - Scope Challenge
-
-### What already exists
-
-| Sub-problem | Existing owner | M46 action |
-|---|---|---|
-| target-language routing | `spec-core/src/types.rs`, `spec-cli/src/commands.rs` | preserve |
-| Bun build/test execution | `spec-core/src/pipeline.rs` | preserve |
-| additive target-proof storage | `spec-core/src/passport.rs`, `spec-core/src/export.rs` | preserve |
-| monotone-up family routing | `spec-core/src/semantic_review.rs` | preserve |
-| helper-family routing | `spec-core/src/semantic_review.rs` | reuse as eligibility gate |
-| bounded TypeScript generation | `spec-core/src/typescript_backend.rs` | extend from zero-dep to one-helper topology |
-| direct-dep validation | `spec-core/src/validator.rs` | replace blanket ban with bounded helper-aware rule |
-| legacy CLI-side TS rendering helpers | `spec-cli/src/commands.rs` | remove or reduce to thin routing |
-
-### Minimum complete change
-
-M46 is complete only if all of this lands together:
-
-1. TypeScript target eligibility allows zero deps or exactly one direct helper dep.
-2. The allowed helper dep is proven semantically through `function.helper.identity_passthrough.v1`, not by string name alone.
-3. TypeScript generation emits helper imports and a truthful build/test entry path for the one-helper topology.
-4. TypeScript atom tests execute a helper-aware monotone-up unit end to end.
-5. Passports, status, and export keep target-specific proof separation unchanged.
-6. The old CLI-side TypeScript generator path stops being a second truth surface.
-7. The proof wall is refreshed so a real helper-aware unit is exercised, not just theorized.
-8. README and CHANGELOG describe the bounded lane exactly, with no wrapper or multi-dep overclaim.
-
-If any of those is missing, M46 either stays dishonest or widens into more than one lake.
-
-### Complexity check
-
-This milestone touches multiple files, but it is still the smallest honest end-to-end slice because all touched files sit on one already-shipped seam:
-
-- validator gate
-- TypeScript backend generation
-- CLI orchestration
-- proof persistence
-- proof wall tests
-- docs
-
-The overbuilt versions are:
-
-- generic dep-graph scheduling
-- wrapper execution
-- cross-library TS resolution
-- multi-helper support
-- any new backend abstraction layer
-
-Reject all of them in M46.
-
-### Completeness check
-
-The complete bounded version is still cheap enough to do now:
-
-- one dep topology
-- one helper-family gate
-- one import-resolution path
-- one atom-test expansion
-- one generator-owner cleanup
-- one proof wall refresh
-
-The shortcuts are bad shortcuts:
-
-- allow one dep without helper-family validation
-- allow helper execution but leave duplicate generator ownership alive
-- update docs without updating the example or fixtures
-- ship happy path only without pre-Bun negative coverage
-
-Do the complete bounded version.
-
-## Locked Decisions
-
-### 1. M46 stays monotone-up only
-
-M46 extends only `function.arithmetic_leaf.monotone_up.v1`.
-
-It does not add `function.wrapper.pipeline.v1` execution in `spec`.
-
-### 2. Helper topology is exactly zero deps or one direct dep
-
-Eligible TypeScript units may have:
-
-- `deps: []`, or
-- exactly one direct dep
-
-More than one dep remains out of scope.
-
-### 3. The one direct dep must classify as helper passthrough truth
-
-When one direct dep exists, the dep unit must classify to:
-
-- `function.helper.identity_passthrough.v1`
-
-Do not special-case `money/round` by raw id. Consume semantic-review truth.
-
-### 4. Helper support is same-generated-tree only
-
-M46 supports helper imports only when the helper unit is present in the same loaded unit set and generated output tree.
-
-It does not add cross-library TypeScript import resolution.
-
-### 5. The TypeScript test surface stays atom-only
-
-`.test.spec` remains unsupported for `--target-language typescript`.
-
-M46 only expands local atom-test execution enough to cover a monotone-up unit that calls one helper.
-
-### 6. One backend owns TypeScript generation truth
-
-`spec-core/src/typescript_backend.rs` becomes the only generator source of truth for the TypeScript tree.
-
-`spec-cli/src/commands.rs` keeps orchestration and flag routing only.
-
-## Architecture Contract
-
-### Current to target flow
-
-```text
-M45
-  spec test --target-language typescript
-    -> reject deps
-    -> run only zero-dep monotone-up units
-
-M46
-  spec test --target-language typescript
-    -> validate kind:function
-    -> validate monotone-up family
-    -> allow deps == 0 or deps == 1
-    -> if deps == 1, require helper family support
-    -> require helper unit present in same generated tree
-    -> generate helper import edge in TS output
-    -> bun build
-    -> bun local_tests
-    -> write target_proofs.typescript only
-```
-
-### Ownership table
-
-| Module | Owns after M46 | Must not own |
-|---|---|---|
-| `spec-core/src/validator.rs` | helper-aware TS eligibility, dep-count rule, helper-family gate, missing-helper preflight | TS file emission |
-| `spec-core/src/typescript_backend.rs` | helper-aware import generation, build entry wiring, local-test harness emission | Bun execution policy |
-| `spec-core/src/pipeline.rs` | Bun build/test runners | family eligibility policy |
-| `spec-cli/src/commands.rs` | target-language routing, command orchestration, error surfacing | duplicate TS generator/runtime helpers |
-| `spec-core/src/passport.rs` | additive target-proof persistence | CLI wording |
-| `spec-core/src/export.rs` | additive proof projection | target selection |
-
-### Non-negotiable invariants
-
-- Rust remains the default target everywhere.
-- `.test.spec` remains unsupported for TypeScript.
-- M46 never promotes wrapper execution implicitly.
-- M46 never adds multi-dep or generic dep-graph execution.
-- TypeScript proof never overwrites Rust proof.
-- The helper dep must be semantically supported, not just syntactically present.
-
-## File-By-File Implementation Contract
-
-| File | Required change | Done when |
-|---|---|---|
-| `spec-core/src/validator.rs` | replace blanket `deps: []` rejection with zero-or-one-helper rule, helper-family gate, missing-helper-in-tree rejection, updated molecule-wrapper rejection wording | TypeScript eligibility errors are topology-aware and fail before Bun |
-| `spec-core/src/typescript_backend.rs` | emit helper import edges, include helper module in generated tree, keep local test harness truthful for helper-aware units | helper-aware monotone-up unit builds and tests in TS lane |
-| `spec-cli/src/commands.rs` | route entirely through backend-owned TS generation and remove or reduce dead helper-generation code | no duplicate TypeScript generator ownership remains |
-| `spec-core/src/pipeline.rs` | no semantic widening, only coverage or plumbing changes if needed | Bun path stays stable |
-| `spec-core/src/passport.rs` | preserve target-proof separation under helper-aware runs | Rust proof remains untouched after TS execution |
-| `spec-core/src/export.rs` | preserve additive proof export behavior | export remains honest after TS helper-aware run |
-| `spec-cli/tests/cli.rs` | add helper-aware positive path plus pre-Bun negative topology coverage | product surface is locked by integration coverage |
-| `examples/ecommerce/units/pricing/apply_tax.unit.spec` or packet fixture set | refresh at least one canonical proof source to actually use the helper topology | proof wall exercises the new lane for real |
-| `README.md` | update bounded-lane docs from `deps: []` to helper-aware monotone-up | user-facing truth matches product |
-| `CHANGELOG.md` | record the exact widened boundary and retained exclusions | release truth is explicit |
-
-## Ordered Implementation Plan
-
-### Step 1. Lock the validator contract first
-
-Change `spec-core/src/validator.rs` so the TypeScript gate enforces exactly this rule:
-
-- zero deps is still valid
-- one dep is valid only if that dep classifies to `function.helper.identity_passthrough.v1`
-- one dep is invalid if the helper is absent from the loaded unit set
-- two or more deps are invalid
-- wrapper and molecule targets remain invalid
-
-Do not start by editing docs or tests first. Freeze the policy surface first.
-
-### Step 2. Extend the TypeScript backend, not the CLI
-
-Change `spec-core/src/typescript_backend.rs` so the generated TS tree can compile and execute one helper-aware monotone-up unit.
+Finish M46 honestly.
 
 That means:
 
-- emit the helper module into the generated tree
-- emit the correct relative import edge
-- preserve the current local-test entrypoint model
-- keep the implementation topology-specific, not generic
+- prove the integrated helper-aware monotone-up TypeScript lane against the real code
+- keep the expected mixed-root TypeScript status contract explicit and unchanged
+- land the integrated M46 truth onto `feat/m40-plus`
+- write closeout that records what actually happened, not what was expected to happen
 
-Do not add generic scheduling or dependency-graph machinery.
+## Problem
 
-### Step 3. Collapse duplicate generator ownership
+The repo currently has split truth:
 
-Change `spec-cli/src/commands.rs` so it stops owning a second TypeScript rendering path.
+- the authoritative integrated M46 code exists at `ccefca8` in the integration worktree
+- the primary working branch `feat/m40-plus` still points at `a976a1f`
+- acceptance and closeout are not yet finished at the repo-root authority level
 
-After M46, command code should route and report. Backend code should generate.
+If the repo starts the next wedge from `feat/m40-plus` before this is resolved, future work will inherit stale branch truth and fake confidence about what M46 actually shipped.
 
-### Step 4. Refresh the proof wall
+## Done Means
 
-Refresh one real proof source so the helper topology is exercised end to end:
+M46 is closed only when all of the following are true:
 
-- canonical ecommerce example, or
-- semantic-family packet fixtures, or
-- both if needed for coverage symmetry
+1. the frozen proof wall passes on `ccefca8` with the expected positive and negative outcomes
+2. `closeout.md` records the exact observed command results, exact integrated SHA, and exact landed SHA
+3. `feat/m40-plus` points at the landed M46 head
+4. post-landing rerun on `feat/m40-plus` matches the integration truth for the narrow M46 validation surface
+5. repo-root authority docs describe one coherent landing story with no branch-state ambiguity
 
-The milestone is not done if the code supports helper-aware execution but the checked proof surfaces never exercise it.
+## Scope
 
-### Step 5. Add positive and negative product coverage
+### In scope
 
-Update `spec-cli/tests/cli.rs` and any targeted library tests so the lane is locked on both sides:
+- proof-wall execution on the integration head
+- acceptance and closeout completion from observed truth
+- deciding between fast-forward landing and one bounded continuation commit
+- landing the integrated truth onto `feat/m40-plus`
+- post-landing branch validation
 
-- one positive helper-aware monotone-up execution case
-- wrong helper family rejection
-- missing helper from loaded tree rejection
-- dep count > 1 rejection
-- molecule rejection still intact
-- Rust/TS proof separation still intact
+### Out of scope
 
-### Step 6. Move docs with the product
+- any new post-M46 milestone selection
+- wrapper TypeScript execution
+- additional TypeScript family support
+- broader docs rewriting outside M46 closeout truth
+- reopening the M46 helper-aware implementation scope itself
 
-Update `README.md` and `CHANGELOG.md` only after the code and proof wall are truthful.
+## What Already Exists
 
-Docs must say exactly what the lane supports and exactly what it still rejects.
+| Sub-problem | Existing source of truth | Reuse verdict |
+| --- | --- | --- |
+| M46 scope authority | repo-root `PLAN.md` and `ORCH_PLAN.md` | reuse, now unified here |
+| Integrated M46 code | integration worktree at `ccefca8` | authoritative code source |
+| Merge and run history | `.runs/m46_helper_aware_monotone_up_typescript/merge-log.md` | reuse |
+| Acceptance scaffold | `.runs/m46_helper_aware_monotone_up_typescript/acceptance.md` | reuse and finalize |
+| Closeout scaffold | `.runs/m46_helper_aware_monotone_up_typescript/closeout.md` | reuse and finalize |
+| Primary landing target | `feat/m40-plus` at `a976a1f` | still stale, must advance |
+
+## Delta Audit
+
+Observed M46 delta from `a976a1f` to `ccefca8`:
+
+- core code: `spec-core/src/typescript_backend.rs`, `spec-core/src/validator.rs`, `spec-cli/src/commands.rs`
+- CLI coverage: `spec-cli/tests/cli.rs`
+- canonical example truth: `examples/ecommerce/units/money/round.unit.spec`, `examples/ecommerce/units/pricing/apply_tax.unit.spec`
+- packet proof truth: aligned monotone-up fixture helper and apply-tax unit specs plus refreshed passports
+- public contract: `README.md`, `CHANGELOG.md`
+
+This is not a trivial branch-pointer move, but it is still one coherent M46 delta. The plan must treat `ccefca8` as the starting authority and avoid reconstructing that delta by hand on the primary branch.
+
+## Locked Decisions
+
+### 1. Hold scope
+
+This is a completion and landing plan, not a new feature plan. M46 scope is already chosen.
+
+### 2. `ccefca8` is the authoritative starting point
+
+Proof and landing work begins from the integration worktree head, not from `feat/m40-plus`.
+
+### 3. Option A is preferred
+
+If the proof wall passes unchanged, fast-forward `feat/m40-plus` directly to `ccefca8`.
+
+### 4. Option B is bounded contingency only
+
+If proof or landing exposes one real unfinished M46 defect, fix it on top of `ccefca8`, rerun the proof wall, then land that new head.
+
+### 5. Cherry-pick reconstruction is forbidden
+
+Do not manually replay selected M46 commits onto `feat/m40-plus`. That creates two competing truth surfaces.
+
+### 6. One canonical green trust surface must be recorded
+
+The closeout must highlight one clean product-facing success case:
+
+`cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript`
+
+### 7. The mixed-root TypeScript status remains intentionally non-green
+
+The closeout must preserve the expected root TypeScript status contract instead of pretending M46 created full green parity.
+
+## Step 0 - Scope Challenge
+
+### Minimum complete change
+
+The minimum honest change set is operational, not architectural:
+
+1. verify the integrated head
+2. decide Option A or Option B from observed proof
+3. finalize acceptance and closeout
+4. land onto `feat/m40-plus`
+5. rerun narrow landed-branch validation
+
+Anything beyond that is scope creep.
+
+### Complexity check
+
+This plan touches multiple truth surfaces, but only one code surface:
+
+- repo-root authority files
+- `.runs/m46_helper_aware_monotone_up_typescript/` artifacts
+- git branch pointers
+- the already-integrated code at `ccefca8`
+
+That is the smallest complete plan. The overbuilt version would be reopening implementation or inventing a new milestone before landing the one that already exists.
+
+### Completeness check
+
+The bad shortcut is "integration proved it once, close enough." That saves almost nothing and leaves the repo in a split-truth state. The complete version is still cheap:
+
+- prove the integrated head
+- land it
+- prove the landed head
+- record both SHAs
+
+Do the complete version.
+
+## Architecture Contract
+
+### Truth-surface diagram
+
+```text
+repo-root authority
+  PLAN.md + ORCH_PLAN.md
+          |
+          v
+run artifacts (.runs/m46...)
+  acceptance.md / merge-log.md / closeout.md
+          |
+          v
+integration code truth
+  ws/spec-m46-integration @ ccefca8
+          |
+          v
+proof wall execution
+  cargo test / spec test / spec status
+          |
+          v
+landing decision
+  Option A: fast-forward feat/m40-plus
+  Option B: bounded fix on top of ccefca8, then land
+          |
+          v
+primary branch truth
+  feat/m40-plus @ landed M46 head
+          |
+          v
+post-landing validation
+```
+
+### Landing topology
+
+| Option | What it means | When allowed | Verdict |
+| --- | --- | --- | --- |
+| A. Fast-forward landing | advance `feat/m40-plus` directly to `ccefca8` | proof wall passes unchanged | preferred |
+| B. Bounded continuation | add one last M46 fix on top of `ccefca8`, then land that new head | proof or landing exposes a real remaining defect | allowed, contingency only |
+| Rejected. Cherry-pick reconstruction | replay selected commits onto `feat/m40-plus` | never | forbidden |
+
+## Ordered Execution Plan
+
+### Step 1. Freeze the execution root
+
+- execute all proof-wall commands from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m46/integration`
+- record `ccefca8` as the authoritative starting head in acceptance and closeout artifacts
+- refuse to run the proof wall from `feat/m40-plus`
+
+Exit gate:
+- execution root is explicit in the run record
+- integrated SHA is recorded before proof begins
+
+### Step 2. Run the frozen M46 proof wall
+
+Run the exact commands listed in the proof-wall section below. Record observed outcomes, not inferred outcomes.
+
+Exit gate:
+- every command has pass/fail output captured
+- the expected non-green TypeScript status contract is either confirmed or falsified
+
+### Step 3. Decide landing path from evidence
+
+- choose Option A if Step 2 matches expected truth exactly
+- choose Option B only if Step 2 or the branch move exposes one remaining bounded M46 defect
+- if Option B is required, keep the fix on top of `ccefca8`, rerun Step 2, then continue
+
+Exit gate:
+- chosen landing path is written down with a one-line reason
+
+### Step 4. Write acceptance and closeout from observed truth
+
+- acceptance records exact command outcomes
+- closeout records exact integrated SHA, exact landed SHA once known, the canonical green trust surface, and the expected non-green root status
+- do not write final success language before branch landing and post-landing validation
+
+Exit gate:
+- acceptance is no longer "not started"
+- closeout reflects observed truth only
+
+### Step 5. Land onto `feat/m40-plus`
+
+- if Option A, fast-forward `feat/m40-plus` to `ccefca8`
+- if Option B, fast-forward `feat/m40-plus` to the new bounded continuation head
+- do not cherry-pick
+
+Exit gate:
+- `feat/m40-plus` points at the landed M46 head
+
+### Step 6. Rerun narrow validation on the landed branch
+
+Rerun the narrow post-landing validation commands from `feat/m40-plus`:
+
+- `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript`
+- `cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json`
+
+Exit gate:
+- the landed branch matches the integrated truth for the canonical green surface and the mixed-root non-green surface
+
+### Step 7. Finalize authority artifacts
+
+- update closeout with the exact landed head
+- mark M46 complete only after Step 6 passes
+- keep future milestone selection explicitly out of this closeout
+
+Exit gate:
+- one coherent repo-root landing story
+- no ambiguity about what code is landed and what proof was observed
+
+## Required Proof Wall
+
+```bash
+cargo test -p spec-core -- --color never
+cargo test -p spec-cli --test cli -- --color never
+cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
+cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units --target-language typescript
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_plus_tax.test.spec --target-language typescript
+cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
+```
+
+## Expected Truth
+
+Expected outcomes on the integration head:
+
+- `cargo test -p spec-core -- --color never` passes
+- `cargo test -p spec-cli --test cli -- --color never` passes
+- aligned monotone-up packet proof passes in TypeScript
+- unsupported near miss fails before Bun
+- helper-aware `pricing/apply_tax` passes in TypeScript
+- `discount_plus_tax.test.spec` fails before Bun because molecule tests remain Rust-only
+- root TypeScript status remains expected non-green:
+  - exit code `1`
+  - `pricing/apply_tax` is `valid`
+  - `money/round`, `pricing/apply_discount`, `pricing/calculate_total`, `pricing/checkout_quote`, and `pricing/discount_policy` are `untested`
+  - no Rust proof inheritance appears in the TypeScript status view
 
 ## Test Review
+
+### Test artifact
+
+Primary QA-facing artifact:
+
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-202402.md`
+
+This plan does not replace that artifact. It depends on it and adds the missing branch-landing validation contract.
 
 ### Coverage diagram
 
 ```text
-CLI target-language parse
-  -> wrong command/flag                                 [existing]
-  -> typescript target selected
-       -> kind != function                             [existing]
-       -> family != monotone_up                        [existing]
-       -> dep count > 1                                [GAP]
-       -> dep count == 1, wrong helper family          [GAP]
-       -> dep count == 1, helper missing from tree     [GAP]
-       -> molecule target                              [existing]
-       -> helper-aware monotone-up unit
-            -> helper import edge emitted correctly    [GAP]
-            -> bun build passes                        [GAP]
-            -> local atom tests pass                   [GAP]
-            -> target_proofs.typescript refreshed      [expand existing]
-            -> rust proof remains untouched            [existing]
-            -> status reads TS proof only              [expand existing]
-            -> export preserves additive truth         [existing]
+INTEGRATION HEAD COVERAGE
+=========================
+[+] Core regression
+    └── [COVERED] cargo test -p spec-core
+
+[+] CLI regression
+    └── [COVERED] cargo test -p spec-cli --test cli
+
+[+] Positive helper-aware packet proof
+    └── [COVERED] aligned packet in TypeScript
+
+[+] Negative bounded-lane packet proof
+    └── [COVERED] unsupported near miss fails before Bun
+
+[+] Canonical green trust surface
+    └── [COVERED] pricing/apply_tax.unit.spec passes in TypeScript
+
+[+] Molecule rejection surface
+    └── [COVERED] discount_plus_tax.test.spec fails before Bun
+
+[+] Mixed-root TypeScript status surface
+    └── [COVERED] status exits 1 with expected non-green contract
+
+LANDED BRANCH COVERAGE
+======================
+[+] Canonical green trust surface parity
+    └── [GAP TO EXECUTE] rerun apply_tax TypeScript test from feat/m40-plus
+
+[+] Mixed-root non-green parity
+    └── [GAP TO EXECUTE] rerun TypeScript status JSON from feat/m40-plus
 ```
 
-### Proof wall
+### Required post-landing validation
 
-```bash
-cargo test
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_plus_tax.test.spec --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units --target-language typescript
-cargo run -p spec-cli -- export examples/ecommerce/units --format json
-```
+The integration proof wall is necessary but not sufficient. Post-landing rerun is mandatory because the primary branch is the surface future work will build from.
 
-### Expected proof-wall outcomes
+### Observed integration proof notes
 
-- helper-aware monotone-up unit passes in the TypeScript lane when its helper unit is present in the same generated tree
-- `spec status --target-language typescript` still reads `target_proofs.typescript` only
-- `.test.spec` still fails before Bun runs for TypeScript
-- unsupported helper topologies fail before Bun runs with stable messages
-- export keeps additive target-proof truth without merge bugs
+Observed proof-wall truth on `ccefca8` already indicates:
 
-### Required new tests
+- core tests passed
+- CLI tests passed
+- aligned TypeScript packet passed
+- unsupported near-miss packet failed before Bun as intended
+- `pricing/apply_tax.unit.spec` passed in TypeScript
+- `discount_plus_tax.test.spec` failed before Bun as intended
+- `spec status ... --target-language typescript --format json` exited `1` with the expected mixed-root result
 
-#### Integration
+One non-blocking engineering concern remains visible during those flows:
 
-- add one end-to-end CLI success test for helper-aware monotone-up execution
-- add one CLI test for wrong helper family pre-Bun rejection
-- add one CLI test for missing helper from loaded tree pre-Bun rejection
-- add one CLI test for dep count > 1 pre-Bun rejection
-- expand stale-status coverage so helper-aware TS proof goes stale when either the unit or helper changes
+- `spec-cli/src/commands.rs` still emits dead-code warnings for `status_command`, `generate_command`, `build_command`, and `test_command`
 
-#### Library / module tests
+That warning cleanup is not part of M46 completion unless it blocks landing.
 
-- add targeted validator coverage for the zero-or-one-helper rule
-- add targeted TS backend coverage for helper import path emission
-- preserve existing proof-separation coverage in `passport.rs` and `export.rs`
+## Error And Rescue Registry
 
-### Test plan artifact
-
-Primary QA artifact stays:
-
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260510-163500.md`
-
-That artifact already captures the exact QA-facing interactions and edge cases. M46 should stay aligned to it, not invent a parallel QA story.
+| Failure | Why it happens | Rescue |
+| --- | --- | --- |
+| Proof wall fails on `ccefca8` | M46 is not actually done | stay on Option B, fix only the bounded M46 defect |
+| Closeout drifts from actual results | closeout written from expectation | write closeout only after proof records exist |
+| `feat/m40-plus` receives partial M46 truth | wrong base or manual cherry-picking | land only from integration head |
+| Root TS status gets misread as a green gate | old misunderstanding returns | preserve explicit non-green contract in closeout |
+| Landed branch diverges from integration truth | branch advanced without rerun | run mandatory post-landing validation |
 
 ## Failure Modes Registry
 
-| Codepath | Realistic failure mode | Test required? | Error handling required? | User-visible outcome required? |
-|---|---|---|---|---|
-| helper-aware validator gate | accepts wrong helper family | yes | yes, pre-Bun failure | clear error |
-| helper-aware validator gate | accepts helper ref absent from loaded tree | yes | yes, pre-Bun failure | clear error |
-| helper-aware validator gate | silently accepts dep count > 1 | yes | yes, pre-Bun failure | clear error |
-| TS backend import generation | emits broken relative import | yes | build failure path already exists | clear build failure |
-| TS local test harness | helper-aware unit compiles but tests run against incomplete tree | yes | yes, generate full tree | clear failure |
-| CLI/backend split ownership | CLI helper path diverges from backend path | yes | fixed by consolidation | n/a after cleanup |
-| proof persistence | TS run overwrites Rust proof | yes, preserve existing coverage | existing additive storage must remain | silent corruption must be impossible |
-| canonical example / fixtures | proof wall never exercises helper topology | yes | fix by refreshing proof source | no fake green |
+| Risk | Severity | Test coverage | Error handling | User-visible outcome |
+| --- | --- | --- | --- | --- |
+| M46 closes without landing on `feat/m40-plus` | Critical | no, unless branch rerun happens | process gate only | stale branch truth |
+| Manual reconstruction onto primary branch | Critical | no | policy gate only | competing truth surfaces |
+| Proof wall only run on integration head | High | partial | none if skipped | false confidence on primary branch |
+| Closeout omits exact SHAs | High | no | documentation gate only | readers cannot verify what actually landed |
+| Mixed-root red surface is reported without a canonical green surface | High | yes, if closeout records both | documentation gate only | milestone sounds more broken than it is |
 
-**Critical gap rule:** any failure mode that has no test, no explicit failure path, and can produce silent success is a release blocker for M46.
+Critical gap rule for this plan:
+
+- if post-landing rerun is missing, M46 is not done
+- if closeout does not record both SHAs, M46 is not done
+- if the plan lands by cherry-pick reconstruction, M46 is not done
+
+## Observability And Closeout Requirements
+
+Closeout must include all of the following:
+
+- authoritative integration head SHA
+- landed primary-branch SHA
+- exact proof-wall command list
+- exact observed outcome for each command
+- one canonical green trust surface:
+  - `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript`
+- one explicit expected non-green trust surface:
+  - `cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json`
+- statement that `.test.spec --target-language typescript` remains intentionally unsupported
 
 ## Worktree Parallelization Strategy
 
-This plan has limited but real parallelization opportunity. The core backend changes share `spec-core/src` and `spec-cli/src`, so most runtime work is sequential. The proof assets and doc updates can be prepared in parallel once the validator contract is frozen.
+This plan has limited parallelism. Most critical steps share the same truth surfaces, `.runs/m46...` artifacts and the integration worktree, so the core landing path is mostly sequential.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
-|---|---|---|
-| lock TS helper-aware validator contract | `spec-core/src`, `spec-core semantic review surfaces` | — |
-| extend TS backend generation and harness | `spec-core/src` | lock TS helper-aware validator contract |
-| consolidate CLI generator ownership and preserve proof surfaces | `spec-cli/src`, `spec-core/src` | extend TS backend generation and harness |
-| refresh examples, packet fixtures, and CLI integration tests | `examples/`, `semantic-families/`, `spec-cli/tests/` | lock TS helper-aware validator contract |
-| finalize docs and changelog | `README.md`, `CHANGELOG.md` | consolidate CLI generator ownership and preserve proof surfaces |
+| --- | --- | --- |
+| freeze execution root and run proof wall | `.worktrees/spec-m46/integration`, `.runs/m46_helper_aware_monotone_up_typescript/` | — |
+| acceptance capture | `.runs/m46_helper_aware_monotone_up_typescript/` | freeze execution root and run proof wall |
+| closeout drafting | `.runs/m46_helper_aware_monotone_up_typescript/`, repo-root authority docs | freeze execution root and run proof wall |
+| branch landing | git refs for `feat/m40-plus`, integration worktree | acceptance capture |
+| post-landing validation | primary branch checkout, `.runs/m46_helper_aware_monotone_up_typescript/` | branch landing |
+| final closeout finalize | `.runs/m46_helper_aware_monotone_up_typescript/`, repo-root authority docs | post-landing validation |
 
 ### Parallel lanes
 
-Lane A: lock TS helper-aware validator contract -> extend TS backend generation and harness -> consolidate CLI generator ownership and preserve proof surfaces
-
-Lane B: refresh examples, packet fixtures, and CLI integration tests
-
-Lane C: finalize docs and changelog
+Lane A: freeze execution root -> run proof wall -> acceptance capture  
+Lane B: closeout draft shell after proof starts, then fill only from observed outputs  
+Lane C: branch landing -> post-landing validation -> final closeout finalize
 
 ### Execution order
 
-1. Launch Lane A first. The validator contract is the dependency anchor for everything else.
-2. After Step 1 in Lane A is frozen, launch Lane B in a parallel worktree. That work can author the helper-aware example, fixtures, and most integration coverage while Lane A finishes backend and CLI ownership work.
-3. Merge Lane A first.
-4. Rebase Lane B on top of Lane A, then fix any error-message or path assertion drift.
-5. Run the proof wall.
-6. Launch Lane C only after proof-wall behavior is final, then merge docs/changelog last.
+1. Launch Lane A first. It owns the evidence that every other step depends on.
+2. Lane B may prepare closeout structure in parallel after Lane A begins, but it cannot finalize any result text until Lane A completes.
+3. Launch Lane C only after Lane A confirms the landing path and acceptance is written.
 
 ### Conflict flags
 
-- Lane A and Lane B both depend on exact validator wording. Expect assertion churn if Lane B starts before Step 1 is frozen.
-- Lane A and Lane B both indirectly touch TypeScript-path expectations. Rebase Lane B after Lane A lands.
-- Lane A and Lane C both influence public wording. Keep README/CHANGELOG edits last so docs do not promise behavior that code does not yet ship.
+- Lane A and Lane B both touch `.runs/m46_helper_aware_monotone_up_typescript/`. Keep one parent owner for writes to avoid artifact drift.
+- Lane A and Lane C both depend on the authoritative integrated head. Do not move `feat/m40-plus` before Lane A is complete.
+- Lane B and Lane C both affect final closeout wording. Final closeout ownership stays with the parent after post-landing validation.
+
+### Parallelization verdict
+
+Safe concurrency is limited. Treat this as one primary sequential lane with one light parallel drafting lane, not as a multi-worker code implementation effort.
 
 ## NOT in scope
 
-- `function.wrapper.pipeline.v1` execution in `spec`
-- any function family beyond monotone-up
-- more than one direct dep
-- cross-library TypeScript dep resolution
-- seam-kind TypeScript execution
-- `.test.spec` TypeScript execution
-- `spec validate --target-language`
-- `spec export --target-language`
-- generic backend abstraction work
+- choosing M47
+- reopening M46 helper-aware implementation scope
+- redefining the TypeScript status contract
+- dead-code warning cleanup unless it blocks landing
+- any new product work unrelated to M46 completion and landing
 
-These items are already the right kind of deferred work for `TODOS.md`. Do not quietly pull them into M46.
+## Completion Summary
 
-## What already exists
-
-- target-specific proof storage already works
-- Bun build and local test runners already work
-- helper semantic family truth already exists
-- zero-dependency monotone-up TS execution already works
-- export and status already understand additive proof truth
-
-M46 is extending a real lane, not inventing one.
-
-## Acceptance Criteria
-
-M46 is complete only if all of the following are true:
-
-1. The M45 zero-dep lane still passes unchanged.
-2. A monotone-up unit with one helper passthrough dep can execute in the TypeScript lane.
-3. Helper eligibility is enforced semantically through `function.helper.identity_passthrough.v1`.
-4. Helper absence from the loaded tree fails before Bun runs.
-5. More than one dep fails before Bun runs.
-6. `.test.spec` remains unsupported for TypeScript.
-7. Target-proof separation remains unchanged and honest.
-8. Duplicate CLI-side TypeScript generator logic is gone or reduced to thin routing.
-9. The proof wall exercises a real helper-aware unit instead of a zero-dep stand-in.
-10. README and CHANGELOG describe the new bounded lane exactly, with no wrapper or multi-dep claim.
-
-## Open Risks
-
-- the helper family is runtime-supported but still unpromoted; M46 must consume that truth without inventing a new packet workflow
-- `spec-cli/src/commands.rs` already mixes live routing and legacy TS helper logic, so cleanup may touch more surface area than the feature itself
-- if the example and packet fixtures diverge, the proof wall can become green in one place and stale in another
+| Area | Verdict | Notes |
+| --- | --- | --- |
+| Problem choice | Strong | this is the real unfinished work |
+| Scope | Strong | bounded to proof, closeout, landing, rerun |
+| Reuse | Strong | existing integration head and artifacts already exist |
+| Architecture | Strong | one authoritative code truth surface |
+| Test plan | Strong with one mandatory gap | landed-branch parity rerun is still required |
+| Performance | Strong | human-process integrity is the main risk, not runtime cost |
+| Recommendation | Approve and execute | prefer Option A, keep Option B as bounded contingency |
 
 ## One-Line Summary
 
-M46 should make the first realistic monotone-up TypeScript unit executable by allowing exactly one supported helper passthrough dep, while keeping every broader TypeScript ambition out of scope and locking the result with proof, tests, docs, and worktree-aware execution order.
+M46 is already built at `ccefca8`; the remaining honest work is to prove that head, land it onto `feat/m40-plus`, rerun the narrow branch validation, and write closeout that records one canonical green TypeScript trust surface plus the still-intentional mixed-root non-green status.
