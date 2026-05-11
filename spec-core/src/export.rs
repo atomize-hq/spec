@@ -1003,11 +1003,11 @@ mod tests {
         }
     }
 
-    fn loaded_discount_policy_sum_seam(dir: &TempDir) -> LoadedSpec {
+    fn loaded_discount_strategy_sum_seam(dir: &TempDir) -> LoadedSpec {
         let mut spec = loaded_sum_seam(
             dir,
-            "units/pricing/discount_policy.unit.spec",
-            "pricing/discount_policy",
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
         );
         spec.spec.intent.why =
             "Represent mutually exclusive discount strategies for checkout pricing.".to_string();
@@ -1029,7 +1029,7 @@ mod tests {
     fn covering_molecule_test(dir: &TempDir, id: &str, cover_id: &str) -> LoadedMoleculeTest {
         let source_path = dir
             .path()
-            .join("units/pricing/discount_policy_checkout_flow.test.spec");
+            .join("units/pricing/discount_strategy_checkout_flow.test.spec");
         if let Some(parent) = source_path.parent() {
             fs::create_dir_all(parent).unwrap();
         }
@@ -1406,13 +1406,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let original_spec = loaded_sum_seam(
             &dir,
-            "units/pricing/discount_policy.unit.spec",
-            "pricing/discount_policy",
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
         );
         let mut changed_spec = loaded_spec(
             &dir,
-            "units/pricing/discount_policy.unit.spec",
-            "pricing/discount_policy",
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
             vec![],
         );
         changed_spec.spec.intent.why = "Apply a function-style discount".to_string();
@@ -1447,8 +1447,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let spec = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
         let supported_review =
             evaluate_semantic_review(&spec).expect("supported data review expected after Lane A");
@@ -1485,7 +1485,7 @@ mod tests {
     }
 
     #[test]
-    fn load_passports_for_specs_preserve_accepts_matching_legacy_seam_compatibility_keys() {
+    fn load_passports_for_specs_preserve_drops_removed_legacy_seam_compatibility_keys() {
         let dir = TempDir::new().unwrap();
         let sum_spec = loaded_supported_discount_strategy_sum_seam(
             &dir,
@@ -1494,8 +1494,8 @@ mod tests {
         );
         let data_spec = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
 
         let mut sum_review =
@@ -1558,19 +1558,21 @@ mod tests {
 
         assert!(warnings.is_empty());
         assert_eq!(passports.len(), 2);
-        assert_eq!(
+        assert!(
             passports
                 .iter()
                 .find(|passport| passport.id == "pricing/discount_strategy")
-                .and_then(|passport| passport.semantic_review.clone()),
-            Some(sum_review)
+                .expect("sum passport")
+                .semantic_review
+                .is_none()
         );
-        assert_eq!(
+        assert!(
             passports
                 .iter()
-                .find(|passport| passport.id == "pricing/checkout_quote")
-                .and_then(|passport| passport.semantic_review.clone()),
-            Some(data_review)
+                .find(|passport| passport.id == "pricing/pricing_quote")
+                .expect("data passport")
+                .semantic_review
+                .is_none()
         );
     }
 
@@ -1584,8 +1586,8 @@ mod tests {
         );
         let data_spec = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
 
         let mut sum_review =
@@ -1657,7 +1659,7 @@ mod tests {
         assert!(
             passports
                 .iter()
-                .find(|passport| passport.id == "pricing/checkout_quote")
+                .find(|passport| passport.id == "pricing/pricing_quote")
                 .expect("data passport")
                 .semantic_review
                 .is_none()
@@ -2075,8 +2077,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let spec = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
 
         let passport = build_passport_with_evidence(
@@ -2158,8 +2160,8 @@ mod tests {
         );
         let data_spec = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
         let specs_by_id = HashMap::from([
             (sum_spec.spec.id.clone(), sum_spec.clone()),
@@ -2342,11 +2344,11 @@ mod tests {
     #[test]
     fn export_recomputes_escape_hatch_gate_from_current_evidence() {
         let dir = TempDir::new().unwrap();
-        let spec = loaded_discount_policy_sum_seam(&dir);
+        let spec = loaded_discount_strategy_sum_seam(&dir);
         let molecule_test = covering_molecule_test(
             &dir,
-            "pricing/discount_policy_checkout_flow",
-            "pricing/discount_policy",
+            "pricing/discount_strategy_checkout_flow",
+            "pricing/discount_strategy",
         );
         let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
 
@@ -2426,7 +2428,7 @@ mod tests {
     #[test]
     fn export_reprojects_stale_branch_proof_coverage_from_current_surfaces() {
         let dir = TempDir::new().unwrap();
-        let original_spec = loaded_discount_policy_sum_seam(&dir);
+        let original_spec = loaded_discount_strategy_sum_seam(&dir);
         let mut changed_spec = original_spec.clone();
         changed_spec.spec.intent.why = "Represent revised discount policy".to_string();
 
@@ -2541,8 +2543,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let seam = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
 
         let bundle = build_export_bundle(&[seam], &[], "2026-04-19T00:00:00Z", None);
@@ -2564,11 +2566,11 @@ mod tests {
             bundle.graph.edges,
             vec![
                 ExportEdge::Dep {
-                    from: ExportDepRef::local("pricing/checkout_quote"),
+                    from: ExportDepRef::local("pricing/pricing_quote"),
                     to: ExportDepRef::local("pricing/apply_discount"),
                 },
                 ExportEdge::Dep {
-                    from: ExportDepRef::local("pricing/checkout_quote"),
+                    from: ExportDepRef::local("pricing/pricing_quote"),
                     to: ExportDepRef::local("pricing/apply_tax"),
                 },
             ]
