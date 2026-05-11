@@ -291,7 +291,7 @@ where
 mod tests {
     use super::*;
     use crate::family::{
-        certify, decision_kernel,
+        certify,
         harness::{
             CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
             CHAIN3_SUITE_SLUG, FamilyHarness, HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW,
@@ -3686,7 +3686,7 @@ gate_d = true
         )]);
 
         assert_eq!(
-            decision_kernel::corpus_program_basis_snapshot(&artifact),
+            family::analysis_core::corpus_program_basis_snapshot(&artifact),
             CorpusProgramBasisSnapshot {
                 recommendation_status: artifact.recommendation_status,
                 decision_status: artifact.decision_summary.decision_status,
@@ -4406,7 +4406,7 @@ gate_d = true
                 generated_at: "2026-05-05T02:00:00Z".to_string(),
                 analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
                 analysis_basis_sha256,
-                basis_snapshot: decision_kernel::corpus_program_basis_snapshot(&analysis),
+                basis_snapshot: family::analysis_core::corpus_program_basis_snapshot(&analysis),
                 decision_action: CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn,
                 decision_basis_code:
                     CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface,
