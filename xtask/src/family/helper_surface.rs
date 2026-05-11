@@ -1,3 +1,6 @@
+//! Compatibility-only passthrough for historical helper-surface call sites.
+//! Semantic ownership lives in `crate::family::analysis_core::helper_surface`.
+
 #[allow(unused_imports)]
 pub(crate) use crate::family::analysis_core::helper_surface::{
     HELPER_SURFACE_FINGERPRINT, HelperSurfaceDisposition, HelperSurfaceSignal,
