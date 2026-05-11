@@ -188,12 +188,16 @@ frozen vocabulary, `recommendation.latest.json` remains the analysis input
 truth, while `corpus-program-decision.latest.json` remains the bounded
 operator-action output.
 
-M36 preserved that frozen M35 wedge rather than widening it. M37 keeps the
-same wedge outcome while splitting the code boundary cleanly:
-`xtask/src/family/helper_surface.rs` still owns the helper-surface
-classification, and `xtask/src/family/decision_kernel.rs` now owns the
-family-analysis decision derivation and normalized proof-fingerprint logic.
-The same `helper_surface_not_promotable` input still drives the same
+M36 preserved that frozen M35 wedge rather than widening it. Historically, M37
+described that same wedge through a split between
+`xtask/src/family/helper_surface.rs` and
+`xtask/src/family/decision_kernel.rs`. At the current frozen ownership
+boundary, `analysis_core/*` is the live semantic owner surface for both the
+helper-surface classification and the bounded family-analysis decision
+derivation. `helper_surface.rs` and `decision_kernel.rs` remain
+compatibility-only passthrough surfaces, and `mod.rs` preserves that
+compatibility presentation at the `46bef6e` freeze. The same
+`helper_surface_not_promotable` input still drives the same
 `durable_non_promotable_helper_surface` basis and the same
 `pivot_to_architecture_shared_core_follow_on` plus
 `author_architecture_follow_on_plan` follow-on contract.
@@ -349,11 +353,10 @@ That means:
 - capability is still missing
 - the current blocker is `helper_surface_not_promotable`, not lack of
   visibility
-- the non-promotability call belongs to `helper_surface.rs`, not a widened
-  family-packet or generic decision layer
-- M37 keeps the frozen M35 wedge, with `decision_kernel.rs` deriving the
-  helper follow-on contract from that unchanged helper-surface input instead of
-  a corpus-budget or packet-local shortcut
+- the current non-promotability call belongs to `analysis_core/*`, not a
+  widened family-packet or generic decision layer
+- historical references to `helper_surface.rs` or `decision_kernel.rs` describe
+  compatibility-only presentation, not the current owner surface
 
 So if you add more examples of that same unsupported shape, you may increase:
 
