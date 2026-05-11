@@ -8,7 +8,7 @@ Next artifact kind: **authority_plan**
 Autoplan ready: **yes**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
-Current primary head: **`fff21c5`**  
+Current primary head: **`4f8d38c`**  
 Last rewritten: **2026-05-11**
 
 Primary source artifacts:
@@ -87,7 +87,7 @@ That missing contract is the M47 job.
 | write-side caller of shared semantics | `xtask/src/family/recommend.rs` | counts as owner-adjacent producer, not extraction pressure by itself |
 | independent read-side consumer | `xtask/src/family/verify.rs` | real reuse pressure, first independent consumer |
 | compatibility re-export wrappers | `xtask/src/family/helper_surface.rs`, `xtask/src/family/decision_kernel.rs` | local shims, not seam owners |
-| artifact schemas and validation | `xtask/src/family/promotion_artifacts.rs` | local contract surface, not portability-safe shared core |
+| artifact schemas and validation | `xtask/src/family/promotion_artifacts.rs` | local validator consumer and contract surface; imports the seam to validate artifact truth, but does not count as portability-safe shared core |
 | CLI wiring and path lookup | `xtask/src/family/mod.rs`, `xtask/src/family/paths.rs`, `xtask/src/lib.rs` | local orchestration only |
 | bounded second-language proof | `.runs/m46_helper_aware_monotone_up_typescript/closeout.md` | proof context only, not broad portability proof |
 | prior authority framing | `.runs/m40_plus_selector_contract_hardening/replay-inputs/restore-point.md` | reuse and refresh, do not reinvent |
@@ -168,6 +168,7 @@ Current consumers:
 
 - `xtask/src/family/recommend.rs`
 - `xtask/src/family/verify.rs`
+- `xtask/src/family/promotion_artifacts.rs` for local artifact validation against the frozen seam contract
 
 ### Shared vs local ownership map
 
@@ -179,7 +180,7 @@ Current consumers:
 | `recommend.rs` | local consumer | uses shared semantics, but also owns command execution, artifact write policy, and recommendation assembly |
 | `verify.rs` | local consumer | uses shared semantics, but owns verifier-only JSON output and artifact loading |
 | `helper_surface.rs`, `decision_kernel.rs` | local compatibility wrappers | re-export shims only; adjacency is not ownership |
-| `promotion_artifacts.rs` | local artifact boundary | schema and validator surface, not portability-safe shared semantics |
+| `promotion_artifacts.rs` | local validator consumer and artifact boundary | imports seam semantics to validate artifact tuples and decision parity, but still owns schema and validator policy locally |
 | `mod.rs`, `paths.rs`, `lib.rs` | local orchestration | CLI dispatch, path lookup, write locations, command plumbing |
 | target-language execution policy | local backend ownership | M46 proved one bounded TypeScript surface, not a shared execution layer |
 
@@ -228,6 +229,9 @@ analysis_core/proof_fingerprint.rs
         │
         ├──────────────► corpus-program-decision.latest.json
         │
+        ├──────────────► promotion_artifacts.rs
+        │                validates artifact tuples against the frozen seam contract
+        │
         └──────────────► verify.rs
                          re-derives and verifies parity against frozen floor
 
@@ -262,10 +266,11 @@ That is the whole architecture game here. Keep shared semantics tiny. Keep every
 
 ## Trigger Table
 
-Current reuse pressure is:
+Current extraction-relevant reuse pressure is:
 
 - `recommend.rs` is the owner-adjacent producer
 - `verify.rs` is the first independent consumer
+- `promotion_artifacts.rs` is a local validator consumer, but it does not count toward extraction pressure because artifact validators remain local-only in this plan
 
 That is real signal, but it is still not enough to authorize extraction.
 
@@ -316,7 +321,7 @@ M47 PROOF FLOOR
 [GREEN] cargo test -p xtask
 [MANUAL] PLAN.md remains authority-only
 [MANUAL] PLAN.md keeps analysis_core/* as seam owner
-[MANUAL] PLAN.md keeps wrappers, artifact schemas, and CLI glue local
+[MANUAL] PLAN.md keeps wrappers, validator-only artifact imports, and CLI glue local
 [MANUAL] M46 closeout remains the only second-language proof cited
 ```
 
@@ -327,6 +332,7 @@ M47 PROOF FLOOR
 | `analysis_core/helper_surface.rs` | frozen helper-surface contract | unit tests | still green |
 | `analysis_core/decision_contract.rs` | locked stop-state and follow-on derivation | unit tests + command proof | still green |
 | `analysis_core/proof_fingerprint.rs` | semantic stability vs artifact churn | unit tests | still green |
+| `promotion_artifacts.rs` | local validator consumer that must not become seam ownership | artifact validation + manual review | still local-only |
 | `verify.rs` | first independent consumer and parity gate | unit tests + command proof | still green |
 | `PLAN.md` authorization boundary | prevents false implementation claims | manual review | must stay authority-only |
 | M46 closeout truth | prevents overclaiming TypeScript portability | artifact review | must stay bounded |
