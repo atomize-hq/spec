@@ -410,10 +410,15 @@ enum SupportedFunctionRoute {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SupportedSeamFamily {
+    SumDiscountStrategyV1,
+    DataPricingQuoteV1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SupportedSurface {
     Function(SupportedFunctionFamily),
-    SumDiscountPolicy,
-    DataCheckoutQuote,
+    Seam(SupportedSeamFamily),
     Unsupported(UnitKind),
 }
 
@@ -439,8 +444,10 @@ enum FamilyBArgClassification {
     UnsupportedExpr,
 }
 
-const SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY: &str = "sum.discount_policy.v1";
-const DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY: &str = "data.checkout_quote.v1";
+const SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY: &str = "sum.discount_strategy.v1";
+const DATA_PRICING_QUOTE_COMPATIBILITY_KEY: &str = "data.pricing_quote.v1";
+const LEGACY_SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY: &str = "sum.discount_policy.v1";
+const LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY: &str = "data.checkout_quote.v1";
 const FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY: &str =
     "function.wrapper.pipeline.chain3.v1";
 const FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY: &str =
@@ -505,8 +512,7 @@ impl SupportedSurface {
             Self::Function(SupportedFunctionFamily::HelperIdentityPassthrough) => {
                 Some(FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY)
             }
-            Self::SumDiscountPolicy => Some(SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY),
-            Self::DataCheckoutQuote => Some(DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY),
+            Self::Seam(family) => Some(canonical_seam_compatibility_key(family)),
             Self::Unsupported(_) => None,
         }
     }
@@ -514,8 +520,12 @@ impl SupportedSurface {
     fn evaluator_scope(self) -> EvaluatorScope {
         match self {
             Self::Function(_) => EvaluatorScope::SupportedFunctionSurface,
-            Self::SumDiscountPolicy => EvaluatorScope::SupportedSumSurface,
-            Self::DataCheckoutQuote => EvaluatorScope::SupportedDataSurface,
+            Self::Seam(SupportedSeamFamily::SumDiscountStrategyV1) => {
+                EvaluatorScope::SupportedSumSurface
+            }
+            Self::Seam(SupportedSeamFamily::DataPricingQuoteV1) => {
+                EvaluatorScope::SupportedDataSurface
+            }
             Self::Unsupported(_) => EvaluatorScope::UnsupportedSurface,
         }
     }
@@ -625,6 +635,47 @@ fn unsupported_surface_compatibility_key(unit_kind: UnitKind) -> String {
     format!("unsupported.{}.v1", unit_kind.as_str())
 }
 
+fn canonical_seam_compatibility_key(family: SupportedSeamFamily) -> &'static str {
+    match family {
+        SupportedSeamFamily::SumDiscountStrategyV1 => SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY,
+        SupportedSeamFamily::DataPricingQuoteV1 => DATA_PRICING_QUOTE_COMPATIBILITY_KEY,
+    }
+}
+
+fn legacy_seam_compatibility_keys(family: SupportedSeamFamily) -> &'static [&'static str] {
+    match family {
+        SupportedSeamFamily::SumDiscountStrategyV1 => {
+            &[LEGACY_SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY]
+        }
+        SupportedSeamFamily::DataPricingQuoteV1 => &[LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY],
+    }
+}
+
+fn supported_surface_matches_existing_review(
+    surface: SupportedSurface,
+    review: &SemanticReview,
+) -> bool {
+    if review.evaluator_scope != surface.evaluator_scope() {
+        return false;
+    }
+
+    match surface {
+        SupportedSurface::Function(_) => {
+            review.compatibility_key
+                == surface
+                    .compatibility_key()
+                    .expect("supported function compatibility key")
+        }
+        SupportedSurface::Seam(family) => {
+            review.compatibility_key == canonical_seam_compatibility_key(family)
+                || legacy_seam_compatibility_keys(family)
+                    .iter()
+                    .any(|key| review.compatibility_key == *key)
+        }
+        SupportedSurface::Unsupported(_) => false,
+    }
+}
+
 pub fn project_semantic_review(
     spec: &LoadedSpec,
     existing: Option<&SemanticReview>,
@@ -643,17 +694,9 @@ pub fn project_semantic_review_with_context(
 ) -> Option<SemanticReview> {
     let mut stack = HashSet::new();
     match supported_surface_for_spec(spec, context, &mut stack)? {
-        surface @ (SupportedSurface::Function(_)
-        | SupportedSurface::SumDiscountPolicy
-        | SupportedSurface::DataCheckoutQuote) => match mode {
+        surface @ (SupportedSurface::Function(_) | SupportedSurface::Seam(_)) => match mode {
             SemanticProjectionMode::Preserve => existing
-                .filter(|review| {
-                    review.evaluator_scope == surface.evaluator_scope()
-                        && review.compatibility_key
-                            == surface
-                                .compatibility_key()
-                                .expect("supported surface compatibility key")
-                })
+                .filter(|review| supported_surface_matches_existing_review(surface, review))
                 .cloned(),
             SemanticProjectionMode::Refresh => {
                 evaluate_supported_semantic_review(spec, surface, context, &mut stack)
@@ -720,9 +763,7 @@ pub fn evaluate_semantic_review_with_context(
 ) -> Option<SemanticReview> {
     let mut stack = HashSet::new();
     match supported_surface_for_spec(spec, context, &mut stack)? {
-        surface @ (SupportedSurface::Function(_)
-        | SupportedSurface::SumDiscountPolicy
-        | SupportedSurface::DataCheckoutQuote) => {
+        surface @ (SupportedSurface::Function(_) | SupportedSurface::Seam(_)) => {
             evaluate_supported_semantic_review(spec, surface, context, &mut stack)
         }
         SupportedSurface::Unsupported(unit_kind) => Some(match unit_kind {
@@ -746,14 +787,9 @@ fn supported_surface_for_spec(
         UnitKind::Function => supported_function_surface(spec, context, stack)
             .map(SupportedSurface::Function)
             .unwrap_or(SupportedSurface::Unsupported(UnitKind::Function)),
-        UnitKind::Sum if spec.spec.id == "pricing/discount_policy" => {
-            SupportedSurface::SumDiscountPolicy
-        }
-        UnitKind::Data if spec.spec.id == "pricing/checkout_quote" => {
-            SupportedSurface::DataCheckoutQuote
-        }
-        kind if is_portability_seam_kind(kind) => SupportedSurface::Unsupported(kind),
-        _ => unreachable!("all unit kinds are covered above"),
+        UnitKind::Sum | UnitKind::Data => supported_seam_surface(spec)
+            .map(SupportedSurface::Seam)
+            .unwrap_or(SupportedSurface::Unsupported(unit_kind)),
     };
     stack.remove(&spec.spec.id);
     Some(surface)
@@ -769,8 +805,12 @@ fn evaluate_supported_semantic_review(
         SupportedSurface::Function(family) => {
             evaluate_supported_function_semantic_review(spec, family, context, stack)
         }
-        SupportedSurface::SumDiscountPolicy => evaluate_supported_sum_semantic_review(spec),
-        SupportedSurface::DataCheckoutQuote => evaluate_supported_checkout_quote_data_review(spec),
+        SupportedSurface::Seam(SupportedSeamFamily::SumDiscountStrategyV1) => {
+            evaluate_supported_sum_semantic_review(spec)
+        }
+        SupportedSurface::Seam(SupportedSeamFamily::DataPricingQuoteV1) => {
+            evaluate_supported_checkout_quote_data_review(spec)
+        }
         SupportedSurface::Unsupported(_) => None,
     }
 }
@@ -1077,7 +1117,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     if !reasons.is_empty() {
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
-            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1133,7 +1173,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     if !under_specified_reasons.is_empty() {
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
-            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1156,7 +1196,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         };
         return Some(SemanticReview {
             verdict,
-            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1175,7 +1215,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         }
         return Some(SemanticReview {
             verdict: SemanticVerdict::BackendOnlyMeaningPreserved,
-            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1201,7 +1241,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
 
     Some(SemanticReview {
         verdict: SemanticVerdict::Aligned,
-        compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+        compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
         support_status: None,
         unsupported_reason_codes: Vec::new(),
         rewrite_hints: Vec::new(),
@@ -1317,6 +1357,68 @@ fn supported_function_surface(
     }
 
     None
+}
+
+fn supported_seam_surface(spec: &LoadedSpec) -> Option<SupportedSeamFamily> {
+    match spec.spec.unit_kind().ok()? {
+        UnitKind::Sum if detect_sum_discount_strategy_family(spec) => {
+            Some(SupportedSeamFamily::SumDiscountStrategyV1)
+        }
+        UnitKind::Data if detect_data_pricing_quote_family(spec) => {
+            Some(SupportedSeamFamily::DataPricingQuoteV1)
+        }
+        _ => None,
+    }
+}
+
+fn detect_sum_discount_strategy_family(spec: &LoadedSpec) -> bool {
+    let authored = match build_authored_packet(spec) {
+        Some(authored) => authored,
+        None => return false,
+    };
+    let helper_method_ids = spec
+        .spec
+        .extensions
+        .methods
+        .iter()
+        .filter(|method| is_helper_or_example_method(method))
+        .map(|method| method.id.clone())
+        .collect::<HashSet<_>>();
+    let executable = match build_executable_packet(spec, &helper_method_ids) {
+        Some(executable) => executable,
+        None => return false,
+    };
+
+    authored_matches_discount_strategy_variants(&authored.variants)
+        && authored_has_required_discount_strategy_roles(&authored.methods)
+        && executable_matches_discount_strategy_variants(&executable.variants)
+        && executable_has_required_discount_strategy_roles(&executable.methods)
+}
+
+fn detect_data_pricing_quote_family(spec: &LoadedSpec) -> bool {
+    let authored = match build_authored_data_packet(spec) {
+        Some(authored) => authored,
+        None => return false,
+    };
+    let helper_method_ids = spec
+        .spec
+        .extensions
+        .methods
+        .iter()
+        .filter(|method| is_helper_or_example_method(method))
+        .map(|method| method.id.clone())
+        .collect::<HashSet<_>>();
+    let executable = match build_executable_data_packet(spec, &helper_method_ids) {
+        Some(executable) => executable,
+        None => return false,
+    };
+
+    authored_matches_checkout_quote_fields(&authored.fields)
+        && authored_matches_checkout_quote_constructors(&authored.constructors)
+        && authored_has_required_checkout_quote_roles(&authored.methods)
+        && authored_matches_checkout_quote_fields(&executable.fields)
+        && authored_matches_checkout_quote_constructors(&executable.constructors)
+        && executable_has_required_checkout_quote_roles(&executable.methods)
 }
 
 fn authored_function_contract_is_supported(
@@ -1565,8 +1667,7 @@ fn family_b_deps_are_supported(
         matches!(
             dep_surface,
             SupportedSurface::Function(SupportedFunctionFamily::FamilyA(_))
-                | SupportedSurface::SumDiscountPolicy
-                | SupportedSurface::DataCheckoutQuote
+                | SupportedSurface::Seam(_)
         )
     })
 }
@@ -1706,8 +1807,6 @@ fn classify_family_c_function_body(
 
 fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<SemanticReview> {
     debug_assert!(matches!(spec.spec.unit_kind(), Ok(UnitKind::Data)));
-    debug_assert_eq!(spec.spec.id, "pricing/checkout_quote");
-
     let authored = build_authored_data_packet(spec)?;
     let helper_method_ids = spec
         .spec
@@ -1751,7 +1850,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
     if !reasons.is_empty() {
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
-            compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1794,7 +1893,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
                     SupportedBodyClassification::OutsideHonestSubset => {
                         return Some(SemanticReview {
                             verdict: SemanticVerdict::UnderSpecified,
-                            compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+                            compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
                             support_status: None,
                             unsupported_reason_codes: Vec::new(),
                             rewrite_hints: Vec::new(),
@@ -1823,7 +1922,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         };
         return Some(SemanticReview {
             verdict,
-            compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1842,7 +1941,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         }
         return Some(SemanticReview {
             verdict: SemanticVerdict::BackendOnlyMeaningPreserved,
-            compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1857,7 +1956,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
 
     Some(SemanticReview {
         verdict: SemanticVerdict::Aligned,
-        compatibility_key: DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+        compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
         support_status: None,
         unsupported_reason_codes: Vec::new(),
         rewrite_hints: Vec::new(),
@@ -2401,6 +2500,63 @@ fn build_authored_fields(data: &AuthoredDataShape) -> Vec<SemanticFieldPacket> {
     fields
 }
 
+fn authored_matches_discount_strategy_variants(variants: &[SemanticVariantPacket]) -> bool {
+    variants.len() == 3
+        && variants.iter().any(|variant| {
+            variant.id == "fixed_amount"
+                && variant.fields.len() == 1
+                && variant.fields[0].name == "amount"
+                && type_is_decimal(&variant.fields[0].type_)
+        })
+        && variants
+            .iter()
+            .any(|variant| variant.id == "none" && variant.fields.is_empty())
+        && variants.iter().any(|variant| {
+            variant.id == "percentage"
+                && variant.fields.len() == 1
+                && variant.fields[0].name == "rate"
+                && type_is_decimal(&variant.fields[0].type_)
+        })
+}
+
+fn executable_matches_discount_strategy_variants(variants: &[SemanticVariantPacket]) -> bool {
+    authored_matches_discount_strategy_variants(variants)
+}
+
+fn authored_has_required_discount_strategy_roles(methods: &[SemanticMethodPacket]) -> bool {
+    methods.iter().any(|method| {
+        matches!(
+            supported_role_for_method(method),
+            Some(SupportedSemanticRole::DiscountAmount)
+        )
+    }) && methods.iter().any(|method| {
+        matches!(
+            supported_role_for_method(method),
+            Some(SupportedSemanticRole::DiscountedSubtotal)
+        )
+    })
+}
+
+fn executable_has_required_discount_strategy_roles(
+    methods: &[SemanticExecutableMethodPacket],
+) -> bool {
+    methods.iter().any(|method| {
+        method.id == "discount_amount"
+            && method.receiver == "shared_ref"
+            && method.inputs.len() == 1
+            && method.inputs[0].name == "subtotal"
+            && type_is_decimal(&method.inputs[0].type_)
+            && type_is_decimal(method.returns.as_deref().unwrap_or_default())
+    }) && methods.iter().any(|method| {
+        method.id == "discounted_subtotal"
+            && method.receiver == "shared_ref"
+            && method.inputs.len() == 1
+            && method.inputs[0].name == "subtotal"
+            && type_is_decimal(&method.inputs[0].type_)
+            && type_is_decimal(method.returns.as_deref().unwrap_or_default())
+    })
+}
+
 fn authored_matches_checkout_quote_fields(fields: &[SemanticFieldPacket]) -> bool {
     fields.len() == 3
         && fields
@@ -2433,18 +2589,37 @@ fn authored_has_exact_checkout_quote_roles(methods: &[SemanticMethodPacket]) -> 
     methods
         .iter()
         .all(|method| supported_data_role_for_method(method).is_some())
-        && methods.iter().any(|method| {
-            matches!(
-                supported_data_role_for_method(method),
-                Some(SupportedDataSemanticRole::DiscountedSubtotal)
-            )
-        })
-        && methods.iter().any(|method| {
-            matches!(
-                supported_data_role_for_method(method),
-                Some(SupportedDataSemanticRole::Total)
-            )
-        })
+        && authored_has_required_checkout_quote_roles(methods)
+}
+
+fn authored_has_required_checkout_quote_roles(methods: &[SemanticMethodPacket]) -> bool {
+    methods.iter().any(|method| {
+        matches!(
+            supported_data_role_for_method(method),
+            Some(SupportedDataSemanticRole::DiscountedSubtotal)
+        )
+    }) && methods.iter().any(|method| {
+        matches!(
+            supported_data_role_for_method(method),
+            Some(SupportedDataSemanticRole::Total)
+        )
+    })
+}
+
+fn executable_has_required_checkout_quote_roles(
+    methods: &[SemanticExecutableMethodPacket],
+) -> bool {
+    methods.iter().any(|method| {
+        method.id == "discounted_subtotal"
+            && method.receiver == "shared_ref"
+            && method.inputs.is_empty()
+            && type_is_decimal(method.returns.as_deref().unwrap_or_default())
+    }) && methods.iter().any(|method| {
+        method.id == "total"
+            && method.receiver == "shared_ref"
+            && method.inputs.is_empty()
+            && type_is_decimal(method.returns.as_deref().unwrap_or_default())
+    })
 }
 
 fn semantic_text_is_vague(text: &str) -> bool {
@@ -4222,7 +4397,7 @@ mod tests {
         }"#
     }
 
-    fn discount_policy_sum_spec() -> LoadedSpec {
+    fn discount_strategy_sum_spec(id: &str) -> LoadedSpec {
         let mut variants = IndexMap::new();
         variants.insert("none".to_string(), AuthoredSumVariant::default());
         variants.insert(
@@ -4250,11 +4425,11 @@ mod tests {
 
         LoadedSpec {
             source: SpecSource {
-                file_path: "units/pricing/discount_policy.unit.spec".to_string(),
-                id: "pricing/discount_policy".to_string(),
+                file_path: format!("units/{id}.unit.spec"),
+                id: id.to_string(),
             },
             spec: SpecStruct {
-                id: "pricing/discount_policy".to_string(),
+                id: id.to_string(),
                 kind: "sum".to_string(),
                 intent: Intent {
                     why: "Represent discount strategies that cap fixed discounts at the subtotal."
@@ -4286,6 +4461,10 @@ mod tests {
                 },
             },
         }
+    }
+
+    fn discount_policy_sum_spec() -> LoadedSpec {
+        discount_strategy_sum_spec("pricing/discount_policy")
     }
 
     fn function_spec(
@@ -4536,14 +4715,14 @@ mod tests {
         spec
     }
 
-    fn checkout_quote_data_spec() -> LoadedSpec {
+    fn pricing_quote_data_spec(id: &str) -> LoadedSpec {
         LoadedSpec {
             source: SpecSource {
-                file_path: "units/pricing/checkout_quote.unit.spec".to_string(),
-                id: "pricing/checkout_quote".to_string(),
+                file_path: format!("units/{id}.unit.spec"),
+                id: id.to_string(),
             },
             spec: SpecStruct {
-                id: "pricing/checkout_quote".to_string(),
+                id: id.to_string(),
                 kind: "data".to_string(),
                 intent: Intent {
                     why: "Quote a checkout total from subtotal plus discount and tax rates."
@@ -4657,6 +4836,10 @@ mod tests {
         }
     }
 
+    fn checkout_quote_data_spec() -> LoadedSpec {
+        pricing_quote_data_spec("pricing/checkout_quote")
+    }
+
     #[test]
     fn semantic_review_marks_vague_authored_sum_as_under_specified() {
         let mut spec = discount_policy_sum_spec();
@@ -4674,6 +4857,10 @@ mod tests {
     fn semantic_review_marks_aligned_discount_amount_and_discounted_subtotal() {
         let review = evaluate_semantic_review(&discount_policy_sum_spec()).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY
+        );
         assert_eq!(review.reason_codes, Vec::<SemanticReasonCode>::new());
     }
 
@@ -4683,10 +4870,106 @@ mod tests {
         assert_eq!(review.verdict, SemanticVerdict::Aligned);
         assert_eq!(
             review.compatibility_key,
-            DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
+            DATA_PRICING_QUOTE_COMPATIBILITY_KEY
         );
         assert_eq!(review.evaluator_scope, EvaluatorScope::SupportedDataSurface);
         assert_eq!(review.reason_codes, Vec::<SemanticReasonCode>::new());
+    }
+
+    #[test]
+    fn seam_family_key_routing_is_descriptor_based_for_sum_surfaces() {
+        let review =
+            evaluate_semantic_review(&discount_strategy_sum_spec("billing/discount_strategy"))
+                .unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY
+        );
+        assert_eq!(review.evaluator_scope, EvaluatorScope::SupportedSumSurface);
+    }
+
+    #[test]
+    fn seam_family_key_routing_is_descriptor_based_for_data_surfaces() {
+        let review =
+            evaluate_semantic_review(&pricing_quote_data_spec("billing/pricing_quote")).unwrap();
+
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            DATA_PRICING_QUOTE_COMPATIBILITY_KEY
+        );
+        assert_eq!(review.evaluator_scope, EvaluatorScope::SupportedDataSurface);
+    }
+
+    #[test]
+    fn seam_family_routing_rejects_renamed_sum_vocabulary() {
+        let mut spec = discount_strategy_sum_spec("billing/discount_strategy_near_miss");
+        spec.spec
+            .extensions
+            .sum
+            .as_mut()
+            .unwrap()
+            .variants
+            .shift_remove("percentage");
+        spec.spec.extensions.sum.as_mut().unwrap().variants.insert(
+            "percent".to_string(),
+            AuthoredSumVariant {
+                fields: IndexMap::from([(
+                    "rate".to_string(),
+                    crate::types::AuthoredField {
+                        type_: "Decimal".to_string(),
+                    },
+                )]),
+            },
+        );
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(review.compatibility_key, "unsupported.sum.v1");
+    }
+
+    #[test]
+    fn seam_family_routing_rejects_renamed_data_vocabulary() {
+        let mut spec = pricing_quote_data_spec("billing/pricing_quote_near_miss");
+        let data = spec.spec.extensions.data.as_mut().unwrap();
+        let old = data.fields.shift_remove("discount_rate").unwrap();
+        data.fields.insert("discount_percent".to_string(), old);
+
+        let review = evaluate_semantic_review(&spec).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(review.compatibility_key, "unsupported.data.v1");
+    }
+
+    #[test]
+    fn family_b_dep_support_accepts_unseen_family_routed_seams() {
+        let wrapper = wrapper_pipeline_spec(
+            "billing/calculate_total_from_seams",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            let discounted = discount_strategy(subtotal, discount_rate);
+            pricing_quote(discounted, tax_rate)
+        }"#,
+        );
+        let mut wrapper = wrapper;
+        wrapper.spec.deps = vec![
+            "billing/discount_strategy".to_string(),
+            "billing/pricing_quote".to_string(),
+        ];
+        let specs = family_b_context(&[
+            discount_strategy_sum_spec("billing/discount_strategy"),
+            pricing_quote_data_spec("billing/pricing_quote"),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+        let authored = build_authored_function_packet(&wrapper).unwrap();
+
+        assert!(family_b_deps_are_supported(
+            &authored,
+            &context,
+            &mut HashSet::new()
+        ));
     }
 
     #[test]
@@ -4752,7 +5035,7 @@ mod tests {
         assert_eq!(review.verdict, SemanticVerdict::BackendOnlySemanticsLeaked);
         assert_eq!(
             review.compatibility_key,
-            DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
+            DATA_PRICING_QUOTE_COMPATIBILITY_KEY
         );
         assert_eq!(
             review.reason_codes,
@@ -4852,7 +5135,7 @@ mod tests {
         assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
         assert_eq!(
             review.compatibility_key,
-            DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
+            DATA_PRICING_QUOTE_COMPATIBILITY_KEY
         );
         assert!(
             review
@@ -4870,7 +5153,7 @@ mod tests {
         assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
         assert_eq!(
             review.compatibility_key,
-            DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY
+            DATA_PRICING_QUOTE_COMPATIBILITY_KEY
         );
         assert!(
             review
@@ -6325,7 +6608,7 @@ mod tests {
     fn semantic_health_effect_only_demotes_supported_verdicts() {
         let supported_review = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
-            compatibility_key: SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -6460,6 +6743,44 @@ mod tests {
     }
 
     #[test]
+    fn project_semantic_review_preserve_keeps_matching_legacy_sum_compatibility_key() {
+        let spec = discount_strategy_sum_spec("billing/discount_strategy");
+        let mut review = evaluate_semantic_review(&spec).unwrap();
+        review.compatibility_key = LEGACY_SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string();
+
+        let preserved =
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
+                .unwrap();
+
+        assert_eq!(preserved.compatibility_key, review.compatibility_key);
+    }
+
+    #[test]
+    fn project_semantic_review_preserve_keeps_matching_legacy_data_compatibility_key() {
+        let spec = pricing_quote_data_spec("billing/pricing_quote");
+        let mut review = evaluate_semantic_review(&spec).unwrap();
+        review.compatibility_key = LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string();
+
+        let preserved =
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
+                .unwrap();
+
+        assert_eq!(preserved.compatibility_key, review.compatibility_key);
+    }
+
+    #[test]
+    fn project_semantic_review_preserve_drops_mismatched_legacy_seam_family_key() {
+        let spec = discount_strategy_sum_spec("billing/discount_strategy");
+        let mut review = evaluate_semantic_review(&spec).unwrap();
+        review.compatibility_key = LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string();
+
+        let preserved =
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve);
+
+        assert!(preserved.is_none());
+    }
+
+    #[test]
     fn project_semantic_review_preserve_drops_mismatched_supported_compatibility_key() {
         let spec = discount_policy_sum_spec();
         let mut supported_review = evaluate_semantic_review(&spec).unwrap();
@@ -6577,6 +6898,40 @@ mod tests {
         );
         assert!(!refreshed.authored_surfaces.is_empty());
         assert!(!refreshed.executable_surfaces.is_empty());
+    }
+
+    #[test]
+    fn project_semantic_review_refresh_emits_canonical_sum_key_only() {
+        let spec = discount_strategy_sum_spec("billing/discount_strategy");
+        let seeded = SemanticReview {
+            compatibility_key: LEGACY_SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
+            ..evaluate_semantic_review(&spec).unwrap()
+        };
+
+        let refreshed =
+            project_semantic_review(&spec, Some(&seeded), SemanticProjectionMode::Refresh).unwrap();
+
+        assert_eq!(
+            refreshed.compatibility_key,
+            SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY
+        );
+    }
+
+    #[test]
+    fn project_semantic_review_refresh_emits_canonical_data_key_only() {
+        let spec = pricing_quote_data_spec("billing/pricing_quote");
+        let seeded = SemanticReview {
+            compatibility_key: LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
+            ..evaluate_semantic_review(&spec).unwrap()
+        };
+
+        let refreshed =
+            project_semantic_review(&spec, Some(&seeded), SemanticProjectionMode::Refresh).unwrap();
+
+        assert_eq!(
+            refreshed.compatibility_key,
+            DATA_PRICING_QUOTE_COMPATIBILITY_KEY
+        );
     }
 
     #[test]
@@ -6872,7 +7227,7 @@ mod tests {
         ] {
             let review = SemanticReview {
                 verdict: SemanticVerdict::Aligned,
-                compatibility_key: "data.checkout_quote.v1".to_string(),
+                compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
                 support_status: None,
                 unsupported_reason_codes: vec![],
                 rewrite_hints: vec![],
