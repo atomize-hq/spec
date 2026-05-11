@@ -1069,11 +1069,11 @@ fn project_passport_proof_coverage_from_portability(
 fn canonical_proof_coverage_definitions(
     spec: &LoadedSpec,
 ) -> Option<&'static [CanonicalProofCoverageDefinition]> {
-    if spec.spec.id != "pricing/discount_policy" {
+    if spec.spec.id != "pricing/discount_strategy" {
         return None;
     }
 
-    const DISCOUNT_POLICY_COVERAGE: &[CanonicalProofCoverageDefinition] = &[
+    const DISCOUNT_STRATEGY_COVERAGE: &[CanonicalProofCoverageDefinition] = &[
         CanonicalProofCoverageDefinition {
             id: "variant.none",
             explicit_atom_local_test_id: Some("variant_none"),
@@ -1092,7 +1092,7 @@ fn canonical_proof_coverage_definitions(
         },
     ];
 
-    Some(DISCOUNT_POLICY_COVERAGE)
+    Some(DISCOUNT_STRATEGY_COVERAGE)
 }
 
 fn branch_proof_surfaces(
@@ -1741,10 +1741,10 @@ mod tests {
         }
     }
 
-    fn make_discount_policy_sum_seam(local_test_ids: &[&str]) -> LoadedSpec {
+    fn make_discount_strategy_sum_seam(local_test_ids: &[&str]) -> LoadedSpec {
         let mut spec = make_loaded_sum_seam(
-            "pricing/discount_policy",
-            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_strategy",
+            "units/pricing/discount_strategy.unit.spec",
         );
         spec.spec.intent.why =
             "Represent mutually exclusive discount strategies for checkout pricing.".to_string();
@@ -1758,18 +1758,18 @@ mod tests {
         spec
     }
 
-    fn make_discount_policy_molecule_test() -> LoadedMoleculeTest {
+    fn make_discount_strategy_molecule_test() -> LoadedMoleculeTest {
         LoadedMoleculeTest {
             source: MoleculeTestSource {
-                file_path: "units/pricing/discount_policy_checkout_flow.test.spec".to_string(),
-                id: "pricing/discount_policy_checkout_flow".to_string(),
+                file_path: "units/pricing/discount_strategy_checkout_flow.test.spec".to_string(),
+                id: "pricing/discount_strategy_checkout_flow".to_string(),
             },
             test: MoleculeTestStruct {
-                id: "pricing/discount_policy_checkout_flow".to_string(),
+                id: "pricing/discount_strategy_checkout_flow".to_string(),
                 intent: Intent {
                     why: "Cover the discount policy seam".to_string(),
                 },
-                covers: vec!["pricing/discount_policy".to_string()],
+                covers: vec!["pricing/discount_strategy".to_string()],
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
@@ -1925,8 +1925,8 @@ mod tests {
     #[test]
     fn build_passport_data_seam_serializes_top_level_truth_only() {
         let spec = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
 
         let passport = build_passport(&spec, "2026-04-19T00:00:00Z");
@@ -2186,8 +2186,8 @@ mod tests {
     #[test]
     fn test_contract_hash_present_for_data_seam() {
         let spec = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
 
         assert!(
@@ -2199,8 +2199,8 @@ mod tests {
     #[test]
     fn test_contract_hash_changes_on_data_seam_intent_change() {
         let spec_original = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let mut spec_changed = spec_original.clone();
         spec_changed.spec.intent.why = "Changed seam intent".to_string();
@@ -2287,8 +2287,8 @@ mod tests {
     #[test]
     fn test_contract_hash_changes_on_data_seam_method_truth_change() {
         let spec_original = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let mut spec_changed = spec_original.clone();
         spec_changed.spec.extensions.methods[1]
@@ -2361,8 +2361,8 @@ mod tests {
     #[test]
     fn test_authored_truth_digest_ignores_backend_only_seam_changes() {
         let spec_original = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let mut spec_changed = spec_original.clone();
         spec_changed.spec.extensions.methods[0]
@@ -2764,13 +2764,13 @@ mod tests {
 
     #[test]
     fn build_passport_preserving_proof_state_drops_stale_sum_review_after_kind_change() {
-        let sum_spec = make_discount_policy_sum_seam(&["variant_none"]);
+        let sum_spec = make_discount_strategy_sum_seam(&["variant_none"]);
         let mut existing = make_current_passport(&sum_spec);
         existing.semantic_review = evaluate_semantic_review(&sum_spec);
 
         let changed_spec = make_loaded_spec(
-            "pricing/discount_policy",
-            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_strategy",
+            "units/pricing/discount_strategy.unit.spec",
             Some("0.3.0"),
             Some(Contract {
                 inputs: Some(IndexMap::from([(
@@ -2795,9 +2795,10 @@ mod tests {
     }
 
     #[test]
-    fn build_passport_preserving_proof_state_keeps_supported_sum_review_when_kind_matches() {
-        let spec = make_discount_policy_sum_seam(&["variant_none"]);
+    fn build_passport_preserving_proof_state_drops_unsupported_sum_review_when_kind_matches() {
+        let spec = make_discount_strategy_sum_seam(&["variant_none"]);
         let supported_review = evaluate_semantic_review(&spec).expect("sum review expected");
+        assert_eq!(supported_review.compatibility_key, "unsupported.sum.v1");
         let mut existing = make_current_passport(&spec);
         existing.semantic_review = Some(supported_review.clone());
 
@@ -2808,18 +2809,18 @@ mod tests {
             existing.contract_hash.clone(),
         );
 
-        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+        assert!(rebuilt.semantic_review.is_none());
     }
 
     #[test]
     fn build_passport_preserving_proof_state_keeps_matching_data_compatibility_key() {
         let spec = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let supported_review =
             evaluate_semantic_review(&spec).expect("supported data review expected after Lane A");
-        assert_eq!(supported_review.compatibility_key, "data.checkout_quote.v1");
+        assert_eq!(supported_review.compatibility_key, "data.pricing_quote.v1");
         let mut existing = make_current_passport(&spec);
         existing.semantic_review = Some(supported_review.clone());
 
@@ -2993,13 +2994,13 @@ mod tests {
     #[test]
     fn build_passport_preserving_proof_state_drops_mismatched_data_compatibility_key() {
         let spec = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let mut supported_review =
             evaluate_semantic_review(&spec).expect("supported data review expected after Lane A");
-        assert_eq!(supported_review.compatibility_key, "data.checkout_quote.v1");
-        supported_review.compatibility_key = "data.checkout_quote.v0".to_string();
+        assert_eq!(supported_review.compatibility_key, "data.pricing_quote.v1");
+        supported_review.compatibility_key = "data.pricing_quote.v0".to_string();
         let mut existing = make_current_passport(&spec);
         existing.semantic_review = Some(supported_review);
 
@@ -3090,8 +3091,8 @@ mod tests {
     #[test]
     fn build_passport_preserving_proof_state_drops_unsupported_review_when_kind_becomes_sum() {
         let unsupported_spec = make_loaded_spec(
-            "pricing/discount_policy",
-            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_strategy",
+            "units/pricing/discount_strategy.unit.spec",
             Some("0.3.0"),
             Some(Contract {
                 inputs: Some(IndexMap::from([(
@@ -3106,7 +3107,7 @@ mod tests {
         );
         let mut existing = make_current_passport(&unsupported_spec);
         existing.semantic_review = evaluate_semantic_review(&unsupported_spec);
-        let sum_spec = make_discount_policy_sum_seam(&["variant_none"]);
+        let sum_spec = make_discount_strategy_sum_seam(&["variant_none"]);
 
         let rebuilt = build_passport_preserving_proof_state(
             &sum_spec,
@@ -3229,14 +3230,14 @@ mod tests {
 
     #[test]
     fn project_passport_proof_coverage_reports_current_atom_and_molecule_surfaces() {
-        let spec = make_discount_policy_sum_seam(&[
+        let spec = make_discount_strategy_sum_seam(&[
             "variant_none",
             "variant_percentage",
             "variant_fixed_amount",
             "behavior_fixed_amount_capped",
         ]);
         let passport = make_current_passport(&spec);
-        let molecule_test = make_discount_policy_molecule_test();
+        let molecule_test = make_discount_strategy_molecule_test();
         let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
         let molecule_evidence = build_molecule_evidence(
             &molecule_test,
@@ -3266,7 +3267,7 @@ mod tests {
 
     #[test]
     fn project_passport_proof_coverage_drops_atom_when_passport_is_stale() {
-        let original = make_discount_policy_sum_seam(&[
+        let original = make_discount_strategy_sum_seam(&[
             "variant_none",
             "variant_percentage",
             "variant_fixed_amount",
@@ -3295,7 +3296,7 @@ mod tests {
 
     #[test]
     fn project_passport_proof_coverage_keeps_current_molecule_when_atom_is_stale() {
-        let original = make_discount_policy_sum_seam(&[
+        let original = make_discount_strategy_sum_seam(&[
             "variant_none",
             "variant_percentage",
             "variant_fixed_amount",
@@ -3304,7 +3305,7 @@ mod tests {
         let passport = make_current_passport(&original);
         let mut changed = original.clone();
         changed.spec.intent.why = "Represent revised discount policy".to_string();
-        let molecule_test = make_discount_policy_molecule_test();
+        let molecule_test = make_discount_strategy_molecule_test();
         let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
         let molecule_evidence = build_molecule_evidence(
             &molecule_test,
@@ -3334,7 +3335,7 @@ mod tests {
 
     #[test]
     fn project_passport_proof_coverage_uses_current_authored_local_test_set_per_branch() {
-        let mut changed = make_discount_policy_sum_seam(&[
+        let mut changed = make_discount_strategy_sum_seam(&[
             "variant_none",
             "variant_percentage",
             "variant_fixed_amount",
@@ -3355,7 +3356,7 @@ mod tests {
             },
         ];
         let passport = make_current_passport(&changed);
-        let molecule_test = make_discount_policy_molecule_test();
+        let molecule_test = make_discount_strategy_molecule_test();
         let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
         let molecule_evidence = build_molecule_evidence(
             &molecule_test,

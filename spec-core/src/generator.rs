@@ -1302,9 +1302,9 @@ mod tests {
 
     fn test_data_seam() -> NormalizedDataSeam {
         NormalizedDataSeam {
-            id: "pricing/checkout_quote".to_string(),
+            id: "pricing/pricing_quote".to_string(),
             intent_why: "Quote checkout totals.".to_string(),
-            type_name: "CheckoutQuote".to_string(),
+            type_name: "PricingQuote".to_string(),
             module_path: "pricing".to_string(),
             fields: vec![
                 NormalizedDataField {
@@ -1718,7 +1718,7 @@ mod tests {
 
         let lowering = lower_data_seam(&seam).unwrap();
 
-        assert_eq!(lowering.struct_name, "CheckoutQuote");
+        assert_eq!(lowering.struct_name, "PricingQuote");
         assert_eq!(lowering.fields.len(), 2);
         assert_eq!(lowering.constructors.len(), 1);
         assert_eq!(lowering.constructors[0].id, "new");
@@ -1747,10 +1747,10 @@ mod tests {
         assert!(code.contains("use crate::pricing::apply_tax::apply_tax;"));
         assert!(code.contains("/// Quote checkout totals."));
         assert!(code.contains("#[derive(Clone, Debug)]"));
-        assert!(code.contains("pub struct CheckoutQuote {"));
+        assert!(code.contains("pub struct PricingQuote {"));
         assert!(code.contains("pub subtotal: rust_decimal::Decimal,"));
         assert!(code.contains("pub tax_rate: rust_decimal::Decimal,"));
-        assert!(code.contains("impl CheckoutQuote {"));
+        assert!(code.contains("impl PricingQuote {"));
         assert!(code.contains(
             "pub fn new(subtotal: rust_decimal::Decimal, tax_rate: rust_decimal::Decimal) -> Self {"
         ));
@@ -1816,7 +1816,7 @@ mod tests {
     #[test]
     fn generate_data_seam_code_dedupes_identical_cross_method_deps_after_normalization() {
         let seam = NormalizedDataSeam::from_spec(SpecStruct {
-            id: "pricing/checkout_quote".to_string(),
+            id: "pricing/pricing_quote".to_string(),
             kind: "data".to_string(),
             intent: Intent {
                 why: "Quote checkout totals.".to_string(),
@@ -1910,7 +1910,7 @@ mod tests {
 
         let err = generate_data_seam_code(&seam).unwrap_err().to_string();
         assert!(err.contains("duplicate inherent callable 'new'"), "{err}");
-        assert!(err.contains("pricing/checkout_quote"), "{err}");
+        assert!(err.contains("pricing/pricing_quote"), "{err}");
     }
 
     #[test]
@@ -1923,7 +1923,7 @@ mod tests {
             err.contains("invalid backends.rust.derives[0] 'not valid rust'"),
             "{err}"
         );
-        assert!(err.contains("pricing/checkout_quote"), "{err}");
+        assert!(err.contains("pricing/pricing_quote"), "{err}");
     }
 
     #[test]
@@ -2256,17 +2256,17 @@ mod tests {
     fn generate_molecule_tests_code_imports_data_seam_type() {
         let test = make_resolved_molecule_test(
             "pricing/data_checkout",
-            vec!["pricing/checkout_quote"],
-            "{ let _quote = CheckoutQuote::new(rust_decimal::Decimal::ONE, rust_decimal::Decimal::ONE); }",
+            vec!["pricing/pricing_quote"],
+            "{ let _quote = PricingQuote::new(rust_decimal::Decimal::ONE, rust_decimal::Decimal::ONE); }",
         );
         let seam = test_data_seam();
         let unit = NormalizedUnit::Data(seam);
         let units_by_id: HashMap<&str, &NormalizedUnit> =
-            [("pricing/checkout_quote", &unit)].into_iter().collect();
+            [("pricing/pricing_quote", &unit)].into_iter().collect();
 
         let code = generate_molecule_tests_code(&[&test], &units_by_id).unwrap();
 
-        assert!(code.contains("use crate::pricing::checkout_quote::CheckoutQuote;"));
+        assert!(code.contains("use crate::pricing::pricing_quote::PricingQuote;"));
     }
 
     #[test]
