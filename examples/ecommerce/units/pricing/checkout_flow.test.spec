@@ -5,23 +5,23 @@ intent:
 covers:
   - pricing/apply_discount
   - pricing/calculate_total
-  - pricing/checkout_quote
+  - pricing/pricing_quote
 imports:
   - rust_decimal::Decimal
   - crate::pricing::apply_discount::apply_discount
   - crate::pricing::calculate_total::calculate_total
-  - crate::pricing::checkout_quote::CheckoutQuote
+  - crate::pricing::pricing_quote::PricingQuote
 body:
   rust: |
     {
-        let quote = CheckoutQuote::new(
+        let quote = PricingQuote::new(
             Decimal::new(10000, 2),
             Decimal::new(10, 2),
             Decimal::new(725, 4),
         );
         let total =
             calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4));
-        let rounding_sensitive_quote = CheckoutQuote::new(
+        let rounding_sensitive_quote = PricingQuote::new(
             Decimal::new(1001, 2),
             Decimal::new(3333, 4),
             Decimal::new(725, 4),

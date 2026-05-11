@@ -1,21 +1,21 @@
-id: pricing/discount_policy_checkout_flow
+id: pricing/discount_strategy_checkout_flow
 spec_version: "0.3.0"
 intent:
-  why: Prove that the sum seam stays aligned with the existing checkout quote and tax flow.
+  why: Prove that the sum seam stays aligned with the pricing quote and tax flow.
 covers:
-  - pricing/discount_policy
-  - pricing/checkout_quote
+  - pricing/discount_strategy
+  - pricing/pricing_quote
   - pricing/apply_tax
 imports:
   - rust_decimal::Decimal
-  - crate::pricing::checkout_quote::CheckoutQuote
+  - crate::pricing::pricing_quote::PricingQuote
   - crate::pricing::apply_tax::apply_tax
 body:
   rust: |
     {
         let subtotal = Decimal::new(1500, 2);
-        let raw_none = crate::raw_baseline::pricing::discount_policy::DiscountPolicy::None;
-        let generated_none = crate::pricing::discount_policy::DiscountPolicy::None;
+        let raw_none = crate::raw_baseline::pricing::discount_strategy::DiscountStrategy::None;
+        let generated_none = crate::pricing::discount_strategy::DiscountStrategy::None;
         assert_eq!(raw_none.discount_amount(subtotal), generated_none.discount_amount(subtotal));
         assert_eq!(
             raw_none.discounted_subtotal(subtotal),
@@ -23,10 +23,10 @@ body:
         );
 
         let percentage_subtotal = Decimal::new(10000, 2);
-        let raw_percentage = crate::raw_baseline::pricing::discount_policy::DiscountPolicy::Percentage {
+        let raw_percentage = crate::raw_baseline::pricing::discount_strategy::DiscountStrategy::Percentage {
             rate: Decimal::new(10, 2),
         };
-        let generated_percentage = crate::pricing::discount_policy::DiscountPolicy::Percentage {
+        let generated_percentage = crate::pricing::discount_strategy::DiscountStrategy::Percentage {
             rate: Decimal::new(10, 2),
         };
         assert_eq!(
@@ -39,10 +39,10 @@ body:
         );
 
         let fixed_subtotal = Decimal::new(5000, 2);
-        let raw_fixed = crate::raw_baseline::pricing::discount_policy::DiscountPolicy::FixedAmount {
+        let raw_fixed = crate::raw_baseline::pricing::discount_strategy::DiscountStrategy::FixedAmount {
             amount: Decimal::new(1250, 2),
         };
-        let generated_fixed = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+        let generated_fixed = crate::pricing::discount_strategy::DiscountStrategy::FixedAmount {
             amount: Decimal::new(1250, 2),
         };
         assert_eq!(
@@ -55,10 +55,10 @@ body:
         );
 
         let capped_subtotal = Decimal::new(1500, 2);
-        let raw_capped = crate::raw_baseline::pricing::discount_policy::DiscountPolicy::FixedAmount {
+        let raw_capped = crate::raw_baseline::pricing::discount_strategy::DiscountStrategy::FixedAmount {
             amount: Decimal::new(2000, 2),
         };
-        let generated_capped = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+        let generated_capped = crate::pricing::discount_strategy::DiscountStrategy::FixedAmount {
             amount: Decimal::new(2000, 2),
         };
         assert_eq!(
@@ -72,7 +72,7 @@ body:
 
         let percentage_discounted =
             generated_percentage.discounted_subtotal(percentage_subtotal);
-        let quote = CheckoutQuote::new(
+        let quote = PricingQuote::new(
             percentage_subtotal,
             Decimal::new(10, 2),
             Decimal::new(725, 4),
@@ -82,7 +82,7 @@ body:
         assert_eq!(percentage_discounted, quote.discounted_subtotal());
         assert_eq!(apply_tax(percentage_discounted, Decimal::new(725, 4)), quote.total());
 
-        let fixed_policy = crate::pricing::discount_policy::DiscountPolicy::FixedAmount {
+        let fixed_policy = crate::pricing::discount_strategy::DiscountStrategy::FixedAmount {
             amount: Decimal::new(1250, 2),
         };
         let fixed_discounted = fixed_policy.discounted_subtotal(fixed_subtotal);

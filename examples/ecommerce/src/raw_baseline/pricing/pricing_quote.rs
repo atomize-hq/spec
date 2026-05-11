@@ -1,14 +1,14 @@
 use rust_decimal::Decimal;
 
-/// Hand-written Rust baseline for the M12 `pricing/checkout_quote` migration wedge.
+/// Hand-written Rust baseline for the canonical `pricing/pricing_quote` seam.
 #[derive(Clone, Debug, PartialEq)]
-pub struct CheckoutQuote {
+pub struct PricingQuote {
     pub subtotal: Decimal,
     pub discount_rate: Decimal,
     pub tax_rate: Decimal,
 }
 
-impl CheckoutQuote {
+impl PricingQuote {
     pub fn new(subtotal: Decimal, discount_rate: Decimal, tax_rate: Decimal) -> Self {
         Self {
             subtotal,
@@ -34,7 +34,7 @@ mod tests {
 
     #[test]
     fn computes_happy_path_totals_without_generated_helpers() {
-        let quote = CheckoutQuote::new(
+        let quote = PricingQuote::new(
             Decimal::new(10000, 2),
             Decimal::new(10, 2),
             Decimal::new(725, 4),
@@ -46,7 +46,7 @@ mod tests {
 
     #[test]
     fn computes_rounding_sensitive_totals_without_generated_helpers() {
-        let quote = CheckoutQuote::new(
+        let quote = PricingQuote::new(
             Decimal::new(1001, 2),
             Decimal::new(3333, 4),
             Decimal::new(725, 4),

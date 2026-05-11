@@ -1,6 +1,6 @@
 {
   "spec_version": "0.3.0",
-  "id": "pricing/checkout_quote",
+  "id": "pricing/pricing_quote",
   "kind": "data",
   "intent": "Quote a checkout total from subtotal plus discount and tax rates.",
   "data": {
@@ -93,15 +93,15 @@
   "local_tests": [
     {
       "id": "discounted_subtotal_basic",
-      "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)"
+      "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)"
     },
     {
       "id": "total_basic",
-      "expect": "CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
+      "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-05-11T14:39:07Z",
-  "source_file": "examples/ecommerce/units/pricing/checkout_quote.unit.spec",
+  "generated_at": "2026-05-11T19:32:16Z",
+  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/spec/examples/ecommerce/units/pricing/pricing_quote.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
@@ -114,9 +114,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-26T18:41:14Z",
+    "observed_at": "2026-05-11T19:32:19Z",
     "provenance": {
-      "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+      "git_commit_sha": "93c7a3a32ebdbe8d63b554d58ff12ebcaccf337e"
     }
   },
   "freshness_anchor": {
@@ -143,9 +143,9 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-04-26T18:41:14Z",
+        "observed_at": "2026-05-11T19:32:19Z",
         "provenance": {
-          "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+          "git_commit_sha": "93c7a3a32ebdbe8d63b554d58ff12ebcaccf337e"
         }
       },
       "freshness_anchor": {
@@ -188,7 +188,7 @@
   },
   "semantic_review": {
     "verdict": "backend_only_meaning_preserved",
-    "compatibility_key": "data.checkout_quote.v1",
+    "compatibility_key": "data.pricing_quote.v1",
     "reason_codes": [
       "backend_only_execution_marker"
     ],
@@ -208,13 +208,13 @@
       },
       {
         "path": "methods",
-        "summary": "2 semantic method(s) on pricing/checkout_quote"
+        "summary": "2 semantic method(s) on pricing/pricing_quote"
       }
     ],
     "executable_surfaces": [
       {
         "path": "data",
-        "summary": "projects to Rust struct CheckoutQuote"
+        "summary": "projects to Rust struct PricingQuote"
       },
       {
         "path": "constructors",

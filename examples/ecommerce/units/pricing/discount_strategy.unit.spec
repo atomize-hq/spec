@@ -1,4 +1,4 @@
-id: pricing/discount_policy
+id: pricing/discount_strategy
 kind: sum
 spec_version: "0.3.0"
 intent:
@@ -103,13 +103,13 @@ methods:
           }
 local_tests:
   - id: variant_none
-    expect: 'DiscountPolicy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO && DiscountPolicy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)'
+    expect: 'DiscountStrategy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO && DiscountStrategy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)'
   - id: variant_percentage
-    expect: DiscountPolicy::None.percentage_example_holds()
+    expect: DiscountStrategy::None.percentage_example_holds()
   - id: variant_fixed_amount
-    expect: DiscountPolicy::None.fixed_amount_example_holds()
+    expect: DiscountStrategy::None.fixed_amount_example_holds()
   - id: behavior_fixed_amount_capped
-    expect: DiscountPolicy::None.fixed_amount_capped_behavior_holds()
+    expect: DiscountStrategy::None.fixed_amount_capped_behavior_holds()
 backends:
   rust:
     derives:

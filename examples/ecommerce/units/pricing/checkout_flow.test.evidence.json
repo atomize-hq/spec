@@ -5,15 +5,15 @@
   "covers": [
     "pricing/apply_discount",
     "pricing/calculate_total",
-    "pricing/checkout_quote"
+    "pricing/pricing_quote"
   ],
   "status": "pass",
-  "observed_at": "2026-04-26T18:41:14Z",
-  "test_body_hash": "sha256:bb223c38f896cf8dc5fd7a4b8f8446231b7305c957649bed44d7377ee975033d",
+  "observed_at": "2026-05-11T19:32:20Z",
+  "test_body_hash": "sha256:7cb1629288a4094814abef07e73a39d5b1a56d2cfb38dbc228508dbe0c53d9d7",
   "covered_unit_contract_hashes": {
     "pricing/apply_discount": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb",
     "pricing/calculate_total": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92",
-    "pricing/checkout_quote": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87"
+    "pricing/pricing_quote": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87"
   },
   "covered_unit_freshness": {
     "pricing/apply_discount": {
@@ -22,12 +22,12 @@
     "pricing/calculate_total": {
       "authored_truth_digest": "sha256:d5f36faa2c6c498fa5ddd78719759ea1434d8e025b06c592b3296562e3bc5e60"
     },
-    "pricing/checkout_quote": {
+    "pricing/pricing_quote": {
       "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
       "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205"
     }
   },
   "provenance": {
-    "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+    "git_commit_sha": "93c7a3a32ebdbe8d63b554d58ff12ebcaccf337e"
   }
 }

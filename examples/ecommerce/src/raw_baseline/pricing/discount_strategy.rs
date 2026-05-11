@@ -1,14 +1,14 @@
 use rust_decimal::Decimal;
 
-/// Hand-written Rust baseline for the M13 `pricing/discount_policy` migration wedge.
+/// Hand-written Rust baseline for the canonical `pricing/discount_strategy` seam.
 #[derive(Clone, Debug, PartialEq)]
-pub enum DiscountPolicy {
+pub enum DiscountStrategy {
     None,
     Percentage { rate: Decimal },
     FixedAmount { amount: Decimal },
 }
 
-impl DiscountPolicy {
+impl DiscountStrategy {
     pub fn discount_amount(&self, subtotal: Decimal) -> Decimal {
         match self {
             Self::None => Decimal::ZERO,
@@ -28,7 +28,7 @@ mod tests {
 
     #[test]
     fn computes_percentage_discount_without_generated_helpers() {
-        let policy = DiscountPolicy::Percentage {
+        let policy = DiscountStrategy::Percentage {
             rate: Decimal::new(10, 2),
         };
 
@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn caps_fixed_amount_discount_at_subtotal_without_generated_helpers() {
-        let policy = DiscountPolicy::FixedAmount {
+        let policy = DiscountStrategy::FixedAmount {
             amount: Decimal::new(2000, 2),
         };
 

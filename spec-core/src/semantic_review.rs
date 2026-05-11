@@ -446,8 +446,6 @@ enum FamilyBArgClassification {
 
 const SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY: &str = "sum.discount_strategy.v1";
 const DATA_PRICING_QUOTE_COMPATIBILITY_KEY: &str = "data.pricing_quote.v1";
-const LEGACY_SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY: &str = "sum.discount_policy.v1";
-const LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY: &str = "data.checkout_quote.v1";
 const FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY: &str =
     "function.wrapper.pipeline.chain3.v1";
 const FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY: &str =
@@ -642,15 +640,6 @@ fn canonical_seam_compatibility_key(family: SupportedSeamFamily) -> &'static str
     }
 }
 
-fn legacy_seam_compatibility_keys(family: SupportedSeamFamily) -> &'static [&'static str] {
-    match family {
-        SupportedSeamFamily::SumDiscountStrategyV1 => {
-            &[LEGACY_SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY]
-        }
-        SupportedSeamFamily::DataPricingQuoteV1 => &[LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY],
-    }
-}
-
 fn supported_surface_matches_existing_review(
     surface: SupportedSurface,
     review: &SemanticReview,
@@ -668,9 +657,6 @@ fn supported_surface_matches_existing_review(
         }
         SupportedSurface::Seam(family) => {
             review.compatibility_key == canonical_seam_compatibility_key(family)
-                || legacy_seam_compatibility_keys(family)
-                    .iter()
-                    .any(|key| review.compatibility_key == *key)
         }
         SupportedSurface::Unsupported(_) => false,
     }
@@ -4463,8 +4449,8 @@ mod tests {
         }
     }
 
-    fn discount_policy_sum_spec() -> LoadedSpec {
-        discount_strategy_sum_spec("pricing/discount_policy")
+    fn canonical_discount_strategy_sum_spec() -> LoadedSpec {
+        discount_strategy_sum_spec("pricing/discount_strategy")
     }
 
     fn function_spec(
@@ -4687,7 +4673,7 @@ mod tests {
     }
 
     fn discount_policy_sum_spec_with_backend_markers() -> LoadedSpec {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.extensions.backends = Some(crate::types::AuthoredBackends {
             rust: Some(AuthoredRustBackend {
                 derives: vec!["Clone".to_string()],
@@ -4697,7 +4683,7 @@ mod tests {
     }
 
     fn discount_policy_data_spec() -> LoadedSpec {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.kind = "data".to_string();
         spec.spec.contract = None;
         spec.spec.body = Body::default();
@@ -4836,13 +4822,13 @@ mod tests {
         }
     }
 
-    fn checkout_quote_data_spec() -> LoadedSpec {
-        pricing_quote_data_spec("pricing/checkout_quote")
+    fn canonical_pricing_quote_data_spec() -> LoadedSpec {
+        pricing_quote_data_spec("pricing/pricing_quote")
     }
 
     #[test]
     fn semantic_review_marks_vague_authored_sum_as_under_specified() {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.intent.why = "discount policy".to_string();
         let review = evaluate_semantic_review(&spec).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
@@ -4855,7 +4841,7 @@ mod tests {
 
     #[test]
     fn semantic_review_marks_aligned_discount_amount_and_discounted_subtotal() {
-        let review = evaluate_semantic_review(&discount_policy_sum_spec()).unwrap();
+        let review = evaluate_semantic_review(&canonical_discount_strategy_sum_spec()).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::Aligned);
         assert_eq!(
             review.compatibility_key,
@@ -4866,7 +4852,7 @@ mod tests {
 
     #[test]
     fn evaluate_semantic_review_supports_checkout_quote_aligned_data_surface() {
-        let review = evaluate_semantic_review(&checkout_quote_data_spec()).unwrap();
+        let review = evaluate_semantic_review(&canonical_pricing_quote_data_spec()).unwrap();
         assert_eq!(review.verdict, SemanticVerdict::Aligned);
         assert_eq!(
             review.compatibility_key,
@@ -4974,7 +4960,7 @@ mod tests {
 
     #[test]
     fn semantic_review_marks_missing_cap_behavior_as_backend_leak() {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.extensions.methods[0]
             .lowering
             .as_mut()
@@ -5013,7 +4999,7 @@ mod tests {
 
     #[test]
     fn evaluate_semantic_review_marks_checkout_quote_drift_as_backend_only_semantics_leaked() {
-        let mut spec = checkout_quote_data_spec();
+        let mut spec = canonical_pricing_quote_data_spec();
         spec.spec.extensions.backends = Some(crate::types::AuthoredBackends {
             rust: Some(AuthoredRustBackend {
                 derives: vec!["Clone".to_string()],
@@ -5045,7 +5031,7 @@ mod tests {
 
     #[test]
     fn semantic_review_helper_example_decimal_zero_does_not_mask_drift() {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.extensions.methods.push(helper_method(
             "fixed_amount_capped_example",
             r#"{
@@ -5070,7 +5056,7 @@ mod tests {
 
     #[test]
     fn semantic_review_holds_helper_does_not_mask_drift() {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.extensions.methods.push(helper_method(
             "fixed_amount_capped_behavior_holds",
             r#"{
@@ -5095,7 +5081,7 @@ mod tests {
 
     #[test]
     fn semantic_review_marks_extra_non_helper_method_as_under_specified() {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.extensions.methods.push(decimal_contract_method(
             "preview_discount_label",
             "Return a preview amount for the current discount policy.",
@@ -5111,7 +5097,7 @@ mod tests {
 
     #[test]
     fn evaluate_semantic_review_marks_checkout_quote_under_specified_for_extra_non_helper_method() {
-        let mut spec = checkout_quote_data_spec();
+        let mut spec = canonical_pricing_quote_data_spec();
         spec.spec.extensions.methods.push(AuthoredMethod {
             id: "preview_discount".to_string(),
             intent: Intent {
@@ -5146,7 +5132,7 @@ mod tests {
 
     #[test]
     fn evaluate_semantic_review_marks_checkout_quote_under_specified_for_vague_authored_truth() {
-        let mut spec = checkout_quote_data_spec();
+        let mut spec = canonical_pricing_quote_data_spec();
         spec.spec.intent.why = "checkout quote".to_string();
 
         let review = evaluate_semantic_review(&spec).unwrap();
@@ -5164,7 +5150,7 @@ mod tests {
 
     #[test]
     fn checkout_quote_executable_field_shape_mismatch_is_detected() {
-        let spec = checkout_quote_data_spec();
+        let spec = canonical_pricing_quote_data_spec();
         let authored = build_authored_data_packet(&spec).unwrap();
         let mut executable = build_executable_data_packet(&spec, &HashSet::new()).unwrap();
         executable.fields[0].name = "subtotal_cents".to_string();
@@ -5177,7 +5163,7 @@ mod tests {
 
     #[test]
     fn checkout_quote_executable_constructor_shape_mismatch_is_detected() {
-        let spec = checkout_quote_data_spec();
+        let spec = canonical_pricing_quote_data_spec();
         let authored = build_authored_data_packet(&spec).unwrap();
         let mut executable = build_executable_data_packet(&spec, &HashSet::new()).unwrap();
         executable.constructors[0]
@@ -5192,7 +5178,7 @@ mod tests {
 
     #[test]
     fn semantic_review_marks_bool_domain_predicate_as_under_specified() {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec
             .extensions
             .methods
@@ -5212,7 +5198,7 @@ mod tests {
 
     #[test]
     fn semantic_review_marks_unrecognized_supported_role_body_as_under_specified() {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.extensions.methods[1]
             .lowering
             .as_mut()
@@ -5238,7 +5224,7 @@ mod tests {
 
     #[test]
     fn semantic_review_reports_backend_only_meaning_preserved_for_helper_markers() {
-        let mut spec = discount_policy_sum_spec();
+        let mut spec = canonical_discount_strategy_sum_spec();
         spec.spec.extensions.methods.push(helper_method(
             "percentage_example",
             r#"{
@@ -6732,7 +6718,7 @@ mod tests {
 
     #[test]
     fn project_semantic_review_preserve_keeps_matching_sum_compatibility_key() {
-        let spec = discount_policy_sum_spec();
+        let spec = canonical_discount_strategy_sum_spec();
         let review = evaluate_semantic_review(&spec).unwrap();
 
         let preserved =
@@ -6743,36 +6729,34 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_preserve_keeps_matching_legacy_sum_compatibility_key() {
+    fn project_semantic_review_preserve_drops_legacy_sum_compatibility_key() {
         let spec = discount_strategy_sum_spec("billing/discount_strategy");
         let mut review = evaluate_semantic_review(&spec).unwrap();
-        review.compatibility_key = LEGACY_SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string();
+        review.compatibility_key = "sum.discount_policy.v1".to_string();
 
         let preserved =
-            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
-                .unwrap();
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve);
 
-        assert_eq!(preserved.compatibility_key, review.compatibility_key);
+        assert!(preserved.is_none());
     }
 
     #[test]
-    fn project_semantic_review_preserve_keeps_matching_legacy_data_compatibility_key() {
+    fn project_semantic_review_preserve_drops_legacy_data_compatibility_key() {
         let spec = pricing_quote_data_spec("billing/pricing_quote");
         let mut review = evaluate_semantic_review(&spec).unwrap();
-        review.compatibility_key = LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string();
+        review.compatibility_key = "data.checkout_quote.v1".to_string();
 
         let preserved =
-            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
-                .unwrap();
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve);
 
-        assert_eq!(preserved.compatibility_key, review.compatibility_key);
+        assert!(preserved.is_none());
     }
 
     #[test]
     fn project_semantic_review_preserve_drops_mismatched_legacy_seam_family_key() {
         let spec = discount_strategy_sum_spec("billing/discount_strategy");
         let mut review = evaluate_semantic_review(&spec).unwrap();
-        review.compatibility_key = LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string();
+        review.compatibility_key = "data.checkout_quote.v1".to_string();
 
         let preserved =
             project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve);
@@ -6782,7 +6766,7 @@ mod tests {
 
     #[test]
     fn project_semantic_review_preserve_drops_mismatched_supported_compatibility_key() {
-        let spec = discount_policy_sum_spec();
+        let spec = canonical_discount_strategy_sum_spec();
         let mut supported_review = evaluate_semantic_review(&spec).unwrap();
         supported_review.compatibility_key = "sum.discount_policy.v0".to_string();
 
@@ -6833,7 +6817,7 @@ mod tests {
             evaluate_semantic_review(&calculate_total_function_spec()).unwrap();
 
         let preserved = project_semantic_review(
-            &discount_policy_sum_spec(),
+            &canonical_discount_strategy_sum_spec(),
             Some(&unsupported_review),
             SemanticProjectionMode::Preserve,
         );
@@ -6901,35 +6885,20 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_refresh_emits_canonical_sum_key_only() {
-        let spec = discount_strategy_sum_spec("billing/discount_strategy");
-        let seeded = SemanticReview {
-            compatibility_key: LEGACY_SUM_DISCOUNT_POLICY_COMPATIBILITY_KEY.to_string(),
-            ..evaluate_semantic_review(&spec).unwrap()
-        };
-
-        let refreshed =
-            project_semantic_review(&spec, Some(&seeded), SemanticProjectionMode::Refresh).unwrap();
+    fn project_semantic_review_refresh_emits_canonical_seam_keys() {
+        let sum_spec = discount_strategy_sum_spec("billing/discount_strategy");
+        let sum_refreshed =
+            project_semantic_review(&sum_spec, None, SemanticProjectionMode::Refresh).unwrap();
+        let data_spec = pricing_quote_data_spec("billing/pricing_quote");
+        let data_refreshed =
+            project_semantic_review(&data_spec, None, SemanticProjectionMode::Refresh).unwrap();
 
         assert_eq!(
-            refreshed.compatibility_key,
+            sum_refreshed.compatibility_key,
             SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY
         );
-    }
-
-    #[test]
-    fn project_semantic_review_refresh_emits_canonical_data_key_only() {
-        let spec = pricing_quote_data_spec("billing/pricing_quote");
-        let seeded = SemanticReview {
-            compatibility_key: LEGACY_DATA_CHECKOUT_QUOTE_COMPATIBILITY_KEY.to_string(),
-            ..evaluate_semantic_review(&spec).unwrap()
-        };
-
-        let refreshed =
-            project_semantic_review(&spec, Some(&seeded), SemanticProjectionMode::Refresh).unwrap();
-
         assert_eq!(
-            refreshed.compatibility_key,
+            data_refreshed.compatibility_key,
             DATA_PRICING_QUOTE_COMPATIBILITY_KEY
         );
     }

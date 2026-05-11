@@ -1,6 +1,6 @@
 {
   "spec_version": "0.3.0",
-  "id": "pricing/discount_policy",
+  "id": "pricing/discount_strategy",
   "kind": "sum",
   "intent": "Represent mutually exclusive discount strategies for checkout pricing.",
   "sum": {
@@ -128,23 +128,23 @@
   "local_tests": [
     {
       "id": "variant_none",
-      "expect": "DiscountPolicy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO && DiscountPolicy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)"
+      "expect": "DiscountStrategy::None.discount_amount(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::ZERO && DiscountStrategy::None.discounted_subtotal(rust_decimal::Decimal::new(1500, 2)) == rust_decimal::Decimal::new(1500, 2)"
     },
     {
       "id": "variant_percentage",
-      "expect": "DiscountPolicy::None.percentage_example_holds()"
+      "expect": "DiscountStrategy::None.percentage_example_holds()"
     },
     {
       "id": "variant_fixed_amount",
-      "expect": "DiscountPolicy::None.fixed_amount_example_holds()"
+      "expect": "DiscountStrategy::None.fixed_amount_example_holds()"
     },
     {
       "id": "behavior_fixed_amount_capped",
-      "expect": "DiscountPolicy::None.fixed_amount_capped_behavior_holds()"
+      "expect": "DiscountStrategy::None.fixed_amount_capped_behavior_holds()"
     }
   ],
-  "generated_at": "2026-05-11T14:39:07Z",
-  "source_file": "examples/ecommerce/units/pricing/discount_policy.unit.spec",
+  "generated_at": "2026-05-11T19:32:16Z",
+  "source_file": "/Users/spensermcconnell/__Active_Code/atomize-hq/spec/examples/ecommerce/units/pricing/discount_strategy.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
@@ -165,9 +165,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-26T18:41:14Z",
+    "observed_at": "2026-05-11T19:32:20Z",
     "provenance": {
-      "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+      "git_commit_sha": "93c7a3a32ebdbe8d63b554d58ff12ebcaccf337e"
     }
   },
   "freshness_anchor": {
@@ -202,9 +202,9 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-04-26T18:41:14Z",
+        "observed_at": "2026-05-11T19:32:20Z",
         "provenance": {
-          "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+          "git_commit_sha": "93c7a3a32ebdbe8d63b554d58ff12ebcaccf337e"
         }
       },
       "freshness_anchor": {
@@ -245,36 +245,6 @@
       "path": "methods.fixed_amount_capped_behavior_holds.lowering.rust.body"
     }
   ],
-  "proof_coverage": [
-    {
-      "id": "variant.none",
-      "surfaces": [
-        "atom",
-        "molecule"
-      ]
-    },
-    {
-      "id": "variant.percentage",
-      "surfaces": [
-        "atom",
-        "molecule"
-      ]
-    },
-    {
-      "id": "variant.fixed_amount",
-      "surfaces": [
-        "atom",
-        "molecule"
-      ]
-    },
-    {
-      "id": "behavior.fixed_amount_capped",
-      "surfaces": [
-        "atom",
-        "molecule"
-      ]
-    }
-  ],
   "escape_hatch_gate": {
     "status": "closed",
     "required_surfaces": [
@@ -289,7 +259,7 @@
   },
   "semantic_review": {
     "verdict": "backend_only_meaning_preserved",
-    "compatibility_key": "sum.discount_policy.v1",
+    "compatibility_key": "sum.discount_strategy.v1",
     "reason_codes": [
       "backend_only_execution_marker",
       "proof_helper_only_marker"
@@ -306,13 +276,13 @@
       },
       {
         "path": "methods",
-        "summary": "2 semantic method(s) on pricing/discount_policy"
+        "summary": "2 semantic method(s) on pricing/discount_strategy"
       }
     ],
     "executable_surfaces": [
       {
         "path": "sum",
-        "summary": "projects to Rust enum DiscountPolicy"
+        "summary": "projects to Rust enum DiscountStrategy"
       },
       {
         "path": "methods.*.lowering.rust.body",

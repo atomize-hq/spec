@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "pricing/discount_strategy_checkout_flow",
+  "source_file": "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec",
+  "covers": [
+    "pricing/discount_strategy",
+    "pricing/pricing_quote",
+    "pricing/apply_tax"
+  ],
+  "status": "pass",
+  "observed_at": "2026-05-11T19:32:20Z",
+  "test_body_hash": "sha256:ebc57debe1ebb2645f11c1ee3a69b7d8aea8b83b4d87f48f67b3b4827cf9d465",
+  "covered_unit_contract_hashes": {
+    "pricing/apply_tax": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df",
+    "pricing/discount_strategy": "sha256:ef008ec2283a6fb5c51d12766a41ed81673ceb9f5e909d78eb058c8de7886b53",
+    "pricing/pricing_quote": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87"
+  },
+  "covered_unit_freshness": {
+    "pricing/apply_tax": {
+      "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe"
+    },
+    "pricing/discount_strategy": {
+      "authored_truth_digest": "sha256:ef008ec2283a6fb5c51d12766a41ed81673ceb9f5e909d78eb058c8de7886b53",
+      "backend_execution_digest": "sha256:06039f3e8df3a5ebeb557763c70a82a999f315e054df964a4af0bf7fd531f2e1"
+    },
+    "pricing/pricing_quote": {
+      "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+      "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205"
+    }
+  },
+  "provenance": {
+    "git_commit_sha": "93c7a3a32ebdbe8d63b554d58ff12ebcaccf337e"
+  }
+}
