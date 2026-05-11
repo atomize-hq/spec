@@ -1,89 +1,125 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260511-110901.md -->
-# M49: Reusable Seam Semantic-Review Substrate, Slice 1 Implementation Plan
+# M50: Canonical Seam Family Migration Implementation Plan
 
 Status: **implementation plan**  
-Milestone: **M49**  
-Milestone family: **semantic-review-core**  
+Milestone: **M50**  
+Milestone family: **semantic-review-contract-completion**  
 Implementation readiness: **ready for bounded execution**  
-Plan scope: **generalize supported seam routing away from literal unit ids, keep seam vocabulary explicit**  
+Plan scope: **rename the canonical seam examples to family-aligned names, retire legacy seam aliases, and re-prove all canonical read-side and teaching surfaces**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
-Execution precondition: **clean worktree**  
 Last rewritten: **2026-05-11**
 
 Supersedes:
-- the prior repo-root plan captured at [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260511-110901.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260511-110901.md)
+- the prior repo-root M49 plan previously maintained at this path
+- the design draft at [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-131248.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-131248.md)
 
 Primary source artifacts:
-- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-105634.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-105634.md)
+- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-131248.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-131248.md)
+- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260511-131248.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260511-131248.md)
+- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-134424.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-134424.md)
 - [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md)
-- [docs/recommendation_corpus_expansion_program_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/recommendation_corpus_expansion_program_v0.1.md)
-- [docs/semantic_family_capability_corpus_guide_v0.1.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/semantic_family_capability_corpus_guide_v0.1.md)
+- [TODOS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/TODOS.md)
 
 Primary repo surfaces:
 - [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs)
 - [spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs)
-- [spec-core/src/typescript_backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/typescript_backend.rs)
+- [spec-core/src/passport.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/passport.rs)
+- [spec-core/src/generator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/generator.rs)
+- [spec-core/src/molecule_evidence.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/molecule_evidence.rs)
+- [spec-core/src/escape_hatch.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/escape_hatch.rs)
 - [spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs)
 - [spec-cli/tests/cli.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/cli.rs)
-
-Companion test artifact:
-- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md)
+- [spec-cli/tests/m14_regressions.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/m14_regressions.rs)
+- [examples/ecommerce/units/pricing](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/examples/ecommerce/units/pricing)
+- [examples/ecommerce/src/raw_baseline/pricing](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/examples/ecommerce/src/raw_baseline/pricing)
 
 ## Executive Summary
 
-M48 finished servant architecture work. M49 needs to move back to the product core.
+M49 finished the reusable seam-family substrate. Good. The repo can now classify the supported canonical seam shapes by family instead of by one literal example id.
 
-The repo already ships real seam semantic review for one `sum` surface and one `data` surface. The problem is not that seam review is fake. The problem is that the supported path still enters through literal unit ids in `supported_surface_for_spec(...)`, which means the current capability is example-specific instead of family-specific.
+But the repo still ships a split contract:
 
-This plan fixes exactly that. It generalizes supported seam routing one level up, proves the same supported seam families on unseen unit ids, keeps the authored and executable vocabulary intentionally narrow, and preserves downstream status/export/passport behavior. No new ontology. No generic seam understanding claim. No adjacent architecture side quest.
+- refresh emits the family-aligned keys
+- preserve still accepts the legacy seam keys
+- the canonical ecommerce seams, molecule fixtures, raw baseline modules, plan-spec references, CLI regression fixtures, and teaching docs still center the old example names
 
-If this lands cleanly, the repo will be able to say something honest and stronger than it can say today: supported seam review is no longer tied to `pricing/discount_policy` and `pricing/checkout_quote`, but it is still bounded to the exact semantic families the evaluator actually understands.
+That was fine as a temporary migration window. It is not fine as steady state.
+
+M50 closes the window. Rename the canonical sum seam from `pricing/discount_policy` to `pricing/discount_strategy`. Rename the canonical data seam from `pricing/checkout_quote` to `pricing/pricing_quote`. Rename every maintained contract surface that teaches, loads, proves, or exports those canonical examples. Then remove the legacy seam-key preserve window and re-prove the same bounded semantic truth.
+
+No new family support. No new schema. No TypeScript scope expansion. No architecture side quest. Just make the shipped contract read like one coherent product instead of two overlapping eras.
 
 ## Decision This Plan Makes
 
-This plan authorizes exactly one slice:
+This plan authorizes exactly one bounded milestone:
 
-1. Replace literal unit-id seam routing in `semantic_review.rs` with explicit supported seam-family routing.
-2. Adopt canonical family keys:
+1. Rename the canonical sum seam example from `pricing/discount_policy` to `pricing/discount_strategy`.
+2. Rename the canonical data seam example from `pricing/checkout_quote` to `pricing/pricing_quote`.
+3. Rename example-owned companion surfaces that encode those old names:
+   - source file paths
+   - `.spec.passport.json` artifact paths
+   - `.test.evidence.json` artifact paths
+   - molecule ids and file names where the canonical seam name is embedded
+   - raw baseline module names
+   - example `main.rs` narrative string
+   - local plan-spec acceptance references
+   - maintained CLI/export fixture ids and paths
+4. Remove legacy seam-key preservation for:
+   - `sum.discount_policy.v1`
+   - `data.checkout_quote.v1`
+5. Keep the supported seam-family vocabulary unchanged:
    - `sum.discount_strategy.v1`
    - `data.pricing_quote.v1`
-3. Preserve backward compatibility during one migration window:
-   - `Preserve` accepts either the canonical key or the legacy key for the same family.
-   - Legacy keys are:
-     - `sum.discount_policy.v1`
-     - `data.checkout_quote.v1`
-4. `Refresh` always emits the new canonical family key.
-5. Add unseen-unit-id proof for both seam families and prove read-side truth surfaces do not regress.
-6. Keep the supported seam vocabulary exact:
-   - same supported variants, fields, constructors, method ids, and body-shape classifiers
-   - no renamed-vocabulary support in this milestone
+6. Re-prove semantic review, export, passport/status/export projection, CLI regression behavior, example plan validation, and maintained docs/commands against the renamed canonical surfaces.
 
 This plan does not authorize:
 
-- generic seam understanding
+- new supported seam families
 - new supported function families
-- corpus expansion or promotion work
-- shared-core portability follow-on work
-- CLI/schema redesign
-- TypeScript parity expansion
-- new abstraction layers, traits, or module splits beyond this slice
+- generic seam synonym support
+- export schema changes
+- CLI JSON redesign
+- TypeScript product-scope expansion
+- shared-core or cross-library follow-on work
+- a repo-wide string-eradication campaign outside the canonical-contract blast radius
 
 ## Live Validated Basis
 
-Validated from the current tree on `feat/m40-plus` at commit `151f1e9` by reading the active implementation.
+Validated from the current tree on `feat/m40-plus` at commit `e7b35a6`.
 
 Observed truth:
 
-- `supported_surface_for_spec(...)` in [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs) still hard-codes:
-  - `pricing/discount_policy`
-  - `pricing/checkout_quote`
-- `family_b_deps_are_supported(...)` already treats supported `sum` and `data` surfaces as valid dependency surfaces for wrapper-family evaluation.
-- `project_semantic_review_with_context(...)` preserves supported truth only when `evaluator_scope` and `compatibility_key` match exactly, which means key migration must be handled explicitly.
-- `spec-core/src/export.rs`, `spec-cli/src/commands.rs`, and `spec-cli/tests/cli.rs` already encode preserve-vs-refresh truth-surface behavior and will fail loudly if compatibility handling changes sloppily.
-- `spec-core/src/typescript_backend.rs` gates bounded TypeScript support off supported semantic review. It is a proof wall, not new write scope.
+- `spec-core/src/semantic_review.rs` already routes supported seams through the canonical family keys:
+  - `sum.discount_strategy.v1`
+  - `data.pricing_quote.v1`
+- that same file still preserves the legacy seam keys on read-side projection paths
+- the canonical ecommerce source tree still uses the old example ids and file names:
+  - `examples/ecommerce/units/pricing/discount_policy.unit.spec`
+  - `examples/ecommerce/units/pricing/checkout_quote.unit.spec`
+  - `examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`
+- the example tree also contains a second molecule path, `checkout_flow.*`, that still references `pricing/checkout_quote` and therefore must move with the data-seam rename even though its filename stays the same
+- the raw baseline modules still use the old canonical names:
+  - `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs`
+  - `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs`
+- `examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec` still points at the old local unit ids
+- maintained proof surfaces still hard-code old canonical ids, old canonical file paths, or old legacy compatibility keys in:
+  - `spec-core/src/export.rs`
+  - `spec-core/src/passport.rs`
+  - `spec-core/src/generator.rs`
+  - `spec-core/src/molecule_evidence.rs`
+  - `spec-core/src/escape_hatch.rs`
+  - `spec-cli/src/commands.rs`
+  - `spec-cli/tests/cli.rs`
+  - `spec-cli/tests/m14_regressions.rs`
+  - `spec-cli/tests/fixtures/plan-validate-valid-mixed.json`
+  - `spec-cli/tests/fixtures/plan-export-valid-mixed.json`
+- maintained teaching surfaces still teach the old names in:
+  - `README.md`
+  - `examples/ecommerce/README.md`
+  - `examples/ecommerce/src/main.rs`
+  - `AGENTS.md`
 
-This is the whole opportunity. The evaluators are already real. The missing move is reusable routing plus compatibility-proof discipline.
+That is the real problem. The repo already knows the new family vocabulary. It just has not finished moving the canonical example contract onto that vocabulary.
 
 ## Step 0: Scope Challenge
 
@@ -91,589 +127,653 @@ This is the whole opportunity. The evaluators are already real. The missing move
 
 | Sub-problem | Existing owner | Reuse verdict |
 | --- | --- | --- |
-| supported seam routing entry point | `spec-core/src/semantic_review.rs::supported_surface_for_spec` | reuse, replace literal id checks with family detection |
-| supported sum evaluator | `evaluate_supported_sum_semantic_review(...)` | reuse, route into it through a family contract |
-| supported data evaluator | `evaluate_supported_checkout_quote_data_review(...)` | reuse, route into it through a family contract |
-| preserve vs refresh projection | `project_semantic_review_with_context(...)` | reuse, extend to canonical-plus-legacy alias matching |
-| wrapper dependency support | `family_b_deps_are_supported(...)` | reuse, make it depend on family-routed seams instead of example ids |
-| passport/export preserve behavior | `spec-core/src/export.rs` | proof wall only |
-| CLI status/build/test/export projection | `spec-cli/src/commands.rs` | proof wall only |
-| bounded TypeScript semantic gate | `spec-core/src/typescript_backend.rs` | proof wall only |
-| end-to-end truth-surface regression coverage | `spec-cli/tests/cli.rs` | extend, do not redesign |
+| canonical seam-family truth | `spec-core/src/semantic_review.rs` | reuse, remove the legacy preserve window instead of widening semantics |
+| read-side projection | `spec-core/src/export.rs`, `spec-cli/src/commands.rs`, `spec-cli/tests/cli.rs` | reuse, retarget fixture ids and current-state expectations |
+| canonical example seams | `examples/ecommerce/units/pricing/*.spec` | reuse, rename instead of inventing new examples |
+| canonical proof coverage definitions | `spec-core/src/passport.rs` | reuse, retarget the canonical seam ids and molecule ids |
+| raw baseline comparison | `examples/ecommerce/src/raw_baseline/pricing/*.rs` | reuse, rename to keep generated-vs-raw teaching coherent |
+| molecule freshness and escape-hatch truth | `spec-core/src/molecule_evidence.rs`, `spec-core/src/escape_hatch.rs` | reuse, update hard-coded canonical ids and file paths |
+| generated module-path expectations | `spec-core/src/generator.rs` | reuse, update canonical module-path assertions where the example ids are encoded |
+| deep CLI regression pack | `spec-cli/tests/m14_regressions.rs` | reuse, retarget the canonical wedge fixtures instead of creating a second wedge |
+| example plan-spec truth | `examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec` and JSON fixtures | reuse, rename the local acceptance ids |
+| teaching and maintainer workflow docs | `README.md`, `examples/ecommerce/README.md`, `examples/ecommerce/src/main.rs`, `AGENTS.md` | reuse, update the canonical commands and narrative |
+
+### Affected Surface Triage
+
+This is the ambiguity-killer for implementation. Not every old-name literal in the repo means the same thing.
+
+#### Category A: Required M50 updates
+
+These are contract surfaces. Old names must not survive here when M50 lands:
+
+- canonical ecommerce source specs and tracked artifacts
+- canonical example molecule ids, `covers`, imports, and evidence
+- canonical raw baseline modules and their `mod.rs`
+- example `main.rs`
+- example plan-spec acceptance ids
+- semantic-review preserve/refresh logic
+- passport/export/status/read-side proof fixtures that model the canonical current state
+- CLI regression fixtures that model the canonical current state
+- maintained docs and maintainer commands
+
+#### Category B: Conditional updates
+
+These may contain old-name literals today, but they are only in scope if they encode the canonical example as present-day truth or if renamed files make them fail:
+
+- synthetic helper tests in `spec-core` that use old ids only as placeholder values
+- portability/backend-execution tests that do not load the on-disk canonical example tree
+- generic type-name, graph, or normalizer tests whose point is formatting or structure, not the canonical example contract
+
+Rule: update them only if they either fail because paths moved or they claim to represent the canonical example as current truth.
+
+#### Category C: Intentionally retained historical literals
+
+These are allowed only in targeted assertions whose point is legacy behavior itself:
+
+- tests proving a legacy key is rejected after M50
+- comments or fixture names that explicitly explain historical compatibility behavior
+
+Rule: any retained old-name literal must be clearly tied to a legacy-specific assertion. Old names are not allowed to remain as the unmarked default fixture language for current-state tests.
 
 ### Minimum Complete Slice
 
-This is the smallest honest implementation:
+This is the minimum honest implementation:
 
-1. introduce a seam-family layer
-2. route supported seams by semantic family instead of literal id
-3. choose and ship canonical seam family keys
-4. preserve legacy keys only in `Preserve`
-5. prove unseen unit ids for both seam families
-6. prove no read-side drift in export/status/passport/TypeScript gating
+1. freeze the rename map and alias-removal contract in `semantic_review.rs`
+2. rename the canonical example source tree and tracked example artifacts
+3. retarget every maintained proof wall that treats those examples as a contract surface
+4. update the docs and maintainer commands so the repo teaches only one vocabulary
+5. regenerate and re-prove the canonical example artifacts
 
-Anything smaller is a refactor with no substrate gain. Anything larger turns a lake into an ocean.
+Anything smaller is fake done. It would leave the product core saying `pricing_quote` while the README, fixtures, or passports still say `checkout_quote`.
 
-### Complexity, Completeness, and Distribution
+### Complexity Check
 
-- Primary production write scope: `1` file, [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs)
-- Allowed production proof-surface touches: `4` files, only if required to preserve truthful behavior
-- Required test/proof surfaces: `4` files
-- New crates, services, schema families, or runtime infrastructure: `0`
-- Distribution work: `0`, this milestone changes semantic review internals only
-- Complete version vs shortcut: choose the complete version, because alias-aware preserve logic plus unseen-id proof is the real deliverable
+This milestone touches more than eight files. Normally that is a smell.
+
+Here it is justified because all extra files are in the blast radius of one narrow contract decision: what the canonical seam examples are called and what semantic-review keys they preserve. We are not adding new architecture, new crates, or new feature scope.
+
+Recommendation: **accept the expanded blast radius, but forbid behavioral widening beyond rename completion and alias retirement.**
+
+### Completeness Check
+
+Choose the complete version:
+
+- rename the canonical examples everywhere they are a maintained contract surface
+- retire the old seam keys fully
+- refresh the tracked example proof artifacts from source specs
+- update the docs and commands that teach the canonical workflow
+
+Do not ship a halfway version. With CC, the delta between partial cleanup and complete cleanup is minutes. The cost of leaving split vocabulary behind is weeks of future archaeology.
+
+### TODOS Cross-Reference
+
+Relevant existing TODOs:
+
+- `Canonical example as compatibility surface` is directly aligned with this milestone and is exactly why the example tree must move with the product contract
+- `Remove deprecated cover-derived molecule imports fallback` is unrelated and remains deferred
+- `Wrapper TypeScript execution in spec` and the rest of the post-M46 TypeScript backlog remain explicitly out of scope
+
+Default expectation: **M50 should not create new TODOs.**  
+Exception: if a Category B surface is intentionally deferred because it is truly historical and non-blocking, capture that explicitly in `TODOS.md` instead of silently leaving ambiguity behind.
 
 ### Locked Plan Decisions
 
-These decisions are resolved and should not be reopened mid-implementation:
+These are frozen. Do not reopen them mid-implementation:
 
-1. Canonical seam family keys are `sum.discount_strategy.v1` and `data.pricing_quote.v1`.
-2. Legacy keys are accepted only in `Preserve`, never emitted by `Refresh`.
-3. The milestone stays one-file-first. No new `semantic_review/` submodule tree.
-4. Detection is family-by-shape only. It must not consult literal unit ids, file paths, or fuzzy intent text.
-5. Detection remains explicit and vocabulary-bound. No fuzzy intent inference, no widened synonym set, no approximate matching.
-6. Unseen-id proof is required for both seam families before the slice is done.
-7. Wrapper-family support must keep working when its seam deps are routed through the new family layer.
-8. Function names may be cleaned up for clarity, but canonical compatibility keys and preserve semantics are the real contract.
-9. If landing this requires changing CLI JSON shape, export bundle schema, or TypeScript target policy, stop and re-scope.
+1. Canonical seam ids become:
+   - `pricing/discount_strategy`
+   - `pricing/pricing_quote`
+2. Canonical source files become:
+   - `examples/ecommerce/units/pricing/discount_strategy.unit.spec`
+   - `examples/ecommerce/units/pricing/pricing_quote.unit.spec`
+3. Canonical raw baseline modules become:
+   - `examples/ecommerce/src/raw_baseline/pricing/discount_strategy.rs`
+   - `examples/ecommerce/src/raw_baseline/pricing/pricing_quote.rs`
+4. The mixed-kind molecule that embeds the old sum seam name is renamed:
+   - `pricing/discount_policy_checkout_flow` -> `pricing/discount_strategy_checkout_flow`
+   - `discount_policy_checkout_flow.test.spec` -> `discount_strategy_checkout_flow.test.spec`
+5. `checkout_flow.test.spec` keeps its filename, but its `covers`, imports, and tracked evidence must move from `pricing/checkout_quote` to `pricing/pricing_quote`.
+6. The supported semantic families do not widen. Only the canonical naming surface changes.
+7. `Refresh` and `Preserve` both speak only the canonical seam-family keys after M50 lands.
+8. Generated artifacts are refreshed from source specs. They are never hand-edited.
+9. M50 is not a global search-and-replace milestone. Category B surfaces move only if they are true contract surfaces or break because of the rename.
 
 ### Abort and Re-scope Triggers
 
-Stop and write a follow-on plan if any of these become necessary:
+Stop and re-scope if any of these become necessary:
 
-1. a new seam family key needs new schema fields or new public JSON shape
-2. `spec-cli` command behavior must change beyond compatibility preservation
-3. supported seam detection cannot be expressed without widening the supported vocabulary
-4. `semantic_review.rs` needs to split into a new framework just to hold two seam families
-5. a downstream proof wall needs semantic behavior changes instead of simple alias-preserve support
+1. export JSON needs a schema-version bump
+2. CLI command semantics need to change beyond rename expectations
+3. the rename requires a new generic alias framework instead of straight removal
+4. TypeScript backend behavior needs product-scope changes rather than fixture retargeting
+5. the rename breaks a non-example public contract outside the canonical teaching and proof surfaces named in this plan
 
 ## Architecture and Ownership
 
-### Supported Seam Family Contract
+### Canonical Rename Contract
 
-Use one explicit family layer inside [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs):
+| Old surface | New surface | Notes |
+| --- | --- | --- |
+| `pricing/discount_policy` | `pricing/discount_strategy` | canonical `kind: sum` seam id |
+| `pricing/checkout_quote` | `pricing/pricing_quote` | canonical `kind: data` seam id |
+| `discount_policy.unit.spec` | `discount_strategy.unit.spec` | canonical sum source spec |
+| `checkout_quote.unit.spec` | `pricing_quote.unit.spec` | canonical data source spec |
+| `discount_policy.spec.passport.json` | `discount_strategy.spec.passport.json` | tracked canonical sum artifact |
+| `checkout_quote.spec.passport.json` | `pricing_quote.spec.passport.json` | tracked canonical data artifact |
+| `pricing/discount_policy_checkout_flow` | `pricing/discount_strategy_checkout_flow` | mixed-kind molecule id |
+| `discount_policy_checkout_flow.test.spec` | `discount_strategy_checkout_flow.test.spec` | mixed-kind molecule file |
+| `discount_policy_checkout_flow.test.evidence.json` | `discount_strategy_checkout_flow.test.evidence.json` | tracked molecule evidence |
+| `discount_policy.rs` | `discount_strategy.rs` | raw baseline sum module |
+| `checkout_quote.rs` | `pricing_quote.rs` | raw baseline data module |
+| `sum.discount_policy.v1` | removed | legacy seam key retired |
+| `data.checkout_quote.v1` | removed | legacy seam key retired |
 
-```rust
-enum SupportedSeamFamily {
-    SumDiscountStrategyV1,
-    DataPricingQuoteV1,
-}
+### Required Surface Inventory
 
-enum SupportedSurface {
-    Function(SupportedFunctionFamily),
-    Seam(SupportedSeamFamily),
-    Unsupported(UnitKind),
-}
-```
+#### Authority and source surfaces
 
-Required helper functions:
+- `spec-core/src/semantic_review.rs`
+- `examples/ecommerce/units/pricing/discount_policy.unit.spec`
+- `examples/ecommerce/units/pricing/checkout_quote.unit.spec`
+- `examples/ecommerce/units/pricing/discount_policy.spec.passport.json`
+- `examples/ecommerce/units/pricing/checkout_quote.spec.passport.json`
+- `examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`
+- `examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.evidence.json`
+- `examples/ecommerce/units/pricing/checkout_flow.test.spec`
+- `examples/ecommerce/units/pricing/checkout_flow.test.evidence.json`
+- `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs`
+- `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs`
+- `examples/ecommerce/src/raw_baseline/pricing/mod.rs`
+- `examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec`
 
-- `supported_seam_surface(...) -> Option<SupportedSeamFamily>`
-- `detect_sum_discount_strategy_family(...) -> bool`
-- `detect_data_pricing_quote_family(...) -> bool`
-- `canonical_seam_compatibility_key(...) -> &'static str`
-- `legacy_seam_compatibility_keys(...) -> &'static [&'static str]`
-- `supported_surface_matches_existing_review(...) -> bool`
+#### Required proof-wall updates
 
-That last helper is important. It centralizes the migration rule so preserve logic does not fork quietly.
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
+- `spec-core/src/generator.rs`
+- `spec-core/src/molecule_evidence.rs`
+- `spec-core/src/escape_hatch.rs`
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/m14_regressions.rs`
+- `spec-cli/tests/fixtures/plan-validate-valid-mixed.json`
+- `spec-cli/tests/fixtures/plan-export-valid-mixed.json`
 
-Detection inputs are also part of the contract:
+#### Required teaching-surface updates
 
-- allowed: authored seam shape, lowered executable shape, existing explicit classifier helpers
-- not allowed: `spec.spec.id`, path-name heuristics, intent-text substring matching, new synonym tables
-
-Naming rule:
-
-- if `evaluate_supported_checkout_quote_data_review(...)` gets renamed for clarity, that is acceptable
-- if it stays named for the old example unit, that is also acceptable
-- either way, the exported compatibility keys and the supported-family detection behavior are the source of truth
-
-### Routing Flow
-
-```text
-evaluate_semantic_review_with_context(...)
-  │
-  └── supported_surface_for_spec(...)
-        ├── supported_function_surface(...) -> existing function routing
-        ├── supported_seam_surface(...)
-        │     ├── detect_sum_discount_strategy_family(...)
-        │     └── detect_data_pricing_quote_family(...)
-        └── Unsupported(UnitKind)
-              │
-              ├── Function -> unsupported_function_review(...)
-              └── Sum/Data -> unsupported_surface_review(...)
-
-project_semantic_review_with_context(...)
-  │
-  ├── Preserve -> accept canonical key or legacy alias for matching seam family
-  └── Refresh  -> emit canonical family key only
-```
-
-### Family Boundaries
-
-`SumDiscountStrategyV1` still means the current exact authored and executable shape:
-
-- variants: `none`, `percentage`, `fixed_amount`
-- methods: `discount_amount`, `discounted_subtotal`
-- same explicit classifier expectations already encoded in the evaluator
-
-`DataPricingQuoteV1` still means the current exact authored and executable shape:
-
-- fields: `subtotal`, `discount_rate`, `tax_rate`
-- constructor: `new`
-- methods: `discounted_subtotal`, `total`
-- same supported body classifiers already used for `checkout_quote`
-
-Anything outside that vocabulary remains unsupported in M49. That is good discipline, not missing ambition.
+- `README.md`
+- `examples/ecommerce/README.md`
+- `examples/ecommerce/src/main.rs`
+- `AGENTS.md`
 
 ### Dependency Graph
 
 ```text
-semantic_review.rs
-  ├── SupportedFunctionFamily routing                (unchanged contract)
-  ├── SupportedSeamFamily routing                    (new explicit layer)
-  │     ├── SumDiscountStrategyV1
-  │     └── DataPricingQuoteV1
-  ├── evaluate_supported_sum_semantic_review(...)   (reused)
-  ├── evaluate_supported_checkout_quote_data_review(...) (reused)
-  └── project_semantic_review_with_context(...)
+canonical example source specs and tracked artifacts
+  │
+  ├── discount_strategy.unit.spec
+  ├── pricing_quote.unit.spec
+  ├── discount_strategy_checkout_flow.test.spec
+  ├── checkout_flow.test.spec
+  ├── *.spec.passport.json
+  ├── *.test.evidence.json
+  └── checkout-tax-refactor.plan.spec
           │
-          ├── export.rs                    preserve/read-side truth wall
-          ├── spec-cli commands.rs         status/build/test/export truth wall
-          ├── typescript_backend.rs        bounded target eligibility wall
-          └── spec-cli/tests/cli.rs        end-to-end regression wall
+          ▼
+spec loader / generator / passport / molecule evidence / escape-hatch truth
+          │
+          ▼
+semantic_review.rs
+  ├── canonical family routing stays the same
+  └── legacy seam-key preserve window is removed
+          │
+          ├── export.rs
+          ├── commands.rs
+          ├── cli.rs
+          ├── m14_regressions.rs
+          ├── generator.rs
+          ├── passport.rs
+          ├── molecule_evidence.rs
+          ├── escape_hatch.rs
+          └── README / example README / example main / AGENTS
 ```
 
 ### Invariants
 
-All of these must still be true after the slice lands:
+All of these must remain true after M50:
 
-1. wrapper-family semantic review still accepts supported seam deps
-2. unsupported renamed seam vocabulary still stays unsupported
-3. `Preserve` never invents fresh supported seam truth
-4. `Refresh` never emits legacy seam keys
-5. stale or failing base health still outranks semantic-read-side optimism
-6. bounded TypeScript gating stays identical except for consuming canonical family truth where relevant
+1. `semantic_review.rs` still classifies the same supported seam shapes as before.
+2. Wrapper-family support still accepts the renamed canonical seams as supported dependency surfaces.
+3. Unsupported renamed-vocabulary near misses remain unsupported.
+4. Example plan validation still points at truthful local unit ids.
+5. Passport freshness, escape-hatch gates, and molecule freshness still behave the same, just against renamed canonical ids and paths.
+6. Docs, commands, and tracked example artifacts all point at the same canonical vocabulary.
 
-### Contract Freeze Gate
+### Grep Exit Gate
 
-Parallel follow-on work does not start until all of these are locked in `semantic_review.rs` on the main working branch:
+M50 is done only when both of these are true:
 
-1. `SupportedSeamFamily` variant names
-2. canonical keys:
-   - `sum.discount_strategy.v1`
-   - `data.pricing_quote.v1`
-3. legacy keys:
+1. Category A paths contain no remaining literals of:
+   - `pricing/discount_policy`
+   - `pricing/checkout_quote`
    - `sum.discount_policy.v1`
    - `data.checkout_quote.v1`
-4. preserve matching policy: canonical-or-legacy only for the matching family
-5. refresh policy: canonical key only
-6. near-miss policy: renamed vocabulary stays unsupported
+2. Any retained old-name literal outside Category A is clearly intentional and legacy-specific.
 
-This freeze gate is the handoff boundary. If any of these are still moving, do not start parallel proof-wall work.
+Use one final targeted audit, not a permanent new code path:
 
-## Implementation Contract
-
-### Primary Write Scope
-
-Primary write scope is:
-
-- [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs)
-
-Production changes allowed there:
-
-1. add `SupportedSeamFamily`
-2. replace `SumDiscountPolicy` / `DataCheckoutQuote` surface variants with family routing
-3. add canonical-plus-legacy compatibility helpers
-4. update preserve matching logic
-5. update wrapper dep support to recognize the new seam surface variant
-6. add unseen-id and alias-preserve tests in the same file
-
-### Allowed Proof-Surface Touches
-
-Allowed only if needed to preserve truthfulness:
-
-- [spec-core/src/export.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/export.rs)
-- [spec-core/src/typescript_backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/typescript_backend.rs)
-- [spec-cli/src/commands.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs)
-- [spec-cli/tests/cli.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-cli/tests/cli.rs)
-
-Expected use:
-
-- mostly tests
-- minimal alias-aware preservation if current equality checks are duplicated elsewhere
-- no behavior widening, no output-shape redesign
-
-### Forbidden Scope
-
-Do not touch:
-
-- `xtask/src/family/*`
-- repo-root authority docs beyond this plan
-- schema versions
-- export JSON contract
-- TypeScript target-lane product scope
-- molecule execution behavior
-- new public CLI flags
+```bash
+rg -n "pricing/discount_policy|pricing/checkout_quote|sum.discount_policy.v1|data.checkout_quote.v1" \
+  README.md AGENTS.md examples/ecommerce spec-core spec-cli/tests spec-cli/src/commands.rs spec-core/src
+```
 
 ## Implementation Sequence
 
-### Step 1: Introduce canonical seam-family routing
+### Step 1: Freeze the authority contract
 
-Inside `semantic_review.rs`:
+Owner: authority lane
 
-1. add `SupportedSeamFamily`
-2. change `SupportedSurface` to use `Seam(SupportedSeamFamily)`
-3. add canonical and legacy key helpers
-4. add seam-family-to-evaluator-scope mapping
+Touch:
 
-Definition of done:
+- `spec-core/src/semantic_review.rs`
 
-- no literal unit-id seams remain in the `SupportedSurface` enum
-- compatibility key policy is centralized in helper functions, not inlined across matches
-- the six-item contract freeze gate above is fully decided and does not change after this step merges
+Work:
 
-### Step 2: Replace literal unit-id routing with semantic family detection
-
-Replace:
-
-- `UnitKind::Sum if spec.spec.id == "pricing/discount_policy"`
-- `UnitKind::Data if spec.spec.id == "pricing/checkout_quote"`
-
-With:
-
-- `UnitKind::Sum` -> detect `SumDiscountStrategyV1` by current authored plus executable shape
-- `UnitKind::Data` -> detect `DataPricingQuoteV1` by current authored plus executable shape
-
-Constraint:
-
-- detectors may reuse existing packet-build helpers and existing role-match helpers
-- detectors must not read or branch on `spec.spec.id`
-- detectors must not widen accepted vocabulary
+1. confirm the canonical family keys stay exactly:
+   - `sum.discount_strategy.v1`
+   - `data.pricing_quote.v1`
+2. remove legacy seam-key preservation for:
+   - `sum.discount_policy.v1`
+   - `data.checkout_quote.v1`
+3. make the current-state rename contract explicit in local helper fixtures or tests so downstream proof walls consume one frozen vocabulary
+4. keep any retained old-name literal only inside targeted legacy-rejection assertions
 
 Definition of done:
 
-- an unseen unit id with the same supported shape routes to a supported seam family
-- a renamed-field or renamed-method near miss still routes to unsupported
+- preserve no longer accepts the legacy seam keys
+- refresh still emits the same canonical family keys as M49
+- downstream lanes have one frozen rename map and one frozen key policy
 
-### Step 3: Keep evaluator logic explicit and bounded
+### Step 2: Rename the canonical example tree
 
-Do not invent a generic seam evaluator abstraction. Keep the current evaluators and route into them by family.
+Owner: authority lane
 
-Allowed refactor:
+Touch:
 
-- parameterize compatibility key emission
-- rename evaluator entry points if that improves clarity
+- canonical source specs
+- canonical tracked passport artifacts
+- canonical molecule specs and evidence
+- raw baseline modules
+- example `mod.rs`
+- example plan-spec acceptance ids
 
-Not allowed:
+Work:
 
-- trait-based evaluator registry
-- dynamic rule tables
-- splitting into a new architecture layer for two families
-
-Definition of done:
-
-- current canonical fixtures still produce the same verdicts
-- evaluator readability remains one-sitting readable
-
-### Step 4: Ship the compatibility-key migration window
-
-Required behavior:
-
-- `Refresh` emits:
-  - `sum.discount_strategy.v1`
-  - `data.pricing_quote.v1`
-- `Preserve` accepts:
-  - canonical key for matching family
-  - legacy key for matching family
-- `Preserve` still drops:
-  - mismatched family key
-  - unsupported review on supported seam surface
-  - stale invented supported review
+1. rename the two canonical `.unit.spec` files and their `id:` values
+2. rename the two tracked canonical passport files to match
+3. rename `discount_policy_checkout_flow.test.spec` and its id/evidence file to `discount_strategy_checkout_flow`
+4. update `checkout_flow.test.spec` and `checkout_flow.test.evidence.json` so their data-seam references move from `pricing/checkout_quote` to `pricing/pricing_quote`
+5. rename the raw baseline pricing modules and update `examples/ecommerce/src/raw_baseline/pricing/mod.rs`
+6. update `examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec`
 
 Definition of done:
 
-- legacy fresh passports survive `status` and `export` on preserve paths during the migration window
-- a fresh refresh writes canonical keys only
+- the example tree loads and reads as one coherent vocabulary
+- no tracked example artifact points at a path or id that no longer exists
+- both molecule surfaces are truthful:
+  - one renamed because its own canonical id changed
+  - one updated in place because one of its covered seam ids changed
 
-### Step 5: Prove downstream truth surfaces
+### Step 3: Retarget proof walls
 
-Required proof walls:
+Owner: downstream proof lanes
 
-1. `spec-core/src/export.rs`
-2. `spec-cli/src/commands.rs`
-3. `spec-core/src/typescript_backend.rs`
-4. `spec-cli/tests/cli.rs`
+Touch:
 
-Goal:
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
+- `spec-core/src/generator.rs`
+- `spec-core/src/molecule_evidence.rs`
+- `spec-core/src/escape_hatch.rs`
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/m14_regressions.rs`
+- `spec-cli/tests/fixtures/plan-validate-valid-mixed.json`
+- `spec-cli/tests/fixtures/plan-export-valid-mixed.json`
 
-- read-side truth remains truthful
-- semantic health demotion behavior remains unchanged
-- TypeScript bounded-lane gating does not regress when supported seam truth exists in context
-- downstream proof-wall edits stay behavioral-noop except for alias-aware preserve compatibility and canonical refresh expectations
+Work:
 
-### Step 6: Finish with proof-first validation
+1. retarget canonical fixture ids, canonical file paths, and tracked artifact paths
+2. rewrite current-state tests that still seed old compatibility keys as if they were the normal contract
+3. keep old compatibility keys only inside tests whose point is legacy rejection or historical migration behavior
+4. update canonical proof-coverage definitions, generated module-path assertions, molecule freshness lookups, escape-hatch gate fixtures, and CLI status/export fixtures
 
-Required command set:
+Definition of done:
+
+- proof walls fail only for real semantic regressions, not stale naming
+- no maintained current-state test models the canonical example with the old names
+- legacy-key references that remain are clearly intentional and narrow
+
+### Step 4: Update teaching surfaces
+
+Owner: docs lane
+
+Touch:
+
+- `README.md`
+- `examples/ecommerce/README.md`
+- `examples/ecommerce/src/main.rs`
+- `AGENTS.md`
+
+Work:
+
+1. update canonical example file inventories
+2. update maintainer commands
+3. update narrative text describing the canonical wedge
+4. update any nearby ASCII diagrams or workflow snippets that mention the old canonical seam names
+
+Definition of done:
+
+- a maintainer following the docs lands on the renamed canonical files on the first try
+- example narrative, proof commands, and raw-baseline references all match the code on disk
+
+### Step 5: Regenerate and re-prove
+
+Owner: integrated branch
+
+Run the source-of-truth loop:
+
+```bash
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_strategy.unit.spec --format json
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/pricing_quote.unit.spec --format json
+cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/pricing_quote.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/checkout_flow.test.spec
+cargo run -p spec-cli -- plan validate examples/ecommerce/plans/refactors/checkout-tax-refactor.plan.spec --format json
+cargo run -p spec-cli -- status examples/ecommerce --format json
+```
+
+Then run the targeted Rust proof walls:
 
 ```bash
 cargo test -p spec-core semantic_review
 cargo test -p spec-core export
-cargo test -p spec-core typescript_backend
+cargo test -p spec-core passport
+cargo test -p spec-core generator
+cargo test -p spec-core molecule_evidence
+cargo test -p spec-core escape_hatch
 cargo test -p spec-cli cli
+cargo test -p spec-cli m14_regressions
 ```
 
-If any alias-preserve logic touches shared projection behavior in a broader way, run:
+Escalate to broader suites only if fallout leaks outside the targeted walls:
 
 ```bash
 cargo test -p spec-core
 cargo test -p spec-cli
+cargo test --manifest-path examples/ecommerce/Cargo.toml
 ```
+
+Definition of done:
+
+- canonical renamed examples still classify to the same supported seam families
+- tracked artifacts refresh cleanly from source specs
+- read-side surfaces export and report only the canonical current-state keys
+- the grep exit gate passes
 
 ## Code Quality Guardrails
 
-This plan is explicit over clever on purpose.
-
-- Keep the seam-family contract in one file.
-- Prefer small private helpers over generic registries.
-- Reuse existing packet-build and classifier functions instead of duplicating authored/executable parsing.
-- Do not create new near-identical sum/data detectors if a narrow helper can express the shared alias policy.
-- Do not copy compatibility-key matching logic into export or CLI code if the semantic-review layer can answer the question once.
-
-The user preference here is obvious: engineered enough, minimal diff, aggressively DRY, but no premature abstraction circus.
+- Keep the change explicit. This is a rename-and-proof milestone, not a framework milestone.
+- Centralize the current-state canonical names once per surface. Do not scatter new alias tables across helper fixtures.
+- Delete legacy seam-key preservation instead of adding another migration shim.
+- Prefer updating existing fixture builders over cloning nearly identical helpers with new names.
+- Update any nearby ASCII diagrams that mention the canonical seam names. Stale diagrams are lies.
+- Touch source specs first, then regenerate derived artifacts. Never hand-edit generated truth.
+- If a Category B surface is left unchanged, make that a deliberate decision, not an accident from an incomplete grep pass.
 
 ## Test Review
 
-100 percent coverage is the goal for the changed code paths. This slice changes semantic routing, projection compatibility, and downstream truth preservation. Every branch listed below needs proof.
+The goal is full coverage of every renamed or behaviorally changed path. This milestone mixes semantic-contract cleanup with canonical example renaming. That combination is exactly where fake-green regressions happen if coverage is casual.
 
 ### Code Path Coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] spec-core/src/semantic_review.rs
+[+] Canonical example source tree
     │
-    ├── supported_surface_for_spec()
-    │   ├── [EXISTING] canonical sum id -> supported seam
-    │   ├── [EXISTING] canonical data id -> supported seam
-    │   ├── [ADD]      unseen sum id, same variants + methods -> SumDiscountStrategyV1
-    │   ├── [ADD]      unseen data id, same fields + methods -> DataPricingQuoteV1
-    │   └── [ADD]      renamed-vocabulary near miss -> Unsupported(UnitKind)
-    │
-    ├── family_b_deps_are_supported()
-    │   ├── [EXISTING] wrapper deps accept canonical seam ids
-    │   └── [ADD]      wrapper deps accept unseen seam ids routed by family
-    │
-    ├── project_semantic_review_with_context(Preserve)
-    │   ├── [EXISTING] canonical current key preserved
-    │   ├── [ADD]      legacy sum key preserved for matching family
-    │   ├── [ADD]      legacy data key preserved for matching family
-    │   ├── [ADD]      canonical key preserved for matching family
-    │   └── [ADD]      mismatched seam family key dropped
-    │
-    └── project_semantic_review_with_context(Refresh)
-        ├── [ADD]      sum refresh emits sum.discount_strategy.v1
-        └── [ADD]      data refresh emits data.pricing_quote.v1
+    ├── discount_policy.unit.spec
+    │   └── [REGRESSION] rename file + id to discount_strategy
+    ├── checkout_quote.unit.spec
+    │   └── [REGRESSION] rename file + id to pricing_quote
+    ├── discount_policy.spec.passport.json
+    │   └── [REGRESSION] rename tracked artifact path
+    ├── checkout_quote.spec.passport.json
+    │   └── [REGRESSION] rename tracked artifact path
+    ├── discount_policy_checkout_flow.test.spec
+    │   ├── [REGRESSION] rename file + test id to discount_strategy_checkout_flow
+    │   └── [REGRESSION] update covers/imports/module refs
+    ├── checkout_flow.test.spec
+    │   └── [REGRESSION] update data-seam covers/imports without renaming file
+    └── checkout-tax-refactor.plan.spec
+        └── [REGRESSION] update local acceptance ids
 
-[+] spec-core/src/export.rs
+[+] Semantic review core
     │
-    ├── load_passports_for_specs()
-    │   ├── [EXISTING] canonical current data key preserved
-    │   ├── [ADD]      legacy sum key preserved on unseen-id family match
-    │   └── [ADD]      legacy data key preserved on unseen-id family match
-    │
-    └── build_export_bundle()
-        ├── [EXISTING] preserve does not invent missing supported data review
-        └── [ADD]      preserve carries legacy seam key through migration window
+    └── project_semantic_review_with_context(...)
+        ├── [ADD] preserve rejects legacy seam-family keys
+        ├── [REGRESSION] refresh still emits canonical family keys
+        └── [REGRESSION] same supported seam shapes still classify as supported
 
-[+] spec-core/src/typescript_backend.rs
+[+] Proof helpers
     │
-    └── validate_typescript_tree_spec()
-        └── [ADD]      supported seam truth in shared context does not break bounded TS validation
+    ├── passport.rs
+    │   └── [REGRESSION] canonical proof coverage definitions follow renamed seam ids
+    ├── generator.rs
+    │   └── [REGRESSION] generated module-path assertions use renamed canonical modules
+    ├── molecule_evidence.rs
+    │   └── [REGRESSION] freshness lookups follow renamed canonical ids
+    └── escape_hatch.rs
+        └── [REGRESSION] gate recomputation follows renamed canonical ids and file paths
 
-[+] spec-cli/tests/cli.rs
+[+] Read-side truth walls
     │
-    ├── status/export preserve matrix
-    │   ├── [ADD]      legacy seam passport survives status on preserve path
-    │   ├── [ADD]      legacy seam passport survives export on preserve path
-    │   └── [ADD]      refresh rewrites passport semantic_review to canonical family key
+    ├── export.rs
+    │   ├── [ADD] canonical passports/export rows use renamed ids
+    │   └── [ADD] legacy seam-family keys no longer survive projection
+    ├── commands.rs
+    │   └── [REGRESSION] status-health fixtures use canonical current-state keys
+    ├── cli.rs
+    │   ├── [ADD] status/export/test expectations use renamed ids and files
+    │   └── [REGRESSION] refresh still rewrites proof truthfully
+    └── m14_regressions.rs
+        ├── [REGRESSION] canonical wedge fixtures move to renamed files
+        └── [REGRESSION] semantic review still reports the same verdicts and states
+
+[+] Teaching surfaces
     │
-    └── seam health semantics
-        ├── [EXISTING] incomplete gate still demotes otherwise-valid seam
-        └── [EXISTING] stale seam still reports stale after authored change
+    ├── README.md
+    ├── examples/ecommerce/README.md
+    ├── examples/ecommerce/src/main.rs
+    └── AGENTS.md
+        └── [REGRESSION] example commands and inventories resolve on first copy-paste
 
 ─────────────────────────────────
-PLANNED NEW COVERAGE: 15 paths
-  semantic_review.rs: 8
-  export.rs: 3
-  typescript_backend.rs: 1
-  cli.rs: 3
-CRITICAL REGRESSION TESTS: 4
-  preserve legacy sum key
-  preserve legacy data key
-  refresh canonical sum key
-  refresh canonical data key
+PLANNED COVERAGE: 23 critical paths
+  source/artifact rename paths: 8
+  semantic-review contract paths: 3
+  proof-helper paths: 4
+  read-side truth-wall paths: 5
+  teaching/workflow paths: 3
+CRITICAL REGRESSION TESTS: 10
 ─────────────────────────────────
 ```
 
-### User-Visible and Command-Visible Flows
+### Maintainer Flow Coverage
 
 ```text
-TRUTH SURFACE FLOW COVERAGE
+MAINTAINER FLOW COVERAGE
 ===========================
-[+] spec status --format json
-    ├── [ADD] legacy seam review in passport remains visible during preserve window
-    ├── [EXISTING] stale authored change still drops fresh supported truth
-    └── [EXISTING] incomplete escape-hatch gate still wins over green wishful thinking
+[+] Canonical author loop
+    ├── validate renamed sum seam
+    ├── validate renamed data seam
+    ├── build units into src/generated
+    ├── test renamed sum seam
+    ├── test renamed data seam
+    ├── test renamed mixed-kind molecule
+    ├── test existing checkout_flow molecule with renamed data seam refs
+    └── status examples/ecommerce
 
-[+] spec export
-    ├── [ADD] legacy seam review survives preserve projection
-    └── [ADD] refreshed seam review emits canonical family key only
+[+] Read-side proof loop
+    ├── export canonical ids after refresh
+    ├── status canonical ids after artifact refresh
+    ├── plan validate acceptance ids after rename
+    └── grep current-state surfaces for stale old-name literals
 
-[+] spec test / passport write path
-    └── [ADD] refreshed seam review rewrites passport semantic_review key canonically
-
-[+] bounded TypeScript lane
-    └── [ADD] supported seam context does not poison TS eligibility logic
+[+] Docs loop
+    ├── repo README commands resolve
+    ├── example README commands resolve
+    ├── example binary message points at real files
+    └── AGENTS workflow points at renamed files
 ```
 
-### Required Test Files and Assertions
+### Required Assertion Surfaces
 
-| File | Test additions required |
+| File | Required updates or assertions |
 | --- | --- |
-| `spec-core/src/semantic_review.rs` | unseen sum id routes to canonical family, unseen data id routes to canonical family, legacy preserve alias accepted, refresh emits canonical key, wrapper deps still supported through family routing, renamed-vocabulary near misses stay unsupported |
-| `spec-core/src/export.rs` | passport preserve accepts legacy seam keys for matching family, export bundle preserve keeps legacy key alive during migration |
-| `spec-core/src/typescript_backend.rs` | semantic review context containing family-routed seam support does not regress bounded TS validation |
-| `spec-cli/tests/cli.rs` | command matrix for preserve vs refresh on seam passports using legacy and canonical keys |
+| `spec-core/src/semantic_review.rs` | prove canonical family keys still classify the renamed canonical examples; prove legacy seam-family keys are rejected on preserve |
+| `spec-core/src/export.rs` | update canonical fixture ids and paths; prove exported passports use renamed ids and canonical seam keys only |
+| `spec-core/src/passport.rs` | retarget canonical proof-coverage definitions and tracked molecule ids |
+| `spec-core/src/generator.rs` | update module-path assertions from `checkout_quote` to `pricing_quote` where the canonical example is referenced |
+| `spec-core/src/molecule_evidence.rs` | update freshness lookup fixtures for the renamed data seam |
+| `spec-core/src/escape_hatch.rs` | update canonical fixture paths, ids, and gate recomputation expectations |
+| `spec-cli/src/commands.rs` | rewrite current-state status-health fixtures away from legacy compatibility keys |
+| `spec-cli/tests/cli.rs` | update status/export/test expectations, passport paths, molecule evidence paths, and command-surface assertions |
+| `spec-cli/tests/m14_regressions.rs` | move canonical wedge fixture expectations to renamed files, ids, and module paths without changing semantic outcomes |
+| `spec-cli/tests/fixtures/plan-validate-valid-mixed.json` | update local unit ids and molecule ids |
+| `spec-cli/tests/fixtures/plan-export-valid-mixed.json` | update local unit ids and molecule ids |
 
 ### Test Plan Artifact
 
-The companion QA-oriented artifact lives at:
+The QA-oriented artifact for this plan lives at:
 
-- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-110938.md)
+- [/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-134424.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260511-134424.md)
 
-It should stay short and command-focused so `/qa` or `/qa-only` can consume it directly.
+That file is the short version for `/qa` and `/qa-only`. This plan is the exhaustive implementation version.
 
 ## Failure Modes
 
-| Codepath | Real failure mode | Test coverage required | Error handling today | User-visible impact | Critical gap if missed |
+| Codepath | Real production or maintainer failure | Test coverage required | Error handling today | User-visible impact | Critical gap if missed |
 | --- | --- | --- | --- | --- | --- |
-| seam detection | unseen seam id still falls back to unsupported | yes | falls back silently to unsupported | supported substrate claim is fake | yes |
-| preserve alias matching | legacy fresh passport dropped during status/export | yes | current exact-match preserve will drop it | user loses previously valid proof after upgrade | yes |
-| refresh key emission | refresh keeps writing legacy keys | yes | none, would look green but block migration | public contract stays repo-specific forever | yes |
-| wrapper dep support | family-B wrapper no longer recognizes seam deps | yes | wrapper route falls out of supported subset | previously supported wrappers degrade to unsupported | yes |
-| near-miss rejection | renamed seam vocabulary accidentally accepted | yes | none if detection widens too far | evaluator overclaims understanding | yes |
-| TS bounded lane | shared supported seam context trips TS validation | yes | generator errors early | unrelated TypeScript workflow regresses | no |
+| example rename | file path changes but `id:` does not | yes | none | maintainer commands and fixtures drift instantly | yes |
+| tracked passport rename | source spec moves but tracked passport filename does not | yes | none | status/export surface stale or missing proof | yes |
+| molecule rename | sum seam rename lands but `covers`, imports, or evidence file names stay old | yes | none | molecule proof freshness lies | yes |
+| in-place molecule update | `checkout_flow.*` keeps old data-seam refs because its filename did not change | yes | none | build/tests look partially green but canonical data contract is still split | yes |
+| alias retirement | preserve silently still accepts legacy seam keys | yes | none | repo claims cleanup but old contract is still live | yes |
+| export projection | renamed canonical ids not reflected in exported passports | yes | read-side projection only | external consumers see split-brain vocabulary | yes |
+| passport coverage defs | proof coverage still keys off `pricing/discount_policy` | yes | none | canonical seam can report incomplete coverage for the wrong reason | yes |
+| generator/module refs | raw baseline or generated imports still point at old module names | yes | compile failure surfaces late | example build breaks after apparently successful rename | yes |
+| escape-hatch gate | gate recomputation still keys off old file names or ids | yes | live recompute only | valid seam can look incomplete or stale for the wrong reason | yes |
+| docs loop | README, example README, example main, or AGENTS still point at deleted files | yes | none | maintainer hits dead commands on first copy-paste | yes |
 
 ## Performance Review
 
-No major runtime or memory risk is justified here, but there are two guardrails:
+No meaningful runtime performance work is justified here. This milestone is dominated by renames, fixtures, and proof.
 
-1. Do not parse the same executable body repeatedly inside the same evaluation path if a local helper can hold the result once. `status`, `export`, and `test` already walk many specs, so accidental double work compounds.
-2. Do not introduce new cross-spec scans outside the existing dependency-resolution and context lookups. This slice should stay constant-factor work on top of the current evaluator, not a new graph walk.
+Guardrails:
 
-If implementation keeps the change inside existing packet-build and classifier flow, performance should remain effectively unchanged.
+1. Do not add permanent new scans just to enforce the rename. One final grep audit is enough.
+2. Do not duplicate canonical rename constants across helper fixtures if one existing builder can own them.
 
 ## NOT in Scope
 
 These were considered and are explicitly deferred:
 
-- generic renamed seam vocabulary support, because M49 is about reusability of the current honest subset, not wider semantic inference
-- new seam families, because live recommendation state still does not authorize family-promotion theater
-- CLI/schema changes, because the value here is semantic substrate truth, not surface churn
-- TypeScript seam support expansion, because the current TS lane is a proof wall only
-- cross-crate/shared-core extraction, because this is not another servant-architecture milestone
-- docs or README rewrites outside brief key-name updates if needed after landing, because they do not block the core slice
+- new seam-family support
+- function-family work
+- generic alias or synonym support
+- TypeScript feature expansion
+- export schema changes
+- CLI UX redesign
+- corpus or promotion work
+- roadmap or architecture doc rewrites outside the canonical teaching surfaces named above
+- Category B historical or synthetic tests that do not model the canonical current state and do not break because of renamed paths
 
 ## Worktree Parallelization Strategy
 
-This plan has a real parallelization opportunity after the semantic contract is frozen.
+This plan has a real parallelization opportunity, but only after the authority contract is frozen.
 
 ### Dependency Table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| A. Core seam-family routing and alias policy | `spec-core::semantic_review` | — |
-| B. Export and TypeScript proof walls | `spec-core::export`, `spec-core::typescript_backend` | A |
-| C. CLI preserve/refresh proof matrix | `spec-cli::commands`, `spec-cli::tests` | A |
-
-Lane ownership is strict:
-
-- `Lane A` owns `spec-core/src/semantic_review.rs`
-- `Lane B` owns `spec-core/src/export.rs` and `spec-core/src/typescript_backend.rs`
-- `Lane C` owns `spec-cli/src/commands.rs` and `spec-cli/tests/cli.rs`
-
-If a lane needs to edit another lane's owned file, stop and collapse back to sequential execution.
+| A. Freeze rename map and retire legacy seam aliases | `spec-core/`, `examples/ecommerce/units/`, `examples/ecommerce/src/raw_baseline/`, `examples/ecommerce/plans/` | — |
+| B. Core proof-wall rewiring | `spec-core/` | A |
+| C. CLI and regression rewiring | `spec-cli/` | A |
+| D. Teaching-surface updates | repo root docs, `examples/ecommerce/` docs | A |
 
 ### Parallel Lanes
 
-- `Lane A`: Step A, sequential, establishes the contract and canonical key names.
-- `Lane B`: Step B, can start after Lane A freezes key names and preserve semantics.
-- `Lane C`: Step C, can start after Lane A for command-surface proof.
-
-ASCII execution map:
-
-```text
-Lane A  semantic_review.rs
-  │
-  ├── freeze family enum + canonical keys + legacy aliases + preserve/refresh rules
-  │
-  ├──────────────┬──────────────
-  │              │
-  ▼              ▼
-Lane B         Lane C
-export.rs      commands.rs + cli.rs
-typescript     preserve/refresh matrix
-proof walls
-  │              │
-  └──────┬───────┘
-         ▼
-   integrated validation
-```
+- `Lane A`: contract freeze -> example tree rename -> tracked artifact rename (sequential, shared `examples/ecommerce/`)
+- `Lane B`: export -> passport -> generator -> molecule_evidence -> escape_hatch -> any needed proof-helper cleanup (sequential, shared `spec-core/`)
+- `Lane C`: commands -> cli -> m14_regressions -> JSON fixtures (sequential, shared `spec-cli/`)
+- `Lane D`: README -> examples README -> example main -> AGENTS (sequential, shared docs)
 
 ### Execution Order
 
 1. Launch `Lane A` first.
-2. Do not launch downstream work just because `Lane A` compiles. Launch it only after the contract freeze gate is explicitly satisfied.
-3. Once `Lane A` compiles and the contract freeze gate is locked, launch `Lane B` and `Lane C` in parallel worktrees.
-4. Merge `Lane B` and `Lane C`.
-5. Run the full proof command set once on the integrated branch.
+2. Do not start downstream lanes until all of these are frozen:
+   - canonical seam ids
+   - canonical file rename map
+   - canonical tracked artifact rename map
+   - legacy seam-key removal decision
+3. Launch `Lane B`, `Lane C`, and `Lane D` in parallel worktrees after the freeze gate passes.
+4. Merge `Lane B` and `Lane C` first and run the targeted proof suites.
+5. Merge `Lane D`.
+6. Run the full authoritative proof loop once on the integrated branch.
 
 ### Conflict Flags
 
-- `Lane B` and `Lane C` both depend on the exact canonical key strings from `Lane A`. Freeze those strings before parallel work starts.
-- `Lane B` and `Lane C` should not both edit `spec-core/src/semantic_review.rs`. If they do, parallelization failed and should be collapsed back to sequential.
-- `Lane C` will be noisy if `Lane A` has not already stabilized the preserve-vs-refresh expectations. Do not let CLI tests become the place where the semantic contract is decided.
+- `Lane B` must not reopen `semantic_review.rs`. If it needs to, collapse back to sequential execution.
+- `Lane C` must not decide canonical names through test fixes. If a CLI assertion forces a rename decision, bounce it back to `Lane A`.
+- `Lane D` should not edit source specs, proof files, or generated artifacts. If docs uncover a source mismatch, hand it back to the owning lane.
+- `Lane B` and `Lane C` both depend on the renamed example artifact paths. If those paths are still moving, parallelization is premature.
 
 ## Implementation Checklist
 
-1. Replace seam `SupportedSurface` id variants with `SupportedSeamFamily`.
-2. Add canonical and legacy seam key helpers.
-3. Route sum seams by semantic family, not literal id.
-4. Route data seams by semantic family, not literal id.
-5. Freeze the seam contract: enum names, canonical keys, legacy keys, preserve rules, refresh rules, near-miss rejection rules.
-6. Keep current evaluator vocabulary exact.
-7. Update preserve logic to accept canonical plus legacy key aliases for the same family.
-8. Update refresh logic to emit canonical keys only.
-9. Prove wrapper-family deps still accept family-routed seams.
-10. Add export preserve tests for legacy seam passports.
-11. Add CLI status/export/test matrix tests for legacy and canonical seam keys.
-12. Add TS-context regression proof if needed.
-13. Run targeted package tests, then full package tests if any proof wall needed broader touch.
+1. Remove legacy seam-key preservation from `semantic_review.rs`.
+2. Freeze the canonical rename map in the authority lane.
+3. Rename the canonical sum seam source spec and tracked passport artifact.
+4. Rename the canonical data seam source spec and tracked passport artifact.
+5. Rename the mixed-kind canonical molecule id, file, and tracked evidence artifact.
+6. Update `checkout_flow.*` to the renamed data-seam id without renaming the file.
+7. Rename raw baseline pricing modules and update `mod.rs`.
+8. Update the example plan-spec acceptance ids.
+9. Retarget export, passport, generator, molecule-evidence, and escape-hatch proof fixtures.
+10. Retarget commands, CLI, M14 regression, and plan-fixture suites.
+11. Update README, example README, example `main.rs`, and AGENTS commands and inventories.
+12. Rebuild example generated output and refresh tracked artifacts from source specs.
+13. Run targeted proof suites, then broader suites only if fallout demands it.
+14. Run the final grep exit gate and classify any remaining old-name literal as intentional or a bug.
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, scope accepted as-is
-- Architecture Review: 1 core architecture change, keep it one-file-first
-- Code Quality Review: explicit-over-clever guardrails written
-- Test Review: coverage diagram produced, 15 planned new paths identified
-- Performance Review: 0 major findings, 2 guardrails
+- Step 0: Scope Challenge, expanded blast radius accepted because it is one bounded rename contract, not scope creep
+- Architecture Review: 1 contract change, 3 surface classes, 4 execution lanes
+- Code Quality Review: explicit-over-clever guardrails written, no new abstraction layer authorized
+- Test Review: coverage diagram produced, 23 critical paths identified
+- Performance Review: 0 runtime performance findings, 2 guardrails
 - NOT in scope: written
 - What already exists: written
-- Failure modes: 5 critical gaps flagged
-- Parallelization: 3 steps, 2 downstream lanes parallel after core contract freeze
-- Lake Score: 5/5 major recommendations chose the complete option over the shortcut
+- Failure modes: 10 critical gaps flagged
+- Parallelization: 4 lanes total, 3 downstream lanes parallel after authority freeze
+- Lake Score: 7/7 major recommendations chose the complete option over the shortcut
 
 ## Recommended Next Action
 
-Execute `Lane A` first in [spec-core/src/semantic_review.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/spec/spec-core/src/semantic_review.rs). Treat the contract freeze gate as the mandatory handoff point. Do not touch export, CLI, or TypeScript proof walls until the canonical family keys, legacy aliases, and preserve-vs-refresh rules are frozen.
+Execute `Lane A` first. Freeze the canonical rename map, remove the legacy seam-key preserve window, rename the example source tree, and settle the tracked artifact rename map before any downstream lane touches proof walls or docs.
+
+If `Lane A` lands cleanly, the rest of M50 is straightforward proof-surface rewiring instead of archaeology. That is the whole game.
