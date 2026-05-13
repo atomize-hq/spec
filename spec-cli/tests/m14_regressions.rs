@@ -172,7 +172,7 @@ fn wrapper_pipeline_typescript_body(bucket: &str) -> &'static str {
             "    {\n        const discounted = pricing_discount_leaf_under_specified(subtotal, discount_rate);\n        return pricing_tax_leaf_under_specified(discounted, tax_rate);\n    }"
         }
         "unsupported_near_miss" => {
-            "    {\n        const discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);\n        return pricing_tax_leaf_unsupported_near_miss(\n            discounted,\n            tax_rate >= Decimal.ZERO ? tax_rate : Decimal.ZERO\n        );\n    }"
+            "    {\n        const discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);\n        if (tax_rate.eq(Decimal.new(0n, 0n))) {\n            return pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate);\n        }\n        return pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate);\n    }"
         }
         other => panic!("unexpected wrapper-pipeline bucket `{other}`"),
     }

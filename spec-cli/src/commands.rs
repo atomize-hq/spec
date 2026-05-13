@@ -2109,10 +2109,15 @@ fn generate_typescript_specs(
             .with_context(|| format!("Failed to normalize {}", spec.source.file_path))?;
         normalized_units.push(unit);
     }
+    let root_unit_ids = validation_specs
+        .root_specs
+        .iter()
+        .map(|spec| spec.spec.id.clone())
+        .collect::<Vec<_>>();
 
     let output_base = ensure_output_marker(output, project_root)?;
     let generated_at = rfc3339_now();
-    let tree = generate_typescript_output_tree(&normalized_units)
+    let tree = generate_typescript_output_tree(&normalized_units, &root_unit_ids)
         .with_context(|| "Failed to generate bounded TypeScript output tree")?;
     let mut generated_rel_paths = HashSet::<PathBuf>::new();
     for (rel_path, content) in tree {

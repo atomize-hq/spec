@@ -498,8 +498,9 @@ pub fn generate_unit_code_for_target(
 
 pub fn generate_typescript_output_tree(
     units: &[NormalizedUnit],
+    root_unit_ids: &[String],
 ) -> Result<BTreeMap<PathBuf, String>> {
-    crate::typescript_backend::generate_typescript_tree(units)
+    crate::typescript_backend::generate_typescript_tree(units, root_unit_ids)
 }
 
 fn render_constructor_body(
@@ -1946,8 +1947,12 @@ mod tests {
             NormalizedUnit::Function(typescript_lane_spec("pricing/apply_tax")),
             NormalizedUnit::Function(typescript_lane_spec("checkout/apply_vat")),
         ];
+        let root_unit_ids = vec![
+            "pricing/apply_tax".to_string(),
+            "checkout/apply_vat".to_string(),
+        ];
 
-        let tree = generate_typescript_output_tree(&specs).unwrap();
+        let tree = generate_typescript_output_tree(&specs, &root_unit_ids).unwrap();
 
         assert_eq!(tree.len(), 5);
         assert!(tree.contains_key(&PathBuf::from("pricing/apply_tax.ts")));

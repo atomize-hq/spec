@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **The bounded TypeScript monotone-up lane is now helper-aware in M46** — eligible `kind:function` units may still declare `deps: []`, or may declare exactly one direct local helper dep when that helper classifies to `function.helper.identity_passthrough.v1` and lives in the same loaded unit set and generated tree. The lane remains Bun-only, atom-only, and additive to Rust proof; it does not widen to wrapper execution, molecule execution, multi-dep execution, seam kinds, cross-library TypeScript resolution, `spec validate --target-language`, or `spec export --target-language`. Root-level TypeScript status over a mixed example remains truthfully non-green when non-eligible or unproven units are still untested in that target.
+- **The bounded TypeScript lane now proves the same-tree wrapper family in M52** — eligible `kind:function` roots may still use the helper-aware monotone-up lane from M46, and may now also classify to `function.wrapper.pipeline.v1` when they declare the exact same-tree local dep tuple `function.arithmetic_leaf.monotone_down_nonnegative.v1` then `function.arithmetic_leaf.monotone_up.v1`. The lane remains Bun-only, atom-only, and additive to Rust proof; it still does not widen to chain3 execution, molecule execution, generic multi-dep execution, seam kinds, cross-library TypeScript resolution, `spec validate --target-language`, or `spec export --target-language`.
 
 ## 0.14.0 - 2026-05-07
 

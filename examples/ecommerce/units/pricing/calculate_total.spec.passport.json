@@ -32,7 +32,7 @@
       "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-05-11T22:23:29Z",
+  "generated_at": "2026-05-12T23:51:35Z",
   "source_file": "examples/ecommerce/units/pricing/calculate_total.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -78,6 +78,29 @@
         "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
+    },
+    "typescript": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "combined_flow",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-12T23:51:35Z",
+        "provenance": {
+          "git_commit_sha": "3553c2735d1078f8d3ff9c2d93a8b44363246754"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:53c5a2a2d43b283fd5d04804e30690c945897ea9cffe477119357dc8253faca0"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:53c5a2a2d43b283fd5d04804e30690c945897ea9cffe477119357dc8253faca0",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
     }
   },
   "semantic_review": {
@@ -105,6 +128,10 @@
       {
         "path": "deps",
         "summary": "2 declared dep(s)"
+      },
+      {
+        "path": "body.typescript",
+        "summary": "authored TypeScript body present"
       }
     ],
     "executable_surfaces": [

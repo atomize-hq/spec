@@ -20,8 +20,8 @@ body:
     }
   typescript: |
     {
-        const discounted = subtotal - subtotal * rate;
-        return discounted >= Decimal.ZERO ? discounted : Decimal.ZERO;
+        const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));
+        return discounted;
     }
 local_tests:
   - id: pricing_discount_leaf_drift_basic

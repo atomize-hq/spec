@@ -19,7 +19,7 @@ body:
     }
   typescript: |
     {
-        return subtotal + subtotal * rate;
+        return subtotal.add(subtotal.mul(rate));
     }
 local_tests:
   - id: pricing_tax_leaf_unsupported_near_miss_basic

@@ -1296,6 +1296,38 @@ fn copy_m21_chain3_fixture(bucket: &str) -> (tempfile::TempDir, PathBuf) {
     (temp_dir, fixture_dir)
 }
 
+fn copy_m30_wrapper_fixture(bucket: &str) -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let fixture_dir = temp_dir.path().join(format!("m30_wrapper_{bucket}"));
+    copy_dir_recursive(
+        &repo_root()
+            .join("semantic-families/function.wrapper.pipeline.v1/fixtures")
+            .join(bucket),
+        &fixture_dir,
+    )
+    .expect("failed to copy M30 wrapper fixture");
+    (temp_dir, fixture_dir)
+}
+
+fn inject_typescript_body_if_missing(unit_path: &Path, typescript_body: &str) {
+    let contents = fs::read_to_string(unit_path).unwrap();
+    if contents.contains("\n  typescript: |\n") {
+        return;
+    }
+
+    let rewritten = contents.replace(
+        "\nlocal_tests:\n",
+        &format!("\n  typescript: |\n{typescript_body}\nlocal_tests:\n"),
+    );
+    assert_ne!(
+        rewritten,
+        contents,
+        "expected to inject a typescript body into `{}`",
+        unit_path.display()
+    );
+    fs::write(unit_path, rewritten).unwrap();
+}
+
 fn setup_m12_data_seam_project() -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path().join("m12-data-seam");
@@ -15413,7 +15445,7 @@ fn typescript_near_miss_rejects_before_bun_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "semantic family 'function.arithmetic_leaf.monotone_down_nonnegative.v1' is unsupported"
+            "TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1 or function.wrapper.pipeline.v1 in M52; found function.arithmetic_leaf.monotone_down_nonnegative.v1"
         ),
         "{stderr}"
     );
@@ -15456,6 +15488,73 @@ fn typescript_example_apply_tax_single_file_test_succeeds() {
     );
 }
 
+#[test]
+fn typescript_example_calculate_total_single_file_test_succeeds() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "example calculate_total should succeed in the bounded TypeScript wrapper lane",
+        &output,
+    );
+
+    let wrapper_passport =
+        read_passport_json(&ecommerce_dir.join("units/pricing/calculate_total.spec.passport.json"));
+    assert_eq!(
+        wrapper_passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        wrapper_passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_aligned_wrapper_fixture_single_file_test_succeeds() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m30_wrapper_fixture("aligned");
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/pricing_total_wrapper_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "aligned wrapper fixture should pass in the bounded TypeScript wrapper lane",
+        &output,
+    );
+
+    let wrapper_passport = read_passport_json(
+        &fixture_dir.join("units/pricing/pricing_total_wrapper_aligned.spec.passport.json"),
+    );
+    assert_eq!(
+        wrapper_passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        wrapper_passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn typescript_molecule_test_is_rejected_before_bun_runs() {
@@ -15479,18 +15578,58 @@ fn typescript_molecule_test_is_rejected_before_bun_runs() {
     );
     assert!(
         !output.status.success(),
-        "TypeScript molecule tests should be rejected in M46"
+        "TypeScript molecule tests should be rejected in M52"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            ".test.spec is not supported for --target-language typescript in M46; molecule tests remain Rust-only"
+            ".test.spec is not supported for --target-language typescript in M52; molecule tests remain Rust-only"
         ),
         "{stderr}"
     );
     assert!(
         !marker_path.exists(),
         "molecule rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_chain3_wrapper_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec"),
+        "    {\n        const base_total = pricing_total_wrapper_aligned(subtotal, discount_rate, tax_rate);\n        const surcharged_total = pricing_tax_leaf_aligned(base_total, surcharge_rate);\n        return pricing_discount_leaf_aligned(surcharged_total, loyalty_rate);\n    }",
+    );
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "chain3 wrapper TypeScript target should be rejected in M52"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("function.wrapper.pipeline.chain3.v1"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "chain3 wrapper rejection should happen before Bun build/test execution"
     );
 }
 

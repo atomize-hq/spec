@@ -188,8 +188,8 @@
 
 ## Deferred from M46 /autoplan review (2026-05-10)
 
-- [ ] **Wrapper TypeScript execution in `spec`** — Deferred by the M46 review. This is a wider dependency-topology milestone than the helper-aware monotone-up follow-on and should be scoped separately after M46 lands.
+- [x] **Wrapper TypeScript execution in `spec`** — Completed by M52 (2026-05-12). The bounded Bun-backed TypeScript lane now admits the same-tree `function.wrapper.pipeline.v1` family with the frozen direct local dep tuple `monotone_down_nonnegative -> monotone_up`, while keeping proof additive and target-specific.
 
 - [ ] **Cross-library TypeScript helper imports** — Deferred by the M46 review. Same-tree helper execution is enough to close the current product-family mismatch; cross-library target resolution is a different portability problem.
 
-- [ ] **Generic multi-dependency TypeScript execution** — Deferred by the M46 review. M46 is intentionally bounded to zero deps or one helper passthrough dep only.
+- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M52. The current lane is intentionally family-shaped: helper-aware monotone-up roots plus same-tree wrapper roots only, not arbitrary dependency topologies.
