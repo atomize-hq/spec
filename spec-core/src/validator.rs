@@ -7,8 +7,7 @@
 use crate::graph::top_level_deps;
 use crate::portability_contract::{SharedSeamAuthoredShapeRule, shared_surface_violation_message};
 use crate::semantic_review::{
-    SemanticReviewContext, SemanticSupportStatus, evaluate_semantic_review,
-    evaluate_semantic_review_with_context,
+    SemanticReviewContext, SemanticSupportStatus, evaluate_semantic_review_with_context,
 };
 use crate::syntax::{token_stream_contains_unsafe_keyword, validate_expect_expr};
 use crate::types::{
@@ -54,25 +53,26 @@ pub const TYPESCRIPT_MOLECULE_UNSUPPORTED_MESSAGE: &str = ".test.spec is not sup
 pub const TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE: &str =
     "TypeScript target currently supports only kind:function units in M52";
 pub const TYPESCRIPT_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript monotone-up target requires deps: [] or exactly one direct local helper dep in M52";
-pub const TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE: &str = "TypeScript target does not support cross-library helper deps in M52; the direct helper dep must be local to the loaded unit set";
+    "TypeScript monotone-up target requires deps: [] or exactly one direct helper dep in M55";
 pub const TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript target requires the direct helper dep to exist in the same loaded unit set in M52";
-pub const TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires the direct helper dep to classify as function.helper.identity_passthrough.v1 in M52";
+    "TypeScript target requires the direct helper dep to resolve from the loaded unit set in M55";
+pub const TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires the direct helper dep to classify as function.helper.identity_passthrough.v1 in M55";
+pub const TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript target requires the direct helper dep to author body.typescript in M55";
 pub const TYPESCRIPT_WRAPPER_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript wrapper target requires exactly two direct local deps in M52";
-pub const TYPESCRIPT_WRAPPER_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target does not support cross-library deps in M52; every direct dep must be local to the loaded unit set";
+    "TypeScript wrapper target requires exactly two direct local deps in M55";
+pub const TYPESCRIPT_WRAPPER_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target allows only local direct deps in M55; cross-library helper imports do not widen wrapper root deps";
 pub const TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript wrapper target requires every direct dep to exist in the same loaded unit set in M52";
-pub const TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M52";
+    "TypeScript wrapper target requires every direct dep to exist in the same loaded unit set in M55";
+pub const TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M55";
 pub const TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript chain3 target requires exactly three direct local deps in M54";
-pub const TYPESCRIPT_CHAIN3_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target does not support cross-library deps in M54; every direct dep must be local to the loaded unit set";
+    "TypeScript chain3 target requires exactly three direct local deps in M55";
+pub const TYPESCRIPT_CHAIN3_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target allows only local direct deps in M55; cross-library helper imports do not widen chain3 root deps";
 pub const TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript chain3 target requires every direct dep to exist in the same loaded unit set in M54";
-pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M54";
+    "TypeScript chain3 target requires every direct dep to exist in the same loaded unit set in M55";
+pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M55";
 pub const TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript chain3 target requires direct deps to author body.typescript in M54";
+    "TypeScript chain3 target requires direct deps to author body.typescript in M55";
 pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M52";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -576,35 +576,32 @@ fn validate_typescript_helper_dep_contract(
         [] => Ok(()),
         [dep] => {
             let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
-            if parsed.library_alias().is_some() {
-                return Err(semantic_error(
-                    spec,
-                    format!(
-                        "{}: '{}'",
-                        TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE,
-                        parsed.authored()
-                    ),
-                ));
-            }
-
-            let Some(helper_spec) = specs_by_id.get(parsed.unit_id()) else {
+            let helper_key = if parsed.library_alias().is_some() {
+                parsed.authored()
+            } else {
+                parsed.unit_id().to_string()
+            };
+            let Some(helper_spec) = specs_by_id.get(&helper_key) else {
                 return Err(semantic_error(
                     spec,
                     format!(
                         "{}: '{}'",
                         TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE,
-                        parsed.unit_id()
+                        parsed.authored()
                     ),
                 ));
             };
 
-            let Some(helper_review) = evaluate_semantic_review(helper_spec) else {
+            let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+            let Some(helper_review) =
+                evaluate_semantic_review_with_context(helper_spec, &semantic_review_context)
+            else {
                 return Err(semantic_error(
                     spec,
                     format!(
                         "{}: '{}'",
                         TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE,
-                        parsed.unit_id()
+                        parsed.authored()
                     ),
                 ));
             };
@@ -617,8 +614,27 @@ fn validate_typescript_helper_dep_contract(
                     format!(
                         "{}: '{}' resolved to {}",
                         TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE,
-                        parsed.unit_id(),
+                        parsed.authored(),
                         helper_review.compatibility_key
+                    ),
+                ));
+            }
+
+            if helper_spec
+                .spec
+                .body
+                .typescript
+                .as_deref()
+                .map(str::trim)
+                .filter(|body| !body.is_empty())
+                .is_none()
+            {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "{}: '{}'",
+                        TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
+                        parsed.authored()
                     ),
                 ));
             }
@@ -4903,14 +4919,28 @@ methods:
     }
 
     #[test]
-    fn typescript_target_rejects_cross_library_helper_dep() {
+    fn typescript_target_accepts_cross_library_helper_dep_with_loaded_helper() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.deps = vec!["shared::money/round".to_string()];
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            ("shared::money/round".to_string(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("cross-library helper dep should be eligible in M55 when the helper is loaded");
+    }
+
+    #[test]
+    fn typescript_target_rejects_missing_shared_helper_dep() {
         let mut spec = create_typescript_lane_function_spec();
         spec.spec.deps = vec!["shared::money/round".to_string()];
 
         let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -4964,6 +4994,27 @@ methods:
             .to_string();
         assert!(
             err.contains(TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn typescript_target_rejects_shared_helper_missing_typescript_body() {
+        let mut spec = create_typescript_lane_function_spec();
+        spec.spec.deps = vec!["shared::money/round".to_string()];
+        let mut helper = create_typescript_helper_spec();
+        helper.spec.body.typescript = None;
+
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            ("shared::money/round".to_string(), helper),
+        ]);
+
+        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
