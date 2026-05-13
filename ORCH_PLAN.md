@@ -1,196 +1,459 @@
-# M53 Shared-Core Portability Adoption Closeout Orchestration Plan
+# M54 Bounded Same-Tree Chain3 TypeScript Orchestration Runbook
 
-Status: **authoritative execution plan**  
-Supersedes: **the stale M52 `ORCH_PLAN.md`**  
+Status: **authoritative execution runbook**  
+Supersedes: **the stale M53 `ORCH_PLAN.md`**  
 Authority source: **`PLAN.md`**  
-Plan title: **`M53: Shared-Core Portability Adoption Closeout Implementation Plan`**  
+Plan title: **`M54: Bounded Same-Tree Chain3 TypeScript Execution Plan`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
 Base branch: **`main`**  
 Primary execution branch: **`feat/m40-plus`**  
-Authority date: **`2026-05-12`**  
+Authority date: **`2026-05-13`**  
 Worker model: **GPT-5.4 with `reasoning_effort=high`**  
-Maximum concurrency after contract freeze: **2 lanes total, but only 1 true code lane; the 2nd lane is conditional docs-only**  
-Last rewritten: **`2026-05-12`**
+Maximum safe parallelism: **2 worker lanes at once, and only after validator contract freeze**  
+Last rewritten: **`2026-05-13`**
 
 ## Summary
 
-Execute from `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on `feat/m40-plus`.
+Execute M54 from `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on `feat/m40-plus`.
 
-`PLAN.md` is the only scope authority. This file is the operator runbook derived from it.
+`PLAN.md` is the only scope authority. This runbook converts that plan into an operator-safe session flow.
 
-M53 is a closeout milestone, not a new semantic-family milestone. The semantic owner surface is already frozen in `xtask/src/family/analysis_core/*`. The remaining work is bounded to command-facing presentation, compatibility-shim honesty, proof tightening, and conditional maintainer wording sync.
+M54 is a bounded execution milestone. It does one thing: extend the existing Bun-backed TypeScript lane to execute exactly `function.wrapper.pipeline.chain3.v1` when the root and all required members live in the same loaded tree. It does not authorize generic multi-dependency TypeScript execution, generic graph execution, cross-library resolution, molecule TypeScript, seam-kind expansion, passport/export schema changes, or new infrastructure.
 
-The exact milestone is:
+The orchestration truth is:
 
-1. make `xtask/src/family/mod.rs` present `analysis_core` as the maintained owner surface
-2. keep `xtask/src/family/decision_kernel.rs` and `xtask/src/family/helper_surface.rs` compatibility-only passthroughs, or remove them with proof updated in the same change
-3. make `xtask/src/lib.rs` prove owner-surface behavior and retained compatibility-surface behavior separately
-4. touch maintainer docs only if the final code diff would otherwise make them false
-5. rerun the locked proof floor without changing stop-state semantics, CLI shape, JSON contracts, or artifact paths
+1. the validator contract is the critical path and goes first
+2. the validator phase is parent-owned in this runbook and stays serialized
+3. backend closure work and aligned fixture TypeScript bodies may run in parallel only after the validator contract is frozen in the primary branch
+4. the CLI proof wall waits for validator truth, backend truth, and aligned fixture truth
+5. docs and backlog sync run last
+6. final integration, final proof commands, and signoff are parent-owned
 
-This plan does not authorize new semantics, new consumers, consumer rewires, schema churn, broader shared-core extraction, or opportunistic cleanup outside the named files.
+If the implementation starts drifting toward "support any three-dependency TypeScript root" or "resolve helpers across libraries," stop and re-scope. That is not M54.
 
 ## Hard Guards
 
 - `PLAN.md` is the sole scope authority.
-- `xtask/src/family/analysis_core/*` remains the only semantic owner surface.
-- `xtask/src/family/recommend.rs`, `xtask/src/family/verify.rs`, `xtask/src/family/promotion_artifacts.rs`, and `xtask/src/family/paths.rs` are blocker-only escape hatches, not planned write targets.
-- `xtask/src/family/mod.rs`, `xtask/src/family/decision_kernel.rs`, `xtask/src/family/helper_surface.rs`, and `xtask/src/lib.rs` stay in one code lane. Do not split them across multiple code worktrees.
-- Maintainer docs may be edited only if the parent review after `WS-CLOSEOUT` determines the landed code diff would otherwise make them false.
-- Acceptance cargo commands run serially only. Do not run the locked proof floor in parallel across worktrees.
-- The final proof floor commands are frozen:
-  - `./.agents/skills/next-milestone/scripts/collect_signals.sh`
-  - `cargo xtask family recommend --format json`
-  - `cargo xtask family corpus-decision --format json`
-  - `cargo xtask family verify-decision-contract --format json`
-  - `cargo test -p xtask`
-- Final stop-state semantics must remain exactly:
-  - `recommendation_status = insufficient_real_corpus`
-  - `decision_status = not_recommended`
-  - `decision_action = stop`
-  - `decision_basis_code = no_actionable_candidate`
-  - `required_next_action = record_stop_without_new_milestone`
-- `overall_verdict = "pass"` must remain true for `verify-decision-contract`.
-- Do not revert or silently clean other people’s edits.
+- The only new TypeScript execution family admitted by M54 is `function.wrapper.pipeline.chain3.v1`.
+- Support is keyed by semantic family compatibility key, not by direct dependency count.
+- The validator contract is the hinge. No parallel code lanes begin until it is frozen in the primary branch.
+- No generic multi-dependency TypeScript support.
+- No generic graph executor.
+- No cross-library imports or cross-library resolution.
+- Molecule TypeScript stays rejected before Bun.
+- No passport schema changes.
+- No export schema changes.
+- No new crates, services, commands, or runtime dependencies unless `PLAN.md` explicitly authorizes them. It does not.
+- `spec-core/src/validator.rs` is parent-owned during the validator phase and must not be edited concurrently elsewhere.
+- `spec-core/src/typescript_backend.rs` and the aligned chain3 fixture `.unit.spec` files are the only safe parallel surfaces after freeze.
+- `spec-cli/tests/cli.rs` waits until validator, backend, and aligned fixture truth are all integrated.
+- `README.md`, `CHANGELOG.md`, and `TODOS.md` wait until code paths and proof surfaces are stable.
+- Final merge, final proof commands, and acceptance judgment are parent-owned.
+- Do not revert, clean, or rewrite other people’s edits.
 
-Stop and re-scope if any of these become necessary:
+Stop immediately and re-scope if any of these become true:
 
-1. a retained consumer outside the named shim surfaces still depends on the old export topology in a way that forces broader module surgery
-2. command behavior, flags, JSON output, latest-artifact paths, or write behavior would need to change
-3. docs require broad historical cleanup rather than narrow wording sync
-4. semantic logic would need to move into or out of `analysis_core/*`
-5. a new crate, new facade layer, or broader shared-core extraction is proposed
-6. the stop-state tuple changes away from `stop / no_actionable_candidate / record_stop_without_new_milestone`
+1. chain3 support requires a generic graph executor
+2. passing the aligned path requires cross-library dependency resolution
+3. TypeScript molecule execution becomes necessary
+4. passport or export schema changes appear necessary
+5. the aligned fixture cannot be classified as `function.wrapper.pipeline.chain3.v1`
+6. the work starts broadening into generic multi-root or multi-library TypeScript support
 
-## Current Code Truth And Rationale
+## Concrete Worktree And Branch Layout
 
-Current code truth from the live authority docs and named repo surfaces:
-
-- `xtask/src/family/mod.rs` already exports `analysis_core`, `decision_kernel`, and `helper_surface`.
-- `xtask/src/family/mod.rs` already labels `decision_kernel` and `helper_surface` as compatibility-only passthroughs.
-- `xtask/src/family/decision_kernel.rs` is already a pure passthrough re-export of `crate::family::analysis_core::decision_contract`.
-- `xtask/src/family/helper_surface.rs` is already a pure passthrough re-export of `crate::family::analysis_core::helper_surface`.
-- `xtask/src/family/recommend.rs`, `xtask/src/family/verify.rs`, and `xtask/src/family/promotion_artifacts.rs` already import `analysis_core` directly and are not planned write targets.
-- `xtask/src/lib.rs` already exercises owner-surface behavior heavily through `family::analysis_core::*`.
-- `xtask/src/lib.rs` still needs explicit proof that any retained compatibility surface is intentional and drift-detecting.
-- `docs/semantic_family_capability_corpus_guide_v0.1.md` and `docs/recommendation_corpus_expansion_program_v0.1.md` already describe `analysis_core/*` as the owner surface, but must not drift back into dual-ownership wording.
-
-Rationale for orchestration shape:
-
-- There is only one true code lane. `mod.rs`, the two shim files, and `xtask/src/lib.rs` define one tightly coupled ownership-and-proof contract.
-- The only safe optional parallelism is a docs-only lane after the parent reviews the settled code contract.
-- Final proof must stay parent-owned and serial because the proof floor is both behavior-sensitive and build-lock-sensitive.
-
-## Canonical Run Roots
-
-Use these exact paths:
+Use this exact topology.
 
 ```bash
 PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec
-WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m53
-RUN_ROOT=$PRIMARY_ROOT/.runs/m53_shared_core_portability_closeout
+WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m54
+RUN_ROOT=$PRIMARY_ROOT/.runs/m54_bounded_same_tree_chain3
 ```
 
-All authoritative orchestration state lives under `RUN_ROOT`.
+### Branch inventory
 
-## Parallelization Contract
+| Lane | Path | Branch | Owner | Purpose |
+| --- | --- | --- | --- | --- |
+| Authority + integration | `PRIMARY_ROOT` | `feat/m40-plus` | Parent | kickoff, validator phase, integration, final proofs |
+| `WS-BACKEND` | `$WT_ROOT/ws-backend` | `codex/m54-ws-backend` | Worker | bounded TypeScript backend closure only |
+| `WS-FIXTURE` | `$WT_ROOT/ws-fixture` | `codex/m54-ws-fixture` | Worker | aligned chain3 fixture TypeScript bodies only |
+| `WS-CLI` | `$WT_ROOT/ws-cli` | `codex/m54-ws-cli` | Worker | CLI proof wall after backend + fixture integration |
+| `WS-DOCS` | `$WT_ROOT/ws-docs` | `codex/m54-ws-docs` | Worker | docs and backlog sync after proof surfaces stabilize |
 
-Before any worker starts, execution is strictly sequential.
+Rules:
 
-After contract freeze:
-
-- only `WS-CLOSEOUT` may start immediately
-- `WS-DOC-SYNC` may start only after the parent reviews the settled code contract and explicitly marks docs as required
-- `WS-DOC-SYNC` is the only allowed overlap with `WS-CLOSEOUT`, and only because it owns docs only
-- `WS-INT` starts only after worker submissions are complete
-- the locked proof floor never runs in parallel across worktrees
-
-This milestone has at most one true code worker. Any plan that pretends otherwise is widening scope dishonestly.
+- There is no separate validator worktree in the default topology. The parent executes the validator contract in `PRIMARY_ROOT`.
+- `WS-BACKEND` and `WS-FIXTURE` are the only lanes allowed to overlap.
+- `WS-CLI` and `WS-DOCS` are serialized behind earlier gates.
+- If the parent chooses to delegate the validator anyway, that worker must be the only active code lane and must finish before any other worker starts.
 
 ## Orchestration State
 
-### File-Of-Record Inventory
+All durable orchestration state lives under:
 
-| Path | Role | Owner |
+```bash
+RUN_ROOT=$PRIMARY_ROOT/.runs/m54_bounded_same_tree_chain3
+```
+
+`RUN_ROOT` and `.runs/m54_*` are execution state, not product source. They are the operator ledger for the session and must not be treated as authored repo truth.
+
+### Run-state inventory
+
+| Path | Purpose | Owner |
 | --- | --- | --- |
 | `baseline.json` | kickoff branch, commit, dirty-tree, and baseline-proof metadata | Parent |
-| `contract-freeze.json` | frozen M53 contract and no-drift invariants | Parent |
-| `worktrees.json` | worktree and branch inventory | Parent |
-| `file-ownership.json` | writable surfaces per lane | Parent |
-| `tasks.json` | durable task ledger | Parent |
-| `queue.json` | dependency queue and task state | Parent |
-| `blocked.json` | blocker capture with file, command, scope leak, and stop reason | Parent |
-| `session-log.md` | chronological operator log | Parent |
-| `acceptance-ledger.md` | final evidence and signoff ledger | Parent |
-| `validation/kickoff/*` | kickoff and branch-state captures | Parent |
-| `validation/baseline/*` | baseline proof floor captures | Parent |
-| `validation/closeout/*` | code-lane submission captures | Parent |
-| `validation/docs/*` | docs-lane review and submission captures | Parent |
-| `validation/int/*` | merge and integration captures | Parent |
-| `validation/final/*` | final proof floor and signoff captures | Parent |
+| `contract-freeze.json` | frozen M54 execution contract, boundaries, and stop rules | Parent |
+| `worktrees.json` | active worktree and branch inventory for every lane | Parent |
+| `file-ownership.json` | exact owned-file map per task and lane | Parent |
+| `tasks.json` | durable task ledger with task definitions and ownership | Parent |
+| `queue.json` | runnable-state queue and dependency tracking | Parent |
+| `session-log.md` | chronological operator log of launches, integrations, stops, and resumptions | Parent |
+| `acceptance-ledger.md` | final acceptance checklist and proof signoff ledger | Parent |
+| `validation/kickoff/*` | branch, status, and authority snapshots | Parent |
+| `validation/baseline/*` | baseline proof captures before product-code edits | Parent |
+| `validation/validator/*` | validator task proof captures | Parent |
+| `validation/backend/*` | backend lane proof captures and integration evidence | Parent |
+| `validation/fixture/*` | fixture lane proof captures and integration evidence | Parent |
+| `validation/cli/*` | CLI lane proof captures and integration evidence | Parent |
+| `validation/docs/*` | docs review and wording-validation captures | Parent |
+| `validation/final/*` | final proof wall captures and closeout evidence | Parent |
 
-### Per-Task Sentinel Convention
+Rules:
 
-Every task in the task graph has a sentinel directory under `RUN_ROOT/tasks/<TASK_ID>/`.
+- `tasks.json` and `queue.json` are the source of truth for orchestration progress.
+- Per-task sentinel directories support the queue; they do not replace it.
+- Product truth lives in repo source files and validated proofs, not in run-state notes.
+
+## Per-Task Sentinel Convention
+
+Every task and worker lane gets a dedicated sentinel directory:
+
+```bash
+$RUN_ROOT/tasks/<TASK_ID>/
+```
 
 Required sentinel files:
 
 - `status.json`
 - `owner.txt`
 - `branch.txt`
-- `started_at.txt`
-- `finished_at.txt`
 - `commands.txt`
 - `changed_files.txt`
 - `acceptance.md`
 - `blocker.md`
 
+Sentinel file meanings:
+
+- `status.json`: machine-readable task state, timestamps, and current disposition
+- `owner.txt`: parent or worker owner label for the task
+- `branch.txt`: the branch used for execution or integration
+- `commands.txt`: exact commands run plus observed exit codes
+- `changed_files.txt`: newline-delimited touched-file list, even when empty
+- `acceptance.md`: concise statement of what was proven and what remains open
+- `blocker.md`: concrete blockers or unresolved assumptions; empty when not blocked
+
 Rules:
 
-- `status.json` is the machine-readable source for task state.
-- `commands.txt` records exact commands run and observed exit codes.
-- `changed_files.txt` is required for worker tasks even when empty.
-- `blocker.md` is empty unless the task is blocked.
-- parent updates sentinels when tasks transition state.
+- The parent updates task state in `queue.json` and mirrors key task details in the sentinel directory.
+- Workers return narrow summaries that populate `commands.txt`, `changed_files.txt`, and `blocker.md`.
+- Chat history is not the run ledger.
+- A task is not complete until both its queue state and sentinel acceptance are updated.
 
-### Source-Of-Truth Rule
+## Context-Control Rules
 
-The parent uses:
+- The parent owns `PLAN.md` and `ORCH_PLAN.md`. Workers do not edit either file.
+- The parent owns orchestration state under `RUN_ROOT`.
+- One task per worker. No worker prompt may authorize opportunistic side work.
+- Each lane has a frozen file-ownership map. If a worker needs a file outside its map, it stops and hands control back to the parent.
+- The primary branch is the only integration branch. Workers submit patches or commits; the parent integrates them.
+- The parent records all phase transitions in run-state files. Chat history is not the run ledger.
+- No worker may silently rebase away conflicts on shared files. Any overlap outside the declared ownership map is a blocker, not an invitation to improvise.
+- The parent must freeze exact rejection expectations before CLI work begins so the CLI lane does not invent new contract language.
+- The parent must keep negative TypeScript boundaries truthful:
+  - cross-library imports rejected
+  - molecule TypeScript rejected
+  - seam-kind TypeScript rejected
+  - generic four-dependency and other out-of-family roots rejected
+- The docs lane can describe only behavior already proven in the integrated branch.
 
-- `queue.json`
-- `tasks.json`
-- `session-log.md`
-- per-task sentinels under `RUN_ROOT/tasks/`
+## Workstream Plan
 
-as the source of truth for execution state.
+| ID | Lane | Owner | Write scope | Depends on | Exit condition |
+| --- | --- | --- | --- | --- | --- |
+| `M54-00` | Kickoff + baseline | Parent | run-state only | none | branch, dirty-tree, authority snapshots, baseline proofs captured |
+| `M54-01` | Contract freeze | Parent | run-state only | `M54-00` | file ownership, task graph, stop rules, and gates frozen |
+| `M54-02` | Validator contract | Parent | `spec-core/src/validator.rs` | `M54-01` | exact chain3 validator contract integrated in `feat/m40-plus` with focused proof |
+| `M54-10` | `WS-BACKEND` | Worker | `spec-core/src/typescript_backend.rs` | `M54-02` | exact chain3 same-tree closure emission lands cleanly |
+| `M54-11` | `WS-FIXTURE` | Worker | aligned chain3 fixture `.unit.spec` files | `M54-02` | aligned chain3 fixture truth has maintained `body.typescript` coverage |
+| `M54-12` | Backend + fixture integration gate | Parent | primary branch only | `M54-10`, `M54-11` | both lanes integrated, conflicts resolved, focused proof rerun |
+| `M54-20` | `WS-CLI` | Worker | `spec-cli/tests/cli.rs` and explicit small fixture mutations only if required | `M54-12` | aligned pass proof and negative rejects are green |
+| `M54-21` | CLI integration gate | Parent | primary branch only | `M54-20` | CLI proof wall integrated and focused proof rerun |
+| `M54-30` | `WS-DOCS` | Worker | `README.md`, `CHANGELOG.md`, `TODOS.md` | `M54-21` | docs match exact proven boundary and nothing broader |
+| `M54-31` | Docs integration gate | Parent | primary branch only | `M54-30` | docs integrated after proof surface review |
+| `M54-40` | Final proof wall + closeout | Parent | none beyond small conflict resolution if needed | `M54-31` | full acceptance commands pass and closeout ledger is complete |
 
-Chat history is not the run ledger.
+### `M54-00` Kickoff + baseline
 
-`.runs/m53_shared_core_portability_closeout/*` is run-state only. It is not authored product source and must not be treated as a substitute for repo files.
+- Owner: Parent
+- Unlock condition: none
+- Owned files: run-state only under `RUN_ROOT`
+- Acceptance:
+- branch snapshot, head snapshot, and dirty-tree capture exist
+- authority snapshots for `PLAN.md` and `ORCH_PLAN.md` exist
+- baseline proof captures exist for the focused pre-change commands
+- no product-source files were edited during kickoff
 
-### Task Status Vocabulary
+### `M54-01` Contract freeze
 
-Use only these statuses:
+- Owner: Parent
+- Unlock condition: `M54-00` done
+- Owned files: `baseline.json`, `contract-freeze.json`, `worktrees.json`, `file-ownership.json`, `tasks.json`, `queue.json`, `session-log.md`
+- Acceptance:
+- `contract-freeze.json` records the exact M54 boundaries and stop rules
+- `file-ownership.json` records lane ownership without overlap beyond planned integration points
+- `tasks.json` and `queue.json` define every M54 task and dependency
+- validator-first sequencing is explicitly frozen before any worker launch
 
-- `pending`
-- `ready`
-- `in_progress`
-- `submitted`
-- `blocked`
-- `done`
-- `skipped`
-- `cancelled`
+### `M54-02` Validator contract
 
-## Kickoff Rule
+- Owner: Parent
+- Unlock condition: `M54-01` done
+- Owned files: `spec-core/src/validator.rs`
+- Acceptance:
+- validator admits only `function.wrapper.pipeline.chain3.v1` as the new M54 TypeScript root family
+- exact ordered same-tree chain3 dep contract is enforced
+- cross-library deps stay rejected
+- molecule TypeScript stays rejected
+- nested chain3 closure members stay rejected
+- focused validator proof capture is green and stored under `validation/validator/`
 
-Kickoff requires a clean execution posture, not a forced-clean tree.
+### `M54-10` Backend lane
 
-The live workspace is expected to already contain authority-doc edits. In particular, `PLAN.md` is already modified in the live workspace and `ORCH_PLAN.md` may also be in-flight during orchestration authoring.
+- Owner: Worker
+- Unlock condition: `M54-02` integrated in `feat/m40-plus`
+- Owned files: `spec-core/src/typescript_backend.rs`
+- Acceptance:
+- backend emits the exact same-tree chain3 closure and nothing broader
+- wrapper recursion under a chain3 root works without unrelated unit leakage
+- monotone-up and wrapper behavior are preserved
+- worker return includes only changed files, commands with exit codes, and blockers or assumptions
 
-Required kickoff commands:
+### `M54-11` Fixture lane
+
+- Owner: Worker
+- Unlock condition: `M54-02` integrated in `feat/m40-plus`
+- Owned files: aligned chain3 fixture `.unit.spec` files only
+- Acceptance:
+- aligned root and required closure members have truthful non-empty `body.typescript`
+- no new units are added
+- no negative fixtures are widened unless the parent explicitly reassigns them
+- worker return includes only changed files, commands with exit codes, and blockers or assumptions
+
+### `M54-12` Backend + fixture integration gate
+
+- Owner: Parent
+- Unlock condition: `M54-10` and `M54-11` submitted
+- Owned files: primary branch integration surface only
+- Acceptance:
+- `WS-BACKEND` and `WS-FIXTURE` diffs are reviewed against their ownership maps
+- both lanes are integrated by the parent only
+- focused backend and validator-adjacent proofs are rerun after integration
+- no hidden dependency on CLI files remains
+
+### `M54-20` CLI proof wall
+
+- Owner: Worker
+- Unlock condition: `M54-12` done
+- Owned files: `spec-cli/tests/cli.rs` plus explicit tiny fixture mutations only if parent-approved
+- Acceptance:
+- aligned chain3 TypeScript proof succeeds through Bun
+- negative chain3-like paths still reject before Bun where required
+- proof scope stays bounded to chain3 and existing TypeScript rules
+- worker return includes only changed files, commands with exit codes, and blockers or assumptions
+
+### `M54-21` CLI integration gate
+
+- Owner: Parent
+- Unlock condition: `M54-20` submitted
+- Owned files: primary branch integration surface only
+- Acceptance:
+- CLI diff stays within the approved ownership map
+- parent integrates the lane and reruns `cargo test -p spec-cli typescript_chain3`
+- any contract drift discovered here routes back to the parent-owned contract or integration gate, not to an ad hoc worker fix
+
+### `M54-30` Docs and backlog sync
+
+- Owner: Worker
+- Unlock condition: `M54-21` done
+- Owned files: `README.md`, `CHANGELOG.md`, `TODOS.md`
+- Acceptance:
+- docs state bounded same-tree chain3 TypeScript support accurately
+- docs do not imply generic multi-dependency TypeScript support
+- deferred items remain deferred in `TODOS.md`
+- worker return includes only changed files, commands with exit codes, and blockers or assumptions
+
+### `M54-31` Docs integration gate
+
+- Owner: Parent
+- Unlock condition: `M54-30` submitted
+- Owned files: primary branch integration surface only
+- Acceptance:
+- parent integrates docs only after verifying wording against integrated code and proofs
+- any contract drift exposed by docs returns to the parent-owned contract or integration gate
+- no broader support claims land accidentally
+
+### `M54-40` Final proof wall + closeout
+
+- Owner: Parent
+- Unlock condition: `M54-31` done
+- Owned files: final run-state captures and narrow conflict resolution only if required
+- Acceptance:
+- final proof commands all run serially in `PRIMARY_ROOT`
+- aligned chain3 proof passes
+- out-of-contract paths still fail with bounded behavior
+- `acceptance-ledger.md` records final signoff, residual concerns, and closeout status
+
+## Worker Return Contract
+
+Each worker returns only:
+
+- changed files
+- commands run with exit codes
+- blockers or unresolved assumptions
+
+Parent review rules:
+
+- the parent reviews worker summaries plus narrow diffs only, not full transcripts
+- the parent records accepted results into the task sentinel directory and `queue.json`
+- the parent closes workers after integration; no worker remains open after its lane is merged or rejected
+- workers do not become ad hoc integration agents after submission
+
+## Concrete Parent-Agent Responsibilities
+
+The parent owns:
+
+- reading `PLAN.md` and translating it into the frozen orchestration contract
+- kickoff validation of branch, workspace dirtiness, and baseline state
+- creating `RUN_ROOT`, task ledgers, file ownership maps, and worktree inventory
+- the full validator phase in `spec-core/src/validator.rs`
+- the exact wording of the frozen TypeScript contract and rejection boundaries
+- deciding whether `WS-CLI` may mutate fixtures beyond the aligned pass case; default is no
+- integrating `WS-BACKEND`, `WS-FIXTURE`, `WS-CLI`, and `WS-DOCS` into `feat/m40-plus`
+- rerunning focused gates after every integration step
+- stopping the run when scope drifts into generic execution or cross-library resolution
+- running final proof commands
+- final acceptance judgment and signoff
+- all lane integration and conflict resolution at ownership boundaries
+
+The parent must not:
+
+- start `WS-BACKEND` or `WS-FIXTURE` before validator freeze
+- start `WS-CLI` before backend and fixture truth are integrated
+- start `WS-DOCS` before CLI proof surfaces stabilize
+- let workers widen scope through convenience refactors, schema churn, or infra additions
+- let workers fix cross-lane drift by editing outside their ownership maps
+
+## Concrete Worker-Lane Responsibilities
+
+### `WS-BACKEND`
+
+Owned files:
+
+- `spec-core/src/typescript_backend.rs`
+
+Responsibilities:
+
+- extend bounded closure collection for a chain3 root only
+- preserve monotone-up and wrapper behavior
+- emit the exact same-tree closure and exclude unrelated loaded units
+- keep import behavior stable and deduped
+- avoid validator contract changes
+
+Stop if:
+
+- backend work needs validator rule changes
+- backend work needs cross-library resolution
+- backend work starts implying nested chain3 support or generic multi-dependency support
+
+### `WS-FIXTURE`
+
+Owned files:
+
+- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec`
+- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec`
+- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_tax_leaf_aligned.unit.spec`
+- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_discount_leaf_aligned.unit.spec`
+
+Responsibilities:
+
+- add and align `body.typescript` exactly where M54 requires it
+- keep TypeScript bodies faithful to existing Rust truth
+- avoid adding new units or broadening the fixture family
+- avoid touching drift, under-specified, or unsupported-near-miss fixtures unless the parent explicitly reassigns them
+
+Stop if:
+
+- the aligned truth seems to require new units
+- the aligned truth cannot mirror existing Rust behavior cleanly
+- negative fixtures need changes that would alter validator boundary semantics
+
+### `WS-CLI`
+
+Owned files:
+
+- `spec-cli/tests/cli.rs`
+- explicit tiny fixture mutations only if the parent approves them during `M54-21` planning
+
+Responsibilities:
+
+- flip the aligned chain3 TypeScript path from reject-before-Bun to success-through-Bun
+- preserve or add negative proofs for wrong-family, wrong-order, missing-`body.typescript`, and molecule rejection behavior
+- keep the proof wall specific to chain3, not generic multi-dependency TypeScript
+
+Stop if:
+
+- the CLI lane needs to redefine validator or backend semantics
+- the CLI lane needs generic fixture expansion
+- the negative proof set depends on cross-library runtime behavior instead of validator rejection
+
+### `WS-DOCS`
+
+Owned files:
+
+- `README.md`
+- `CHANGELOG.md`
+- `TODOS.md`
+
+Responsibilities:
+
+- document bounded same-tree chain3 TypeScript support accurately
+- state explicitly that generic multi-dependency TypeScript remains unsupported
+- keep cross-library helper imports and broader TypeScript portability deferred in `TODOS.md`
+
+Stop if:
+
+- docs would need to promise anything broader than the integrated code proves
+- docs would need to explain new commands, new dependencies, or schema changes
+
+## Exact Sequencing, Gating, Stop Rules, And Final Integration Flow
+
+### Parent-only integration and conflict rules
+
+- The parent is the only integrator.
+- If a lane needs files outside its ownership map, stop and bounce it back to the parent.
+- Do not resolve creatively across ownership boundaries.
+- If `WS-CLI` exposes contract drift, return to the parent-owned contract or integration gate.
+- If `WS-DOCS` exposes contract drift, return to the parent-owned contract or integration gate.
+- Workers may identify overlap, but they do not resolve it by expanding their scope.
+
+### Phase 0: Kickoff And Baseline
+
+Run only in `PRIMARY_ROOT`.
+
+Required commands:
 
 ```bash
-mkdir -p "$RUN_ROOT"/validation/{kickoff,baseline,closeout,docs,int,final}
+mkdir -p "$RUN_ROOT"/validation/{kickoff,baseline,validator,backend,fixture,cli,docs,final}
 mkdir -p "$RUN_ROOT"/tasks
 
 git branch --show-current | tee "$RUN_ROOT/validation/kickoff/branch.txt"
@@ -203,671 +466,263 @@ cp "$PRIMARY_ROOT/ORCH_PLAN.md" "$RUN_ROOT/validation/kickoff/ORCH_PLAN.md"
 Kickoff acceptance:
 
 - branch is `feat/m40-plus`
-- authority snapshots are captured before code execution begins
-- dirty tracked files are limited to expected authority-doc edits:
-  - `PLAN.md`
-  - `ORCH_PLAN.md`
-- run-root creation is allowed as new untracked execution state
-- any other dirty tracked repo file is a stop condition
-- no one silently cleans, stashes, reverts, or rewrites the tree to satisfy kickoff
+- authority snapshots are captured before code work
+- tracked dirty files are understood and tolerated only if the parent explicitly records them
+- no one cleans or reverts the tree to make kickoff "look clean"
 
-If kickoff fails these conditions, record the blocker under `RUN_ROOT/tasks/M53-00/` and stop for human review.
+Run baseline proof capture before changing product code:
 
-## Contract Freeze
+```bash
+cargo test -p spec-core typescript_target | tee "$RUN_ROOT/validation/baseline/spec-core-typescript-target.txt"
+cargo test -p spec-core typescript_tree | tee "$RUN_ROOT/validation/baseline/spec-core-typescript-tree.txt"
+cargo test -p spec-cli typescript_chain3 | tee "$RUN_ROOT/validation/baseline/spec-cli-typescript-chain3.txt"
+```
 
-Purpose: freeze the exact M53 execution contract before workers start.
+Stop if baseline behavior already contradicts `PLAN.md`. That means the authority plan is stale and must be rewritten before execution continues.
+
+### Phase 1: Contract Freeze
+
+The parent writes these run-state artifacts:
+
+- `baseline.json`
+- `contract-freeze.json`
+- `worktrees.json`
+- `file-ownership.json`
+- `queue.json`
+- `session-log.md`
 
 The freeze must record:
 
-- `analysis_core/*` is the only semantic owner surface
-- `decision_kernel.rs` and `helper_surface.rs` are compatibility-only passthroughs or are removed with same-change proof
-- `xtask/src/lib.rs` must prove owner-surface and retained compatibility-surface behavior separately
-- allowed write scope:
-  - `xtask/src/family/mod.rs`
-  - `xtask/src/family/decision_kernel.rs`
-  - `xtask/src/family/helper_surface.rs`
-  - `xtask/src/lib.rs`
-- conditional write scope only if truth requires it:
-  - `docs/semantic_family_capability_corpus_guide_v0.1.md`
-  - `docs/recommendation_corpus_expansion_program_v0.1.md`
-- blocker-only escape hatches, not planned write scope:
-  - `xtask/src/family/recommend.rs`
-  - `xtask/src/family/verify.rs`
-  - `xtask/src/family/promotion_artifacts.rs`
-  - `xtask/src/family/paths.rs`
-- final proof floor commands
-- frozen stop-state tuple
-- no CLI shape, JSON contract, artifact-path, or stop-state drift
-- serial cargo acceptance rule
-- parent-only merge and approval authority
+- supported TypeScript families before and after M54
+- the exact chain3 dep tuple and order
+- same-tree-only enforcement
+- rejection of molecule TypeScript, cross-library imports, seam kinds, nested chain3 members, and generic out-of-family roots
+- the lane ownership map from this runbook
+- the rule that `WS-BACKEND` and `WS-FIXTURE` are the only overlapping lanes
 
-Required freeze outputs:
+No worker starts before freeze acceptance is recorded.
 
-- `contract-freeze.json`
-- `file-ownership.json`
-- `tasks.json`
-- `queue.json`
-- `worktrees.json`
+### Phase 2: Parent-Owned Validator Contract
 
-Freeze acceptance before `WS-CLOSEOUT` may begin:
+Parent edits only:
 
-- baseline proof floor captures exist for all five locked commands
-- `contract-freeze.json` names the exact in-scope and blocker-only files
-- `file-ownership.json` matches this runbook exactly
-- `tasks.json` contains every task from `M53-00` through `M53-41`
-- `queue.json` shows only `M53-03` as the next runnable worker-launch task
-- `worktrees.json` reserves only the honest M53 topology:
-  - `WS-AUTHORITY`
-  - `WS-CLOSEOUT`
-  - `WS-INT`
-  - `WS-DOC-SYNC` as conditional only
-- the parent has explicitly recorded that only one true code lane exists for M53
-- no worker has write authority outside its frozen lane
-- no worker starts until all of the above are true
+- `spec-core/src/validator.rs`
 
-## Context-Control Rules
+Required implementation scope:
 
-Parent context stays small and authoritative:
+- add the chain3 TypeScript compatibility key
+- extend root-family classification
+- enforce family-aware dep-count gates
+- add exact ordered chain3 dep-contract validation
+- keep same-tree-only behavior
+- preserve supported existing families
+- reject nested chain3 closure members
 
-- keep only authority docs, run-root state, worker diffs, and proof captures live
-- do not keep broad repo history, unrelated docs, or speculative follow-ons in active parent context
-- parent decisions are limited to scope enforcement, docs-needed judgment, merge order, blocker recording, and final acceptance
-
-Worker prompts stay narrow:
-
-- `WS-CLOSEOUT` receives only:
-  - frozen contract bullets
-  - owned files
-  - current code truth relevant to those files
-  - exact non-goals
-  - submit conditions
-  - allowed commands
-- `WS-DOC-SYNC` receives only:
-  - parent-approved code contract summary
-  - owned docs
-  - exact wording risks to check
-  - explicit instruction not to widen scope or perform historical cleanup
-
-Worker return format is narrow:
-
-- changed files
-- commands run
-- exit codes
-- blockers
-
-Workers do not return broad narratives, redesign proposals, or follow-on planning.
-
-Operational rules:
-
-- workers do not self-expand scope
-- workers do not run the authoritative final proof floor
-- after a worker lane is merged, close that worker and remove it from active context
-- chat history is not state; run-root files are state
-
-## Workstream Topology
-
-| Lane | Workstream | Path | Branch | Owner | Purpose |
-| --- | --- | --- | --- | --- | --- |
-| `lane/m53-parent-authority` | `WS-AUTHORITY` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | `feat/m40-plus` | Parent | kickoff, baseline capture, contract freeze, worker launch, approvals |
-| `lane/m53-closeout` | `WS-CLOSEOUT` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m53/closeout` | `ws/m53-closeout` | Worker | export-surface closeout, shim honesty, and proof-wall tightening |
-| `lane/m53-doc-sync` | `WS-DOC-SYNC` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m53/doc-sync` | `ws/m53-doc-sync` | Worker | conditional docs-only wording sync |
-| `lane/m53-int` | `WS-INT` | `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m53/int` | `ws/m53-int` | Parent | parent-only integration and authoritative final proof |
-
-## File Ownership Per Lane
-
-### `WS-CLOSEOUT`
-
-Owns only:
-
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/decision_kernel.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/lib.rs`
-
-Must not edit:
-
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/verify.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/family/paths.rs`
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-- `PLAN.md`
-- `ORCH_PLAN.md`
-
-### `WS-DOC-SYNC`
-
-Owns only, and only if opened by parent:
-
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-
-Must not edit:
-
-- anything under `xtask/src/`
-- `PLAN.md`
-- `ORCH_PLAN.md`
-
-### `WS-AUTHORITY`
-
-Owns only:
-
-- `PLAN.md`
-- `ORCH_PLAN.md`
-- `RUN_ROOT/**`
-- worktree creation and removal
-- parent-side approval and blocker recording
-
-### `WS-INT`
-
-Owns only:
-
-- integration worktree state
-- merge commits
-- conflict resolution that is strictly mechanical
-- final proof captures
-- `acceptance-ledger.md`
-- final task and blocker state under `RUN_ROOT`
-
-## Task Graph
-
-| Task ID | Lane | Description | Depends on | Submit when |
-| --- | --- | --- | --- | --- |
-| `M53-00` | Parent | kickoff capture | — | kickoff artifacts written and tree state validated |
-| `M53-01` | Parent | baseline proof floor capture | `M53-00` | all five baseline command captures written |
-| `M53-02` | Parent | contract freeze and ownership freeze | `M53-01` | freeze files written and accepted |
-| `M53-03` | Parent | create worktrees and launch code lane | `M53-02` | `WS-CLOSEOUT` and `WS-INT` exist and are logged |
-| `M53-10` | `WS-CLOSEOUT` | export-surface closeout in `mod.rs` and shims | `M53-03` | `mod.rs` and shim files reflect owner-vs-compatibility truth without new logic |
-| `M53-11` | `WS-CLOSEOUT` | proof-wall tightening in `xtask/src/lib.rs` | `M53-10` | owner and compatibility proof are separate and local `cargo test -p xtask` passes |
-| `M53-12` | Parent | code-lane review and docs-needed decision | `M53-11` | parent records `docs_required` or `docs_skipped` |
-| `M53-20` | `WS-DOC-SYNC` | conditional maintainer wording sync | `M53-12` | docs, if touched, stay narrow and ownership-accurate |
-| `M53-30` | Parent | merge closeout lane into integration tree | `M53-12` | `ws/m53-closeout` merged cleanly into `ws/m53-int` |
-| `M53-31` | Parent | merge docs lane or mark skipped | `M53-30`, `M53-20` | docs lane merged, or skip recorded if not needed |
-| `M53-40` | Parent | authoritative final proof floor | `M53-31` | locked proof floor passes serially and captures are written |
-| `M53-41` | Parent | final acceptance and signoff | `M53-40` | acceptance ledger complete |
-
-## Worktree Setup Commands
-
-Run from `PRIMARY_ROOT` after `M53-02` completes:
+Focused proof commands after the validator change:
 
 ```bash
-mkdir -p "$WT_ROOT"
-
-git worktree add -b ws/m53-closeout "$WT_ROOT/closeout" feat/m40-plus
-git worktree add -b ws/m53-int "$WT_ROOT/int" feat/m40-plus
-git worktree list --porcelain | tee "$RUN_ROOT/validation/kickoff/worktrees.porcelain.txt"
+cargo test -p spec-core typescript_target | tee "$RUN_ROOT/validation/validator/spec-core-typescript-target.txt"
 ```
 
-Create the docs worktree only if `M53-12` marks `docs_required`:
+Gate to unlock parallel lanes:
+
+- validator patch is integrated in `feat/m40-plus`
+- focused validator proofs are green
+- frozen rejection wording is good enough that CLI tests do not need to invent contract language later
+
+Stop if the validator patch starts requiring backend refactors to understand basic scope. Validator is the contract, not a moving guess.
+
+### Phase 3: Safe Parallel Lanes After Validator Freeze
+
+Only now may the parent create worker worktrees.
+
+Recommended creation pattern:
 
 ```bash
-git worktree add -b ws/m53-doc-sync "$WT_ROOT/doc-sync" feat/m40-plus
-git worktree list --porcelain | tee "$RUN_ROOT/validation/docs/worktrees-doc-sync.porcelain.txt"
+git worktree add "$WT_ROOT/ws-backend" -b codex/m54-ws-backend feat/m40-plus
+git worktree add "$WT_ROOT/ws-fixture" -b codex/m54-ws-fixture feat/m40-plus
 ```
 
-If `M53-12` marks `docs_skipped`, do not create the docs worktree.
+Active overlap rules:
 
-## Workstream Plan
+- `WS-BACKEND` edits only `spec-core/src/typescript_backend.rs`
+- `WS-FIXTURE` edits only the aligned chain3 fixture files
+- neither lane edits `spec-core/src/validator.rs`
+- neither lane edits `spec-cli/tests/cli.rs`
 
-### `WS-AUTHORITY` — parent only, sequential
-
-This lane owns setup, baseline truth, freeze, worker launch, and the docs-needed decision. It is sequential and authoritative.
-
-#### Task `M53-00` — kickoff capture
-
-Files owned:
-
-- `RUN_ROOT/**`
-- `PLAN.md`
-- `ORCH_PLAN.md`
-
-Commands:
+Lane acceptance:
 
 ```bash
-mkdir -p "$RUN_ROOT"/validation/{kickoff,baseline,closeout,docs,int,final}
-mkdir -p "$RUN_ROOT"/tasks
-git branch --show-current
-git rev-parse HEAD
-git status --porcelain=v1 -uall
-cp "$PRIMARY_ROOT/PLAN.md" "$RUN_ROOT/validation/kickoff/PLAN.md"
-cp "$PRIMARY_ROOT/ORCH_PLAN.md" "$RUN_ROOT/validation/kickoff/ORCH_PLAN.md"
+# WS-BACKEND
+cargo test -p spec-core typescript_tree
+
+# WS-FIXTURE
+cargo test -p spec-core typescript_target
 ```
 
-Acceptance:
+Parent integration flow for `M54-12`:
 
-- branch is `feat/m40-plus`
-- dirty tracked files are limited to `PLAN.md` and `ORCH_PLAN.md`
-- run-root exists
-- sentinel directory `RUN_ROOT/tasks/M53-00/` is populated
-- no silent cleanup occurred
+1. integrate `WS-BACKEND` into `feat/m40-plus`
+2. rerun `cargo test -p spec-core typescript_tree`
+3. integrate `WS-FIXTURE` into `feat/m40-plus`
+4. rerun `cargo test -p spec-core typescript_target`
+5. rerun both focused commands once both are integrated
 
-#### Task `M53-01` — baseline proof floor capture
+Stop if either lane overlaps outside its ownership map or if either lane exposes a hidden dependency on the CLI test file.
 
-Files owned:
+### Phase 4: CLI Proof Wall
 
-- `RUN_ROOT/validation/baseline/*`
-- `RUN_ROOT/tasks/M53-01/*`
+Do not start this phase until validator, backend, and aligned fixture truth all exist in `feat/m40-plus`.
 
-Commands:
+Create the worktree only after `M54-12` passes:
 
 ```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh | tee "$RUN_ROOT/validation/baseline/collect_signals.txt"
-cargo xtask family recommend --format json | tee "$RUN_ROOT/validation/baseline/recommend.json"
-cargo xtask family corpus-decision --format json | tee "$RUN_ROOT/validation/baseline/corpus-decision.json"
-cargo xtask family verify-decision-contract --format json | tee "$RUN_ROOT/validation/baseline/verify-decision-contract.json"
-cargo test -p xtask | tee "$RUN_ROOT/validation/baseline/cargo-test-p-xtask.txt"
+git worktree add "$WT_ROOT/ws-cli" -b codex/m54-ws-cli feat/m40-plus
 ```
 
-Acceptance:
+`WS-CLI` responsibilities:
 
-- all five captures exist
-- baseline stop-state tuple is recorded in `baseline.json`
-- `verify-decision-contract` is `pass`
-- any failure becomes a blocker and stops execution
+- replace the aligned pre-Bun rejection proof with success-through-Bun proof
+- preserve targeted negative rejections
+- keep the proof scope bounded to chain3 and existing TypeScript boundaries
 
-#### Task `M53-02` — contract freeze and ownership freeze
-
-Files owned:
-
-- `contract-freeze.json`
-- `file-ownership.json`
-- `tasks.json`
-- `queue.json`
-- `worktrees.json`
-- `RUN_ROOT/tasks/M53-02/*`
-
-Commands:
+Lane acceptance:
 
 ```bash
-rg -n "analysis_core|decision_kernel|helper_surface" xtask/src/family/mod.rs xtask/src/family/decision_kernel.rs xtask/src/family/helper_surface.rs xtask/src/lib.rs
-rg -n "analysis_core|decision_kernel|helper_surface" docs/semantic_family_capability_corpus_guide_v0.1.md docs/recommendation_corpus_expansion_program_v0.1.md
+cargo test -p spec-cli typescript_chain3
 ```
 
-Acceptance:
+Parent integration flow for `M54-21`:
 
-- freeze files are written
-- allowed, conditional, and blocker-only write scope is recorded exactly
-- only one true code lane is recorded
-- `queue.json` permits `WS-CLOSEOUT` and nothing else
-- no worker starts before this task is marked `done`
+1. review whether `WS-CLI` changed only allowed files
+2. integrate into `feat/m40-plus`
+3. rerun `cargo test -p spec-cli typescript_chain3`
+4. if negative proof behavior changed unexpectedly, stop and fix the contract before docs begin
 
-#### Task `M53-03` — create worktrees and launch code lane
+### Phase 5: Docs And Backlog Sync
 
-Files owned:
+Docs run last, not concurrently with proof-shaping code.
 
-- `worktrees.json`
-- `RUN_ROOT/tasks/M53-03/*`
-
-Commands:
+Create the worktree only after `M54-21` passes:
 
 ```bash
-mkdir -p "$WT_ROOT"
-git worktree add -b ws/m53-closeout "$WT_ROOT/closeout" feat/m40-plus
-git worktree add -b ws/m53-int "$WT_ROOT/int" feat/m40-plus
-git worktree list --porcelain | tee "$RUN_ROOT/validation/kickoff/worktrees.porcelain.txt"
+git worktree add "$WT_ROOT/ws-docs" -b codex/m54-ws-docs feat/m40-plus
 ```
 
-Acceptance:
+`WS-DOCS` may now update:
 
-- `WS-CLOSEOUT` exists
-- `WS-INT` exists
-- `WS-DOC-SYNC` is not yet created
-- launch is logged in `session-log.md`
+- `README.md`
+- `CHANGELOG.md`
+- `TODOS.md`
 
-#### Task `M53-12` — code-lane review and docs-needed decision
+Parent integration flow for `M54-31`:
 
-Files owned:
+1. review every wording change against the integrated code and tests
+2. integrate into `feat/m40-plus`
+3. reject any claim that implies generic multi-dependency TypeScript support
 
-- `RUN_ROOT/validation/closeout/*`
-- `RUN_ROOT/validation/docs/*`
-- `RUN_ROOT/tasks/M53-12/*`
+### Phase 6: Final Integration And Proof Wall
 
-Commands:
+This phase is parent-owned and must run serially in `PRIMARY_ROOT`.
+
+Required final proof commands:
 
 ```bash
-git -C "$WT_ROOT/closeout" diff -- xtask/src/family/mod.rs xtask/src/family/decision_kernel.rs xtask/src/family/helper_surface.rs xtask/src/lib.rs
-git -C "$WT_ROOT/closeout" status --short
+cargo test -p spec-core
+cargo test -p spec-cli
+cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec --target-language typescript
+cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/unsupported_near_miss/units/pricing/checkout_chain3_unsupported_near_miss.unit.spec --target-language typescript
+cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/drift/units/pricing/checkout_chain3_drift.unit.spec --target-language typescript
+cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/under_specified/units/pricing/checkout_chain3_under_specified.unit.spec --target-language typescript
 ```
 
-Acceptance:
+Final acceptance rules:
 
-- parent confirms `WS-CLOSEOUT` stayed within file ownership
-- parent confirms proof coverage distinguishes owner vs compatibility surfaces
-- parent decides one of:
-  - `docs_required`
-  - `docs_skipped`
-- if `docs_skipped`, no docs worktree is created
-- decision is recorded in `queue.json`, `tasks.json`, and `RUN_ROOT/tasks/M53-12/acceptance.md`
+- aligned chain3 TypeScript proof passes
+- out-of-contract chain3-like paths still fail with bounded-lane rejection behavior
+- Bun is not invoked for validator-level rejects
+- monotone-up and wrapper TypeScript proofs still pass
+- docs match the actual integrated boundary
 
-### `WS-CLOSEOUT` — worker code lane
-
-This is the only true code worker. It covers both export-surface closeout and proof-wall tightening. No other code lane exists for M53.
-
-#### Task `M53-10` — export-surface closeout in `mod.rs` and shims
-
-Files owned:
-
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/decision_kernel.rs`
-- `xtask/src/family/helper_surface.rs`
-
-Commands:
-
-```bash
-git status --short
-rg -n "analysis_core|decision_kernel|helper_surface" xtask/src/family/mod.rs xtask/src/family/decision_kernel.rs xtask/src/family/helper_surface.rs
-git diff -- xtask/src/family/mod.rs xtask/src/family/decision_kernel.rs xtask/src/family/helper_surface.rs
-```
-
-Acceptance:
-
-- `mod.rs` presents `analysis_core` as the maintained owner surface
-- retained shim files are visibly compatibility-only
-- no new semantic logic is added to shim files
-- no file outside lane ownership is changed
-- `recommend.rs`, `verify.rs`, `promotion_artifacts.rs`, and `paths.rs` remain untouched unless the worker records a blocker and stops instead of editing them opportunistically
-
-#### Task `M53-11` — proof-wall tightening in `xtask/src/lib.rs`
-
-Files owned:
-
-- `xtask/src/lib.rs`
-
-Commands:
-
-```bash
-cargo test -p xtask | tee "$RUN_ROOT/validation/closeout/cargo-test-p-xtask.txt"
-git diff -- xtask/src/lib.rs
-```
-
-Acceptance:
-
-- `xtask/src/lib.rs` proves owner-surface behavior directly
-- `xtask/src/lib.rs` proves retained compatibility-surface behavior directly
-- future shim drift would fail loudly through explicit proof, not only through incidental indirect coverage
-- local `cargo test -p xtask` passes
-- `changed_files.txt` for `M53-11` lists only the allowed code files
-
-Submission rule for `WS-CLOSEOUT`:
-
-- worker returns changed files, commands run, exit codes, and blockers only
-- worker does not run the authoritative full proof floor
-- worker stops and records blocker state if forbidden files appear necessary
-
-### `WS-DOC-SYNC` — conditional worker docs lane
-
-This lane exists only if the parent decides the two named docs are no longer truthful after reviewing `WS-CLOSEOUT`.
-
-Skip condition:
-
-- if the parent review after `WS-CLOSEOUT` concludes `docs/semantic_family_capability_corpus_guide_v0.1.md` and `docs/recommendation_corpus_expansion_program_v0.1.md` are already truthful, this lane is skipped and no docs worktree is created
-
-#### Task `M53-20` — conditional maintainer wording sync
-
-Files owned:
-
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-
-Commands:
-
-```bash
-git status --short
-rg -n "analysis_core|decision_kernel|helper_surface|compatibility-only|semantic owner" docs/semantic_family_capability_corpus_guide_v0.1.md docs/recommendation_corpus_expansion_program_v0.1.md
-git diff -- docs/semantic_family_capability_corpus_guide_v0.1.md docs/recommendation_corpus_expansion_program_v0.1.md
-```
-
-Acceptance:
-
-- docs remain narrow and ownership-accurate
-- docs do not introduce new policy
-- docs do not introduce new scope
-- docs do not perform historical cleanup beyond wording required for current truth
-- docs do not imply dual ownership or peer-owner shims
-- if those constraints cannot be met, the lane records a blocker and stops
-
-Submission rule for `WS-DOC-SYNC`:
-
-- worker returns changed files, commands run, exit codes, and blockers only
-- no cargo proof commands are required for this lane
-- close the worker after merge or skip
-
-### `WS-INT` — parent only integration lane
-
-This lane merges approved worker output, runs authoritative proof, and either accepts the milestone or records a blocker and stops.
-
-#### Task `M53-30` — merge closeout lane
-
-Files owned:
-
-- integration worktree state
-- `RUN_ROOT/validation/int/*`
-- `RUN_ROOT/tasks/M53-30/*`
-
-Commands:
-
-```bash
-git -C "$WT_ROOT/int" merge --no-ff ws/m53-closeout
-```
-
-Acceptance:
-
-- merge is clean or requires only straightforward merge mechanics
-- if conflicts imply scope ambiguity or semantic disagreement, stop and record blocker state
-- worker is closed after successful merge
-
-#### Task `M53-31` — merge docs lane if opened, else mark skipped
-
-Files owned:
-
-- integration worktree state
-- `RUN_ROOT/tasks/M53-31/*`
-
-Commands if docs lane exists:
-
-```bash
-git -C "$WT_ROOT/int" merge --no-ff ws/m53-doc-sync
-```
-
-Acceptance:
-
-- docs lane merges cleanly or with only straightforward merge mechanics
-- if code truth and doc wording conflict, code truth wins and docs are corrected before final proof
-- if docs lane was never opened, mark `M53-20` and `M53-31` as `skipped` and continue
-
-#### Task `M53-40` — authoritative final proof floor
-
-Files owned:
-
-- `RUN_ROOT/validation/final/*`
-- `RUN_ROOT/tasks/M53-40/*`
-
-Commands:
-
-```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh | tee "$RUN_ROOT/validation/final/collect_signals.txt"
-cargo xtask family recommend --format json | tee "$RUN_ROOT/validation/final/recommend.json"
-cargo xtask family corpus-decision --format json | tee "$RUN_ROOT/validation/final/corpus-decision.json"
-cargo xtask family verify-decision-contract --format json | tee "$RUN_ROOT/validation/final/verify-decision-contract.json"
-cargo test -p xtask | tee "$RUN_ROOT/validation/final/cargo-test-p-xtask.txt"
-```
-
-Acceptance:
-
-- all five final captures exist
-- final stop-state tuple matches baseline exactly
-- `verify-decision-contract` is `pass`
-- if any final proof command is red, record blocker state under `RUN_ROOT/tasks/M53-40/` and `blocked.json`, then stop
-- do not keep retrying silently
-
-#### Task `M53-41` — final acceptance and signoff
-
-Files owned:
-
-- `acceptance-ledger.md`
-- `session-log.md`
-- final task sentinels
-
-Acceptance:
-
-- acceptance ledger cites command outputs, not impressions
-- all completed and skipped states are reflected in `tasks.json` and `queue.json`
-- merged workers are closed and removed from active context
-- milestone is either explicitly accepted or explicitly blocked
-
-## Merge And Integration Rules
-
-- Parent is the sole integrator and sole approval authority.
-- Integration sequence is fixed:
-  1. merge `WS-CLOSEOUT`
-  2. merge `WS-DOC-SYNC` if and only if it was opened
-  3. resolve only straightforward merge mechanics
-  4. if code truth and doc wording conflict, code truth wins and docs are corrected before final proof
-- Workers do not merge themselves.
-- If merge conflict resolution would require semantic reinterpretation, new scope, or edits outside lane ownership, stop and record blocker state.
-- If final proof floor is red, record blocker state under `RUN_ROOT` and stop. Do not continue retrying silently.
+If any final proof requires reopening validator semantics, stop and return to the parent-owned contract phase. Do not paper over it in docs or CLI tests.
 
 ## Tests And Acceptance
 
-### Baseline Truth
+### Required focused coverage by phase
 
-Baseline truth is captured by `M53-01`.
+Validator phase must cover:
 
-Required commands:
+- exact chain3 root acceptance
+- wrong dep order rejection
+- cross-library dep rejection
+- missing dep rejection
+- unsupported dep family rejection
+- missing `body.typescript` rejection
+- generic four-dependency rejection
+- nested chain3 closure-member rejection
 
-```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family verify-decision-contract --format json
-cargo test -p xtask
-```
+Backend phase must cover:
 
-Required baseline assertions:
+- exact same-tree chain3 closure rendering
+- wrapper closure recursion under a chain3 root
+- deduped emission
+- unrelated loaded unit exclusion
 
-- `recommendation_status = insufficient_real_corpus`
-- `decision_status = not_recommended`
-- `decision_action = stop`
-- `decision_basis_code = no_actionable_candidate`
-- `required_next_action = record_stop_without_new_milestone`
-- `overall_verdict = "pass"`
+CLI phase must cover:
 
-### Closeout Lane Proof
+- aligned chain3 success through Bun
+- wrong-family rejection before Bun
+- missing-`body.typescript` rejection before Bun
+- wrong-order rejection before Bun if a small explicit mutation proves it honestly
+- molecule TypeScript rejection before Bun
 
-Closeout lane proof is captured by `M53-11`.
+Docs phase acceptance:
 
-Required lane assertions:
+- `README.md` states chain3 support narrowly
+- `CHANGELOG.md` records bounded same-tree chain3 TypeScript support
+- `TODOS.md` still defers cross-library imports and generic multi-dependency TypeScript
 
-- export-surface closeout and proof-wall tightening are both landed in the same code lane
-- proof distinguishes owner-surface behavior from retained compatibility-surface behavior
-- future shim drift fails loudly
-- `cargo test -p xtask` passes locally in `WS-CLOSEOUT`
-- forbidden files remain untouched unless blocker escalation occurred
+### Definition of done
 
-### Docs Truth
+M54 is done only when:
 
-Docs truth is captured by `M53-12` and `M53-20`.
-
-Required assertions:
-
-- if docs are already truthful, docs lane is skipped and no docs worktree is created
-- if docs are touched, wording stays narrow
-- docs do not introduce new policy
-- docs do not introduce new scope
-- docs do not perform historical cleanup unrelated to M53
-- docs do not reintroduce dual-ownership language
-
-### Final Proof Floor
-
-Final proof floor is captured by `M53-40`.
-
-Required commands:
-
-```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family verify-decision-contract --format json
-cargo test -p xtask
-```
-
-Required final assertions:
-
-- all five commands pass
-- final stop-state tuple matches baseline exactly
-- `overall_verdict = "pass"`
-- no CLI shape, JSON contract, artifact-path, or stop-state drift appears
-
-### Write-Scope Enforcement
-
-Write-scope enforcement is checked at `M53-12`, `M53-30`, and `M53-41`.
-
-Required assertions:
-
-- `WS-CLOSEOUT` changed only:
-  - `xtask/src/family/mod.rs`
-  - `xtask/src/family/decision_kernel.rs`
-  - `xtask/src/family/helper_surface.rs`
-  - `xtask/src/lib.rs`
-- `WS-DOC-SYNC` changed only:
-  - `docs/semantic_family_capability_corpus_guide_v0.1.md`
-  - `docs/recommendation_corpus_expansion_program_v0.1.md`
-- any attempted change to:
-  - `xtask/src/family/recommend.rs`
-  - `xtask/src/family/verify.rs`
-  - `xtask/src/family/promotion_artifacts.rs`
-  - `xtask/src/family/paths.rs`
-  is blocker-only and requires parent stop plus human review
-
-### Failure-Mode To Gate Mapping
-
-| Failure mode from `PLAN.md` | Gate that catches it | Required signal |
-| --- | --- | --- |
-| shim drift from `analysis_core` | `M53-11`, `M53-40` | explicit compatibility-path proof fails loudly |
-| `mod.rs` still presenting shims as peer owner surfaces | `M53-10`, `M53-12` | parent review of export presentation fails |
-| proof wall failing to distinguish owner vs compatibility surfaces | `M53-11`, `M53-12` | `xtask/src/lib.rs` proof is insufficient or indirect |
-| stop-state command outputs drifting | `M53-01`, `M53-40` | baseline vs final tuple mismatch |
-| docs silently reintroducing dual-ownership language | `M53-12`, `M53-20`, `M53-31` | parent review or docs-lane review fails |
+1. the validator admits exactly `function.wrapper.pipeline.chain3.v1` under the frozen same-tree contract
+2. backend closure emission includes only the required same-tree closure
+3. aligned chain3 fixtures contain honest maintained TypeScript bodies
+4. CLI aligned proof passes
+5. negative validator boundaries remain intact
+6. no schema, command, or dependency drift was introduced
+7. docs describe the exact proven boundary and nothing broader
 
 ## Assumptions
 
-- `feat/m40-plus` remains the active execution branch for M53.
-- `PLAN.md` remains authoritative for M53 until closeout completes.
-- `analysis_core/*` itself is frozen and does not need semantic edits for honest closeout.
-- no hidden consumer outside the named shims forces rewrites in `recommend.rs`, `verify.rs`, `promotion_artifacts.rs`, or `paths.rs`
-- only one true code lane exists for M53 because the owned files are tightly coupled and define one ownership-and-proof contract
-- docs may be skipped entirely if the parent determines the landed code diff does not make them false
-- the parent can create worktrees under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m53`
-- serial execution of the locked proof floor is preferred because lock contention matters more than theoretical parallel wall-clock savings here
+- `PLAN.md` remains the authority and is not superseded mid-run.
+- `feat/m40-plus` remains the primary execution branch for M54.
+- The repo may be dirty because other agents or the user are working. The parent inspects and preserves those edits rather than reverting them.
+- `cargo test -p spec-core ...` and `cargo test -p spec-cli ...` remain the correct proof entrypoints from `PLAN.md`.
+- The aligned chain3 fixture is already semantically classifiable as `function.wrapper.pipeline.chain3.v1`; M54 is about bounded execution truth, not family-analysis expansion.
+- No new generated artifact contract needs to be authored for this milestone.
+- The parent agent is responsible for deciding whether an unexpected overlap is a real blocker or just stale worker scope. Default to blocker.
 
-## Blocker Handling
+## Parallel Subagent Optimization
 
-If a blocker appears:
+Safe optimization exists, but only in one place:
 
-- capture it under `RUN_ROOT/validation/*`
-- record the exact file, command, scope leak, and stop reason in `blocked.json`
-- update the affected task sentinel under `RUN_ROOT/tasks/<TASK_ID>/blocker.md`
-- set the affected task to `blocked` in `tasks.json` and `queue.json`
-- stop instead of widening scope silently
+- optimize by overlapping `WS-BACKEND` and `WS-FIXTURE` after validator freeze
+- do not overlap validator work with anything else
+- do not overlap CLI proof-wall work with backend or fixture truth shaping
+- do not overlap docs with unstable proof surfaces
 
-Mandatory escalation cases:
+This means the honest launch pattern is:
 
-- dirty tracked files outside expected authority-doc edits at kickoff
-- any claimed need to edit `xtask/src/family/recommend.rs`, `xtask/src/family/verify.rs`, `xtask/src/family/promotion_artifacts.rs`, or `xtask/src/family/paths.rs`
-- any proposed semantic move into or out of `analysis_core/*`
-- any merge conflict that is not straightforward mechanics
-- any final proof-floor failure
+1. parent kickoff and baseline
+2. parent contract freeze
+3. parent validator contract
+4. `WS-BACKEND` + `WS-FIXTURE` in parallel
+5. parent integration gate
+6. `WS-CLI`
+7. parent integration gate
+8. `WS-DOCS`
+9. parent final proof wall and closeout
 
-Widened scope in forbidden files requires parent stop plus human review. Workers do not have discretion to spend that scope.
-
-## Done Definition
-
-M53 is done only when:
-
-1. parent-owned sequential phases completed before any worker began
-2. the single code lane stayed within its four-file boundary
-3. the docs lane was either honestly skipped or stayed within its two-file boundary
-4. integration was parent-owned
-5. the final locked proof floor passed serially
-6. the acceptance ledger records unchanged stop-state semantics and unchanged contract surfaces
-7. the repo tells one consistent story: `analysis_core/*` owns the semantics, any retained shim is compatibility glue only, and the family-analysis lane still truthfully says `stop`
+Any orchestration that tries to create more concurrency than that is manufacturing merge risk, not saving time.

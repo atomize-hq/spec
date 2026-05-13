@@ -190,6 +190,8 @@
 
 - [x] **Wrapper TypeScript execution in `spec`** — Completed by M52 (2026-05-12). The bounded Bun-backed TypeScript lane now admits the same-tree `function.wrapper.pipeline.v1` family with the frozen direct local dep tuple `monotone_down_nonnegative -> monotone_up`, while keeping proof additive and target-specific.
 
+- [x] **Bounded same-tree chain3 TypeScript execution in `spec`** — Completed by M54 (2026-05-13). The bounded Bun-backed TypeScript lane now admits the same-tree `function.wrapper.pipeline.chain3.v1` family with the frozen direct local dep tuple `wrapper.pipeline -> monotone_up -> monotone_down_nonnegative`, while keeping proof additive, atom-only, and target-specific.
+
 - [ ] **Cross-library TypeScript helper imports** — Deferred by the M46 review. Same-tree helper execution is enough to close the current product-family mismatch; cross-library target resolution is a different portability problem.
 
-- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M52. The current lane is intentionally family-shaped: helper-aware monotone-up roots plus same-tree wrapper roots only, not arbitrary dependency topologies.
+- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M54. The current lane is intentionally family-shaped: helper-aware monotone-up roots plus same-tree wrapper roots and same-tree chain3 roots only, not arbitrary dependency topologies.

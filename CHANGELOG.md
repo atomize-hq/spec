@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **The bounded TypeScript lane now proves the same-tree wrapper family in M52** — eligible `kind:function` roots may still use the helper-aware monotone-up lane from M46, and may now also classify to `function.wrapper.pipeline.v1` when they declare the exact same-tree local dep tuple `function.arithmetic_leaf.monotone_down_nonnegative.v1` then `function.arithmetic_leaf.monotone_up.v1`. The lane remains Bun-only, atom-only, and additive to Rust proof; it still does not widen to chain3 execution, molecule execution, generic multi-dep execution, seam kinds, cross-library TypeScript resolution, `spec validate --target-language`, or `spec export --target-language`.
+- **The bounded TypeScript lane now proves the same-tree chain3 family in M54** — eligible `kind:function` roots may still use the helper-aware monotone-up lane from M46 and the same-tree wrapper lane from M52, and may now also classify to `function.wrapper.pipeline.chain3.v1` when they declare the exact same-tree local dep tuple `function.wrapper.pipeline.v1` then `function.arithmetic_leaf.monotone_up.v1` then `function.arithmetic_leaf.monotone_down_nonnegative.v1`. The lane remains Bun-only, atom-only, and additive to Rust proof; it still does not widen to molecule execution, generic multi-dep execution, seam kinds, nested chain3 closure members, cross-library TypeScript resolution, `spec validate --target-language`, or `spec export --target-language`.
 
 ## 0.14.0 - 2026-05-07
 

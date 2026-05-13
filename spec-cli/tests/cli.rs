@@ -1328,6 +1328,25 @@ fn inject_typescript_body_if_missing(unit_path: &Path, typescript_body: &str) {
     fs::write(unit_path, rewritten).unwrap();
 }
 
+fn remove_typescript_body(unit_path: &Path) {
+    let contents = fs::read_to_string(unit_path).unwrap();
+    let (before, after) = contents
+        .split_once("\n  typescript: |\n")
+        .expect("expected a typescript body block to remove");
+    let (_, tail) = after
+        .split_once("\nlocal_tests:\n")
+        .expect("expected local_tests after the typescript body block");
+    let rewritten = format!("{before}\nlocal_tests:\n{tail}");
+    fs::write(unit_path, rewritten).unwrap();
+}
+
+fn replace_in_file(path: &Path, from: &str, to: &str) {
+    let contents = fs::read_to_string(path).unwrap();
+    let rewritten = contents.replace(from, to);
+    assert_ne!(rewritten, contents, "expected fixture rewrite for `{}`", path.display());
+    fs::write(path, rewritten).unwrap();
+}
+
 fn setup_m12_data_seam_project() -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path().join("m12-data-seam");
@@ -15445,7 +15464,7 @@ fn typescript_near_miss_rejects_before_bun_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1 or function.wrapper.pipeline.v1 in M52; found function.arithmetic_leaf.monotone_down_nonnegative.v1"
+            "TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1, function.wrapper.pipeline.v1, or function.wrapper.pipeline.chain3.v1 in M52; found function.arithmetic_leaf.monotone_down_nonnegative.v1"
         ),
         "{stderr}"
     );
@@ -15595,12 +15614,100 @@ fn typescript_molecule_test_is_rejected_before_bun_runs() {
 
 #[cfg(unix)]
 #[test]
-fn typescript_chain3_wrapper_rejects_before_bun_runs() {
+fn typescript_chain3_wrapper_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
     let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
-    inject_typescript_body_if_missing(
-        &fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec"),
-        "    {\n        const base_total = pricing_total_wrapper_aligned(subtotal, discount_rate, tax_rate);\n        const surcharged_total = pricing_tax_leaf_aligned(base_total, surcharge_rate);\n        return pricing_discount_leaf_aligned(surcharged_total, loyalty_rate);\n    }",
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
     );
+    assert_output_success(
+        "aligned chain3 fixture should pass in the bounded same-tree TypeScript lane",
+        &output,
+    );
+
+    let passport = read_passport_json(
+        &fixture_dir.join("units/pricing/checkout_chain3_aligned.spec.passport.json"),
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_chain3_wrong_family_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("unsupported_near_miss");
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/checkout_chain3_unsupported_near_miss.unit.spec"),
+        "    {\n        const base_total = pricing_total_wrapper_unsupported_near_miss(subtotal, discount_rate, tax_rate);\n        const surcharged_total = pricing_tax_leaf_unsupported_near_miss(base_total, surcharge_rate);\n        return pricing_discount_leaf_unsupported_near_miss(surcharged_total, loyalty_rate);\n    }",
+    );
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec"),
+        "    {\n        const discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);\n        return pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate);\n    }",
+    );
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/pricing_tax_leaf_unsupported_near_miss.unit.spec"),
+        "    {\n        return subtotal.add(subtotal.mul(rate));\n    }",
+    );
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/pricing_discount_leaf_unsupported_near_miss.unit.spec"),
+        "    {\n        const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));\n        return discounted;\n    }",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3_unsupported_near_miss.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "unsupported chain3-like TypeScript target should be rejected before Bun"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsupported.function.v1"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "chain3 wrong-family rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_chain3_missing_typescript_body_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    remove_typescript_body(
+        &fixture_dir.join("units/pricing/pricing_total_wrapper_aligned.unit.spec"),
+    );
+
     let marker_path = fixture_dir.join("bun-invoked.txt");
     let fake_bun = format!(
         "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
@@ -15620,16 +15727,58 @@ fn typescript_chain3_wrapper_rejects_before_bun_runs() {
     );
     assert!(
         !output.status.success(),
-        "chain3 wrapper TypeScript target should be rejected in M52"
+        "chain3 targets with missing direct-dep TypeScript bodies should be rejected"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("function.wrapper.pipeline.chain3.v1"),
+        stderr.contains("TypeScript chain3 target requires direct deps to author body.typescript in M54"),
         "{stderr}"
     );
     assert!(
         !marker_path.exists(),
-        "chain3 wrapper rejection should happen before Bun build/test execution"
+        "missing body.typescript rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_chain3_wrong_dep_order_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    replace_in_file(
+        &fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec"),
+        "deps:\n  - pricing/pricing_total_wrapper_aligned\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+        "deps:\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_total_wrapper_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "chain3 targets with wrong dep order should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M54"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "wrong dep order rejection should happen before Bun build/test execution"
     );
 }
 

@@ -24,6 +24,12 @@ body:
         let surcharged_total = pricing_tax_leaf_aligned(base_total, surcharge_rate);
         pricing_discount_leaf_aligned(surcharged_total, loyalty_rate)
     }
+  typescript: |
+    {
+        const base_total = pricing_total_wrapper_aligned(subtotal, discount_rate, tax_rate);
+        const surcharged_total = pricing_tax_leaf_aligned(base_total, surcharge_rate);
+        return pricing_discount_leaf_aligned(surcharged_total, loyalty_rate);
+    }
 local_tests:
   - id: checkout_chain3_aligned_basic
     expect: checkout_chain3_aligned(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(9801, 2)

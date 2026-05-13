@@ -18,6 +18,11 @@ body:
     {
         (subtotal - subtotal * rate).max(Decimal::ZERO)
     }
+  typescript: |
+    {
+        const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));
+        return discounted;
+    }
 local_tests:
   - id: pricing_discount_leaf_aligned_basic
     expect: pricing_discount_leaf_aligned(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)

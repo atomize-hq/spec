@@ -47,14 +47,16 @@ spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
 
-## Bounded TypeScript lane (M52)
+## Bounded TypeScript lane (M54)
 
 `spec` now exposes one bounded TypeScript execution lane. It is intentionally narrow:
 
 - Bun is the only TypeScript prerequisite. The lane shells out to `bun`; no alternate Node, npm, or tsx contract is supported.
-- Eligible roots are exactly `kind: function` specs that classify to either `function.arithmetic_leaf.monotone_up.v1` or `function.wrapper.pipeline.v1`.
+- Eligible roots are exactly `kind: function` specs that classify to `function.arithmetic_leaf.monotone_up.v1`, `function.wrapper.pipeline.v1`, or the bounded same-tree `function.wrapper.pipeline.chain3.v1`.
 - Monotone-up roots may declare `deps: []` or exactly one direct local helper dep. That helper must classify to `function.helper.identity_passthrough.v1`, exist in the same loaded unit set and generated tree, and be the only direct dep of the current unit.
 - Wrapper roots must declare exactly two direct local deps in the same loaded unit set and generated tree. The ordered dep tuple is frozen to `function.arithmetic_leaf.monotone_down_nonnegative.v1` then `function.arithmetic_leaf.monotone_up.v1`, and both deps must author non-empty `body.typescript`.
+- Chain3 roots must declare exactly three direct local deps in the same loaded unit set and generated tree. The ordered dep tuple is frozen to `function.wrapper.pipeline.v1` then `function.arithmetic_leaf.monotone_up.v1` then `function.arithmetic_leaf.monotone_down_nonnegative.v1`, and every direct dep must author non-empty `body.typescript`.
+- Chain3 closure collection stays bounded. A same-tree wrapper may appear as a closure member under a chain3 root, but nested `function.wrapper.pipeline.chain3.v1` closure members remain unsupported.
 - Rust remains the default target. TypeScript proof is additive only; it writes `target_proofs.typescript` without replacing the Rust proof surface.
 - TypeScript execution is atom-only. Only `local_tests` run in this lane; `.test.spec` molecule tests remain unsupported for `--target-language typescript` and fail before Bun runs.
 - The accepted `local_tests.expect` grammar is deliberately small: `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)`. The left-hand side must be a direct call to the current unit, and both the arguments and expected value must use integer-literal `Decimal::new(...)` forms.
@@ -68,19 +70,19 @@ spec test <path> --target-language typescript
 spec status <unit-or-root> --target-language typescript
 ```
 
-`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M52, a root-level status over a mixed example like `examples/ecommerce` may stay non-green unless every unit in scope is either freshly proven in the bounded monotone-up or wrapper lane, or truthfully remains outside that lane.
+`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M54, a root-level status over a mixed example like `examples/ecommerce` may stay non-green unless every unit in scope is either freshly proven in the bounded monotone-up, wrapper, or same-tree chain3 lane, or truthfully remains outside that lane.
 
-The generated helper filenames remain frozen in M52:
+The generated helper filenames remain frozen in M54:
 
 - `__spec_ts/runtime.ts`
 - `__spec_ts/build_entry.ts`
 - `__spec_ts/local_tests.ts`
 
-Commands and surfaces that do not widen for M52:
+Commands and surfaces that do not widen for M54:
 
 - `spec validate` does not accept `--target-language`
 - `spec export` does not accept `--target-language`
-- This lane does not widen to chain3 execution, molecule execution, generic multi-dep execution, seam kinds, cross-library TypeScript resolution, `spec validate --target-language`, or `spec export --target-language`.
+- This lane does not widen to molecule execution, generic multi-dep execution, seam kinds, cross-library TypeScript resolution, nested chain3 closure members, `spec validate --target-language`, or `spec export --target-language`.
 
 ## Spec format
 

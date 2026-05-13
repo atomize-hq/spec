@@ -5,6 +5,7 @@
 //! - `kind:function`
 //! - compatibility key `function.arithmetic_leaf.monotone_up.v1`
 //! - compatibility key `function.wrapper.pipeline.v1`
+//! - compatibility key `function.wrapper.pipeline.chain3.v1`
 //! - the exact same-tree closure required by those roots
 //!
 //! It does not promise generic TypeScript parity, molecule parity, seam-kind
@@ -18,6 +19,7 @@ use crate::types::{
     TYPESCRIPT_RUNTIME_HELPER_PATH, UnitExtensions,
 };
 use crate::validator::{
+    TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY,
     TYPESCRIPT_HELPER_COMPATIBILITY_KEY, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE,
     TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
     TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY, TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
@@ -179,6 +181,18 @@ fn collect_typescript_root_closure(
             }
             Ok(())
         }
+        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
+            for dep in &spec.deps {
+                let parsed = parse_local_typescript_dep(dep, "chain3 direct dep")?;
+                let dep_spec = resolve_typescript_dep_spec(
+                    &spec.id,
+                    parsed.unit_id(),
+                    resolved_specs_by_id,
+                )?;
+                collect_typescript_closure_member(dep_spec, resolved_specs_by_id, specs_by_id, included)?;
+            }
+            Ok(())
+        }
         _ => Err(SpecError::Generator {
             message: format!(
                 "unit '{}' is not eligible for the bounded M52 TypeScript lane: semantic family '{}' is unsupported",
@@ -222,6 +236,18 @@ fn collect_typescript_closure_member(
     let review = evaluate_semantic_review_with_context(&loaded, &semantic_review_context)
         .expect("validated closure member should have a supported semantic review");
     match review.compatibility_key.as_str() {
+        TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
+            for dep in &spec.deps {
+                let parsed = parse_local_typescript_dep(dep, "wrapper closure dep")?;
+                let dep_spec = resolve_typescript_dep_spec(
+                    &spec.id,
+                    parsed.unit_id(),
+                    resolved_specs_by_id,
+                )?;
+                collect_typescript_closure_member(dep_spec, resolved_specs_by_id, specs_by_id, included)?;
+            }
+            Ok(())
+        }
         TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY
         | TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
             collect_typescript_helper_dep(spec, resolved_specs_by_id, specs_by_id, included)
@@ -863,6 +889,58 @@ mod tests {
         })
     }
 
+    fn chain3_spec(
+        id: &str,
+        wrapper_dep: &str,
+        tax_dep: &str,
+        discount_dep: &str,
+        typescript_body: &str,
+    ) -> ResolvedSpec {
+        let fn_name = id.rsplit('/').next().unwrap_or(id);
+        ResolvedSpec::from_spec(SpecStruct {
+            id: id.to_string(),
+            kind: "function".to_string(),
+            intent: Intent {
+                why: format!("TypeScript chain3 fixture for {id}."),
+            },
+            contract: Some(Contract {
+                inputs: Some(IndexMap::from([
+                    ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
+                    ("discount_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    ("tax_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    ("surcharge_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    ("loyalty_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                ])),
+                returns: Some("rust_decimal::Decimal".to_string()),
+                invariants: vec!["output >= 0".to_string()],
+            }),
+            deps: vec![
+                wrapper_dep.to_string(),
+                tax_dep.to_string(),
+                discount_dep.to_string(),
+            ],
+            imports: vec!["rust_decimal::Decimal".to_string()],
+            body: Body {
+                rust: format!(
+                    "{{ let base_total = {}(subtotal, discount_rate, tax_rate); let surcharged_total = {}(base_total, surcharge_rate); {}(surcharged_total, loyalty_rate) }}",
+                    wrapper_dep.rsplit('/').next().unwrap(),
+                    tax_dep.rsplit('/').next().unwrap(),
+                    discount_dep.rsplit('/').next().unwrap()
+                ),
+                typescript: Some(typescript_body.to_string()),
+            },
+            local_tests: vec![LocalTest {
+                id: "happy_path".to_string(),
+                expect: format!(
+                    "{fn_name}(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(992638, 5)"
+                ),
+            }],
+            links: None,
+            spec_version: Some("0.3.0".to_string()),
+            extensions: UnitExtensions::default(),
+        })
+    }
+
     fn supported_data_seam_spec(id: &str) -> LoadedSpec {
         LoadedSpec {
             source: SpecSource {
@@ -1090,6 +1168,73 @@ mod tests {
             .get(&PathBuf::from("pricing/apply_tax.ts"))
             .expect("tax module should be emitted");
         assert!(tax_module.contains("import { round } from \"../money/round.ts\";"));
+    }
+
+    #[test]
+    fn typescript_tree_renders_chain3_closure_without_unrelated_units() {
+        let helper = helper_spec("money/round");
+        let discount = monotone_down_spec(
+            "pricing/apply_discount",
+            vec!["money/round"],
+            "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
+        );
+        let tax = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["money/round"],
+            "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
+        );
+        let wrapper = wrapper_spec(
+            "pricing/calculate_total",
+            "pricing/apply_discount",
+            "pricing/apply_tax",
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
+        );
+        let chain3 = chain3_spec(
+            "pricing/checkout_chain3",
+            "pricing/calculate_total",
+            "pricing/apply_tax",
+            "pricing/apply_discount",
+            "const base_total = calculate_total(subtotal, discount_rate, tax_rate); const surcharged_total = apply_tax(base_total, surcharge_rate); return apply_discount(surcharged_total, loyalty_rate);",
+        );
+        let unrelated = monotone_up_spec(
+            "pricing/unrelated_tax",
+            vec![],
+            "return subtotal.add(subtotal.mul(rate));",
+        );
+
+        let root_ids = vec![chain3.id.clone()];
+        let tree = generate_typescript_tree(
+            &[
+                NormalizedUnit::Function(chain3),
+                NormalizedUnit::Function(wrapper),
+                NormalizedUnit::Function(discount),
+                NormalizedUnit::Function(tax),
+                NormalizedUnit::Function(helper),
+                NormalizedUnit::Function(unrelated),
+            ],
+            &root_ids,
+        )
+        .expect("chain3 closure tree should generate");
+
+        assert!(tree.contains_key(&PathBuf::from("pricing/checkout_chain3.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/calculate_total.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_discount.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_tax.ts")));
+        assert!(tree.contains_key(&PathBuf::from("money/round.ts")));
+        assert!(!tree.contains_key(&PathBuf::from("pricing/unrelated_tax.ts")));
+
+        let chain3_module = tree
+            .get(&PathBuf::from("pricing/checkout_chain3.ts"))
+            .expect("chain3 module should be emitted");
+        assert!(chain3_module.contains("import { calculate_total } from \"./calculate_total.ts\";"));
+        assert!(chain3_module.contains("import { apply_tax } from \"./apply_tax.ts\";"));
+        assert!(chain3_module.contains("import { apply_discount } from \"./apply_discount.ts\";"));
+
+        let wrapper_module = tree
+            .get(&PathBuf::from("pricing/calculate_total.ts"))
+            .expect("wrapper module should be emitted");
+        assert!(wrapper_module.contains("import { apply_discount } from \"./apply_discount.ts\";"));
+        assert!(wrapper_module.contains("import { apply_tax } from \"./apply_tax.ts\";"));
     }
 
     #[test]
