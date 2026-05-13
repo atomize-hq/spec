@@ -1,64 +1,62 @@
-# M54 Bounded Same-Tree Chain3 TypeScript Orchestration Runbook
+# M55 Bounded Cross-Library TypeScript Helper Imports Orchestration Runbook
 
 Status: **authoritative execution runbook**  
-Supersedes: **the stale M53 `ORCH_PLAN.md`**  
-Authority source: **`PLAN.md`**  
-Plan title: **`M54: Bounded Same-Tree Chain3 TypeScript Execution Plan`**  
+Supersedes: **the stale M54 `ORCH_PLAN.md`**  
+Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
+Plan title: **`M55: Bounded Cross-Library TypeScript Helper Imports Plan`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
-Base branch: **`main`**  
 Primary execution branch: **`feat/m40-plus`**  
+Base branch: **`main`**  
 Authority date: **`2026-05-13`**  
 Worker model: **GPT-5.4 with `reasoning_effort=high`**  
-Maximum safe parallelism: **2 worker lanes at once, and only after validator contract freeze**  
+Maximum safe worker concurrency: **2 concurrent worker lanes, and only after validator contract freeze**  
 Last rewritten: **`2026-05-13`**
 
 ## Summary
 
-Execute M54 from `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` on `feat/m40-plus`.
+This runbook turns `PLAN.md` into an operator-safe parent/worker execution flow for M55.
 
-`PLAN.md` is the only scope authority. This runbook converts that plan into an operator-safe session flow.
+M55 is narrow. It extends the existing Bun-backed TypeScript lane to allow **bounded cross-library helper imports only**. It does **not** authorize generic cross-library TypeScript execution. It does **not** authorize direct cross-library wrapper roots. It does **not** authorize direct cross-library chain3 roots. It does **not** authorize test-only mutation of the canonical example as an escape hatch.
 
-M54 is a bounded execution milestone. It does one thing: extend the existing Bun-backed TypeScript lane to execute exactly `function.wrapper.pipeline.chain3.v1` when the root and all required members live in the same loaded tree. It does not authorize generic multi-dependency TypeScript execution, generic graph execution, cross-library resolution, molecule TypeScript, seam-kind expansion, passport/export schema changes, or new infrastructure.
+The operator truth for M55 is:
 
-The orchestration truth is:
+1. The canonical real-user proof path is `examples/crosslib-app/units/pricing/apply_tax.unit.spec`.
+2. The parent owns kickoff, contract freeze, validator changes, all integration, all gates, and final signoff.
+3. The validator contract freezes first in `feat/m40-plus`.
+4. Only after that freeze may two worker lanes overlap:
+   - backend helper resolution and import rendering
+   - CLI proof wall plus maintained example authoring and any pre-frozen additive support-fixture work
+5. Docs and backlog updates are strictly last.
+6. The parent is the only integrator. Workers never merge each other.
+7. If the only way to make the canonical example pass is to inject temporary `body.typescript` during tests, stop. That is outside M55.
 
-1. the validator contract is the critical path and goes first
-2. the validator phase is parent-owned in this runbook and stays serialized
-3. backend closure work and aligned fixture TypeScript bodies may run in parallel only after the validator contract is frozen in the primary branch
-4. the CLI proof wall waits for validator truth, backend truth, and aligned fixture truth
-5. docs and backlog sync run last
-6. final integration, final proof commands, and signoff are parent-owned
-
-If the implementation starts drifting toward "support any three-dependency TypeScript root" or "resolve helpers across libraries," stop and re-scope. That is not M54.
+`PLAN.md` is the only authority for product scope. The existing `ORCH_PLAN.md` is structural reference only.
 
 ## Hard Guards
 
 - `PLAN.md` is the sole scope authority.
-- The only new TypeScript execution family admitted by M54 is `function.wrapper.pipeline.chain3.v1`.
-- Support is keyed by semantic family compatibility key, not by direct dependency count.
-- The validator contract is the hinge. No parallel code lanes begin until it is frozen in the primary branch.
-- No generic multi-dependency TypeScript support.
-- No generic graph executor.
-- No cross-library imports or cross-library resolution.
-- Molecule TypeScript stays rejected before Bun.
-- No passport schema changes.
-- No export schema changes.
-- No new crates, services, commands, or runtime dependencies unless `PLAN.md` explicitly authorizes them. It does not.
-- `spec-core/src/validator.rs` is parent-owned during the validator phase and must not be edited concurrently elsewhere.
-- `spec-core/src/typescript_backend.rs` and the aligned chain3 fixture `.unit.spec` files are the only safe parallel surfaces after freeze.
-- `spec-cli/tests/cli.rs` waits until validator, backend, and aligned fixture truth are all integrated.
-- `README.md`, `CHANGELOG.md`, and `TODOS.md` wait until code paths and proof surfaces are stable.
-- Final merge, final proof commands, and acceptance judgment are parent-owned.
-- Do not revert, clean, or rewrite other people’s edits.
+- M55 supports cross-library imports only when the imported dep is a helper leaf in a helper slot already legal in the bounded TypeScript lane.
+- Direct wrapper root deps remain local-only.
+- Direct chain3 root deps remain local-only.
+- The canonical green path is `examples/crosslib-app/units/pricing/apply_tax.unit.spec`.
+- Recursive wrapper and chain3 shared-helper reuse must be proven, but a second maintained public example is not required.
+- The parent owns `spec-core/src/validator.rs` for the entire run. No worker edits it.
+- The parent is the only integrator onto `feat/m40-plus`.
+- Workers may edit source `.unit.spec` files only. They must not author `.spec.passport.json`, `.test.evidence.json`, or generated code as source truth.
+- `README.md`, `examples/crosslib-app/README.md`, `CHANGELOG.md`, and `TODOS.md` stay untouched until proof is green.
+- `spec-cli/tests/cli.rs` has one owner only.
+- No new crates, commands, runtime channels, schema changes, or broad resolver stack.
+- Support-fixture ownership for `WS-B-PROOF` must be frozen to exact file paths before that lane starts. Default is an empty list.
 
-Stop immediately and re-scope if any of these become true:
+Stop and re-scope immediately if any of these become true:
 
-1. chain3 support requires a generic graph executor
-2. passing the aligned path requires cross-library dependency resolution
-3. TypeScript molecule execution becomes necessary
-4. passport or export schema changes appear necessary
-5. the aligned fixture cannot be classified as `function.wrapper.pipeline.chain3.v1`
-6. the work starts broadening into generic multi-root or multi-library TypeScript support
+1. The canonical example needs direct cross-library wrapper or chain3 root deps to pass.
+2. Backend support requires a second TypeScript-only library resolver instead of loaded-unit truth.
+3. The validator or backend change implies generic cross-library TypeScript execution.
+4. Recursive proof requires generic graph execution instead of the bounded closure contract.
+5. Passport, export, or status schemas need new fields.
+6. The canonical example can only pass via `inject_typescript_body_if_missing`, test-only file mutation, or any other temporary body injection trick.
+7. Docs would need to promise anything broader than “cross-library helper imports in the bounded TypeScript lane.”
 
 ## Concrete Worktree And Branch Layout
 
@@ -66,252 +64,210 @@ Use this exact topology.
 
 ```bash
 PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec
-WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m54
-RUN_ROOT=$PRIMARY_ROOT/.runs/m54_bounded_same_tree_chain3
+WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m55
+RUN_ROOT=$PRIMARY_ROOT/.runs/m55_bounded_cross_library_helper_imports
 ```
 
 ### Branch inventory
 
 | Lane | Path | Branch | Owner | Purpose |
 | --- | --- | --- | --- | --- |
-| Authority + integration | `PRIMARY_ROOT` | `feat/m40-plus` | Parent | kickoff, validator phase, integration, final proofs |
-| `WS-BACKEND` | `$WT_ROOT/ws-backend` | `codex/m54-ws-backend` | Worker | bounded TypeScript backend closure only |
-| `WS-FIXTURE` | `$WT_ROOT/ws-fixture` | `codex/m54-ws-fixture` | Worker | aligned chain3 fixture TypeScript bodies only |
-| `WS-CLI` | `$WT_ROOT/ws-cli` | `codex/m54-ws-cli` | Worker | CLI proof wall after backend + fixture integration |
-| `WS-DOCS` | `$WT_ROOT/ws-docs` | `codex/m54-ws-docs` | Worker | docs and backlog sync after proof surfaces stabilize |
+| Primary authority + integration | `PRIMARY_ROOT` | `feat/m40-plus` | Parent | kickoff, validator, integration, final proof wall |
+| `WS-A-BACKEND` | `$WT_ROOT/ws-a-backend` | `codex/m55-backend-helper-imports` | Worker | `spec-core/src/typescript_backend.rs` only |
+| `WS-B-PROOF` | `$WT_ROOT/ws-b-proof` | `codex/m55-cli-example-proof` | Worker | CLI proof wall, canonical example bodies, exact pre-frozen support fixtures |
+| `WS-C-DOCS` | `$WT_ROOT/ws-c-docs` | `codex/m55-docs-last` | Worker | docs and backlog after proof is green |
 
-Rules:
+### Worktree creation rules
 
-- There is no separate validator worktree in the default topology. The parent executes the validator contract in `PRIMARY_ROOT`.
-- `WS-BACKEND` and `WS-FIXTURE` are the only lanes allowed to overlap.
-- `WS-CLI` and `WS-DOCS` are serialized behind earlier gates.
-- If the parent chooses to delegate the validator anyway, that worker must be the only active code lane and must finish before any other worker starts.
+- Do not create any worker worktree before `M55-02` validator freeze is integrated in `feat/m40-plus`.
+- Create `WS-A-BACKEND` and `WS-B-PROOF` from the same frozen `feat/m40-plus` head.
+- Create `WS-C-DOCS` only after `M55-21` is green.
+- If the primary tree is dirty, record it in `baseline.json` before creating worktrees. Do not stash or clean by default.
 
-## Orchestration State
-
-All durable orchestration state lives under:
+### Recommended creation commands
 
 ```bash
-RUN_ROOT=$PRIMARY_ROOT/.runs/m54_bounded_same_tree_chain3
+mkdir -p "$WT_ROOT"
+
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-a-backend" -b codex/m55-backend-helper-imports feat/m40-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-b-proof" -b codex/m55-cli-example-proof feat/m40-plus
+# create ws-c-docs only after proof is green
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-c-docs" -b codex/m55-docs-last feat/m40-plus
 ```
 
-`RUN_ROOT` and `.runs/m54_*` are execution state, not product source. They are the operator ledger for the session and must not be treated as authored repo truth.
+## Durable Orchestration State
 
-### Run-state inventory
+All durable session state lives under:
+
+```bash
+$PRIMARY_ROOT/.runs/m55_bounded_cross_library_helper_imports
+```
+
+This directory is orchestration state, not product truth.
+
+### Required run-state artifacts
 
 | Path | Purpose | Owner |
 | --- | --- | --- |
-| `baseline.json` | kickoff branch, commit, dirty-tree, and baseline-proof metadata | Parent |
-| `contract-freeze.json` | frozen M54 execution contract, boundaries, and stop rules | Parent |
-| `worktrees.json` | active worktree and branch inventory for every lane | Parent |
-| `file-ownership.json` | exact owned-file map per task and lane | Parent |
-| `tasks.json` | durable task ledger with task definitions and ownership | Parent |
-| `queue.json` | runnable-state queue and dependency tracking | Parent |
-| `session-log.md` | chronological operator log of launches, integrations, stops, and resumptions | Parent |
-| `acceptance-ledger.md` | final acceptance checklist and proof signoff ledger | Parent |
-| `validation/kickoff/*` | branch, status, and authority snapshots | Parent |
-| `validation/baseline/*` | baseline proof captures before product-code edits | Parent |
-| `validation/validator/*` | validator task proof captures | Parent |
-| `validation/backend/*` | backend lane proof captures and integration evidence | Parent |
-| `validation/fixture/*` | fixture lane proof captures and integration evidence | Parent |
-| `validation/cli/*` | CLI lane proof captures and integration evidence | Parent |
-| `validation/docs/*` | docs review and wording-validation captures | Parent |
-| `validation/final/*` | final proof wall captures and closeout evidence | Parent |
+| `baseline.json` | kickoff branch, commit, dirty-tree, baseline command expectations | Parent |
+| `contract-freeze.json` | frozen M55 contract, negative wall, stop rules, unlock rules | Parent |
+| `worktrees.json` | exact worktree paths, branches, and lane states | Parent |
+| `file-ownership.json` | exact owned file map per task and lane | Parent |
+| `tasks.json` | durable task definitions, dependencies, and states | Parent |
+| `queue.json` | runnable queue and current task state machine | Parent |
+| `session-log.md` | chronological run log with launches, submissions, integrations, and stops | Parent |
+| `acceptance-ledger.md` | final signoff checklist and artifact references | Parent |
+| `final-proof-manifest.json` | final proof commands, exit codes, and artifact paths | Parent |
+| `final-diff-summary.md` | parent-authored summary of landed diffs by lane | Parent |
+| `validation/kickoff/` | branch, head, git-status, authority snapshots | Parent |
+| `validation/baseline/` | pre-change proof captures, including expected failure on canonical TS path | Parent |
+| `validation/validator/` | validator-focused proof captures | Parent |
+| `validation/backend/` | backend-focused proof captures and import-render evidence | Parent |
+| `validation/proof/` | CLI/example/support-fixture proof captures | Parent |
+| `validation/docs/` | wording review captures | Parent |
+| `validation/final/` | final serial proof wall and closeout evidence | Parent |
+| `handoffs/` | worker briefs and worker result summaries | Parent |
 
-Rules:
+### Required `baseline.json` contents
 
-- `tasks.json` and `queue.json` are the source of truth for orchestration progress.
-- Per-task sentinel directories support the queue; they do not replace it.
-- Product truth lives in repo source files and validated proofs, not in run-state notes.
+`baseline.json` must include at least:
+
+- `milestone`: `M55`
+- `authority_plan_path`
+- `authority_plan_head_commit`
+- `primary_branch`
+- `primary_head_commit`
+- `dirty_tree_summary`
+- `dirty_tree_files`
+- `canonical_example_path`
+- `baseline_commands`
+- `baseline_expected_truth`
+- `baseline_artifact_paths`
+- `stop_rules_version`
+
+### Required `contract-freeze.json` contents
+
+`contract-freeze.json` must include at least:
+
+- `milestone`: `M55`
+- `authority_plan_path`
+- `authority_plan_head_commit`
+- `frozen_at_primary_commit`
+- `primary_branch`
+- `canonical_example_path`
+- `exact_scope_claim`
+- `negative_wall`
+- `allowed_worker_lanes`
+- `file_ownership_version`
+- `support_fixture_paths_for_ws_b_proof`
+- `phase_commands`
+- `integration_order`
+- `merge_conflict_policy`
+- `worker_return_contract`
+- `exact_stop_rules`
+
+### Queue state machine
+
+Every task in `tasks.json` and `queue.json` uses only these states:
+
+- `queued`
+- `ready`
+- `running`
+- `blocked`
+- `submitted`
+- `integrated`
+- `closed`
+
+A worker may move a task only to `submitted` or `blocked`. Only the parent may mark `integrated` or `closed`.
 
 ## Per-Task Sentinel Convention
 
-Every task and worker lane gets a dedicated sentinel directory:
+Each task gets a dedicated sentinel directory:
 
 ```bash
 $RUN_ROOT/tasks/<TASK_ID>/
 ```
 
-Required sentinel files:
+Required files:
 
 - `status.json`
 - `owner.txt`
 - `branch.txt`
+- `write_scope.txt`
 - `commands.txt`
 - `changed_files.txt`
 - `acceptance.md`
 - `blocker.md`
 
-Sentinel file meanings:
+### Sentinel file meanings
 
-- `status.json`: machine-readable task state, timestamps, and current disposition
-- `owner.txt`: parent or worker owner label for the task
-- `branch.txt`: the branch used for execution or integration
-- `commands.txt`: exact commands run plus observed exit codes
-- `changed_files.txt`: newline-delimited touched-file list, even when empty
-- `acceptance.md`: concise statement of what was proven and what remains open
-- `blocker.md`: concrete blockers or unresolved assumptions; empty when not blocked
+- `status.json`: `task_id`, `state`, `owner`, `depends_on`, `started_at`, `submitted_at`, `integrated_at`
+- `owner.txt`: `parent` or the exact worker lane id
+- `branch.txt`: execution branch for the task
+- `write_scope.txt`: frozen allowed write scope for the task
+- `commands.txt`: exact commands run and exit codes
+- `changed_files.txt`: newline-delimited changed file list
+- `acceptance.md`: what was proven, what remains open
+- `blocker.md`: one concrete blocker or `none`
 
-Rules:
+Sentinel rules:
 
-- The parent updates task state in `queue.json` and mirrors key task details in the sentinel directory.
-- Workers return narrow summaries that populate `commands.txt`, `changed_files.txt`, and `blocker.md`.
-- Chat history is not the run ledger.
-- A task is not complete until both its queue state and sentinel acceptance are updated.
+- The parent creates every sentinel directory before a task starts.
+- The worker result is considered incomplete until `commands.txt`, `changed_files.txt`, and `acceptance.md` are populated.
+- Chat history is not the durable ledger.
+- A task is not done when a worker says “finished”; it is done only after parent integration and gate rerun.
 
 ## Context-Control Rules
 
-- The parent owns `PLAN.md` and `ORCH_PLAN.md`. Workers do not edit either file.
-- The parent owns orchestration state under `RUN_ROOT`.
-- One task per worker. No worker prompt may authorize opportunistic side work.
-- Each lane has a frozen file-ownership map. If a worker needs a file outside its map, it stops and hands control back to the parent.
-- The primary branch is the only integration branch. Workers submit patches or commits; the parent integrates them.
-- The parent records all phase transitions in run-state files. Chat history is not the run ledger.
-- No worker may silently rebase away conflicts on shared files. Any overlap outside the declared ownership map is a blocker, not an invitation to improvise.
-- The parent must freeze exact rejection expectations before CLI work begins so the CLI lane does not invent new contract language.
-- The parent must keep negative TypeScript boundaries truthful:
-  - cross-library imports rejected
-  - molecule TypeScript rejected
-  - seam-kind TypeScript rejected
-  - generic four-dependency and other out-of-family roots rejected
-- The docs lane can describe only behavior already proven in the integrated branch.
+- The parent owns `PLAN.md`, this runbook, and all `.runs/m55_*` state.
+- Workers get only the minimum prompt necessary: goal, scope, owned files, stop rules, acceptance, and the exact commands they should run.
+- Do not forward one worker’s raw transcript into another worker.
+- Worker outputs must stay narrow.
+- No worker may expand its write scope mid-flight. Any new file request goes back to the parent.
+- `spec-core/src/` is a contract seam. Only the parent touches `validator.rs`; only `WS-A-BACKEND` touches `typescript_backend.rs`.
+- `spec-cli/tests/cli.rs` is conflict-prone. Only `WS-B-PROOF` touches it.
+- The canonical example source files stay owned by `WS-B-PROOF`, not docs.
+- Docs worker never edits product code or spec fixtures.
+- The parent keeps summaries small and updates `queue.json` instead of carrying state in chat.
+- When validation feedback matters, use machine-readable or targeted test outputs and store them under `validation/*`; do not rely on memory or paraphrased stderr.
 
-## Workstream Plan
+## File Ownership Map
 
-| ID | Lane | Owner | Write scope | Depends on | Exit condition |
-| --- | --- | --- | --- | --- | --- |
-| `M54-00` | Kickoff + baseline | Parent | run-state only | none | branch, dirty-tree, authority snapshots, baseline proofs captured |
-| `M54-01` | Contract freeze | Parent | run-state only | `M54-00` | file ownership, task graph, stop rules, and gates frozen |
-| `M54-02` | Validator contract | Parent | `spec-core/src/validator.rs` | `M54-01` | exact chain3 validator contract integrated in `feat/m40-plus` with focused proof |
-| `M54-10` | `WS-BACKEND` | Worker | `spec-core/src/typescript_backend.rs` | `M54-02` | exact chain3 same-tree closure emission lands cleanly |
-| `M54-11` | `WS-FIXTURE` | Worker | aligned chain3 fixture `.unit.spec` files | `M54-02` | aligned chain3 fixture truth has maintained `body.typescript` coverage |
-| `M54-12` | Backend + fixture integration gate | Parent | primary branch only | `M54-10`, `M54-11` | both lanes integrated, conflicts resolved, focused proof rerun |
-| `M54-20` | `WS-CLI` | Worker | `spec-cli/tests/cli.rs` and explicit small fixture mutations only if required | `M54-12` | aligned pass proof and negative rejects are green |
-| `M54-21` | CLI integration gate | Parent | primary branch only | `M54-20` | CLI proof wall integrated and focused proof rerun |
-| `M54-30` | `WS-DOCS` | Worker | `README.md`, `CHANGELOG.md`, `TODOS.md` | `M54-21` | docs match exact proven boundary and nothing broader |
-| `M54-31` | Docs integration gate | Parent | primary branch only | `M54-30` | docs integrated after proof surface review |
-| `M54-40` | Final proof wall + closeout | Parent | none beyond small conflict resolution if needed | `M54-31` | full acceptance commands pass and closeout ledger is complete |
+### Parent-owned throughout
 
-### `M54-00` Kickoff + baseline
+- `spec-core/src/validator.rs`
+- all files under `$RUN_ROOT/`
+- final integration commits on `feat/m40-plus`
 
-- Owner: Parent
-- Unlock condition: none
-- Owned files: run-state only under `RUN_ROOT`
-- Acceptance:
-- branch snapshot, head snapshot, and dirty-tree capture exist
-- authority snapshots for `PLAN.md` and `ORCH_PLAN.md` exist
-- baseline proof captures exist for the focused pre-change commands
-- no product-source files were edited during kickoff
+### `WS-A-BACKEND` owned files
 
-### `M54-01` Contract freeze
+- `spec-core/src/typescript_backend.rs`
 
-- Owner: Parent
-- Unlock condition: `M54-00` done
-- Owned files: `baseline.json`, `contract-freeze.json`, `worktrees.json`, `file-ownership.json`, `tasks.json`, `queue.json`, `session-log.md`
-- Acceptance:
-- `contract-freeze.json` records the exact M54 boundaries and stop rules
-- `file-ownership.json` records lane ownership without overlap beyond planned integration points
-- `tasks.json` and `queue.json` define every M54 task and dependency
-- validator-first sequencing is explicitly frozen before any worker launch
+### `WS-B-PROOF` owned files
 
-### `M54-02` Validator contract
+Always owned:
 
-- Owner: Parent
-- Unlock condition: `M54-01` done
-- Owned files: `spec-core/src/validator.rs`
-- Acceptance:
-- validator admits only `function.wrapper.pipeline.chain3.v1` as the new M54 TypeScript root family
-- exact ordered same-tree chain3 dep contract is enforced
-- cross-library deps stay rejected
-- molecule TypeScript stays rejected
-- nested chain3 closure members stay rejected
-- focused validator proof capture is green and stored under `validation/validator/`
+- `spec-cli/tests/cli.rs`
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+- `examples/shared-spec/units/money/round.unit.spec`
 
-### `M54-10` Backend lane
+Conditionally owned:
 
-- Owner: Worker
-- Unlock condition: `M54-02` integrated in `feat/m40-plus`
-- Owned files: `spec-core/src/typescript_backend.rs`
-- Acceptance:
-- backend emits the exact same-tree chain3 closure and nothing broader
-- wrapper recursion under a chain3 root works without unrelated unit leakage
-- monotone-up and wrapper behavior are preserved
-- worker return includes only changed files, commands with exit codes, and blockers or assumptions
+- exact additive support-fixture file paths frozen by the parent in `file-ownership.json` before launch
 
-### `M54-11` Fixture lane
+Rules for support fixtures:
 
-- Owner: Worker
-- Unlock condition: `M54-02` integrated in `feat/m40-plus`
-- Owned files: aligned chain3 fixture `.unit.spec` files only
-- Acceptance:
-- aligned root and required closure members have truthful non-empty `body.typescript`
-- no new units are added
-- no negative fixtures are widened unless the parent explicitly reassigns them
-- worker return includes only changed files, commands with exit codes, and blockers or assumptions
+- Default is `[]`.
+- The parent must decide before launch whether support fixtures are needed.
+- If needed, the parent must list exact fixture file paths, not globs.
+- If later evidence shows additional fixture files are required, stop `WS-B-PROOF`, update `file-ownership.json`, and relaunch or re-brief. Do not silently broaden scope mid-lane.
 
-### `M54-12` Backend + fixture integration gate
+### `WS-C-DOCS` owned files
 
-- Owner: Parent
-- Unlock condition: `M54-10` and `M54-11` submitted
-- Owned files: primary branch integration surface only
-- Acceptance:
-- `WS-BACKEND` and `WS-FIXTURE` diffs are reviewed against their ownership maps
-- both lanes are integrated by the parent only
-- focused backend and validator-adjacent proofs are rerun after integration
-- no hidden dependency on CLI files remains
-
-### `M54-20` CLI proof wall
-
-- Owner: Worker
-- Unlock condition: `M54-12` done
-- Owned files: `spec-cli/tests/cli.rs` plus explicit tiny fixture mutations only if parent-approved
-- Acceptance:
-- aligned chain3 TypeScript proof succeeds through Bun
-- negative chain3-like paths still reject before Bun where required
-- proof scope stays bounded to chain3 and existing TypeScript rules
-- worker return includes only changed files, commands with exit codes, and blockers or assumptions
-
-### `M54-21` CLI integration gate
-
-- Owner: Parent
-- Unlock condition: `M54-20` submitted
-- Owned files: primary branch integration surface only
-- Acceptance:
-- CLI diff stays within the approved ownership map
-- parent integrates the lane and reruns `cargo test -p spec-cli typescript_chain3`
-- any contract drift discovered here routes back to the parent-owned contract or integration gate, not to an ad hoc worker fix
-
-### `M54-30` Docs and backlog sync
-
-- Owner: Worker
-- Unlock condition: `M54-21` done
-- Owned files: `README.md`, `CHANGELOG.md`, `TODOS.md`
-- Acceptance:
-- docs state bounded same-tree chain3 TypeScript support accurately
-- docs do not imply generic multi-dependency TypeScript support
-- deferred items remain deferred in `TODOS.md`
-- worker return includes only changed files, commands with exit codes, and blockers or assumptions
-
-### `M54-31` Docs integration gate
-
-- Owner: Parent
-- Unlock condition: `M54-30` submitted
-- Owned files: primary branch integration surface only
-- Acceptance:
-- parent integrates docs only after verifying wording against integrated code and proofs
-- any contract drift exposed by docs returns to the parent-owned contract or integration gate
-- no broader support claims land accidentally
-
-### `M54-40` Final proof wall + closeout
-
-- Owner: Parent
-- Unlock condition: `M54-31` done
-- Owned files: final run-state captures and narrow conflict resolution only if required
-- Acceptance:
-- final proof commands all run serially in `PRIMARY_ROOT`
-- aligned chain3 proof passes
-- out-of-contract paths still fail with bounded behavior
-- `acceptance-ledger.md` records final signoff, residual concerns, and closeout status
+- `README.md`
+- `examples/crosslib-app/README.md`
+- `CHANGELOG.md`
+- `TODOS.md`
 
 ## Worker Return Contract
 
@@ -321,41 +277,214 @@ Each worker returns only:
 - commands run with exit codes
 - blockers or unresolved assumptions
 
+Each worker return must be written into its handoff packet under `$RUN_ROOT/handoffs/<TASK_ID>.md` and mirrored into the task sentinel files.
+
 Parent review rules:
 
-- the parent reviews worker summaries plus narrow diffs only, not full transcripts
-- the parent records accepted results into the task sentinel directory and `queue.json`
-- the parent closes workers after integration; no worker remains open after its lane is merged or rejected
-- workers do not become ad hoc integration agents after submission
+- The parent reviews narrow diffs only, scoped to the lane’s ownership map.
+- The parent reviews command outcomes and blockers, not full worker transcripts.
+- The parent integrates one worker lane at a time.
+- The parent reruns the relevant gates after each integration before touching the next lane.
+- After a lane is integrated or rejected, the parent closes that worker. Workers do not remain open as ad hoc follow-up agents.
+- If merge feedback requires edits outside the lane’s ownership map, bounce the lane back with a narrower brief or explicit ownership-map update first. Do not silently broaden scope.
+
+## Workstream Plan
+
+| ID | Task | Owner | Write scope | Depends on | Unlock condition | Exit criteria |
+| --- | --- | --- | --- | --- | --- | --- |
+| `M55-00` | Kickoff + baseline capture | Parent | `$RUN_ROOT/**` | none | repo available on `feat/m40-plus` | authority snapshots, dirty-tree capture, baseline proofs stored |
+| `M55-01` | Contract freeze + ownership map | Parent | `$RUN_ROOT/**` | `M55-00` | baseline recorded | `contract-freeze.json`, `file-ownership.json`, `tasks.json`, `queue.json`, `worktrees.json` frozen |
+| `M55-02` | Validator contract | Parent | `spec-core/src/validator.rs` | `M55-01` | contract frozen | validator change integrated on `feat/m40-plus` with focused proof green |
+| `M55-10` | Backend helper resolution + import rendering | `WS-A-BACKEND` | `spec-core/src/typescript_backend.rs` | `M55-02` | validator contract integrated | backend lane submitted with tests and no scope drift |
+| `M55-20` | CLI proof wall + canonical example truth + exact support fixtures | `WS-B-PROOF` | `spec-cli/tests/cli.rs`, canonical example specs, exact pre-frozen support fixtures | `M55-02` | validator contract integrated and fixture paths frozen | worker submits green proof wall or explicit blocker |
+| `M55-21` | Parent integration gate for backend then proof lane | Parent | `feat/m40-plus` integration only | `M55-10`, `M55-20` | both worker lanes submitted | both diffs integrated by parent and post-merge proof reruns green |
+| `M55-30` | Docs + backlog sync | `WS-C-DOCS` | docs files only | `M55-21` | proof green and wording frozen | docs submitted with exact narrow M55 language |
+| `M55-31` | Parent docs integration gate | Parent | `feat/m40-plus` integration only | `M55-30` | docs lane submitted | docs integrated and wording verified against proof |
+| `M55-40` | Final serial proof wall + closeout | Parent | `$RUN_ROOT/**` and minimal fix-forward if required | `M55-31` | all prior tasks integrated | final commands pass, manifests written, closeout recorded |
+
+### `M55-00` Kickoff + baseline capture
+
+Owner: Parent  
+Write scope: `$RUN_ROOT/**`
+
+Required captures:
+
+```bash
+mkdir -p "$RUN_ROOT"/{validation/{kickoff,baseline,validator,backend,proof,docs,final},tasks,handoffs}
+
+git -C "$PRIMARY_ROOT" branch --show-current | tee "$RUN_ROOT/validation/kickoff/branch.txt"
+git -C "$PRIMARY_ROOT" rev-parse HEAD | tee "$RUN_ROOT/validation/kickoff/head.txt"
+git -C "$PRIMARY_ROOT" status --porcelain=v1 -uall | tee "$RUN_ROOT/validation/kickoff/git-status.porcelain.txt"
+cp "$PRIMARY_ROOT/PLAN.md" "$RUN_ROOT/validation/kickoff/PLAN.md"
+cp "$PRIMARY_ROOT/ORCH_PLAN.md" "$RUN_ROOT/validation/kickoff/ORCH_PLAN.previous.md"
+```
+
+Baseline proof captures:
+
+```bash
+cargo test -p spec-core typescript_target | tee "$RUN_ROOT/validation/baseline/spec-core-typescript-target.txt"
+cargo test -p spec-core typescript_tree | tee "$RUN_ROOT/validation/baseline/spec-core-typescript-tree.txt"
+cargo test -p spec-cli typescript | tee "$RUN_ROOT/validation/baseline/spec-cli-typescript.txt"
+
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript \
+  | tee "$RUN_ROOT/validation/baseline/canonical-apply-tax-typescript-test.txt"
+
+cargo run -p spec-cli -- status examples/crosslib-app --target-language typescript --format json \
+  | tee "$RUN_ROOT/validation/baseline/canonical-crosslib-status-typescript.json"
+```
+
+`baseline.json` must record:
+
+- authority commit from `PLAN.md`
+- current branch
+- current HEAD commit
+- dirty-tree summary and file list
+- canonical example path
+- exact baseline commands
+- expected baseline truth:
+  - current canonical TypeScript path is not yet green
+  - current M55 negative wall is not yet fully landed
+- artifact paths for all kickoff and baseline captures
+- exact stop rules snapshot
+
+Exit criteria:
+
+- kickoff snapshots exist
+- current branch is `feat/m40-plus`
+- baseline captures prove current pre-M55 behavior
+- any existing dirty files are recorded, not “cleaned up”
+
+Stop rule:
+
+- If baseline already shows the canonical TypeScript path green, stop and reconcile `PLAN.md` first.
+
+### `M55-01` Contract freeze + ownership map
+
+Owner: Parent  
+Write scope: `$RUN_ROOT/**`
+
+Required artifacts:
+
+- `baseline.json`
+- `contract-freeze.json`
+- `worktrees.json`
+- `file-ownership.json`
+- `tasks.json`
+- `queue.json`
+- `session-log.md`
+
+`contract-freeze.json` must freeze:
+
+- authority commit
+- current branch
+- current primary commit
+- dirty-tree summary reference
+- canonical example path
+- exact M55 scope claim
+- negative wall list:
+  - unresolved alias
+  - missing shared helper
+  - wrong helper family
+  - missing helper `body.typescript`
+  - direct shared wrapper root dep
+  - direct shared chain3 root dep
+- allowed worker lanes:
+  - `WS-A-BACKEND`
+  - `WS-B-PROOF`
+  - `WS-C-DOCS`
+- exact commands for each phase
+- exact stop rules
+- integration order:
+  - parent validator
+  - backend lane
+  - proof lane
+  - docs lane
+  - final closeout
+- merge conflict policy
+- worker return contract
+- exact support-fixture paths for `WS-B-PROOF`, or `[]` if none
+
+Additional freeze requirements:
+
+- `file-ownership.json` must list lane-owned files exactly.
+- `worktrees.json` must include intended paths and branches before any worktree is created.
+- `tasks.json` and `queue.json` must already reflect the serialized gates.
+
+Exit criteria:
+
+- all artifacts above exist
+- all tasks are queued with explicit dependencies
+- support-fixture ownership for `WS-B-PROOF` is either exact and finite or explicitly empty
+- worker prompts can be generated without re-reading the whole repo
+
+### `M55-02` Validator contract
+
+Owner: Parent  
+Write scope: `spec-core/src/validator.rs`
+
+Required outcomes:
+
+- legal shared helper dep accepted in legal helper slot
+- unresolved alias rejected clearly
+- missing shared helper rejected clearly
+- wrong helper family rejected clearly
+- missing helper `body.typescript` rejected clearly
+- direct shared wrapper dep rejected before Bun
+- direct shared chain3 dep rejected before Bun
+- user-facing wording says the narrow M55 thing, not broad cross-library TS support
+
+Required proof surface:
+
+```bash
+cargo test -p spec-core typescript_target | tee "$RUN_ROOT/validation/validator/spec-core-typescript-target.txt"
+```
+
+Exit criteria:
+
+- validator change committed in `feat/m40-plus`
+- validator proof capture is green
+- `contract-freeze.json` is updated with final wording if test strings changed
+- parent records worker launch brief inputs
+
+Stop rule:
+
+- If validator work forces edits outside `validator.rs`, pause and decide in parent before any worker starts.
 
 ## Concrete Parent-Agent Responsibilities
 
 The parent owns:
 
 - reading `PLAN.md` and translating it into the frozen orchestration contract
-- kickoff validation of branch, workspace dirtiness, and baseline state
-- creating `RUN_ROOT`, task ledgers, file ownership maps, and worktree inventory
-- the full validator phase in `spec-core/src/validator.rs`
-- the exact wording of the frozen TypeScript contract and rejection boundaries
-- deciding whether `WS-CLI` may mutate fixtures beyond the aligned pass case; default is no
-- integrating `WS-BACKEND`, `WS-FIXTURE`, `WS-CLI`, and `WS-DOCS` into `feat/m40-plus`
-- rerunning focused gates after every integration step
-- stopping the run when scope drifts into generic execution or cross-library resolution
-- running final proof commands
-- final acceptance judgment and signoff
-- all lane integration and conflict resolution at ownership boundaries
+- creating `RUN_ROOT`, run-state files, task sentinels, and validation directories
+- creating worktrees and branches for each worker lane
+- generating worker briefs and handoff packets under `$RUN_ROOT/handoffs/`
+- freezing exact support-fixture ownership before launching `WS-B-PROOF`
+- running and recording kickoff and baseline commands
+- freezing exact phase commands in `contract-freeze.json`
+- executing the entire validator phase in `spec-core/src/validator.rs`
+- launching workers only after validator freeze is integrated
+- integration ordering:
+  - backend first
+  - proof lane second
+  - docs last
+- integrating one lane at a time
+- rerunning the relevant gates after each merge
+- recording every run-state transition in `queue.json`, `tasks.json`, and `session-log.md`
+- enforcing ownership boundaries and stop rules
+- writing `acceptance-ledger.md`, `final-proof-manifest.json`, and `final-diff-summary.md`
+- final acceptance judgment
 
 The parent must not:
 
-- start `WS-BACKEND` or `WS-FIXTURE` before validator freeze
-- start `WS-CLI` before backend and fixture truth are integrated
-- start `WS-DOCS` before CLI proof surfaces stabilize
-- let workers widen scope through convenience refactors, schema churn, or infra additions
-- let workers fix cross-lane drift by editing outside their ownership maps
+- launch workers before `M55-02`
+- leave support-fixture ownership ambiguous for `WS-B-PROOF`
+- batch unresolved worker diffs together in one merge step
+- let workers self-integrate
+- silently absorb scope changes discovered during merge feedback
 
 ## Concrete Worker-Lane Responsibilities
 
-### `WS-BACKEND`
+### `WS-A-BACKEND`
 
 Owned files:
 
@@ -363,366 +492,349 @@ Owned files:
 
 Responsibilities:
 
-- extend bounded closure collection for a chain3 root only
-- preserve monotone-up and wrapper behavior
-- emit the exact same-tree closure and exclude unrelated loaded units
-- keep import behavior stable and deduped
-- avoid validator contract changes
+- implement helper resolution and relative import rendering inside the bounded M55 contract
+- reuse loaded-unit truth rather than introducing a second resolver
+- preserve deterministic and deduplicated bounded closure emission
+- keep changes limited to backend logic and backend-facing tests only if already co-located in the same file scope
+- return only changed files, commands with exit codes, and blockers
 
 Stop if:
 
-- backend work needs validator rule changes
-- backend work needs cross-library resolution
-- backend work starts implying nested chain3 support or generic multi-dependency support
+- work requires edits to `spec-core/src/validator.rs`
+- work requires edits to `spec-cli/tests/cli.rs`
+- work implies generic cross-library TypeScript execution
+- work requires a second import resolver stack
+- work needs files outside its ownership map
 
-### `WS-FIXTURE`
-
-Owned files:
-
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_tax_leaf_aligned.unit.spec`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_discount_leaf_aligned.unit.spec`
-
-Responsibilities:
-
-- add and align `body.typescript` exactly where M54 requires it
-- keep TypeScript bodies faithful to existing Rust truth
-- avoid adding new units or broadening the fixture family
-- avoid touching drift, under-specified, or unsupported-near-miss fixtures unless the parent explicitly reassigns them
-
-Stop if:
-
-- the aligned truth seems to require new units
-- the aligned truth cannot mirror existing Rust behavior cleanly
-- negative fixtures need changes that would alter validator boundary semantics
-
-### `WS-CLI`
+### `WS-B-PROOF`
 
 Owned files:
 
 - `spec-cli/tests/cli.rs`
-- explicit tiny fixture mutations only if the parent approves them during `M54-21` planning
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+- `examples/shared-spec/units/money/round.unit.spec`
+- exact support-fixture files frozen in `file-ownership.json` before launch, or none
 
 Responsibilities:
 
-- flip the aligned chain3 TypeScript path from reject-before-Bun to success-through-Bun
-- preserve or add negative proofs for wrong-family, wrong-order, missing-`body.typescript`, and molecule rejection behavior
-- keep the proof wall specific to chain3, not generic multi-dependency TypeScript
+- make the canonical example green through authored source truth
+- add or update the M55 CLI proof wall
+- prove recursive wrapper and chain3 shared-helper reuse
+- keep support-fixture edits additive, minimal, and limited to exact pre-frozen paths
+- avoid test-only canonical mutation
+- return only changed files, commands with exit codes, and blockers
 
 Stop if:
 
-- the CLI lane needs to redefine validator or backend semantics
-- the CLI lane needs generic fixture expansion
-- the negative proof set depends on cross-library runtime behavior instead of validator rejection
+- no pre-frozen support fixture exists and a new one is needed
+- more fixture files are needed than were frozen in `file-ownership.json`
+- work requires edits to `spec-core/src/typescript_backend.rs` or `validator.rs`
+- work requires broadening the canonical public example story
+- work depends on temporary `body.typescript` injection
+- work needs files outside its ownership map
 
-### `WS-DOCS`
+### `WS-C-DOCS`
 
 Owned files:
 
 - `README.md`
+- `examples/crosslib-app/README.md`
 - `CHANGELOG.md`
 - `TODOS.md`
 
 Responsibilities:
 
-- document bounded same-tree chain3 TypeScript support accurately
-- state explicitly that generic multi-dependency TypeScript remains unsupported
-- keep cross-library helper imports and broader TypeScript portability deferred in `TODOS.md`
+- document only the landed M55 claim
+- keep docs wording consistent across all owned files
+- point to the canonical command that actually passed
+- preserve explicit deferred items in `TODOS.md`
+- return only changed files, commands with exit codes, and blockers
 
 Stop if:
 
-- docs would need to promise anything broader than the integrated code proves
-- docs would need to explain new commands, new dependencies, or schema changes
+- docs need to promise broader behavior than the integrated proof supports
+- docs need product-code edits to become truthful
+- docs require changes outside owned files
 
-## Exact Sequencing, Gating, Stop Rules, And Final Integration Flow
+### `M55-10` Backend helper resolution + import rendering
 
-### Parent-only integration and conflict rules
+Owner: `WS-A-BACKEND`  
+Write scope: `spec-core/src/typescript_backend.rs`
 
-- The parent is the only integrator.
-- If a lane needs files outside its ownership map, stop and bounce it back to the parent.
-- Do not resolve creatively across ownership boundaries.
-- If `WS-CLI` exposes contract drift, return to the parent-owned contract or integration gate.
-- If `WS-DOCS` exposes contract drift, return to the parent-owned contract or integration gate.
-- Workers may identify overlap, but they do not resolve it by expanding their scope.
+Required outcomes:
 
-### Phase 0: Kickoff And Baseline
+- helper dep resolution accepts library-qualified helper ids only where validator has already allowed them
+- backend resolves shared helpers from loaded units, not a second resolver
+- sibling-library relative import path is correct
+- bounded closure stays deduplicated
+- unrelated loaded units do not leak into output
+- recursive wrapper/chain3 helper reuse is covered here only if the CLI lane would otherwise need awkward fixture inflation
 
-Run only in `PRIMARY_ROOT`.
-
-Required commands:
-
-```bash
-mkdir -p "$RUN_ROOT"/validation/{kickoff,baseline,validator,backend,fixture,cli,docs,final}
-mkdir -p "$RUN_ROOT"/tasks
-
-git branch --show-current | tee "$RUN_ROOT/validation/kickoff/branch.txt"
-git rev-parse HEAD | tee "$RUN_ROOT/validation/kickoff/head.txt"
-git status --porcelain=v1 -uall | tee "$RUN_ROOT/validation/kickoff/git-status.porcelain.txt"
-cp "$PRIMARY_ROOT/PLAN.md" "$RUN_ROOT/validation/kickoff/PLAN.md"
-cp "$PRIMARY_ROOT/ORCH_PLAN.md" "$RUN_ROOT/validation/kickoff/ORCH_PLAN.md"
-```
-
-Kickoff acceptance:
-
-- branch is `feat/m40-plus`
-- authority snapshots are captured before code work
-- tracked dirty files are understood and tolerated only if the parent explicitly records them
-- no one cleans or reverts the tree to make kickoff "look clean"
-
-Run baseline proof capture before changing product code:
+Required proof surface:
 
 ```bash
-cargo test -p spec-core typescript_target | tee "$RUN_ROOT/validation/baseline/spec-core-typescript-target.txt"
-cargo test -p spec-core typescript_tree | tee "$RUN_ROOT/validation/baseline/spec-core-typescript-tree.txt"
-cargo test -p spec-cli typescript_chain3 | tee "$RUN_ROOT/validation/baseline/spec-cli-typescript-chain3.txt"
-```
-
-Stop if baseline behavior already contradicts `PLAN.md`. That means the authority plan is stale and must be rewritten before execution continues.
-
-### Phase 1: Contract Freeze
-
-The parent writes these run-state artifacts:
-
-- `baseline.json`
-- `contract-freeze.json`
-- `worktrees.json`
-- `file-ownership.json`
-- `queue.json`
-- `session-log.md`
-
-The freeze must record:
-
-- supported TypeScript families before and after M54
-- the exact chain3 dep tuple and order
-- same-tree-only enforcement
-- rejection of molecule TypeScript, cross-library imports, seam kinds, nested chain3 members, and generic out-of-family roots
-- the lane ownership map from this runbook
-- the rule that `WS-BACKEND` and `WS-FIXTURE` are the only overlapping lanes
-
-No worker starts before freeze acceptance is recorded.
-
-### Phase 2: Parent-Owned Validator Contract
-
-Parent edits only:
-
-- `spec-core/src/validator.rs`
-
-Required implementation scope:
-
-- add the chain3 TypeScript compatibility key
-- extend root-family classification
-- enforce family-aware dep-count gates
-- add exact ordered chain3 dep-contract validation
-- keep same-tree-only behavior
-- preserve supported existing families
-- reject nested chain3 closure members
-
-Focused proof commands after the validator change:
-
-```bash
-cargo test -p spec-core typescript_target | tee "$RUN_ROOT/validation/validator/spec-core-typescript-target.txt"
-```
-
-Gate to unlock parallel lanes:
-
-- validator patch is integrated in `feat/m40-plus`
-- focused validator proofs are green
-- frozen rejection wording is good enough that CLI tests do not need to invent contract language later
-
-Stop if the validator patch starts requiring backend refactors to understand basic scope. Validator is the contract, not a moving guess.
-
-### Phase 3: Safe Parallel Lanes After Validator Freeze
-
-Only now may the parent create worker worktrees.
-
-Recommended creation pattern:
-
-```bash
-git worktree add "$WT_ROOT/ws-backend" -b codex/m54-ws-backend feat/m40-plus
-git worktree add "$WT_ROOT/ws-fixture" -b codex/m54-ws-fixture feat/m40-plus
-```
-
-Active overlap rules:
-
-- `WS-BACKEND` edits only `spec-core/src/typescript_backend.rs`
-- `WS-FIXTURE` edits only the aligned chain3 fixture files
-- neither lane edits `spec-core/src/validator.rs`
-- neither lane edits `spec-cli/tests/cli.rs`
-
-Lane acceptance:
-
-```bash
-# WS-BACKEND
 cargo test -p spec-core typescript_tree
-
-# WS-FIXTURE
 cargo test -p spec-core typescript_target
 ```
 
-Parent integration flow for `M54-12`:
+Exit criteria:
 
-1. integrate `WS-BACKEND` into `feat/m40-plus`
-2. rerun `cargo test -p spec-core typescript_tree`
-3. integrate `WS-FIXTURE` into `feat/m40-plus`
-4. rerun `cargo test -p spec-core typescript_target`
-5. rerun both focused commands once both are integrated
+- worker submits diff limited to `typescript_backend.rs`
+- backend proof commands and exit codes are captured
+- no validator or CLI file edits
+- any unresolved ambiguity is called out explicitly
 
-Stop if either lane overlaps outside its ownership map or if either lane exposes a hidden dependency on the CLI test file.
+Stop rules:
 
-### Phase 4: CLI Proof Wall
+- if `validator.rs` must change, stop and return to parent
+- if backend needs a second import resolver, stop
+- if backend broadens root contract beyond helper-slot reuse, stop
 
-Do not start this phase until validator, backend, and aligned fixture truth all exist in `feat/m40-plus`.
+### `M55-20` CLI proof wall + canonical example truth + exact support fixtures
 
-Create the worktree only after `M54-12` passes:
+Owner: `WS-B-PROOF`  
+Write scope: `spec-cli/tests/cli.rs`, canonical example `.unit.spec` files, exact pre-frozen support fixture files only
 
-```bash
-git worktree add "$WT_ROOT/ws-cli" -b codex/m54-ws-cli feat/m40-plus
-```
+Required outcomes:
 
-`WS-CLI` responsibilities:
+- canonical green path passes through Bun using authored truth in:
+  - `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+  - `examples/shared-spec/units/money/round.unit.spec`
+- target-specific status remains truthful after the TypeScript proof
+- recursive wrapper shared-helper reuse is proven
+- recursive chain3 shared-helper reuse is proven
+- negative wall exists for:
+  - unresolved alias
+  - missing shared helper
+  - wrong helper family
+  - missing helper `body.typescript`
+  - direct shared wrapper root dep
+  - direct shared chain3 root dep
+- no test-only injection on canonical example
 
-- replace the aligned pre-Bun rejection proof with success-through-Bun proof
-- preserve targeted negative rejections
-- keep the proof scope bounded to chain3 and existing TypeScript boundaries
-
-Lane acceptance:
-
-```bash
-cargo test -p spec-cli typescript_chain3
-```
-
-Parent integration flow for `M54-21`:
-
-1. review whether `WS-CLI` changed only allowed files
-2. integrate into `feat/m40-plus`
-3. rerun `cargo test -p spec-cli typescript_chain3`
-4. if negative proof behavior changed unexpectedly, stop and fix the contract before docs begin
-
-### Phase 5: Docs And Backlog Sync
-
-Docs run last, not concurrently with proof-shaping code.
-
-Create the worktree only after `M54-21` passes:
+Required proof surface:
 
 ```bash
-git worktree add "$WT_ROOT/ws-docs" -b codex/m54-ws-docs feat/m40-plus
+cargo test -p spec-cli typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- status examples/crosslib-app --target-language typescript --format json
 ```
 
-`WS-DOCS` may now update:
+Exit criteria:
 
-- `README.md`
-- `CHANGELOG.md`
-- `TODOS.md`
+- worker submits diff within approved scope
+- proof commands and exit codes captured
+- canonical example bodies, if changed, are minimal and semantically honest
+- support fixture usage is additive and explicitly documented in `acceptance.md`
 
-Parent integration flow for `M54-31`:
+Stop rules:
 
-1. review every wording change against the integrated code and tests
-2. integrate into `feat/m40-plus`
-3. reject any claim that implies generic multi-dependency TypeScript support
+- if worker needs to mutate the canonical example only during test execution, stop
+- if proof requires editing docs early, stop
+- if proof requires generic multi-dependency or generic cross-library TypeScript behavior, stop
+- if any needed support-fixture file is not already frozen in `file-ownership.json`, stop and return to parent
 
-### Phase 6: Final Integration And Proof Wall
+### `M55-21` Parent integration gate for backend then proof lane
 
-This phase is parent-owned and must run serially in `PRIMARY_ROOT`.
+Owner: Parent  
+Write scope: `feat/m40-plus` integration only
 
-Required final proof commands:
+Integration order is fixed:
+
+1. Review and integrate `WS-A-BACKEND`
+2. Rerun backend/core gates
+3. Review and integrate `WS-B-PROOF`
+4. Rerun CLI and canonical example gates
+
+Integration rules:
+
+- Integrate one lane at a time.
+- Never batch unresolved lane diffs together.
+- Review each lane diff against `file-ownership.json` before merge.
+- If merge feedback requires edits outside the lane ownership map, bounce the lane back with a narrower brief or explicit ownership-map update first.
+- Do not silently “fix it in parent” by broadening scope unless the parent first records that change in run-state artifacts and reopens the task explicitly.
+
+Required post-integration proof surface:
 
 ```bash
-cargo test -p spec-core
-cargo test -p spec-cli
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/unsupported_near_miss/units/pricing/checkout_chain3_unsupported_near_miss.unit.spec --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/drift/units/pricing/checkout_chain3_drift.unit.spec --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/under_specified/units/pricing/checkout_chain3_under_specified.unit.spec --target-language typescript
+cargo test -p spec-core typescript_target | tee "$RUN_ROOT/validation/backend/post-merge-spec-core-typescript-target.txt"
+cargo test -p spec-core typescript_tree | tee "$RUN_ROOT/validation/backend/post-merge-spec-core-typescript-tree.txt"
+
+cargo test -p spec-cli typescript | tee "$RUN_ROOT/validation/proof/post-merge-spec-cli-typescript.txt"
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript \
+  | tee "$RUN_ROOT/validation/proof/post-merge-canonical-apply-tax-typescript-test.txt"
+cargo run -p spec-cli -- status examples/crosslib-app --target-language typescript --format json \
+  | tee "$RUN_ROOT/validation/proof/post-merge-canonical-crosslib-status-typescript.json"
 ```
 
-Final acceptance rules:
+Exit criteria:
 
-- aligned chain3 TypeScript proof passes
-- out-of-contract chain3-like paths still fail with bounded-lane rejection behavior
-- Bun is not invoked for validator-level rejects
-- monotone-up and wrapper TypeScript proofs still pass
-- docs match the actual integrated boundary
+- both worker lanes integrated by parent only
+- canonical proof is green after integration, not just in a worker worktree
+- no remaining hidden dependency on docs or other files
+- queue states updated to `integrated`
 
-If any final proof requires reopening validator semantics, stop and return to the parent-owned contract phase. Do not paper over it in docs or CLI tests.
+### `M55-30` Docs + backlog sync
+
+Owner: `WS-C-DOCS`  
+Write scope: docs files only
+
+Required outcomes:
+
+- `README.md`, `examples/crosslib-app/README.md`, and `CHANGELOG.md` all describe the same narrow M55 claim
+- `TODOS.md` still explicitly defers direct shared wrapper roots, direct shared chain3 roots, and generic multi-dependency TypeScript execution
+- docs point at the canonical command that just passed
+
+Required doc language anchor:
+
+- “cross-library helper imports in the bounded TypeScript lane”
+
+Exit criteria:
+
+- worker submits docs-only diff
+- wording is narrow and consistent
+- no accidental product-scope widening
+
+Stop rule:
+
+- If docs need to mention broader cross-library TypeScript support to stay readable, stop and bounce to parent. The code/proof contract is not yet clear enough.
+
+### `M55-31` Parent docs integration gate
+
+Owner: Parent  
+Write scope: `feat/m40-plus` integration only
+
+Exit criteria:
+
+- docs integrate cleanly
+- parent verifies wording against actual proof captures
+- no broader promise lands than what `M55-21` proved
+
+### `M55-40` Final serial proof wall + closeout
+
+Owner: Parent  
+Write scope: `$RUN_ROOT/**` and minimal fix-forward only if required
+
+Run serially in `PRIMARY_ROOT`:
+
+```bash
+cargo test -p spec-core typescript_target | tee "$RUN_ROOT/validation/final/spec-core-typescript-target.txt"
+cargo test -p spec-core typescript_tree | tee "$RUN_ROOT/validation/final/spec-core-typescript-tree.txt"
+cargo test -p spec-cli typescript | tee "$RUN_ROOT/validation/final/spec-cli-typescript.txt"
+
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript \
+  | tee "$RUN_ROOT/validation/final/canonical-apply-tax-typescript-test.txt"
+
+cargo run -p spec-cli -- status examples/crosslib-app --target-language typescript --format json \
+  | tee "$RUN_ROOT/validation/final/canonical-crosslib-status-typescript.json"
+
+cp "$PRIMARY_ROOT/examples/crosslib-app/units/pricing/apply_tax.spec.passport.json" \
+  "$RUN_ROOT/validation/final/apply_tax.spec.passport.json"
+```
+
+Closeout rules:
+
+- Parent runs final proofs only after all lane tasks are already `integrated`.
+- Parent does not batch unresolved post-merge fixes from multiple lanes.
+- If final proof feedback requires edits outside the last lane’s ownership map, reopen the appropriate task explicitly instead of silently broadening parent integration scope.
+- Parent writes:
+  - `acceptance-ledger.md`
+  - `final-proof-manifest.json`
+  - `final-diff-summary.md`
+
+`final-proof-manifest.json` must include:
+
+- final command list
+- exit codes
+- artifact paths
+- final canonical example path
+- final primary commit
+- whether TypeScript proof is additive in passport/status
+- whether test-only canonical mutation was used, which must be `false`
+
+Exit criteria:
+
+- final serial proof wall is green
+- canonical example passport contains additive TypeScript proof
+- target-specific status is valid for the canonical path
+- docs are integrated and truthful
+- closeout artifacts are complete and internally consistent
 
 ## Tests And Acceptance
 
-### Required focused coverage by phase
+### Acceptance matrix
 
-Validator phase must cover:
+| Acceptance item | Proof source | Owner | Pass condition |
+| --- | --- | --- | --- |
+| Canonical real-user green path | `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript` | Parent final gate | exits `0`; Bun build/test succeeds |
+| Target-specific status is additive and truthful | `cargo run -p spec-cli -- status examples/crosslib-app --target-language typescript --format json` | Parent final gate | canonical unit row is `valid`; status reflects TypeScript proof |
+| Additive passport proof exists | copied passport artifact | Parent final gate | `target_proofs.typescript` present for `pricing/apply_tax` |
+| Backend import rendering is correct | `cargo test -p spec-core typescript_tree` | `WS-A-BACKEND`, then Parent | green after integration |
+| Validator contract is exact | `cargo test -p spec-core typescript_target` | Parent | green with explicit failure classes |
+| Recursive wrapper shared-helper reuse is proven | CLI proof wall | `WS-B-PROOF`, then Parent | concrete passing test exists |
+| Recursive chain3 shared-helper reuse is proven | CLI proof wall | `WS-B-PROOF`, then Parent | concrete passing test exists |
+| Negative wall stays red before Bun | CLI proof wall | `WS-B-PROOF`, then Parent | each out-of-scope case rejects |
+| Docs are truthful and narrow | docs diff review + proof captures | `WS-C-DOCS`, then Parent | no broader claim than landed behavior |
 
-- exact chain3 root acceptance
-- wrong dep order rejection
-- cross-library dep rejection
-- missing dep rejection
-- unsupported dep family rejection
-- missing `body.typescript` rejection
-- generic four-dependency rejection
-- nested chain3 closure-member rejection
+### Mandatory negative cases
 
-Backend phase must cover:
+These must be explicitly covered in the proof wall:
 
-- exact same-tree chain3 closure rendering
-- wrapper closure recursion under a chain3 root
-- deduped emission
-- unrelated loaded unit exclusion
-
-CLI phase must cover:
-
-- aligned chain3 success through Bun
-- wrong-family rejection before Bun
-- missing-`body.typescript` rejection before Bun
-- wrong-order rejection before Bun if a small explicit mutation proves it honestly
-- molecule TypeScript rejection before Bun
-
-Docs phase acceptance:
-
-- `README.md` states chain3 support narrowly
-- `CHANGELOG.md` records bounded same-tree chain3 TypeScript support
-- `TODOS.md` still defers cross-library imports and generic multi-dependency TypeScript
+- unresolved library alias
+- missing shared helper unit
+- wrong helper family
+- missing shared helper `body.typescript`
+- direct shared wrapper root dep
+- direct shared chain3 root dep
 
 ### Definition of done
 
-M54 is done only when:
+M55 is done only when all of the following are true:
 
-1. the validator admits exactly `function.wrapper.pipeline.chain3.v1` under the frozen same-tree contract
-2. backend closure emission includes only the required same-tree closure
-3. aligned chain3 fixtures contain honest maintained TypeScript bodies
-4. CLI aligned proof passes
-5. negative validator boundaries remain intact
-6. no schema, command, or dependency drift was introduced
-7. docs describe the exact proven boundary and nothing broader
+- the parent-integrated `feat/m40-plus` branch passes the final serial proof wall
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec` is green for `--target-language typescript`
+- direct shared wrapper and chain3 root deps are still rejected
+- recursive wrapper and chain3 shared-helper reuse is proven somewhere concrete
+- docs describe only the landed bounded behavior
+- `acceptance-ledger.md`, `final-proof-manifest.json`, and `final-diff-summary.md` are complete
+- no test-only canonical body injection was used
 
 ## Assumptions
 
-- `PLAN.md` remains the authority and is not superseded mid-run.
-- `feat/m40-plus` remains the primary execution branch for M54.
-- The repo may be dirty because other agents or the user are working. The parent inspects and preserves those edits rather than reverting them.
-- `cargo test -p spec-core ...` and `cargo test -p spec-cli ...` remain the correct proof entrypoints from `PLAN.md`.
-- The aligned chain3 fixture is already semantically classifiable as `function.wrapper.pipeline.chain3.v1`; M54 is about bounded execution truth, not family-analysis expansion.
-- No new generated artifact contract needs to be authored for this milestone.
-- The parent agent is responsible for deciding whether an unexpected overlap is a real blocker or just stale worker scope. Default to blocker.
+- `feat/m40-plus` is the active primary branch for M55 execution.
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec` and `examples/shared-spec/units/money/round.unit.spec` remain the canonical maintained example pair.
+- If the canonical example lacks truthful `body.typescript`, adding minimal authored TypeScript to those source specs is allowed and in scope.
+- Recursive wrapper and chain3 shared-helper proof may use a minimal additive support fixture if existing maintained examples do not already cover that path.
+- `cargo test -p spec-core typescript_target`, `cargo test -p spec-core typescript_tree`, and `cargo test -p spec-cli typescript` remain useful focused command filters. If any filter is too broad or stale, the parent must freeze a narrower exact command list in `contract-freeze.json` before launching workers.
+- Existing dirty files outside owned scope may exist; they are tolerated if recorded and not overlapped.
 
 ## Parallel Subagent Optimization
 
-Safe optimization exists, but only in one place:
+The optimal launch pattern is:
 
-- optimize by overlapping `WS-BACKEND` and `WS-FIXTURE` after validator freeze
-- do not overlap validator work with anything else
-- do not overlap CLI proof-wall work with backend or fixture truth shaping
-- do not overlap docs with unstable proof surfaces
+1. No workers during kickoff, baseline, contract freeze, or validator work.
+2. After `M55-02`, launch exactly two workers:
+   - `WS-A-BACKEND`
+   - `WS-B-PROOF`
+3. Keep them isolated by file ownership:
+   - one worker for `spec-core/src/typescript_backend.rs`
+   - one worker for `spec-cli/tests/cli.rs` plus canonical example/spec fixtures
+4. Do not split `spec-cli/tests/cli.rs` across workers.
+5. Do not split `spec-core/src/` across multiple workers.
+6. Launch docs only after both earlier lanes are integrated and green.
 
-This means the honest launch pattern is:
+Maximum safe worker concurrency is `2`.
 
-1. parent kickoff and baseline
-2. parent contract freeze
-3. parent validator contract
-4. `WS-BACKEND` + `WS-FIXTURE` in parallel
-5. parent integration gate
-6. `WS-CLI`
-7. parent integration gate
-8. `WS-DOCS`
-9. parent final proof wall and closeout
+Why this is the safe maximum:
 
-Any orchestration that tries to create more concurrency than that is manufacturing merge risk, not saving time.
+- before validator freeze, concurrency creates contract churn
+- after validator freeze, backend and proof work are separable
+- docs before proof creates lying documentation
+- a third concurrent code lane would only increase merge risk without shortening the critical path
+
+Parent polling rule:
+
+- poll workers for narrow result summaries only
+- do not reopen scope while they are running
+- integrate one lane at a time into `feat/m40-plus`
+- rerun gates after each integration before proceeding

@@ -36,8 +36,7 @@ pub const TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY: &str =
 pub const TYPESCRIPT_TARGET_COMPATIBILITY_KEY: &str =
     TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY;
 pub const TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
-pub const TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY: &str =
-    "function.wrapper.pipeline.chain3.v1";
+pub const TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.chain3.v1";
 pub const TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_down_nonnegative.v1";
 pub const TYPESCRIPT_WRAPPER_SECOND_DEP_COMPATIBILITY_KEY: &str =
@@ -62,14 +61,12 @@ pub const TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
 pub const TYPESCRIPT_WRAPPER_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript wrapper target requires exactly two direct local deps in M55";
 pub const TYPESCRIPT_WRAPPER_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target allows only local direct deps in M55; cross-library helper imports do not widen wrapper root deps";
-pub const TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript wrapper target requires every direct dep to exist in the same loaded unit set in M55";
+pub const TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target requires every direct dep to exist in the same loaded unit set in M55";
 pub const TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M55";
 pub const TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires exactly three direct local deps in M55";
 pub const TYPESCRIPT_CHAIN3_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target allows only local direct deps in M55; cross-library helper imports do not widen chain3 root deps";
-pub const TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript chain3 target requires every direct dep to exist in the same loaded unit set in M55";
+pub const TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires every direct dep to exist in the same loaded unit set in M55";
 pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M55";
 pub const TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires direct deps to author body.typescript in M55";
@@ -711,7 +708,8 @@ fn validate_typescript_wrapper_dep_family(
     };
 
     let semantic_review_context = SemanticReviewContext::new(specs_by_id);
-    let Some(dep_review) = evaluate_semantic_review_with_context(dep_spec, &semantic_review_context)
+    let Some(dep_review) =
+        evaluate_semantic_review_with_context(dep_spec, &semantic_review_context)
     else {
         return Err(semantic_error(
             spec,
@@ -823,7 +821,8 @@ fn validate_typescript_chain3_dep_family(
     };
 
     let semantic_review_context = SemanticReviewContext::new(specs_by_id);
-    let Some(dep_review) = evaluate_semantic_review_with_context(dep_spec, &semantic_review_context)
+    let Some(dep_review) =
+        evaluate_semantic_review_with_context(dep_spec, &semantic_review_context)
     else {
         return Err(semantic_error(
             spec,
@@ -4909,11 +4908,10 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
-            err.to_string()
-                .contains("unsupported.function.v1"),
+            err.to_string().contains("unsupported.function.v1"),
             "unexpected error: {err}"
         );
     }
@@ -5010,8 +5008,8 @@ methods:
             ("shared::money/round".to_string(), helper),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains(TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
@@ -5028,8 +5026,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains("TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1, function.wrapper.pipeline.v1, or function.wrapper.pipeline.chain3.v1 in M52"),
@@ -5078,8 +5076,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains(TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE),
@@ -5104,8 +5102,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains(TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE),
@@ -5152,8 +5150,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
@@ -5187,8 +5185,8 @@ methods:
             (discount.spec.id.clone(), discount),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains(TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE),
@@ -5212,8 +5210,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
@@ -5237,8 +5235,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err = validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains(TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
@@ -5261,8 +5259,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err = validate_typescript_closure_member_spec_with_specs(&spec, &specs_by_id)
-            .unwrap_err();
+        let err =
+            validate_typescript_closure_member_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
                 .contains("TypeScript closure member does not support semantic family 'function.wrapper.pipeline.chain3.v1'"),

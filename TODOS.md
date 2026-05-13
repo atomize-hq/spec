@@ -192,6 +192,8 @@
 
 - [x] **Bounded same-tree chain3 TypeScript execution in `spec`** — Completed by M54 (2026-05-13). The bounded Bun-backed TypeScript lane now admits the same-tree `function.wrapper.pipeline.chain3.v1` family with the frozen direct local dep tuple `wrapper.pipeline -> monotone_up -> monotone_down_nonnegative`, while keeping proof additive, atom-only, and target-specific.
 
-- [ ] **Cross-library TypeScript helper imports** — Deferred by the M46 review. Same-tree helper execution is enough to close the current product-family mismatch; cross-library target resolution is a different portability problem.
+- [x] **Cross-library TypeScript helper imports** — Completed by M55 (2026-05-13). The bounded Bun-backed TypeScript lane now admits cross-library helper imports in the one legal helper slot for `function.arithmetic_leaf.monotone_up.v1`, and bounded wrapper/chain3 closures may reuse that shared helper transitively once it is in the loaded tree.
 
-- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M54. The current lane is intentionally family-shaped: helper-aware monotone-up roots plus same-tree wrapper roots and same-tree chain3 roots only, not arbitrary dependency topologies.
+- [ ] **Direct cross-library wrapper and chain3 TypeScript roots** — Deferred after M55. Cross-library helper imports are now allowed only in legal helper slots; direct wrapper root deps and direct chain3 root deps remain local-only.
+
+- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M55. The current lane is intentionally family-shaped: helper-aware monotone-up roots, cross-library helper imports only in that legal helper slot, plus same-tree wrapper roots and same-tree chain3 roots only, not arbitrary dependency topologies.

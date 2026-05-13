@@ -1343,7 +1343,12 @@ fn remove_typescript_body(unit_path: &Path) {
 fn replace_in_file(path: &Path, from: &str, to: &str) {
     let contents = fs::read_to_string(path).unwrap();
     let rewritten = contents.replace(from, to);
-    assert_ne!(rewritten, contents, "expected fixture rewrite for `{}`", path.display());
+    assert_ne!(
+        rewritten,
+        contents,
+        "expected fixture rewrite for `{}`",
+        path.display()
+    );
     fs::write(path, rewritten).unwrap();
 }
 
@@ -15508,6 +15513,72 @@ fn typescript_example_apply_tax_single_file_test_succeeds() {
 }
 
 #[test]
+fn typescript_cross_library_example_status_marks_apply_tax_valid_after_proof() {
+    if !bun_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let app_dir = temp_dir.path().join("crosslib-app");
+    let shared_crate_dir = temp_dir.path().join("shared-crate");
+    let shared_spec_dir = temp_dir.path().join("shared-spec");
+
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .unwrap();
+    copy_git_tracked_dir(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-crate"), &shared_crate_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+
+    let test_output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "cross-library apply_tax should pass in the bounded TypeScript lane",
+        &test_output,
+    );
+
+    let status_output = run_in(
+        &app_dir,
+        &[
+            "status",
+            "units",
+            "--target-language",
+            "typescript",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !status_output.status.success(),
+        "status should stay non-green while other cross-library units remain untested"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let apply_tax = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/apply_tax")
+        .expect("expected pricing/apply_tax status row");
+    assert_eq!(apply_tax["status"], "valid", "{status_json}");
+    assert_eq!(
+        apply_tax["semantic_review"]["compatibility_key"], FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "{status_json}"
+    );
+    assert_eq!(
+        apply_tax["freshness"]["authored_truth_status"], "fresh",
+        "{status_json}"
+    );
+}
+
+#[test]
 fn typescript_example_calculate_total_single_file_test_succeeds() {
     if !bun_available() {
         return;
@@ -15690,10 +15761,7 @@ fn typescript_chain3_wrong_family_rejects_before_bun_runs() {
         "unsupported chain3-like TypeScript target should be rejected before Bun"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("unsupported.function.v1"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("unsupported.function.v1"), "{stderr}");
     assert!(
         !marker_path.exists(),
         "chain3 wrong-family rejection should happen before Bun build/test execution"
@@ -15731,7 +15799,9 @@ fn typescript_chain3_missing_typescript_body_rejects_before_bun_runs() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("TypeScript chain3 target requires direct deps to author body.typescript in M54"),
+        stderr.contains(
+            "TypeScript chain3 target requires direct deps to author body.typescript in M55"
+        ),
         "{stderr}"
     );
     assert!(
@@ -15773,12 +15843,66 @@ fn typescript_chain3_wrong_dep_order_rejects_before_bun_runs() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M54"),
+        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M55"),
         "{stderr}"
     );
     assert!(
         !marker_path.exists(),
         "wrong dep order rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_helper_missing_typescript_body_rejects_before_bun_runs() {
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let app_dir = temp_dir.path().join("crosslib-app");
+    let shared_crate_dir = temp_dir.path().join("shared-crate");
+    let shared_spec_dir = temp_dir.path().join("shared-spec");
+
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .unwrap();
+    copy_git_tracked_dir(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-crate"), &shared_crate_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+
+    remove_typescript_body(&shared_spec_dir.join("units/money/round.unit.spec"));
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library helper without body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript target requires the direct helper dep to author body.typescript in M55"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "shared-helper body rejection should happen before Bun build/test execution"
     );
 }
 

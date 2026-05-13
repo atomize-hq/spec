@@ -19,9 +19,8 @@ use crate::types::{
     TYPESCRIPT_RUNTIME_HELPER_PATH, UnitExtensions,
 };
 use crate::validator::{
-    TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY,
-    TYPESCRIPT_HELPER_COMPATIBILITY_KEY, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE,
-    TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
+    TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY, TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
+    TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE, TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
     TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY, TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
     validate_typescript_closure_member_spec_with_specs,
     validate_typescript_execution_target_spec_with_specs,
@@ -139,7 +138,12 @@ fn collect_included_typescript_unit_ids(
                 ),
             });
         };
-        collect_typescript_root_closure(root_spec, resolved_specs_by_id, specs_by_id, &mut included)?;
+        collect_typescript_root_closure(
+            root_spec,
+            resolved_specs_by_id,
+            specs_by_id,
+            &mut included,
+        )?;
     }
 
     Ok(included)
@@ -155,8 +159,10 @@ fn collect_typescript_root_closure(
     included.insert(spec.id.clone());
 
     let semantic_review_context = SemanticReviewContext::new(specs_by_id);
-    let Some(review) = evaluate_semantic_review_with_context(&typescript_loaded_spec(spec), &semantic_review_context)
-    else {
+    let Some(review) = evaluate_semantic_review_with_context(
+        &typescript_loaded_spec(spec),
+        &semantic_review_context,
+    ) else {
         return Err(SpecError::Generator {
             message: format!(
                 "unit '{}' is not eligible for the bounded M52 TypeScript lane: missing supported semantic review",
@@ -172,24 +178,28 @@ fn collect_typescript_root_closure(
         TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
             for dep in &spec.deps {
                 let parsed = parse_local_typescript_dep(dep, "wrapper direct dep")?;
-                let dep_spec = resolve_typescript_dep_spec(
-                    &spec.id,
-                    parsed.unit_id(),
+                let dep_spec =
+                    resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
+                collect_typescript_closure_member(
+                    dep_spec,
                     resolved_specs_by_id,
+                    specs_by_id,
+                    included,
                 )?;
-                collect_typescript_closure_member(dep_spec, resolved_specs_by_id, specs_by_id, included)?;
             }
             Ok(())
         }
         TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
             for dep in &spec.deps {
                 let parsed = parse_local_typescript_dep(dep, "chain3 direct dep")?;
-                let dep_spec = resolve_typescript_dep_spec(
-                    &spec.id,
-                    parsed.unit_id(),
+                let dep_spec =
+                    resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
+                collect_typescript_closure_member(
+                    dep_spec,
                     resolved_specs_by_id,
+                    specs_by_id,
+                    included,
                 )?;
-                collect_typescript_closure_member(dep_spec, resolved_specs_by_id, specs_by_id, included)?;
             }
             Ok(())
         }
@@ -239,12 +249,14 @@ fn collect_typescript_closure_member(
         TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
             for dep in &spec.deps {
                 let parsed = parse_local_typescript_dep(dep, "wrapper closure dep")?;
-                let dep_spec = resolve_typescript_dep_spec(
-                    &spec.id,
-                    parsed.unit_id(),
+                let dep_spec =
+                    resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
+                collect_typescript_closure_member(
+                    dep_spec,
                     resolved_specs_by_id,
+                    specs_by_id,
+                    included,
                 )?;
-                collect_typescript_closure_member(dep_spec, resolved_specs_by_id, specs_by_id, included)?;
             }
             Ok(())
         }
@@ -267,7 +279,8 @@ fn collect_typescript_helper_dep(
         return Ok(());
     };
     let parsed = parse_local_typescript_dep(dep, "helper dep")?;
-    let helper_spec = resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
+    let helper_spec =
+        resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
     collect_typescript_closure_member(helper_spec, resolved_specs_by_id, specs_by_id, included)
 }
 
@@ -297,10 +310,38 @@ fn resolve_typescript_dep_spec<'a>(
 }
 
 fn build_typescript_loaded_specs_by_id(specs: &[&ResolvedSpec]) -> HashMap<String, LoadedSpec> {
-    specs
-        .iter()
-        .map(|spec| (spec.id.clone(), typescript_loaded_spec(spec)))
-        .collect()
+    let mut specs_by_id = HashMap::new();
+    let mut qualified_helper_keys = BTreeMap::<String, Vec<String>>::new();
+
+    for spec in specs {
+        let loaded = typescript_loaded_spec(spec);
+        specs_by_id.insert(spec.id.clone(), loaded.clone());
+
+        for dep in &spec.deps {
+            let Ok(parsed) = DepRef::parse(dep) else {
+                continue;
+            };
+            if parsed.library_alias().is_some() {
+                qualified_helper_keys
+                    .entry(parsed.unit_id().to_string())
+                    .or_default()
+                    .push(parsed.authored());
+            }
+        }
+    }
+
+    for (unit_id, authored_keys) in qualified_helper_keys {
+        let Some(loaded) = specs_by_id.get(&unit_id).cloned() else {
+            continue;
+        };
+        for authored_key in authored_keys {
+            specs_by_id
+                .entry(authored_key)
+                .or_insert_with(|| loaded.clone());
+        }
+    }
+
+    specs_by_id
 }
 
 fn typescript_loaded_spec(spec: &ResolvedSpec) -> LoadedSpec {
@@ -485,6 +526,27 @@ fn render_runtime_module() -> String {
 
     mul(other: Decimal): Decimal {
         return Decimal.normalize(this.value * other.value, this.scale + other.scale);
+    }
+
+    round(scale: number): Decimal {
+        const targetScale = BigInt(scale);
+        if (targetScale < 0n) {
+            throw new Error("Decimal round scale must be non-negative in the bounded M55 runtime");
+        }
+        if (targetScale >= this.scale) {
+            return Decimal.normalize(this.value, this.scale);
+        }
+
+        const factor = Decimal.pow10(this.scale - targetScale);
+        let roundedValue = this.value / factor;
+        const remainder = this.value % factor;
+        const absRemainder = remainder < 0n ? -remainder : remainder;
+
+        if (absRemainder * 2n >= factor) {
+            roundedValue += this.value >= 0n ? 1n : -1n;
+        }
+
+        return Decimal.normalize(roundedValue, targetScale);
     }
 
     eq(other: Decimal): boolean {
@@ -850,7 +912,12 @@ mod tests {
         })
     }
 
-    fn wrapper_spec(id: &str, discount_dep: &str, tax_dep: &str, typescript_body: &str) -> ResolvedSpec {
+    fn wrapper_spec(
+        id: &str,
+        discount_dep: &str,
+        tax_dep: &str,
+        typescript_body: &str,
+    ) -> ResolvedSpec {
         let fn_name = id.rsplit('/').next().unwrap_or(id);
         ResolvedSpec::from_spec(SpecStruct {
             id: id.to_string(),
@@ -861,7 +928,10 @@ mod tests {
             contract: Some(Contract {
                 inputs: Some(IndexMap::from([
                     ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
-                    ("discount_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    (
+                        "discount_rate".to_string(),
+                        "rust_decimal::Decimal".to_string(),
+                    ),
                     ("tax_rate".to_string(), "rust_decimal::Decimal".to_string()),
                 ])),
                 returns: Some("rust_decimal::Decimal".to_string()),
@@ -906,10 +976,19 @@ mod tests {
             contract: Some(Contract {
                 inputs: Some(IndexMap::from([
                     ("subtotal".to_string(), "rust_decimal::Decimal".to_string()),
-                    ("discount_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    (
+                        "discount_rate".to_string(),
+                        "rust_decimal::Decimal".to_string(),
+                    ),
                     ("tax_rate".to_string(), "rust_decimal::Decimal".to_string()),
-                    ("surcharge_rate".to_string(), "rust_decimal::Decimal".to_string()),
-                    ("loyalty_rate".to_string(), "rust_decimal::Decimal".to_string()),
+                    (
+                        "surcharge_rate".to_string(),
+                        "rust_decimal::Decimal".to_string(),
+                    ),
+                    (
+                        "loyalty_rate".to_string(),
+                        "rust_decimal::Decimal".to_string(),
+                    ),
                 ])),
                 returns: Some("rust_decimal::Decimal".to_string()),
                 invariants: vec!["output >= 0".to_string()],
@@ -1064,13 +1143,16 @@ mod tests {
         let helper = helper_spec("money/round");
         let leaf = monotone_up_spec(
             "pricing/deep/apply_tax",
-            vec!["money/round"],
+            vec!["shared::money/round"],
             "return round(subtotal.add(subtotal.mul(rate)));",
         );
 
         let root_ids = vec![leaf.id.clone()];
         let tree = generate_typescript_tree(
-            &[NormalizedUnit::Function(leaf), NormalizedUnit::Function(helper)],
+            &[
+                NormalizedUnit::Function(leaf),
+                NormalizedUnit::Function(helper),
+            ],
             &root_ids,
         )
         .expect("helper-aware tree should generate");
@@ -1226,7 +1308,9 @@ mod tests {
         let chain3_module = tree
             .get(&PathBuf::from("pricing/checkout_chain3.ts"))
             .expect("chain3 module should be emitted");
-        assert!(chain3_module.contains("import { calculate_total } from \"./calculate_total.ts\";"));
+        assert!(
+            chain3_module.contains("import { calculate_total } from \"./calculate_total.ts\";")
+        );
         assert!(chain3_module.contains("import { apply_tax } from \"./apply_tax.ts\";"));
         assert!(chain3_module.contains("import { apply_discount } from \"./apply_discount.ts\";"));
 

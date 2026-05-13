@@ -2018,11 +2018,7 @@ fn generate_typescript_specs(
     _test_name_prefix: &str,
 ) -> Result<GeneratedSpecs> {
     let mut validation_specs = collect_validation_specs(path, context)?;
-    let specs: Vec<LoadedSpec> = validation_specs
-        .local_specs()
-        .into_iter()
-        .cloned()
-        .collect();
+    let specs: Vec<LoadedSpec> = validation_specs.all_specs().into_iter().cloned().collect();
     let total_files = validation_specs.total_files;
     let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
     let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);

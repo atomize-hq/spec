@@ -1,28 +1,26 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260512-215821.md -->
-# M54: Bounded Same-Tree Chain3 TypeScript Execution Plan
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-spec/feat-m40-plus-autoplan-restore-20260513-084347.md -->
+# M55: Bounded Cross-Library TypeScript Helper Imports Plan
 
 Status: **implementation plan**
-Milestone: **M54**
+Milestone: **M55**
 Milestone family: **bounded-typescript-execution**
 Implementation readiness: **ready for bounded execution**
-Plan scope: **extend the existing Bun-backed TypeScript lane to execute exactly `function.wrapper.pipeline.chain3.v1` in the same loaded tree, while preserving every current out-of-contract rejection**
+Plan scope: **extend the existing Bun-backed TypeScript lane to allow bounded cross-library helper imports, while keeping direct wrapper and chain3 root deps local-only**
 Base branch: **main**
 Working branch: **feat/m40-plus**
-Validated at commit: **`1f04e28`**
+Validated at commit: **`dd4008f`**
 Last rewritten: **2026-05-13**
 
 Supersedes:
 
-- the prior M53 closeout plan at this path
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260512-214117.md`
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/ceo-plans/2026-05-12-m54-bounded-chain3-typescript.md`
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260512-214819.md`
+- the prior M54 plan at this path
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260513-082845.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260513-082845.md`
 
 Primary source artifacts:
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260512-214117.md`
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/ceo-plans/2026-05-12-m54-bounded-chain3-typescript.md`
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260512-214819.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260513-082845.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260513-082845.md`
 - `TODOS.md`
 - `README.md`
 - `CHANGELOG.md`
@@ -31,140 +29,183 @@ Primary repo surfaces:
 
 - `spec-core/src/validator.rs`
 - `spec-core/src/typescript_backend.rs`
-- `spec-core/src/semantic_review.rs`
 - `spec-cli/tests/cli.rs`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/*.unit.spec`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/{drift,under_specified,unsupported_near_miss}/units/pricing/*.unit.spec`
+- `examples/crosslib-app/spec.toml`
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+- `examples/shared-spec/units/money/round.unit.spec`
 - `README.md`
 - `CHANGELOG.md`
 - `TODOS.md`
 
 ## Executive Summary
 
-M54 closes a specific product mismatch that already exists in the repo.
+M55 closes one specific product mismatch.
 
-`spec` can already classify `function.wrapper.pipeline.chain3.v1` truthfully during semantic review. The promoted family packet and chain3 fixtures already exist. The TypeScript execution lane still rejects that exact family before Bun runs because the lane only admits:
+The repo already supports cross-library units in the Rust path. `examples/crosslib-app` is real. `[libraries]` config already works. Cross-library validate, generate, export, and Rust test flows are already first-class.
 
-- `function.arithmetic_leaf.monotone_up.v1`
-- `function.wrapper.pipeline.v1`
+The Bun-backed TypeScript lane is still artificially narrower. It supports:
 
-M54 widens the lane by one family, not by topology.
+- helper-aware monotone-up roots from M46
+- same-tree wrapper roots from M52
+- same-tree chain3 roots from M54
 
-After M54:
+But it still rejects any `shared::...` helper dep before Bun runs. That makes the product story weird. The user can author a real cross-library function unit like `examples/crosslib-app/units/pricing/apply_tax.unit.spec`, the Rust path treats it as normal, and the TypeScript path says "local only" even when the only thing crossing libraries is a helper leaf already within the bounded lane.
 
-1. a TypeScript root is admitted when semantic review classifies it as `function.wrapper.pipeline.chain3.v1`
-2. the root and every required closure member must live in the same loaded unit tree
-3. the root must use the exact direct-dependency tuple defined by the promoted chain3 family
-4. generated TypeScript emits only the root plus the required closure members
-5. the aligned chain3 fixture flips from pre-Bun rejection to successful Bun execution
-6. cross-library imports, generic multi-dependency roots, molecule targets, seam kinds, and unrelated loaded units all stay rejected
+M55 fixes that exact seam. Not generic TypeScript portability. Not generic cross-library execution. One bounded move:
 
-If implementation starts sounding like "support any three-dependency TypeScript unit," the milestone drifted and the plan should stop.
+> The Bun-backed TypeScript lane supports cross-library helper imports for already-supported bounded function families, while direct wrapper and chain3 root deps remain local-only.
+
+If implementation starts sounding like "cross-library TypeScript support," the milestone drifted.
+
+## Problem Statement
+
+Today the TypeScript lane is family-shaped but still topology-fragile. The root-family admission logic already exists, and the generated same-tree closure logic already exists, but helper resolution assumes the direct helper dep must be local. That makes the maintained cross-library example truthfully portable in Rust and artificially non-portable in TypeScript.
+
+This matters because the user journey is currently arbitrary:
+
+1. author a real cross-library helper in a sibling spec library
+2. prove it in Rust
+3. switch to `--target-language typescript`
+4. hit a pre-Bun rejection that is not about family support, only about helper locality
+
+That feels fake because it is fake. M55 removes that fake limitation without widening the root contract.
+
+## Step 0: Scope Challenge
+
+### What already exists for each sub-problem
+
+| Sub-problem | Existing surface | M55 action |
+|---|---|---|
+| Cross-library library loading | `examples/crosslib-app/spec.toml`, M9 library loading, many `shared::...` CLI tests in `spec-cli/tests/cli.rs` | reuse |
+| TypeScript target root-family validation | `spec-core/src/validator.rs` | extend carefully |
+| TypeScript bounded closure emission | `spec-core/src/typescript_backend.rs` | extend helper resolution only |
+| Same-tree wrapper and chain3 TypeScript proofs | `spec-cli/tests/cli.rs` | preserve |
+| Current cross-library TypeScript rejection wall | `TYPESCRIPT_CROSS_LIBRARY_HELPER_UNSUPPORTED_MESSAGE` and local-only dep parsing in `spec-core/src/validator.rs` | replace only for helper slots |
+| Real maintained cross-library example | `examples/crosslib-app/` | reuse as the canonical green path |
+
+### Minimum change set
+
+The minimum honest implementation is:
+
+1. allow cross-library resolution only for helper dep positions already permitted by the bounded lane
+2. keep all direct root deps for wrapper and chain3 local-only
+3. render correct relative TypeScript imports for sibling-library helper units
+4. prove the real maintained monotone-up green path in `examples/crosslib-app`
+5. prove wrapper and chain3 recursive helper reuse inside the bounded closure
+6. add the full negative wall
+7. update docs only after proof is green
+
+Anything beyond that is scope creep.
+
+### Complexity check
+
+This plan touches more than 8 files if docs and fixtures are included, but the logic change is still bounded because it stays inside two existing code seams:
+
+- validation contract in `spec-core/src/validator.rs`
+- generation contract in `spec-core/src/typescript_backend.rs`
+
+No new crates, services, commands, runtimes, or schema surfaces are allowed.
+
+### Search check
+
+No new framework or infrastructure pattern is being introduced. This is a contract-extension milestone inside the existing Rust + Bun lane. Search is not the bottleneck. The bottleneck is keeping the contract narrow and proving it with a real example.
+
+### TODOS cross-reference
+
+This plan executes the existing deferred item in `TODOS.md`:
+
+- `Cross-library TypeScript helper imports`
+
+It must not silently absorb these still-deferred items:
+
+- `Generic multi-dependency TypeScript execution`
+- direct cross-library wrapper deps
+- direct cross-library chain3 deps
+
+### Completeness check
+
+The complete version is still bounded. The shortcut would be proving only a synthetic fixture and calling it done. That would save minutes and cost clarity. The complete version for M55 is:
+
+- one real green path in `examples/crosslib-app`
+- explicit negative proofs for every widening case
+- exact docs language
+
+That is the lake. Boil it.
+
+### Distribution check
+
+No new artifact type is introduced. Distribution remains the existing `spec` CLI via current cargo install and GitHub release paths.
 
 ## Current State
 
-Observed on `feat/m40-plus` at `1f04e28`:
+Observed on `feat/m40-plus` at `dd4008f`:
 
-- `spec-core/src/validator.rs` gates TypeScript execution around the monotone-up root, the two-step wrapper root, and helper closure members
-- `spec-core/src/typescript_backend.rs` renders bounded TypeScript trees for those same promoted same-tree families
-- `spec-cli/tests/cli.rs` still proves `typescript_chain3_wrapper_rejects_before_bun_runs`
-- `spec-core/src/semantic_review.rs` already recognizes `function.wrapper.pipeline.chain3.v1`
-- the aligned chain3 fixture exists, but the maintained TypeScript execution story is incomplete
+- `spec-core/src/validator.rs` still hard-rejects cross-library helper deps for the TypeScript target with M52 wording
+- `spec-core/src/typescript_backend.rs` still parses helper deps as local-only
+- `spec-cli/tests/cli.rs` already proves same-tree green paths for monotone-up, wrapper, and chain3
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec` already depends on `shared::money/round`
+- `examples/shared-spec/units/money/round.unit.spec` already exists as the sibling helper truth
 
-Known stop-state truth from the source design:
+Known governance truth from prior work still stands:
 
 - `recommendation_status = insufficient_real_corpus`
-- `decision_status = not_recommended`
 - `decision_action = stop`
 - `required_next_action = record_stop_without_new_milestone`
 
-M54 changes backend execution truth only. It does not reopen corpus recommendation or family-analysis stop-state logic.
+M55 changes backend execution truth only. It does not reopen family-analysis governance.
 
-## What Already Exists
-
-| Sub-problem | Existing owner | M54 action |
-|---|---|---|
-| TypeScript CLI entrypoint | `spec-cli/src/commands.rs`, `spec-core/src/backend_execution.rs` | reuse |
-| TypeScript root validation | `spec-core/src/validator.rs` | extend exact family gate |
-| Same-tree closure rendering | `spec-core/src/typescript_backend.rs` | extend bounded closure collector |
-| Semantic family classification | `spec-core/src/semantic_review.rs` | reuse as source of truth |
-| Existing wrapper dep contract | `validate_typescript_wrapper_dep_contract` in `spec-core/src/validator.rs` | mirror structure for chain3 |
-| Existing wrapper closure proof | `typescript_tree_renders_wrapper_closure_without_unrelated_units` in `spec-core/src/typescript_backend.rs` | add chain3 sibling test |
-| Chain3 fixtures | `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/...` | add and maintain TypeScript bodies only where needed |
-| Current pre-Bun rejection proof | `typescript_chain3_wrapper_rejects_before_bun_runs` in `spec-cli/tests/cli.rs` | replace aligned-case expectation, preserve negative rejects |
-
-## Scope And Non-Goals
+## Exact Product Contract
 
 ### In Scope
 
-- admit `function.wrapper.pipeline.chain3.v1` as a TypeScript execution root
-- validate the exact same-tree direct-dependency tuple required by the promoted family
-- allow the root closure to include required wrapper and leaf members already supported by the bounded lane
-- render only the required closure into the generated TypeScript tree
-- flip the aligned chain3 CLI proof from reject-before-Bun to pass-through-Bun
-- preserve all current rejection behavior outside the new bounded family
-- update docs and backlog language so the public contract stays exact
+- cross-library helper deps for `function.arithmetic_leaf.monotone_up.v1`
+- cross-library helper deps reached from already-supported wrapper or chain3 closure members, if those helper deps occupy helper positions already allowed today
+- correct TypeScript import rendering for sibling-library helper units
+- actionable bounded errors for unresolved alias, missing helper unit, wrong helper family, and missing helper `body.typescript`
+- at least one real green path through `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+- preservation of additive, target-specific proof in passports and status output
 
 ### Not In Scope
 
-- generic same-tree multi-dependency TypeScript execution
-- cross-library TypeScript helper or function imports
-- TypeScript molecule execution
-- TypeScript execution for `kind:data`, `kind:sum`, marked seams, or any other seam kind
-- new passport schema fields
-- new export schema fields
+- direct cross-library wrapper deps
+- direct cross-library chain3 deps
+- generic cross-library TypeScript execution
+- generic multi-dependency TypeScript execution
+- molecule TypeScript execution
+- seam-kind TypeScript execution
+- new schema fields
+- new CLI flags or runtime channels
 - family-analysis recommendation changes
-- new package, binary, or release channel
-- a maintained ecommerce chain3 TypeScript example unless implementation proves the packet fixture is too opaque
 
 ## Locked Decisions
 
 These are contract decisions, not suggestions:
 
-1. Chain3 support is keyed by `function.wrapper.pipeline.chain3.v1`, not by `deps.len() == 3`.
-2. Chain3 support is same-tree only. Any `shared::...` dependency remains rejected.
-3. Direct dependency order is part of the contract:
-   - dep 1: `function.wrapper.pipeline.v1`
-   - dep 2: `function.arithmetic_leaf.monotone_up.v1`
-   - dep 3: `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-4. Closure recursion is allowed only through already-supported bounded family members.
-5. `function.wrapper.pipeline.v1` may appear as a closure member under a chain3 root if it passes the existing wrapper contract.
-6. `function.wrapper.pipeline.chain3.v1` may not appear as a nested closure member in M54.
+1. Cross-library support is keyed by helper-slot position, not by "dep contains `::`".
+2. Direct root deps for `function.wrapper.pipeline.v1` remain local-only.
+3. Direct root deps for `function.wrapper.pipeline.chain3.v1` remain local-only.
+4. Cross-library resolution is allowed only for helper leaves already permitted by the current bounded lane.
+5. Helper units must still classify as `function.helper.identity_passthrough.v1`.
+6. Helper units must still author non-empty `body.typescript`.
 7. Generated TypeScript includes each required unit once and excludes unrelated loaded units.
 8. Rust and TypeScript proof remain additive and target-specific.
-9. Molecule tests stay Rust-only.
-10. Documentation must describe the boundary as "bounded same-tree chain3 TypeScript execution."
+9. Molecule tests remain Rust-only.
+10. Public docs must say "cross-library helper imports in the bounded TypeScript lane," nothing broader.
+11. The canonical user-facing proof path is `examples/crosslib-app/units/pricing/apply_tax.unit.spec`, not a temporary injected fixture.
+12. Wrapper and chain3 recursive cross-library helper support is in scope for M55 and must be proven, but it does not require a second maintained example.
+13. Focused fixtures may support bounded recursive proofs, but they do not replace the canonical real-example proof.
 
 ## Abort And Re-scope Triggers
 
 Stop implementation and rewrite the plan if any of these become true:
 
-1. chain3 support requires a generic graph executor instead of the current bounded closure collector
-2. a chain3 root needs cross-library resolution to pass
-3. molecule TypeScript execution becomes necessary to prove the feature
+1. supporting helper imports requires a generic graph executor instead of the bounded closure collector
+2. direct wrapper or chain3 root deps must become cross-library for the green path to work
+3. import rendering requires a second TypeScript-only library-resolution system instead of reusing loaded unit truth
 4. passport or export schemas need new fields
-5. semantic review cannot classify the aligned fixture as `function.wrapper.pipeline.chain3.v1`
-6. implementation starts changing family-analysis stop-state behavior
-
-## Target End State
-
-This command passes:
-
-```bash
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec --target-language typescript
-```
-
-These still reject before Bun or before unsupported execution:
-
-- cross-library chain3 deps
-- wrong direct dep order
-- wrong direct dep count
-- unsupported direct dep family
-- required closure member missing `body.typescript`
-- unrelated loaded units leaking into emitted TypeScript
-- `.test.spec --target-language typescript`
-- seam-kind TypeScript targets
-- generic four-dependency or otherwise out-of-family roots
+5. molecule TypeScript execution becomes necessary to prove the feature
+6. docs can only be made truthful by using broader wording than the actual proof wall
+7. the only way to make the canonical example pass is to keep injecting temporary `body.typescript` during tests instead of committing truthful authored spec bodies
 
 ## Architecture
 
@@ -175,56 +216,61 @@ CURRENT
   spec test --target-language typescript
     |
     v
-  validate_typescript_execution_target_spec_with_specs()
+  validator.rs
     |
-    +-- monotone_up root, deps 0..1
+    +-- monotone_up root
+    |     `-- helper dep must be local
     |
-    +-- wrapper root, deps exactly 2
+    +-- wrapper root
+    |     `-- direct deps must be local
     |
-    `-- everything else rejected before Bun
+    `-- chain3 root
+          `-- direct deps must be local
 
-TARGET M54
+TARGET M55
   spec test --target-language typescript
     |
     v
-  validate_typescript_execution_target_spec_with_specs()
+  validator.rs
     |
-    +-- monotone_up root, deps 0..1
+    +-- monotone_up root
+    |     `-- helper dep may be local or cross-library
+    |           if alias resolves, unit loads, family matches, TS body exists
     |
-    +-- wrapper root, deps exactly 2
+    +-- wrapper root
+    |     `-- direct deps stay local-only
+    |           but nested helper leaves may be cross-library
     |
-    `-- chain3 root, deps exactly 3
-          |
-          +-- dep 1: wrapper.pipeline.v1, same tree
-          +-- dep 2: monotone_up.v1, same tree
-          `-- dep 3: monotone_down_nonnegative.v1, same tree
+    `-- chain3 root
+          `-- direct deps stay local-only
+                but nested helper leaves may be cross-library
 ```
 
-### Closure Emission Flow
+### Resolution And Emission Flow
 
 ```text
-checkout_chain3_aligned
+CLI: spec test --target-language typescript
   |
-  +-- pricing_total_wrapper_aligned
-  |     |
-  |     +-- pricing_discount_leaf_aligned
-  |     |     |
-  |     |     `-- helper closure, if authored and already supported
-  |     |
-  |     `-- pricing_tax_leaf_aligned
-  |           |
-  |           `-- helper closure, if authored and already supported
+  +-- validator.rs
+  |     +-- classify root family
+  |     +-- validate root direct-dep tuple
+  |     `-- resolve helper dep
+  |            +-- local helper, existing path
+  |            `-- shared::helper, new bounded path
   |
-  +-- pricing_tax_leaf_aligned
+  +-- typescript_backend.rs
+  |     +-- collect bounded closure
+  |     +-- resolve helper module owner
+  |     `-- render relative import path across sibling library boundary
   |
-  `-- pricing_discount_leaf_aligned
-
-Emission rule:
-  include each required unit once
-  include runtime/build/test support modules
-  exclude unrelated loaded units
-  reject before Bun if any required member lacks valid TypeScript body
+  `-- Bun
+        +-- build generated tree
+        `-- run local tests
 ```
+
+### Import Rendering Rule
+
+The backend must not special-case imports by string concatenation. It should resolve the loaded helper unit first, derive the emitted module path from the resolved unit id, then compute the relative import path from the importing unit module to the helper module. This keeps the TypeScript backend aligned with loaded-unit truth instead of making a second resolver.
 
 ## Write Scope
 
@@ -233,463 +279,405 @@ Expected write scope:
 - `spec-core/src/validator.rs`
 - `spec-core/src/typescript_backend.rs`
 - `spec-cli/tests/cli.rs`
-- aligned chain3 fixture `.unit.spec` files
-- negative chain3 fixture `.unit.spec` files only if a small authored reject case is required
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+- `examples/shared-spec/units/money/round.unit.spec`
+- `examples/crosslib-app/README.md`
 - `README.md`
 - `CHANGELOG.md`
 - `TODOS.md`
 
-This is a multi-file change, but it is still a bounded extension. No new crates, commands, services, or runtime dependencies should appear.
+Support-proof fixture write scope, only for bounded recursive wrapper and chain3 coverage:
+
+- a small cross-library aligned fixture under `semantic-families/.../fixtures/`
+
+This fixture support is additive only. It does not replace the canonical real-example proof path.
 
 ## Detailed Implementation Plan
 
 ### Phase 1: Validator Contract
 
-File: `spec-core/src/validator.rs`
+Primary file: `spec-core/src/validator.rs`
 
-1. Add:
+1. Replace the helper-specific TypeScript rejection rule so helper deps may be local or cross-library when the helper slot is otherwise legal for the bounded lane.
+2. Preserve local-only rejection for direct wrapper deps.
+3. Preserve local-only rejection for direct chain3 deps.
+4. Split failure classes so the error tells the user exactly what failed:
+   - alias unresolved
+   - helper unit missing
+   - helper family wrong
+   - helper `body.typescript` missing
+5. Update the M52/M54 wording in TypeScript error constants where needed so the user-facing contract says M55 and says the narrow thing.
+6. Land validator unit coverage for every positive and negative branch in the same phase.
 
-```rust
-pub const TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY: &str =
-    "function.wrapper.pipeline.chain3.v1";
-```
+Required implementation constraints:
 
-2. Extend the root-family enum:
+- no generic "allow cross-library dep" switch
+- no broadening of direct root dep validation
+- no change to molecule target validation
+- no change to non-TypeScript validation semantics
 
-```rust
-enum TypescriptTargetRootFamily {
-    MonotoneUp,
-    WrapperPipeline,
-    Chain3WrapperPipeline,
-}
-```
+Phase 1 is done when:
 
-3. Update `classify_typescript_target_root_family`:
-   - include chain3 in the supported-key error message
-   - return `Chain3WrapperPipeline` for `function.wrapper.pipeline.chain3.v1`
-   - preserve unsupported semantic-review handling
+- `validate_typescript_execution_target_spec_with_specs` accepts a legal shared helper dep in a helper slot
+- direct wrapper and chain3 shared root deps still fail before any backend work
+- each failure class has its own stable assertion in validator tests
+- no remaining user-facing error string implies broad cross-library TypeScript support
 
-4. Update `validate_typescript_execution_target_spec_with_specs`:
-   - `0 | 1` direct deps only valid for `MonotoneUp`
-   - `2` direct deps only valid for `WrapperPipeline`
-   - `3` direct deps only valid for `Chain3WrapperPipeline`
-   - any other arity rejects with explicit family-aware messaging
+### Phase 2: TypeScript Backend Closure And Import Rendering
 
-5. Add `validate_typescript_chain3_dep_contract`:
-   - require exactly three direct deps
-   - parse each dep with `DepRef::parse`
-   - reject any dep with `library_alias`
-   - require every dep to resolve in `specs_by_id`
-   - evaluate each dep through `SemanticReviewContext::new(specs_by_id)`
-   - require `support_status == supported`
-   - require exact compatibility keys in exact order:
-     - dep 1: `TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY`
-     - dep 2: `TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY`
-     - dep 3: `TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY`
-   - require non-empty `body.typescript` for every direct dep
-   - emit M54-specific, position-specific error strings
+Primary file: `spec-core/src/typescript_backend.rs`
 
-6. Update `validate_typescript_closure_member_spec_with_specs`:
-   - preserve helper closure behavior
-   - preserve monotone-up closure behavior
-   - allow `function.wrapper.pipeline.v1` as a closure member only when it passes the existing wrapper dep contract
-   - reject chain3 as a nested closure member in M54
+1. Extend helper dep parsing to accept library-qualified helper ids in helper positions only.
+2. Resolve helper specs from the loaded unit set, not from a TypeScript-only path guess.
+3. Continue collecting only the bounded closure.
+4. Render sibling-library helper imports with the correct relative path.
+5. Keep output deterministic and de-duplicated.
+6. Prove recursive wrapper and chain3 helper closure behavior here if the CLI layer would otherwise need large fixture orchestration just to exercise the backend contract.
 
-Definition of done for Phase 1:
+Required implementation constraints:
 
-- the validator admits only the exact chain3 family shape
-- every out-of-family variant rejects before Bun with clear error text
+- no inclusion of unrelated loaded units
+- no nested chain3 closure support beyond the current bounded contract
+- no second import resolver stack
 
-### Phase 2: TypeScript Backend Closure
+Phase 2 is done when:
 
-File: `spec-core/src/typescript_backend.rs`
+- backend tests prove correct relative imports across the sibling-library boundary
+- backend tests prove helper units are emitted once and unrelated units stay out
+- bounded recursive wrapper and chain3 helper closure behavior is covered either here or by Phase 3 CLI proofs, with no gap left ambiguous
 
-1. Update the module comment so it is milestone-neutral or explicitly names both M52 and M54 truth:
+### Phase 3: Proof Wall
 
-```text
-Bounded TypeScript backend generation for promoted same-tree function families.
-```
+Primary file: `spec-cli/tests/cli.rs`
 
-2. Import the new chain3 compatibility key.
+Add or update these proofs:
 
-3. Update `collect_typescript_root_closure`:
-   - detect chain3 root family
-   - iterate exactly three direct deps
-   - resolve each local dep
-   - call `collect_typescript_closure_member` for each dep
-   - rely on the validator for family shape and same-tree safety
+1. real cross-library green path for `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+2. target-specific status row remains truthful after TypeScript proof
+3. wrapper root still executes when any cross-library helper appears only inside an already-legal nested helper slot
+4. chain3 root still executes when any cross-library helper appears only inside an already-legal nested helper slot
+5. unresolved library alias fails before Bun
+6. missing shared helper fails before Bun
+7. wrong helper family fails before Bun
+8. missing helper `body.typescript` fails before Bun
+9. direct cross-library wrapper dep still fails before Bun
+10. direct cross-library chain3 dep still fails before Bun
 
-4. Update `collect_typescript_closure_member`:
-   - recurse through wrapper closure members so the chain3 wrapper pulls its leaf deps
-   - preserve helper closure recursion for leaf members
-   - keep `included` as a `BTreeSet` so repeated direct and nested deps emit once
+The negative wall is mandatory. Do not update docs before these are green.
 
-5. Add a chain3 sibling to the existing wrapper-tree test:
-   - root: `checkout_chain3_aligned`
-   - required emitted units:
-     - `pricing/checkout_chain3.ts`
-     - `pricing/calculate_total.ts`
-     - `pricing/apply_discount.ts`
-     - `pricing/apply_tax.ts`
-     - helper unit, only if used
-     - runtime/build/local-test support files
-   - unrelated loaded unit must not be emitted
-   - relative imports must stay stable
+Phase 3 is done when:
 
-Definition of done for Phase 2:
+- the maintained cross-library example passes through Bun without test-only spec mutation
+- wrapper and chain3 recursive helper reuse is proven somewhere concrete, not left as an implied backend property
+- every widened negative case still dies before Bun starts build or test execution
 
-- the backend emits the exact same-tree chain3 closure and nothing else
+### Phase 4: Authored Spec Truth
 
-### Phase 3: Fixture Truth
+Primary files:
 
-Files:
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+- `examples/shared-spec/units/money/round.unit.spec`
 
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_tax_leaf_aligned.unit.spec`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_discount_leaf_aligned.unit.spec`
+M55 assumes the real example path is chosen. Ensure the helper and root units carry truthful, minimal `body.typescript` that mirrors their existing semantic contract. Do not author decorative TypeScript just to make the example green. Keep the bodies as short as possible while remaining semantically honest.
 
-Required work:
-
-1. Add `body.typescript` to the aligned chain3 root.
-2. Ensure every required aligned closure member has non-empty `body.typescript`.
-3. Do not add new units just to make TypeScript generation easier.
-4. Keep naming aligned with generated function aliases.
-
-Root TypeScript body should mirror the Rust body:
-
-```typescript
-const base_total = pricing_total_wrapper_aligned(subtotal, discount_rate, tax_rate);
-const surcharged_total = pricing_tax_leaf_aligned(base_total, surcharge_rate);
-return pricing_discount_leaf_aligned(surcharged_total, loyalty_rate);
-```
-
-Definition of done for Phase 3:
-
-- the aligned fixture contains enough authored TypeScript for the bounded executor to prove the feature honestly
-
-### Phase 4: CLI Proof Wall
-
-File: `spec-cli/tests/cli.rs`
-
-1. Replace `typescript_chain3_wrapper_rejects_before_bun_runs` with an aligned pass proof:
-   - copy the aligned chain3 fixture
-   - run `spec test units/pricing/checkout_chain3_aligned.unit.spec --target-language typescript`
-   - assert success
-   - assert target-specific TypeScript proof surfaces if the surrounding helpers already expose that cleanly
-
-2. Preserve or add negative CLI proofs:
-   - molecule TypeScript rejection still happens before Bun
-   - wrong direct dep order rejects before Bun
-   - unsupported near-miss rejects before Bun
-   - missing required `body.typescript` rejects before Bun
-   - cross-library dep rejects before Bun, if the fixture mutation remains small and explicit
-
-3. Do not add a generic "multi-dep TypeScript now works" proof.
-
-Definition of done for Phase 4:
-
-- the aligned chain3 path is green
-- every out-of-contract chain3-like path still fails at the validator boundary
+If the only way to keep `examples/crosslib-app` green is to bloat the authored spec bodies or diverge from the Rust contract, stop and re-scope instead of hiding behind test-only mutation helpers.
 
 ### Phase 5: Docs And Backlog
 
-Files:
+Primary files:
 
 - `README.md`
 - `CHANGELOG.md`
 - `TODOS.md`
 
-Required work:
+Only after proof is green:
 
-1. `CHANGELOG.md`
-   - add M54 note: bounded same-tree `function.wrapper.pipeline.chain3.v1` TypeScript execution
-   - state explicitly that generic multi-dependency TypeScript remains unsupported
+1. document the exact new claim
+2. document the exact non-goals next to it
+3. promote one canonical command for the real green path
+4. keep deferred items explicit in `TODOS.md`
 
-2. `README.md`
-   - update the TypeScript target-language support list
-   - add one chain3 command example only if it fits cleanly near existing examples
+Phase 5 is done when:
 
-3. `TODOS.md`
-   - keep cross-library helper imports deferred
-   - keep generic multi-dependency TypeScript deferred
-   - remove or rewrite any TODO that falsely says same-tree chain3 TypeScript is still missing
+- README, cross-library example docs, and CHANGELOG all use the same narrow M55 sentence
+- the canonical command matches the maintained example that just passed
+- `TODOS.md` still clearly defers direct cross-library roots and generic multi-dependency execution
 
-Definition of done for Phase 5:
+## Code Quality Guardrails
 
-- docs describe the exact boundary users can rely on, with no accidental generic claims
+- Reuse existing dep parsing and loaded-spec lookup shapes where possible. Do not grow a second parallel contract.
+- Prefer one small helper for "resolve bounded helper dep" over repeated cross-library branching.
+- Keep new constants explicit. Avoid clever generic messages that blur failure classes.
+- If a comment or module header still says "bounded M52 TypeScript lane" in a way that is now materially inaccurate, update it as part of the same change.
 
-## Test Plan
+## Test Review
 
-### Required Test Additions
+100% coverage of new behavior is required. The implementation is small enough that there is no excuse for a partial wall.
 
-#### Validator Unit Tests
-
-Add:
-
-- `typescript_target_accepts_chain3_root_with_exact_local_dep_tuple`
-- `typescript_target_rejects_chain3_wrong_dep_order`
-- `typescript_target_rejects_chain3_cross_library_dep`
-- `typescript_target_rejects_chain3_missing_dep`
-- `typescript_target_rejects_chain3_wrong_dep_family`
-- `typescript_target_rejects_chain3_dep_missing_typescript_body`
-- `typescript_target_rejects_generic_four_dep_root`
-- `typescript_closure_member_accepts_wrapper_pipeline_member`
-- `typescript_closure_member_rejects_chain3_member`
-
-Preserve:
-
-- monotone-up root acceptance
-- helper dep rejection cases
-- wrapper root acceptance and rejection cases
-- molecule TypeScript rejection
-
-#### TypeScript Backend Unit Tests
-
-Add:
-
-- `typescript_tree_renders_chain3_closure_without_unrelated_units`
-- `typescript_tree_rejects_chain3_closure_member_missing_typescript_body`, only if backend still owns a meaningful branch after validator checks
-- `typescript_tree_rejects_chain3_cross_library_dep_before_render`, only if backend still sees that path after validator checks
-
-Preserve:
-
-- zero-dep module rendering
-- wrapper closure rendering
-- helper import rendering
-
-#### CLI Regression Tests
-
-Add or update:
-
-- `typescript_chain3_wrapper_executes_with_bun`
-- `typescript_chain3_wrong_family_rejects_before_bun_runs`
-- `typescript_chain3_missing_typescript_body_rejects_before_bun_runs`
-- `typescript_chain3_wrong_dep_order_rejects_before_bun_runs`, if a small explicit fixture mutation is enough
-
-Keep:
-
-- `typescript_molecule_test_is_rejected_before_bun_runs`
-
-### Code Path Coverage Diagram
+### Code Path Coverage
 
 ```text
 CODE PATH COVERAGE
-==================
+===========================
 [+] spec-core/src/validator.rs
     |
-    +-- classify_typescript_target_root_family()
-    |   +-- monotone_up still accepted
-    |   +-- wrapper still accepted
-    |   +-- chain3 accepted only by exact compatibility key
-    |   `-- unsupported family rejected with supported-key message
+    ├── monotone-up root with local helper
+    │   └── [PRESERVE] Existing supported path stays green
     |
-    +-- validate_typescript_execution_target_spec_with_specs()
-    |   +-- 0..1 deps valid only for monotone_up roots
-    |   +-- 2 deps valid only for wrapper roots
-    |   +-- 3 deps valid only for chain3 roots
-    |   `-- 4+ deps rejected even if every dep has TypeScript
+    ├── monotone-up root with shared helper
+    │   └── [ADD] Green path if alias resolves, unit exists, family matches, TS body exists
     |
-    +-- validate_typescript_chain3_dep_contract()
-    |   +-- exact tuple accepted
-    |   +-- wrong dep order rejected
-    |   +-- cross-library dep rejected
-    |   +-- missing dep rejected
-    |   +-- unsupported dep family rejected
-    |   `-- missing dep body.typescript rejected
+    ├── wrapper root with direct shared dep
+    │   └── [ADD] Reject before Bun
     |
-    `-- validate_typescript_closure_member_spec_with_specs()
-        +-- helper closure member still accepted
-        +-- monotone_up closure member still accepted
-        +-- wrapper closure member accepted inside chain3 closure
-        `-- nested chain3 closure member rejected
+    ├── chain3 root with direct shared dep
+    │   └── [ADD] Reject before Bun
+    |
+    └── helper failure branches
+        ├── [ADD] unresolved alias
+        ├── [ADD] missing helper unit
+        ├── [ADD] wrong helper family
+        └── [ADD] missing helper body.typescript
 
 [+] spec-core/src/typescript_backend.rs
     |
-    +-- collect_typescript_root_closure()
-    |   +-- monotone_up behavior unchanged
-    |   +-- wrapper behavior unchanged
-    |   `-- chain3 root collects exact deps recursively
+    ├── helper dep resolution
+    │   ├── [ADD] local helper still resolves
+    │   └── [ADD] shared helper resolves to sibling library unit
     |
-    +-- collect_typescript_closure_member()
-    |   +-- wrapper member recursively collects its leaf deps
-    |   +-- helper member terminates recursion
-    |   `-- repeated direct and nested deps emit once
+    ├── import rendering
+    │   └── [ADD] relative import path is correct across sibling library boundary
     |
-    `-- render TypeScript tree
-        +-- chain3 root imports wrapper, tax, discount
-        +-- wrapper imports its leaves
-        +-- unrelated loaded unit excluded
-        `-- runtime/build/local-test support modules still emitted
-
-[+] spec-cli/tests/cli.rs
-    |
-    +-- aligned chain3 target-language typescript
-    |   `-- succeeds through Bun
-    |
-    +-- unsupported chain3-like target-language typescript
-    |   +-- wrong family rejects before Bun
-    |   +-- missing TypeScript body rejects before Bun
-    |   `-- cross-library dep rejects before Bun
-    |
-    `-- molecule target-language typescript
-        `-- remains rejected before Bun
+    └── bounded closure collection
+        └── [ADD] include helper once, exclude unrelated units
 ```
 
-### Regression Rule
+### User Flow Coverage
 
-This milestone changes existing behavior, not just net-new behavior. The aligned chain3 target currently rejects before Bun. That means the aligned green-path proof is a regression test requirement, not an optional nice-to-have.
+```text
+USER FLOW COVERAGE
+===========================
+[+] Real cross-library example
+    |
+    ├── [ADD] spec test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+    ├── [ADD] passport stores additive TypeScript proof
+    └── [ADD] spec status --target-language typescript reports valid
 
-## Failure Modes Registry
+[+] Recursive bounded closure reuse
+    |
+    ├── [ADD] wrapper root stays green when its nested helper leaf resolves cross-library
+    └── [ADD] chain3 root stays green when its nested helper leaf resolves cross-library
 
-| # | Codepath | Failure mode | Planned guard |
-|---|---|---|---|
-| 1 | root family classification | dep-count logic accidentally admits unsupported families | exact compatibility-key gate plus wrong-family tests |
-| 2 | direct dep tuple | wrong order produces plausible but incorrect runtime math | position-specific tuple validation plus negative tests |
-| 3 | same-tree resolution | root pulls `shared::...` dep and generated imports cannot resolve | cross-library rejection before Bun |
-| 4 | nested closure emission | wrapper emits without required leaf deps | backend closure-tree test |
-| 5 | repeated deps | direct and nested leaves emit twice with unstable imports | `BTreeSet` dedupe plus tree assertions |
-| 6 | missing TypeScript body | Rust-only closure member reaches generation or Bun | validator rejection before render |
-| 7 | unrelated loaded units | generated tree implies broader support than intended | exact exclusion assertion |
-| 8 | stale docs | users think generic multi-dep TypeScript is supported | README and CHANGELOG boundary wording |
+[+] Failure UX
+    |
+    ├── [ADD] alias error points at [libraries] config
+    ├── [ADD] missing helper error names the qualified unit id
+    ├── [ADD] wrong-family error names the resolved compatibility key
+    └── [ADD] missing TypeScript body error identifies the helper unit
+```
 
-Critical rule: any failure mode with no test and no clear pre-Bun error is a stop sign for merge.
+### Required Tests
 
-## Performance Notes
+#### `spec-core/src/validator.rs`
 
-No new runtime service or hot path is introduced. The risks are local:
+- accept cross-library helper dep in a legal helper slot
+- reject unresolved library alias
+- reject missing loaded helper unit
+- reject wrong helper family
+- reject missing helper `body.typescript`
+- reject direct cross-library wrapper dep
+- reject direct cross-library chain3 dep
 
-- do not introduce an unbounded repeated semantic-review traversal if a scoped context or map lookup is enough
-- closure collection must remain proportional to the required closure, not to every loaded unit for every dep
-- keep `BTreeSet` dedupe in place
-- keep CLI Bun tests targeted so `cargo test -p spec-cli` does not turn into a slow fixture matrix
+#### `spec-core/src/typescript_backend.rs`
+
+- render correct sibling-library import path
+- collect bounded cross-library helper closure without unrelated unit leakage
+- keep emission deterministic when helper ids are library-qualified
+
+#### `spec-cli/tests/cli.rs`
+
+- real example green path through Bun
+- TypeScript status row uses the TypeScript proof
+- bounded wrapper recursive helper green path
+- bounded chain3 recursive helper green path
+- negative cases fail before Bun:
+  - unresolved alias
+  - missing shared helper
+  - wrong helper family
+  - missing helper `body.typescript`
+  - direct cross-library wrapper dep
+  - direct cross-library chain3 dep
+
+### Exact Commands
+
+Focused unit tests:
+
+```bash
+cargo test -p spec-core typescript_target
+cargo test -p spec-core typescript_tree
+```
+
+Focused CLI integration:
+
+```bash
+cargo test -p spec-cli typescript
+```
+
+Canonical green-path proof:
+
+```bash
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+```
+
+Target-specific status proof:
+
+```bash
+cargo run -p spec-cli -- status examples/crosslib-app --target-language typescript --format json
+```
+
+Recursive bounded-closure proof:
+
+- if the repo already has a truthful maintained wrapper or chain3 example that exercises a shared helper leaf, use it
+- otherwise add the smallest focused fixture that proves wrapper and chain3 recursive helper reuse without changing the public M55 product story
+
+## Failure Modes
+
+| Failure mode | Test covers it | Error handling exists | User sees clear error | Severity | Required action |
+|---|---|---|---|---|---|
+| Direct cross-library wrapper dep accidentally passes | yes, add CLI + validator negative | yes | yes | High | preserve local-only direct-dep wall |
+| Direct cross-library chain3 dep accidentally passes | yes, add CLI + validator negative | yes | yes | High | preserve local-only direct-dep wall |
+| Shared helper alias is unresolved | yes, add CLI + validator negative | yes | must be explicit | Medium | point at `[libraries]` alias |
+| Shared helper unit is absent from loaded sibling library | yes, add CLI + validator negative | yes | must name the unit id | Medium | name the missing qualified unit |
+| Shared helper resolves to wrong family | yes, add CLI + validator negative | yes | must name the resolved family | Medium | print compatibility key |
+| Shared helper lacks `body.typescript` | yes, add CLI + validator negative | yes | must identify the helper unit | High | fail before Bun |
+| Import rendering points at wrong relative path | yes, add backend + CLI green-path proof | partial today | not necessarily | High | treat backend import tests as mandatory |
+| Unrelated loaded units leak into generated tree | yes, add backend tree assertion | partial today | no | Medium | keep bounded closure collector strict |
+
+Critical gap rule:
+
+- Any failure mode that has no test, no explicit error handling, and would fail silently blocks completion.
+
+M55 should ship with zero critical gaps.
+
+## Performance And Operational Review
+
+Performance is not the main risk here. Complexity drift is.
+
+Still, hold these lines:
+
+- do not add generic graph traversal where bounded helper recursion already works
+- do not scan more loaded units than needed for the bounded closure
+- do not recompute import ancestry with a second custom resolver if module paths already encode what is needed
+
+Operationally, the biggest risk is debugging generated import paths after validation passed. That is why backend import rendering tests are first-class, not "nice to have."
+
+## What Already Exists
+
+| Existing code or flow | Reuse or rebuild |
+|---|---|
+| M9 cross-library library loading and alias semantics | reuse |
+| M46 helper-aware monotone-up TypeScript lane | reuse and extend |
+| M52 wrapper TypeScript lane | reuse and preserve direct local deps |
+| M54 chain3 TypeScript lane | reuse and preserve direct local deps |
+| `examples/crosslib-app` as maintained product example | reuse as the canonical user-facing green path |
+| existing CLI TypeScript proof wall in `spec-cli/tests/cli.rs` | reuse and expand |
+
+## NOT In Scope
+
+- proving cross-library direct wrapper roots
+- proving cross-library direct chain3 roots
+- supporting arbitrary multi-dependency TypeScript targets
+- broadening target-language validation to new spec kinds
+- adding TypeScript molecule execution
+- redesigning export or passport schema
+- reopening semantic-family promotion or corpus strategy
 
 ## Worktree Parallelization Strategy
 
-There is a real parallelization opportunity, but not at the start. The validator contract is the hinge. If multiple worktrees invent that contract independently, the merge pain will be self-inflicted.
+This plan does have parallelization opportunities.
 
 ### Dependency Table
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| A. Validator contract | `spec-core/src/validator.rs` | none |
-| B. TypeScript backend closure | `spec-core/src/typescript_backend.rs` | A |
-| C. Chain3 fixture TypeScript bodies | `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/` | A |
-| D. CLI proof wall | `spec-cli/tests/`, chain3 fixtures | A, B, C |
-| E. Docs and backlog sync | repo docs | A, B, C, D |
+| 1. Validator contract and unit tests | `spec-core/src/` validation surfaces | — |
+| 2. Backend helper resolution and import rendering | `spec-core/src/` backend surfaces | 1 contract freeze |
+| 3. CLI proof wall plus maintained example authoring | `spec-cli/tests/`, `examples/crosslib-app/`, `examples/shared-spec/` | 1 contract freeze |
+| 4. Docs and backlog updates | repo docs surfaces | 2 + 3 green proof |
 
 ### Parallel Lanes
 
-```text
-Lane 1
-  A. Validator contract
+Lane A: Step 1 -> Step 2  
+Sequential. One owner. Shared `spec-core/src/` write surface, same contract seam.
 
-Lane 2
-  B. TypeScript backend closure
+Lane B: Step 3  
+Can start after Step 1 freezes the contract wording and negative cases. This lane owns `spec-cli/tests/` plus the maintained example specs and can scaffold the proof wall in parallel with Lane A Step 2, but it cannot claim green until Lane A finishes.
 
-Lane 3
-  C. Chain3 fixture TypeScript bodies
-
-Lane 4
-  D. CLI proof wall
-
-Lane 5
-  E. Docs and backlog sync
-```
+Lane C: Step 4  
+Strictly last. Docs that land before proof will lie.
 
 ### Execution Order
 
-1. Run Lane 1 first, alone.
-2. After Lane 1 lands or is rebased cleanly, run Lane 2 and Lane 3 in parallel worktrees.
-3. After Lanes 2 and 3 are green, run Lane 4.
-4. Run Lane 5 last, after command names, proof surfaces, and exact rejection strings are stable.
+1. Launch Lane A first.
+2. Once Step 1 is stable, launch Lane B in a second worktree while Lane A continues through backend import rendering.
+3. Merge Lane A backend completion and Lane B proof wall together.
+4. Run the full focused command set.
+5. Launch Lane C only after the canonical real green path, the recursive bounded-closure proofs, and the negative wall are all passing.
 
 ### Conflict Flags
 
-- Lane 1 and Lane 2 both touch `spec-core`. Keep them sequential.
-- Lane 3 and Lane 4 both touch chain3 fixtures if CLI proofs mutate fixtures. Prefer authored fixture truth in Lane 3 and make Lane 4 read that truth instead of rewriting it.
-- Lane 5 should wait. Stale docs are worse than missing docs for a short window.
+- Lane A Step 1 and Step 2 both touch `spec-core/src/`. Keep them sequential in one worktree or under one owner.
+- Lane B owns `spec-cli/tests/cli.rs`. Do not split that file across workers. It is already huge and easy to conflict.
+- Lane B also owns the maintained example spec bodies. Lane C must not edit docs until those files and commands are stable.
+- If the CLI tests need helper utilities added in `spec-cli/tests/cli.rs`, keep one owner for that file. It is a large file and conflict-prone.
 
-### Parallelization Summary
+## Documentation And DX Deliverables
 
-- total workstreams: 5
-- workstreams that can truly overlap: 2
-- sequential gates: 3
-- recommended launch pattern: `A` first, then `B + C`, then `D`, then `E`
+The DX outcome is simple:
 
-If implementation discovers that Lane 4 needs to change validator contract or backend semantics, stop and fold that work back into the primary branch instead of pretending it is still an independent lane.
+- one canonical cross-library TypeScript command that works
+- exact explanation of what works
+- equally exact explanation of what still does not
 
-## Documentation Plan
+Required doc updates after proof:
 
-Update docs only after tests are green.
+1. README note for bounded cross-library helper imports
+2. `examples/crosslib-app/README.md` points at the canonical command
+3. CHANGELOG entry with the narrow product sentence
+4. TODOS keep direct cross-library root deps and generic multi-dep execution deferred
 
-Required outputs:
+Target TTHW for this wedge:
 
-- `CHANGELOG.md` says chain3 same-tree TypeScript execution is supported
-- `README.md` lists chain3 as supported and does not imply generic multi-dependency support
-- `TODOS.md` continues to track the real deferred items:
-  - cross-library TypeScript helper imports
-  - generic multi-dependency TypeScript execution
-  - any future broader portability work
+- current: ~15 minutes because there is no maintained passing example
+- target after M55: ~5 minutes with one copy-paste command
 
-## Validation Commands
+## Acceptance Criteria
 
-Run during implementation:
+M55 is done when all of these are true:
 
-```bash
-cargo test -p spec-core typescript_target
-cargo test -p spec-core typescript_tree
-cargo test -p spec-cli typescript_chain3
-```
+1. `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript` passes.
+2. The TypeScript lane accepts cross-library helper deps only in legal helper positions.
+3. Wrapper and chain3 bounded recursive helper closure support is explicitly proven.
+4. Direct cross-library wrapper deps still reject before Bun.
+5. Direct cross-library chain3 deps still reject before Bun.
+6. Unresolved alias, missing helper unit, wrong helper family, and missing helper `body.typescript` all fail with actionable bounded errors before Bun runs.
+7. Generated TypeScript imports the sibling helper module correctly.
+8. Status and passport proof remain additive and target-specific.
+9. README, `examples/crosslib-app/README.md`, and CHANGELOG describe exactly the landed boundary and no broader claim.
 
-Run before calling M54 done:
+## Completion Summary
 
-```bash
-cargo test -p spec-core
-cargo test -p spec-cli
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_chain3_aligned.unit.spec --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/unsupported_near_miss/units/pricing/checkout_chain3_unsupported_near_miss.unit.spec --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/drift/units/pricing/checkout_chain3_drift.unit.spec --target-language typescript
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/under_specified/units/pricing/checkout_chain3_under_specified.unit.spec --target-language typescript
-```
+- Step 0: Scope Challenge — accepted as a bounded execution wedge
+- Architecture — validator contract plus backend import rendering are the only real logic seams
+- Code Quality — reuse existing loaded-unit truth, no second resolver, no generic dep switch
+- Test Review — full coverage required for canonical green path, recursive bounded-closure proofs, and negative wall
+- Performance Review — no meaningful runtime risk, but real complexity drift risk
+- NOT in scope — written
+- What already exists — written
+- Failure modes — explicit, zero critical gaps allowed
+- Parallelization — 3 lanes, with Lane A sequential and Lane B parallel after contract freeze
+- Distribution — unchanged existing CLI distribution only
 
-Expected result:
+## Immediate Next Action
 
-- aligned command passes
-- out-of-contract commands fail with clear bounded-lane errors
-- Bun is not invoked for validator-level rejections
-
-## Success Criteria
-
-M54 is done when all of the following are true:
-
-1. `spec test ...checkout_chain3_aligned.unit.spec --target-language typescript` passes.
-2. The generated TypeScript tree includes only:
-   - the chain3 root
-   - the wrapper dep
-   - the two leaf deps
-   - required helpers, if authored and supported
-   - runtime/build/local-test support modules
-3. The generated TypeScript tree excludes unrelated loaded units.
-4. The validator rejects:
-   - cross-library deps
-   - wrong dep order
-   - wrong dep count
-   - unsupported dep family
-   - missing required `body.typescript`
-   - nested chain3 closure members
-   - generic out-of-family roots
-5. Existing monotone-up and two-step wrapper TypeScript tests still pass.
-6. Molecule TypeScript targets still reject before Bun.
-7. `README.md`, `CHANGELOG.md`, and `TODOS.md` all describe the same exact boundary.
-
-## Final Checklist
-
-- [ ] Validator contract implemented exactly as specified
-- [ ] Backend closure emission implemented exactly as specified
-- [ ] Aligned chain3 fixtures contain maintained TypeScript bodies
-- [ ] CLI aligned proof is green
-- [ ] Negative CLI proofs are green
-- [ ] Existing monotone-up and wrapper proofs remain green
-- [ ] Docs and backlog language are synchronized
-- [ ] No generic multi-dependency support slipped in by accident
+Implement Phase 1 first and keep it in one owner's worktree. As soon as the validator contract and unit tests are frozen, start the CLI/example proof lane in parallel while the same owner finishes backend import rendering.
