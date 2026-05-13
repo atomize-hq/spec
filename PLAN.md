@@ -1,129 +1,134 @@
-# M52: Bounded Same-Tree Wrapper TypeScript Execution Implementation Plan
+# M53: Shared-Core Portability Adoption Closeout Implementation Plan
 
 Status: **implementation plan**
-Milestone: **M52**
-Milestone family: **second-language-backend**
+Milestone: **M53**
+Milestone family: **shared-core-portability**
 Implementation readiness: **ready for bounded execution**
-Plan scope: **extend the existing M46 TypeScript executor so `spec` can generate, build, test, and record TypeScript target proof for the supported same-tree `function.wrapper.pipeline.v1` family without widening to cross-library imports, chain3, molecule execution, or generic arbitrary multi-dependency execution**
+Plan scope: **close out command-facing adoption on the frozen `xtask/src/family/analysis_core/*` seam without changing stop-state semantics, CLI shape, JSON contracts, or artifact paths**
 Base branch: **main**
 Working branch: **feat/m40-plus**
 Last rewritten: **2026-05-12**
 
 Supersedes:
-- the prior repo-root M51 shared-core portability plan previously maintained at this path
+- the prior repo-root M52 TypeScript execution plan previously maintained at this path
+- the reviewed M53 design draft at `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-170532.md`
 
 Primary source artifacts:
-- `docs/m52_bounded_same_tree_wrapper_typescript_execution_design_v0.1.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260511-170532.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-test-plan-20260512-201140.md`
 - `TODOS.md`
-- `README.md`
-- `CHANGELOG.md`
-- `docs/ai_promotion_and_multilanguage_milestones_v0.1.md`
-- `~/.gstack/projects/atomize-hq-spec/checkpoints/20260506-181701-semantic-review-milestone-reset.md`
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `ORCH_PLAN.md`
 
 Primary repo surfaces:
-- `spec-core/src/typescript_backend.rs`
-- `spec-core/src/validator.rs`
-- `spec-core/src/semantic_review.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/cli.rs`
-- `examples/ecommerce/units/pricing/apply_discount.unit.spec`
-- `examples/ecommerce/units/pricing/apply_tax.unit.spec`
-- `examples/ecommerce/units/pricing/calculate_total.unit.spec`
-- `semantic-families/function.wrapper.pipeline.v1/candidate.md`
+- `xtask/src/family/mod.rs`
+- `xtask/src/family/decision_kernel.rs`
+- `xtask/src/family/helper_surface.rs`
+- `xtask/src/family/analysis_core/mod.rs`
+- `xtask/src/family/recommend.rs`
+- `xtask/src/family/verify.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/lib.rs`
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
 
 ## Executive Summary
 
-M46 proved that `spec` can run one bounded TypeScript lane.
+M52 was the TypeScript widening.
 
-It did not prove the first same-tree wrapper closure.
+M53 is not another semantic-family decision milestone, and it is not more TypeScript work. The current repo truth still says no new family move is authorized, the frozen `analysis_core/*` seam is already the semantic owner, and the remaining debt is the command-facing adoption story around that seam.
 
-The repo already knows how to classify `function.wrapper.pipeline.v1` semantically, but the TypeScript execution path still rejects the canonical `pricing/calculate_total` wrapper before Bun runs because its direct deps are validated under the old monotone-up-root-plus-optional-helper contract.
+That means the honest next wedge is small and specific:
 
-M52 fixes exactly that mismatch.
+1. make `xtask/src/family/mod.rs` present `analysis_core` as the maintained owner surface
+2. keep `decision_kernel.rs` and `helper_surface.rs` only as explicit compatibility passthroughs if they are still needed
+3. tighten `xtask/src/lib.rs` proof so retained compatibility surfaces are tested as passthroughs, not mistaken for a second semantic home
+4. rerun the frozen stop-state proof floor and confirm no CLI, JSON, or artifact-path behavior changed
 
-This plan lands one honest widening:
-
-1. admit `function.wrapper.pipeline.v1` as a TypeScript execution target
-2. require its direct dependency closure to stay local to the same loaded unit set and generated tree
-3. reuse the existing Bun runtime, CLI surfaces, and `target_proofs.typescript` storage
-4. explicitly refuse chain3, cross-library TypeScript deps, molecule tests, seam kinds, and generic multi-dep execution
-
-If implementation broadens from "supported wrapper family in one local tree" to "multiple deps are generally fine now," M52 failed.
+If this milestone grows into seam extraction, repo-root plan churn, new family authorization, or generic portability work, it failed.
 
 ## Live Validated Basis
 
 Validated from the current tree on `feat/m40-plus` on 2026-05-12.
 
-Commands:
+Commands run:
 
 ```bash
+./.agents/skills/next-milestone/scripts/collect_signals.sh
 cargo xtask family recommend --format json
 cargo xtask family corpus-decision --format json
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/calculate_total.unit.spec --target-language typescript
+cargo xtask family verify-decision-contract --format json
+cargo test -p xtask
 ```
 
 Observed command truth:
 
+- `collect_signals.sh`
+  - `recommendation_status = insufficient_real_corpus`
+  - `decision_status = not_recommended`
+  - `decision_action = stop`
+  - `decision_basis_code = no_actionable_candidate`
+  - `required_next_action = record_stop_without_new_milestone`
 - `cargo xtask family recommend --format json`
   - `recommendation_status = "insufficient_real_corpus"`
   - `decision_summary.decision_status = "not_recommended"`
 - `cargo xtask family corpus-decision --format json`
   - `decision_action = "stop"`
+  - `decision_basis_code = "no_actionable_candidate"`
   - `required_next_action = "record_stop_without_new_milestone"`
-- `spec test ... apply_tax.unit.spec --target-language typescript`
-  - passes today
-- `spec test ... calculate_total.unit.spec --target-language typescript`
-  - fails before Bun with:
-  - `unit 'pricing/apply_discount' is not eligible for the bounded M46 TypeScript lane: body.typescript is required`
+- `cargo xtask family verify-decision-contract --format json`
+  - `overall_verdict = "pass"`
+  - all five checks passed
+- `cargo test -p xtask`
+  - `156 passed; 0 failed`
 
 Observed code truth:
 
-- `spec-core/src/validator.rs`
-  - hard-codes the current M46 TypeScript target gate around `function.arithmetic_leaf.monotone_up.v1`
-  - permits `deps: []` or exactly one direct local helper dep
-  - rejects cross-library deps, missing local helper deps, and wrong helper family
-- `spec-core/src/typescript_backend.rs`
-  - validates every emitted TypeScript unit under the current target/helper-role assumptions
-  - only renders zero-dep or one-helper import topology
-- `spec-core/src/semantic_review.rs`
-  - already supports:
-  - `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-  - `function.arithmetic_leaf.monotone_up.v1`
-  - `function.helper.identity_passthrough.v1`
-  - `function.wrapper.pipeline.v1`
-  - `function.wrapper.pipeline.chain3.v1`
-- `examples/ecommerce/units/pricing/calculate_total.unit.spec`
-  - is the canonical same-tree wrapper target
-- `examples/ecommerce/units/pricing/apply_discount.unit.spec`
-  - currently lacks `body.typescript`
-- `semantic-families/function.wrapper.pipeline.v1/candidate.md`
-  - freezes the truthful wrapper family as a straight-line two-call wrapper over supported local deps
+- `xtask/src/family/mod.rs`
+  - already exports `analysis_core`
+  - still exports `decision_kernel` and `helper_surface`
+  - already labels both shims as compatibility-only passthroughs
+- `xtask/src/family/decision_kernel.rs`
+  - is already a pure re-export shim over `analysis_core::decision_contract`
+- `xtask/src/family/helper_surface.rs`
+  - is already a pure re-export shim over `analysis_core::helper_surface`
+- `xtask/src/family/recommend.rs`
+  - already imports `analysis_core` directly
+- `xtask/src/family/verify.rs`
+  - already imports `analysis_core` directly
+- `xtask/src/family/promotion_artifacts.rs`
+  - already imports `analysis_core` directly
+- `xtask/src/lib.rs`
+  - already proves most decision semantics through `family::analysis_core::*`
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+  - already states `analysis_core/*` is the live owner surface and shims are compatibility-only
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+  - already makes the same compatibility-only distinction
 
-That is enough basis. Another family-choice or recommendation-governance milestone would be fake motion. The missing product truth is bounded wrapper execution in `spec`.
+That is the actual state.
+
+The semantic move is done. The remaining work is command-facing ownership closeout and proof tightening.
 
 ## Decision This Plan Makes
 
-M52 authorizes exactly one milestone:
+M53 authorizes exactly one bounded milestone:
 
-1. widen the TypeScript validator from "monotone-up leaf root only" to "supported wrapper pipeline root plus its exact same-tree local closure"
-2. widen the TypeScript tree generator so wrapper roots may import both required direct local deps
-3. keep the widening family-shaped, not dep-count-shaped
-4. add authored `body.typescript` only where the canonical wrapper closure and maintained wrapper packet fixtures now require it
-5. prove the widened contract through Rust unit tests, CLI integration tests, fixture truth, and target-proof evidence refresh
+1. preserve `analysis_core/*` as the only semantic owner surface
+2. make the command-facing export story match that frozen boundary
+3. keep any retained shim surface explicitly compatibility-only
+4. prove that the stop-state contract and command-facing outputs do not move
 
-M52 does not authorize:
+M53 does not authorize:
 
-- cross-library TypeScript dependency resolution
-- generic arbitrary multi-dependency TypeScript execution
-- `function.wrapper.pipeline.chain3.v1` execution
-- `.test.spec --target-language typescript`
-- seam-kind TypeScript execution
-- `spec validate --target-language`
-- `spec export --target-language`
-- new runtime/tooling beyond Bun
-- shared-core extraction work
-- renewed family-choice or corpus-program work
+- new family promotion work
+- corpus run `1`
+- second-language backend changes
+- repo-root `ORCH_PLAN.md` rewrite
+- artifact schema churn
+- path ownership migration into `analysis_core`
+- crate extraction
+- generic shared-core portability beyond this seam closeout
 
 ## Step 0: Scope Challenge
 
@@ -131,659 +136,532 @@ M52 does not authorize:
 
 | Sub-problem | Existing owner | Reuse verdict |
 | --- | --- | --- |
-| TypeScript CLI target entry points | `spec-cli/src/commands.rs` | reuse |
-| TypeScript runtime and generated helper modules | `spec-core/src/typescript_backend.rs` | reuse, extend narrowly |
-| TypeScript target-proof storage | `spec-core/src/passport.rs` via `spec-cli/src/commands.rs` | reuse |
-| supported wrapper family authority | `spec-core/src/semantic_review.rs` | reuse as the only semantic authority |
-| canonical same-tree wrapper example | `examples/ecommerce/units/pricing/*` | reuse, widen honestly |
-| maintained wrapper packet truth | `semantic-families/function.wrapper.pipeline.v1/**` | reuse, add bounded TypeScript parity |
-| TypeScript CLI regression harness | `spec-cli/tests/cli.rs` | reuse and extend |
-| validator/backend unit harnesses | `spec-core/src/validator.rs`, `spec-core/src/typescript_backend.rs` tests | reuse and extend |
+| semantic owner surface | `xtask/src/family/analysis_core/*` | reuse as-is |
+| command consumers | `xtask/src/family/recommend.rs`, `verify.rs`, `promotion_artifacts.rs` | already adopted, do not rework |
+| command dispatch surface | `xtask/src/lib.rs` | reuse, tighten proof only |
+| compatibility shims | `xtask/src/family/decision_kernel.rs`, `xtask/src/family/helper_surface.rs` | reuse only as explicit passthroughs if retained |
+| module presentation | `xtask/src/family/mod.rs` | tighten, do not redesign |
+| maintainer stop-state docs | `docs/semantic_family_capability_corpus_guide_v0.1.md`, `docs/recommendation_corpus_expansion_program_v0.1.md` | likely reuse with at most surgical wording sync |
+| proof floor | `cargo test -p xtask`, `collect_signals.sh`, `recommend`, `corpus-decision`, `verify-decision-contract` | reuse verbatim |
 
 ### Minimum Complete Slice
 
-The minimum honest slice is:
+The minimum honest M53 slice is:
 
-1. validator admits exactly one new TypeScript target family: `function.wrapper.pipeline.v1`
-2. generator can emit the wrapper root and the exact same-tree direct-dep closure it needs
-3. the canonical ecommerce wrapper closure authors the missing TypeScript bodies
-4. maintained wrapper packet fixtures can prove the aligned bounded TypeScript lane
-5. CLI/passport/status flows continue to write additive target-specific TypeScript proof
-6. docs explain the widened lane without implying generic multi-dep support
+1. `mod.rs` presents `analysis_core` as the maintained surface and retains shims only as compatibility surfaces
+2. retained shims remain trivial passthroughs and do not grow new logic
+3. `xtask/src/lib.rs` proves both the maintained owner surface and any retained compatibility surface intentionally
+4. the frozen stop-state proof floor reruns cleanly with unchanged outputs
+5. maintainer docs are only touched if a specific command-facing surface still lies after the code closeout
 
 Anything smaller is fake done.
 
+Anything larger is fake scope growth.
+
 ### Scope Reduction Decision
 
-Do not invent a generic closure planner.
+Do not reopen the old "Lane B + Lane D" framing as if a broad consumer migration is still left.
 
-Do not add a new executor abstraction just to support one family.
+Do not move logic into `analysis_core`.
 
-Do not refactor semantic review routing.
+Do not rewrite repo-root plans as part of this milestone.
 
-The smallest acceptable implementation is a bounded extension to the current validator and generator that introduces one new role model:
-
-- target root
-- helper dep
-- wrapper closure member
-
-That is enough.
+Do not touch `recommend.rs`, `verify.rs`, or `promotion_artifacts.rs` unless a proof failure shows that one of them still relies on the old presentation contract.
 
 ### Complexity Check
 
-This is a bounded lake, not an ocean.
+This milestone is below the overbuild threshold.
 
-Expected write scope:
+Expected primary write scope is four files:
 
-- core executor surfaces
-  - `spec-core/src/validator.rs`
-  - `spec-core/src/typescript_backend.rs`
-  - `spec-cli/src/commands.rs`
-  - `spec-cli/tests/cli.rs`
-- authored truth surfaces
-  - `examples/ecommerce/units/pricing/apply_discount.unit.spec`
-  - `examples/ecommerce/units/pricing/apply_tax.unit.spec`
-  - `examples/ecommerce/units/pricing/calculate_total.unit.spec`
-  - `semantic-families/function.wrapper.pipeline.v1/**`
-- docs
-  - `README.md`
-  - `CHANGELOG.md`
-  - `TODOS.md`
+- `xtask/src/family/mod.rs`
+- `xtask/src/family/decision_kernel.rs`
+- `xtask/src/family/helper_surface.rs`
+- `xtask/src/lib.rs`
 
-No new service, no new crate, no new schema version, no new runtime manager, no new distribution pipeline.
+Possible secondary write scope, only if truth requires it:
+
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+
+No new service, no new crate, no new command, no new schema, no new distribution work.
 
 ### Search Check
 
-No unfamiliar platform is entering the repo.
+No unfamiliar platform or new infrastructure is entering the repo.
 
-- **[Layer 1]** Reuse Bun, the existing CLI entry points, and the existing passport target-proof surface.
-- **[Layer 1]** Reuse semantic review compatibility keys as the sole truth for what families are eligible.
-- **[Layer 3]** The executor should widen only where the family contract is already strong enough to keep the claim honest.
+- **[Layer 1]** reuse the existing Rust module structure, stop-state commands, and xtask proof harness
+- **[Layer 1]** reuse the existing compatibility-only shim pattern rather than inventing a new facade layer
+- **[Layer 3]** the eureka here is that the semantic migration is already done; the remaining work is presentation and proof, so the plan should stay much smaller than the original draft wording suggested
 
 ### TODOS Cross-Reference
 
-Relevant deferred items already exist and remain deferred:
+Relevant deferred items in `TODOS.md` remain deferred:
 
-- wrapper TypeScript execution in `spec` -> spent by M52
-- cross-library TypeScript helper imports -> still deferred
-- generic multi-dependency TypeScript execution -> still deferred
-- molecule TypeScript execution -> still deferred
-- seam-kind TypeScript execution -> still deferred
+- generalized multi-wedge decision layer
+- cross-crate family-analysis shared core
+- public semantic fingerprint fields
 
-M52 should close the wrapper-execution TODO and leave the rest untouched.
+M53 must not silently consume any of those follow-ons.
 
 ### Completeness Check
 
 Choose the complete version.
 
-Land executor truth, authored truth, fixture truth, CLI proof truth, and docs truth in the same milestone. Do not ship the shortcut where the validator widens but the canonical example still cannot prove the new contract, or where the example passes but maintained packet truth and docs still lie.
+This milestone must land code truth, proof truth, and any necessary maintainer truth together. Do not ship the shortcut where the export surface is cleaned up but proof never directly exercises the retained compatibility path, and do not ship the shortcut where code is right but command-facing docs still teach the old ownership story.
 
 ### Distribution Check
 
-No new distributable artifact is introduced in M52.
+No new distributable artifact is introduced in M53.
 
-This is a behavior change inside the existing `spec` binary. Existing build and release pipelines are sufficient. Nothing new needs to be published beyond the repo and normal binary release flow.
+This is an internal behavior and proof-topology cleanup inside the existing `xtask` binary and repo docs. Existing build and release infrastructure is sufficient.
 
 ### Locked Plan Decisions
 
-These are frozen for M52:
+These are frozen for M53:
 
-1. The widened TypeScript executor remains family-shaped.
-2. `function.wrapper.pipeline.v1` is in scope.
-3. `function.wrapper.pipeline.chain3.v1` is out of scope.
-4. Cross-library TypeScript dep resolution is out of scope.
-5. `.test.spec --target-language typescript` remains unsupported.
-6. Rust remains the default target. TypeScript proof stays additive.
-7. Bun remains the only TypeScript runtime/tooling contract.
-8. No new `validate` or `export` target-language surface is added.
+1. `analysis_core/*` remains the only semantic owner surface.
+2. `decision_kernel.rs` and `helper_surface.rs` are either compatibility-only passthroughs or are removed entirely with proof coverage updated in the same change.
+3. command names, flags, JSON schemas, latest-artifact paths, and write behavior stay unchanged.
+4. `recommend`, `corpus-decision`, and `verify-decision-contract` must preserve current stop-state semantics exactly.
+5. repo-root `PLAN.md` is the only authority artifact being rewritten in this milestone; `ORCH_PLAN.md` is not reopened here.
+6. no logic moves into or out of `analysis_core/*` beyond import-path or re-export presentation adjustments needed for truthfulness.
 
 ### Abort And Re-scope Triggers
 
 Stop and re-scope if any of these become necessary:
 
-1. the executor needs cross-library dep loading or alias resolution
-2. the rule must widen to arbitrary supported multi-dep graphs to make the canonical wrapper pass
-3. chain3 turns out to be required for the first honest wrapper proof
-4. passport or status storage needs a schema redesign rather than reusing `target_proofs.typescript`
-5. the runtime contract needs `npm`, `package.json`, `tsconfig.json`, or alternate toolchain ownership beyond Bun
+1. a retained consumer outside the expected shim surfaces still depends on historical exports in a way that forces broader module surgery
+2. command behavior, JSON output, or latest-artifact paths need to change to complete the adoption cleanup
+3. docs require broad historical rewrites rather than narrow wording sync
+4. a proposed change starts to extract shared-core logic into a new crate or new module layer
+5. the stop-state proof floor changes from `stop / no_actionable_candidate / record_stop_without_new_milestone`
 
 ## Target End State
 
-After M52, the repo must tell one consistent story:
+After M53, the repo must tell one consistent story:
 
-- TypeScript execution in `spec` supports:
-  - monotone-up leaf roots
-  - the supported same-tree wrapper pipeline family
-- wrapper execution means:
-  - exactly two direct local deps
-  - same loaded unit set
-  - same generated tree
-  - exact dep-family tuple:
-    - first dep: `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-    - second dep: `function.arithmetic_leaf.monotone_up.v1`
-- the canonical ecommerce wrapper example proves that contract
-- maintained wrapper packet fixtures prove the same contract
-- docs say exactly that, and no more
+- semantic ownership lives in `xtask/src/family/analysis_core/*`
+- the command-facing module surface reflects that truth
+- any retained shim exists only as a compatibility passthrough
+- `xtask/src/lib.rs` proves both the owner surface and the compatibility promise intentionally
+- maintainer docs no longer leave room to read shims as live semantic owners
+- the family-analysis lane still says stop
 
 ## Architecture Review
 
 ### Architecture Delta
 
 ```text
-CURRENT M46
-  TS target root = monotone_up leaf
-    -> deps: [] or one local helper dep
-    -> generate root/helper modules
-    -> bun build
-    -> bun local tests
-    -> write target_proofs.typescript
+CURRENT
+  analysis_core/*
+    -> semantic owner surface
+    -> consumed directly by recommend.rs
+    -> consumed directly by verify.rs
+    -> consumed directly by promotion_artifacts.rs
+    -> consumed directly by most xtask proof tests
 
-M52
-  TS target root = monotone_up leaf OR wrapper.pipeline.v1
-    -> if wrapper root:
-       -> exactly two direct local deps
-       -> both deps already classify to the supported local families
-       -> include wrapper + exact direct closure in generated tree
-       -> bun build
-       -> bun local tests
-       -> write additive target_proofs.typescript
+  mod.rs
+    -> exports analysis_core
+    -> exports decision_kernel shim
+    -> exports helper_surface shim
 
-STILL OUT
-  chain3
-  cross-library deps
-  molecule tests
-  seam kinds
-  generic supported multi-dep graphs
+TARGET M53
+  analysis_core/*
+    -> still the only semantic owner
+
+  mod.rs
+    -> makes analysis_core the obvious maintained seam
+    -> keeps shims only if compatibility is still required
+
+  xtask/src/lib.rs
+    -> proves owner-surface behavior directly
+    -> proves retained shims are passthrough-only
+
+  docs
+    -> only updated if they still imply shim ownership after code closeout
 ```
 
 ### Component Boundaries
 
-`spec-core/src/validator.rs`
-- owns target eligibility and rejection reasons
-- must determine whether a root spec is:
-  - current M46 monotone-up lane
-  - new M52 wrapper lane
-  - unsupported
+`xtask/src/family/analysis_core/mod.rs`
+- remains the seam-local export surface for semantic ownership
+- is not the place to add new command plumbing
 
-`spec-core/src/typescript_backend.rs`
-- owns tree membership and import generation
-- must stop assuming every included unit is either a root or a helper
-- must render wrapper roots with two direct dep imports
-- must allow closure-member units whose role is "validated local dep of a validated wrapper root"
+`xtask/src/family/mod.rs`
+- owns command-facing module presentation
+- is the primary code surface M53 is allowed to reinterpret
 
-`spec-cli/src/commands.rs`
-- owns `generate/build/test/status` TypeScript plumbing
-- must keep additive proof routing unchanged
-- must not create new target-language command surfaces
+`xtask/src/family/decision_kernel.rs`
+- may only re-export `analysis_core::decision_contract`
+- must not accumulate wrapper logic, aliases, or policy branching
 
-`spec-cli/tests/cli.rs`
-- owns the end-to-end proof wall
-- must prove success for the canonical wrapper path and rejection for bounded non-goals
+`xtask/src/family/helper_surface.rs`
+- may only re-export `analysis_core::helper_surface`
+- must not become a second semantic owner
 
-### Execution Contract
+`xtask/src/lib.rs`
+- owns the proof wall
+- must prove the maintained owner story and the retained compatibility story separately
 
-#### Validator contract
+`docs/semantic_family_capability_corpus_guide_v0.1.md`
+`docs/recommendation_corpus_expansion_program_v0.1.md`
+- are maintainer teaching surfaces only
+- may be touched only when they would otherwise contradict the code after M53
 
-TypeScript target eligibility branches by supported compatibility key:
+### Realistic Failure Scenarios
 
-- `function.arithmetic_leaf.monotone_up.v1`
-  - keep the M46 rule
-- `function.wrapper.pipeline.v1`
-  - require exactly two direct deps
-  - both deps must be local to the same loaded unit set
-  - both deps must already exist in the validated spec context
-  - dep 1 must classify to `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-  - dep 2 must classify to `function.arithmetic_leaf.monotone_up.v1`
-  - both deps must author non-empty `body.typescript`
-  - the wrapper root must author non-empty `body.typescript`
-  - local test expectations remain inside the bounded translated grammar
+| Codepath | Realistic failure | Why it matters | Planned protection |
+| --- | --- | --- | --- |
+| `xtask/src/family/mod.rs` | a shim remains exported in a way that still looks first-class | maintainers keep reading two semantic homes into the codebase | tighten export presentation and add proof around retained compatibility imports |
+| `xtask/src/family/decision_kernel.rs` | passthrough re-export drifts from `analysis_core::decision_contract` | downstream compile paths still work but semantics fork | add direct parity tests through the shim path |
+| `xtask/src/family/helper_surface.rs` | passthrough re-export drifts from `analysis_core::helper_surface` | same false dual-ownership risk | add direct parity tests through the shim path |
+| `xtask/src/lib.rs` | tests only exercise owner paths and never the retained compatibility surface | a future refactor can silently break the promised compat surface | add explicit compatibility-surface regression coverage |
+| proof commands | cleanup mutates stop-state outputs while code still compiles | milestone accidentally spends the wrong contract | rerun the full stop-state proof floor as mandatory acceptance |
+| docs | wording drifts back to shim ownership language | maintainers get a silent but durable false model | touch docs only if needed and review wording against code after the code diff lands |
 
-The validator must reject:
+### Security And Blast-Radius Contract
 
-- cross-library deps
-- missing local deps
-- wrong dep arity
-- wrong dep family combination
-- chain3 roots
-- any other "supported somehow" ambiguity
+No new external surface is added.
 
-#### Tree-generation contract
+The blast radius is local to:
 
-The generator must distinguish three roles:
+- module exports
+- compatibility shims
+- xtask proof tests
+- maintainer-facing ownership wording
 
-1. monotone-up target root
-2. helper dep for a monotone-up root
-3. wrapper closure member for a wrapper root
-
-It must not widen to arbitrary graph walking.
-
-For wrapper roots, emit:
-
-- wrapper module
-- direct dep module A
-- direct dep module B
-- shared runtime files already frozen in M46
-- local test harness importing the wrapper root and closure members as needed
-
-It must not emit unrelated same-tree units just because they were loaded.
-
-#### CLI and proof-routing contract
-
-`spec generate/build/test/status --target-language typescript`
-- remain the only widened surfaces
-- keep Rust proof and TypeScript proof distinct
-- continue writing `target_proofs.typescript`
-
-`spec validate --target-language`
-- remains unsupported
-
-`spec export --target-language`
-- remains unsupported
-
-`.test.spec --target-language typescript`
-- remains rejected before Bun runs
-
-#### Security and blast-radius contract
-
-No new external execution surface is added. The blast radius is local:
-
-- validator behavior
-- generated TypeScript import topology
-- bounded Bun invocation
-- additive proof refresh
-
-The worst-case failure is a false-positive widening to unsupported graphs. That is why every rule in M52 stays family-based and explicitly negative on everything else.
-
-## In-Scope Files
-
-Core code:
-
-- `spec-core/src/typescript_backend.rs`
-- `spec-core/src/validator.rs`
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/cli.rs`
-
-Authored truth:
-
-- `examples/ecommerce/units/pricing/apply_discount.unit.spec`
-- `examples/ecommerce/units/pricing/apply_tax.unit.spec`
-- `examples/ecommerce/units/pricing/calculate_total.unit.spec`
-- `semantic-families/function.wrapper.pipeline.v1/**`
-
-Docs:
-
-- `README.md`
-- `CHANGELOG.md`
-- `TODOS.md`
-
-## Out-Of-Scope Files
-
-Do not touch unless a blocker proves this plan wrong:
-
-- cross-library example libraries
-- seam portability code
-- semantic-family packets other than `function.wrapper.pipeline.v1`
-- recommendation-policy and shared-core planning docs
-- CLI export/validate schema machinery
+The worst-case failure is not a production security incident. It is governance drift: the repo starts teaching two ownership surfaces again, or a compatibility promise quietly breaks. That is why proof, not refactor cleverness, is the center of M53.
 
 ## Code Quality Review
 
 ### Guardrails
 
-1. Do not encode M52 as "allow two deps now."
-2. Do not introduce a generic multi-role dependency planner.
-3. Prefer one explicit helper for role classification over a new abstraction layer.
-4. Reuse existing constants or add narrowly named M52-specific constants where current M46 messages would become false.
-5. Keep the diff minimal. The goal is an honest widening, not a cleanup campaign.
+1. Do not add new semantic logic to the shim files.
+2. Do not add a new abstraction layer to describe compatibility.
+3. Do not spread ownership comments across unrelated files when one export surface and one proof wall are enough.
+4. Prefer explicit re-export and explicit tests over helper macros or generic contract harnesses.
+5. Keep the diff minimal. This is adoption closeout, not cleanup theater.
 
-### Naming and structure requirements
+### Naming And Structure Requirements
 
-- If new constants are introduced, they must describe the bounded wrapper lane explicitly.
-- If validator logic branches by compatibility key, keep that logic close to current TypeScript-specific validation instead of scattering it through generic semantic code.
-- If generator logic needs new helpers, keep them inside `typescript_backend.rs` unless two or more modules genuinely need them.
+- if comments change, they must say `compatibility-only` or `semantic owner` plainly
+- if `mod.rs` order or grouping changes, it must make the maintained surface obvious without changing module names
+- if tests are added, they must name the distinction clearly:
+  - owner-surface proof
+  - compatibility-surface proof
 
-### Diagram maintenance
+### Diagram Maintenance
 
-No nearby code ASCII diagrams appear to require sync today, but if any inline comment diagrams are introduced during implementation, they become part of the change and must stay accurate.
-
-## Implementation Plan
-
-### Step 1: Freeze validator behavior
-
-Update `spec-core/src/validator.rs` so TypeScript eligibility is explicit for:
-
-- monotone-up leaf lane
-- helper-aware monotone-up lane
-- wrapper same-tree lane
-
-Acceptance:
-
-- wrapper roots are accepted only when the exact M52 contract holds
-- chain3, cross-library, wrong-family, wrong-arity, and missing-dep paths reject with stable TypeScript-specific errors
-- `.test.spec --target-language typescript` remains rejected before Bun runs
-
-### Step 2: Widen TypeScript tree generation
-
-Update `spec-core/src/typescript_backend.rs` so it can:
-
-- validate wrapper roots and closure members under the correct role
-- render two direct imports for wrapper roots
-- include only the exact validated local closure
-- keep the existing runtime filenames and local test harness structure
-
-Acceptance:
-
-- `pricing/calculate_total` no longer fails because `pricing/apply_discount` is validated under the wrong role
-- unrelated same-tree units are not emitted
-- monotone-up helper behavior does not regress
-
-### Step 3: Preserve CLI and target-proof behavior
-
-Update `spec-cli/src/commands.rs` only as needed to keep the widened tree flowing through:
-
-- `generate`
-- `build`
-- `test`
-- `status`
-
-Acceptance:
-
-- additive `target_proofs.typescript` still refreshes without replacing Rust proof
-- no new target-language command surfaces are introduced
-- single-unit TypeScript runs remain the primary proof path
-
-### Step 4: Author the missing TypeScript truth
-
-Update:
-
-- canonical ecommerce wrapper closure
-- maintained wrapper packet fixtures
-
-Required authored changes:
-
-- add `body.typescript` where the widened executor now depends on it
-- keep authored TypeScript semantically aligned with existing Rust truth
-- add targeted negative fixtures only if validator or CLI rejection coverage truly needs them
-
-Acceptance:
-
-- canonical ecommerce wrapper closure proves the new lane honestly
-- aligned wrapper packet can prove the same lane
-
-### Step 5: Align docs and backlog wording
-
-Update:
-
-- `README.md`
-- `CHANGELOG.md`
-- `TODOS.md`
-
-Acceptance:
-
-- README describes the M52 lane as wrapper-family same-tree execution only
-- CHANGELOG records the widening without overstating parity
-- TODOS removes the spent wrapper execution deferral and leaves later TypeScript wedges deferred
+If any nearby ASCII diagram comments are introduced or updated in `xtask/src/lib.rs`, they become part of the change and must reflect the retained compatibility contract accurately. Do not leave a stale topology diagram behind.
 
 ## Test Review
 
-### Test framework and proof surfaces
+### Test Framework Detection
 
-Primary frameworks already in the repo:
+This repo is Rust-first for the affected surface.
 
-- Rust unit tests in `spec-core`
-- Rust CLI integration tests in `spec-cli/tests/cli.rs`
-- end-to-end Bun proof exercised through `spec test --target-language typescript`
+Authoritative test command for this milestone:
 
-M52 should extend existing tests. No new test framework is needed.
+```bash
+cargo test -p xtask
+```
+
+Command-level acceptance surfaces:
+
+```bash
+./.agents/skills/next-milestone/scripts/collect_signals.sh
+cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
+cargo xtask family verify-decision-contract --format json
+```
 
 ### Code Path Coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] spec-core/src/validator.rs
-    │
-    ├── current monotone-up target eligibility
-    │   └── [EXISTING] covered today
-    │
-    ├── wrapper root eligibility
-    │   ├── [GAP] accept exact same-tree wrapper family
-    │   ├── [GAP] reject wrong dep arity
-    │   ├── [GAP] reject cross-library dep
-    │   ├── [GAP] reject missing local dep
-    │   ├── [GAP] reject wrong dep family combination
-    │   └── [GAP] reject chain3 root
-    │
-    └── molecule target rejection
-        └── [EXISTING] must stay green
+[+] xtask/src/family/analysis_core/*
+    ├── [★★★ TESTED] stop-state tuple + decision derivation + helper-surface classifier
+    └── [★★★ TESTED] proof fingerprints and parity checks
 
-[+] spec-core/src/typescript_backend.rs
-    │
-    ├── monotone-up root tree emission
-    │   └── [EXISTING] covered today
-    │
-    ├── wrapper root tree emission
-    │   ├── [GAP] render two direct dep imports
-    │   ├── [GAP] allow wrapper closure-member role
-    │   └── [GAP] exclude unrelated loaded units
-    │
-    └── helper role emission
-        └── [EXISTING] must not regress
+[+] xtask/src/family/recommend.rs / verify.rs / promotion_artifacts.rs
+    ├── [★★★ TESTED] direct owner-surface consumption already exercised by cargo tests
+    └── [★★★ TESTED] command outputs pinned by current proof floor
 
-[+] spec-cli/tests/cli.rs
-    │
-    ├── canonical apply_tax TypeScript success
-    │   └── [EXISTING] covered today
-    │
-    ├── canonical calculate_total TypeScript success
-    │   └── [GAP] new critical regression test
-    │
-    ├── wrapper fixture aligned TypeScript success
-    │   └── [GAP] new end-to-end fixture test
-    │
-    ├── target-specific status/passport proof after wrapper run
-    │   └── [GAP] prove additive refresh for wrapper root
-    │
-    ├── wrapper rejection before Bun
-    │   ├── [GAP] wrong-family or malformed-closure rejection
-    │   └── [EXISTING PATTERN] near-miss-before-Bun harness can be reused
-    │
-    └── molecule rejection before Bun
-        └── [EXISTING] must stay green
+[+] xtask/src/family/mod.rs
+    ├── [★★  TESTED] compile surface indirectly covered by cargo tests
+    └── [GAP]        explicit regression that retained shims are compatibility-only exports, not peer owner surfaces
+
+[+] xtask/src/family/decision_kernel.rs
+    ├── [★★  TESTED] indirect semantic behavior through owner-path tests
+    └── [GAP]        direct passthrough parity coverage through shim import path
+
+[+] xtask/src/family/helper_surface.rs
+    ├── [★★  TESTED] indirect semantic behavior through owner-path tests
+    └── [GAP]        direct passthrough parity coverage through shim import path
+
+[+] xtask/src/lib.rs proof wall
+    ├── [★★★ TESTED] stop-state command semantics
+    └── [GAP]        explicit compatibility-contract regression block
+
+─────────────────────────────────
+COVERAGE: 6/10 paths fully covered today (60%)
+QUALITY:  ★★★: 5  ★★: 3  GAP: 4
+GAPS: 4 direct compatibility-surface regressions need to be added or tightened
+─────────────────────────────────
 ```
 
-### User and operator flow coverage
+### Maintainer Workflow Coverage
 
 ```text
-USER / OPERATOR FLOW COVERAGE
+MAINTAINER FLOW COVERAGE
 ===========================
-[+] Maintainer runs canonical wrapper proof
-    spec test examples/ecommerce/units/pricing/calculate_total.unit.spec --target-language typescript
-    ├── [GAP] must pass end-to-end
-    └── [GAP] must refresh target_proofs.typescript on the wrapper passport
+[+] Stop-state validation workflow
+    ├── [★★★ TESTED] collect_signals -> recommend -> corpus-decision -> verify-decision-contract
+    └── [★★★ TESTED] cargo test -p xtask
 
-[+] Maintainer runs wrapper packet proof
-    spec test <aligned wrapper fixture> --target-language typescript
-    ├── [GAP] aligned packet path must pass
-    └── [GAP] near-miss packet path must reject before Bun if outside M52 contract
+[+] Compatibility promise workflow
+    ├── [GAP] maintainers import retained shim surfaces after M53
+    └── [GAP] proof explicitly distinguishes owner surface from compat surface
 
-[+] Maintainer runs mixed status after wrapper proof
-    spec status <unit-or-root> --target-language typescript --format json
-    ├── [GAP] wrapper root should report valid when freshly proven
-    └── [EXISTING PATTERN] unrelated unproven units may still keep root-level mixed status non-green
+[+] Documentation truth workflow
+    ├── [★★  REVIEWED] docs already align today
+    └── [GAP] if docs change, final diff review must verify they still say compatibility-only
 ```
 
-### Required test additions
+### Required Test Additions
 
-Add or extend tests for:
+M53 must add or tighten the following tests in `xtask/src/lib.rs`:
 
-1. validator acceptance of an exact same-tree wrapper root
-2. validator rejection of:
-   - wrong dep arity
-   - cross-library dep
-   - missing local dep
-   - wrong dep family combination
-   - chain3 root
-3. backend tree generation:
-   - wrapper root imports both direct deps
-   - closure members are allowed under the correct role
-   - unrelated loaded units are not emitted
-4. CLI end-to-end:
-   - `pricing/calculate_total.unit.spec --target-language typescript` succeeds
-   - aligned wrapper fixture succeeds
-   - wrapper rejection happens before Bun for one bounded non-goal
-   - wrapper target-specific status/passport proof refreshes additively
+1. direct parity coverage through `family::decision_kernel::*` for the retained decision-contract surface
+2. direct parity coverage through `family::helper_surface::*` for the retained helper-surface contract
+3. one proof block that imports both `family::analysis_core::*` and any retained shim surface intentionally, so the compatibility promise is explicit and future breakage is loud
+4. keep the existing command proof floor unchanged and rerun it after the code diff lands
 
-### Regression rule
+No new CLI command tests are required unless export-surface changes unexpectedly force them.
 
-The canonical regression is already known:
+### Failure-Mode Coverage Matrix
 
-- `apply_tax` succeeds today
-- `calculate_total` fails today for the wrong reason
-
-M52 must add a regression test for that exact failure-to-success transition. No skipping. That is the proof that the milestone actually fixed the product bug.
-
-## Failure Modes Registry
-
-| Failure mode | Test required | Error handling required | User-visible outcome | Critical gap if missing |
+| Failure mode | Test covers it? | Error handling exists? | User sees clear failure? | Critical gap? |
 | --- | --- | --- | --- | --- |
-| validator widens to arbitrary multi-dep graphs | yes | yes | silent over-claim if absent | yes |
-| cross-library dep slips through wrapper lane | yes | yes | false support claim | yes |
-| wrapper dep lacks `body.typescript` | yes | yes | pre-Bun failure should be clear | yes |
-| generator emits unrelated same-tree units | yes | no special runtime handling | false "tree-wide TS support" claim | yes |
-| chain3 root accidentally becomes eligible | yes | yes | scope leak | yes |
-| target_proofs.typescript overwrites Rust proof | yes | yes | proof corruption | yes |
-| docs claim generic multi-dep support | no code test, doc review required | n/a | user learns the wrong contract | yes |
+| shim export removed or renamed accidentally | planned after M53 test additions | compile/test failure | yes | no |
+| shim re-export drifts from owner function | planned after M53 test additions | test failure | yes | no |
+| stop-state output mutates silently | yes, via proof floor rerun | verify command + JSON comparison | yes if commands are rerun | no |
+| docs drift back to owner-shim ambiguity | manual diff review only | review-only | otherwise silent | no, but keep docs scope narrow |
 
-Any failure mode with no test, no bounded rejection, and a silent scope leak is a release blocker for M52.
+### Test Plan Artifact
+
+QA-facing artifact for this milestone:
+
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260512-201807.md`
+
+That artifact is generated alongside this plan and should be the primary input for any `/qa` or `/qa-only` pass on M53.
 
 ## Performance Review
 
-Expected performance impact is small, but still review it.
+This milestone does not change product runtime performance.
 
-Likely hotspots:
+The only meaningful performance surface is maintainer proof throughput.
 
-- repeated semantic-review lookup while validating wrapper closure members
-- extra tree-membership checks during TypeScript generation
+What matters:
 
-Requirements:
+- do not add new artifact scans or new command hops
+- do not rerun the same xtask proof commands redundantly inside tests
+- keep acceptance commands sequential in one worktree, because baseline runs already showed occasional package-cache and build-dir lock waiting
 
-1. keep closure walking bounded to the exact direct-dep slice
-2. do not introduce whole-graph traversal for every TypeScript unit
-3. reuse existing context maps where possible instead of rebuilding them per unit
+No caching or architecture changes are justified here. Boring is correct.
 
-There is no caching milestone here. The right answer is bounded work, not more machinery.
+## In-Scope Files
+
+Primary write scope:
+
+- `xtask/src/family/mod.rs`
+- `xtask/src/family/decision_kernel.rs`
+- `xtask/src/family/helper_surface.rs`
+- `xtask/src/lib.rs`
+
+Allowed only if truth requires it:
+
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+
+## Out-Of-Scope Files
+
+Do not touch unless a blocker proves this plan wrong:
+
+- `ORCH_PLAN.md`
+- `xtask/src/family/recommend.rs`
+- `xtask/src/family/verify.rs`
+- `xtask/src/family/promotion_artifacts.rs`
+- `xtask/src/family/paths.rs`
+- artifact schema types
+- repo-root semantic roadmap docs beyond the two maintainer references named above
+- TypeScript execution surfaces
+
+## Implementation Plan
+
+### Step 1: Freeze the current proof floor
+
+Before any edits, capture the exact baseline outputs for:
+
+- `collect_signals.sh`
+- `cargo xtask family recommend --format json`
+- `cargo xtask family corpus-decision --format json`
+- `cargo xtask family verify-decision-contract --format json`
+- `cargo test -p xtask`
+
+Acceptance:
+
+- baseline command outputs are recorded in the implementation notes or closeout
+- no planned code edit starts without a known-good stop-state baseline
+
+### Step 2: Tighten the command-facing export surface
+
+Update `xtask/src/family/mod.rs` so the maintained surface is unmistakable.
+
+Concretely:
+
+- keep `analysis_core` grouped and presented as the maintained owner surface
+- retain `decision_kernel` and `helper_surface` only if compatibility still matters
+- if retained, keep the compatibility-only comment direct and unambiguous
+
+Acceptance:
+
+- `mod.rs` tells the right ownership story at a glance
+- no module names, command names, or import contracts change unless a retained shim is intentionally removed and proven safe in the same milestone
+
+### Step 3: Close out the shim surface without widening it
+
+Update `xtask/src/family/decision_kernel.rs` and `xtask/src/family/helper_surface.rs` only as needed to keep the compatibility contract honest.
+
+Concretely:
+
+- preserve pure passthrough behavior
+- remove any stale wording that sounds like ownership
+- do not add helper functions, wrappers, or policy logic
+
+Acceptance:
+
+- each shim is still obviously a passthrough or is removed entirely with proof updated
+- no semantic code moves out of `analysis_core/*`
+
+### Step 4: Tighten the proof wall
+
+Update `xtask/src/lib.rs` to prove the post-M53 ownership contract intentionally.
+
+Concretely:
+
+- add direct compatibility-path tests for retained shim exports
+- keep existing owner-surface tests intact
+- keep command-proof assertions centered on unchanged stop-state semantics
+
+Acceptance:
+
+- `cargo test -p xtask` still passes
+- retained compatibility surfaces are covered directly, not only indirectly
+- future shim drift would fail loudly
+
+### Step 5: Sync maintainer docs only if the code diff requires it
+
+Inspect:
+
+- `docs/semantic_family_capability_corpus_guide_v0.1.md`
+- `docs/recommendation_corpus_expansion_program_v0.1.md`
+
+Only edit them if the final code diff would otherwise make their wording false or incomplete.
+
+Acceptance:
+
+- docs remain narrow and accurate
+- no broad historical cleanup begins here
+
+### Step 6: Rerun the locked proof floor
+
+After the code diff lands, rerun:
+
+```bash
+cargo test -p xtask
+./.agents/skills/next-milestone/scripts/collect_signals.sh
+cargo xtask family recommend --format json
+cargo xtask family corpus-decision --format json
+cargo xtask family verify-decision-contract --format json
+```
+
+Acceptance:
+
+- stop-state semantics remain exactly:
+  - `recommendation_status = insufficient_real_corpus`
+  - `decision_status = not_recommended`
+  - `decision_action = stop`
+  - `decision_basis_code = no_actionable_candidate`
+  - `required_next_action = record_stop_without_new_milestone`
+- `overall_verdict = "pass"` remains true
+- no CLI, JSON, or latest-artifact path drift appears
 
 ## Worktree Parallelization Strategy
 
-Parallelization is available after the execution contract is frozen.
+This milestone has limited but real parallelization.
 
-### Dependency table
+The code path is mostly sequential. The doc sync, if needed, can split off after the module/export contract is settled.
+
+### Dependency Table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| contract freeze | `spec-core/src/validator.rs`, `spec-core/src/typescript_backend.rs`, `spec-cli/src/commands.rs`, plan docs | — |
-| executor widening | `spec-core/`, `spec-cli/` | contract freeze |
-| authored truth widening | `examples/ecommerce/`, `semantic-families/function.wrapper.pipeline.v1/`, docs | contract freeze |
-| integration proof | repo root, generated outputs, passports | executor widening, authored truth widening |
+| baseline proof capture | `xtask/`, `.semantic-family-artifacts/`, `.agents/skills/next-milestone/scripts` | — |
+| export-surface closeout | `xtask/src/family/` | baseline proof capture |
+| shim-proof tightening | `xtask/src/`, `xtask/src/family/` | export-surface closeout |
+| maintainer doc sync, only if needed | `docs/` | export-surface closeout |
+| final acceptance rerun | `xtask/`, `.semantic-family-artifacts/` | shim-proof tightening, maintainer doc sync |
 
-### Parallel lanes
+### Parallel Lanes
 
-Lane A: contract freeze -> executor widening -> integration
+- `Lane A`: baseline proof capture -> export-surface closeout -> shim-proof tightening -> final acceptance rerun
+- `Lane B`: maintainer doc sync, only if needed, after export-surface closeout
 
-Lane B: contract freeze -> authored truth widening -> integration
+### Execution Order
 
-Lane A and Lane B can run in parallel only after the parent freezes:
+1. run baseline proof capture serially
+2. land the `xtask/src/family/` contract in one worktree first
+3. once that contract is stable, run:
+   - `Lane A` test/proof tightening
+   - `Lane B` doc sync, only if the code diff requires it
+4. merge both back together
+5. rerun the full locked proof floor serially
 
-- exact validator contract
-- exact generator tree-membership contract
-- exact file ownership
+### Conflict Flags
 
-### Execution order
+- `Lane A` and `Lane B` are safe in parallel only because one is code and one is docs
+- do not split `mod.rs`, shim files, and `xtask/src/lib.rs` across multiple code worktrees, because the ownership contract and its proof wall are tightly coupled
+- do not run the acceptance cargo commands in parallel across worktrees, because baseline runs already showed package-cache and build-dir lock contention
 
-1. Parent freezes contract and file ownership in the main worktree.
-2. Launch Lane A and Lane B in parallel worktrees.
-3. Merge Lane A first because it defines the executable contract.
-4. Rebase or merge Lane B on top.
-5. Run authoritative integrated proof in the parent or integration worktree.
+## NOT In Scope
 
-### Conflict flags
+- repo-root `ORCH_PLAN.md` rewrite
+- family-promotion authorization changes
+- corpus run `1`
+- second-language backend work
+- path or artifact-schema redesign
+- `analysis_core/*` extraction into a new crate
+- generic compatibility cleanup outside the named family-analysis seam
+- broad documentation archaeology
 
-- Lane A and Lane B must not both edit `spec-cli/src/commands.rs`.
-- Lane B docs edits must not restate executor rules differently than Lane A implements.
-- If wrapper packet fixture tests require new CLI harness helpers, that helper belongs to Lane A unless it is pure fixture data.
+## Acceptance Criteria
 
-## Execution Order
+M53 is complete only if all of the following are true:
 
-1. Freeze the wrapper eligibility contract in validator/backend terms.
-2. Implement validator support for bounded wrapper roots.
-3. Implement backend tree-emission support for wrapper closure members.
-4. Adjust CLI plumbing only where required for the widened tree.
-5. Add authored TypeScript bodies to the canonical wrapper closure and maintained wrapper packet fixtures.
-6. Add end-to-end proof coverage for canonical success, fixture success, and bounded rejection.
-7. Update README, CHANGELOG, and TODO wording to match the landed contract.
+1. `analysis_core/*` remains the only semantic owner surface.
+2. `xtask/src/family/mod.rs` presents that owner surface cleanly.
+3. any retained shim file is visibly compatibility-only and behaviorally trivial.
+4. `xtask/src/lib.rs` directly proves any retained compatibility contract.
+5. `cargo test -p xtask` passes.
+6. `collect_signals.sh`, `recommend`, `corpus-decision`, and `verify-decision-contract` all preserve the current stop-state outputs.
+7. no command names, flags, JSON schemas, latest-artifact paths, or write behavior change.
+8. docs were either left alone because they were already truthful, or were updated surgically to stay truthful.
 
-## Proof Floor
+## Definition Of Done
 
-Required code-level proof:
+The milestone is done when a maintainer can read `xtask/src/family/mod.rs`, inspect the shim files, run the locked proof floor, and come away with exactly one conclusion:
 
-- validator regressions for wrapper target eligibility
-- backend regressions for wrapper closure emission
-- CLI end-to-end success on the canonical wrapper unit
-- CLI end-to-end success on the aligned wrapper packet
-- CLI rejection coverage for at least one out-of-scope wrapper path
-- target-specific status/passport proof coverage for a wrapper root
-
-Required product-level proof:
-
-```bash
-cargo test -p spec-core typescript
-cargo test -p spec-cli wrapper -- --nocapture
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/calculate_total.unit.spec --target-language typescript
-```
-
-Optional final read-side check:
-
-```bash
-cargo run -p spec-cli -- status examples/ecommerce --target-language typescript --format json
-```
-
-## Success Criteria
-
-M52 is done only when all of these are true:
-
-- `spec test examples/ecommerce/units/pricing/calculate_total.unit.spec --target-language typescript` passes
-- the aligned wrapper packet can prove TypeScript execution through `spec`, not just semantic review
-- wrapper execution still rejects cross-library and generic arbitrary multi-dep widening
-- chain3 still rejects clearly
-- `target_proofs.typescript` remains additive and target-specific
-- the generated TypeScript tree includes only the validated local closure
-- README explains the widened TypeScript lane as wrapper-family same-tree execution only
-
-## NOT in scope
-
-Deferred explicitly:
-
-- chain3 TypeScript execution
-- cross-library TypeScript helper imports
-- generic multi-dependency TypeScript execution
-- molecule TypeScript execution
-- seam-kind TypeScript execution
-- `spec validate --target-language`
-- `spec export --target-language`
-
-Those are later milestones. M52 should not quietly spend them.
-
-## Completion Summary
-
-- Step 0: Scope Challenge -> scope accepted as a bounded family-shaped widening
-- Architecture Review -> contract is explicit across validator, backend, CLI, proof, and docs
-- Code Quality Review -> no new abstraction layer authorized
-- Test Review -> regression matrix and required proof floor defined
-- Performance Review -> bounded direct-closure work only
-- NOT in scope -> written
-- What already exists -> written
-- Failure modes -> critical gaps identified up front
-- Parallelization -> 2 lanes after contract freeze
-- Lake Score -> complete option chosen across executor, fixtures, proof, and docs
+`analysis_core/*` owns the semantics, the stop-state contract still says stop, and any retained shim is just compatibility glue.
