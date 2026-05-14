@@ -1,23 +1,24 @@
-# M58: Bounded Nested Chain3 Closure TypeScript Execution Plan
+# M59: Semantic-Review-Driven Local TypeScript Function Graph Execution Plan
 
 Status: **authoritative implementation plan**  
-Milestone: **M58**  
+Milestone: **M59**  
 Milestone family: **second-language-backend**  
 Implementation readiness: **ready for bounded execution**  
-Plan scope: **ship exactly one new TypeScript capability: a chain3 root may use a same-tree `function.wrapper.pipeline.chain3.v1` in chain3 direct dep slot 1, and the backend may recurse through that validated nested chain3 closure, without widening to generic multi-dependency graphs, molecule execution, seam kinds, or target-language validate/export**  
+Plan scope: **ship exactly one new TypeScript capability: any same-tree `kind:function` unit that classifies to a shipped supported function family, authors non-empty `body.typescript`, and stays inside a fully loaded local closure may execute through a semantic-review-driven local graph lane; preserve the existing M55-M58 family-shaped direct cross-library helper, wrapper, and chain3 lanes unchanged; do not widen to arbitrary per-node dep arity, new semantic families, molecule execution, seam kinds, or target-language validate/export**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
-Validated at commit: **`6c7caf3`**  
+Validated at commit: **`bd55d0f`**  
 Last rewritten: **2026-05-14**
 
 Supersedes:
 
-- the stale M57 shared-core closeout plan previously maintained at this path
+- the stale M58 bounded nested chain3 plan previously maintained at this path
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-135734.md`
 - `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-074521.md`
 
 Primary source artifacts:
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-074521.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-135734.md`
 - `README.md`
 - `TODOS.md`
 - `AGENTS.md`
@@ -27,119 +28,142 @@ Primary repo surfaces:
 
 - `spec-core/src/validator.rs`
 - `spec-core/src/typescript_backend.rs`
+- `spec-core/src/semantic_review.rs`
 - `spec-cli/tests/cli.rs`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*`
 - `README.md`
 - `TODOS.md`
 
 ## Executive Summary
 
-The old repo-root plan was solving the wrong problem.
+M59 is not "arbitrary generic TypeScript execution."
 
-M56 already shipped bounded TypeScript execution for:
-
-1. helper-aware monotone-up roots
-2. wrapper roots
-3. flat chain3 roots
-4. direct cross-library helper, wrapper, and chain3 roots
-
-M57 already closed the shared-core ownership loop. The remaining gap is narrower and more concrete:
+M59 is one narrower, honest widen:
 
 ```text
-outer_chain3
-├── nested_chain3        <- still rejected today
-├── monotone_up
-└── monotone_down
+generic at the graph level
+not generic at the node-shape level
 ```
 
-The current lane cannot execute that shape because the validator still freezes chain3 slot 1 to `function.wrapper.pipeline.v1` and still rejects `function.wrapper.pipeline.chain3.v1` as a closure member.
+The local TypeScript lane should stop hard-coding eligibility as "monotone-up, wrapper, or chain3 root plus a closure-family allowlist." Instead, it should admit any same-tree local `kind:function` root whose reachable closure:
 
-M58 fixes exactly that wall. Nothing else.
+- resolves entirely from the loaded unit set
+- stays local, not `shared::...`
+- stays within the shipped supported semantic-review function families
+- authors non-empty `body.typescript` at every reachable node
+- remains acyclic
 
-The contract after M58 is:
+Everything broader stays out:
 
-```text
-chain3 slot 1 = wrapper OR same-tree chain3
-chain3 slot 2 = monotone_up
-chain3 slot 3 = monotone_down_nonnegative
-```
+- arbitrary 4+ dep authored function units
+- new semantic families
+- generic recursive cross-library graphs
+- molecule TypeScript execution
+- seam-kind TypeScript execution
+- `spec validate --target-language`
+- `spec export --target-language`
 
-Everything outside that shape stays out:
+The user-visible gain is still real:
 
-- no generic DAG policy
-- no arbitrary recursive graphs
-- no cross-library recursive chain3 closure
-- no target-language validate/export
-- no molecule TypeScript execution
+- local helper roots can execute
+- local monotone-down roots can execute
+- local wrapper and chain3 roots no longer depend on a closure-member family table
+- shared same-tree subgraphs are admitted and deduped when every reachable node is already semantically supported
 
-This plan is therefore not “generic multi-dependency TypeScript execution.” It is one bounded recursive family widen in the existing Bun-backed lane.
+The existing M55-M58 direct cross-library helper, wrapper, and chain3 lanes remain a preserved portability contract. M59 adds a new local graph lane. It does not replace the old portability lane.
 
 ## Current Validated Basis
 
-Validated from HEAD source review on `feat/m40-plus` at `6c7caf3`.
+Validated from HEAD source review on `feat/m40-plus` at `bd55d0f`.
 
 Observed repo truth:
 
 - `README.md`
-  - flat TypeScript chain3 roots are documented as supported
-  - generic multi-dependency TypeScript execution is still explicitly deferred
-  - nested chain3 closure members are still explicitly unsupported
+  - the bounded TypeScript lane still describes roots in family-slot language
+  - direct cross-library helper, wrapper, and chain3 execution are documented as bounded exceptions
+  - molecule TypeScript execution, seam kinds, and target-language validate/export remain out
 - `TODOS.md`
-  - M52 through M56 are recorded as complete
-  - generic multi-dependency TypeScript execution remains deferred
+  - `Generic multi-dependency TypeScript execution` is still the one open late-lane TypeScript item
+  - the wording is directionally right, but now too fuzzy for an honest M59 close
 - `spec-core/src/validator.rs`
-  - `validate_typescript_execution_target_spec_with_specs(...)` admits chain3 roots only when direct dep slot 1 resolves to `function.wrapper.pipeline.v1`
-  - `validate_typescript_closure_member_spec_with_specs(...)` rejects closure members with compatibility key `function.wrapper.pipeline.chain3.v1`
-  - the current proof surface includes `typescript_closure_member_rejects_chain3_member`
+  - `validate_typescript_execution_target_spec_with_specs(...)` still selects by root family and direct dep tuple
+  - `validate_typescript_closure_member_spec_with_specs(...)` still acts like a closure-member family allowlist gate
+  - direct cross-library helper, wrapper, and chain3 validators already exist and should be preserved
+  - cycle detection already exists through `detect_cycles(...)` and `detect_qualified_cycles(...)`
 - `spec-core/src/typescript_backend.rs`
-  - wrapper closure recursion is already implemented
-  - closure collection already recurses over validated members
-  - chain3 closure recursion is unreachable today because validation blocks the shape first
-  - unrelated loaded units are already kept out through `included: BTreeSet<usize>`
+  - the module banner still describes a bounded M52-style family exception lane
+  - root and closure traversal still branch by specific family arms
+  - `included: BTreeSet<usize>` already gives the right dedupe primitive for shared local subgraphs
+- `spec-core/src/semantic_review.rs`
+  - supported function-family truth already exists and is queryable through `evaluate_semantic_review_with_context(...)`
+  - `effective_support_status()` already gives the supported versus unsupported contract M59 needs
+  - unsupported dep topology still rejects the broader oceans M59 is explicitly not shipping
 - `spec-cli/tests/cli.rs`
-  - the TypeScript lane already has strong pre-Bun rejection coverage for wrong family, wrong dep order, missing `body.typescript`, and molecule rejection
-  - Bun-backed success coverage exists for flat chain3, not nested chain3
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*`
-  - the maintained aligned proof pack is flat
-  - no maintained same-tree nested chain3 proof exists yet
+  - the lane already has pre-Bun rejection coverage and Bun-backed green-path coverage
+  - coverage is still centered on the bounded family-shaped roots plus same-tree nested chain3
 
 ## Step 0: Scope Challenge
 
+### Premise correction
+
+The current design pressure is correct. The loose phrase is not.
+
+This phrase is too ambiguous:
+
+```text
+generic multi-dependency TypeScript execution
+```
+
+In this repo, that cannot honestly mean:
+
+- any authored function with any dep count
+- arbitrary function topology outside the shipped supported families
+- recursive cross-library TypeScript graph execution
+
+For M59 it means exactly this:
+
+```text
+same-tree local graph execution over the shipped supported function families,
+with semantic review owning per-node shape truth
+```
+
+That is a bounded lake. The rest is ocean.
+
 ### What already exists
 
-| Sub-problem | Existing owner or proof surface | M58 action |
+| Sub-problem | Existing owner or proof surface | M59 action |
 | --- | --- | --- |
-| root eligibility for flat chain3 | `validate_typescript_chain3_dep_contract(...)` in `spec-core/src/validator.rs` | widen slot 1 only, keep slots 2 and 3 frozen |
-| closure-member gating | `validate_typescript_closure_member_spec_with_specs(...)` | admit chain3 only through the exact same bounded slot-1 contract |
-| recursive tree inclusion | `collect_typescript_closure_member(...)` in `spec-core/src/typescript_backend.rs` | extend recursion to validated nested chain3 members |
-| duplicate suppression | `included: BTreeSet<usize>` in `typescript_backend.rs` | reuse unchanged |
-| flat chain3 proof harness | `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*` | add one maintained nested aligned path, not a second fixture system |
-| CLI TypeScript regression harness | `spec-cli/tests/cli.rs` | add nested green-path and preserved red-path coverage |
-| public contract wording | `README.md`, `TODOS.md` | rewrite exactly one TypeScript-lane claim, keep generic multi-dep deferred |
+| root CLI entry point | `spec-cli/src/commands.rs` target-language flow | reuse |
+| local and qualified dep parsing | `DepRef` in `spec-core/src/types.rs` and validator helpers | reuse |
+| supported-function truth | `evaluate_semantic_review_with_context(...)` in `spec-core/src/semantic_review.rs` | reuse as authority |
+| direct cross-library helper lane | `validate_typescript_helper_dep_contract(...)` | preserve unchanged |
+| direct cross-library wrapper lane | `validate_typescript_wrapper_dep_contract(...)` | preserve unchanged |
+| direct cross-library chain3 lane | `validate_typescript_chain3_dep_contract(...)` | preserve unchanged |
+| cycle detection | `detect_cycles(...)` and `detect_qualified_cycles(...)` in `spec-core/src/validator.rs` | reuse |
+| local closure dedupe | `included: BTreeSet<usize>` in `spec-core/src/typescript_backend.rs` | reuse |
+| target-proof routing | `target_proofs.typescript` plumbing in passports and status | reuse |
+| CLI regression harness | `spec-cli/tests/cli.rs` and existing fixture helpers | extend |
 
 ### Minimum complete slice
 
-The minimum honest M58 slice is:
+The minimum honest M59 slice is:
 
-1. replace the stale repo-root M57 plan with this M58 contract
-2. add one maintained same-tree nested chain3 proof shape inside the existing aligned fixture pack
-3. widen TypeScript chain3 slot 1 to allow `function.wrapper.pipeline.v1` or same-tree `function.wrapper.pipeline.chain3.v1`
-4. allow chain3 as a closure member only when that exact bounded slot-1 contract holds
-5. recurse through validated nested chain3 members in the generated TypeScript tree
-6. preserve all existing pre-Bun rejection behavior for out-of-contract recursive shapes
-7. update `README.md` and `TODOS.md` so public wording says exactly what shipped
+1. keep per-node supported shape owned by semantic review
+2. add one explicit local graph lane for TypeScript execution
+3. widen local root eligibility to the shipped supported function family set
+4. validate the reachable local closure graph-wide instead of via a closure-member family table
+5. preserve the direct cross-library helper, wrapper, and chain3 lanes exactly as shipped
+6. prove shared-subgraph dedupe and unrelated-unit exclusion
+7. update `README.md` and `TODOS.md` so "generic" now means graph-level genericity over shipped supported families, not arbitrary node-shape parity
 
 Anything smaller is fake done.
 
 Examples:
 
-- changing validator admission without backend recursion is fake done
-- making one nested fixture pass without preserved rejection coverage is fake done
-- shipping code without updating the README nested-chain3 sentence is fake done
+- docs-only widening is fake done
+- backend-only traversal without validator proof-wall updates is fake done
+- local graph validation without preserved cross-library regression proof is fake done
 
 ### Complexity and blast radius
-
-This milestone stays small only if it remains inside the existing TypeScript lane surfaces.
 
 Expected write scope:
 
@@ -147,176 +171,208 @@ Expected write scope:
 - `spec-core/src/validator.rs`
 - `spec-core/src/typescript_backend.rs`
 - `spec-cli/tests/cli.rs`
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/*.unit.spec`
+- one dedicated local graph fixture tree under `spec-cli/tests/fixtures/`
 - `README.md`
 - `TODOS.md`
 
-No new crate. No new command. No new artifact type. No new schema. No new runtime.
+Expected non-write scope:
 
-The diff will touch more files than the logic size suggests because proof fixtures and docs are part of the product surface here. That is acceptable. A new abstraction layer or a new fixture universe is not.
+- `spec-core/src/semantic_review.rs`
+- passport schema
+- status/export schema
+- CLI flags
+- Bun runtime contract
 
-### Search check
-
-No unfamiliar framework or infra component enters the repo in M58.
-
-- **[Layer 1]** reuse the existing validator helpers and TypeScript-lane constants in `spec-core/src/validator.rs`
-- **[Layer 1]** reuse the existing recursive inclusion walker and `included` dedupe set in `spec-core/src/typescript_backend.rs`
-- **[Layer 1]** reuse the existing chain3 aligned fixture pack instead of inventing a new proof surface
-- **[Layer 3]** the first-principles insight is that nested chain3 is only reachable by widening chain3 slot 1, not by adding “generic closure support”
+This is the right size. It touches the lane owner files and public contract surfaces without inventing new infrastructure.
 
 ### TODOS cross-reference
 
-This plan must preserve the current deferred boundary in `TODOS.md`:
+`TODOS.md` currently says generic multi-dependency TypeScript execution is deferred.
 
-- generic multi-dependency TypeScript execution stays deferred
-- no second follow-on is created unless implementation pressure proves a need for slot-2/slot-3 recursion or cross-library recursive closure
+After M59 lands, that defer must narrow to the actual remaining oceans:
 
-M58 must not silently absorb the generic DAG milestone.
+- arbitrary authored 4+ dep function topology
+- new supported semantic families
+- generic recursive cross-library function graphs
 
-### Completeness check
+The TODO must stop implying that all graph-shaped TypeScript execution is still out after M59.
+
+### Completeness and distribution check
 
 Choose the complete bounded version, not the shortcut.
 
-The complete version is still small:
+The complete version includes:
 
-1. green path for same-tree nested chain3
-2. preserved red paths for wrong nested shapes
-3. updated docs and backlog wording
+1. local helper root proof
+2. local monotone-down root proof
+3. local graph-wide closure validation
+4. shared-subgraph dedupe proof
+5. preserved cross-library regression proof
+6. public wording that removes ambiguity
 
-The shortcut is “make one fixture pass and skip the rejection wall.” That saves almost nothing and leaves the lane undefined. Not acceptable.
+No new distributable artifact is introduced. This is still an existing `spec` CLI capability widen:
 
-### Distribution check
-
-No new distributable artifact is introduced.
-
-This remains an existing `spec` CLI capability widen:
-
-- `cargo install spec-cli`
-- existing GitHub Releases
-- existing CI
-- existing target-proof storage in passports
+- existing install path remains `cargo install spec-cli`
+- existing GitHub Releases remain the distribution surface
+- existing CI remains the build surface
 
 ## Milestone Contract
 
 ### Exact shipped behavior
 
-After M58:
+After M59:
 
-- a TypeScript chain3 root may use a same-tree chain3 unit in direct dep slot 1
-- that nested chain3 unit may itself recurse again through the same bounded rule
-- every nested chain3 still uses the frozen ordered tuple:
-  - slot 1 = `function.wrapper.pipeline.v1` or same-tree `function.wrapper.pipeline.chain3.v1`
-  - slot 2 = `function.arithmetic_leaf.monotone_up.v1`
-  - slot 3 = `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-- every reachable direct or recursive member must author non-empty `body.typescript`
-- recursive closure collection stays limited to reachable validated members in the loaded unit set
+- any same-tree local `kind:function` unit may execute in the TypeScript lane when:
+  - it authors non-empty `body.typescript`
+  - it resolves to a supported semantic review
+  - every reachable dep resolves from the loaded unit set
+  - every reachable dep stays local, not `shared::...`
+  - every reachable unit is `kind:function`
+  - every reachable unit authors non-empty `body.typescript`
+  - every reachable unit resolves to a supported semantic review
+  - the reachable closure is acyclic
+- the supported local root set for M59 is the shipped supported function family set already recognized by the repo for this lane
+- direct cross-library TypeScript execution remains bounded and explicit:
+  - one helper import lane
+  - one wrapper direct-root lane
+  - one chain3 direct-root lane
+  - the same-tree nested chain3 slot-1 rule inside the chain3 portability lane
+- generic local traversal is graph-driven, not closure-family-driven
+- arbitrary per-node dep arity remains out because semantic review still rejects the broader ocean M59 is not trying to solve
 
-### Same-tree rule
+### Correct definition of "generic" for M59
 
-“Same-tree” means:
+For this repo, M59 generic means:
 
-- the nested chain3 dep is authored as a local dep id like `pricing/base_nested_chain3_aligned`
-- it does not use a library-qualified dep such as `shared::pricing/base_nested_chain3_aligned`
-- it resolves from the same loaded unit set as the root
-- the validator enforces that locality on the slot-1 recursive path, not by path heuristics in the backend
+```text
+the closure walker is generic over the existing supported local function graph
+```
 
-### In scope
+It does not mean:
 
-- widen TypeScript chain3 slot 1 from wrapper-only to wrapper-or-same-tree-chain3
-- keep that widen bounded to the TypeScript lane only
-- preserve slot 2 as monotone-up and slot 3 as monotone-down-nonnegative
-- allow a chain3 closure member only when it satisfies the exact bounded slot-1 contract
-- recurse through validated nested chain3 members during TypeScript tree generation
-- keep helper recursion behavior unchanged under monotone-up and monotone-down members
-- add one maintained nested aligned proof path in the existing chain3 family fixture pack
-- add CLI proof for:
-  - nested green path
-  - wrong first-slot family rejection
-  - wrong dep order rejection
-  - missing nested `body.typescript` rejection
-  - cross-library nested chain3 rejection
-- update `README.md` and `TODOS.md` to name the new bounded recursive slice precisely
+```text
+any authored function with any dep list can now run in TypeScript
+```
 
-### Not in scope
+That second claim requires new semantic-family promotion work. M59 does not do that work.
 
-- generic multi-dependency TypeScript execution
-- arbitrary supported-function DAG execution
-- widening any slot other than chain3 slot 1
-- cross-library recursive chain3 closure as a general rule
+### Exact allowed topology
+
+Allowed M59 local graph:
+
+```text
+root (supported local function family)
+├── local dep A (supported local function family)
+│   ├── local dep C
+│   └── local dep D
+├── local dep B
+│   └── local dep D    <- shared subgraph allowed, emitted once
+└── local dep E
+```
+
+Where all of the following are true:
+
+1. every node is `kind:function`
+2. every edge is local to the loaded unit set
+3. every node resolves to a supported semantic review
+4. every node authors non-empty `body.typescript`
+5. the closure is acyclic
+6. only reachable nodes are emitted into the generated TypeScript tree
+7. each node's authored shape is still bounded by the shipped supported semantic-review function families
+
+### Exact topologies still out
+
+M59 must keep these out:
+
+- arbitrary 4+ dep authored function units
+- any authored function whose dep topology falls outside the shipped supported semantic families
+- any reachable node with `semantic_review.support_status = unsupported`
+- any reachable node missing `body.typescript`
+- any generic local-graph path containing `shared::...` edges
+- generic recursive cross-library DAGs
 - molecule TypeScript execution
 - seam-kind TypeScript execution
 - `spec validate --target-language`
 - `spec export --target-language`
-- passport, status, or export schema changes
-- new semantic-family promotion work
-- `ORCH_PLAN.md` refresh as part of this plan-only rewrite
+- any claim that TypeScript execution now has arbitrary function-graph parity
 
-## Locked Decisions
+## NOT in scope
 
-These are not open questions for M58:
-
-1. Bun remains the only TypeScript runtime contract.
-2. The TypeScript lane still speaks in family language, not generic graph language.
-3. The recursive widen is only:
-   - chain3 slot 1
-   - same loaded tree
-   - same promoted family set
-4. The milestone is an execution-contract widen, not a semantic-review model rewrite.
-5. Public wording must continue to say generic multi-dependency execution is deferred.
-6. The backend must not infer locality or reachability that the validator did not already approve.
-7. The implementation stays explicit. No generic “allowed family graph” registry for M58.
+- arbitrary 4+ dep authored function units
+  - rationale: semantic review still rejects them; pretending otherwise would be fake done
+- new supported semantic families
+  - rationale: M59 is executor-lane work, not family-governance work
+- generic recursive cross-library graphs
+  - rationale: that is a second widen and would blur the docs immediately
+- molecule TypeScript execution
+  - rationale: separate product surface with its own proof model
+- seam-kind TypeScript execution
+  - rationale: separate ontology and runtime contract
+- `spec validate --target-language`
+  - rationale: no need to widen CLI shape to ship M59
+- `spec export --target-language`
+  - rationale: same
 
 ## Architecture Review
 
 ### Current vs target lane shape
 
-Current shape:
+Current M58 shape:
 
 ```text
-outer_chain3 root
-├── slot 1: wrapper only
-├── slot 2: monotone_up
-└── slot 3: monotone_down
-
-closure members allowed:
-- wrapper
-- monotone_up
-- monotone_down
-- helper
-
-closure members rejected:
-- chain3
+root target request
+  -> classify root as monotone_up / wrapper / chain3
+  -> validate direct dep tuple for that family
+  -> allow closure members only from a hard-coded family allowlist
+  -> recurse through family-specific branches
 ```
 
-Target M58 shape:
+Target M59 shape:
 
 ```text
-outer_chain3 root
-├── slot 1: wrapper OR same-tree chain3
-│   ├── if wrapper:
-│   │   ├── monotone_down
-│   │   └── monotone_up
-│   │       └── helper?
-│   └── if chain3:
-│       ├── slot 1: wrapper OR same-tree chain3
-│       ├── slot 2: monotone_up
-│       │   └── helper?
-│       └── slot 3: monotone_down
-├── slot 2: monotone_up
-│   └── helper?
-└── slot 3: monotone_down
-    └── helper?
+root target request
+  |
+  +-- direct or reachable shared:: dep required?
+  |     |
+  |     +-- yes -> existing M55-M58 portability lanes
+  |     |          - helper direct-root lane
+  |     |          - wrapper direct-root lane
+  |     |          - chain3 direct-root lane
+  |     |
+  |     +-- no  -> new M59 local graph lane
+  |                - root is local kind:function
+  |                - root has supported semantic review
+  |                - walk reachable local deps
+  |                - every reachable node has supported semantic review
+  |                - every reachable node has body.typescript
+  |                - cycle rejection stays pre-Bun
+  |                - emit reachable closure once
+  |
+  +-- Bun build/test
 ```
 
 Still out:
 
 ```text
-- chain3 in slot 2
-- chain3 in slot 3
-- arbitrary new families in any slot
-- cross-library recursive chain3
-- unrelated loaded units entering the TypeScript tree
+- arbitrary 4+ dep function nodes
+- generic recursive cross-library DAGs
+- molecule execution
+- seam-kind execution
+- validate/export target-language widening
 ```
+
+### Lane-selection rule
+
+The validator must make one explicit choice:
+
+1. if the requested execution shape needs the existing direct cross-library helper, wrapper, or chain3 portability contract, route through the preserved M55-M58 validators
+2. otherwise, if the root is a local `kind:function` unit, route through the new local graph lane
+3. never try to stretch the old family-tuple validators to simulate generic local graph execution
+
+That split keeps the code honest:
+
+- portability remains an explicit exception surface
+- local graph execution becomes the general same-tree surface
 
 ### Concrete module boundaries
 
@@ -324,21 +380,27 @@ Still out:
 authored .unit.spec
         |
         v
+spec-core/src/semantic_review.rs
+  - supported-function truth
+  - unsupported dep-topology truth
+        |
+        v
 spec-core/src/validator.rs
-  - validate_typescript_execution_target_spec_with_specs(...)
-  - validate_typescript_chain3_dep_contract(...)
-  - validate_typescript_closure_member_spec_with_specs(...)
+  - lane selection
+  - local graph proof wall
+  - preserved cross-library portability wall
         |
         v
 spec-core/src/typescript_backend.rs
-  - collect_typescript_root_closure(...)
-  - collect_typescript_closure_member(...)
-  - generate_typescript_tree(...)
+  - reachable closure collection
+  - shared-subgraph dedupe
+  - TypeScript tree emission
         |
         v
 spec-cli/tests/cli.rs
-  - pre-Bun rejection tests
-  - Bun-backed success tests
+  - Bun-backed green path
+  - pre-Bun red paths
+  - preserved cross-library regressions
         |
         v
 README.md / TODOS.md
@@ -347,14 +409,28 @@ README.md / TODOS.md
 
 ### File-by-file implementation contract
 
-| Surface | Current behavior | Required M58 change | Must stay true after the change |
+| Surface | Current behavior | Required M59 change | Must stay true after the change |
 | --- | --- | --- | --- |
-| `spec-core/src/validator.rs` | chain3 roots require slot 1 = wrapper; closure members reject chain3 | widen slot 1 only, and admit chain3 closure members only when the same bounded slot-1 contract holds | slots 2 and 3 stay frozen; cross-library recursive chain3 still rejects before Bun |
-| `spec-core/src/typescript_backend.rs` | wrapper recursion works; chain3 recursion is unreachable | recurse through validated nested chain3 members | unrelated loaded units still stay out of the generated tree |
-| `spec-cli/tests/cli.rs` | flat chain3 green path and red paths exist | add nested green path and preserved recursive rejection wall | all new recursive rejections happen before Bun |
-| `semantic-families/.../fixtures/aligned/*` | flat aligned chain3 fixture only | add one maintained nested aligned path | no second fixture universe, no cross-library recursive proof |
-| `README.md` | nested chain3 closure explicitly unsupported | replace that sentence with the exact bounded recursive rule | generic multi-dep still explicitly deferred |
-| `TODOS.md` | generic multi-dep deferred | keep the defer line, do not overclaim M58 | M58 is not recorded as generic graph support |
+| `spec-core/src/validator.rs` | root admission is family-shaped; local closure admission is tied to a closure-member family table | add a local graph-validation path driven by semantic-review support plus local-only closure rules | direct cross-library helper, wrapper, and chain3 roots still pass exactly as shipped |
+| `spec-core/src/typescript_backend.rs` | root and closure traversal branch on root-family and closure-family arms | add a local graph collector that walks validated reachable local deps generically | shared-subgraph dedupe still uses `included`; unrelated units stay out |
+| `spec-core/src/semantic_review.rs` | already owns supported dep-topology truth | no logic change required for M59 | the broader oceans remain unsupported |
+| `spec-cli/tests/cli.rs` | proves family-shaped roots plus M58 nested chain3 | add local supported-root and local-graph proof, plus preserved cross-library regressions | all new failures still happen before Bun |
+| `README.md` | TypeScript lane wording is narrower than the corrected M59 contract | rewrite the local lane versus portability lane wording | docs must not imply arbitrary node-shape parity |
+| `TODOS.md` | remaining TypeScript defer is still coarse | narrow the remaining backlog to the real oceans left after M59 | do not erase honest backlog |
+
+### Public wording contract
+
+`README.md` must say three things clearly:
+
+1. local roots may now be any shipped supported local function family with `body.typescript`
+2. local traversal is semantic-review-driven and same-tree only
+3. direct cross-library execution is still limited to the existing helper, wrapper, and chain3 portability lanes
+
+`TODOS.md` must stop using "generic multi-dependency TypeScript execution" as a fuzzy bucket and instead name the real remaining work:
+
+- arbitrary authored 4+ dep function topology
+- new supported semantic families
+- generic cross-library recursive function graphs
 
 ### Opinionated architecture recommendation
 
@@ -362,74 +438,83 @@ Keep this implementation boring.
 
 Recommended shape:
 
-1. split slot-1 handling from slot-2 and slot-3 handling inside `validate_typescript_chain3_dep_contract(...)`
-2. keep slot-2 and slot-3 validation exactly as they are
-3. extend the closure-member matcher with one explicit `chain3` arm
-4. extend `collect_typescript_closure_member(...)` with one explicit `chain3` recursion branch
+1. preserve the current direct cross-library helper, wrapper, and chain3 validators as the portability lane
+2. add one explicit local graph validator path instead of stretching the old family helpers
+3. add one explicit local graph collector instead of stacking more special cases into the current family-shaped collector
+4. keep semantic review as the single owner of per-node supported topology truth
 
-Do not build a generic “TypeScript family graph” registry. This repo does not need that abstraction yet. M58 spends no innovation tokens on cleverness.
+Do not build:
 
-### Public wording delta
-
-`README.md` must stop saying nested chain3 closure is unsupported and instead say the exact new rule:
-
-- chain3 roots still require exactly three direct deps
-- slot 1 may be wrapper or same-tree chain3
-- slot 2 and slot 3 stay fixed to monotone-up then monotone-down-nonnegative
-- recursive chain3 closure is same-tree only
-- generic multi-dependency execution is still unsupported
-
-`TODOS.md` must keep the deferred line aimed at generic multi-dependency TypeScript execution. Do not replace that defer with language that sounds like graph parity shipped.
+- a new generic graph registry
+- a target-language-specific semantic-family clone
+- a second cycle detector
 
 ## Code Quality Review
 
 ### Keep the diff minimal
 
-Minimal-diff recommendation:
+Minimal-diff rules:
 
-- modify the existing chain3 contract helper, do not invent a new validator subsystem
-- add the recursion branch inside `collect_typescript_closure_member(...)`, do not refactor the whole inclusion walker
-- keep proof in existing unit-test and CLI-test files
-- reuse the existing aligned chain3 fixture directory
+- preserve the existing cross-library helper, wrapper, and chain3 validator helpers
+- add one local graph validation entry instead of refactoring the entire validator subsystem
+- add one local graph collection entry instead of teaching the current family-specific collector new tricks forever
+- keep proof in existing unit and integration test files, plus one dedicated local graph fixture surface
 
 ### DRY rule
 
-Avoid duplicating “supported TypeScript family” logic across three places in slightly different words.
+Avoid duplicating "supported TypeScript function unit" truth across semantic review, validator, backend, tests, and docs.
 
-The right DRY level is small and local:
+The right DRY level is:
 
-- one explicit slot-1 contract helper in `validator.rs`
-- one explicit chain3 recursion branch in `typescript_backend.rs`
-- one shared phrasing update for the recursive contract error surface
+- semantic review owns per-node supported-family truth
+- validator owns lane selection plus pre-Bun contract checks
+- backend owns closure collection only
 
-The wrong DRY level is a new generic abstraction that hides which exact families M58 admits.
+The wrong DRY level is:
+
+- re-encoding supported family rules again in backend traversal
+- growing the closure-member family table into a second semantic-review system
 
 ### Error-handling and naming rule
 
-All new rejection paths must fail before Bun runs and must stay lane-specific.
+All new rejection paths must fail before Bun runs and must use precise lane wording.
 
 Required behavior:
 
-- nested chain3 wrong slot or wrong family: TypeScript lane error, not a generic semantic-review failure
-- cross-library nested chain3: explicit rejection that says recursive chain3 remains same-tree only in M58
-- missing nested `body.typescript`: same pre-Bun contract failure class as existing M55/M56 errors
+- local graph lane plus reachable `shared::...` dep -> explicit local-lane portability rejection
+- local graph lane plus unsupported deep member -> explicit supported-semantic-review rejection
+- local graph lane plus missing deep `body.typescript` -> explicit pre-Bun TypeScript-body rejection
+- local graph lane plus cycle -> existing cycle error surface, still pre-Bun
+- local root with unsupported dep topology -> semantic-review unsupported topology, not a vague "generic graph" error
 
-Where semantics changed, update stale `in M55` / `in M56` wording to `in M58`. Do not leave the new recursive rule guarded by stale milestone text.
+Also fix milestone drift in error strings where needed. Leaving stale `M52` language in M59-only codepaths is sloppy and will confuse users.
 
 ### Diagram maintenance rule
 
-If any nearby ASCII diagram or explanatory comment in touched files becomes stale, update it in the same change. Stale diagrams are worse than no diagrams.
+If nearby ASCII diagrams or comments in `typescript_backend.rs` or `validator.rs` become stale, update them in the same change. The current module banner in `typescript_backend.rs` will be stale after M59 and must be rewritten.
 
 ## Test Review
 
-100% coverage is the target for the new behavior slice.
+100% coverage is the goal for the new behavior slice.
 
-### Test framework
+### Test framework and proof surfaces
 
 - runtime: Rust / Cargo
 - unit tests: inline `#[test]` in `spec-core`
 - integration tests: `spec-cli/tests/cli.rs`
 - live TypeScript execution proof: Bun-backed CLI integration tests
+
+Do not overload a semantic-family packet fixture to prove a graph-lane contract it was not built to explain.
+
+Recommended proof surface:
+
+- add a dedicated local graph fixture tree under `spec-cli/tests/fixtures/`
+
+Why:
+
+- M59 is topology and lane-selection work, not family-packet promotion work
+- the proof needs multiple supported families in one local graph
+- the fixture should be obviously local-only and graph-oriented
 
 ### Code path coverage
 
@@ -438,28 +523,30 @@ CODE PATH COVERAGE
 ===========================
 [+] spec-core/src/validator.rs
     │
-    ├── validate_typescript_chain3_dep_contract(...)
-    │   ├── [EXISTING] flat chain3 slot 1 == wrapper, slot 2 == up, slot 3 == down
-    │   ├── [GAP]      slot 1 == same-tree nested chain3 should pass
-    │   ├── [GAP]      slot 1 == cross-library nested chain3 should fail
-    │   ├── [GAP]      slot 1 == wrong family should fail with M58 wording
-    │   └── [GAP]      nested chain3 missing body.typescript should fail pre-Bun
+    ├── validate_typescript_execution_target_spec_with_specs(...)
+    │   ├── [EXISTING] family-shaped direct cross-library root lanes
+    │   ├── [GAP]      local helper root passes
+    │   ├── [GAP]      local monotone-down root passes
+    │   ├── [GAP]      local wrapper root passes through local graph lane
+    │   ├── [GAP]      local chain3 root passes through local graph lane
+    │   ├── [GAP]      local root with unsupported dep topology still rejects
+    │   └── [GAP]      local reachable shared:: dep rejects before Bun
     │
-    └── validate_typescript_closure_member_spec_with_specs(...)
-        ├── [EXISTING] wrapper closure member passes
-        ├── [EXISTING] chain3 closure member fails
-        └── [GAP]      chain3 closure member passes only under bounded M58 contract
+    └── local reachable-closure validation
+        ├── [GAP]      unsupported deep member rejects
+        ├── [GAP]      missing deep body.typescript rejects
+        ├── [GAP]      cycle rejects before Bun
+        └── [GAP]      missing reachable dep rejects before Bun
 
 [+] spec-core/src/typescript_backend.rs
     │
-    ├── collect_typescript_closure_member(...)
-    │   ├── [EXISTING] wrapper recursion
-    │   ├── [EXISTING] helper recursion
-    │   ├── [GAP]      nested chain3 recursion
-    │   └── [GAP]      unrelated loaded units still excluded when nested chain3 exists
+    ├── local graph closure collection
+    │   ├── [GAP]      reachable local closure is included
+    │   ├── [GAP]      shared subgraph is emitted once
+    │   └── [GAP]      unrelated loaded units stay excluded
     │
-    └── generate_typescript_tree(...)
-        └── [GAP]      nested chain3 tree emits outer root + nested chain3 + reachable deps only
+    └── legacy portability lane collection
+        └── [REGRESSION] M55-M58 helper, wrapper, and chain3 roots still behave unchanged
 ```
 
 ### User-flow coverage
@@ -467,217 +554,283 @@ CODE PATH COVERAGE
 ```text
 USER FLOW COVERAGE
 ===========================
-[+] Happy path
+[+] Local root execution
     │
-    └── [GAP] [→CLI] spec test <nested_chain3_unit> --target-language typescript passes
+    ├── [GAP] [→CLI] helper root executes with Bun
+    ├── [GAP] [→CLI] monotone-down root executes with Bun
+    ├── [GAP] [→CLI] monotone-up root with helper executes with Bun
+    ├── [GAP] [→CLI] wrapper root executes with Bun
+    └── [GAP] [→CLI] chain3 root executes with Bun
 
-[+] Contract rejections
+[+] Local graph contract rejections
     │
-    ├── [GAP] [→CLI] nested chain3 with wrong first-slot family fails before Bun
-    ├── [GAP] [→CLI] nested chain3 with wrong dep order fails before Bun
-    ├── [GAP] [→CLI] nested chain3 with missing nested body.typescript fails before Bun
-    └── [GAP] [→CLI] nested cross-library chain3 fails before Bun
+    ├── [GAP] [→CLI] deep member missing body.typescript rejects before Bun
+    ├── [GAP] [→CLI] deep member unsupported by semantic review rejects before Bun
+    ├── [GAP] [→CLI] local cycle rejects before Bun
+    ├── [GAP] [→CLI] reachable shared:: dep rejects before Bun
+    └── [GAP] [→CLI] unsupported authored topology still rejects before Bun
 
-[+] Tree integrity
+[+] Regression wall
     │
-    └── [GAP] [→UNIT] unrelated loaded units stay out of generated TypeScript tree
+    ├── [REGRESSION] existing cross-library helper root still passes
+    ├── [REGRESSION] existing cross-library wrapper root still passes
+    └── [REGRESSION] existing cross-library chain3 root still passes
 ```
 
-### Required proof additions by file
+### Required proof additions by surface
 
 1. `spec-core/src/validator.rs`
-   - replace the current “chain3 closure member rejects” proof with bounded recursive admission coverage:
-     - same-tree nested chain3 allowed
-     - cross-library nested chain3 rejected
-     - wrong first-slot family rejected
-     - missing nested `body.typescript` rejected
-   - keep flat-chain3 root coverage green
+   - add local-root admission coverage for helper and monotone-down
+   - add local generic closure rejection coverage for:
+     - deep unsupported member
+     - deep missing `body.typescript`
+     - reachable `shared::...` dep
+     - unsupported authored topology still rejected
+   - keep direct cross-library helper, wrapper, and chain3 coverage green
 2. `spec-core/src/typescript_backend.rs`
    - add unit coverage proving:
-     - nested chain3 closure inclusion works
-     - unrelated loaded units still stay excluded
-     - repeated reachable members are still deduped
+     - local reachable closure inclusion
+     - shared-subgraph dedupe
+     - unrelated-unit exclusion
+     - legacy portability-lane closure remains unchanged
 3. `spec-cli/tests/cli.rs`
-   - add Bun-backed success coverage for the maintained nested aligned fixture
-   - add pre-Bun rejection coverage for:
-     - wrong nested first-slot family
-     - wrong nested dep order
-     - missing nested `body.typescript`
-     - cross-library nested chain3
-4. `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/`
-   - add one outer nested-chain3 root unit
-   - add one nested chain3 member unit
-   - reuse the existing aligned wrapper and leaf units
+   - add Bun-backed green-path coverage for local helper, monotone-down, monotone-up, wrapper, and chain3 roots
+   - add pre-Bun local graph rejection coverage for the red paths above
+   - preserve M55-M58 cross-library green paths
+4. `spec-cli/tests/fixtures/typescript_local_supported_graph/`
+   - add one local graph fixture tree that includes:
+     - helper root
+     - monotone-down root
+     - monotone-up root with helper
+     - wrapper root
+     - chain3 root
+     - one shared-subgraph reuse path
 
 ### Maintained fixture shape
 
-Use the existing aligned bucket. Add exactly two new units:
+Use one dedicated local graph fixture tree with obvious same-tree ids.
+
+Suggested shape:
 
 ```text
-pricing/checkout_nested_chain3_aligned
-├── pricing/base_nested_chain3_aligned      (chain3, local)
-├── pricing/pricing_tax_leaf_aligned        (up)
-└── pricing/pricing_discount_leaf_aligned   (down)
-
-pricing/base_nested_chain3_aligned
-├── pricing/pricing_total_wrapper_aligned   (wrapper)
-├── pricing/pricing_tax_leaf_aligned        (up)
-└── pricing/pricing_discount_leaf_aligned   (down)
+units/
+├── money/
+│   └── round.unit.spec
+└── pricing/
+    ├── apply_discount.unit.spec
+    ├── apply_tax.unit.spec
+    ├── calculate_total.unit.spec
+    ├── checkout_total.unit.spec
+    └── display_total.unit.spec
 ```
 
-That proves the exact recursive slot-1 contract and nothing broader.
+What this proves:
+
+- helper root eligibility
+- monotone-down root eligibility
+- local graph traversal across the shipped supported function families already admitted by the lane
+- shared-subgraph dedupe through reused local members
 
 ### Regression rule
 
-This is a regression-style contract change against the old rejection wall.
+This is a regression-sensitive lane change.
 
-That means the green nested same-tree case lands with regression proof in the same change. No deferral.
+That means:
+
+- every new green path lands with proof in the same change
+- every preserved M55-M58 portability lane is exercised in the same change
+- no doc update ships before the regression wall is green
+
+### Test plan artifact
+
+Write the QA handoff artifact here:
+
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-eng-review-test-plan-20260514-141636.md`
+
+That artifact is part of this planning output, not follow-up garnish.
 
 ### QA handoff checklist
 
-Affected CLI commands and proofs:
+Affected commands and proofs:
 
-- `spec test <nested-chain3-unit> --target-language typescript`
-- `spec build <aligned fixture root> --target-language typescript`
-- `spec status <aligned fixture root> --target-language typescript`
+- `spec test <local-helper-root.unit.spec> --target-language typescript`
+- `spec test <local-monotone-down-root.unit.spec> --target-language typescript`
+- `spec test <local-wrapper-root.unit.spec> --target-language typescript`
+- `spec test <local-chain3-root.unit.spec> --target-language typescript`
+- `spec build <local-graph-fixture-dir> --target-language typescript`
+- `spec status <local-graph-fixture-dir> --target-language typescript`
 
 Critical behaviors to verify:
 
-- same-tree nested chain3 executes successfully
-- recursive dep order stays frozen
-- cross-library recursive chain3 rejects before Bun
-- missing nested `body.typescript` rejects before Bun
-- unrelated loaded units never leak into the emitted TypeScript tree
+- local helper root is now valid in the TypeScript lane
+- local monotone-down root is now valid in the TypeScript lane
+- local graph traversal includes exactly the reachable local closure
+- repeated reachable members are emitted once
+- deep unsupported or un-authored members reject before Bun
+- direct cross-library helper, wrapper, and chain3 roots remain green
 
 ## Performance Review
 
-This change must not alter the asymptotic class of the TypeScript tree walk.
+M59 must not worsen the asymptotic class of the TypeScript tree walk.
 
 Expected characteristics:
 
 - traversal remains bounded to reachable loaded units
 - `included: BTreeSet<usize>` continues to dedupe repeated reachable members
-- recursion depth is bounded by the validated acyclic authored graph
-- no new cache is needed
+- no new global scans per recursive step
+- cycle rejection continues to happen before codegen
 
-Performance risks to avoid:
+Performance rules:
 
-- do not rescan the entire loaded set to find nested members
-- do not add a second inclusion structure beside `included`
-- do not emit duplicate modules for repeated nested chain3 reuse
+- do not recompute semantic review repeatedly for the same node unless the surrounding callsite already has that truth in hand
+- do not add a second dedupe structure beside `included`
+- do not turn local graph validation into an O(n^2) repeated closure walk
+- do not regress the fast path for the existing cross-library portability lanes
 
 ## Failure Modes
 
 | New codepath | Real failure | Test covers it? | Error handling exists? | User-visible outcome |
 | --- | --- | --- | --- | --- |
-| nested chain3 slot-1 admission | cross-library nested chain3 is admitted by mistake | required | required | clear rejection before Bun |
-| closure-member recursion | nested chain3 reachable deps are not included | required | compile/test proof | build failure with specific lane context |
-| dedupe and inclusion boundary | unrelated loaded units leak into generated tree | required | unit-test proof | silent over-inclusion if untested |
-| missing nested TypeScript body | runtime hits Bun instead of rejecting early | required | required | clear rejection before Bun |
-| wrong nested dep order | lane accepts a graph outside the frozen family contract | required | required | clear rejection before Bun |
+| local root admission | helper or monotone-down root still rejected by stale root-family logic | required | required | clear pre-Bun rejection if broken |
+| local graph closure validation | unsupported deep member slips through because only the root is checked | required | required | misleading Bun or runtime failure if broken |
+| local graph closure validation | deep member missing `body.typescript` reaches codegen | required | required | clear pre-Bun rejection required |
+| local graph portability wall | reachable `shared::...` dep is silently admitted into the local lane | required | required | scope explosion and dishonest docs |
+| closure collection | shared local subgraph is emitted twice | required | required | duplicate module or import noise |
+| closure boundary | unrelated loaded units leak into the generated tree | required | required | silent over-inclusion if untested |
+| regression wall | direct cross-library wrapper or chain3 roots route through the wrong lane and break | required | required | real user regression |
 
 Critical gap rule:
 
-If any one of the first four rows lands without a direct test, M58 is not ready.
+If any of the first five rows lands without direct proof, M59 is not ready.
 
 ## Implementation Sequence
 
-### 1. Freeze authority
+### 1. Freeze the contract
 
-- keep this `PLAN.md` as the repo-root contract
-- leave `ORCH_PLAN.md` untouched for now
+Touched surfaces:
 
-### 2. Add the maintained nested aligned proof
+- `PLAN.md`
 
-- add `pricing/base_nested_chain3_aligned.unit.spec`
-- add `pricing/checkout_nested_chain3_aligned.unit.spec`
-- keep the proof same-tree and local
-- reuse existing aligned wrapper and leaf units
+Required outcome:
 
-### 3. Widen validator slot 1 only
+- this file becomes the single implementation authority
+- no stale "arbitrary generic graph" wording remains
 
-- update `validate_typescript_chain3_dep_contract(...)`
-- separate slot-1 handling from slot-2 and slot-3 handling
-- allow slot 1 to resolve to:
-  - `function.wrapper.pipeline.v1`
-  - `function.wrapper.pipeline.chain3.v1` when same-tree local
-- keep slot 2 and slot 3 unchanged
-- make the cross-library recursive rejection explicit in the validator
+### 2. Add the dedicated local graph proof surface
 
-### 4. Widen closure-member admission
+Touched surfaces:
 
-- update `validate_typescript_closure_member_spec_with_specs(...)`
-- admit chain3 closure members only through the same bounded slot-1 contract
-- preserve helper, wrapper, monotone-up, and monotone-down rules unchanged
+- `spec-cli/tests/fixtures/`
+- `spec-cli/tests/cli.rs`
 
-### 5. Recurse through nested chain3 in the backend
+Required outcome:
 
-- update `collect_typescript_closure_member(...)`
-- when the validated closure member is chain3:
-  - recurse into its three direct deps
-  - continue to use `collect_typescript_closure_member(...)` for each dep
-  - rely on `included` to avoid duplicate emission
-- keep unrelated loaded-unit exclusion tests green
+- one maintained local fixture tree exists
+- fixture ids are stable before validator and backend assertions get wired to them
+
+### 3. Split the local graph lane from the portability lane in the validator
+
+Touched surfaces:
+
+- `spec-core/src/validator.rs`
+
+Required outcome:
+
+- direct cross-library helper, wrapper, and chain3 validators remain intact
+- one explicit local-root path is added in `validate_typescript_execution_target_spec_with_specs(...)`
+- lane selection is now local-graph versus portability, not "more cases in the old root-family switch"
+
+### 4. Validate the local reachable closure graph-wide
+
+Touched surfaces:
+
+- `spec-core/src/validator.rs`
+
+Required outcome:
+
+- semantic review is reused for supported-family truth
+- cycle detection is reused
+- reachable non-local deps reject
+- reachable unsupported semantic review rejects
+- reachable missing `body.typescript` rejects
+
+### 5. Replace local family-shaped closure traversal with dep-driven traversal
+
+Touched surfaces:
+
+- `spec-core/src/typescript_backend.rs`
+
+Required outcome:
+
+- a local graph collector walks reachable local deps generically
+- `included` remains the dedupe mechanism
+- the preserved portability-lane collector behavior stays intact
 
 ### 6. Lock the proof wall
 
-- extend validator tests in `spec-core/src/validator.rs`
-- extend backend tree tests in `spec-core/src/typescript_backend.rs`
-- extend Bun-backed and pre-Bun CLI proof in `spec-cli/tests/cli.rs`
+Touched surfaces:
+
+- `spec-core/src/validator.rs`
+- `spec-core/src/typescript_backend.rs`
+- `spec-cli/tests/cli.rs`
+
+Required outcome:
+
+- validator tests exist
+- backend tree tests exist
+- Bun-backed CLI green paths exist
+- CLI red paths for local-graph rejections exist
+- direct cross-library regressions are rerun
 
 ### 7. Rewrite public wording
 
+Touched surfaces:
+
 - `README.md`
-  - replace the nested-chain3 unsupported sentence
-  - name the exact new rule:
-    - chain3 slot 1 may be wrapper or same-tree chain3
-    - slot 2 and slot 3 stay fixed
-    - generic multi-dep still unsupported
 - `TODOS.md`
-  - keep generic multi-dependency TypeScript execution deferred
-  - do not record M58 as generic graph support
+
+Required outcome:
+
+- docs distinguish the new local graph lane from the preserved cross-library portability lanes
+- docs explicitly say arbitrary node-shape parity is still out
+- the TODO backlog now names the real remaining oceans
 
 ## Acceptance Commands
 
-Run these before calling M58 done:
+Run these before calling M59 done:
 
 ```bash
-cargo test -p spec-core typescript_nested_chain3
-cargo test -p spec-core typescript_tree_renders_nested_chain3
-cargo test -p spec-cli --test cli typescript_nested_chain3
+cargo test -p spec-core typescript
+cargo test -p spec-cli --test cli typescript
 ```
 
-Then run the maintained fixture proof directly:
+Then run the maintained local graph proof directly:
 
 ```bash
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/checkout_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/money/round.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/apply_discount.unit.spec --target-language typescript
 ```
 
-Finally run the whole lane-facing regression surface:
+Then run the preserved portability regressions:
+
+```bash
+cargo test -p spec-cli --test cli typescript_cross_library
+```
+
+Finally run the full lane-facing regression surface:
 
 ```bash
 cargo test -p spec-core
 cargo test -p spec-cli --test cli
 ```
 
-Acceptance is not complete until all three gates are green:
+Acceptance is not complete until all four gates are green:
 
-1. validator recursive admission and rejection proofs are green
-2. generated TypeScript tree includes the nested chain3 closure and excludes unrelated units
-3. Bun-backed nested-chain3 execution passes while all recursive red paths still fail before Bun
-
-## NOT in scope
-
-- cross-library nested chain3 recursion
-  - rationale: that is a second widen and would blur the same-tree boundary immediately
-- slot-2 or slot-3 recursive widening
-  - rationale: that becomes a new family rule, not the M58 seam
-- generic DAG execution policy
-  - rationale: still an ocean, still explicitly deferred
-- molecule TypeScript execution
-  - rationale: unrelated product surface with its own proof model
-- target-language validate/export
-  - rationale: no need to widen CLI shape to ship this recursive slice
+1. local supported-family roots pass
+2. local graph-wide rejection wall stays pre-Bun
+3. shared-subgraph dedupe and unrelated-unit exclusion are proven
+4. existing cross-library helper, wrapper, and chain3 lanes still pass unchanged
 
 ## Worktree Parallelization Strategy
 
@@ -685,18 +838,18 @@ Acceptance is not complete until all three gates are green:
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| validator slot-1 widen | `spec-core/src/` | — |
-| backend nested recursion | `spec-core/src/` | validator slot-1 widen |
-| nested aligned fixture plus CLI proof | `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/`, `spec-cli/tests/` | — |
-| docs plus backlog sync | repo-root docs | validator slot-1 widen, backend nested recursion, CLI proof |
+| local graph fixture authoring and CLI proof | `spec-cli/tests/`, `spec-cli/tests/fixtures/` | — |
+| validator lane split and local graph validation | `spec-core/src/` | — |
+| backend local graph collector and dedupe proof | `spec-core/src/` | validator lane split |
+| docs and backlog sync | repo-root docs | validator lane split, backend collector, CLI proof |
 
 ### Parallel lanes
 
-- Lane A: validator slot-1 widen → backend nested recursion
+- Lane A: validator lane split -> backend local graph collector
   - sequential, shared `spec-core/src/`
-- Lane B: nested aligned fixture plus CLI proof
-  - parallelizable, but it must coordinate exact fixture ids and final error wording with Lane A
-- Lane C: docs plus backlog sync
+- Lane B: local graph fixture authoring and CLI proof
+  - parallelizable, but it must coordinate fixture ids and final error wording with Lane A
+- Lane C: docs and backlog sync
   - sequential after A and B merge, because public wording must match shipped behavior exactly
 
 ### Execution order
@@ -705,32 +858,44 @@ Launch Lane A and Lane B in parallel worktrees.
 
 Merge both only after:
 
-1. validator behavior is stable
-2. nested fixture ids are locked
-3. CLI proof expectations match final validator wording
+1. local fixture ids are locked
+2. validator wording is stable
+3. CLI proof expectations match the final lane split
 
-Then run Lane C for docs and backlog wording.
+Then run Lane C for `README.md` and `TODOS.md`.
 
 ### Conflict flags
 
-- Lane A and Lane B do not share files, but they do share fixture ids and validator-error wording
-- avoid editing `README.md` from either parallel lane, keep that in Lane C
+- Lane A and Lane B do not share files, but they do share:
+  - fixture ids
+  - expected error wording
+  - exact definition of local-versus-portability lane selection
 - do not split validator and backend into separate worktrees, both live in `spec-core/src/`
+- do not let either parallel lane edit `README.md`; keep docs in Lane C
+
+### Recommended ownership
+
+- Lane A owner: `spec-core/src/`
+- Lane B owner: `spec-cli/tests/` and `spec-cli/tests/fixtures/`
+- Lane C owner: repo-root docs only
+
+If a worker needs to change a module outside its lane, it should stop and hand the change back rather than creating cross-lane merge conflict bait.
 
 ## Completion Summary
 
 - Step 0: Scope Challenge
-  - scope accepted as a bounded slot-1 recursive widen only
+  - scope accepted as semantic-review-driven same-tree local graph execution over shipped supported families only
 - Architecture Review
-  - one required contract clarification: nested chain3 is only reachable by widening slot 1
+  - one critical clarification locked: graph-generic does not mean arbitrary node-shape generic
 - Code Quality Review
-  - explicit-over-clever implementation required, no generic graph registry
+  - explicit lane split required, no second semantic-review system
 - Test Review
-  - maintained nested proof path required
-  - Bun-backed green path required
-  - pre-Bun rejection wall must stay strong
+  - dedicated local graph proof surface required
+  - helper and monotone-down root proofs required
+  - shared-subgraph dedupe proof required
+  - preserved cross-library regression wall required
 - Performance Review
-  - no new asymptotic risk if recursion stays on the existing included-set walker
+  - no new asymptotic risk if traversal stays reachable-only and deduped
 - NOT in scope
   - written
 - What already exists
@@ -741,9 +906,30 @@ Then run Lane C for docs and backlog wording.
   - 3 lanes total
   - 1 parallel launch wave
   - 2 sequential follow-on stages
+- Lake Score
+  - the complete bounded option was chosen over the shortcut on every major decision
 
 ## Why This Plan Wins
 
-It reads like one execution contract now, not a mix of stale milestone cleanup notes and partial review commentary.
+It turns the design doc into an execution contract the codebase can actually honor.
 
-It names the exact M58 behavior widen, ties that behavior to concrete files and proof gates, preserves the bounded family-shaped story, and leaves no room to accidentally smuggle generic graph execution into the TypeScript lane. That is the right bar for this milestone.
+It keeps the good ambition:
+
+- stop hard-coding the local TypeScript lane as a few special families forever
+
+It removes the bad ambiguity:
+
+- no fake promise that arbitrary authored function graphs suddenly work
+
+It preserves what users already have:
+
+- direct cross-library helper, wrapper, and chain3 roots
+
+And it gives implementation a clean ownership split:
+
+- semantic review owns node truth
+- validator owns lane selection and pre-Bun contract checks
+- backend owns closure collection
+- CLI proof owns end-to-end confidence
+
+That is specific enough to build, test, and ship without lying in the docs.

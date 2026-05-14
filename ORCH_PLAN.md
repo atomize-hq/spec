@@ -1,75 +1,72 @@
-# M58 Orchestration Plan
+# M59 Orchestration Plan
 
 Status: **authoritative execution runbook**  
-Supersedes: **the stale M57 `ORCH_PLAN.md`**  
+Supersedes: **the stale M58 `ORCH_PLAN.md`**  
 Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
-Plan title: **`M58: Bounded Nested Chain3 Closure TypeScript Execution Plan`**  
+Plan title: **`M59: Semantic-Review-Driven Local TypeScript Function Graph Execution Plan`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
 Primary execution branch: **`feat/m40-plus`**  
-Primary execution head at rewrite: **`6c7caf3`**  
-Authority validated commit in `PLAN.md`: **`6c7caf3`**  
+Authority validated commit in `PLAN.md`: **`bd55d0f`**  
 Base branch: **`main`**  
 Authority date: **`2026-05-14`**  
-Worker model: **GPT-5.4 with `reasoning_effort=high`**  
 Maximum safe worker concurrency: **2 worker lanes plus the parent integrator**  
-Rewrite intent: **replace the stale M57 closeout runbook with an execution-ready M58 runbook aligned to the current `PLAN.md` truth**  
+Rewrite intent: **replace the stale M58 runbook with an execution-ready M59 runbook aligned to the current `PLAN.md` contract**  
 Last rewritten: **`2026-05-14`**
 
 ## Summary
 
-This runbook drives one bounded milestone to completion.
+M59 adds one new TypeScript execution lane and keeps the existing portability lane intact.
 
-M58 is not generic TypeScript graph execution. It is one exact widen in the existing Bun-backed lane:
+The new lane is exactly:
 
-- a chain3 root may use a same-tree `function.wrapper.pipeline.chain3.v1` in direct dep slot 1
-- nested chain3 recursion stays bounded to the same loaded tree
-- slot 2 stays `function.arithmetic_leaf.monotone_up.v1`
-- slot 3 stays `function.arithmetic_leaf.monotone_down_nonnegative.v1`
+- same-tree local only
+- `kind:function` only
+- semantic-review-driven
+- graph-generic only over the shipped supported function families already admitted by the lane
 
-The parent agent remains the sole integrator on `feat/m40-plus`. The parent owns scope, run-state, merge order, and final proof. Worker lanes are allowed only where file ownership is disjoint and dependency shape is controlled.
+The new lane is not:
 
-The safe execution shape is fixed:
+- arbitrary per-node dep arity support
+- new semantic-family promotion
+- molecule TypeScript execution
+- seam-kind TypeScript execution
+- target-language `validate` or `export`
+- generic recursive cross-library graph execution
 
-- Lane A: `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs`
-- Lane B: `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*` and `spec-cli/tests/cli.rs`
-- Lane C: `README.md` and `TODOS.md`
+The parent remains the sole integrator on `feat/m40-plus`. Parallelism is allowed only where merge risk is low and ownership is exact:
 
-Lane A and Lane B may run in parallel only after the parent freezes exact fixture ids, lane scope, and rejection-wall expectations. Lane C runs last, after A and B are integrated, because docs must describe shipped truth rather than intended truth.
+- Lane A: validator lane split plus backend local graph collector in `spec-core/src/`
+- Lane B: local graph fixture authoring plus CLI proof in `spec-cli/tests/` and `spec-cli/tests/fixtures/`
+- Lane C: `README.md` and `TODOS.md` sync only after A and B are integrated and proven
 
-`PLAN.md` is the authority. `ORCH_PLAN.md` is derived orchestration only. If `PLAN.md` changes mid-run, the parent pauses, re-freezes scope, updates run-state, and relaunches only against the refreshed contract.
+`PLAN.md` is the authority. `ORCH_PLAN.md` is derived orchestration only. If `PLAN.md` changes during execution, the parent pauses worker lanes, updates the freeze artifacts under `.runs/`, and relaunches only against the refreshed contract.
 
 ## Hard Guards
 
 - `PLAN.md` is the only scope authority.
-- M58 is exactly one bounded TypeScript-lane widen.
-- Slot 1 widens from wrapper-only to wrapper-or-same-tree-chain3.
-- Slot 2 remains monotone-up.
-- Slot 3 remains monotone-down-nonnegative.
-- Same-tree nested chain3 only. No cross-library recursive chain3.
-- No generic DAG or multi-dependency TypeScript policy.
-- No molecule TypeScript execution.
-- No target-language `validate` or `export`.
-- No schema churn.
-- No new crate.
-- No new runtime.
-- No new command surface.
-- No new fixture universe outside the existing `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*` pack.
-- No generic “allowed TypeScript family graph” abstraction.
-- All new recursive rejection paths must fail before Bun runs.
-- The preserved rejection wall is part of done, not cleanup.
-- The maintained green proof must include a nested same-tree chain3 path.
-- The maintained red proof must preserve wrong-family, wrong-order, missing-`body.typescript`, and cross-library recursive rejection coverage.
+- M59 adds exactly one same-tree local TypeScript function graph lane.
+- The local graph lane is semantic-review-driven and same-tree only.
+- Graph-generic means closure traversal is dep-driven over already supported families, not arbitrary authored function topology.
+- Existing direct cross-library helper, wrapper, and chain3 lanes remain preserved portability contracts and must not regress.
+- No lane may widen to arbitrary 4+ dep authored function units.
+- No lane may add or promote new semantic families.
+- No lane may add molecule TypeScript execution.
+- No lane may add seam-kind TypeScript execution.
+- No lane may add target-language `validate` or `export`.
+- No lane may change `spec-core/src/semantic_review.rs` for M59. If validator/backend work requires semantic-review logic changes, stop and re-scope.
+- All new rejection paths must fail before Bun runs.
 - The parent is the only integrator onto `feat/m40-plus`.
+- No lane may revert, clean, stash, or overwrite unowned worktree changes. Kickoff must record the dirty tree and preserve it.
 
 Stop and re-scope immediately if any of these become true:
 
-1. The core lane needs slot-2 or slot-3 widening to make the nested green path work.
-2. The core lane needs cross-library recursive chain3 to make the nested green path work.
-3. The implementation starts drifting toward generic graph execution or a new registry abstraction.
-4. Any recursive red path starts failing at Bun/runtime instead of failing in pre-Bun validation.
-5. The CLI proof requires new commands, new fixtures outside the maintained aligned pack, or target-language `validate/export`.
-6. Docs would need to claim broader TypeScript graph support than the bounded same-tree slot-1 widen.
-7. `PLAN.md` changes materially during execution and the parent has not re-frozen the contract.
+1. The local lane requires semantic-family promotion to ship the intended green path.
+2. The local lane requires arbitrary authored dep-topology support beyond the currently shipped supported families.
+3. The implementation needs edits to `spec-core/src/semantic_review.rs`, CLI command surface changes, schema changes, or new runtime contracts.
+4. Any local-graph rejection path reaches Bun or runtime instead of failing in pre-Bun validation.
+5. The implementation starts widening to cross-library recursive graphs instead of preserving the existing explicit helper/wrapper/chain3 portability lanes.
+6. Lane B cannot complete without touching `spec-core/src/`, or Lane A cannot complete without touching `spec-cli/tests/` or fixture files.
+7. `PLAN.md` changes materially during execution and the parent has not refreshed the contract freeze.
 
 ## Concrete Worktree And Branch Layout
 
@@ -77,8 +74,8 @@ Use this exact topology.
 
 ```bash
 PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec
-WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m58
-RUN_ROOT=$PRIMARY_ROOT/.runs/m58_bounded_nested_chain3_closure_typescript_execution
+WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m59
+RUN_ROOT=$PRIMARY_ROOT/.runs/m59_semantic_review_driven_local_typescript_function_graph
 ```
 
 ### Branch inventory
@@ -86,29 +83,29 @@ RUN_ROOT=$PRIMARY_ROOT/.runs/m58_bounded_nested_chain3_closure_typescript_execut
 | Lane | Path | Branch | Owner | Purpose |
 | --- | --- | --- | --- | --- |
 | Primary authority + integration | `PRIMARY_ROOT` | `feat/m40-plus` | Parent | kickoff, freeze, integration, final proof wall |
-| `WS-A-CORE` | `$WT_ROOT/ws-a-core` | `codex/m58-core-nested-chain3` | Worker | validator slot-1 widen and backend nested recursion |
-| `WS-B-FIXTURE-CLI` | `$WT_ROOT/ws-b-fixture-cli` | `codex/m58-fixture-cli-nested-chain3` | Worker | maintained nested fixture and CLI proof wall |
-| `WS-C-DOCS` | `$WT_ROOT/ws-c-docs` | `codex/m58-doc-contract-sync` | Worker or parent | final README/TODOS wording sync only after A and B land |
+| `WS-A-CORE` | `$WT_ROOT/ws-a-core` | `codex/m59-core-local-graph` | Worker | validator lane split plus backend local graph collector |
+| `WS-B-FIXTURE-CLI` | `$WT_ROOT/ws-b-fixture-cli` | `codex/m59-fixture-cli-local-graph` | Worker | maintained local graph fixture tree plus CLI proof wall |
+| `WS-C-DOCS` | `$WT_ROOT/ws-c-docs` | `codex/m59-doc-contract-sync` | Worker or parent | final README/TODOS wording sync only after A+B merge |
 
 ### Worktree creation rules
 
-- Do not create any worker worktree before `M58-01` contract freeze completes.
-- Create `WS-A-CORE` and `WS-B-FIXTURE-CLI` together after `M58-01`.
-- Create `WS-C-DOCS` only after `M58-21` completes or if the parent decides to do docs directly on `feat/m40-plus`.
-- Do not split validator and backend into different worktrees. Both touch `spec-core/src/` and must stay one sequential lane.
-- Do not move docs earlier. Docs describe shipped truth and therefore come after core and CLI proof are integrated.
-- Record the current dirty tree at kickoff. At rewrite time, `PLAN.md` is already modified in the primary tree and must be preserved, not cleaned.
+- Do not create worker worktrees before `M59-01` contract freeze completes.
+- Create `WS-A-CORE` and `WS-B-FIXTURE-CLI` together after the freeze, because they can execute in parallel once ids and wording expectations are locked.
+- Create `WS-C-DOCS` only after `M59-21` completes, unless the parent decides to handle docs directly on `feat/m40-plus`.
+- Do not split validator and backend across worktrees. Both touch `spec-core/src/` and belong to one sequential lane.
+- Do not let docs run in parallel with core or CLI proof work. Public wording must describe landed truth, not predicted truth.
+- Record the dirty tree at kickoff and preserve it. At rewrite time, `PLAN.md` is already modified in the primary tree; the parent must capture the actual dirty state rather than assume a clean baseline.
 
 ### Recommended creation commands
 
 ```bash
 mkdir -p "$WT_ROOT"
 
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-a-core" -b codex/m58-core-nested-chain3 feat/m40-plus
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-b-fixture-cli" -b codex/m58-fixture-cli-nested-chain3 feat/m40-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-a-core" -b codex/m59-core-local-graph feat/m40-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-b-fixture-cli" -b codex/m59-fixture-cli-local-graph feat/m40-plus
 
-# only after lanes A and B are integrated, unless the parent keeps docs local
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-c-docs" -b codex/m58-doc-contract-sync feat/m40-plus
+# only after A and B are integrated, unless the parent keeps docs local
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/ws-c-docs" -b codex/m59-doc-contract-sync feat/m40-plus
 ```
 
 ## Durable Orchestration State
@@ -126,62 +123,105 @@ This directory is orchestration state only. It is not product truth.
 | Path | Purpose | Owner |
 | --- | --- | --- |
 | `baseline.json` | kickoff branch, head, dirty-tree snapshot, authority commit | Parent |
-| `contract-freeze.json` | frozen M58 contract, lane scopes, stop rules, gate commands | Parent |
-| `worktrees.json` | exact worktree paths, branches, and lane states | Parent |
-| `file-ownership.json` | exact owned file map per lane | Parent |
-| `tasks.json` | canonical task ledger and dependencies | Parent |
-| `session-log.md` | chronological launch, handoff, merge, rerun, block, and close log | Parent |
+| `contract-freeze.json` | frozen M59 contract, fixture ids, lane scopes, stop rules, command walls | Parent |
+| `worktrees.json` | exact worktree paths, branches, current heads, and lane states | Parent |
+| `file-ownership.json` | exact file ownership and no-touch surfaces per lane | Parent |
+| `tasks.json` | canonical task ledger, dependencies, and current states | Parent |
+| `session-log.md` | chronological launch, handoff, integration, rerun, block, and close log | Parent |
 | `acceptance-ledger.md` | final gate checklist and proof references | Parent |
-| `final-proof-manifest.json` | exact final commands, exit codes, and artifact paths | Parent |
-| `validation/kickoff/` | branch, head, status, authority snapshots | Parent |
-| `validation/baseline/` | baseline proof captures and initial lane observations | Parent |
-| `validation/lane-a/` | targeted core-lane proof captures | Parent |
-| `validation/lane-b/` | targeted fixture/CLI proof captures | Parent |
-| `validation/lane-c/` | docs sync captures if needed | Parent |
+| `final-proof-manifest.json` | exact final commands, exit codes, and output paths | Parent |
+| `validation/kickoff/` | branch, head, dirty-tree, and authority snapshots | Parent |
+| `validation/lane-a-core/` | targeted core-lane proof captures | Parent |
+| `validation/lane-b-cli/` | targeted fixture and CLI proof captures | Parent |
+| `validation/lane-c-docs/` | wording verification captures | Parent |
 | `validation/final/` | final serial proof wall captures | Parent |
 | `handoffs/` | worker briefs and worker return packets | Parent |
-| `tasks/<TASK_ID>/` | per-task sentinels | Parent creates, lane updates |
+| `tasks/<TASK_ID>/` | per-task sentinels and status files | Parent creates, lane updates |
 
-### Required `baseline.json` contents
+### Required `baseline.json` fields
 
 - `milestone`
 - `authority_plan_path`
 - `authority_plan_title`
-- `authority_plan_validated_commit`
+- `authority_plan_commit`
 - `primary_branch`
 - `primary_head_commit`
 - `dirty_tree_summary`
 - `dirty_tree_files`
+- `known_dirty_files_at_kickoff`
 - `observed_primary_surfaces`
 - `baseline_commands`
-- `known_scope_boundaries`
 - `run_started_at`
 
-### Required `contract-freeze.json` contents
+### Required `contract-freeze.json` fields
 
 - `milestone`
 - `authority_plan_path`
-- `authority_plan_head_commit`
+- `authority_plan_commit`
 - `primary_branch`
 - `frozen_scope_claim`
-- `locked_decisions`
-- `not_in_scope`
-- `same_tree_rule`
-- `exact_lane_ownership`
-- `fixture_ids`
-- `worker_command_walls`
+- `shipped_supported_function_families_scope`
+- `preserved_portability_contracts`
+- `fixture_root`
+- `frozen_fixture_ids`
+- `lane_ownership`
+- `command_walls`
 - `acceptance_commands`
 - `integration_order`
 - `merge_conflict_policy`
 - `worker_return_contract`
-- `exact_stop_rules`
+- `stop_rules`
 
-### Frozen fixture ids
+### Required `worktrees.json` fields
 
-These ids must be written into `contract-freeze.json` before worker launch so Lane A and Lane B never drift:
+- `milestone`
+- `updated_at`
+- `primary_root`
+- `worktree_root`
+- `lanes[]`
+  - `lane_id`
+  - `path`
+  - `branch`
+  - `owner`
+  - `state`
+  - `head_commit`
+  - `write_scope`
+  - `task_ids`
 
-- `pricing/base_nested_chain3_aligned`
-- `pricing/checkout_nested_chain3_aligned`
+### Required `tasks.json` fields
+
+- `milestone`
+- `updated_at`
+- `tasks[]`
+  - `task_id`
+  - `lane`
+  - `state`
+  - `owner`
+  - `depends_on`
+  - `write_scope`
+  - `command_wall`
+  - `acceptance_summary`
+  - `stop_rules`
+  - `sentinel_dir`
+
+### Frozen fixture root and ids
+
+The dedicated M59 proof surface is frozen to:
+
+```text
+spec-cli/tests/fixtures/typescript_local_supported_graph/
+```
+
+The parent must freeze these exact unit ids in `contract-freeze.json` before worker launch:
+
+- `money/round`
+- `pricing/apply_discount`
+- `pricing/apply_tax`
+- `pricing/calculate_total`
+- `pricing/checkout_total`
+- `pricing/display_total`
+
+`pricing/display_total` exists to support unrelated-unit exclusion proof. If Lane B believes different ids are required, it must block and return the proposed replacement instead of changing the contract ad hoc.
 
 ## Task State And Sentinels
 
@@ -226,9 +266,9 @@ Required files:
 - `owner`
 - `branch`
 - `write_scope`
+- `depends_on`
 - `started_at`
 - `updated_at`
-- `depends_on`
 - `commands_run`
 - `changed_files`
 - `acceptance_status`
@@ -236,11 +276,21 @@ Required files:
 - `blocker_summary`
 - `next_action`
 
-A task is not done when a worker says it is done. A task is done only after the parent integrates the lane and reruns the relevant gates.
+A task is not done when a worker says it is done. A task is done only after the parent integrates the lane and reruns the relevant proof wall.
 
 ## Blocked-State Protocol
 
 Blocked state is explicit and durable.
+
+### Standard blocker codes
+
+- `PLAN_DRIFT`
+- `SCOPE_EXPANSION_REQUIRED`
+- `OWNERSHIP_CONFLICT`
+- `PROOF_WALL_FAIL`
+- `FIXTURE_CONTRACT_DRIFT`
+- `MERGE_RISK`
+- `ENVIRONMENT_MISSING`
 
 ### What a worker writes when blocked
 
@@ -260,7 +310,7 @@ If a worker cannot complete within scope, it must write all of the following bef
 - `Why this is blocked within current scope`
 - `Whether existing partial edits are safe to keep`
 - `Requested parent action`
-- `Whether the lane recommends bounce-back, parent fix-forward, or re-scope`
+- `Whether the lane recommends fix-forward, bounce-back, or re-scope`
 
 ### Required blocked `status.json` updates
 
@@ -276,7 +326,7 @@ When blocked, the worker sets at minimum:
 
 ### Parent behavior on blocked lanes
 
-The parent records the worker’s block in:
+The parent records the block in:
 
 - `tasks.json`
 - `tasks/<TASK_ID>/status.json`
@@ -286,26 +336,24 @@ The parent records the worker’s block in:
 Then the parent chooses one of three paths only:
 
 1. `fix_forward_local`
-   - allowed only if the issue is small, stays inside the parent integration tree, and does not expand milestone scope
-   - typical case: trivial assertion drift, path typo, or handoff formatting issue
+   - allowed only if the issue is small, stays inside already integrated or parent-owned surfaces, and does not expand milestone scope
 2. `bounce_back_to_lane`
-   - required if the fix stays inside the original lane’s write scope and needs substantive code changes
-   - typical case: validator wording mismatch, fixture/test mismatch, or incomplete recursive proof
+   - required if the fix stays inside the original lane's write scope and needs substantive code or test changes
 3. `halt_and_rescope`
-   - required if the blocker implies scope expansion, command-surface expansion, or a violated hard guard
+   - required if the blocker implies milestone drift, new surfaces, or a hard-guard breach
 
 ### Fix-forward vs bounce-back rule
 
 The parent may fix-forward locally only when all are true:
 
-- the fix is within already-integrated files or the parent branch during integration
-- the fix does not broaden the task’s original write scope
-- the fix does not alter frozen milestone behavior
+- the fix is within already integrated files or parent-owned integration work
+- the fix does not broaden the task's write scope
+- the fix does not alter frozen M59 behavior
 - the fix can be proven immediately with targeted reruns
 
-Otherwise the parent must bounce back to the owning lane or halt.
+Otherwise the parent must bounce the task back or halt.
 
-## File Ownership And Exact Lane Scope
+## Exact Lane Ownership
 
 ### Parent-owned throughout
 
@@ -313,7 +361,7 @@ Otherwise the parent must bounce back to the owning lane or halt.
 - `ORCH_PLAN.md`
 - all files under `$RUN_ROOT/`
 - the primary integration branch `feat/m40-plus`
-- all merge commits or squash steps
+- all merge, cherry-pick, or patch integration actions
 - all final proof execution
 - all re-scope decisions
 
@@ -324,33 +372,43 @@ Otherwise the parent must bounce back to the owning lane or halt.
 
 ### `WS-B-FIXTURE-CLI` owned files
 
-- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*`
 - `spec-cli/tests/cli.rs`
+- `spec-cli/tests/fixtures/typescript_local_supported_graph/**`
 
 ### `WS-C-DOCS` owned files
 
 - `README.md`
 - `TODOS.md`
 
+### Explicit no-touch surfaces
+
+- `spec-core/src/semantic_review.rs`
+- `spec-cli/src/**`
+- `spec-core/src/types.rs`
+- `AGENTS.md`
+- any file under `.runs/`
+
 ### Ownership guards
 
-- No lane may edit another lane’s files.
-- No worker lane may edit `PLAN.md`, `ORCH_PLAN.md`, or `$RUN_ROOT/**`.
-- No worker may add new files outside its exact owned surface.
+- No lane may edit another lane's files.
+- No worker may edit `PLAN.md`, `ORCH_PLAN.md`, or `$RUN_ROOT/**`.
+- No worker may add files outside its exact owned surface.
+- Lane B may not create a second fixture tree. M59 owns only `spec-cli/tests/fixtures/typescript_local_supported_graph/**`.
+- Lane C may not edit code or tests.
 - If a lane discovers a required change outside its scope, it must stop and return a blocker rather than expanding scope implicitly.
-- Parent-only integration remains mandatory even when lanes are conflict-free.
+- Parent-only integration remains mandatory even when branches are conflict-free.
 
 ## Context-Control Rules For Subagents
 
-- Give each worker only the authority summary, its write scope, the exact stop rules, its acceptance criteria, and the exact commands it is responsible for.
-- Do not forward full raw transcripts between workers.
-- Do not let Lane B invent fixture ids or error wording independently of the parent freeze.
-- Keep validator and backend together in Lane A because both touch `spec-core/src/` and the backend behavior depends on validator admission.
-- Allow Lane B to run in parallel only because its files are disjoint from Lane A after ids and scope are frozen.
-- Keep docs out of parallel execution because `README.md` and `TODOS.md` must reflect the final landed truth, not speculative wording.
-- Require workers to return only changed files, commands run with exit codes, blockers, and unresolved assumptions.
-- Store proof output under `validation/*`; do not rely on chat summaries for gate evidence.
-- If `PLAN.md` changes while workers are active, pause all workers, update `contract-freeze.json`, and relaunch only with refreshed scope.
+- Give each worker only the authority summary, its write scope, frozen fixture ids, required command wall, stop rules, and acceptance criteria.
+- Do not forward full transcripts between workers.
+- Do not let Lane B invent fixture ids, local-vs-portability wording, or broadened rejection semantics independently of Lane A and the parent freeze.
+- Keep validator and backend together in Lane A because they share `spec-core/src/` and are sequential by design.
+- Allow Lane B to run in parallel only because its files are disjoint from Lane A after fixture ids and error-surface expectations are frozen.
+- Keep docs out of parallel execution because `README.md` and `TODOS.md` must reflect landed truth only.
+- Require workers to return only changed files, commands with exit codes, blockers, unresolved assumptions, and an acceptance claim.
+- Store proof output under `validation/*`; do not rely on chat summaries as gate evidence.
+- If `PLAN.md` changes while workers are active, pause them, refresh `contract-freeze.json`, and relaunch only with the updated contract.
 
 ## Worker Handoff Contract
 
@@ -362,7 +420,7 @@ Each worker return packet must include exactly:
 - unresolved assumptions, if any
 - whether the task believes acceptance is met
 
-Workers do not merge. Workers do not integrate. Workers do not commit unless the parent explicitly asks for a commit. Worker output is a handoff packet plus scoped file changes only.
+Workers do not merge. Workers do not integrate. Workers do not commit unless the parent explicitly requests a commit. Worker output is scoped file changes plus a handoff packet only.
 
 The return must be written into:
 
@@ -377,53 +435,34 @@ The return must be written into:
 - The parent integrates one lane at a time.
 - Merge order is fixed: Lane A, then Lane B, then Lane C.
 - Lane B may execute in parallel with Lane A, but it may not be integrated before Lane A.
-- After integrating Lane A, the parent reruns targeted core proofs before touching Lane B.
-- After integrating Lane B, the parent reruns targeted CLI and maintained-fixture proofs before touching Lane C.
+- After integrating Lane A, the parent reruns targeted core proofs before touching Lane B integration.
+- After integrating Lane B, the parent reruns targeted CLI and direct local-graph proofs before touching Lane C.
 - Docs never merge on top of unproven code.
-- If Lane B’s assertions or fixture naming drift from landed Lane A behavior, the parent bounces Lane B for refresh instead of patching it ad hoc.
-- The parent never asks workers to merge or reconcile each other’s worktrees.
-- If an integration requires edits outside the submitted lane scope, the parent either fixes it directly on `feat/m40-plus` or reassigns scope explicitly and records that in `file-ownership.json`.
-
-## Integration Mechanics
-
-For every submitted lane, the parent follows the same mechanics in the same order:
-
-1. review the submitted changed files against the lane’s write scope
-2. review `commands.txt`, `acceptance.md`, `blocker.md`, and unresolved assumptions
-3. merge or patch the lane’s changes onto `feat/m40-plus`
-4. rerun the lane’s targeted gates immediately
-5. if the targeted gates pass, mark the task `integrated`
-6. if the targeted gates fail because of narrow drift inside lane scope, bounce the lane back
-7. if the targeted gates fail because of a trivial parent-side integration issue, fix-forward locally and rerun
-8. if the targeted gates fail because the milestone contract is breached, halt and re-scope
-
-Integration failure is not silent. The parent must write the failure and chosen next action into:
-
-- `tasks/<TASK_ID>/status.json`
-- `tasks/<TASK_ID>/blocker.md`
-- `session-log.md`
+- If Lane B assertions or fixture naming drift from landed Lane A behavior, the parent bounces Lane B for refresh instead of papering over the mismatch in the integration tree.
+- The parent never asks workers to merge or reconcile each other's worktrees.
+- If an integration requires edits outside the submitted lane scope, the parent either fixes it directly on `feat/m40-plus` or explicitly revises ownership and records that change in `file-ownership.json`.
 
 ## Workstream Plan
 
 | ID | Task | Owner | Write scope | Depends on | Parallel? | Exit criteria |
 | --- | --- | --- | --- | --- | --- | --- |
-| `M58-00` | Kickoff + baseline capture | Parent | `$RUN_ROOT/**` | none | no | baseline snapshots and dirty-tree record stored |
-| `M58-01` | Contract freeze + lane charter | Parent | `$RUN_ROOT/**` | `M58-00` | no | frozen scope, ids, ownership, stop rules, and command walls written |
-| `M58-10` | Lane A core validator/backend implementation | `WS-A-CORE` | `spec-core/src/validator.rs`, `spec-core/src/typescript_backend.rs` | `M58-01` | yes | worker submits bounded slot-1 widen plus nested recursion proof |
-| `M58-20` | Lane B maintained fixture + CLI proof | `WS-B-FIXTURE-CLI` | aligned fixture pack and `spec-cli/tests/cli.rs` | `M58-01` | yes | worker submits nested aligned fixture and CLI proof wall |
-| `M58-11` | Parent integrate Lane A + core gate rerun | Parent | integration on `feat/m40-plus` only | `M58-10` | no | targeted spec-core proofs pass or lane is bounced/blocked |
-| `M58-21` | Parent integrate Lane B + CLI gate rerun | Parent | integration on `feat/m40-plus` only | `M58-20`, `M58-11` | no | targeted CLI and maintained-fixture proofs pass or lane is bounced/blocked |
-| `M58-30` | Lane C docs/backlog sync | `WS-C-DOCS` or Parent | `README.md`, `TODOS.md` | `M58-21` | no | public wording exactly matches shipped bounded behavior |
-| `M58-31` | Final serial proof wall + closeout | Parent | `$RUN_ROOT/**` and minimal fix-forward only if needed | `M58-30` | no | full acceptance wall green and closeout artifacts written |
+| `M59-00` | Kickoff + baseline capture | Parent | `$RUN_ROOT/**` | none | no | baseline snapshots and dirty-tree record stored |
+| `M59-01` | Contract freeze + lane charter | Parent | `$RUN_ROOT/**` | `M59-00` | no | frozen scope, fixture ids, ownership, stop rules, and command walls written |
+| `M59-10` | Lane A validator split + local graph validation + backend collector | `WS-A-CORE` | `spec-core/src/validator.rs`, `spec-core/src/typescript_backend.rs` | `M59-01` | yes | local-graph lane is implemented without portability regression |
+| `M59-20` | Lane B local fixture authoring + CLI proof wall | `WS-B-FIXTURE-CLI` | `spec-cli/tests/cli.rs`, `spec-cli/tests/fixtures/typescript_local_supported_graph/**` | `M59-01` | yes | maintained fixture tree and CLI proof wall are submitted |
+| `M59-11` | Parent integrate Lane A + core proof rerun | Parent | integration on `feat/m40-plus` only | `M59-10` | no | targeted spec-core proofs pass or lane is bounced/blocked |
+| `M59-21` | Parent integrate Lane B + CLI proof rerun | Parent | integration on `feat/m40-plus` only | `M59-20`, `M59-11` | no | targeted CLI and direct local-graph proofs pass or lane is bounced/blocked |
+| `M59-30` | Lane C docs/backlog sync | `WS-C-DOCS` or Parent | `README.md`, `TODOS.md` | `M59-21` | no | public wording matches shipped M59 truth exactly |
+| `M59-31` | Final serial proof wall + closeout | Parent | `$RUN_ROOT/**` and minimal fix-forward only if needed | `M59-30` | no | full M59 acceptance wall is green and closeout artifacts are written |
 
 ## Task Execution Details
 
-### `M58-00` Kickoff + baseline capture
+### `M59-00` Kickoff + baseline capture
 
 Required captures:
 
 ```bash
-mkdir -p "$RUN_ROOT"/{validation/{kickoff,baseline,lane-a,lane-b,lane-c,final},handoffs,tasks}
+mkdir -p "$RUN_ROOT"/{validation/{kickoff,lane-a-core,lane-b-cli,lane-c-docs,final},handoffs,tasks}
 
 git -C "$PRIMARY_ROOT" branch --show-current > "$RUN_ROOT/validation/kickoff/branch.txt"
 git -C "$PRIMARY_ROOT" rev-parse HEAD > "$RUN_ROOT/validation/kickoff/head.txt"
@@ -434,11 +473,11 @@ cp "$PRIMARY_ROOT/ORCH_PLAN.md" "$RUN_ROOT/validation/kickoff/ORCH_PLAN.md"
 
 Required parent notes:
 
-- record that `PLAN.md` is already dirty in the primary tree
-- treat that dirty `PLAN.md` as authoritative session input
-- do not clean, stash, or overwrite it by default
+- record the actual dirty tree instead of assuming a clean checkout
+- preserve all pre-existing edits; do not clean, stash, or revert them
+- capture that `PLAN.md` is already dirty at rewrite time unless the live status says otherwise
 
-### `M58-01` Contract freeze + lane charter
+### `M59-01` Contract freeze + lane charter
 
 The parent writes:
 
@@ -451,197 +490,208 @@ The parent writes:
 
 The freeze must state all of this explicitly:
 
-- same-tree recursive chain3 only
-- slot 1 may be wrapper or same-tree chain3
-- slot 2 and slot 3 remain frozen
-- no molecule TypeScript execution
-- no target-language `validate/export`
-- frozen fixture ids
-- Lane A owns only `spec-core/src/*` surfaces above
-- Lane B owns only aligned fixture pack plus `spec-cli/tests/cli.rs`
+- one new same-tree local graph lane only
+- local lane is semantic-review-driven and same-tree only
+- graph-generic over shipped supported families only
+- direct cross-library helper, wrapper, and chain3 lanes remain preserved portability contracts
+- no `semantic_review.rs` edits in M59
+- frozen fixture root and exact ids listed above
+- Lane A owns only `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs`
+- Lane B owns only `spec-cli/tests/cli.rs` and `spec-cli/tests/fixtures/typescript_local_supported_graph/**`
 - Lane C owns only `README.md` and `TODOS.md`
 - merge order A then B then C
 - exact command walls below
 
-### `M58-10` Lane A core validator/backend implementation
+### `M59-10` Lane A validator split + local graph validation + backend collector
 
-Lane A is sequential internally.
+Lane A is sequential internally and must remain one lane.
 
 Lane A responsibilities:
 
-- widen `validate_typescript_chain3_dep_contract(...)` in `spec-core/src/validator.rs`
-- keep slot-2 and slot-3 validation unchanged
-- admit slot-1 same-tree chain3 only under the bounded M58 contract
-- preserve explicit rejection for cross-library recursive chain3
-- widen `validate_typescript_closure_member_spec_with_specs(...)` only through the same bounded contract
-- extend `collect_typescript_closure_member(...)` in `spec-core/src/typescript_backend.rs` to recurse through validated nested chain3 members
-- preserve reachability and dedupe behavior via the existing `included` set
-- add or update unit tests in the touched files for nested admission, rejection, recursion, and exclusion boundaries
+- split local graph lane selection from the preserved cross-library portability lane in `spec-core/src/validator.rs`
+- keep direct cross-library helper, wrapper, and chain3 root validation unchanged
+- add one explicit local-root path in `validate_typescript_execution_target_spec_with_specs(...)`
+- validate the reachable local closure graph-wide
+- reject reachable `shared::...` deps in the local lane
+- reject reachable unsupported semantic-review members in the local lane
+- reject reachable missing `body.typescript` members in the local lane
+- reuse existing cycle detection
+- add a dep-driven local graph collector in `spec-core/src/typescript_backend.rs`
+- preserve `included` as the dedupe mechanism
+- preserve unrelated-unit exclusion and keep the old portability-lane collector behavior intact
+- add or update unit tests in the touched files for lane selection, rejection wall, dedupe, and exclusion boundaries
 
 #### Lane A worker command wall
 
-The expected worker command wall is:
+The default worker handoff wall is:
 
 ```bash
-cargo test -p spec-core typescript_nested_chain3
-cargo test -p spec-core typescript_tree_renders_nested_chain3
+cargo test -p spec-core typescript
 ```
 
-If the final landed test selector names differ, the worker must record the exact replacement selectors in `handoff.md`, and the parent must update `contract-freeze.json` before integration.
-
-Lane A may run additional narrow `cargo test -p spec-core ...` selectors during development, but the two commands above are the required handoff wall.
+If implementation lands with narrower stable selectors that cover all new M59 core cases, the parent may replace this in `contract-freeze.json` before worker launch. Otherwise the broad selector above stays authoritative.
 
 #### Lane A acceptance
 
 Before the parent integrates Lane A, all of these must be true:
 
-- `spec-core/src/validator.rs` admits slot-1 same-tree nested chain3 and still rejects cross-library recursive chain3
-- `spec-core/src/validator.rs` keeps slot 2 and slot 3 frozen
-- `spec-core/src/typescript_backend.rs` recurses through validated nested chain3 members without leaking unrelated loaded units
+- `spec-core/src/validator.rs` implements an explicit local graph lane and keeps the preserved portability lanes intact
+- local graph validation remains same-tree only and semantic-review-driven
+- reachable `shared::...`, unsupported semantic-review, missing `body.typescript`, and cycle failures remain pre-Bun
+- `spec-core/src/typescript_backend.rs` walks the reachable local closure dep-first, dedupes shared subgraphs, and excludes unrelated loaded units
 - the required Lane A command wall passes
-- `acceptance.md` explicitly states whether any selector names were adjusted
 - no lane-owned file outside `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs` changed
 
 #### Lane A stop conditions
 
-- needing a new abstraction or registry
-- needing slot-2 or slot-3 widening
-- needing cross-library recursion
-- moving any recursive rejection from validation time to runtime
+- needing `semantic_review.rs` edits
+- needing arbitrary dep-topology widen beyond current supported families
+- needing new CLI surface or schema changes
+- regressing preserved cross-library helper, wrapper, or chain3 behavior
+- moving any rejection from validation time to Bun/runtime
 
-### `M58-20` Lane B maintained fixture + CLI proof
+### `M59-20` Lane B local fixture authoring + CLI proof wall
 
-Lane B may run in parallel with Lane A after `M58-01`, because the files are disjoint and the ids are frozen.
+Lane B may run in parallel with Lane A after `M59-01`, because the files are disjoint and the ids are frozen.
 
 Lane B responsibilities:
 
-- add the maintained nested aligned proof shape in `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*`
-- use exactly:
-  - `pricing/base_nested_chain3_aligned`
-  - `pricing/checkout_nested_chain3_aligned`
-- reuse existing aligned wrapper and leaf units
-- extend `spec-cli/tests/cli.rs` with:
-  - nested green-path proof
-  - wrong first-slot family rejection
-  - wrong dep order rejection
-  - missing nested `body.typescript` rejection
-  - cross-library nested chain3 rejection
-- keep all new recursive red paths failing before Bun runs
+- author the dedicated fixture tree under `spec-cli/tests/fixtures/typescript_local_supported_graph/`
+- use exactly the frozen ids:
+  - `money/round`
+  - `pricing/apply_discount`
+  - `pricing/apply_tax`
+  - `pricing/calculate_total`
+  - `pricing/checkout_total`
+  - `pricing/display_total`
+- ensure the fixture tree proves helper root, monotone-down root, monotone-up-with-helper root, wrapper root, chain3 root, shared-subgraph reuse, and unrelated-unit exclusion
+- extend `spec-cli/tests/cli.rs` with Bun-backed green-path proof for the local graph lane
+- extend `spec-cli/tests/cli.rs` with pre-Bun red-path proof for:
+  - reachable `shared::...` in the local lane
+  - reachable unsupported semantic-review member
+  - reachable missing `body.typescript`
+  - unsupported authored topology still rejected
+  - local cycle rejection
+- preserve green proof for direct cross-library helper, wrapper, and chain3 lanes
 
 #### Lane B worker command wall
 
-The expected worker command wall is:
+The worker handoff wall is:
 
 ```bash
-cargo test -p spec-cli --test cli typescript_nested_chain3
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
+cargo test -p spec-cli --test cli typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/checkout_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/money/round.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/apply_discount.unit.spec --target-language typescript
 ```
-
-Lane B may run additional narrow CLI selectors during development, but the two commands above are the required handoff wall.
 
 #### Lane B acceptance
 
 Before the parent integrates Lane B, all of these must be true:
 
-- the aligned fixture pack contains the two frozen nested ids and reuses the existing aligned wrapper and leaf units
-- `spec-cli/tests/cli.rs` covers the nested green path plus all required recursive red paths
+- the dedicated local graph fixture tree exists at the frozen path with the frozen ids
+- `spec-cli/tests/cli.rs` proves local helper, monotone-down, monotone-up, wrapper, and chain3 green paths
+- `spec-cli/tests/cli.rs` proves the local-graph rejection wall stays pre-Bun
+- cross-library helper, wrapper, and chain3 regressions still pass unchanged
 - the required Lane B command wall passes
-- recursive wrong-family, wrong-order, missing-`body.typescript`, and cross-library nested failures still fail before Bun
-- no lane-owned file outside the aligned fixture pack and `spec-cli/tests/cli.rs` changed
+- no lane-owned file outside `spec-cli/tests/cli.rs` and `spec-cli/tests/fixtures/typescript_local_supported_graph/**` changed
 
 #### Lane B guardrails
 
 - do not edit `README.md` or `TODOS.md`
-- do not expand to a new fixture pack
-- do not add generic graph proof
-- if final validator wording differs after Lane A lands, return for refresh rather than broadening assertions
+- do not edit `spec-core/src/**`
+- do not create a second fixture pack
+- if Lane A lands different final error wording, return for refresh rather than broadening assertions ad hoc
 
-### `M58-11` Parent integrate Lane A + core gate rerun
+### `M59-11` Parent integrate Lane A + core proof rerun
 
-After Lane A submits, the parent integrates only Lane A and runs targeted core proofs.
+After Lane A submits, the parent integrates only Lane A and runs targeted core proof immediately.
 
-Required gate commands:
+Required gate command:
 
 ```bash
-cargo test -p spec-core typescript_nested_chain3
-cargo test -p spec-core typescript_tree_renders_nested_chain3
+cargo test -p spec-core typescript
 ```
 
 Stop conditions here:
 
-- any targeted failure that implies broader graph work
-- any red path that no longer fails pre-Bun
-- any change that leaks unrelated units into the tree or breaks dedupe expectations
+- any failure implying semantic-family promotion or broader dep-topology work
+- any rejection wall failure that now reaches Bun/runtime
+- any regression in preserved portability-lane behavior
 
-### `M58-21` Parent integrate Lane B + CLI gate rerun
+### `M59-21` Parent integrate Lane B + CLI proof rerun
 
-After Lane B submits and Lane A is already integrated, the parent integrates only Lane B and runs targeted CLI proofs.
+After Lane B submits and Lane A is already integrated, the parent integrates only Lane B and reruns targeted CLI proof.
 
 Required gate commands:
 
 ```bash
-cargo test -p spec-cli --test cli typescript_nested_chain3
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
+cargo test -p spec-cli --test cli typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/checkout_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/money/round.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/apply_discount.unit.spec --target-language typescript
 ```
 
 Stop conditions here:
 
-- maintained nested green path fails
-- any recursive red path reaches Bun instead of failing earlier
-- fixture ids or error expectations do not match landed Lane A behavior
+- any local-graph red path reaches Bun
+- frozen fixture ids drift
+- cross-library helper, wrapper, or chain3 regressions fail
+- CLI expectations no longer match landed Lane A semantics
 
-### `M58-30` Lane C docs/backlog sync
+### `M59-30` Lane C docs/backlog sync
 
 Lane C starts only after A and B are integrated and proven.
 
 Lane C responsibilities:
 
-- update `README.md` so it no longer says nested chain3 closure is unsupported
-- describe only the bounded M58 rule:
-  - chain3 slot 1 may be wrapper or same-tree chain3
-  - slot 2 and slot 3 remain fixed
-  - recursive chain3 closure is same-tree only
-  - generic multi-dependency execution remains unsupported
-- update `TODOS.md` so generic multi-dependency TypeScript execution remains deferred and M58 is not overclaimed
+- update `README.md` so it distinguishes the new same-tree local graph lane from the preserved direct cross-library portability lanes
+- state clearly that local roots may now be any shipped supported local function family with `body.typescript`
+- state clearly that local traversal is semantic-review-driven and same-tree only
+- state clearly that arbitrary node-shape parity, molecule execution, seam kinds, and target-language `validate/export` remain out
+- update `TODOS.md` so the remaining TypeScript backlog names the real oceans left after M59:
+  - arbitrary authored 4+ dep topology
+  - new supported semantic families
+  - generic recursive cross-library function graphs
 
-#### Lane C worker verification wall
+#### Lane C verification wall
 
-The expected worker verification wall is:
+The verification wall is:
 
 ```bash
-rg -n "chain3 root|same-tree|nested chain3|generic multi-dependency|molecule|target-language" README.md TODOS.md
-cargo test -p spec-cli --test cli typescript_nested_chain3
+rg -n "same-tree|semantic-review|cross-library|validate --target-language|export --target-language|molecule TypeScript|generic" README.md TODOS.md
+cargo test -p spec-cli --test cli typescript_cross_library
 ```
-
-The `rg` command is the wording verification wall. The CLI command is a contract-sanity check so docs do not race ahead of actual landed behavior.
 
 #### Lane C acceptance
 
 Before the parent integrates Lane C, all of these must be true:
 
-- `README.md` states the bounded recursive rule and no longer says nested chain3 closure is unsupported
-- `README.md` does not imply generic multi-dependency execution shipped
-- `TODOS.md` keeps generic multi-dependency TypeScript execution deferred
-- the verification wall passes or, for `rg`, clearly shows the exact intended wording matches
+- `README.md` states the local graph lane and preserved portability lane distinctly
+- `README.md` does not imply arbitrary per-node dep-topology parity shipped
+- `TODOS.md` no longer uses a fuzzy generic-multi-dependency bucket for the now-shipped local graph widen
+- the verification wall passes or, for `rg`, clearly shows the exact intended wording
 - no lane-owned file outside `README.md` and `TODOS.md` changed
 
 #### Lane C stop conditions
 
-- wording would imply generic graph execution
-- docs would need to mention target-language `validate/export`
-- docs would need to mention molecule TypeScript execution
+- wording would imply molecule TypeScript execution shipped
+- wording would imply seam-kind or target-language `validate/export` shipped
+- wording would erase the remaining backlog oceans or understate preserved portability constraints
 
-### `M58-31` Final serial proof wall + closeout
+### `M59-31` Final serial proof wall + closeout
 
 The parent runs the full acceptance wall only after all required code and docs are integrated.
 
 #### Final closeout command wall
 
 ```bash
-cargo test -p spec-core typescript_nested_chain3
-cargo test -p spec-core typescript_tree_renders_nested_chain3
-cargo test -p spec-cli --test cli typescript_nested_chain3
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
+cargo test -p spec-core typescript
+cargo test -p spec-cli --test cli typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/checkout_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/money/round.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/apply_discount.unit.spec --target-language typescript
+cargo test -p spec-cli --test cli typescript_cross_library
 cargo test -p spec-core
 cargo test -p spec-cli --test cli
 ```
@@ -649,21 +699,21 @@ cargo test -p spec-cli --test cli
 Optional observability commands, if useful for the ledger:
 
 ```bash
-cargo run -p spec-cli -- build semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- status semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
+cargo run -p spec-cli -- build spec-cli/tests/fixtures/typescript_local_supported_graph/units --target-language typescript
+cargo run -p spec-cli -- status spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/checkout_total.unit.spec --target-language typescript
 ```
 
 #### Final closeout acceptance
 
-Before `M58-31` can be marked complete, all of these must be true:
+Before `M59-31` can be marked complete, all of these must be true:
 
 - Lane A, Lane B, and Lane C are integrated or explicitly closed by the parent with equivalent landed changes
 - the final closeout command wall passes
-- validator recursive admission and rejection proofs are green
-- generated TypeScript tree includes the nested chain3 closure and excludes unrelated units
-- Bun-backed nested-chain3 execution passes
-- recursive red paths still fail before Bun
-- `README.md` and `TODOS.md` reflect only the bounded M58 rule
+- local supported-family roots pass
+- local graph-wide rejection wall stays pre-Bun
+- shared-subgraph dedupe and unrelated-unit exclusion are proven
+- existing cross-library helper, wrapper, and chain3 lanes still pass unchanged
+- `README.md` and `TODOS.md` reflect only the shipped M59 truth
 - `acceptance-ledger.md` is written
 - `final-proof-manifest.json` is written
 
@@ -681,12 +731,12 @@ Before `M58-31` can be marked complete, all of these must be true:
 
 `final-proof-manifest.json` must include:
 
-- milestone
-- final head commit
-- exact final commands
-- exit code per command
-- output artifact paths under `validation/final/`
-- final status: `complete` or `blocked`
+- `milestone`
+- `final_head_commit`
+- `commands`
+- `exit_codes`
+- `output_artifact_paths`
+- `status`
 
 #### Successful vs blocked end state
 
@@ -694,7 +744,7 @@ Successful end state:
 
 - all required final commands exit zero
 - all acceptance bullets above are true
-- `tasks.json` marks `M58-31` as `closed`
+- `tasks.json` marks `M59-31` as `closed`
 - `final-proof-manifest.json` marks `status: "complete"`
 
 Blocked end state:
@@ -702,11 +752,11 @@ Blocked end state:
 - any required final command fails
 - any hard guard is breached
 - any doc contract still overclaims or underclaims shipped truth
-- `tasks/M58-31/blocker.md` explains the stop
-- `tasks.json` marks `M58-31` as `blocked`
+- `tasks/M59-31/blocker.md` explains the stop
+- `tasks.json` marks `M59-31` as `blocked`
 - `final-proof-manifest.json` marks `status: "blocked"`
 
-## Validation And Proof Wall Sequencing
+## Validation And Proof Sequencing
 
 ### Phase 1: baseline capture
 
@@ -716,39 +766,55 @@ Required outcome:
 
 - run-state created
 - authority snapshotted
-- `PLAN.md` dirty state recorded
+- dirty tree recorded and preserved
 
 ### Phase 2: targeted core proof after Lane A
 
-Goal: prove validator admission/rejection and backend recursion behavior before CLI integration.
+Goal: prove lane selection, local closure validation, dedupe, and unrelated-unit exclusion before CLI integration.
 
-Required commands:
+Required command:
 
 ```bash
-cargo test -p spec-core typescript_nested_chain3
-cargo test -p spec-core typescript_tree_renders_nested_chain3
+cargo test -p spec-core typescript
 ```
 
 Required stop condition:
 
-- if these fail in a way that suggests broader graph work, pause and re-scope
+- if this implies semantic-family promotion or arbitrary dep-topology widen, pause and re-scope
 
-### Phase 3: targeted CLI and maintained fixture proof after Lane B
+### Phase 3: targeted CLI and direct root proof after Lane B
 
-Goal: prove the maintained nested green path and the preserved pre-Bun recursive rejection wall.
+Goal: prove the maintained local graph fixture green paths and the preserved pre-Bun rejection wall.
 
 Required commands:
 
 ```bash
-cargo test -p spec-cli --test cli typescript_nested_chain3
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
+cargo test -p spec-cli --test cli typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/checkout_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/money/round.unit.spec --target-language typescript
+cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/apply_discount.unit.spec --target-language typescript
 ```
 
 Required stop condition:
 
-- if any recursive red path reaches Bun, pause and fix the rejection wall before proceeding
+- if any local-graph red path reaches Bun, pause and repair the rejection wall before proceeding
 
-### Phase 4: final regression wall
+### Phase 4: docs sync verification
+
+Goal: prove public wording matches the shipped lane boundary and preserved portability boundary.
+
+Required commands:
+
+```bash
+rg -n "same-tree|semantic-review|cross-library|validate --target-language|export --target-language|molecule TypeScript|generic" README.md TODOS.md
+cargo test -p spec-cli --test cli typescript_cross_library
+```
+
+Required stop condition:
+
+- if docs imply broader support than the landed code or hide remaining backlog oceans, bounce Lane C
+
+### Phase 5: final regression wall
 
 Goal: prove the full lane-facing surfaces are green after docs sync.
 
@@ -759,58 +825,48 @@ cargo test -p spec-core
 cargo test -p spec-cli --test cli
 ```
 
-Optional evidence commands if useful for the ledger:
-
-```bash
-cargo run -p spec-cli -- build semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units --target-language typescript
-cargo run -p spec-cli -- status semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
-```
-
-These optional commands are observability only. They do not replace the acceptance wall above.
+The phase-5 commands do not replace the earlier phases. They close the full surface after the targeted gates are already green.
 
 ## Acceptance And Tests
 
-Acceptance is not complete until all three milestone gates are green:
+Acceptance is not complete until all four M59 proof-wall guarantees are green:
 
-1. validator recursive admission and rejection proofs are green
-2. generated TypeScript tree includes the nested chain3 closure and excludes unrelated units
-3. Bun-backed nested-chain3 execution passes while all recursive red paths still fail before Bun
-
-The minimum command wall is:
-
-```bash
-cargo test -p spec-core typescript_nested_chain3
-cargo test -p spec-core typescript_tree_renders_nested_chain3
-cargo test -p spec-cli --test cli typescript_nested_chain3
-cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
-cargo test -p spec-core
-cargo test -p spec-cli --test cli
-```
+1. `local supported-family roots pass`
+   - prove with `cargo test -p spec-cli --test cli typescript`
+   - prove directly with:
+     - `cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/checkout_total.unit.spec --target-language typescript`
+     - `cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/money/round.unit.spec --target-language typescript`
+     - `cargo run -p spec-cli -- test spec-cli/tests/fixtures/typescript_local_supported_graph/units/pricing/apply_discount.unit.spec --target-language typescript`
+2. `local graph-wide rejection wall stays pre-Bun`
+   - prove with `cargo test -p spec-cli --test cli typescript`
+   - required rejection coverage includes reachable `shared::...`, unsupported semantic-review member, missing deep `body.typescript`, unsupported authored topology, and local cycle
+3. `shared-subgraph dedupe and unrelated-unit exclusion are proven`
+   - prove with `cargo test -p spec-core typescript`
+4. `existing cross-library helper, wrapper, and chain3 lanes still pass unchanged`
+   - prove with `cargo test -p spec-cli --test cli typescript_cross_library`
 
 No milestone closeout is allowed if any one of these remains true:
 
-- same-tree nested chain3 is still rejected
-- cross-library recursive chain3 is admitted
-- slot-2 or slot-3 recursion slipped in
-- missing nested `body.typescript` reaches Bun
-- wrong nested dep order reaches Bun
-- unrelated loaded units appear in the generated TypeScript tree
-- docs still claim nested chain3 closure is unsupported
-- docs imply generic multi-dependency TypeScript execution shipped
+- the local lane still rejects supported same-tree roots that should now pass
+- any local-graph rejection reaches Bun
+- unrelated loaded units leak into the generated TypeScript tree
+- shared subgraphs are emitted more than once
+- cross-library helper, wrapper, or chain3 lanes regress
+- docs still imply M59 shipped arbitrary dep-topology parity or target-language `validate/export`
 
 ## Parallelization Strategy
 
 ### Why Lane A is sequential
 
-Lane A owns both `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs`. The backend recursion is only valid after validator admission rules are correct. Splitting these files across workers would create unnecessary merge churn and false-positive proofs.
+Lane A owns both `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs`. The backend collector is only valid after the validator lane split and local closure checks are correct. Splitting these files across workers would create merge churn and false confidence.
 
 ### Why Lane B may run in parallel
 
-Lane B owns only the aligned fixture pack and `spec-cli/tests/cli.rs`. Those files are disjoint from Lane A. Parallel execution is safe only because the parent freezes exact ids and scope first.
+Lane B owns only `spec-cli/tests/cli.rs` and the dedicated fixture tree. Those files are disjoint from Lane A. Parallel execution is safe only because the parent freezes exact fixture ids, acceptance commands, and wording expectations first.
 
 ### Why Lane C runs last
 
-Docs are contract surfaces. They must describe the landed bounded rule, not a predicted one. Running docs in parallel risks overclaiming or documenting stale error boundaries.
+Docs are contract surfaces. They must describe the landed M59 behavior, not an estimated one. Running docs earlier would create overclaim risk and extra merge churn.
 
 ### Effective concurrency policy
 
@@ -822,21 +878,22 @@ Docs are contract surfaces. They must describe the landed bounded rule, not a pr
 ## Assumptions
 
 - `PLAN.md` remains the authority unless the parent explicitly refreshes the contract.
-- The repo continues to use `feat/m40-plus` as the execution branch and `main` as base.
+- The repo continues to use `feat/m40-plus` as the primary execution branch and `main` as base.
 - Bun is available in the execution environment for the maintained TypeScript proof.
-- Existing flat chain3 TypeScript coverage remains intact and serves as the baseline shape being widened.
-- The nested maintained fixture can be expressed by adding exactly two aligned units and reusing existing aligned wrapper and leaf units.
-- Targeted test selectors named in `PLAN.md` will exist by the time the proof wall is run. If a lane chooses slightly different test names while implementing, the parent must update `contract-freeze.json` and `final-proof-manifest.json` before final closeout.
-- `.runs/*` is acceptable as ephemeral orchestration state and not treated as product output.
+- The shipped supported function-family vocabulary remains the one already admitted by the lane; M59 does not promote new families.
+- The M59 local fixture tree can be expressed entirely under `spec-cli/tests/fixtures/typescript_local_supported_graph/`.
+- Broad selectors `cargo test -p spec-core typescript` and `cargo test -p spec-cli --test cli typescript` are acceptable as the default targeted proof walls unless the parent freezes narrower stable selectors before worker launch.
+- `.runs/*` is acceptable as ephemeral orchestration state and is not treated as product output.
 
 ## Completion Criteria
 
-M58 is done only when all of the following are true:
+M59 is done only when all of the following are true:
 
-- Lane A is integrated and its targeted core gates pass.
-- Lane B is integrated and its targeted CLI plus maintained-fixture gates pass.
+- `M59-00` through `M59-31` are integrated or intentionally closed by the parent with equivalent landed changes.
+- Lane A is integrated and its targeted core proof passes.
+- Lane B is integrated and its targeted CLI plus direct local-graph proofs pass.
 - Lane C is integrated or intentionally completed by the parent with equivalent doc updates.
-- `README.md` and `TODOS.md` match the bounded shipped rule exactly.
+- `README.md` and `TODOS.md` match the shipped M59 behavior exactly.
 - Final `cargo test -p spec-core` and `cargo test -p spec-cli --test cli` are green.
-- `acceptance-ledger.md` and `final-proof-manifest.json` are written.
-- No stop-rule breach remains unresolved.
+- `acceptance-ledger.md` and `final-proof-manifest.json` are written under `$RUN_ROOT/`.
+- No hard-guard breach remains unresolved.
