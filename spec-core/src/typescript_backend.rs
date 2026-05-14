@@ -1,12 +1,8 @@
-//! Bounded M52 TypeScript backend generation.
+//! Bounded M59 TypeScript backend generation.
 //!
-//! This module is intentionally narrow. It only renders the first-class M52
-//! TypeScript lane for:
-//! - `kind:function`
-//! - compatibility key `function.arithmetic_leaf.monotone_up.v1`
-//! - compatibility key `function.wrapper.pipeline.v1`
-//! - compatibility key `function.wrapper.pipeline.chain3.v1`
-//! - the exact same-tree closure required by those roots
+//! This module is intentionally narrow. It renders:
+//! - the M59 same-tree local graph lane for supported `kind:function` units
+//! - the preserved direct cross-library helper, wrapper, and chain3 portability lanes
 //!
 //! It does not promise generic TypeScript parity, molecule parity, seam-kind
 //! support, arbitrary dependency-bearing units, proof routing, or Bun execution.
@@ -22,6 +18,7 @@ use crate::validator::{
     TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY, TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
     TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE, TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
     TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY, TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
+    typescript_target_uses_local_graph_lane,
     validate_typescript_closure_member_spec_with_specs,
     validate_typescript_execution_target_spec_with_specs,
 };
@@ -160,6 +157,81 @@ fn collect_typescript_root_closure(
 ) -> Result<()> {
     let spec = specs[spec_index];
     validate_typescript_resolved_spec_with_specs(spec, specs_by_id)?;
+
+    if typescript_target_uses_local_graph_lane(&typescript_loaded_spec(spec)).map_err(|err| {
+        SpecError::Generator {
+            message: err.to_string(),
+        }
+    })? {
+        return collect_typescript_local_graph_root_closure(
+            spec_index,
+            specs,
+            spec_indices_by_key,
+            included,
+        );
+    }
+
+    collect_typescript_portability_root_closure(
+        spec_index,
+        specs,
+        spec_indices_by_key,
+        specs_by_id,
+        included,
+    )
+}
+
+fn collect_typescript_local_graph_root_closure(
+    spec_index: usize,
+    specs: &[&ResolvedSpec],
+    spec_indices_by_key: &HashMap<String, usize>,
+    included: &mut BTreeSet<usize>,
+) -> Result<()> {
+    collect_typescript_local_graph_member_closure(spec_index, specs, spec_indices_by_key, included)
+}
+
+fn collect_typescript_local_graph_member_closure(
+    spec_index: usize,
+    specs: &[&ResolvedSpec],
+    spec_indices_by_key: &HashMap<String, usize>,
+    included: &mut BTreeSet<usize>,
+) -> Result<()> {
+    if !included.insert(spec_index) {
+        return Ok(());
+    }
+
+    let spec = specs[spec_index];
+    for dep in &spec.deps {
+        let parsed = parse_typescript_dep(dep, "same-tree local dep")?;
+        if parsed.library_alias().is_some() {
+            return Err(SpecError::Generator {
+                message: format!(
+                    "unit '{}' is not eligible for the bounded M59 TypeScript lane: same-tree local traversal reached cross-library dep '{}'",
+                    spec.id,
+                    parsed.authored()
+                ),
+            });
+        }
+
+        let dep_index = resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
+        collect_typescript_local_graph_member_closure(
+            dep_index,
+            specs,
+            spec_indices_by_key,
+            included,
+        )?;
+    }
+
+    Ok(())
+}
+
+fn collect_typescript_portability_root_closure(
+    spec_index: usize,
+    specs: &[&ResolvedSpec],
+    spec_indices_by_key: &HashMap<String, usize>,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+    included: &mut BTreeSet<usize>,
+) -> Result<()> {
+    let spec = specs[spec_index];
     included.insert(spec_index);
 
     let semantic_review_context = SemanticReviewContext::new(specs_by_id);
@@ -1253,6 +1325,95 @@ mod tests {
         assert!(local_tests
             .contains("import { apply_tax as __spec$pricing$deep$apply_tax } from \"../pricing/deep/apply_tax.ts\";"));
         assert!(local_tests.contains("__spec$pricing$deep$apply_tax"));
+    }
+
+    #[test]
+    fn typescript_tree_renders_same_tree_local_supported_graph_without_unrelated_units() {
+        let helper = helper_spec("money/round");
+        let discount = monotone_down_spec(
+            "pricing/apply_discount",
+            vec!["money/round"],
+            "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
+        );
+        let tax = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["money/round"],
+            "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
+        );
+        let wrapper = wrapper_spec(
+            "pricing/calculate_total",
+            "pricing/apply_discount",
+            "pricing/apply_tax",
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
+        );
+        let chain3 = chain3_spec(
+            "pricing/checkout_total",
+            "pricing/calculate_total",
+            "pricing/apply_tax",
+            "pricing/apply_discount",
+            "const base_total = calculate_total(subtotal, discount_rate, tax_rate); const surcharged_total = apply_tax(base_total, surcharge_rate); return apply_discount(surcharged_total, loyalty_rate);",
+        );
+        let unrelated = helper_spec("pricing/display_total");
+
+        let root_ids = vec![chain3.id.clone()];
+        let tree = generate_typescript_tree(
+            &[
+                NormalizedUnit::Function(chain3),
+                NormalizedUnit::Function(wrapper),
+                NormalizedUnit::Function(discount),
+                NormalizedUnit::Function(tax),
+                NormalizedUnit::Function(helper),
+                NormalizedUnit::Function(unrelated),
+            ],
+            &root_ids,
+        )
+        .expect("same-tree local graph should generate");
+
+        assert!(tree.contains_key(&PathBuf::from("pricing/checkout_total.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/calculate_total.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_discount.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_tax.ts")));
+        assert!(tree.contains_key(&PathBuf::from("money/round.ts")));
+        assert!(!tree.contains_key(&PathBuf::from("pricing/display_total.ts")));
+    }
+
+    #[test]
+    fn typescript_tree_rejects_same_tree_local_graph_with_reachable_shared_dep() {
+        let helper = helper_spec("money/round");
+        let discount = monotone_down_spec(
+            "pricing/apply_discount",
+            vec!["money/round"],
+            "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
+        );
+        let tax = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["shared::money/round"],
+            "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
+        );
+        let wrapper = wrapper_spec(
+            "pricing/calculate_total",
+            "pricing/apply_discount",
+            "pricing/apply_tax",
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
+        );
+
+        let root_ids = vec![wrapper.id.clone()];
+        let err = generate_typescript_tree(
+            &[
+                NormalizedUnit::Function(wrapper),
+                NormalizedUnit::Function(discount),
+                NormalizedUnit::Function(tax),
+                NormalizedUnit::Function(helper),
+            ],
+            &root_ids,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(
+            err.contains("same-tree local target requires every reachable dep to stay same-tree local in M59"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

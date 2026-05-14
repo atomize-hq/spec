@@ -1309,6 +1309,17 @@ fn copy_m30_wrapper_fixture(bucket: &str) -> (tempfile::TempDir, PathBuf) {
     (temp_dir, fixture_dir)
 }
 
+fn copy_typescript_local_supported_graph_fixture() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let fixture_dir = temp_dir.path().join("typescript_local_supported_graph");
+    copy_dir_recursive(
+        &repo_root().join("spec-cli/tests/fixtures/typescript_local_supported_graph"),
+        &fixture_dir,
+    )
+    .expect("failed to copy local supported-graph fixture");
+    (temp_dir, fixture_dir)
+}
+
 fn inject_typescript_body_if_missing(unit_path: &Path, typescript_body: &str) {
     let contents = fs::read_to_string(unit_path).unwrap();
     if contents.contains("\n  typescript: |\n") {
@@ -4514,7 +4525,7 @@ body:
     }
   typescript: |
     {
-        return subtotal.sub(subtotal.mul(rate)).max(Decimal.zero());
+        return subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));
     }
 local_tests:
   - id: happy_path
@@ -15628,19 +15639,16 @@ fn typescript_status_detects_drift_after_typescript_body_change() {
     );
 }
 
-#[cfg(unix)]
 #[test]
-fn typescript_near_miss_rejects_before_bun_runs() {
+fn typescript_monotone_down_fixture_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
     let temp_dir = temp_repo_dir();
     let spec_path = write_typescript_near_miss_fixture(temp_dir.path());
-    let marker_path = temp_dir.path().join("bun-invoked.txt");
-    let fake_bun = format!(
-        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
-        marker_path.display()
-    );
-    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
 
-    let output = run_in_with_env(
+    let output = run_in(
         temp_dir.path(),
         &[
             "test",
@@ -15652,23 +15660,8 @@ fn typescript_near_miss_rejects_before_bun_runs() {
             "--target-language",
             "typescript",
         ],
-        &[("PATH", path_override.as_os_str())],
     );
-    assert!(
-        !output.status.success(),
-        "near-miss TypeScript target should fail"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains(
-            "TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1, function.wrapper.pipeline.v1, or function.wrapper.pipeline.chain3.v1 in M52; found function.arithmetic_leaf.monotone_down_nonnegative.v1"
-        ),
-        "{stderr}"
-    );
-    assert!(
-        !marker_path.exists(),
-        "bounded-lane rejection should happen before Bun build/test execution"
-    );
+    assert_output_success("monotone-down roots should execute in the M59 lane", &output);
 }
 
 #[test]
@@ -15701,6 +15694,392 @@ fn typescript_example_apply_tax_single_file_test_succeeds() {
     assert_eq!(
         passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
         "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_helper_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/money/round.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success("local helper root should pass in the M59 lane", &output);
+
+    let passport = read_passport_json(&fixture_dir.join("units/money/round.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_monotone_down_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/apply_discount.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success("local monotone-down root should pass in the M59 lane", &output);
+
+    let passport =
+        read_passport_json(&fixture_dir.join("units/pricing/apply_discount.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_monotone_up_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success("local monotone-up root should pass in the M59 lane", &output);
+
+    let passport =
+        read_passport_json(&fixture_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_wrapper_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success("local wrapper root should pass in the M59 lane", &output);
+
+    let passport =
+        read_passport_json(&fixture_dir.join("units/pricing/calculate_total.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_chain3_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success("local chain3 root should pass in the M59 lane", &output);
+
+    let passport =
+        read_passport_json(&fixture_dir.join("units/pricing/checkout_total.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+    assert!(
+        !fixture_dir.join("src/generated/pricing/display_total.rs").exists(),
+        "unrelated supported units should stay out of the generated local graph"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_reachable_shared_dep_rejects_before_bun_runs() {
+    let temp_dir = tempfile::TempDir::new_in(repo_root().join("target")).unwrap();
+    let fixture_dir = temp_dir.path().join("typescript_local_supported_graph");
+    copy_dir_recursive(
+        &repo_root().join("spec-cli/tests/fixtures/typescript_local_supported_graph"),
+        &fixture_dir,
+    )
+    .expect("failed to copy local supported-graph fixture");
+    copy_dir_recursive(
+        &repo_root().join("examples/shared-crate"),
+        &temp_dir.path().join("shared-crate"),
+    )
+    .expect("failed to copy shared crate for local-graph rejection coverage");
+    copy_dir_recursive(
+        &repo_root().join("examples/shared-spec"),
+        &temp_dir.path().join("shared-spec"),
+    )
+    .expect("failed to copy shared spec for local-graph rejection coverage");
+    fs::write(
+        fixture_dir.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    fs::write(
+        &fixture_dir.join("Cargo.toml"),
+        "[package]\nname = \"typescript-local-supported-graph\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nrust_decimal = { version = \"1.36\", features = [\"serde\"] }\nshared = { path = \"../shared-crate\" }\n\n[workspace]\n",
+    )
+    .unwrap();
+    replace_in_file(
+        &fixture_dir.join("units/pricing/apply_tax.unit.spec"),
+        "deps:\n  - money/round\n",
+        "deps:\n  - shared::money/round\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "reachable shared deps in the local graph should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript same-tree local target requires every reachable dep to stay same-tree local in M59"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "same-tree local shared-dep rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_reachable_unsupported_member_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    replace_in_file(
+        &fixture_dir.join("units/pricing/apply_discount.unit.spec"),
+        "        let discounted = subtotal - subtotal * rate;\n        round(discounted.max(Decimal::ZERO))\n",
+        "        let discounted = subtotal - subtotal * rate;\n        if discounted < Decimal::ZERO {\n            Decimal::ZERO\n        } else {\n            round(discounted)\n        }\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "reachable unsupported local members should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript same-tree local target requires every reachable unit to classify to a supported semantic review in M59"
+        ),
+        "{stderr}"
+    );
+    assert!(stderr.contains("unsupported.function.v1"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "unsupported-member rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_missing_typescript_body_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    remove_typescript_body(&fixture_dir.join("units/pricing/apply_tax.unit.spec"));
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "reachable missing body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript same-tree local target requires every reachable unit to author body.typescript in M59"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "missing body.typescript rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_unsupported_topology_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    replace_in_file(
+        &fixture_dir.join("units/pricing/checkout_total.unit.spec"),
+        "deps:\n  - pricing/calculate_total\n  - pricing/apply_tax\n  - pricing/apply_discount\n",
+        "deps:\n  - pricing/calculate_total\n  - pricing/apply_tax\n  - pricing/apply_discount\n  - pricing/display_total\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "unsupported local dep topology should still be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unsupported.function.v1"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "unsupported-topology rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_cycle_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    replace_in_file(
+        &fixture_dir.join("units/pricing/apply_tax.unit.spec"),
+        "deps:\n  - money/round\n",
+        "deps:\n  - money/round\n  - pricing/checkout_total\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "local cycles should be rejected before Bun"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("cycle detected"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "cycle rejection should happen before Bun"
     );
 }
 
@@ -16391,7 +16770,7 @@ fn typescript_chain3_wrong_family_rejects_before_bun_runs() {
 
 #[cfg(unix)]
 #[test]
-fn typescript_nested_chain3_wrong_first_slot_family_rejects_before_bun_runs() {
+fn typescript_nested_chain3_wrong_first_slot_family_reaches_bun_in_m59() {
     let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
     write_spec(
         &fixture_dir.join("units"),
@@ -16450,16 +16829,11 @@ local_tests:
     );
     assert!(
         !output.status.success(),
-        "nested chain3 targets with a wrong first-slot family should be rejected"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"),
-        "{stderr}"
+        "nested chain3 targets with rewritten local deps should still fail under the fake Bun"
     );
     assert!(
-        !marker_path.exists(),
-        "nested chain3 wrong-family rejection should happen before Bun build/test execution"
+        marker_path.exists(),
+        "M59 same-tree local graph validation should allow this case far enough to reach Bun"
     );
 }
 
@@ -16495,7 +16869,7 @@ fn typescript_chain3_missing_typescript_body_rejects_before_bun_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "TypeScript chain3 target requires direct deps to author body.typescript in M56"
+            "TypeScript same-tree local target requires every reachable unit to author body.typescript in M59"
         ),
         "{stderr}"
     );
@@ -16536,7 +16910,7 @@ fn typescript_nested_chain3_missing_nested_typescript_body_rejects_before_bun_ru
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("TypeScript chain3 target requires direct deps to author body.typescript in M56"),
+        stderr.contains("TypeScript same-tree local target requires every reachable unit to author body.typescript in M59"),
         "{stderr}"
     );
     assert!(
@@ -16547,7 +16921,7 @@ fn typescript_nested_chain3_missing_nested_typescript_body_rejects_before_bun_ru
 
 #[cfg(unix)]
 #[test]
-fn typescript_chain3_wrong_dep_order_rejects_before_bun_runs() {
+fn typescript_chain3_wrong_dep_order_reaches_bun_in_m59() {
     let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
     replace_in_file(
         &fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec"),
@@ -16574,22 +16948,17 @@ fn typescript_chain3_wrong_dep_order_rejects_before_bun_runs() {
     );
     assert!(
         !output.status.success(),
-        "chain3 targets with wrong dep order should be rejected"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"),
-        "{stderr}"
+        "chain3 targets with reordered local deps should still fail under the fake Bun"
     );
     assert!(
-        !marker_path.exists(),
-        "wrong dep order rejection should happen before Bun build/test execution"
+        marker_path.exists(),
+        "M59 same-tree local graph validation should allow reordered local deps to reach Bun"
     );
 }
 
 #[cfg(unix)]
 #[test]
-fn typescript_nested_chain3_wrong_dep_order_rejects_before_bun_runs() {
+fn typescript_nested_chain3_wrong_dep_order_reaches_bun_in_m59() {
     let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
     replace_in_file(
         &fixture_dir.join("units/pricing/checkout_nested_chain3_aligned.unit.spec"),
@@ -16616,16 +16985,11 @@ fn typescript_nested_chain3_wrong_dep_order_rejects_before_bun_runs() {
     );
     assert!(
         !output.status.success(),
-        "nested chain3 targets with wrong dep order should be rejected"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"),
-        "{stderr}"
+        "nested chain3 targets with reordered local deps should still fail under the fake Bun"
     );
     assert!(
-        !marker_path.exists(),
-        "nested chain3 wrong dep order rejection should happen before Bun build/test execution"
+        marker_path.exists(),
+        "M59 same-tree local graph validation should allow reordered nested local deps to reach Bun"
     );
 }
 

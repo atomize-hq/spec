@@ -47,16 +47,16 @@ spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
 
-## Bounded TypeScript lane (M58)
+## Bounded TypeScript lane (M59)
 
 `spec` now exposes one bounded TypeScript execution lane. It is intentionally narrow:
 
 - Bun is the only TypeScript prerequisite. The lane shells out to `bun`; no alternate Node, npm, or tsx contract is supported.
-- Eligible roots are exactly `kind: function` specs that classify to `function.arithmetic_leaf.monotone_up.v1`, `function.wrapper.pipeline.v1`, or the bounded same-tree `function.wrapper.pipeline.chain3.v1`.
-- Monotone-up roots may declare `deps: []` or exactly one direct helper dep. That helper must classify to `function.helper.identity_passthrough.v1`, author non-empty `body.typescript`, and exist in the loaded unit set and generated tree. That one helper dep may be cross-library when it is referenced through `[libraries]` as a sibling import like `shared::money/round`.
-- Wrapper roots must declare exactly two direct deps in the same loaded unit set and generated tree. The ordered dep tuple is frozen to `function.arithmetic_leaf.monotone_down_nonnegative.v1` then `function.arithmetic_leaf.monotone_up.v1`, both deps must author non-empty `body.typescript`, and each slot may be local or a direct sibling-library dep such as `shared::pricing/apply_discount` or `shared::pricing/apply_tax`.
-- Chain3 roots must declare exactly three direct deps in the same loaded unit set and generated tree. The ordered dep tuple is frozen to `function.wrapper.pipeline.v1` or same-tree `function.wrapper.pipeline.chain3.v1` in slot 1, then `function.arithmetic_leaf.monotone_up.v1`, then `function.arithmetic_leaf.monotone_down_nonnegative.v1`. Every direct dep must author non-empty `body.typescript`, direct slots 2 and 3 may still mix local and sibling-library deps within that exact family order, and recursive slot 1 chain3 deps must stay same-tree local.
-- Chain3 closure collection stays bounded. A wrapper or same-tree nested `function.wrapper.pipeline.chain3.v1` may appear in chain3 slot 1, recursive collection stays inside the same loaded tree, and generic multi-dependency execution remains unsupported.
+- The new M59 lane is same-tree local only. Eligible roots are `kind: function` specs whose reachable closure resolves from the loaded unit set, stays local rather than `shared::...`, classifies to already-supported semantic-review function families, and authors non-empty `body.typescript` at every reachable unit.
+- Local graph traversal is semantic-review-driven and dep-driven. It does not hard-code a root family tuple, it dedupes shared same-tree subgraphs, and it excludes unrelated loaded units from the generated TypeScript tree.
+- The preserved portability exceptions remain in place for direct cross-library roots. A `function.arithmetic_leaf.monotone_up.v1` root may still use exactly one direct cross-library helper dep that classifies to `function.helper.identity_passthrough.v1`, authors non-empty `body.typescript`, and resolves from the loaded unit set and generated tree.
+- The preserved direct cross-library wrapper lane remains frozen to the `function.wrapper.pipeline.v1` family with the direct dep tuple `function.arithmetic_leaf.monotone_down_nonnegative.v1` then `function.arithmetic_leaf.monotone_up.v1`.
+- The preserved direct cross-library chain3 lane remains frozen to the `function.wrapper.pipeline.chain3.v1` family with the direct dep tuple `function.wrapper.pipeline.v1` or same-tree `function.wrapper.pipeline.chain3.v1` in slot 1, then `function.arithmetic_leaf.monotone_up.v1`, then `function.arithmetic_leaf.monotone_down_nonnegative.v1`. Recursive slot-1 chain3 deps must still stay same-tree local.
 - Rust remains the default target. TypeScript proof is additive only; it writes `target_proofs.typescript` without replacing the Rust proof surface.
 - TypeScript execution is atom-only. Only `local_tests` run in this lane; `.test.spec` molecule tests remain unsupported for `--target-language typescript` and fail before Bun runs.
 - The accepted `local_tests.expect` grammar is deliberately small: `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)`. The left-hand side must be a direct call to the current unit, and both the arguments and expected value must use integer-literal `Decimal::new(...)` forms.
@@ -70,19 +70,19 @@ spec test <path> --target-language typescript
 spec status <unit-or-root> --target-language typescript
 ```
 
-`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M58, a root-level status over a mixed example like `examples/ecommerce` or `examples/crosslib-app` may stay non-green unless every unit in scope is either freshly proven in the bounded monotone-up, wrapper, or chain3 lane, or truthfully remains outside that lane.
+`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M59, a root-level status over a mixed example like `examples/ecommerce` or `examples/crosslib-app` may stay non-green unless every unit in scope is either freshly proven in the bounded same-tree local graph lane or preserved direct cross-library portability lane, or truthfully remains outside those lanes.
 
-The generated helper filenames remain frozen in M58:
+The generated helper filenames remain frozen in M59:
 
 - `__spec_ts/runtime.ts`
 - `__spec_ts/build_entry.ts`
 - `__spec_ts/local_tests.ts`
 
-Commands and surfaces that do not widen for M58:
+Commands and surfaces that do not widen for M59:
 
 - `spec validate` does not accept `--target-language`
 - `spec export` does not accept `--target-language`
-- This lane does not widen to molecule execution, generic multi-dep execution, seam kinds, cross-library recursive chain3 closure, `spec validate --target-language`, or `spec export --target-language`.
+- This lane does not widen to molecule execution, arbitrary authored 4+ dep topology parity, new semantic-family promotion, seam kinds, generic recursive cross-library function graphs, `spec validate --target-language`, or `spec export --target-language`.
 
 ## Spec format
 
@@ -296,7 +296,7 @@ cargo run -p spec-cli -- status examples/ecommerce --format json
 
 `spec build` and directory-scoped `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec build` is directory-scoped only. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests. Passports persist a `freshness_anchor` snapshot as the proof anchor from the last unit test run, while `freshness` is a live projection against the current spec. Marked seam passports may also carry additive `escape_hatch_gate` metadata. In M14 that gate requires both `atom` and `molecule` proof; `atom` is present only when the authored local tests pass and the seam's projected freshness is still current, and an open gate uses a stable reason like `missing required escape-hatch proof: molecule`.
 
-Semantic review for `kind:function` is bounded to a small shipped family vocabulary, not arbitrary function understanding. The current supported family keys are `function.arithmetic_leaf.monotone_down_nonnegative.v1`, `function.arithmetic_leaf.monotone_up.v1`, and `function.wrapper.pipeline.v1`. In the canonical ecommerce example, `pricing/apply_discount`, `pricing/apply_tax`, and `pricing/calculate_total` refresh to those family keys when their authored and executable shapes fit honestly. M20 does not add a new supported function family.
+Semantic review for `kind:function` is bounded to a small shipped family vocabulary, not arbitrary function understanding. The current supported function family keys are `function.helper.identity_passthrough.v1`, `function.arithmetic_leaf.monotone_down_nonnegative.v1`, `function.arithmetic_leaf.monotone_up.v1`, `function.wrapper.pipeline.v1`, and `function.wrapper.pipeline.chain3.v1`. In the canonical ecommerce and TypeScript fixture flows, `money/round`, `pricing/apply_discount`, `pricing/apply_tax`, `pricing/calculate_total`, and the bounded chain3 forms refresh to those family keys when their authored and executable shapes fit honestly. M59 does not add a new supported function family.
 
 M20 also makes unsupported-function truth explicit. The public fields are exactly `semantic_review.support_status`, `semantic_review.unsupported_reason_codes`, and `semantic_review.rewrite_hints`. New supported reviews write `support_status: supported`; unsupported function reviews write `support_status: unsupported`. Consumers should branch on `semantic_review.support_status == "unsupported"` instead of inferring unsupported state from `verdict` or `evaluator_scope`, though legacy reviews without `support_status` still fall back to `evaluator_scope` plus `unsupported.*.v1` compatibility-key inference.
 

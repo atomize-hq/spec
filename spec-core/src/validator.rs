@@ -76,6 +76,14 @@ pub const TYPESCRIPT_CHAIN3_SAME_TREE_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires recursive slot-1 chain3 deps to stay same-tree local in M58";
 pub const TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires direct deps to author body.typescript in M56";
+pub const TYPESCRIPT_LOCAL_GRAPH_SHARED_DEP_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript same-tree local target requires every reachable dep to stay same-tree local in M59";
+pub const TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript same-tree local target requires every reachable dep to resolve from the loaded unit set in M59";
+pub const TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript same-tree local target requires every reachable unit to classify to a supported semantic review in M59";
+pub const TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript same-tree local target requires every reachable unit to author body.typescript in M59";
 pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M52";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -348,6 +356,30 @@ pub fn validate_typescript_execution_target_spec_with_specs(
         return Err(semantic_error(spec, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE));
     }
 
+    if typescript_target_uses_local_graph_lane(spec)? {
+        validate_typescript_local_graph_root_spec_with_specs(spec, specs_by_id)?;
+        return validate_typescript_local_test_expect_shape(spec);
+    }
+
+    validate_typescript_portability_target_spec_with_specs(spec, specs_by_id)?;
+    validate_typescript_local_test_expect_shape(spec)
+}
+
+pub fn typescript_target_uses_local_graph_lane(spec: &LoadedSpec) -> Result<bool> {
+    for dep in &spec.spec.deps {
+        let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
+        if parsed.library_alias().is_some() {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
+}
+
+fn validate_typescript_portability_target_spec_with_specs(
+    spec: &LoadedSpec,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> Result<()> {
     match spec.spec.deps.len() {
         0 | 1 => {
             validate_typescript_helper_dep_contract(spec, specs_by_id)?;
@@ -461,7 +493,104 @@ pub fn validate_typescript_execution_target_spec_with_specs(
         },
     }
 
-    validate_typescript_local_test_expect_shape(spec)
+    Ok(())
+}
+
+fn validate_typescript_local_graph_root_spec_with_specs(
+    spec: &LoadedSpec,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+) -> Result<()> {
+    let mut visited = HashSet::new();
+    validate_typescript_local_graph_member_spec_with_specs(spec, specs_by_id, &mut visited)
+}
+
+fn validate_typescript_local_graph_member_spec_with_specs(
+    spec: &LoadedSpec,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+    visited: &mut HashSet<String>,
+) -> Result<()> {
+    if spec
+        .spec
+        .unit_kind()
+        .map_err(|message| semantic_error(spec, message))?
+        != UnitKind::Function
+    {
+        return Err(semantic_error(spec, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE));
+    }
+
+    if !visited.insert(spec.spec.id.clone()) {
+        return Ok(());
+    }
+
+    if spec
+        .spec
+        .body
+        .typescript
+        .as_deref()
+        .map(str::trim)
+        .filter(|body| !body.is_empty())
+        .is_none()
+    {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "{}: '{}'",
+                TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE, spec.spec.id
+            ),
+        ));
+    }
+
+    for dep in &spec.spec.deps {
+        let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
+        if parsed.library_alias().is_some() {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "{}: '{}'",
+                    TYPESCRIPT_LOCAL_GRAPH_SHARED_DEP_UNSUPPORTED_MESSAGE,
+                    parsed.authored()
+                ),
+            ));
+        }
+
+        let Some(dep_spec) = specs_by_id.get(parsed.unit_id()) else {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "{}: '{}'",
+                    TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE,
+                    parsed.authored()
+                ),
+            ));
+        };
+
+        validate_typescript_local_graph_member_spec_with_specs(dep_spec, specs_by_id, visited)?;
+    }
+
+    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+    let Some(review) = evaluate_semantic_review_with_context(spec, &semantic_review_context) else {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "{}: '{}' is missing supported semantic review",
+                TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE, spec.spec.id
+            ),
+        ));
+    };
+
+    if review.effective_support_status() != SemanticSupportStatus::Supported {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "{}: '{}' resolved to {}",
+                TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE,
+                spec.spec.id,
+                review.compatibility_key
+            ),
+        ));
+    }
+
+    Ok(())
 }
 
 pub fn validate_typescript_closure_member_spec_with_specs(
@@ -4988,6 +5117,26 @@ methods:
     }
 
     #[test]
+    fn typescript_local_graph_target_accepts_helper_root() {
+        let spec = create_typescript_helper_spec();
+        validate_typescript_execution_target_spec(&spec)
+            .expect("same-tree helper roots should be eligible in M59");
+    }
+
+    #[test]
+    fn typescript_local_graph_target_accepts_monotone_down_root() {
+        let spec = create_typescript_discount_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (helper.spec.id.clone(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("same-tree monotone-down roots should be eligible in M59");
+    }
+
+    #[test]
     fn typescript_target_accepts_one_local_helper_dep_with_context() {
         let mut spec = create_typescript_lane_function_spec();
         spec.spec.deps = vec!["money/round".to_string()];
@@ -5015,12 +5164,20 @@ methods:
         let tax = create_typescript_lane_function_spec();
         let discount = create_typescript_discount_spec();
         let helper = create_typescript_helper_spec();
+        let mut bonus = create_typescript_lane_function_spec();
+        bonus.spec.id = "pricing/apply_tax_bonus".to_string();
+        bonus.source.id = "pricing/apply_tax_bonus".to_string();
+        bonus.source.file_path = "units/pricing/apply_tax_bonus.unit.spec".to_string();
+        bonus.spec.local_tests[0].expect =
+            "apply_tax_bonus(Decimal::new(1000, 2), Decimal::new(7, 2)) == Decimal::new(1070, 2)"
+                .to_string();
         let specs_by_id = HashMap::from([
             (spec.spec.id.clone(), spec.clone()),
             (wrapper.spec.id.clone(), wrapper),
             (tax.spec.id.clone(), tax),
             (discount.spec.id.clone(), discount),
             (helper.spec.id.clone(), helper),
+            (bonus.spec.id.clone(), bonus),
         ]);
 
         let err =
@@ -5066,7 +5223,7 @@ methods:
         let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -5106,7 +5263,11 @@ methods:
             .unwrap_err()
             .to_string();
         assert!(
-            err.contains(TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE),
+            err.contains(TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.contains("unsupported.function.v1"),
             "unexpected error: {err}"
         );
     }
@@ -5133,11 +5294,64 @@ methods:
     }
 
     #[test]
-    fn typescript_target_rejects_wrong_semantic_family() {
-        let spec = create_typescript_discount_spec();
+    fn typescript_local_graph_target_rejects_reachable_shared_dep() {
+        let spec = create_typescript_wrapper_spec();
+        let discount = create_typescript_discount_spec();
+        let mut tax = create_typescript_lane_function_spec();
+        tax.spec.deps = vec!["shared::money/round".to_string()];
         let helper = create_typescript_helper_spec();
         let specs_by_id = HashMap::from([
             (spec.spec.id.clone(), spec.clone()),
+            (discount.spec.id.clone(), discount),
+            (tax.spec.id.clone(), tax),
+            (helper.spec.id.clone(), helper.clone()),
+            ("shared::money/round".to_string(), helper),
+        ]);
+
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(TYPESCRIPT_LOCAL_GRAPH_SHARED_DEP_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn typescript_local_graph_target_rejects_reachable_unsupported_semantic_member() {
+        let spec = create_typescript_wrapper_spec();
+        let mut discount = create_typescript_discount_spec();
+        discount.spec.body.rust = "{ let discounted = subtotal - subtotal * rate; if discounted < Decimal::ZERO { Decimal::ZERO } else { round(discounted) } }".to_string();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (discount.spec.id.clone(), discount),
+            (tax.spec.id.clone(), tax),
+            (helper.spec.id.clone(), helper),
+        ]);
+
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
+        let err = err.to_string();
+        assert!(
+            err.contains(TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
+        assert!(err.contains("unsupported.function.v1"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn typescript_local_graph_target_rejects_reachable_missing_typescript_body() {
+        let spec = create_typescript_wrapper_spec();
+        let discount = create_typescript_discount_spec();
+        let mut tax = create_typescript_lane_function_spec();
+        tax.spec.body.typescript = None;
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (discount.spec.id.clone(), discount),
+            (tax.spec.id.clone(), tax),
             (helper.spec.id.clone(), helper),
         ]);
 
@@ -5145,7 +5359,7 @@ methods:
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains("TypeScript target requires compatibility key function.arithmetic_leaf.monotone_up.v1, function.wrapper.pipeline.v1, or function.wrapper.pipeline.chain3.v1 in M52"),
+                .contains(TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -5245,13 +5459,13 @@ methods:
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
 
     #[test]
-    fn typescript_target_rejects_wrapper_wrong_dep_family_tuple() {
+    fn typescript_local_graph_target_accepts_wrapper_with_reordered_supported_local_deps() {
         let mut spec = create_typescript_wrapper_spec();
         spec.spec.deps = vec![
             "pricing/apply_tax".to_string(),
@@ -5267,13 +5481,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err =
-            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE),
-            "unexpected error: {err}"
-        );
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("same-tree local wrapper deps are graph-generic in M59");
     }
 
     #[test]
@@ -5354,7 +5563,7 @@ methods:
     }
 
     #[test]
-    fn typescript_target_rejects_chain3_wrong_dep_order() {
+    fn typescript_local_graph_target_accepts_chain3_with_reordered_declared_deps() {
         let mut spec = create_typescript_chain3_spec();
         spec.spec.deps = vec![
             "pricing/apply_tax".to_string(),
@@ -5373,13 +5582,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err =
-            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
-            "unexpected error: {err}"
-        );
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("same-tree local chain3 roots should not depend on declared dep order in M59");
     }
 
     #[test]
@@ -5428,13 +5632,13 @@ methods:
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
 
     #[test]
-    fn typescript_target_rejects_chain3_wrong_dep_family() {
+    fn typescript_local_graph_target_rejects_chain3_with_wrong_supported_local_family_mix() {
         let mut spec = create_typescript_chain3_spec();
         spec.spec.deps[1] = "pricing/apply_discount".to_string();
         let wrapper = create_typescript_wrapper_spec();
@@ -5451,11 +5655,12 @@ methods:
 
         let err =
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
+        let err = err.to_string();
         assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
+            err.contains(TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
+        assert!(err.contains("unsupported.function.v1"), "unexpected error: {err}");
     }
 
     #[test]
@@ -5478,7 +5683,7 @@ methods:
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
