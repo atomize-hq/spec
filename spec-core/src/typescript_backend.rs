@@ -269,6 +269,21 @@ fn collect_typescript_closure_member(
             }
             Ok(())
         }
+        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
+            for dep in &spec.deps {
+                let parsed = parse_typescript_dep(dep, "chain3 closure dep")?;
+                let dep_index =
+                    resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
+                collect_typescript_closure_member(
+                    dep_index,
+                    specs,
+                    spec_indices_by_key,
+                    specs_by_id,
+                    included,
+                )?;
+            }
+            Ok(())
+        }
         TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY
         | TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
             collect_typescript_helper_dep(spec, specs, spec_indices_by_key, specs_by_id, included)
@@ -1523,6 +1538,87 @@ mod tests {
             .expect("wrapper module should be emitted");
         assert!(wrapper_module.contains("import { apply_discount } from \"./apply_discount.ts\";"));
         assert!(wrapper_module.contains("import { apply_tax } from \"./apply_tax.ts\";"));
+    }
+
+    #[test]
+    fn typescript_tree_renders_nested_chain3_closure_without_unrelated_units() {
+        let helper = helper_spec("money/round");
+        let discount = monotone_down_spec(
+            "pricing/apply_discount",
+            vec!["money/round"],
+            "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
+        );
+        let tax = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["money/round"],
+            "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
+        );
+        let wrapper = wrapper_spec(
+            "pricing/calculate_total",
+            "pricing/apply_discount",
+            "pricing/apply_tax",
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
+        );
+        let nested = chain3_spec(
+            "pricing/base_nested_chain3",
+            "pricing/calculate_total",
+            "pricing/apply_tax",
+            "pricing/apply_discount",
+            "const base_total = calculate_total(subtotal, discount_rate, tax_rate); const surcharged_total = apply_tax(base_total, surcharge_rate); return apply_discount(surcharged_total, loyalty_rate);",
+        );
+        let root = chain3_spec(
+            "pricing/checkout_nested_chain3",
+            "pricing/base_nested_chain3",
+            "pricing/apply_tax",
+            "pricing/apply_discount",
+            "const base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate); const surcharged_total = apply_tax(base_total, Decimal.zero()); return apply_discount(surcharged_total, Decimal.zero());",
+        );
+        let unrelated = monotone_up_spec(
+            "pricing/unrelated_tax",
+            vec![],
+            "return subtotal.add(subtotal.mul(rate));",
+        );
+
+        let root_ids = vec![root.id.clone()];
+        let tree = generate_typescript_tree(
+            &[
+                NormalizedUnit::Function(root),
+                NormalizedUnit::Function(nested),
+                NormalizedUnit::Function(wrapper),
+                NormalizedUnit::Function(discount),
+                NormalizedUnit::Function(tax),
+                NormalizedUnit::Function(helper),
+                NormalizedUnit::Function(unrelated),
+            ],
+            &root_ids,
+        )
+        .expect("nested chain3 closure tree should generate");
+
+        assert!(tree.contains_key(&PathBuf::from("pricing/checkout_nested_chain3.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/base_nested_chain3.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/calculate_total.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_discount.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_tax.ts")));
+        assert!(tree.contains_key(&PathBuf::from("money/round.ts")));
+        assert!(!tree.contains_key(&PathBuf::from("pricing/unrelated_tax.ts")));
+
+        let root_module = tree
+            .get(&PathBuf::from("pricing/checkout_nested_chain3.ts"))
+            .expect("nested chain3 root module should be emitted");
+        assert!(
+            root_module.contains("import { base_nested_chain3 } from \"./base_nested_chain3.ts\";")
+        );
+        assert!(root_module.contains("import { apply_tax } from \"./apply_tax.ts\";"));
+        assert!(root_module.contains("import { apply_discount } from \"./apply_discount.ts\";"));
+
+        let nested_module = tree
+            .get(&PathBuf::from("pricing/base_nested_chain3.ts"))
+            .expect("nested chain3 member module should be emitted");
+        assert!(
+            nested_module.contains("import { calculate_total } from \"./calculate_total.ts\";")
+        );
+        assert!(nested_module.contains("import { apply_tax } from \"./apply_tax.ts\";"));
+        assert!(nested_module.contains("import { apply_discount } from \"./apply_discount.ts\";"));
     }
 
     #[test]

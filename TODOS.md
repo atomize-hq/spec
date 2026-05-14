@@ -196,4 +196,6 @@
 
 - [x] **Direct cross-library wrapper and chain3 TypeScript roots** — Completed by M56 (2026-05-13). The bounded Bun-backed TypeScript lane now admits direct cross-library wrapper roots, direct cross-library chain3 roots, and exact mixed local-plus-shared direct dep tuples for the frozen promoted families, while keeping closure collection bounded and broader TypeScript execution claims deferred.
 
-- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M56. The current lane is intentionally family-shaped: helper-aware monotone-up roots, bounded direct cross-library wrapper and chain3 roots only under their frozen family tuples, and no arbitrary dependency topologies.
+- [x] **Bounded same-tree nested chain3 TypeScript closure** — Completed by M58 (2026-05-14). The bounded Bun-backed TypeScript lane now admits a same-tree `function.wrapper.pipeline.chain3.v1` in chain3 slot 1, recurses through that validated nested closure inside the same loaded tree, preserves the pre-Bun rejection wall for wrong family, wrong dep order, missing nested `body.typescript`, and cross-library recursion, and leaves slot 2 plus slot 3 frozen.
+
+- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M58. The current lane is intentionally family-shaped: helper-aware monotone-up roots, bounded direct cross-library wrapper and chain3 roots, bounded same-tree nested chain3 slot-1 closure only, and no arbitrary dependency topologies.

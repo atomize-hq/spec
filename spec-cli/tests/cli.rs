@@ -4302,6 +4302,129 @@ local_tests:
     app_dir.join("units/pricing/checkout_chain3.unit.spec")
 }
 
+fn write_cross_library_nested_chain3_specs(app_dir: &Path, shared_spec_dir: &Path) -> PathBuf {
+    write_spec(
+        &shared_spec_dir.join("units"),
+        "pricing/calculate_total.unit.spec",
+        r#"
+id: pricing/calculate_total
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the shared checkout total after discounting the subtotal and then applying tax.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/apply_discount
+  - pricing/apply_tax
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let discounted = apply_discount(subtotal, discount_rate);
+        apply_tax(discounted, tax_rate)
+    }
+  typescript: |
+    {
+        const discounted = apply_discount(subtotal, discount_rate);
+        return apply_tax(discounted, tax_rate);
+    }
+local_tests:
+  - id: happy_path
+    expect: calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(9653, 2)
+"#,
+    );
+    write_spec(
+        &shared_spec_dir.join("units"),
+        "pricing/base_nested_chain3.unit.spec",
+        r#"
+id: pricing/base_nested_chain3
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the shared nested chain3 subtotal before the app root applies its outer surcharge and loyalty discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+    surcharge_rate: Decimal
+    loyalty_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/calculate_total
+  - pricing/apply_tax
+  - pricing/apply_discount
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        let surcharged_total = apply_tax(base_total, surcharge_rate);
+        apply_discount(surcharged_total, loyalty_rate)
+    }
+  typescript: |
+    {
+        const base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        const surcharged_total = apply_tax(base_total, surcharge_rate);
+        return apply_discount(surcharged_total, loyalty_rate);
+    }
+local_tests:
+  - id: happy_path
+    expect: base_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(96045, 4)
+"#,
+    );
+    write_spec(
+        &app_dir.join("units"),
+        "pricing/checkout_nested_chain3.unit.spec",
+        r#"
+id: pricing/checkout_nested_chain3
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Reject a cross-library recursive chain3 in slot 1 before Bun runs.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+    surcharge_rate: Decimal
+    loyalty_rate: Decimal
+  returns: Decimal
+deps:
+  - shared::pricing/base_nested_chain3
+  - shared::pricing/apply_tax
+  - shared::pricing/apply_discount
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate);
+        let surcharged_total = apply_tax(base_total, surcharge_rate);
+        apply_discount(surcharged_total, loyalty_rate)
+    }
+  typescript: |
+    {
+        const base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate);
+        const surcharged_total = apply_tax(base_total, surcharge_rate);
+        return apply_discount(surcharged_total, loyalty_rate);
+    }
+local_tests:
+  - id: happy_path
+    expect: checkout_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(9124275, 6)
+"#,
+    );
+
+    app_dir.join("units/pricing/checkout_nested_chain3.unit.spec")
+}
+
 fn read_passport(passport_path: &Path) -> String {
     fs::read_to_string(passport_path).unwrap()
 }
@@ -8271,8 +8394,8 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
 
     let output = run_in(temp_dir.path(), &["status", ".", "--format", "json"]);
     assert!(
-        output.status.success(),
-        "repo status should stay green when copied example roots are healthy"
+        !output.status.success(),
+        "repo status should stay non-green when copied roots include an unproven wrapper unit"
     );
 
     let json = parse_stdout_json(&output);
@@ -8282,7 +8405,7 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         .find(|root| root["root"] == "crosslib-app")
         .expect("expected crosslib-app root in repo status");
     let units = crosslib_root["units"].as_array().unwrap();
-    assert_eq!(units.len(), 2, "{json}");
+    assert_eq!(units.len(), 3, "{json}");
     assert_eq!(units[0]["id"], "pricing/apply_discount");
     assert_eq!(units[0]["status"], "valid", "{json}");
     assert_eq!(
@@ -8295,6 +8418,8 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         units[1]["semantic_review"]["compatibility_key"], FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
         "{json}"
     );
+    assert_eq!(units[2]["id"], "pricing/calculate_total");
+    assert_eq!(units[2]["status"], "untested", "{json}");
     assert!(
         units.iter().all(|unit| {
             !unit["errors"]
@@ -15779,7 +15904,7 @@ fn typescript_cross_library_chain3_wrong_dep_order_rejects_before_bun_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M56"
+            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"
         ),
         "{stderr}"
     );
@@ -15868,7 +15993,7 @@ fn typescript_cross_library_chain3_wrong_family_rejects_before_bun_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M56"
+            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"
         ),
         "{stderr}"
     );
@@ -16181,6 +16306,41 @@ fn typescript_chain3_wrapper_executes_with_bun() {
 
 #[cfg(unix)]
 #[test]
+fn typescript_nested_chain3_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "aligned nested chain3 fixture should pass in the bounded same-tree TypeScript lane",
+        &output,
+    );
+
+    let passport = read_passport_json(
+        &fixture_dir.join("units/pricing/checkout_nested_chain3_aligned.spec.passport.json"),
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn typescript_chain3_wrong_family_rejects_before_bun_runs() {
     let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("unsupported_near_miss");
     inject_typescript_body_if_missing(
@@ -16231,6 +16391,80 @@ fn typescript_chain3_wrong_family_rejects_before_bun_runs() {
 
 #[cfg(unix)]
 #[test]
+fn typescript_nested_chain3_wrong_first_slot_family_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    write_spec(
+        &fixture_dir.join("units"),
+        "pricing/wrong_first_slot_tax_like_aligned.unit.spec",
+        r#"
+id: pricing/wrong_first_slot_tax_like_aligned
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Provide a distinct monotone-up leaf so nested chain3 slot-1 family rejection is exercised without duplicate dep collisions.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal + subtotal * rate
+    }
+  typescript: |
+    {
+        return subtotal.add(subtotal.mul(rate));
+    }
+local_tests:
+  - id: wrong_first_slot_tax_like_aligned_basic
+    expect: wrong_first_slot_tax_like_aligned(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(11000, 2)
+"#,
+    );
+    replace_in_file(
+        &fixture_dir.join("units/pricing/checkout_nested_chain3_aligned.unit.spec"),
+        "deps:\n  - pricing/base_nested_chain3_aligned\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+        "deps:\n  - pricing/wrong_first_slot_tax_like_aligned\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "nested chain3 targets with a wrong first-slot family should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "nested chain3 wrong-family rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn typescript_chain3_missing_typescript_body_rejects_before_bun_runs() {
     let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
     remove_typescript_body(
@@ -16261,13 +16495,53 @@ fn typescript_chain3_missing_typescript_body_rejects_before_bun_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "TypeScript chain3 target requires direct deps to author body.typescript in M55"
+            "TypeScript chain3 target requires direct deps to author body.typescript in M56"
         ),
         "{stderr}"
     );
     assert!(
         !marker_path.exists(),
         "missing body.typescript rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_nested_chain3_missing_nested_typescript_body_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    remove_typescript_body(
+        &fixture_dir.join("units/pricing/base_nested_chain3_aligned.unit.spec"),
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "nested chain3 targets with a missing nested body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("TypeScript chain3 target requires direct deps to author body.typescript in M56"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "nested chain3 missing-body rejection should happen before Bun build/test execution"
     );
 }
 
@@ -16304,12 +16578,94 @@ fn typescript_chain3_wrong_dep_order_rejects_before_bun_runs() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M55"),
+        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"),
         "{stderr}"
     );
     assert!(
         !marker_path.exists(),
         "wrong dep order rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_nested_chain3_wrong_dep_order_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    replace_in_file(
+        &fixture_dir.join("units/pricing/checkout_nested_chain3_aligned.unit.spec"),
+        "deps:\n  - pricing/base_nested_chain3_aligned\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+        "deps:\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/base_nested_chain3_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "nested chain3 targets with wrong dep order should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "nested chain3 wrong dep order rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_nested_chain3_cross_library_recursive_first_dep_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) = copy_crosslib_typescript_example();
+    write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library nested chain3 roots should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript chain3 target requires recursive slot-1 chain3 deps to stay same-tree local in M58"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library nested chain3 rejection should happen before Bun build/test execution"
     );
 }
 

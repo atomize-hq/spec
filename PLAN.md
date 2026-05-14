@@ -1,666 +1,749 @@
-# M57: Shared-Core Portability Adoption Closeout Plan
+# M58: Bounded Nested Chain3 Closure TypeScript Execution Plan
 
-Status: **implementation plan**
-Milestone: **M57**
-Milestone family: **shared-core-portability**
-Implementation readiness: **ready for bounded execution**
-Plan scope: **close out the remaining repo-root authority and proof-wall drift around the already-frozen `xtask/src/family/analysis_core/*` owner seam, without changing semantic stop-state behavior, CLI shape, JSON contracts, or artifact paths**
-Base branch: **main**
-Working branch: **feat/m40-plus**
-Validated at commit: **`504b1e3`**
-Last rewritten: **2026-05-13**
+Status: **authoritative implementation plan**  
+Milestone: **M58**  
+Milestone family: **second-language-backend**  
+Implementation readiness: **ready for bounded execution**  
+Plan scope: **ship exactly one new TypeScript capability: a chain3 root may use a same-tree `function.wrapper.pipeline.chain3.v1` in chain3 direct dep slot 1, and the backend may recurse through that validated nested chain3 closure, without widening to generic multi-dependency graphs, molecule execution, seam kinds, or target-language validate/export**  
+Base branch: **main**  
+Working branch: **feat/m40-plus**  
+Validated at commit: **`6c7caf3`**  
+Last rewritten: **2026-05-14**
 
 Supersedes:
 
-- the stale M56 cross-library TypeScript plan previously maintained at this path
-- the M57 design draft at `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260513-212023.md`
+- the stale M57 shared-core closeout plan previously maintained at this path
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-074521.md`
 
 Primary source artifacts:
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260513-212023.md`
-- `.runs/m53_shared_core_portability_closeout/validation/kickoff/PLAN.md`
-- `.runs/m53_shared_core_portability_closeout/acceptance-ledger.md`
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-074521.md`
+- `README.md`
 - `TODOS.md`
+- `AGENTS.md`
 - `ORCH_PLAN.md`
 
 Primary repo surfaces:
 
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/analysis_core/mod.rs`
-- `xtask/src/family/analysis_core/helper_surface.rs`
-- `xtask/src/family/analysis_core/decision_contract.rs`
-- `xtask/src/family/analysis_core/proof_fingerprint.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/decision_kernel.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/verify.rs`
-- `xtask/src/family/promotion_artifacts.rs`
-- `xtask/src/lib.rs`
+- `spec-core/src/validator.rs`
+- `spec-core/src/typescript_backend.rs`
+- `spec-cli/tests/cli.rs`
+- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*`
+- `README.md`
+- `TODOS.md`
 
 ## Executive Summary
 
-M56 landed. That work is real, but the repo-root authority file was left behind.
+The old repo-root plan was solving the wrong problem.
 
-The branch-level design doc for the next milestone is about shared-core portability adoption closeout on the frozen `analysis_core` seam. The current `PLAN.md` was still a full M56 Bun/TypeScript execution contract. That mismatch is worse than ugly. It points implementers at the wrong product problem.
+M56 already shipped bounded TypeScript execution for:
 
-The current code truth is narrower and more boring:
+1. helper-aware monotone-up roots
+2. wrapper roots
+3. flat chain3 roots
+4. direct cross-library helper, wrapper, and chain3 roots
 
-1. `xtask/src/family/analysis_core/*` is already the semantic owner surface.
-2. `xtask/src/family/helper_surface.rs` and `xtask/src/family/decision_kernel.rs` are already compatibility-only passthrough shims.
-3. Maintainer docs already describe that ownership story correctly.
-4. The family-analysis stop-state still truthfully says `stop`.
-5. The one concrete drift found during revalidation is proof-wall drift in `xtask/src/lib.rs`: one locked recommendation coverage assertion still expects pre-M56 corpus counts and currently keeps `cargo test -p xtask` red.
+M57 already closed the shared-core ownership loop. The remaining gap is narrower and more concrete:
 
-M57 therefore is not a new architecture milestone. It is a closeout and truth-sync milestone:
+```text
+outer_chain3
+├── nested_chain3        <- still rejected today
+├── monotone_up
+└── monotone_down
+```
 
-1. align repo-root authority with the actual branch direction
-2. keep the frozen owner-seam story explicit
-3. repair the stale proof-wall expectation that M56 invalidated
-4. touch docs only if the final code diff would otherwise leave them false
-5. rerun the full frozen proof floor and stop if any new drift appears
+The current lane cannot execute that shape because the validator still freezes chain3 slot 1 to `function.wrapper.pipeline.v1` and still rejects `function.wrapper.pipeline.chain3.v1` as a closure member.
 
-If this expands into new semantic-review policy, corpus-run spending, TypeScript work, consumer rewires, schema churn, or shared-core extraction, the plan has widened past its budget and must stop.
+M58 fixes exactly that wall. Nothing else.
+
+The contract after M58 is:
+
+```text
+chain3 slot 1 = wrapper OR same-tree chain3
+chain3 slot 2 = monotone_up
+chain3 slot 3 = monotone_down_nonnegative
+```
+
+Everything outside that shape stays out:
+
+- no generic DAG policy
+- no arbitrary recursive graphs
+- no cross-library recursive chain3 closure
+- no target-language validate/export
+- no molecule TypeScript execution
+
+This plan is therefore not “generic multi-dependency TypeScript execution.” It is one bounded recursive family widen in the existing Bun-backed lane.
 
 ## Current Validated Basis
 
-Validated from the current tree on `feat/m40-plus` at `504b1e3`.
+Validated from HEAD source review on `feat/m40-plus` at `6c7caf3`.
 
-Commands run:
+Observed repo truth:
 
-```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family recommend --format json
-cargo xtask family verify-decision-contract --format json
-cargo xtask family corpus-decision --format json
-cargo test -p xtask
-```
-
-Observed command truth:
-
-- `collect_signals.sh`
-  - `recommendation_status = insufficient_real_corpus`
-  - `decision_status = not_recommended`
-  - `decision_action = stop`
-  - `decision_basis_code = no_actionable_candidate`
-  - `required_next_action = record_stop_without_new_milestone`
-- `cargo xtask family verify-decision-contract --format json`
-  - `overall_verdict = "pass"`
-  - all five checks passed
-- `cargo xtask family corpus-decision --format json`
-  - `decision_action = "stop"`
-  - `decision_basis_code = "no_actionable_candidate"`
-  - `required_next_action = "record_stop_without_new_milestone"`
-- `cargo xtask family recommend --format json`
-  - `recommendation_status = "insufficient_real_corpus"`
-  - `decision_summary.decision_status = "not_recommended"`
-- `cargo test -p xtask`
-  - `155 passed; 1 failed`
-  - current failing test:
-    - `tests::recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held`
-  - observed stale assertion:
-    - expected source unit counts: `[6, 12, 9, 1, 2]`
-    - actual source unit counts: `[6, 12, 9, 3, 3]`
-
-Observed code truth:
-
-- `xtask/src/family/mod.rs`
-  - already exports `analysis_core` first
-  - already groups `decision_kernel` and `helper_surface` under explicit compatibility-only framing
-- `xtask/src/family/helper_surface.rs`
-  - already a pure passthrough to `analysis_core::helper_surface`
-- `xtask/src/family/decision_kernel.rs`
-  - already a pure passthrough to `analysis_core::decision_contract`
-- `xtask/src/family/recommend.rs`
-  - already imports `analysis_core` directly
-- `xtask/src/family/verify.rs`
-  - already imports `analysis_core` directly
-- `xtask/src/family/promotion_artifacts.rs`
-  - already imports `analysis_core` directly
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-  - already describes `analysis_core/*` as the live owner surface
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-  - already makes the same compatibility-only distinction
-
-That is the whole game. The semantic migration is already done. The remaining work is repo-root authority repair, proof-wall repair, and only-if-needed wording sync.
+- `README.md`
+  - flat TypeScript chain3 roots are documented as supported
+  - generic multi-dependency TypeScript execution is still explicitly deferred
+  - nested chain3 closure members are still explicitly unsupported
+- `TODOS.md`
+  - M52 through M56 are recorded as complete
+  - generic multi-dependency TypeScript execution remains deferred
+- `spec-core/src/validator.rs`
+  - `validate_typescript_execution_target_spec_with_specs(...)` admits chain3 roots only when direct dep slot 1 resolves to `function.wrapper.pipeline.v1`
+  - `validate_typescript_closure_member_spec_with_specs(...)` rejects closure members with compatibility key `function.wrapper.pipeline.chain3.v1`
+  - the current proof surface includes `typescript_closure_member_rejects_chain3_member`
+- `spec-core/src/typescript_backend.rs`
+  - wrapper closure recursion is already implemented
+  - closure collection already recurses over validated members
+  - chain3 closure recursion is unreachable today because validation blocks the shape first
+  - unrelated loaded units are already kept out through `included: BTreeSet<usize>`
+- `spec-cli/tests/cli.rs`
+  - the TypeScript lane already has strong pre-Bun rejection coverage for wrong family, wrong dep order, missing `body.typescript`, and molecule rejection
+  - Bun-backed success coverage exists for flat chain3, not nested chain3
+- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*`
+  - the maintained aligned proof pack is flat
+  - no maintained same-tree nested chain3 proof exists yet
 
 ## Step 0: Scope Challenge
 
 ### What already exists
 
-| Sub-problem | Existing owner or proof surface | M57 action |
+| Sub-problem | Existing owner or proof surface | M58 action |
 | --- | --- | --- |
-| semantic owner seam | `xtask/src/family/analysis_core/*` | Reuse, do not widen |
-| command-facing owner presentation | `xtask/src/family/mod.rs` | Reuse unless audit finds false wording |
-| compatibility shims | `xtask/src/family/helper_surface.rs`, `xtask/src/family/decision_kernel.rs` | Preserve as pure passthroughs |
-| direct consumers | `recommend.rs`, `verify.rs`, `promotion_artifacts.rs` | Read-only proof surfaces |
-| command dispatch and regression proof | `xtask/src/lib.rs` | Repair stale proof expectation only |
-| stop-state proof floor | `collect_signals.sh`, `verify-decision-contract`, `corpus-decision`, `cargo test -p xtask` | Reuse verbatim |
-| maintainer wording | `docs/semantic_family_capability_corpus_guide_v0.1.md`, `docs/recommendation_corpus_expansion_program_v0.1.md` | Touch only if final diff makes them false |
-| prior closeout precedent | `.runs/m53_shared_core_portability_closeout/*` | Reuse as implementation template, not product scope |
+| root eligibility for flat chain3 | `validate_typescript_chain3_dep_contract(...)` in `spec-core/src/validator.rs` | widen slot 1 only, keep slots 2 and 3 frozen |
+| closure-member gating | `validate_typescript_closure_member_spec_with_specs(...)` | admit chain3 only through the exact same bounded slot-1 contract |
+| recursive tree inclusion | `collect_typescript_closure_member(...)` in `spec-core/src/typescript_backend.rs` | extend recursion to validated nested chain3 members |
+| duplicate suppression | `included: BTreeSet<usize>` in `typescript_backend.rs` | reuse unchanged |
+| flat chain3 proof harness | `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/*` | add one maintained nested aligned path, not a second fixture system |
+| CLI TypeScript regression harness | `spec-cli/tests/cli.rs` | add nested green-path and preserved red-path coverage |
+| public contract wording | `README.md`, `TODOS.md` | rewrite exactly one TypeScript-lane claim, keep generic multi-dep deferred |
 
 ### Minimum complete slice
 
-The minimum honest M57 slice is:
+The minimum honest M58 slice is:
 
-1. replace the stale repo-root M56 authority with the actual M57 closeout contract
-2. verify that `mod.rs` and both shims still tell one ownership story
-3. repair the stale `xtask/src/lib.rs` proof expectation that M56 invalidated
-4. rerun the frozen stop-state proof floor
-5. sync docs only if the final code diff proves a wording mismatch
+1. replace the stale repo-root M57 plan with this M58 contract
+2. add one maintained same-tree nested chain3 proof shape inside the existing aligned fixture pack
+3. widen TypeScript chain3 slot 1 to allow `function.wrapper.pipeline.v1` or same-tree `function.wrapper.pipeline.chain3.v1`
+4. allow chain3 as a closure member only when that exact bounded slot-1 contract holds
+5. recurse through validated nested chain3 members in the generated TypeScript tree
+6. preserve all existing pre-Bun rejection behavior for out-of-contract recursive shapes
+7. update `README.md` and `TODOS.md` so public wording says exactly what shipped
 
 Anything smaller is fake done.
 
 Examples:
 
-- rewriting only `PLAN.md` but leaving the red `cargo test -p xtask` proof wall untouched is fake done
-- patching the red test while leaving repo-root authority aimed at the wrong milestone is fake done
+- changing validator admission without backend recursion is fake done
+- making one nested fixture pass without preserved rejection coverage is fake done
+- shipping code without updating the README nested-chain3 sentence is fake done
 
-Anything larger is scope growth:
+### Complexity and blast radius
 
-- new `analysis_core` extraction
-- consumer rewires
-- new schema or CLI work
-- new family-analysis semantics
-- more TypeScript execution
+This milestone stays small only if it remains inside the existing TypeScript lane surfaces.
 
-### Complexity check
-
-This is a small closeout milestone.
-
-Expected primary write scope:
+Expected write scope:
 
 - `PLAN.md`
-- `xtask/src/lib.rs`
+- `spec-core/src/validator.rs`
+- `spec-core/src/typescript_backend.rs`
+- `spec-cli/tests/cli.rs`
+- `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/*.unit.spec`
+- `README.md`
+- `TODOS.md`
 
-Possible secondary write scope, only if truth requires it:
+No new crate. No new command. No new artifact type. No new schema. No new runtime.
 
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/decision_kernel.rs`
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-
-No new crate. No new command. No new artifact kind. No new runtime. No new infrastructure.
+The diff will touch more files than the logic size suggests because proof fixtures and docs are part of the product surface here. That is acceptable. A new abstraction layer or a new fixture universe is not.
 
 ### Search check
 
-No new framework or unfamiliar subsystem is entering the repo.
+No unfamiliar framework or infra component enters the repo in M58.
 
-- **[Layer 1]** reuse the already-shipped `analysis_core` seam
-- **[Layer 1]** reuse the current proof floor and xtask test harness
-- **[Layer 1]** keep the shim modules as explicit compatibility-only passthroughs
-- **[Layer 3]** the first-principles insight is that M57 is smaller than the design doc's open questions made it look, because most of the seam-adoption work is already true on HEAD
+- **[Layer 1]** reuse the existing validator helpers and TypeScript-lane constants in `spec-core/src/validator.rs`
+- **[Layer 1]** reuse the existing recursive inclusion walker and `included` dedupe set in `spec-core/src/typescript_backend.rs`
+- **[Layer 1]** reuse the existing chain3 aligned fixture pack instead of inventing a new proof surface
+- **[Layer 3]** the first-principles insight is that nested chain3 is only reachable by widening chain3 slot 1, not by adding “generic closure support”
 
 ### TODOS cross-reference
 
-Relevant deferred items in `TODOS.md` remain deferred:
+This plan must preserve the current deferred boundary in `TODOS.md`:
 
-- generalized multi-wedge decision layer
-- cross-crate family-analysis shared core
-- public semantic fingerprint fields
+- generic multi-dependency TypeScript execution stays deferred
+- no second follow-on is created unless implementation pressure proves a need for slot-2/slot-3 recursion or cross-library recursive closure
 
-M57 must not silently consume any of those follow-ons.
+M58 must not silently absorb the generic DAG milestone.
 
 ### Completeness check
 
-Choose the complete closeout, not the cosmetic one.
+Choose the complete bounded version, not the shortcut.
 
 The complete version is still small:
 
-1. authority truth
-2. code truth
-3. proof truth
-4. doc truth, only if needed
+1. green path for same-tree nested chain3
+2. preserved red paths for wrong nested shapes
+3. updated docs and backlog wording
 
-The shortcut would be "leave the red proof because it is only a stale expectation." That is not acceptable. A stale proof wall is still a lie.
+The shortcut is “make one fixture pass and skip the rejection wall.” That saves almost nothing and leaves the lane undefined. Not acceptable.
 
 ### Distribution check
 
 No new distributable artifact is introduced.
 
-This is internal `xtask` and maintainer-surface cleanup inside the existing repo and the existing `xtask` binary.
+This remains an existing `spec` CLI capability widen:
 
-## Exact Contract
+- `cargo install spec-cli`
+- existing GitHub Releases
+- existing CI
+- existing target-proof storage in passports
+
+## Milestone Contract
+
+### Exact shipped behavior
+
+After M58:
+
+- a TypeScript chain3 root may use a same-tree chain3 unit in direct dep slot 1
+- that nested chain3 unit may itself recurse again through the same bounded rule
+- every nested chain3 still uses the frozen ordered tuple:
+  - slot 1 = `function.wrapper.pipeline.v1` or same-tree `function.wrapper.pipeline.chain3.v1`
+  - slot 2 = `function.arithmetic_leaf.monotone_up.v1`
+  - slot 3 = `function.arithmetic_leaf.monotone_down_nonnegative.v1`
+- every reachable direct or recursive member must author non-empty `body.typescript`
+- recursive closure collection stays limited to reachable validated members in the loaded unit set
+
+### Same-tree rule
+
+“Same-tree” means:
+
+- the nested chain3 dep is authored as a local dep id like `pricing/base_nested_chain3_aligned`
+- it does not use a library-qualified dep such as `shared::pricing/base_nested_chain3_aligned`
+- it resolves from the same loaded unit set as the root
+- the validator enforces that locality on the slot-1 recursive path, not by path heuristics in the backend
 
 ### In scope
 
-- repo-root authority reset from stale M56 execution scope to truthful M57 closeout scope
-- proof-wall repair in `xtask/src/lib.rs` where locked corpus expectations no longer match current repo truth
-- audit of `xtask/src/family/mod.rs`, `helper_surface.rs`, and `decision_kernel.rs` to confirm the owner-surface story is still single and explicit
-- final stop-state parity proof via:
-  - `collect_signals.sh`
-  - `cargo xtask family verify-decision-contract --format json`
-  - `cargo xtask family corpus-decision --format json`
-  - `cargo test -p xtask`
-- docs sync only when the final code diff would otherwise leave maintainer wording false
+- widen TypeScript chain3 slot 1 from wrapper-only to wrapper-or-same-tree-chain3
+- keep that widen bounded to the TypeScript lane only
+- preserve slot 2 as monotone-up and slot 3 as monotone-down-nonnegative
+- allow a chain3 closure member only when it satisfies the exact bounded slot-1 contract
+- recurse through validated nested chain3 members during TypeScript tree generation
+- keep helper recursion behavior unchanged under monotone-up and monotone-down members
+- add one maintained nested aligned proof path in the existing chain3 family fixture pack
+- add CLI proof for:
+  - nested green path
+  - wrong first-slot family rejection
+  - wrong dep order rejection
+  - missing nested `body.typescript` rejection
+  - cross-library nested chain3 rejection
+- update `README.md` and `TODOS.md` to name the new bounded recursive slice precisely
 
 ### Not in scope
 
-- new semantic-review capability
-- new family promotion work
-- corpus run `1`
-- recommendation-policy changes
-- shared-core extraction into a new crate
-- consumer rewires in `recommend.rs`, `verify.rs`, or `promotion_artifacts.rs`
-- CLI flag changes
-- JSON schema changes
-- artifact-path changes
-- TypeScript lane work
-- rewriting `ORCH_PLAN.md` as part of this slice
-- opportunistic cleanup of unrelated xtask tests beyond the directly observed stale closeout proof
+- generic multi-dependency TypeScript execution
+- arbitrary supported-function DAG execution
+- widening any slot other than chain3 slot 1
+- cross-library recursive chain3 closure as a general rule
+- molecule TypeScript execution
+- seam-kind TypeScript execution
+- `spec validate --target-language`
+- `spec export --target-language`
+- passport, status, or export schema changes
+- new semantic-family promotion work
+- `ORCH_PLAN.md` refresh as part of this plan-only rewrite
 
-### Locked decisions
+## Locked Decisions
 
-These are not open questions anymore:
+These are not open questions for M58:
 
-1. `xtask/src/family/analysis_core/*` remains the only semantic owner surface.
-2. `xtask/src/family/helper_surface.rs` and `xtask/src/family/decision_kernel.rs` stay as compatibility-only passthrough shims in this milestone.
-3. `recommend.rs`, `verify.rs`, and `promotion_artifacts.rs` are read-only proof surfaces for M57.
-4. `cargo xtask family verify-decision-contract --format json` must stay `pass`.
-5. `cargo xtask family corpus-decision --format json` must keep:
-   - `decision_action = "stop"`
-   - `decision_basis_code = "no_actionable_candidate"`
-   - `required_next_action = "record_stop_without_new_milestone"`
-6. The stale `xtask/src/lib.rs` recommendation coverage assertion is in scope because it currently blocks a green proof wall.
-7. Docs change only if they become false after the final code diff. If they already say the truth, leave them alone.
+1. Bun remains the only TypeScript runtime contract.
+2. The TypeScript lane still speaks in family language, not generic graph language.
+3. The recursive widen is only:
+   - chain3 slot 1
+   - same loaded tree
+   - same promoted family set
+4. The milestone is an execution-contract widen, not a semantic-review model rewrite.
+5. Public wording must continue to say generic multi-dependency execution is deferred.
+6. The backend must not infer locality or reachability that the validator did not already approve.
+7. The implementation stays explicit. No generic “allowed family graph” registry for M58.
 
-### Abort and re-scope triggers
+## Architecture Review
 
-Stop M57 and write a new plan instead if any of these become true:
+### Current vs target lane shape
 
-1. fixing the red proof wall requires semantic edits in `recommend.rs`, `verify.rs`, or `promotion_artifacts.rs`
-2. the only way to make `cargo test -p xtask` green is to loosen assertions instead of updating them to current locked truth
-3. owner-surface truth now requires a new abstraction layer or a new helper module
-4. doc sync requires changing product claims rather than tightening ownership wording
-5. proof parity requires changing command output, CLI flags, or artifact JSON
-6. more unrelated xtask failures appear and they are not caused by the shared-core closeout blast radius
-
-## Current vs Target State
-
-### Current
+Current shape:
 
 ```text
-repo-root PLAN.md
-  -> stale M56 TypeScript authority
+outer_chain3 root
+├── slot 1: wrapper only
+├── slot 2: monotone_up
+└── slot 3: monotone_down
 
-analysis_core owner seam
-  -> already correct
+closure members allowed:
+- wrapper
+- monotone_up
+- monotone_down
+- helper
 
-compatibility shims
-  -> already correct
-
-maintainer docs
-  -> already correct
-
-xtask proof wall
-  -> one stale locked recommendation coverage assertion
+closure members rejected:
+- chain3
 ```
 
-### Target
+Target M58 shape:
 
 ```text
-repo-root PLAN.md
-  -> truthful M57 closeout authority
-
-analysis_core owner seam
-  -> unchanged, still the only semantic owner surface
-
-compatibility shims
-  -> unchanged, still explicit passthroughs
-
-maintainer docs
-  -> unchanged unless falsehood is proven
-
-xtask proof wall
-  -> green, with current corpus counts encoded explicitly
+outer_chain3 root
+├── slot 1: wrapper OR same-tree chain3
+│   ├── if wrapper:
+│   │   ├── monotone_down
+│   │   └── monotone_up
+│   │       └── helper?
+│   └── if chain3:
+│       ├── slot 1: wrapper OR same-tree chain3
+│       ├── slot 2: monotone_up
+│       │   └── helper?
+│       └── slot 3: monotone_down
+├── slot 2: monotone_up
+│   └── helper?
+└── slot 3: monotone_down
+    └── helper?
 ```
 
-### Dependency graph
+Still out:
 
 ```text
-analysis_core/*
-  ├── helper_surface.rs
-  ├── decision_contract.rs
-  └── proof_fingerprint.rs
-        │
-        ├── recommend.rs
-        ├── verify.rs
-        ├── promotion_artifacts.rs
-        ├── helper_surface.rs shim
-        └── decision_kernel.rs shim
-
-xtask/src/lib.rs
-  └── command-dispatch and regression proof surface
-
-PLAN.md
-  └── repo-root authority for what implementers should do next
+- chain3 in slot 2
+- chain3 in slot 3
+- arbitrary new families in any slot
+- cross-library recursive chain3
+- unrelated loaded units entering the TypeScript tree
 ```
 
-## Implementation Plan
+### Concrete module boundaries
 
-### Phase 1: Refresh repo-root authority and freeze scope
-
-Files:
-
-- `PLAN.md`
-
-Changes:
-
-1. remove the stale M56 Bun/TypeScript execution contract from repo-root authority
-2. replace it with the bounded M57 closeout contract in this file
-3. pin the exact observed stop-state truth and the known stale-proof issue
-4. pin the exact write scope so M57 cannot silently expand
-
-Acceptance:
-
-- repo-root authority points at the same problem the branch-level design doc points at
-- the plan no longer authorizes TypeScript execution work
-- the plan makes the stale `xtask` proof issue explicit instead of hiding it
-
-### Phase 2: Audit owner-surface presentation and keep it boring
-
-Files:
-
-- `xtask/src/family/mod.rs`
-- `xtask/src/family/helper_surface.rs`
-- `xtask/src/family/decision_kernel.rs`
-
-Changes:
-
-1. verify `analysis_core` is still presented as the maintained owner surface
-2. verify both shims are still pure passthroughs with no semantic logic
-3. touch these files only if the audit finds a real falsehood
-4. do not "clean them up" just because they look small enough to edit
-
-Acceptance:
-
-- either no code change is needed, or any edit is purely wording or presentation and does not change behavior
-- no new helper layer appears
-- no semantic logic moves into shims
-
-### Phase 3: Repair the stale proof wall
-
-Files:
-
-- `xtask/src/lib.rs`
-
-Changes:
-
-1. update the locked recommendation coverage assertion to current repo truth if the kickoff audit confirms the corpus counts are now durably `[6, 12, 9, 3, 3]`
-2. keep the assertion explicit, do not replace it with filesystem-driven "auto discover expected counts" logic
-3. keep the existing owner-surface and compatibility-surface proof intact
-4. if another nearby assertion is stale for the same reason, repair it in the same change only if it is in the same test blast radius
-
-Acceptance:
-
-- `tests::recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held` passes
-- the test still proves locked truth instead of becoming more permissive
-- the proof surface still rejects semantic drift
-
-### Phase 4: Docs sync only if the code diff makes docs false
-
-Files, only if needed:
-
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
-
-Changes:
-
-1. only touch wording that would be false after the final code diff
-2. keep the same stop-state truth
-3. keep the same owner-surface story
-4. do not reopen roadmap narrative or corpus-strategy narrative
-
-Acceptance:
-
-- docs either stay untouched because they were already true, or land with a narrow wording sync only
-
-### Phase 5: Final proof wall
-
-Commands:
-
-```bash
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family verify-decision-contract --format json
-cargo test -p xtask
+```text
+authored .unit.spec
+        |
+        v
+spec-core/src/validator.rs
+  - validate_typescript_execution_target_spec_with_specs(...)
+  - validate_typescript_chain3_dep_contract(...)
+  - validate_typescript_closure_member_spec_with_specs(...)
+        |
+        v
+spec-core/src/typescript_backend.rs
+  - collect_typescript_root_closure(...)
+  - collect_typescript_closure_member(...)
+  - generate_typescript_tree(...)
+        |
+        v
+spec-cli/tests/cli.rs
+  - pre-Bun rejection tests
+  - Bun-backed success tests
+        |
+        v
+README.md / TODOS.md
+  - public contract
 ```
 
-Acceptance:
+### File-by-file implementation contract
 
-- `recommendation_status = insufficient_real_corpus`
-- `decision_status = not_recommended`
-- `decision_action = stop`
-- `decision_basis_code = no_actionable_candidate`
-- `required_next_action = record_stop_without_new_milestone`
-- `cargo xtask family verify-decision-contract --format json` stays `pass`
-- `cargo test -p xtask` is green
+| Surface | Current behavior | Required M58 change | Must stay true after the change |
+| --- | --- | --- | --- |
+| `spec-core/src/validator.rs` | chain3 roots require slot 1 = wrapper; closure members reject chain3 | widen slot 1 only, and admit chain3 closure members only when the same bounded slot-1 contract holds | slots 2 and 3 stay frozen; cross-library recursive chain3 still rejects before Bun |
+| `spec-core/src/typescript_backend.rs` | wrapper recursion works; chain3 recursion is unreachable | recurse through validated nested chain3 members | unrelated loaded units still stay out of the generated tree |
+| `spec-cli/tests/cli.rs` | flat chain3 green path and red paths exist | add nested green path and preserved recursive rejection wall | all new recursive rejections happen before Bun |
+| `semantic-families/.../fixtures/aligned/*` | flat aligned chain3 fixture only | add one maintained nested aligned path | no second fixture universe, no cross-library recursive proof |
+| `README.md` | nested chain3 closure explicitly unsupported | replace that sentence with the exact bounded recursive rule | generic multi-dep still explicitly deferred |
+| `TODOS.md` | generic multi-dep deferred | keep the defer line, do not overclaim M58 | M58 is not recorded as generic graph support |
+
+### Opinionated architecture recommendation
+
+Keep this implementation boring.
+
+Recommended shape:
+
+1. split slot-1 handling from slot-2 and slot-3 handling inside `validate_typescript_chain3_dep_contract(...)`
+2. keep slot-2 and slot-3 validation exactly as they are
+3. extend the closure-member matcher with one explicit `chain3` arm
+4. extend `collect_typescript_closure_member(...)` with one explicit `chain3` recursion branch
+
+Do not build a generic “TypeScript family graph” registry. This repo does not need that abstraction yet. M58 spends no innovation tokens on cleverness.
+
+### Public wording delta
+
+`README.md` must stop saying nested chain3 closure is unsupported and instead say the exact new rule:
+
+- chain3 roots still require exactly three direct deps
+- slot 1 may be wrapper or same-tree chain3
+- slot 2 and slot 3 stay fixed to monotone-up then monotone-down-nonnegative
+- recursive chain3 closure is same-tree only
+- generic multi-dependency execution is still unsupported
+
+`TODOS.md` must keep the deferred line aimed at generic multi-dependency TypeScript execution. Do not replace that defer with language that sounds like graph parity shipped.
 
 ## Code Quality Review
 
-### Guardrails
+### Keep the diff minimal
 
-- No new abstraction layer.
-- No semantic logic in shim files.
-- No dynamic "figure out expected counts from the current tree" test logic.
-- No consumer rewires.
-- No comment churn that says the same thing twice with different words.
-- Minimal diff wins. If `mod.rs` and the shims are already true, do not touch them.
+Minimal-diff recommendation:
 
-### DRY targets
+- modify the existing chain3 contract helper, do not invent a new validator subsystem
+- add the recursion branch inside `collect_typescript_closure_member(...)`, do not refactor the whole inclusion walker
+- keep proof in existing unit-test and CLI-test files
+- reuse the existing aligned chain3 fixture directory
 
-- Keep the owner-surface story singular: `analysis_core/*` owns semantics, everywhere.
-- Keep the stale-proof repair local to the existing xtask proof surface. Do not duplicate the same counts or coverage expectations into a second helper.
+### DRY rule
 
-### Technical-debt traps to avoid
+Avoid duplicating “supported TypeScript family” logic across three places in slightly different words.
 
-- silently broadening M57 into "shared-core cleanup"
-- updating the failing xtask test by deleting useful assertions
-- fixing proof drift by teaching the test to accept whatever the filesystem currently says
-- reopening historical M51/M53 debates that the current branch already settled
+The right DRY level is small and local:
+
+- one explicit slot-1 contract helper in `validator.rs`
+- one explicit chain3 recursion branch in `typescript_backend.rs`
+- one shared phrasing update for the recursive contract error surface
+
+The wrong DRY level is a new generic abstraction that hides which exact families M58 admits.
+
+### Error-handling and naming rule
+
+All new rejection paths must fail before Bun runs and must stay lane-specific.
+
+Required behavior:
+
+- nested chain3 wrong slot or wrong family: TypeScript lane error, not a generic semantic-review failure
+- cross-library nested chain3: explicit rejection that says recursive chain3 remains same-tree only in M58
+- missing nested `body.typescript`: same pre-Bun contract failure class as existing M55/M56 errors
+
+Where semantics changed, update stale `in M55` / `in M56` wording to `in M58`. Do not leave the new recursive rule guarded by stale milestone text.
+
+### Diagram maintenance rule
+
+If any nearby ASCII diagram or explanatory comment in touched files becomes stale, update it in the same change. Stale diagrams are worse than no diagrams.
 
 ## Test Review
 
-### Test framework detection
+100% coverage is the target for the new behavior slice.
 
-This repo uses the Rust test harness.
+### Test framework
 
-- runtime: `Cargo.toml`
-- primary suite: `cargo test -p xtask`
-- command parity proof: `collect_signals.sh`, `recommend`, `corpus-decision`, `verify-decision-contract`
+- runtime: Rust / Cargo
+- unit tests: inline `#[test]` in `spec-core`
+- integration tests: `spec-cli/tests/cli.rs`
+- live TypeScript execution proof: Bun-backed CLI integration tests
 
-### Code path coverage diagram
+### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] xtask/src/family/mod.rs
-    ├── [EXISTS] `analysis_core` presented as maintained owner surface
-    └── [PLAN GUARD] compatibility block remains compatibility-only
+[+] spec-core/src/validator.rs
+    │
+    ├── validate_typescript_chain3_dep_contract(...)
+    │   ├── [EXISTING] flat chain3 slot 1 == wrapper, slot 2 == up, slot 3 == down
+    │   ├── [GAP]      slot 1 == same-tree nested chain3 should pass
+    │   ├── [GAP]      slot 1 == cross-library nested chain3 should fail
+    │   ├── [GAP]      slot 1 == wrong family should fail with M58 wording
+    │   └── [GAP]      nested chain3 missing body.typescript should fail pre-Bun
+    │
+    └── validate_typescript_closure_member_spec_with_specs(...)
+        ├── [EXISTING] wrapper closure member passes
+        ├── [EXISTING] chain3 closure member fails
+        └── [GAP]      chain3 closure member passes only under bounded M58 contract
 
-[+] xtask/src/family/helper_surface.rs
-    └── [EXISTS] passthrough-only shim over `analysis_core::helper_surface`
-
-[+] xtask/src/family/decision_kernel.rs
-    └── [EXISTS] passthrough-only shim over `analysis_core::decision_contract`
-
-[+] xtask/src/family/recommend.rs
-    └── [EXISTS] direct `analysis_core` consumer, read-only proof surface
-
-[+] xtask/src/family/verify.rs
-    └── [EXISTS] direct `analysis_core` consumer, read-only proof surface
-
-[+] xtask/src/family/promotion_artifacts.rs
-    └── [EXISTS] direct `analysis_core` consumer, read-only proof surface
-
-[+] xtask/src/lib.rs
-    ├── [EXISTS] compatibility-path regression proof from M53
-    ├── [EXISTS] command-dispatch proof for `verify-decision-contract`
-    └── [GAP] stale locked recommendation coverage counts after M56 corpus growth
-
-[+] command proof floor
-    ├── [EXISTS] `collect_signals.sh` stop-state parity
-    ├── [EXISTS] `family corpus-decision --format json`
-    ├── [EXISTS] `family verify-decision-contract --format json`
-    └── [GAP] full `cargo test -p xtask` currently red because one locked assertion is stale
-
-─────────────────────────────────
-COVERAGE TARGET: 100% of the closeout blast radius
-QUALITY TARGET: explicit locked truth, no dynamic expectation logic
-CRITICAL GAP: stale `xtask/src/lib.rs` coverage assertion keeps the proof wall red
-─────────────────────────────────
+[+] spec-core/src/typescript_backend.rs
+    │
+    ├── collect_typescript_closure_member(...)
+    │   ├── [EXISTING] wrapper recursion
+    │   ├── [EXISTING] helper recursion
+    │   ├── [GAP]      nested chain3 recursion
+    │   └── [GAP]      unrelated loaded units still excluded when nested chain3 exists
+    │
+    └── generate_typescript_tree(...)
+        └── [GAP]      nested chain3 tree emits outer root + nested chain3 + reachable deps only
 ```
 
-### Required tests to add or refresh
+### User-flow coverage
 
-#### `xtask/src/lib.rs`
+```text
+USER FLOW COVERAGE
+===========================
+[+] Happy path
+    │
+    └── [GAP] [→CLI] spec test <nested_chain3_unit> --target-language typescript passes
 
-- refresh `recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held`
-  - expected source ids stay:
-    - `examples_ecommerce`
-    - `m19_semantic_falsification_pack`
-    - `m20_unsupported_truth_pack`
-    - `examples_shared_spec`
-    - `examples_crosslib_app`
-  - expected source unit counts update to current locked truth:
-    - `[6, 12, 9, 3, 3]`
-  - total function coverage stays aligned with current truth from `collect_signals.sh`
+[+] Contract rejections
+    │
+    ├── [GAP] [→CLI] nested chain3 with wrong first-slot family fails before Bun
+    ├── [GAP] [→CLI] nested chain3 with wrong dep order fails before Bun
+    ├── [GAP] [→CLI] nested chain3 with missing nested body.typescript fails before Bun
+    └── [GAP] [→CLI] nested cross-library chain3 fails before Bun
 
-#### Read-only proof surfaces that must remain green
-
-- `family_verify_decision_contract_help_exits_successfully`
-- `family_verify_decision_contract_rejects_non_json_format_from_cli_dispatch`
-- existing `analysis_core` branch tests under:
-  - `family::analysis_core::helper_surface::tests::*`
-  - `family::analysis_core::decision_contract::tests::*`
-  - `family::analysis_core::proof_fingerprint::tests::*`
-
-### Test command wall
-
-Run these exact commands before calling the milestone complete:
-
-```bash
-cargo test -p xtask recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held -- --nocapture
-cargo test -p xtask family::analysis_core::helper_surface::tests -- --nocapture
-cargo test -p xtask family::analysis_core::decision_contract::tests -- --nocapture
-cargo test -p xtask family::analysis_core::proof_fingerprint::tests -- --nocapture
-./.agents/skills/next-milestone/scripts/collect_signals.sh
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family verify-decision-contract --format json
-cargo test -p xtask
+[+] Tree integrity
+    │
+    └── [GAP] [→UNIT] unrelated loaded units stay out of generated TypeScript tree
 ```
+
+### Required proof additions by file
+
+1. `spec-core/src/validator.rs`
+   - replace the current “chain3 closure member rejects” proof with bounded recursive admission coverage:
+     - same-tree nested chain3 allowed
+     - cross-library nested chain3 rejected
+     - wrong first-slot family rejected
+     - missing nested `body.typescript` rejected
+   - keep flat-chain3 root coverage green
+2. `spec-core/src/typescript_backend.rs`
+   - add unit coverage proving:
+     - nested chain3 closure inclusion works
+     - unrelated loaded units still stay excluded
+     - repeated reachable members are still deduped
+3. `spec-cli/tests/cli.rs`
+   - add Bun-backed success coverage for the maintained nested aligned fixture
+   - add pre-Bun rejection coverage for:
+     - wrong nested first-slot family
+     - wrong nested dep order
+     - missing nested `body.typescript`
+     - cross-library nested chain3
+4. `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/`
+   - add one outer nested-chain3 root unit
+   - add one nested chain3 member unit
+   - reuse the existing aligned wrapper and leaf units
+
+### Maintained fixture shape
+
+Use the existing aligned bucket. Add exactly two new units:
+
+```text
+pricing/checkout_nested_chain3_aligned
+├── pricing/base_nested_chain3_aligned      (chain3, local)
+├── pricing/pricing_tax_leaf_aligned        (up)
+└── pricing/pricing_discount_leaf_aligned   (down)
+
+pricing/base_nested_chain3_aligned
+├── pricing/pricing_total_wrapper_aligned   (wrapper)
+├── pricing/pricing_tax_leaf_aligned        (up)
+└── pricing/pricing_discount_leaf_aligned   (down)
+```
+
+That proves the exact recursive slot-1 contract and nothing broader.
+
+### Regression rule
+
+This is a regression-style contract change against the old rejection wall.
+
+That means the green nested same-tree case lands with regression proof in the same change. No deferral.
+
+### QA handoff checklist
+
+Affected CLI commands and proofs:
+
+- `spec test <nested-chain3-unit> --target-language typescript`
+- `spec build <aligned fixture root> --target-language typescript`
+- `spec status <aligned fixture root> --target-language typescript`
+
+Critical behaviors to verify:
+
+- same-tree nested chain3 executes successfully
+- recursive dep order stays frozen
+- cross-library recursive chain3 rejects before Bun
+- missing nested `body.typescript` rejects before Bun
+- unrelated loaded units never leak into the emitted TypeScript tree
 
 ## Performance Review
 
-This milestone is not runtime-performance-driven.
+This change must not alter the asymptotic class of the TypeScript tree walk.
 
-Real performance and maintenance risks are smaller:
+Expected characteristics:
 
-1. turning a locked explicit regression test into dynamic discovery would make failures slower to diagnose
-2. widening the blast radius into consumer rewires would burn time on non-user-facing churn
-3. rerunning the full xtask proof wall repeatedly during implementation is wasted time once the targeted stale test is repaired
+- traversal remains bounded to reachable loaded units
+- `included: BTreeSet<usize>` continues to dedupe repeated reachable members
+- recursion depth is bounded by the validated acyclic authored graph
+- no new cache is needed
 
-Performance acceptance:
+Performance risks to avoid:
 
-- no new filesystem crawl in tests
-- no new helper that computes expectations indirectly
-- one targeted test run before the full suite is enough
+- do not rescan the entire loaded set to find nested members
+- do not add a second inclusion structure beside `included`
+- do not emit duplicate modules for repeated nested chain3 reuse
 
-## Failure Modes Registry
+## Failure Modes
 
-| Failure mode | Test required | Error handling required | User-visible outcome |
-| --- | --- | --- | --- |
-| repo-root authority still points at M56 after code closeout lands | Yes | No silent acceptance | implementers pick the wrong milestone |
-| stale coverage assertion is "fixed" by removing proof value | Yes | Yes, review must reject it | green test suite that no longer protects drift |
-| shim file quietly regains semantic logic | Yes | Yes, code review + proof wall | future ownership confusion |
-| docs drift back into dual-ownership wording | Manual proof | No | maintainer confusion, false teaching surface |
-| full xtask suite stays red for unrelated reasons | Yes | Yes, explicit re-scope | milestone cannot claim closeout |
+| New codepath | Real failure | Test covers it? | Error handling exists? | User-visible outcome |
+| --- | --- | --- | --- | --- |
+| nested chain3 slot-1 admission | cross-library nested chain3 is admitted by mistake | required | required | clear rejection before Bun |
+| closure-member recursion | nested chain3 reachable deps are not included | required | compile/test proof | build failure with specific lane context |
+| dedupe and inclusion boundary | unrelated loaded units leak into generated tree | required | unit-test proof | silent over-inclusion if untested |
+| missing nested TypeScript body | runtime hits Bun instead of rejecting early | required | required | clear rejection before Bun |
+| wrong nested dep order | lane accepts a graph outside the frozen family contract | required | required | clear rejection before Bun |
 
 Critical gap rule:
 
-The milestone is blocked until the stale `xtask/src/lib.rs` proof issue is closed or a re-scope decision is made with evidence that the failure is not actually in the M57 blast radius.
+If any one of the first four rows lands without a direct test, M58 is not ready.
+
+## Implementation Sequence
+
+### 1. Freeze authority
+
+- keep this `PLAN.md` as the repo-root contract
+- leave `ORCH_PLAN.md` untouched for now
+
+### 2. Add the maintained nested aligned proof
+
+- add `pricing/base_nested_chain3_aligned.unit.spec`
+- add `pricing/checkout_nested_chain3_aligned.unit.spec`
+- keep the proof same-tree and local
+- reuse existing aligned wrapper and leaf units
+
+### 3. Widen validator slot 1 only
+
+- update `validate_typescript_chain3_dep_contract(...)`
+- separate slot-1 handling from slot-2 and slot-3 handling
+- allow slot 1 to resolve to:
+  - `function.wrapper.pipeline.v1`
+  - `function.wrapper.pipeline.chain3.v1` when same-tree local
+- keep slot 2 and slot 3 unchanged
+- make the cross-library recursive rejection explicit in the validator
+
+### 4. Widen closure-member admission
+
+- update `validate_typescript_closure_member_spec_with_specs(...)`
+- admit chain3 closure members only through the same bounded slot-1 contract
+- preserve helper, wrapper, monotone-up, and monotone-down rules unchanged
+
+### 5. Recurse through nested chain3 in the backend
+
+- update `collect_typescript_closure_member(...)`
+- when the validated closure member is chain3:
+  - recurse into its three direct deps
+  - continue to use `collect_typescript_closure_member(...)` for each dep
+  - rely on `included` to avoid duplicate emission
+- keep unrelated loaded-unit exclusion tests green
+
+### 6. Lock the proof wall
+
+- extend validator tests in `spec-core/src/validator.rs`
+- extend backend tree tests in `spec-core/src/typescript_backend.rs`
+- extend Bun-backed and pre-Bun CLI proof in `spec-cli/tests/cli.rs`
+
+### 7. Rewrite public wording
+
+- `README.md`
+  - replace the nested-chain3 unsupported sentence
+  - name the exact new rule:
+    - chain3 slot 1 may be wrapper or same-tree chain3
+    - slot 2 and slot 3 stay fixed
+    - generic multi-dep still unsupported
+- `TODOS.md`
+  - keep generic multi-dependency TypeScript execution deferred
+  - do not record M58 as generic graph support
+
+## Acceptance Commands
+
+Run these before calling M58 done:
+
+```bash
+cargo test -p spec-core typescript_nested_chain3
+cargo test -p spec-core typescript_tree_renders_nested_chain3
+cargo test -p spec-cli --test cli typescript_nested_chain3
+```
+
+Then run the maintained fixture proof directly:
+
+```bash
+cargo run -p spec-cli -- test semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/checkout_nested_chain3_aligned.unit.spec --target-language typescript
+```
+
+Finally run the whole lane-facing regression surface:
+
+```bash
+cargo test -p spec-core
+cargo test -p spec-cli --test cli
+```
+
+Acceptance is not complete until all three gates are green:
+
+1. validator recursive admission and rejection proofs are green
+2. generated TypeScript tree includes the nested chain3 closure and excludes unrelated units
+3. Bun-backed nested-chain3 execution passes while all recursive red paths still fail before Bun
+
+## NOT in scope
+
+- cross-library nested chain3 recursion
+  - rationale: that is a second widen and would blur the same-tree boundary immediately
+- slot-2 or slot-3 recursive widening
+  - rationale: that becomes a new family rule, not the M58 seam
+- generic DAG execution policy
+  - rationale: still an ocean, still explicitly deferred
+- molecule TypeScript execution
+  - rationale: unrelated product surface with its own proof model
+- target-language validate/export
+  - rationale: no need to widen CLI shape to ship this recursive slice
 
 ## Worktree Parallelization Strategy
-
-This plan has limited parallelization value. Most real work is sequential because the closeout is small and one proof file is the critical path.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| Scope and owner-surface audit | `PLAN.md`, `xtask/src/family/`, `docs/` | — |
-| Lane A: proof-wall repair | `xtask/src/lib.rs` | audit |
-| Lane B: owner-surface wording sync, only if audit proves it is false | `xtask/src/family/mod.rs`, `xtask/src/family/helper_surface.rs`, `xtask/src/family/decision_kernel.rs` | audit |
-| Lane C: docs sync, only if code diff makes docs false | `docs/semantic_family_capability_corpus_guide_v0.1.md`, `docs/recommendation_corpus_expansion_program_v0.1.md` | Lane A + Lane B decision |
-| Final proof wall | xtask commands and tests | Lane A, optional Lane B, optional Lane C |
+| validator slot-1 widen | `spec-core/src/` | — |
+| backend nested recursion | `spec-core/src/` | validator slot-1 widen |
+| nested aligned fixture plus CLI proof | `semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/`, `spec-cli/tests/` | — |
+| docs plus backlog sync | repo-root docs | validator slot-1 widen, backend nested recursion, CLI proof |
 
 ### Parallel lanes
 
-- `Lane A: xtask/src/lib.rs` proof-wall repair
-- `Lane B: owner-surface wording audit/sync only if the audit finds a real falsehood`
-- `Lane C: docs sync only if the final code diff would otherwise leave docs false`
+- Lane A: validator slot-1 widen → backend nested recursion
+  - sequential, shared `spec-core/src/`
+- Lane B: nested aligned fixture plus CLI proof
+  - parallelizable, but it must coordinate exact fixture ids and final error wording with Lane A
+- Lane C: docs plus backlog sync
+  - sequential after A and B merge, because public wording must match shipped behavior exactly
 
 ### Execution order
 
-1. run the owner-surface audit first
-2. if the audit confirms `mod.rs` and both shims are already truthful, skip Lane B entirely
-3. execute Lane A next and get the targeted stale xtask test green
-4. only if docs are now false, run Lane C
-5. run the final proof wall last
+Launch Lane A and Lane B in parallel worktrees.
+
+Merge both only after:
+
+1. validator behavior is stable
+2. nested fixture ids are locked
+3. CLI proof expectations match final validator wording
+
+Then run Lane C for docs and backlog wording.
 
 ### Conflict flags
 
-- `xtask/src/lib.rs` is single-owner work. Do not split it across lanes.
-- `xtask/src/family/` wording sync is only worth doing if the audit finds a real falsehood. Otherwise it is churn.
-- Docs must not move ahead of proof. They are last and conditional.
-
-Net recommendation:
-
-Sequential implementation is preferred. Only spin a parallel docs lane if the code diff makes doc wording false.
-
-## NOT in Scope
-
-- semantic-review roadmap resets
-- recommendation-policy changes
-- corpus program redesign
-- new coverage sources or corpus inputs
-- changes to `collect_signals.sh`
-- changes to `recommend.rs`, `verify.rs`, or `promotion_artifacts.rs` unless a real blast-radius blocker is discovered
-- `ORCH_PLAN.md` rewrite
-- opportunistic xtask cleanup outside the directly observed stale closeout proof
-
-## Acceptance Checklist
-
-- [ ] repo-root `PLAN.md` is aligned to M57 closeout scope
-- [ ] `analysis_core/*` remains the only semantic owner surface
-- [ ] `helper_surface.rs` and `decision_kernel.rs` remain compatibility-only passthroughs
-- [ ] the stale `xtask/src/lib.rs` recommendation coverage assertion is refreshed to current locked truth
-- [ ] `collect_signals.sh` still reports the same stop-state summary
-- [ ] `cargo xtask family recommend --format json` still reports `insufficient_real_corpus` and `not_recommended`
-- [ ] `cargo xtask family corpus-decision --format json` still reports `stop` and `no_actionable_candidate`
-- [ ] `cargo xtask family verify-decision-contract --format json` still passes
-- [ ] `cargo test -p xtask` is green
-- [ ] docs were either left alone because they were already true or landed with a narrow wording sync only
+- Lane A and Lane B do not share files, but they do share fixture ids and validator-error wording
+- avoid editing `README.md` from either parallel lane, keep that in Lane C
+- do not split validator and backend into separate worktrees, both live in `spec-core/src/`
 
 ## Completion Summary
 
-- Step 0: scope accepted as the bounded M57 closeout slice
-- Architecture: existing `analysis_core` seam reused, not reinvented
-- Code quality target: explicit locked proof, no clever dynamic expectations
-- Test review: one concrete stale-proof gap identified in `xtask/src/lib.rs`
-- Performance review: keep the closeout local and avoid new indirection
-- NOT in scope: written
-- What already exists: written
-- Failure modes: written, with the red proof-wall gap called out explicitly
-- Parallelization: 3 possible lanes, but sequential execution is preferred and likely sufficient
-- Lake Score: 5/5 recommendations choose the complete bounded closeout over the cosmetic shortcut
+- Step 0: Scope Challenge
+  - scope accepted as a bounded slot-1 recursive widen only
+- Architecture Review
+  - one required contract clarification: nested chain3 is only reachable by widening slot 1
+- Code Quality Review
+  - explicit-over-clever implementation required, no generic graph registry
+- Test Review
+  - maintained nested proof path required
+  - Bun-backed green path required
+  - pre-Bun rejection wall must stay strong
+- Performance Review
+  - no new asymptotic risk if recursion stays on the existing included-set walker
+- NOT in scope
+  - written
+- What already exists
+  - written
+- Failure modes
+  - written with critical-gap rule
+- Parallelization
+  - 3 lanes total
+  - 1 parallel launch wave
+  - 2 sequential follow-on stages
 
-## Next Step
+## Why This Plan Wins
 
-Implement the proof-wall repair first.
+It reads like one execution contract now, not a mix of stale milestone cleanup notes and partial review commentary.
 
-If that repair turns out to need semantic consumer changes, stop immediately and write a new plan. That would no longer be M57 closeout. It would be a different milestone.
+It names the exact M58 behavior widen, ties that behavior to concrete files and proof gates, preserves the bounded family-shaped story, and leaves no room to accidentally smuggle generic graph execution into the TypeScript lane. That is the right bar for this milestone.

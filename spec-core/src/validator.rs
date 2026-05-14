@@ -71,7 +71,9 @@ pub const TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
 pub const TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires every direct dep to resolve from the loaded unit set in M56";
 pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M56";
+    "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58";
+pub const TYPESCRIPT_CHAIN3_SAME_TREE_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript chain3 target requires recursive slot-1 chain3 deps to stay same-tree local in M58";
 pub const TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires direct deps to author body.typescript in M56";
 pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M52";
@@ -497,6 +499,9 @@ pub fn validate_typescript_closure_member_spec_with_specs(
         TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
             validate_typescript_wrapper_dep_contract(spec, specs_by_id)
         }
+        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
+            validate_typescript_chain3_dep_contract(spec, specs_by_id)
+        }
         TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY
         | TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
             validate_typescript_helper_dep_contract(spec, specs_by_id)
@@ -766,12 +771,7 @@ fn validate_typescript_chain3_dep_contract(
         ));
     };
 
-    validate_typescript_chain3_dep_family(
-        spec,
-        specs_by_id,
-        first_dep,
-        TYPESCRIPT_CHAIN3_FIRST_DEP_COMPATIBILITY_KEY,
-    )?;
+    validate_typescript_chain3_first_dep_family(spec, specs_by_id, first_dep)?;
     validate_typescript_chain3_dep_family(
         spec,
         specs_by_id,
@@ -784,6 +784,98 @@ fn validate_typescript_chain3_dep_contract(
         third_dep,
         TYPESCRIPT_CHAIN3_THIRD_DEP_COMPATIBILITY_KEY,
     )
+}
+
+fn validate_typescript_chain3_first_dep_family(
+    spec: &LoadedSpec,
+    specs_by_id: &HashMap<String, LoadedSpec>,
+    dep: &str,
+) -> Result<()> {
+    let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
+    let dep_key = typescript_dep_lookup_key(&parsed);
+    let Some(dep_spec) = specs_by_id.get(&dep_key) else {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "{}: '{}'",
+                TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE,
+                parsed.authored()
+            ),
+        ));
+    };
+
+    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+    let Some(dep_review) =
+        evaluate_semantic_review_with_context(dep_spec, &semantic_review_context)
+    else {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "{}: '{}' is missing supported semantic review",
+                TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
+                parsed.authored()
+            ),
+        ));
+    };
+
+    if dep_review.effective_support_status() != SemanticSupportStatus::Supported {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "{}: '{}' resolved to {}",
+                TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
+                parsed.authored(),
+                dep_review.compatibility_key
+            ),
+        ));
+    }
+
+    match dep_review.compatibility_key.as_str() {
+        TYPESCRIPT_CHAIN3_FIRST_DEP_COMPATIBILITY_KEY => {}
+        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY if parsed.library_alias().is_none() => {}
+        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "{}: '{}'",
+                    TYPESCRIPT_CHAIN3_SAME_TREE_UNSUPPORTED_MESSAGE,
+                    parsed.authored()
+                ),
+            ));
+        }
+        _ => {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "{}: '{}' resolved to {}",
+                    TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
+                    parsed.authored(),
+                    dep_review.compatibility_key
+                ),
+            ));
+        }
+    }
+
+    if dep_spec
+        .spec
+        .body
+        .typescript
+        .as_deref()
+        .map(str::trim)
+        .filter(|body| !body.is_empty())
+        .is_none()
+    {
+        return Err(semantic_error(
+            spec,
+            format!(
+                "{}: '{}'",
+                TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
+                parsed.authored()
+            ),
+        ));
+    }
+
+    Ok(())
 }
 
 fn validate_typescript_chain3_dep_family(
@@ -2335,6 +2427,36 @@ mod tests {
                 extensions: UnitExtensions::default(),
             },
         }
+    }
+
+    fn create_typescript_base_nested_chain3_spec() -> LoadedSpec {
+        let mut spec = create_typescript_chain3_spec();
+        spec.source.file_path = "units/pricing/base_nested_chain3.unit.spec".to_string();
+        spec.source.id = "pricing/base_nested_chain3".to_string();
+        spec.spec.id = "pricing/base_nested_chain3".to_string();
+        spec.spec.local_tests[0].id = "base_nested_chain3_flow".to_string();
+        spec.spec.local_tests[0].expect =
+            "base_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(0, 2), Decimal::new(0, 2)) == Decimal::new(9951, 3)"
+                .to_string();
+        spec
+    }
+
+    fn create_typescript_checkout_nested_chain3_spec() -> LoadedSpec {
+        let mut spec = create_typescript_chain3_spec();
+        spec.source.file_path = "units/pricing/checkout_nested_chain3.unit.spec".to_string();
+        spec.source.id = "pricing/checkout_nested_chain3".to_string();
+        spec.spec.id = "pricing/checkout_nested_chain3".to_string();
+        spec.spec.deps[0] = "pricing/base_nested_chain3".to_string();
+        spec.spec.body.rust = "{ let base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate); let surcharged_total = apply_tax(base_total, Decimal::ZERO); apply_discount(surcharged_total, Decimal::ZERO) }".to_string();
+        spec.spec.body.typescript = Some(
+            "const base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate); const surcharged_total = apply_tax(base_total, Decimal.zero()); return apply_discount(surcharged_total, Decimal.zero());"
+                .to_string(),
+        );
+        spec.spec.local_tests[0].id = "checkout_nested_chain3_flow".to_string();
+        spec.spec.local_tests[0].expect =
+            "checkout_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(0, 2), Decimal::new(0, 2)) == Decimal::new(9951, 3)"
+                .to_string();
+        spec
     }
 
     fn create_molecule_test_spec(id: &str, covers: Vec<&str>) -> LoadedMoleculeTest {
@@ -5362,8 +5484,8 @@ methods:
     }
 
     #[test]
-    fn typescript_closure_member_rejects_chain3_member() {
-        let spec = create_typescript_chain3_spec();
+    fn typescript_nested_chain3_closure_member_accepts_same_tree_chain3_member() {
+        let spec = create_typescript_base_nested_chain3_spec();
         let wrapper = create_typescript_wrapper_spec();
         let discount = create_typescript_discount_spec();
         let tax = create_typescript_lane_function_spec();
@@ -5376,11 +5498,54 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
+        validate_typescript_closure_member_spec_with_specs(&spec, &specs_by_id)
+            .expect("same-tree nested chain3 closure member should validate in M58");
+    }
+
+    #[test]
+    fn typescript_nested_chain3_root_accepts_same_tree_recursive_first_dep() {
+        let spec = create_typescript_checkout_nested_chain3_spec();
+        let nested = create_typescript_base_nested_chain3_spec();
+        let wrapper = create_typescript_wrapper_spec();
+        let discount = create_typescript_discount_spec();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (nested.spec.id.clone(), nested),
+            (wrapper.spec.id.clone(), wrapper),
+            (discount.spec.id.clone(), discount),
+            (tax.spec.id.clone(), tax),
+            (helper.spec.id.clone(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("same-tree nested chain3 root should be eligible in M58");
+    }
+
+    #[test]
+    fn typescript_nested_chain3_root_rejects_cross_library_recursive_first_dep() {
+        let mut spec = create_typescript_checkout_nested_chain3_spec();
+        spec.spec.deps[0] = "shared::pricing/base_nested_chain3".to_string();
+        let nested = create_typescript_base_nested_chain3_spec();
+        let wrapper = create_typescript_wrapper_spec();
+        let discount = create_typescript_discount_spec();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            ("shared::pricing/base_nested_chain3".to_string(), nested),
+            (wrapper.spec.id.clone(), wrapper),
+            (discount.spec.id.clone(), discount),
+            (tax.spec.id.clone(), tax),
+            (helper.spec.id.clone(), helper),
+        ]);
+
         let err =
-            validate_typescript_closure_member_spec_with_specs(&spec, &specs_by_id).unwrap_err();
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains("TypeScript closure member does not support semantic family 'function.wrapper.pipeline.chain3.v1'"),
+                .contains(TYPESCRIPT_CHAIN3_SAME_TREE_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }

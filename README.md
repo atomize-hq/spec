@@ -47,7 +47,7 @@ spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
 
-## Bounded TypeScript lane (M56)
+## Bounded TypeScript lane (M58)
 
 `spec` now exposes one bounded TypeScript execution lane. It is intentionally narrow:
 
@@ -55,8 +55,8 @@ spec generate examples/ecommerce/units
 - Eligible roots are exactly `kind: function` specs that classify to `function.arithmetic_leaf.monotone_up.v1`, `function.wrapper.pipeline.v1`, or the bounded same-tree `function.wrapper.pipeline.chain3.v1`.
 - Monotone-up roots may declare `deps: []` or exactly one direct helper dep. That helper must classify to `function.helper.identity_passthrough.v1`, author non-empty `body.typescript`, and exist in the loaded unit set and generated tree. That one helper dep may be cross-library when it is referenced through `[libraries]` as a sibling import like `shared::money/round`.
 - Wrapper roots must declare exactly two direct deps in the same loaded unit set and generated tree. The ordered dep tuple is frozen to `function.arithmetic_leaf.monotone_down_nonnegative.v1` then `function.arithmetic_leaf.monotone_up.v1`, both deps must author non-empty `body.typescript`, and each slot may be local or a direct sibling-library dep such as `shared::pricing/apply_discount` or `shared::pricing/apply_tax`.
-- Chain3 roots must declare exactly three direct deps in the same loaded unit set and generated tree. The ordered dep tuple is frozen to `function.wrapper.pipeline.v1` then `function.arithmetic_leaf.monotone_up.v1` then `function.arithmetic_leaf.monotone_down_nonnegative.v1`, every direct dep must author non-empty `body.typescript`, and those direct slots may mix local and sibling-library deps while staying within that exact family order.
-- Chain3 closure collection stays bounded. A wrapper may appear as a closure member under a chain3 root, but nested `function.wrapper.pipeline.chain3.v1` closure members remain unsupported.
+- Chain3 roots must declare exactly three direct deps in the same loaded unit set and generated tree. The ordered dep tuple is frozen to `function.wrapper.pipeline.v1` or same-tree `function.wrapper.pipeline.chain3.v1` in slot 1, then `function.arithmetic_leaf.monotone_up.v1`, then `function.arithmetic_leaf.monotone_down_nonnegative.v1`. Every direct dep must author non-empty `body.typescript`, direct slots 2 and 3 may still mix local and sibling-library deps within that exact family order, and recursive slot 1 chain3 deps must stay same-tree local.
+- Chain3 closure collection stays bounded. A wrapper or same-tree nested `function.wrapper.pipeline.chain3.v1` may appear in chain3 slot 1, recursive collection stays inside the same loaded tree, and generic multi-dependency execution remains unsupported.
 - Rust remains the default target. TypeScript proof is additive only; it writes `target_proofs.typescript` without replacing the Rust proof surface.
 - TypeScript execution is atom-only. Only `local_tests` run in this lane; `.test.spec` molecule tests remain unsupported for `--target-language typescript` and fail before Bun runs.
 - The accepted `local_tests.expect` grammar is deliberately small: `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)`. The left-hand side must be a direct call to the current unit, and both the arguments and expected value must use integer-literal `Decimal::new(...)` forms.
@@ -70,19 +70,19 @@ spec test <path> --target-language typescript
 spec status <unit-or-root> --target-language typescript
 ```
 
-`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M56, a root-level status over a mixed example like `examples/ecommerce` or `examples/crosslib-app` may stay non-green unless every unit in scope is either freshly proven in the bounded monotone-up, wrapper, or chain3 lane, or truthfully remains outside that lane.
+`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M58, a root-level status over a mixed example like `examples/ecommerce` or `examples/crosslib-app` may stay non-green unless every unit in scope is either freshly proven in the bounded monotone-up, wrapper, or chain3 lane, or truthfully remains outside that lane.
 
-The generated helper filenames remain frozen in M56:
+The generated helper filenames remain frozen in M58:
 
 - `__spec_ts/runtime.ts`
 - `__spec_ts/build_entry.ts`
 - `__spec_ts/local_tests.ts`
 
-Commands and surfaces that do not widen for M56:
+Commands and surfaces that do not widen for M58:
 
 - `spec validate` does not accept `--target-language`
 - `spec export` does not accept `--target-language`
-- This lane does not widen to molecule execution, generic multi-dep execution, seam kinds, nested chain3 closure members, `spec validate --target-language`, or `spec export --target-language`.
+- This lane does not widen to molecule execution, generic multi-dep execution, seam kinds, cross-library recursive chain3 closure, `spec validate --target-language`, or `spec export --target-language`.
 
 ## Spec format
 
