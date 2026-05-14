@@ -59,17 +59,21 @@ pub const TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript targe
 pub const TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript target requires the direct helper dep to author body.typescript in M55";
 pub const TYPESCRIPT_WRAPPER_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript wrapper target requires exactly two direct local deps in M55";
-pub const TYPESCRIPT_WRAPPER_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target allows only local direct deps in M55; cross-library helper imports do not widen wrapper root deps";
-pub const TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target requires every direct dep to exist in the same loaded unit set in M55";
-pub const TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M55";
+    "TypeScript wrapper target requires exactly two direct deps in M56";
+pub const TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript wrapper target requires every direct dep to resolve from the loaded unit set in M56";
+pub const TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56";
+pub const TYPESCRIPT_WRAPPER_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript wrapper target requires direct deps to author body.typescript in M56";
 pub const TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript chain3 target requires exactly three direct local deps in M55";
-pub const TYPESCRIPT_CHAIN3_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target allows only local direct deps in M55; cross-library helper imports do not widen chain3 root deps";
-pub const TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires every direct dep to exist in the same loaded unit set in M55";
-pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M55";
+    "TypeScript chain3 target requires exactly three direct deps in M56";
+pub const TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript chain3 target requires every direct dep to resolve from the loaded unit set in M56";
+pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str =
+    "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M56";
 pub const TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript chain3 target requires direct deps to author body.typescript in M55";
+    "TypeScript chain3 target requires direct deps to author body.typescript in M56";
 pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M52";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -685,24 +689,14 @@ fn validate_typescript_wrapper_dep_family(
     expected_family: &str,
 ) -> Result<()> {
     let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
-    if parsed.library_alias().is_some() {
-        return Err(semantic_error(
-            spec,
-            format!(
-                "{}: '{}'",
-                TYPESCRIPT_WRAPPER_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE,
-                parsed.authored()
-            ),
-        ));
-    }
-
-    let Some(dep_spec) = specs_by_id.get(parsed.unit_id()) else {
+    let dep_key = typescript_dep_lookup_key(&parsed);
+    let Some(dep_spec) = specs_by_id.get(&dep_key) else {
         return Err(semantic_error(
             spec,
             format!(
                 "{}: '{}'",
                 TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE,
-                parsed.unit_id()
+                parsed.authored()
             ),
         ));
     };
@@ -716,7 +710,7 @@ fn validate_typescript_wrapper_dep_family(
             format!(
                 "{}: '{}' is missing supported semantic review",
                 TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.unit_id()
+                parsed.authored()
             ),
         ));
     };
@@ -729,7 +723,7 @@ fn validate_typescript_wrapper_dep_family(
             format!(
                 "{}: '{}' resolved to {}",
                 TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.unit_id(),
+                parsed.authored(),
                 dep_review.compatibility_key
             ),
         ));
@@ -747,8 +741,9 @@ fn validate_typescript_wrapper_dep_family(
         return Err(semantic_error(
             spec,
             format!(
-                "TypeScript wrapper target requires direct deps to author body.typescript in M52: '{}'",
-                parsed.unit_id()
+                "{}: '{}'",
+                TYPESCRIPT_WRAPPER_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
+                parsed.authored()
             ),
         ));
     }
@@ -798,24 +793,14 @@ fn validate_typescript_chain3_dep_family(
     expected_family: &str,
 ) -> Result<()> {
     let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
-    if parsed.library_alias().is_some() {
-        return Err(semantic_error(
-            spec,
-            format!(
-                "{}: '{}'",
-                TYPESCRIPT_CHAIN3_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE,
-                parsed.authored()
-            ),
-        ));
-    }
-
-    let Some(dep_spec) = specs_by_id.get(parsed.unit_id()) else {
+    let dep_key = typescript_dep_lookup_key(&parsed);
+    let Some(dep_spec) = specs_by_id.get(&dep_key) else {
         return Err(semantic_error(
             spec,
             format!(
                 "{}: '{}'",
                 TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE,
-                parsed.unit_id()
+                parsed.authored()
             ),
         ));
     };
@@ -829,7 +814,7 @@ fn validate_typescript_chain3_dep_family(
             format!(
                 "{}: '{}' is missing supported semantic review",
                 TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.unit_id()
+                parsed.authored()
             ),
         ));
     };
@@ -842,7 +827,7 @@ fn validate_typescript_chain3_dep_family(
             format!(
                 "{}: '{}' resolved to {}",
                 TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.unit_id(),
+                parsed.authored(),
                 dep_review.compatibility_key
             ),
         ));
@@ -862,12 +847,20 @@ fn validate_typescript_chain3_dep_family(
             format!(
                 "{}: '{}'",
                 TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                parsed.unit_id()
+                parsed.authored()
             ),
         ));
     }
 
     Ok(())
+}
+
+fn typescript_dep_lookup_key(dep: &DepRef) -> String {
+    if dep.library_alias().is_some() {
+        dep.authored()
+    } else {
+        dep.unit_id().to_string()
+    }
 }
 
 pub fn validate_typescript_local_test_expect_shape(spec: &LoadedSpec) -> Result<()> {
@@ -5053,14 +5046,64 @@ methods:
     }
 
     #[test]
-    fn typescript_target_rejects_wrapper_cross_library_dep() {
+    fn typescript_wrapper_direct_cross_library_deps_validate() {
+        let mut spec = create_typescript_wrapper_spec();
+        spec.spec.deps = vec![
+            "shared::pricing/apply_discount".to_string(),
+            "shared::pricing/apply_tax".to_string(),
+        ];
+        let discount = create_typescript_discount_spec();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            ("shared::pricing/apply_discount".to_string(), discount),
+            ("shared::pricing/apply_tax".to_string(), tax),
+            ("shared::money/round".to_string(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("direct cross-library wrapper deps should be eligible in M56");
+    }
+
+    #[test]
+    fn typescript_wrapper_mixed_local_and_shared_deps_validate() {
+        let mut spec = create_typescript_wrapper_spec();
+        spec.spec.deps[1] = "shared::pricing/apply_tax".to_string();
+        let discount = create_typescript_discount_spec();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (discount.spec.id.clone(), discount),
+            ("shared::pricing/apply_tax".to_string(), tax),
+            ("shared::money/round".to_string(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("mixed local/shared wrapper deps should be eligible in M56");
+    }
+
+    #[test]
+    fn typescript_wrapper_shared_dep_missing_typescript_body_rejects() {
         let mut spec = create_typescript_wrapper_spec();
         spec.spec.deps[0] = "shared::pricing/apply_discount".to_string();
+        let mut discount = create_typescript_discount_spec();
+        discount.spec.body.typescript = None;
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            ("shared::pricing/apply_discount".to_string(), discount),
+            (tax.spec.id.clone(), tax),
+            ("shared::money/round".to_string(), helper),
+        ]);
 
-        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_WRAPPER_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_WRAPPER_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -5131,6 +5174,64 @@ methods:
     }
 
     #[test]
+    fn typescript_chain3_direct_cross_library_deps_validate() {
+        let mut spec = create_typescript_chain3_spec();
+        spec.spec.deps = vec![
+            "shared::pricing/calculate_total".to_string(),
+            "shared::pricing/apply_tax".to_string(),
+            "shared::pricing/apply_discount".to_string(),
+        ];
+        let mut wrapper = create_typescript_wrapper_spec();
+        wrapper.spec.deps = vec![
+            "shared::pricing/apply_discount".to_string(),
+            "shared::pricing/apply_tax".to_string(),
+        ];
+        let discount = create_typescript_discount_spec();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            ("shared::pricing/calculate_total".to_string(), wrapper.clone()),
+            ("shared::pricing/apply_discount".to_string(), discount.clone()),
+            ("shared::pricing/apply_tax".to_string(), tax.clone()),
+            ("shared::money/round".to_string(), helper.clone()),
+            (discount.spec.id.clone(), discount),
+            (tax.spec.id.clone(), tax),
+            (helper.spec.id.clone(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("direct cross-library chain3 deps should be eligible in M56");
+    }
+
+    #[test]
+    fn typescript_chain3_mixed_local_and_shared_deps_validate() {
+        let mut spec = create_typescript_chain3_spec();
+        spec.spec.deps = vec![
+            "pricing/calculate_total".to_string(),
+            "shared::pricing/apply_tax".to_string(),
+            "shared::pricing/apply_discount".to_string(),
+        ];
+        let wrapper = create_typescript_wrapper_spec();
+        let discount = create_typescript_discount_spec();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (wrapper.spec.id.clone(), wrapper),
+            ("shared::pricing/apply_discount".to_string(), discount.clone()),
+            ("shared::pricing/apply_tax".to_string(), tax.clone()),
+            ("shared::money/round".to_string(), helper.clone()),
+            (discount.spec.id.clone(), discount),
+            (tax.spec.id.clone(), tax),
+            (helper.spec.id.clone(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("mixed local/shared chain3 deps should be eligible in M56");
+    }
+
+    #[test]
     fn typescript_target_rejects_chain3_wrong_dep_order() {
         let mut spec = create_typescript_chain3_spec();
         spec.spec.deps = vec![
@@ -5160,14 +5261,30 @@ methods:
     }
 
     #[test]
-    fn typescript_target_rejects_chain3_cross_library_dep() {
+    fn typescript_chain3_shared_dep_wrong_slot_family_rejects() {
         let mut spec = create_typescript_chain3_spec();
-        spec.spec.deps[0] = "shared::pricing/calculate_total".to_string();
+        spec.spec.deps = vec![
+            "shared::pricing/apply_tax".to_string(),
+            "shared::pricing/calculate_total".to_string(),
+            "shared::pricing/apply_discount".to_string(),
+        ];
+        let wrapper = create_typescript_wrapper_spec();
+        let discount = create_typescript_discount_spec();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            ("shared::pricing/calculate_total".to_string(), wrapper),
+            ("shared::pricing/apply_discount".to_string(), discount),
+            ("shared::pricing/apply_tax".to_string(), tax),
+            ("shared::money/round".to_string(), helper),
+        ]);
 
-        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_CROSS_LIBRARY_DEP_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }

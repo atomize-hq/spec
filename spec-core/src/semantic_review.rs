@@ -486,7 +486,10 @@ impl<'a> SemanticReviewContext<'a> {
     fn resolve_dep_spec(self, dep: &str) -> Option<&'a LoadedSpec> {
         let parsed = DepRef::parse(dep).ok()?;
         if parsed.library_alias().is_some() {
-            return None;
+            return self
+                .specs_by_id
+                .get(&parsed.authored())
+                .or_else(|| self.specs_by_id.get(parsed.unit_id()));
         }
         self.specs_by_id.get(parsed.unit_id())
     }

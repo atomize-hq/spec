@@ -4235,6 +4235,73 @@ fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
     (temp_dir, dst_ecommerce)
 }
 
+fn copy_crosslib_typescript_example() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let app_dir = temp_dir.path().join("crosslib-app");
+    let shared_crate_dir = temp_dir.path().join("shared-crate");
+    let shared_spec_dir = temp_dir.path().join("shared-spec");
+
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .unwrap();
+    copy_dir_recursive(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_dir_recursive(&root.join("examples/shared-crate"), &shared_crate_dir).unwrap();
+    copy_dir_recursive(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+    remove_derived_artifacts(&app_dir);
+    remove_derived_artifacts(&shared_spec_dir);
+
+    (temp_dir, app_dir, shared_crate_dir, shared_spec_dir)
+}
+
+fn write_cross_library_chain3_spec(app_dir: &Path) -> PathBuf {
+    write_spec(
+        &app_dir.join("units"),
+        "pricing/checkout_chain3.unit.spec",
+        r#"
+id: pricing/checkout_chain3
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+    surcharge_rate: Decimal
+    loyalty_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/calculate_total
+  - shared::pricing/apply_tax
+  - shared::pricing/apply_discount
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        let surcharged_total = apply_tax(base_total, surcharge_rate);
+        apply_discount(surcharged_total, loyalty_rate)
+    }
+  typescript: |
+    {
+        const base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        const surcharged_total = apply_tax(base_total, surcharge_rate);
+        return apply_discount(surcharged_total, loyalty_rate);
+    }
+local_tests:
+  - id: happy_path
+    expect: checkout_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(96045, 4)
+"#,
+    );
+
+    app_dir.join("units/pricing/checkout_chain3.unit.spec")
+}
+
 fn read_passport(passport_path: &Path) -> String {
     fs::read_to_string(passport_path).unwrap()
 }
@@ -15518,20 +15585,7 @@ fn typescript_cross_library_example_status_marks_apply_tax_valid_after_proof() {
         return;
     }
 
-    let root = repo_root();
-    let temp_dir = temp_repo_dir();
-    let app_dir = temp_dir.path().join("crosslib-app");
-    let shared_crate_dir = temp_dir.path().join("shared-crate");
-    let shared_spec_dir = temp_dir.path().join("shared-spec");
-
-    fs::write(
-        temp_dir.path().join(".git"),
-        "gitdir: .git/modules/spec-tests\n",
-    )
-    .unwrap();
-    copy_git_tracked_dir(&root.join("examples/crosslib-app"), &app_dir).unwrap();
-    copy_git_tracked_dir(&root.join("examples/shared-crate"), &shared_crate_dir).unwrap();
-    copy_git_tracked_dir(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
 
     let test_output = run_in(
         &app_dir,
@@ -15575,6 +15629,413 @@ fn typescript_cross_library_example_status_marks_apply_tax_valid_after_proof() {
     assert_eq!(
         apply_tax["freshness"]["authored_truth_status"], "fresh",
         "{status_json}"
+    );
+}
+
+#[test]
+fn typescript_cross_library_wrapper_example_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "cross-library wrapper example should pass in the bounded TypeScript lane",
+        &output,
+    );
+
+    let passport =
+        read_passport_json(&app_dir.join("units/pricing/calculate_total.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_chain3_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    write_cross_library_chain3_spec(&app_dir);
+    let output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "cross-library chain3 root should pass in the bounded TypeScript lane",
+        &output,
+    );
+
+    let passport =
+        read_passport_json(&app_dir.join("units/pricing/checkout_chain3.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_wrong_dep_order_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    replace_in_file(
+        &app_dir.join("units/pricing/calculate_total.unit.spec"),
+        "deps:\n  - shared::pricing/apply_discount\n  - shared::pricing/apply_tax\n",
+        "deps:\n  - shared::pricing/apply_tax\n  - shared::pricing/apply_discount\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with wrong dep order should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper dep-order rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_chain3_wrong_dep_order_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    write_cross_library_chain3_spec(&app_dir);
+    replace_in_file(
+        &app_dir.join("units/pricing/checkout_chain3.unit.spec"),
+        "deps:\n  - pricing/calculate_total\n  - shared::pricing/apply_tax\n  - shared::pricing/apply_discount\n",
+        "deps:\n  - shared::pricing/apply_tax\n  - pricing/calculate_total\n  - shared::pricing/apply_discount\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library chain3 with wrong dep order should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M56"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library chain3 dep-order rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_wrong_family_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    replace_in_file(
+        &app_dir.join("units/pricing/calculate_total.unit.spec"),
+        "deps:\n  - shared::pricing/apply_discount\n  - shared::pricing/apply_tax\n",
+        "deps:\n  - shared::money/round\n  - shared::pricing/apply_tax\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with wrong dep family should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper family rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_chain3_wrong_family_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    write_cross_library_chain3_spec(&app_dir);
+    replace_in_file(
+        &app_dir.join("units/pricing/checkout_chain3.unit.spec"),
+        "deps:\n  - pricing/calculate_total\n  - shared::pricing/apply_tax\n  - shared::pricing/apply_discount\n",
+        "deps:\n  - pricing/calculate_total\n  - shared::money/round\n  - shared::pricing/apply_discount\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library chain3 with wrong dep family should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M56"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library chain3 family rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_missing_typescript_body_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) = copy_crosslib_typescript_example();
+    remove_typescript_body(&shared_spec_dir.join("units/pricing/apply_tax.unit.spec"));
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with missing imported body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("TypeScript wrapper target requires direct deps to author body.typescript in M56"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper missing-body rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_chain3_missing_typescript_body_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) = copy_crosslib_typescript_example();
+    write_cross_library_chain3_spec(&app_dir);
+    remove_typescript_body(&shared_spec_dir.join("units/pricing/apply_tax.unit.spec"));
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library chain3 with missing imported body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("TypeScript chain3 target requires direct deps to author body.typescript in M56"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library chain3 missing-body rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_unresolved_alias_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    replace_in_file(
+        &app_dir.join("units/pricing/calculate_total.unit.spec"),
+        "shared::pricing/apply_discount",
+        "missing::pricing/apply_discount",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with unresolved alias should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown library namespace 'missing'"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper unresolved-alias rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_missing_imported_unit_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    replace_in_file(
+        &app_dir.join("units/pricing/calculate_total.unit.spec"),
+        "shared::pricing/apply_tax",
+        "shared::pricing/missing_tax",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with missing imported unit should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cross-library dep 'shared::pricing/missing_tax' not found"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper missing-imported-unit rejection should happen before Bun"
     );
 }
 

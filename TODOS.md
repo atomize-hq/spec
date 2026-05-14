@@ -194,6 +194,6 @@
 
 - [x] **Cross-library TypeScript helper imports** — Completed by M55 (2026-05-13). The bounded Bun-backed TypeScript lane now admits cross-library helper imports in the one legal helper slot for `function.arithmetic_leaf.monotone_up.v1`, and bounded wrapper/chain3 closures may reuse that shared helper transitively once it is in the loaded tree.
 
-- [ ] **Direct cross-library wrapper and chain3 TypeScript roots** — Deferred after M55. Cross-library helper imports are now allowed only in legal helper slots; direct wrapper root deps and direct chain3 root deps remain local-only.
+- [x] **Direct cross-library wrapper and chain3 TypeScript roots** — Completed by M56 (2026-05-13). The bounded Bun-backed TypeScript lane now admits direct cross-library wrapper roots, direct cross-library chain3 roots, and exact mixed local-plus-shared direct dep tuples for the frozen promoted families, while keeping closure collection bounded and broader TypeScript execution claims deferred.
 
-- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M55. The current lane is intentionally family-shaped: helper-aware monotone-up roots, cross-library helper imports only in that legal helper slot, plus same-tree wrapper roots and same-tree chain3 roots only, not arbitrary dependency topologies.
+- [ ] **Generic multi-dependency TypeScript execution** — Deferred again after M56. The current lane is intentionally family-shaped: helper-aware monotone-up roots, bounded direct cross-library wrapper and chain3 roots only under their frozen family tuples, and no arbitrary dependency topologies.

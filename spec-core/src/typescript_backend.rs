@@ -44,12 +44,18 @@ pub fn generate_typescript_tree(
         .collect::<Result<Vec<_>>>()?;
     specs.sort_by(|left, right| left.id.cmp(&right.id));
     let specs_by_id = build_typescript_loaded_specs_by_id(&specs);
-    let resolved_specs_by_id = build_typescript_resolved_specs_by_id(&specs);
-    let included_unit_ids =
-        collect_included_typescript_unit_ids(root_unit_ids, &resolved_specs_by_id, &specs_by_id)?;
+    let spec_indices_by_key = build_typescript_spec_indices_by_key(&specs);
+    let included_spec_indices = collect_included_typescript_unit_ids(
+        root_unit_ids,
+        &specs,
+        &spec_indices_by_key,
+        &specs_by_id,
+    )?;
     let included_specs = specs
         .into_iter()
-        .filter(|spec| included_unit_ids.contains(&spec.id))
+        .enumerate()
+        .filter(|(index, _)| included_spec_indices.contains(index))
+        .map(|(_, spec)| spec)
         .collect::<Vec<_>>();
 
     let mut tree = BTreeMap::new();
@@ -116,21 +122,16 @@ fn validate_typescript_resolved_spec_with_specs(
     validate_typescript_execution_target_spec_with_specs(&typescript_loaded_spec(spec), specs_by_id)
 }
 
-fn build_typescript_resolved_specs_by_id<'a>(
-    specs: &[&'a ResolvedSpec],
-) -> HashMap<String, &'a ResolvedSpec> {
-    specs.iter().map(|spec| (spec.id.clone(), *spec)).collect()
-}
-
 fn collect_included_typescript_unit_ids(
     root_unit_ids: &[String],
-    resolved_specs_by_id: &HashMap<String, &ResolvedSpec>,
+    specs: &[&ResolvedSpec],
+    spec_indices_by_key: &HashMap<String, usize>,
     specs_by_id: &HashMap<String, LoadedSpec>,
-) -> Result<BTreeSet<String>> {
+) -> Result<BTreeSet<usize>> {
     let mut included = BTreeSet::new();
 
     for root_unit_id in root_unit_ids {
-        let Some(root_spec) = resolved_specs_by_id.get(root_unit_id) else {
+        let Some(&root_index) = spec_indices_by_key.get(root_unit_id) else {
             return Err(SpecError::Generator {
                 message: format!(
                     "root unit '{}' was not present in the bounded M52 TypeScript loaded unit set",
@@ -139,8 +140,9 @@ fn collect_included_typescript_unit_ids(
             });
         };
         collect_typescript_root_closure(
-            root_spec,
-            resolved_specs_by_id,
+            root_index,
+            specs,
+            spec_indices_by_key,
             specs_by_id,
             &mut included,
         )?;
@@ -150,13 +152,15 @@ fn collect_included_typescript_unit_ids(
 }
 
 fn collect_typescript_root_closure(
-    spec: &ResolvedSpec,
-    resolved_specs_by_id: &HashMap<String, &ResolvedSpec>,
+    spec_index: usize,
+    specs: &[&ResolvedSpec],
+    spec_indices_by_key: &HashMap<String, usize>,
     specs_by_id: &HashMap<String, LoadedSpec>,
-    included: &mut BTreeSet<String>,
+    included: &mut BTreeSet<usize>,
 ) -> Result<()> {
+    let spec = specs[spec_index];
     validate_typescript_resolved_spec_with_specs(spec, specs_by_id)?;
-    included.insert(spec.id.clone());
+    included.insert(spec_index);
 
     let semantic_review_context = SemanticReviewContext::new(specs_by_id);
     let Some(review) = evaluate_semantic_review_with_context(
@@ -173,16 +177,17 @@ fn collect_typescript_root_closure(
 
     match review.compatibility_key.as_str() {
         TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
-            collect_typescript_helper_dep(spec, resolved_specs_by_id, specs_by_id, included)
+            collect_typescript_helper_dep(spec, specs, spec_indices_by_key, specs_by_id, included)
         }
         TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
             for dep in &spec.deps {
-                let parsed = parse_local_typescript_dep(dep, "wrapper direct dep")?;
-                let dep_spec =
-                    resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
+                let parsed = parse_typescript_dep(dep, "wrapper direct dep")?;
+                let dep_index =
+                    resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
                 collect_typescript_closure_member(
-                    dep_spec,
-                    resolved_specs_by_id,
+                    dep_index,
+                    specs,
+                    spec_indices_by_key,
                     specs_by_id,
                     included,
                 )?;
@@ -191,12 +196,13 @@ fn collect_typescript_root_closure(
         }
         TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
             for dep in &spec.deps {
-                let parsed = parse_local_typescript_dep(dep, "chain3 direct dep")?;
-                let dep_spec =
-                    resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
+                let parsed = parse_typescript_dep(dep, "chain3 direct dep")?;
+                let dep_index =
+                    resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
                 collect_typescript_closure_member(
-                    dep_spec,
-                    resolved_specs_by_id,
+                    dep_index,
+                    specs,
+                    spec_indices_by_key,
                     specs_by_id,
                     included,
                 )?;
@@ -213,11 +219,13 @@ fn collect_typescript_root_closure(
 }
 
 fn collect_typescript_closure_member(
-    spec: &ResolvedSpec,
-    resolved_specs_by_id: &HashMap<String, &ResolvedSpec>,
+    spec_index: usize,
+    specs: &[&ResolvedSpec],
+    spec_indices_by_key: &HashMap<String, usize>,
     specs_by_id: &HashMap<String, LoadedSpec>,
-    included: &mut BTreeSet<String>,
+    included: &mut BTreeSet<usize>,
 ) -> Result<()> {
+    let spec = specs[spec_index];
     if spec
         .body_typescript
         .as_deref()
@@ -240,7 +248,7 @@ fn collect_typescript_closure_member(
         }
     })?;
 
-    included.insert(spec.id.clone());
+    included.insert(spec_index);
 
     let semantic_review_context = SemanticReviewContext::new(specs_by_id);
     let review = evaluate_semantic_review_with_context(&loaded, &semantic_review_context)
@@ -248,12 +256,13 @@ fn collect_typescript_closure_member(
     match review.compatibility_key.as_str() {
         TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
             for dep in &spec.deps {
-                let parsed = parse_local_typescript_dep(dep, "wrapper closure dep")?;
-                let dep_spec =
-                    resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
+                let parsed = parse_typescript_dep(dep, "wrapper closure dep")?;
+                let dep_index =
+                    resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
                 collect_typescript_closure_member(
-                    dep_spec,
-                    resolved_specs_by_id,
+                    dep_index,
+                    specs,
+                    spec_indices_by_key,
                     specs_by_id,
                     included,
                 )?;
@@ -262,7 +271,7 @@ fn collect_typescript_closure_member(
         }
         TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY
         | TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
-            collect_typescript_helper_dep(spec, resolved_specs_by_id, specs_by_id, included)
+            collect_typescript_helper_dep(spec, specs, spec_indices_by_key, specs_by_id, included)
         }
         TYPESCRIPT_HELPER_COMPATIBILITY_KEY => Ok(()),
         _ => unreachable!("validated closure member should use a supported bounded family"),
@@ -271,20 +280,26 @@ fn collect_typescript_closure_member(
 
 fn collect_typescript_helper_dep(
     spec: &ResolvedSpec,
-    resolved_specs_by_id: &HashMap<String, &ResolvedSpec>,
+    specs: &[&ResolvedSpec],
+    spec_indices_by_key: &HashMap<String, usize>,
     specs_by_id: &HashMap<String, LoadedSpec>,
-    included: &mut BTreeSet<String>,
+    included: &mut BTreeSet<usize>,
 ) -> Result<()> {
     let [dep] = spec.deps.as_slice() else {
         return Ok(());
     };
-    let parsed = parse_local_typescript_dep(dep, "helper dep")?;
-    let helper_spec =
-        resolve_typescript_dep_spec(&spec.id, parsed.unit_id(), resolved_specs_by_id)?;
-    collect_typescript_closure_member(helper_spec, resolved_specs_by_id, specs_by_id, included)
+    let parsed = parse_typescript_dep(dep, "helper dep")?;
+    let helper_index = resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
+    collect_typescript_closure_member(
+        helper_index,
+        specs,
+        spec_indices_by_key,
+        specs_by_id,
+        included,
+    )
 }
 
-fn parse_local_typescript_dep(dep: &str, role: &str) -> Result<DepRef> {
+fn parse_typescript_dep(dep: &str, role: &str) -> Result<DepRef> {
     DepRef::parse(dep).map_err(|err| SpecError::Generator {
         message: format!(
             "invalid {role} '{}' reached bounded M52 TypeScript generator: {}",
@@ -295,27 +310,37 @@ fn parse_local_typescript_dep(dep: &str, role: &str) -> Result<DepRef> {
 
 fn resolve_typescript_dep_spec<'a>(
     owner_id: &str,
-    dep_id: &str,
-    resolved_specs_by_id: &'a HashMap<String, &'a ResolvedSpec>,
-) -> Result<&'a ResolvedSpec> {
-    resolved_specs_by_id
-        .get(dep_id)
+    dep: &DepRef,
+    spec_indices_by_key: &'a HashMap<String, usize>,
+) -> Result<usize> {
+    let dep_key = if dep.library_alias().is_some() {
+        dep.authored()
+    } else {
+        dep.unit_id().to_string()
+    };
+    spec_indices_by_key
+        .get(&dep_key)
         .copied()
         .ok_or_else(|| SpecError::Generator {
             message: format!(
-                "unit '{}' is not eligible for the bounded M52 TypeScript lane: required local dep '{}' was not loaded",
-                owner_id, dep_id
+                "unit '{}' is not eligible for the bounded M52 TypeScript lane: required dep '{}' was not loaded",
+                owner_id,
+                dep.authored()
             ),
         })
 }
 
 fn build_typescript_loaded_specs_by_id(specs: &[&ResolvedSpec]) -> HashMap<String, LoadedSpec> {
-    let mut specs_by_id = HashMap::new();
+    let mut first_loaded_by_unit_id = HashMap::new();
+    let mut last_loaded_by_unit_id = HashMap::new();
     let mut qualified_helper_keys = BTreeMap::<String, Vec<String>>::new();
 
     for spec in specs {
         let loaded = typescript_loaded_spec(spec);
-        specs_by_id.insert(spec.id.clone(), loaded.clone());
+        first_loaded_by_unit_id
+            .entry(spec.id.clone())
+            .or_insert_with(|| loaded.clone());
+        last_loaded_by_unit_id.insert(spec.id.clone(), loaded.clone());
 
         for dep in &spec.deps {
             let Ok(parsed) = DepRef::parse(dep) else {
@@ -330,8 +355,9 @@ fn build_typescript_loaded_specs_by_id(specs: &[&ResolvedSpec]) -> HashMap<Strin
         }
     }
 
+    let mut specs_by_id = first_loaded_by_unit_id;
     for (unit_id, authored_keys) in qualified_helper_keys {
-        let Some(loaded) = specs_by_id.get(&unit_id).cloned() else {
+        let Some(loaded) = last_loaded_by_unit_id.get(&unit_id).cloned() else {
             continue;
         };
         for authored_key in authored_keys {
@@ -422,6 +448,43 @@ fn render_typescript_dep_imports(spec: &ResolvedSpec) -> Result<String> {
     }
 
     Ok(imports.join("\n"))
+}
+
+fn build_typescript_spec_indices_by_key(
+    specs: &[&ResolvedSpec],
+) -> HashMap<String, usize> {
+    let mut first_indices_by_unit_id = HashMap::new();
+    let mut last_indices_by_unit_id = HashMap::new();
+    let mut qualified_helper_keys = BTreeMap::<String, Vec<String>>::new();
+
+    for (index, spec) in specs.iter().enumerate() {
+        first_indices_by_unit_id.entry(spec.id.clone()).or_insert(index);
+        last_indices_by_unit_id.insert(spec.id.clone(), index);
+
+        for dep in &spec.deps {
+            let Ok(parsed) = DepRef::parse(dep) else {
+                continue;
+            };
+            if parsed.library_alias().is_some() {
+                qualified_helper_keys
+                    .entry(parsed.unit_id().to_string())
+                    .or_default()
+                    .push(parsed.authored());
+            }
+        }
+    }
+
+    let mut specs_by_id = first_indices_by_unit_id;
+    for (unit_id, authored_keys) in qualified_helper_keys {
+        let Some(index) = last_indices_by_unit_id.get(&unit_id).copied() else {
+            continue;
+        };
+        for authored_key in authored_keys {
+            specs_by_id.entry(authored_key).or_insert(index);
+        }
+    }
+
+    specs_by_id
 }
 
 fn render_typescript_signature(spec: &ResolvedSpec) -> Result<String> {
@@ -677,16 +740,21 @@ fn render_local_test_block(spec: &ResolvedSpec, local_test: &LocalTest) -> Resul
         .collect::<Result<Vec<_>>>()?;
     let expected = render_decimal_new_expr(binary.right.as_ref())?;
     let imported_name = typescript_symbol_alias(spec);
+    let local_test_symbol = format!(
+        "{}${}",
+        imported_name.replace("__spec$", "__spec_test$"),
+        local_test.id
+    );
 
     Ok(format!(
         "const actual_{} = {}({});\nconst expected_{} = {};\nif (!actual_{}.eq(expected_{})) {{\n    throw new Error({:?});\n}}",
-        local_test.id,
+        local_test_symbol,
         imported_name,
         args.join(", "),
-        local_test.id,
+        local_test_symbol,
         expected,
-        local_test.id,
-        local_test.id,
+        local_test_symbol,
+        local_test_symbol,
         format!(
             "bounded TypeScript local test failed: {}#{}",
             spec.id, local_test.id
@@ -1170,6 +1238,142 @@ mod tests {
         assert!(local_tests
             .contains("import { apply_tax as __spec$pricing$deep$apply_tax } from \"../pricing/deep/apply_tax.ts\";"));
         assert!(local_tests.contains("__spec$pricing$deep$apply_tax"));
+    }
+
+    #[test]
+    fn typescript_tree_renders_cross_library_wrapper_root_without_duplicate_units() {
+        let helper = helper_spec("money/round");
+        let discount = monotone_down_spec(
+            "pricing/apply_discount",
+            vec!["shared::money/round"],
+            "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
+        );
+        let tax = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["shared::money/round"],
+            "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
+        );
+        let wrapper = wrapper_spec(
+            "pricing/calculate_total",
+            "shared::pricing/apply_discount",
+            "shared::pricing/apply_tax",
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
+        );
+
+        let root_ids = vec![wrapper.id.clone()];
+        let tree = generate_typescript_tree(
+            &[
+                NormalizedUnit::Function(wrapper),
+                NormalizedUnit::Function(discount),
+                NormalizedUnit::Function(tax),
+                NormalizedUnit::Function(helper),
+            ],
+            &root_ids,
+        )
+        .expect("cross-library wrapper tree should generate");
+
+        assert!(tree.contains_key(&PathBuf::from("pricing/calculate_total.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_discount.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_tax.ts")));
+        assert!(tree.contains_key(&PathBuf::from("money/round.ts")));
+
+        let wrapper_module = tree
+            .get(&PathBuf::from("pricing/calculate_total.ts"))
+            .expect("wrapper module should be emitted");
+        assert!(wrapper_module.contains("import { apply_discount } from \"./apply_discount.ts\";"));
+        assert!(wrapper_module.contains("import { apply_tax } from \"./apply_tax.ts\";"));
+    }
+
+    #[test]
+    fn typescript_tree_renders_cross_library_chain3_root_without_duplicate_units() {
+        let helper = helper_spec("money/round");
+        let discount = monotone_down_spec(
+            "pricing/apply_discount",
+            vec!["shared::money/round"],
+            "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
+        );
+        let tax = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["shared::money/round"],
+            "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
+        );
+        let wrapper = wrapper_spec(
+            "pricing/calculate_total",
+            "shared::pricing/apply_discount",
+            "shared::pricing/apply_tax",
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
+        );
+        let chain3 = chain3_spec(
+            "pricing/checkout_chain3",
+            "shared::pricing/calculate_total",
+            "shared::pricing/apply_tax",
+            "shared::pricing/apply_discount",
+            "const base_total = calculate_total(subtotal, discount_rate, tax_rate); const surcharged_total = apply_tax(base_total, surcharge_rate); return apply_discount(surcharged_total, loyalty_rate);",
+        );
+
+        let root_ids = vec![chain3.id.clone()];
+        let tree = generate_typescript_tree(
+            &[
+                NormalizedUnit::Function(chain3),
+                NormalizedUnit::Function(wrapper),
+                NormalizedUnit::Function(discount),
+                NormalizedUnit::Function(tax),
+                NormalizedUnit::Function(helper),
+            ],
+            &root_ids,
+        )
+        .expect("cross-library chain3 tree should generate");
+
+        assert!(tree.contains_key(&PathBuf::from("pricing/checkout_chain3.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/calculate_total.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_discount.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_tax.ts")));
+        assert!(tree.contains_key(&PathBuf::from("money/round.ts")));
+
+        let chain3_module = tree
+            .get(&PathBuf::from("pricing/checkout_chain3.ts"))
+            .expect("chain3 module should be emitted");
+        assert!(
+            chain3_module.contains("import { calculate_total } from \"./calculate_total.ts\";")
+        );
+        assert!(chain3_module.contains("import { apply_tax } from \"./apply_tax.ts\";"));
+        assert!(chain3_module.contains("import { apply_discount } from \"./apply_discount.ts\";"));
+    }
+
+    #[test]
+    fn typescript_tree_excludes_unrelated_loaded_units_when_shared_root_deps_exist() {
+        let helper = helper_spec("money/round");
+        let local_leaf = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["shared::money/round"],
+            "return round(subtotal.add(subtotal.mul(rate)));",
+        );
+        let mut shared_duplicate = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["shared::money/round"],
+            "return round(subtotal.add(subtotal.mul(rate)));",
+        );
+        shared_duplicate.intent_why =
+            "Shared duplicate that should stay out of the generated tree.".to_string();
+
+        let root_ids = vec![local_leaf.id.clone()];
+        let tree = generate_typescript_tree(
+            &[
+                NormalizedUnit::Function(local_leaf),
+                NormalizedUnit::Function(shared_duplicate),
+                NormalizedUnit::Function(helper),
+            ],
+            &root_ids,
+        )
+        .expect("local helper root should not include unrelated shared duplicates");
+
+        let leaf_module = tree
+            .get(&PathBuf::from("pricing/apply_tax.ts"))
+            .expect("local apply_tax module should be emitted");
+        assert!(
+            !leaf_module.contains("Shared duplicate that should stay out of the generated tree."),
+            "shared duplicate unexpectedly replaced the local root module"
+        );
     }
 
     #[test]
