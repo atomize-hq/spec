@@ -92,10 +92,16 @@ The minimum honest implementation is:
 2. admit `shared::...` in direct chain3 dep slots under the same frozen tuple rules
 3. resolve those direct deps through the already-loaded sibling-library set, not a second TypeScript-only resolver
 4. render correct library-aware TypeScript imports for direct cross-library root deps and their bounded closures
-5. prove one maintained real wrapper root in `examples/crosslib-app`
-6. prove one focused chain3 cross-library root through CLI/integration coverage
-7. preserve all existing same-tree and helper-import green paths
-8. update docs only after the proof wall is green
+5. add shared reusable pricing leaves at:
+   - `examples/shared-spec/units/pricing/apply_discount.unit.spec`
+   - `examples/shared-spec/units/pricing/apply_tax.unit.spec`
+6. add the maintained M56 wrapper proof root at:
+   - `examples/crosslib-app/units/pricing/calculate_total.unit.spec`
+   - deps: `shared::pricing/apply_discount`, `shared::pricing/apply_tax`
+7. preserve `examples/crosslib-app/units/pricing/apply_tax.unit.spec` as the maintained M55 helper-import regression proof
+8. keep the direct cross-library chain3 proof in focused CLI/integration coverage, not the public example
+9. preserve all existing same-tree wrapper, same-tree chain3, and helper-import green paths
+10. update docs only after the proof wall is green
 
 Anything broader is scope creep.
 
@@ -209,9 +215,13 @@ These are contract decisions, not suggestions:
 4. Cross-library root-dep resolution must reuse the loaded library set and current dep parsing model. No second TypeScript-only resolver.
 5. Closure collection stays bounded to the resolved root deps and the already-supported closure-member rules.
 6. Nested `function.wrapper.pipeline.chain3.v1` closure members remain unsupported.
-7. The maintained public example must prove a direct cross-library wrapper root.
-8. The chain3 proof will live in focused CLI/integration coverage, not the public example, unless implementation proves that adding it to `examples/crosslib-app` costs only one extra authored unit and does not degrade README legibility. Default plan: keep it out of the public example.
-9. Docs must keep saying "bounded direct cross-library wrapper and chain3 roots" and must keep every broader ban explicit.
+7. The maintained public M56 wrapper proof path is `examples/crosslib-app/units/pricing/calculate_total.unit.spec`.
+8. The maintained public M55 regression path remains `examples/crosslib-app/units/pricing/apply_tax.unit.spec`.
+9. The shared reusable leaves for the maintained wrapper proof live in:
+   - `examples/shared-spec/units/pricing/apply_discount.unit.spec`
+   - `examples/shared-spec/units/pricing/apply_tax.unit.spec`
+10. The chain3 proof lives in focused CLI/fixture coverage, not the public example. Keep the public example wrapper-sized and README-legible.
+11. Docs must keep saying "bounded direct cross-library wrapper and chain3 roots" and must keep every broader ban explicit.
 
 ## Abort And Re-scope Triggers
 
@@ -321,21 +331,29 @@ Files:
 
 Changes:
 
-1. Replace the M55 wrapper and chain3 "local-only" direct-dep validation with library-aware direct-dep validation.
-2. Preserve exact arity, order, family, and `body.typescript` enforcement.
-3. Keep the error wall narrow and explicit:
+1. Replace the M55 wrapper and chain3 "local-only" direct-dep validation with library-aware direct-dep validation for direct root deps only.
+2. Add or extend one explicit helper path that:
+   - parses a direct dep as local or qualified sibling-library
+   - resolves it from the loaded library set
+   - validates the expected family for that exact slot
+   - validates imported `body.typescript` presence
+3. Preserve exact arity, order, family, and `body.typescript` enforcement.
+4. Keep the error wall narrow and explicit:
    - alias missing
    - imported unit missing
    - wrong family in slot N
+   - wrong dep order
    - wrong dep count
    - missing `body.typescript`
-4. Keep molecule rejection, seam-kind rejection, and nested chain3 bans unchanged.
+5. Keep molecule rejection, seam-kind rejection, and nested chain3 bans unchanged.
 
 Acceptance:
 
-- all new direct cross-library wrapper and chain3 positives validate
-- all wrong-family, wrong-order, wrong-count, unresolved-alias, and missing-body negatives reject before Bun
+- `examples/crosslib-app/units/pricing/calculate_total.unit.spec` validates with direct shared deps
+- the focused cross-library chain3 fixture validates with direct shared deps
+- all wrong-family, wrong-order, wrong-count, unresolved-alias, missing-imported-unit, and missing-body negatives reject before Bun
 - same-tree wrapper and chain3 positives still validate
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec` still validates as the M55 regression path
 
 ### Phase 2: Extend bounded TypeScript closure collection and import rendering
 
@@ -352,27 +370,36 @@ Changes:
    - the already-supported closure members below those deps
 3. Render stable relative import paths for sibling-library units without emitting unrelated loaded units.
 4. Keep helper-import behavior exactly as shipped in M55.
+5. Keep the generated tree honest for the maintained wrapper proof:
+   - `pricing/calculate_total.ts` imports shared leaves, not duplicated local shadows
+   - shared leaf modules are emitted exactly once
+   - unrelated loaded units stay out of the tree
 
 Acceptance:
 
-- generated tree contains every required local and sibling-library unit exactly once
-- generated tree excludes unrelated loaded units
+- the generated tree for `pricing/calculate_total` contains the root plus the two shared pricing leaves exactly once
+- the generated tree for the focused cross-library chain3 fixture contains only the direct deps plus the already-supported bounded closures
+- generated trees exclude unrelated loaded units
 - nested chain3 closure members still reject
 
 ### Phase 3: Add proof surfaces
 
 Files:
 
-- `examples/shared-spec/units/...`
-- `examples/crosslib-app/units/...`
+- `examples/shared-spec/units/pricing/`
+- `examples/crosslib-app/units/pricing/`
 - `spec-cli/tests/cli.rs`
 
 Changes:
 
-1. Add the minimum authored shared leaves needed for a real direct cross-library wrapper root.
-2. Add one maintained app-library wrapper root in `examples/crosslib-app`.
-3. Keep the public example README legible.
-4. Add focused chain3 cross-library proof coverage in `spec-cli/tests/cli.rs` using a controlled fixture path instead of inflating the public example by default.
+1. Add the shared reusable pricing leaves:
+   - `examples/shared-spec/units/pricing/apply_discount.unit.spec`
+   - `examples/shared-spec/units/pricing/apply_tax.unit.spec`
+2. Add the maintained app-library wrapper root:
+   - `examples/crosslib-app/units/pricing/calculate_total.unit.spec`
+   - deps: `shared::pricing/apply_discount`, `shared::pricing/apply_tax`
+3. Keep `examples/crosslib-app/units/pricing/apply_tax.unit.spec` as the maintained M55 regression proof. Do not repurpose it into the M56 wrapper example.
+4. Add focused chain3 cross-library proof coverage in `spec-cli/tests/cli.rs` using a dedicated fixture/helper path instead of inflating the public example.
 5. Refresh or add negative fixtures for:
    - wrong dep order
    - wrong dep family
@@ -382,9 +409,9 @@ Changes:
 
 Acceptance:
 
-- direct cross-library wrapper root passes in the maintained example
+- direct cross-library wrapper root passes at `examples/crosslib-app/units/pricing/calculate_total.unit.spec`
 - direct cross-library chain3 root passes in focused CLI coverage
-- M55 helper-import example still passes
+- M55 helper-import example still passes at `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
 - same-tree wrapper and chain3 proofs still pass
 
 ### Phase 4: Docs and backlog truth
@@ -444,8 +471,11 @@ CODE PATH COVERAGE
 ===========================
 [+] spec-core/src/validator.rs
     |
+    ├── [EXISTS] same-tree wrapper / chain3 direct-dep admission
+    ├── [EXISTS] cross-library helper-import leaf admission (M55)
+    │
     ├── wrapper root direct dep admission
-    │   ├── [GAP] direct cross-library positive
+    │   ├── [GAP] direct cross-library positive for `pricing/calculate_total`
     │   ├── [GAP] mixed local + shared tuple
     │   ├── [GAP] wrong family in shared slot
     │   ├── [GAP] wrong order across local/shared tuple
@@ -453,7 +483,7 @@ CODE PATH COVERAGE
     │   └── [GAP] unresolved alias / missing imported unit
     |
     └── chain3 root direct dep admission
-        ├── [GAP] direct cross-library positive
+        ├── [GAP] direct cross-library positive in focused fixture
         ├── [GAP] mixed local + shared tuple
         ├── [GAP] wrong family in slot 1/2/3
         ├── [GAP] wrong order
@@ -462,8 +492,12 @@ CODE PATH COVERAGE
 
 [+] spec-core/src/typescript_backend.rs
     |
+    ├── [EXISTS] same-tree wrapper closure collection
+    ├── [EXISTS] same-tree chain3 closure collection
+    ├── [EXISTS] cross-library helper import rendering
+    │
     ├── wrapper root closure collection
-    │   ├── [GAP] includes cross-library dep exactly once
+    │   ├── [GAP] includes shared pricing leaves exactly once
     │   └── [GAP] excludes unrelated loaded units
     |
     └── chain3 root closure collection
@@ -472,21 +506,26 @@ CODE PATH COVERAGE
 
 [+] spec-cli/tests/cli.rs
     |
-    ├── [GAP] [→E2E] maintained wrapper example passes in TS lane
+    ├── [EXISTS] M55 helper-import example passes
+    │          `typescript_example_apply_tax_single_file_test_succeeds`
+    ├── [EXISTS] same-tree wrapper passes
+    │          `typescript_example_calculate_total_single_file_test_succeeds`
+    ├── [EXISTS] same-tree chain3 passes
+    │          `typescript_chain3_wrapper_executes_with_bun`
+    ├── [EXISTS] same-tree pre-Bun negative wall
+    │          wrong-family / wrong-order / missing-body tests already exist
+    ├── [GAP] [→E2E] maintained cross-library wrapper example passes at `pricing/calculate_total`
     ├── [GAP] [→E2E] focused chain3 cross-library root passes in TS lane
-    ├── [GAP] same-tree wrapper still passes
-    ├── [GAP] same-tree chain3 still passes
-    ├── [GAP] M55 helper-import example still passes
-    ├── [GAP] wrong-order rejection happens before Bun
-    ├── [GAP] wrong-family rejection happens before Bun
-    ├── [GAP] missing-body rejection happens before Bun
-    ├── [GAP] unresolved-alias rejection happens before Bun
-    └── [GAP] missing-imported-unit rejection happens before Bun
+    ├── [GAP] direct cross-library wrong-order rejection happens before Bun
+    ├── [GAP] direct cross-library wrong-family rejection happens before Bun
+    ├── [GAP] direct cross-library missing-body rejection happens before Bun
+    ├── [GAP] direct cross-library unresolved-alias rejection happens before Bun
+    └── [GAP] direct cross-library missing-imported-unit rejection happens before Bun
 
 ─────────────────────────────────
 COVERAGE TARGET: 100% of new root-dep branches
-QUALITY TARGET: validator unit tests + backend unit tests + CLI proof wall
-CRITICAL GAPS: all direct cross-library wrapper/chain3 paths are currently unproven
+QUALITY TARGET: existing regressions stay green, plus validator unit tests + backend unit tests + new CLI proof wall for direct shared root deps
+CRITICAL GAPS: all direct cross-library wrapper/chain3 root paths are currently unproven
 ─────────────────────────────────
 ```
 
@@ -494,45 +533,56 @@ CRITICAL GAPS: all direct cross-library wrapper/chain3 paths are currently unpro
 
 #### `spec-core/src/validator.rs`
 
-- positive wrapper admission with one or both direct deps in `shared::...`
-- positive chain3 admission with one or more direct deps in `shared::...`
-- mixed local/shared tuple ordering
-- wrong family in each slot
-- wrong order across local/shared tuples
-- unresolved alias
-- missing imported unit
-- missing imported `body.typescript`
+- `typescript_wrapper_direct_cross_library_deps_validate`
+- `typescript_wrapper_mixed_local_and_shared_deps_validate`
+- `typescript_wrapper_shared_dep_wrong_family_rejects`
+- `typescript_wrapper_shared_dep_wrong_order_rejects`
+- `typescript_wrapper_shared_dep_missing_body_typescript_rejects`
+- `typescript_wrapper_shared_dep_missing_alias_or_unit_rejects`
+- `typescript_chain3_direct_cross_library_deps_validate`
+- `typescript_chain3_mixed_local_and_shared_deps_validate`
+- `typescript_chain3_shared_dep_wrong_slot_family_rejects`
+- `typescript_chain3_shared_dep_wrong_order_rejects`
+- `typescript_chain3_shared_dep_wrong_count_rejects`
+- `typescript_chain3_shared_dep_missing_body_typescript_rejects`
 
 #### `spec-core/src/typescript_backend.rs`
 
-- wrapper tree renders sibling-library direct imports correctly
-- chain3 tree renders sibling-library direct imports correctly
-- included tree excludes unrelated loaded units when cross-library deps are present
-- nested chain3 closure-member rejection still fires
+- `typescript_tree_renders_cross_library_wrapper_root_without_duplicate_units`
+- `typescript_tree_renders_cross_library_chain3_root_without_duplicate_units`
+- `typescript_tree_excludes_unrelated_loaded_units_when_shared_root_deps_exist`
+- `typescript_tree_preserves_nested_chain3_rejection_for_shared_root_deps`
 
 #### `spec-cli/tests/cli.rs`
 
-- maintained cross-library wrapper example succeeds with `spec test ... --target-language typescript`
-- focused chain3 cross-library fixture succeeds with `spec test ... --target-language typescript`
-- wrong-order rejection happens before Bun
-- wrong-family rejection happens before Bun
-- unresolved alias rejection happens before Bun
-- missing imported unit rejection happens before Bun
-- missing imported `body.typescript` rejection happens before Bun
-- regression coverage for same-tree wrapper, same-tree chain3, and M55 helper-import paths
+- `typescript_cross_library_wrapper_example_executes_with_bun`
+- `typescript_cross_library_chain3_root_executes_with_bun`
+- `typescript_cross_library_wrapper_wrong_dep_order_rejects_before_bun_runs`
+- `typescript_cross_library_chain3_wrong_dep_order_rejects_before_bun_runs`
+- `typescript_cross_library_wrapper_wrong_family_rejects_before_bun_runs`
+- `typescript_cross_library_chain3_wrong_family_rejects_before_bun_runs`
+- `typescript_cross_library_wrapper_missing_typescript_body_rejects_before_bun_runs`
+- `typescript_cross_library_chain3_missing_typescript_body_rejects_before_bun_runs`
+- `typescript_cross_library_wrapper_unresolved_alias_rejects_before_bun_runs`
+- `typescript_cross_library_wrapper_missing_imported_unit_rejects_before_bun_runs`
+- keep existing regression coverage for same-tree wrapper, same-tree chain3, and M55 helper-import paths green
 
 ### Test command wall
 
 Run these exact commands before docs land:
 
 ```bash
-cargo test -p spec-core validator::tests -- --nocapture
-cargo test -p spec-core typescript_backend::tests -- --nocapture
-cargo test -p spec-cli --test cli typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/<new-wrapper-root>.unit.spec --target-language typescript
+cargo test -p spec-core validator::tests typescript_wrapper -- --nocapture
+cargo test -p spec-core validator::tests typescript_chain3 -- --nocapture
+cargo test -p spec-core typescript_backend::tests cross_library -- --nocapture
+cargo test -p spec-cli --test cli typescript_example_apply_tax_single_file_test_succeeds -- --nocapture
+cargo test -p spec-cli --test cli typescript_cross_library_wrapper_example_executes_with_bun -- --nocapture
+cargo test -p spec-cli --test cli typescript_cross_library_chain3_root_executes_with_bun -- --nocapture
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
 ```
 
-If the chain3 proof lives in a focused fixture, add the exact fixture command to the final PR notes and `ORCH_PLAN.md`.
+If the chain3 proof lives in a focused fixture, add the exact fixture command and fixture helper name to the final PR notes and `ORCH_PLAN.md`.
 
 ## Performance Review
 
@@ -564,42 +614,46 @@ Any path with no validator test, no backend tree test, and no CLI proof is a rel
 
 ## Worktree Parallelization Strategy
 
-This plan has parallelization value, but only after the validator contract is frozen. `validator.rs` is the blast-radius seam and must go first.
+This plan has parallelization value, but only after the validator contract is frozen. `validator.rs` is the blast-radius seam and must go first. The safe split is one contract gate, then two implementation lanes, then docs last.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| Validator contract freeze | `spec-core/src/` | — |
-| Backend closure and import rendering | `spec-core/src/` | Validator contract freeze |
-| Wrapper example and CLI proof wall | `examples/shared-spec/`, `examples/crosslib-app/`, `spec-cli/tests/` | Validator contract freeze |
-| Docs and backlog truth | repo docs root, `examples/crosslib-app/README.md` | Backend + proof wall green |
+| Lane A: validator contract freeze | `spec-core/src/validator.rs` | — |
+| Lane B: backend closure and import rendering | `spec-core/src/typescript_backend.rs` | Lane A |
+| Lane C: shared/app example authoring + CLI proof wall | `examples/shared-spec/units/pricing/`, `examples/crosslib-app/units/pricing/`, `spec-cli/tests/cli.rs` | Lane A |
+| Lane D: docs and backlog truth | `README.md`, `examples/crosslib-app/README.md`, `CHANGELOG.md`, `TODOS.md` | Lane B + Lane C green |
 
 ### Parallel lanes
 
-- Lane A: validator contract freeze, then backend closure/import work
-- Lane B: after validator freeze, example authoring + CLI proof wall
-- Lane C: docs and backlog updates after A and B are merged
+- Lane A: validator contract freeze
+- Lane B: backend closure/import work after Lane A
+- Lane C: shared/app example authoring plus CLI proof wall after Lane A
+- Lane D: docs and backlog updates after Lane B and Lane C are merged and green
 
 Formatted:
 
-- `Lane A: validator.rs freeze -> typescript_backend.rs changes` (sequential, shared `spec-core/src/`)
-- `Lane B: examples/shared-spec + examples/crosslib-app + spec-cli/tests/cli.rs` (parallel after validator freeze)
-- `Lane C: README.md -> examples/crosslib-app/README.md -> CHANGELOG.md -> TODOS.md` (sequential, docs-last)
+- `Lane A: validator.rs contract freeze` (sequential gate, single owner)
+- `Lane B: typescript_backend.rs generation/import work` (parallel only after Lane A lands)
+- `Lane C: shared-spec pricing leaves -> crosslib-app calculate_total -> spec-cli/tests/cli.rs` (parallel only after Lane A lands)
+- `Lane D: README.md -> examples/crosslib-app/README.md -> CHANGELOG.md -> TODOS.md` (sequential, docs-last)
 
 ### Execution order
 
-1. Do validator freeze in the primary branch.
-2. Launch Lane A and Lane B in parallel worktrees from that frozen head.
-3. Merge Lane A and Lane B.
-4. Run the full proof wall.
-5. Launch Lane C only after proof is green.
+1. Land Lane A in the primary branch first.
+2. Launch Lane B and Lane C in parallel worktrees from the same frozen Lane A head.
+3. Merge Lane B and Lane C back into the primary branch.
+4. Run the full proof wall on the integrated branch.
+5. Launch Lane D only after the proof wall is green.
 
 ### Conflict flags
 
-- `validator.rs` and `typescript_backend.rs` both live in `spec-core/src/`, so validator freeze and backend work must not run in parallel before the freeze lands.
-- `spec-cli/tests/cli.rs` is a single high-conflict file. Keep one owner.
-- The public example and docs should not be split across multiple lanes. Example truth and docs wording drift together fast.
+- `validator.rs` is the contract seam. No other lane starts until that contract lands.
+- `typescript_backend.rs` stays single-owner in Lane B even though it shares the `spec-core/src/` directory with the validator seam.
+- `spec-cli/tests/cli.rs` is a single high-conflict file. Keep one owner in Lane C.
+- `examples/shared-spec/units/pricing/` and `examples/crosslib-app/units/pricing/` should stay in the same lane as the CLI proof wall so fixture truth and authored example truth drift together less.
+- Docs must stay last. If docs move earlier, wording will get ahead of the proof wall.
 
 ## NOT in Scope
 
@@ -618,21 +672,22 @@ The milestone is done only when all of these are true:
 - direct cross-library chain3 roots pass in the bounded TypeScript lane
 - exact wrapper and chain3 dep tuples stay enforced even when some slots are `shared::...`
 - wrong dep order, wrong dep count, wrong family, unresolved alias, missing imported unit, and missing imported `body.typescript` all fail before Bun
+- `examples/crosslib-app/units/pricing/calculate_total.unit.spec` is the maintained M56 wrapper proof path
 - same-tree wrapper roots still pass
 - same-tree chain3 roots still pass
-- M55 helper-import behavior still passes
+- `examples/crosslib-app/units/pricing/apply_tax.unit.spec` still passes as the maintained M55 helper-import regression path
 - generated tree remains bounded and excludes unrelated loaded units
 - README, CHANGELOG, TODOs, and example docs all tell the same M56 story
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, completed. Scope accepted as the bounded M56 extension, not reduced beyond the design doc.
+- Step 0: Scope Challenge, completed. Scope accepted as the bounded M56 extension, with exact maintained proof surfaces pinned to `pricing/calculate_total` for M56 and `pricing/apply_tax` for the M55 regression path.
 - Architecture Review: one core architectural rule, reuse existing loaded-unit truth and do not build a second resolver.
 - Code Quality Review: one core quality rule, keep tuple enforcement and import resolution explicit, not clever.
-- Test Review: full branch diagram included; all new root-dep branches require validator + backend + CLI proof coverage.
-- Performance Review: bounded tree generation and duplicate-unit prevention are the only meaningful performance risks.
+- Test Review: full branch diagram included; existing same-tree and M55 regression coverage is called out explicitly, and every new direct shared-root branch has a named proof requirement.
+- Performance Review: bounded tree generation, duplicate-unit prevention, and "no unrelated loaded units" are the only meaningful performance risks.
 - NOT in scope: written.
 - What already exists: written.
 - Failure modes: written, with release-blocking critical-gap rule.
-- Parallelization: 3 lanes total, 1 sequential gate then 2 parallelizable workstreams, then docs-last.
+- Parallelization: 4 lanes total, 1 sequential contract gate, 2 parallel implementation workstreams, then docs-last.
 - Lake Score: 5/5 recommendations choose the complete bounded option over the shortcut.
