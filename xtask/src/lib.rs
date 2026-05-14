@@ -3975,10 +3975,10 @@ gate_d = true
                 .iter()
                 .map(|source| source.unit_count)
                 .collect::<Vec<_>>(),
-            vec![6, 12, 9, 1, 2]
+            vec![6, 12, 9, 3, 3]
         );
-        assert_eq!(coverage.function_coverage.total_units, 28);
-        assert_eq!(coverage.function_coverage.promoted_family_units, 17);
+        assert_eq!(coverage.function_coverage.total_units, 31);
+        assert_eq!(coverage.function_coverage.promoted_family_units, 20);
         assert_eq!(
             coverage.function_coverage.supported_unpromoted_family_units,
             3
