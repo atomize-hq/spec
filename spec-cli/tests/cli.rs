@@ -15661,7 +15661,10 @@ fn typescript_monotone_down_fixture_executes_with_bun() {
             "typescript",
         ],
     );
-    assert_output_success("monotone-down roots should execute in the M59 lane", &output);
+    assert_output_success(
+        "monotone-down roots should execute in the M59 lane",
+        &output,
+    );
 }
 
 #[test]
@@ -15742,7 +15745,10 @@ fn typescript_local_supported_graph_monotone_down_root_executes_with_bun() {
             "typescript",
         ],
     );
-    assert_output_success("local monotone-down root should pass in the M59 lane", &output);
+    assert_output_success(
+        "local monotone-down root should pass in the M59 lane",
+        &output,
+    );
 
     let passport =
         read_passport_json(&fixture_dir.join("units/pricing/apply_discount.spec.passport.json"));
@@ -15772,7 +15778,10 @@ fn typescript_local_supported_graph_monotone_up_root_executes_with_bun() {
             "typescript",
         ],
     );
-    assert_output_success("local monotone-up root should pass in the M59 lane", &output);
+    assert_output_success(
+        "local monotone-up root should pass in the M59 lane",
+        &output,
+    );
 
     let passport =
         read_passport_json(&fixture_dir.join("units/pricing/apply_tax.spec.passport.json"));
@@ -15845,7 +15854,9 @@ fn typescript_local_supported_graph_chain3_root_executes_with_bun() {
         "pass"
     );
     assert!(
-        !fixture_dir.join("src/generated/pricing/display_total.rs").exists(),
+        !fixture_dir
+            .join("src/generated/pricing/display_total.rs")
+            .exists(),
         "unrelated supported units should stay out of the generated local graph"
     );
 }
@@ -15876,7 +15887,7 @@ fn typescript_local_supported_graph_reachable_shared_dep_rejects_before_bun_runs
     )
     .unwrap();
     fs::write(
-        &fixture_dir.join("Cargo.toml"),
+        fixture_dir.join("Cargo.toml"),
         "[package]\nname = \"typescript-local-supported-graph\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nrust_decimal = { version = \"1.36\", features = [\"serde\"] }\nshared = { path = \"../shared-crate\" }\n\n[workspace]\n",
     )
     .unwrap();
@@ -16089,7 +16100,8 @@ fn typescript_cross_library_example_status_marks_apply_tax_valid_after_proof() {
         return;
     }
 
-    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
 
     let test_output = run_in(
         &app_dir,
@@ -16142,7 +16154,8 @@ fn typescript_cross_library_wrapper_example_executes_with_bun() {
         return;
     }
 
-    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
     let output = run_in(
         &app_dir,
         &[
@@ -16176,7 +16189,8 @@ fn typescript_cross_library_chain3_root_executes_with_bun() {
         return;
     }
 
-    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
     write_cross_library_chain3_spec(&app_dir);
     let output = run_in(
         &app_dir,
@@ -16207,7 +16221,8 @@ fn typescript_cross_library_chain3_root_executes_with_bun() {
 #[cfg(unix)]
 #[test]
 fn typescript_cross_library_wrapper_wrong_dep_order_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
     replace_in_file(
         &app_dir.join("units/pricing/calculate_total.unit.spec"),
         "deps:\n  - shared::pricing/apply_discount\n  - shared::pricing/apply_tax\n",
@@ -16251,7 +16266,8 @@ fn typescript_cross_library_wrapper_wrong_dep_order_rejects_before_bun_runs() {
 #[cfg(unix)]
 #[test]
 fn typescript_cross_library_chain3_wrong_dep_order_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
     write_cross_library_chain3_spec(&app_dir);
     replace_in_file(
         &app_dir.join("units/pricing/checkout_chain3.unit.spec"),
@@ -16296,7 +16312,8 @@ fn typescript_cross_library_chain3_wrong_dep_order_rejects_before_bun_runs() {
 #[cfg(unix)]
 #[test]
 fn typescript_cross_library_wrapper_wrong_family_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
     replace_in_file(
         &app_dir.join("units/pricing/calculate_total.unit.spec"),
         "deps:\n  - shared::pricing/apply_discount\n  - shared::pricing/apply_tax\n",
@@ -16340,7 +16357,8 @@ fn typescript_cross_library_wrapper_wrong_family_rejects_before_bun_runs() {
 #[cfg(unix)]
 #[test]
 fn typescript_cross_library_chain3_wrong_family_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
     write_cross_library_chain3_spec(&app_dir);
     replace_in_file(
         &app_dir.join("units/pricing/checkout_chain3.unit.spec"),
@@ -16385,7 +16403,8 @@ fn typescript_cross_library_chain3_wrong_family_rejects_before_bun_runs() {
 #[cfg(unix)]
 #[test]
 fn typescript_cross_library_wrapper_missing_typescript_body_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
     remove_typescript_body(&shared_spec_dir.join("units/pricing/apply_tax.unit.spec"));
 
     let marker_path = app_dir.join("bun-invoked.txt");
@@ -16411,7 +16430,9 @@ fn typescript_cross_library_wrapper_missing_typescript_body_rejects_before_bun_r
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("TypeScript wrapper target requires direct deps to author body.typescript in M56"),
+        stderr.contains(
+            "TypeScript wrapper target requires direct deps to author body.typescript in M56"
+        ),
         "{stderr}"
     );
     assert!(
@@ -16423,7 +16444,8 @@ fn typescript_cross_library_wrapper_missing_typescript_body_rejects_before_bun_r
 #[cfg(unix)]
 #[test]
 fn typescript_cross_library_chain3_missing_typescript_body_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
     write_cross_library_chain3_spec(&app_dir);
     remove_typescript_body(&shared_spec_dir.join("units/pricing/apply_tax.unit.spec"));
 
@@ -16450,7 +16472,9 @@ fn typescript_cross_library_chain3_missing_typescript_body_rejects_before_bun_ru
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("TypeScript chain3 target requires direct deps to author body.typescript in M56"),
+        stderr.contains(
+            "TypeScript chain3 target requires direct deps to author body.typescript in M56"
+        ),
         "{stderr}"
     );
     assert!(
@@ -16462,7 +16486,8 @@ fn typescript_cross_library_chain3_missing_typescript_body_rejects_before_bun_ru
 #[cfg(unix)]
 #[test]
 fn typescript_cross_library_wrapper_unresolved_alias_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
     replace_in_file(
         &app_dir.join("units/pricing/calculate_total.unit.spec"),
         "shared::pricing/apply_discount",
@@ -16504,7 +16529,8 @@ fn typescript_cross_library_wrapper_unresolved_alias_rejects_before_bun_runs() {
 #[cfg(unix)]
 #[test]
 fn typescript_cross_library_wrapper_missing_imported_unit_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
     replace_in_file(
         &app_dir.join("units/pricing/calculate_total.unit.spec"),
         "shared::pricing/apply_tax",
@@ -16883,9 +16909,7 @@ fn typescript_chain3_missing_typescript_body_rejects_before_bun_runs() {
 #[test]
 fn typescript_nested_chain3_missing_nested_typescript_body_rejects_before_bun_runs() {
     let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
-    remove_typescript_body(
-        &fixture_dir.join("units/pricing/base_nested_chain3_aligned.unit.spec"),
-    );
+    remove_typescript_body(&fixture_dir.join("units/pricing/base_nested_chain3_aligned.unit.spec"));
 
     let marker_path = fixture_dir.join("bun-invoked.txt");
     let fake_bun = format!(
@@ -16996,7 +17020,8 @@ fn typescript_nested_chain3_wrong_dep_order_reaches_bun_in_m59() {
 #[cfg(unix)]
 #[test]
 fn typescript_nested_chain3_cross_library_recursive_first_dep_rejects_before_bun_runs() {
-    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) = copy_crosslib_typescript_example();
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
     write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
 
     let marker_path = app_dir.join("bun-invoked.txt");

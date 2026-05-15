@@ -60,30 +60,24 @@ pub const TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript target requires the direct helper dep to author body.typescript in M55";
 pub const TYPESCRIPT_WRAPPER_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript wrapper target requires exactly two direct deps in M56";
-pub const TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript wrapper target requires every direct dep to resolve from the loaded unit set in M56";
-pub const TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56";
+pub const TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target requires every direct dep to resolve from the loaded unit set in M56";
+pub const TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56";
 pub const TYPESCRIPT_WRAPPER_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript wrapper target requires direct deps to author body.typescript in M56";
 pub const TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires exactly three direct deps in M56";
 pub const TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires every direct dep to resolve from the loaded unit set in M56";
-pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58";
+pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58";
 pub const TYPESCRIPT_CHAIN3_SAME_TREE_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires recursive slot-1 chain3 deps to stay same-tree local in M58";
 pub const TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires direct deps to author body.typescript in M56";
 pub const TYPESCRIPT_LOCAL_GRAPH_SHARED_DEP_UNSUPPORTED_MESSAGE: &str =
     "TypeScript same-tree local target requires every reachable dep to stay same-tree local in M59";
-pub const TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript same-tree local target requires every reachable dep to resolve from the loaded unit set in M59";
-pub const TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript same-tree local target requires every reachable unit to classify to a supported semantic review in M59";
-pub const TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
-    "TypeScript same-tree local target requires every reachable unit to author body.typescript in M59";
+pub const TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE: &str = "TypeScript same-tree local target requires every reachable dep to resolve from the loaded unit set in M59";
+pub const TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE: &str = "TypeScript same-tree local target requires every reachable unit to classify to a supported semantic review in M59";
+pub const TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str = "TypeScript same-tree local target requires every reachable unit to author body.typescript in M59";
 pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str = "TypeScript target requires local_tests.expect to match `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)` in M52";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -5338,7 +5332,10 @@ methods:
             err.contains(TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
-        assert!(err.contains("unsupported.function.v1"), "unexpected error: {err}");
+        assert!(
+            err.contains("unsupported.function.v1"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
@@ -5522,8 +5519,14 @@ methods:
         let helper = create_typescript_helper_spec();
         let specs_by_id = HashMap::from([
             (spec.spec.id.clone(), spec.clone()),
-            ("shared::pricing/calculate_total".to_string(), wrapper.clone()),
-            ("shared::pricing/apply_discount".to_string(), discount.clone()),
+            (
+                "shared::pricing/calculate_total".to_string(),
+                wrapper.clone(),
+            ),
+            (
+                "shared::pricing/apply_discount".to_string(),
+                discount.clone(),
+            ),
             ("shared::pricing/apply_tax".to_string(), tax.clone()),
             ("shared::money/round".to_string(), helper.clone()),
             (discount.spec.id.clone(), discount),
@@ -5550,7 +5553,10 @@ methods:
         let specs_by_id = HashMap::from([
             (spec.spec.id.clone(), spec.clone()),
             (wrapper.spec.id.clone(), wrapper),
-            ("shared::pricing/apply_discount".to_string(), discount.clone()),
+            (
+                "shared::pricing/apply_discount".to_string(),
+                discount.clone(),
+            ),
             ("shared::pricing/apply_tax".to_string(), tax.clone()),
             ("shared::money/round".to_string(), helper.clone()),
             (discount.spec.id.clone(), discount),
@@ -5660,7 +5666,10 @@ methods:
             err.contains(TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
-        assert!(err.contains("unsupported.function.v1"), "unexpected error: {err}");
+        assert!(
+            err.contains("unsupported.function.v1"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

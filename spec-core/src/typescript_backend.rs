@@ -18,8 +18,7 @@ use crate::validator::{
     TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY, TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
     TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE, TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
     TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY, TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
-    typescript_target_uses_local_graph_lane,
-    validate_typescript_closure_member_spec_with_specs,
+    typescript_target_uses_local_graph_lane, validate_typescript_closure_member_spec_with_specs,
     validate_typescript_execution_target_spec_with_specs,
 };
 use crate::{Result, SpecError};
@@ -395,10 +394,10 @@ fn parse_typescript_dep(dep: &str, role: &str) -> Result<DepRef> {
     })
 }
 
-fn resolve_typescript_dep_spec<'a>(
+fn resolve_typescript_dep_spec(
     owner_id: &str,
     dep: &DepRef,
-    spec_indices_by_key: &'a HashMap<String, usize>,
+    spec_indices_by_key: &HashMap<String, usize>,
 ) -> Result<usize> {
     let dep_key = if dep.library_alias().is_some() {
         dep.authored()
@@ -537,15 +536,15 @@ fn render_typescript_dep_imports(spec: &ResolvedSpec) -> Result<String> {
     Ok(imports.join("\n"))
 }
 
-fn build_typescript_spec_indices_by_key(
-    specs: &[&ResolvedSpec],
-) -> HashMap<String, usize> {
+fn build_typescript_spec_indices_by_key(specs: &[&ResolvedSpec]) -> HashMap<String, usize> {
     let mut first_indices_by_unit_id = HashMap::new();
     let mut last_indices_by_unit_id = HashMap::new();
     let mut qualified_helper_keys = BTreeMap::<String, Vec<String>>::new();
 
     for (index, spec) in specs.iter().enumerate() {
-        first_indices_by_unit_id.entry(spec.id.clone()).or_insert(index);
+        first_indices_by_unit_id
+            .entry(spec.id.clone())
+            .or_insert(index);
         last_indices_by_unit_id.insert(spec.id.clone(), index);
 
         for dep in &spec.deps {
@@ -1411,7 +1410,9 @@ mod tests {
         .to_string();
 
         assert!(
-            err.contains("same-tree local target requires every reachable dep to stay same-tree local in M59"),
+            err.contains(
+                "same-tree local target requires every reachable dep to stay same-tree local in M59"
+            ),
             "unexpected error: {err}"
         );
     }
