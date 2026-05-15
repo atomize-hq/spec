@@ -42,6 +42,7 @@ This is an execution skill, not a brainstorming skill.
   - `reasoning_effort: high`
   - `fork_context: false`
 - Stage 5 uses one fresh `gpt-5.4` / `high` subagent for the initial ORCH draft.
+- The wrapper-owned Stage 5 agent is itself the required fresh session for the initial ORCH draft, so this rule is enforced by the wrapper and does not need to be repeated inside the Stage 5 prompt text.
 - If the ORCH draft is insufficient, reuse that same Stage 5 subagent with `send_input` for correction rounds.
 - Do not reuse Stage 1-4 agents for later stages.
 - Do not parallelize this wrapper. The stages are serialized by artifact dependency.

@@ -52,8 +52,6 @@ Related Documents:
 ```text
 I need you to use the below example of an Orchestration Plan, the example below is the correct level of structure, rigor, explicit orchestration and completeness, and use it as a guide to generate NEW/FRESH ORCH_PLAN.md with the same level of detail and parallel subagent workstream optimization to ensure it successfully kicksoff and walks the entire PLAN.md session to its completion.
 
-To create the new ORCH_PLAN.md you need to spin up a fresh GPT-5.4 subagent  on high to draft the orchestration plan, you will review it for completness, and if it is not sufficient, you will send it back to the same subagent with details on what needs to be changed/corrected -- you are responsible for providing the subagent with the seed context that will enable it to be successfull
-
 
 
 # M26 Orchestration Plan

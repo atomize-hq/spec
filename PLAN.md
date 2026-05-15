@@ -1,536 +1,558 @@
-# M60: Normalized-Required-Arg Wrapper Family Execution Plan
+# M61: Bounded Recursive Cross-Library TypeScript Function-Graph Execution Plan
 
 Status: **authoritative implementation plan**  
-Milestone: **M60**  
-Milestone family: **semantic-review substrate**  
+Milestone: **M61**  
+Milestone family: **bounded TypeScript execution**  
 Implementation readiness: **ready for bounded execution**  
-Plan scope: **ship exactly one new supported function family, `function.wrapper.pipeline.normalized_required_arg.v1`, for the bounded case where a two-step wrapper normalizes the second dep's required argument with `param.max(Decimal::ZERO)`; preserve `function.wrapper.pipeline.v1` as the strict raw-argument sibling; update maintained examples, regression fixtures, family-analysis read-side truth, and public docs in the same PR; do not widen to generic expression understanding, new dep topology, new TypeScript execution behavior, new seam families, or a corpus-program reopen**  
+Plan scope: **extend the existing Bun-backed TypeScript lane from same-tree local supported-function graphs plus direct cross-library portability exceptions to recursive local-plus-cross-library closure across the already-supported function families; preserve family-specific direct-dep contracts, additive proof, atom-only execution, and all broader non-goals**  
 Base branch: **main**  
 Working branch: **feat/m40-plus**  
-Validated at commit: **`f401d49`**  
+Validated at commit: **`96d2ee9`**  
 Last rewritten: **2026-05-15**
 
 Supersedes:
 
-- the shipped M59 authority plan previously maintained at this path
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-192715.md`
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-135734.md`
+- the shipped M60 authority plan previously maintained at this path
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260515-113145.md`
 
 Primary source artifacts:
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260514-192715.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260515-113145.md`
 - `README.md`
 - `TODOS.md`
 - `CHANGELOG.md`
-- `CLAUDE.md`
-- `semantic-families/function.wrapper.pipeline.v1/candidate.md`
+- `examples/crosslib-app/README.md`
 
 Primary repo surfaces:
 
+- `spec-core/src/validator.rs`
+- `spec-core/src/typescript_backend.rs`
 - `spec-core/src/semantic_review.rs`
 - `spec-cli/tests/cli.rs`
-- `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/**`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/**`
-- `examples/ecommerce/units/pricing/**`
-- `semantic-families/**`
+- `examples/crosslib-app/units/**`
+- `examples/shared-spec/units/**`
 - `README.md`
 - `TODOS.md`
 - `CHANGELOG.md`
+- `examples/crosslib-app/README.md`
 
 ## Executive Summary
 
-M59 finished the local TypeScript graph widen. That work is done.
+M59 shipped the same-tree local TypeScript graph lane.
 
-M60 is not another TypeScript milestone, not a family-analysis milestone, and not generic wrapper expression support.
+M55 and M56 preserved three narrow cross-library exceptions:
 
-M60 is one narrower product truth widen:
+- one direct helper import for `function.arithmetic_leaf.monotone_up.v1`
+- one direct wrapper-root path for `function.wrapper.pipeline.v1`
+- one direct chain3-root path for `function.wrapper.pipeline.chain3.v1`
 
-```text
-support exactly one additional wrapper topology:
-dep_b(dep_a(...), normalized_required_arg)
-where normalized_required_arg == param.max(Decimal::ZERO)
-```
+M58 widened same-tree recursive chain3 closure, but it kept recursive shared closure out.
 
-The new family key is:
+That leaves the next real product gap:
 
 ```text
-function.wrapper.pipeline.normalized_required_arg.v1
+the repo can already execute direct cross-library roots,
+but it still cannot recurse truthfully through a shared function graph
+once a supported TypeScript root depends on another shared supported function
+that itself has deps
 ```
 
-This is the right next lake because the pressure is already real in the repo:
+M61 fixes exactly that gap.
 
-- `semantic-families/function.wrapper.pipeline.v1/candidate.md` calls out this exact near miss
-- `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/billing/checkout_net_total_unsupported_near_miss.unit.spec` uses the same boundary
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/calculate_total.unit.spec` uses the same boundary
+It does not claim generic cross-library parity. It does not claim arbitrary authored 4+ topology support. It does not claim molecule TypeScript execution. It does not change semantic-family meaning.
 
-The milestone succeeds only if the repo ends in a truthful state:
+It ships one bounded contract:
 
-- the new family classifies one maintained real example
-- the old wrapper family stays strict
-- current unsupported fixtures that now fall inside the new family are either migrated or rewritten so the unsupported packs remain honest
-- family-analysis read-side commands still say the corpus program is stopped, not reopened
-- README, CHANGELOG, and TODOS all describe the new boundary without implying generic expression understanding
+```text
+recursive local-plus-cross-library closure across the current supported
+function families, with owner-library-qualified dep resolution and the
+same frozen family-specific dep contracts at every recursive depth
+```
 
 ## Frozen Implementation Decisions
 
-These decisions are locked for M60. If any of them changes, the milestone scope changed and the plan must be rewritten before implementation continues.
+These decisions are locked for M61. If any of them changes, the milestone scope changed and this plan must be rewritten before implementation continues.
 
-1. **Ship a sibling family, not a widened raw family.**
-   - Add `function.wrapper.pipeline.normalized_required_arg.v1`
-   - Keep `function.wrapper.pipeline.v1` raw-arg only
+1. **Unify the validator and generator around one recursive closure story.**
+   - Replace the current split between same-tree local recursion and direct portability exceptions.
+   - Do not keep two separate closure models and bolt recursion onto only one of them.
 
-2. **Admit exactly one required-arg normalization surface.**
-   - Supported: `param.max(Decimal::ZERO)`
-   - Unsupported: literals, arithmetic, chained methods, multi-input expressions, and multi-arg normalization
+2. **Resolve closure membership by qualified identity, not raw unit id.**
+   - Reuse library-qualified identity concepts already present in `spec-core/src/validator.rs`.
+   - Do not allow the TypeScript collector to choose a shared unit by first-loaded or last-loaded raw-id coincidence.
 
-3. **Add one maintained real example and keep the old canonical example intact.**
-   - Add `examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec`
-   - Do not rewrite `examples/ecommerce/units/pricing/calculate_total.unit.spec`
+3. **Keep the supported family set frozen to what the repo already ships today.**
+   - `function.helper.identity_passthrough.v1`
+   - `function.arithmetic_leaf.monotone_down_nonnegative.v1`
+   - `function.arithmetic_leaf.monotone_up.v1`
+   - `function.wrapper.pipeline.v1`
+   - `function.wrapper.pipeline.normalized_required_arg.v1`
+   - `function.wrapper.pipeline.chain3.v1`
 
-4. **Repair the promoted unsupported fixtures in place, do not move them.**
-   - Keep the current file paths and ids stable
-   - Rewrite only the body expressions so the fixtures remain honest owners of `unsupported_required_argument_expression`
-   - Exact replacement shapes:
-     - `m19_semantic_falsification_pack::billing/checkout_net_total_unsupported_near_miss`
-       -> `regional_rate.max(Decimal::ZERO).round_dp(4)`
-     - `m20_unsupported_truth_pack::pricing/calculate_total`
-       -> `tax_rate + Decimal::ZERO`
+4. **Preserve family-specific dep contracts exactly.**
+   - Helper family rules stay helper-family rules.
+   - Wrapper family rules stay wrapper-family rules.
+   - Chain3 family rules stay chain3-family rules.
+   - Normalized-required-arg wrapper rules stay the M60 rules.
+   - Recursive shared closure widens location, not semantics.
 
-5. **Mirror the existing wrapper packet layout instead of inventing a new packet shape.**
-   - Create `semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/`
-   - Reuse the same four buckets: `aligned`, `drift`, `under_specified`, `unsupported_near_miss`
-   - Reuse the same packet-local leaf naming conventions as `function.wrapper.pipeline.v1`
+5. **Promote one maintained recursive-shared proof owner in the cross-library example.**
+   - Use checked-in example specs under `examples/crosslib-app/units/` and `examples/shared-spec/units/`.
+   - Do not leave the only green proof inside temporary CLI test scaffolding.
 
-6. **Freeze the public docs sentence.**
-   - Use one exact statement everywhere:
-     - "M60 adds one supported wrapper family for `apply_tax(discounted, tax_rate.max(Decimal::ZERO))`; broader required-argument expressions remain unsupported."
+6. **Keep the public contract sentence tight and identical across docs.**
+   - Use this exact sentence:
+     - `M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.`
 
 ## Current Validated Basis
 
-Validated on `feat/m40-plus` at `f401d49` with:
-
-```bash
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family verify-decision-contract --format json
-```
+Validated on `feat/m40-plus` at `96d2ee9`.
 
 Observed live branch truth:
 
-- `function_coverage.total_units = 31`
-- `function_coverage.promoted_family_units = 23`
-- `function_coverage.supported_unpromoted_family_units = 0`
-- `function_coverage.unsupported_function_units = 8`
-- `recommendation_status = "insufficient_real_corpus"`
-- `decision_status = "not_recommended"`
-- `corpus_program_decision.decision_action = "stop"`
-- `verify-decision-contract.overall_verdict = "pass"`
-- the unsupported cluster `unsupported_required_argument_expression` still contains:
-  - `m19_semantic_falsification_pack::billing/checkout_net_total_unsupported_near_miss`
-  - `m20_unsupported_truth_pack::pricing/calculate_total`
+- `spec-core/src/validator.rs` still splits target validation between:
+  - `validate_typescript_local_graph_root_spec_with_specs(...)`
+  - `validate_typescript_portability_target_spec_with_specs(...)`
+- `typescript_target_uses_local_graph_lane(...)` still rejects any root with a `shared::...` dep from the local recursive lane.
+- `validate_typescript_chain3_first_dep_family(...)` still enforces the M58 same-tree-only slot-1 recursive chain3 rule for shared deps.
+- `spec-core/src/typescript_backend.rs` still splits closure collection between:
+  - `collect_typescript_local_graph_member_closure(...)`
+  - `collect_typescript_portability_root_closure(...)`
+- `build_typescript_loaded_specs_by_id(...)`, `build_typescript_spec_indices_by_key(...)`, and `resolve_typescript_dep_spec(...)` still rely on raw unit ids plus a limited authored-key exception path rather than first-class qualified node identity.
+- `spec-cli/tests/cli.rs` already contains:
+  - passing proof for direct cross-library helper, wrapper, and chain3 roots
+  - a negative regression for recursive cross-library nested chain3 in slot 1
+- `README.md` and `TODOS.md` still explicitly defer generic recursive cross-library function graphs.
 
-That last bullet is the actual wedge. Today those shapes are unsupported. M60 makes one of them supported under a new explicit key, then repairs the regression packs so unsupported truth remains honest.
+The repo is therefore in a truthful but awkward state: the direct-root exceptions are real, but the next natural recursive shared case still fails before Bun.
 
 ## Step 0: Scope Challenge
 
 ### Premise correction
 
-The problem is not "wrappers need computed expressions now."
+The problem is not "TypeScript support needs to be broader."
 
 The real problem is smaller:
 
 ```text
-the semantic reviewer has no truthful supported family for
-wrapper.pipeline + one normalized required arg
+the bounded TypeScript lane already knows enough semantic truth to execute
+recursive supported function graphs, but the cross-library closure contract
+still stops at direct root exceptions
 ```
 
-If this milestone widens beyond that sentence, it is overbuilt.
+If M61 expands beyond that sentence, it is overbuilt.
 
 ### What already exists
 
-| Sub-problem | Existing owner | M60 action |
+| Sub-problem | Existing owner | M61 action |
 | --- | --- | --- |
-| supported-family routing | `SupportedFunctionRoute` in `spec-core/src/semantic_review.rs` | extend with one new explicit sibling route |
-| supported-family compatibility key emission | `SupportedSurface::compatibility_key()` in `spec-core/src/semantic_review.rs` | add one new key |
-| strict raw-arg wrapper proof | `function.wrapper.pipeline.v1` tests and packet | preserve unchanged |
-| existing normalized near-miss examples | M19 + M20 fixture packs and wrapper candidate doc | migrate or rewrite so they stay truthful |
-| maintained canonical pricing example | `examples/ecommerce/units/pricing/calculate_total.unit.spec` plus molecule tests | add one new guarded-tax example instead of mutating the old raw-arg canonical example |
-| family-analysis read-side surfaces | `cargo xtask family coverage/recommend/corpus-decision/verify-decision-contract` | refresh outputs, keep stop-state honest |
-| unsupported-function projection rules | `spec-cli/tests/cli.rs` whole-pack status/export tests | update to match the new supported boundary and replacement unsupported cases |
+| target-language CLI surface | `spec-cli/src/commands.rs` | reuse existing `--target-language typescript` flow |
+| pre-Bun target validation | `spec-core/src/validator.rs` | replace the root-depth split with recursive qualified closure validation |
+| TypeScript closure collection | `spec-core/src/typescript_backend.rs` | replace raw-id collection with qualified closure membership and dedupe |
+| semantic family truth | `spec-core/src/semantic_review.rs` | reuse as-is, no new family promotion |
+| direct cross-library example | `examples/crosslib-app/units/**`, `examples/shared-spec/units/**` | extend into one maintained recursive-shared proof path |
+| regression harness | `spec-cli/tests/cli.rs` | convert one current red path into green, keep the other red paths |
+| public contract wording | `README.md`, `TODOS.md`, `CHANGELOG.md`, `examples/crosslib-app/README.md` | replace the generic recursive-cross-library defer line with the exact M61 claim |
 
 ### Minimum complete slice
 
-The minimum honest M60 slice is:
+The minimum honest M61 slice is:
 
-1. add one new supported family key and route
-2. classify exactly one admitted normalized required-arg expression surface, `param.max(Decimal::ZERO)`
-3. keep `function.wrapper.pipeline.v1` strict on raw required args only
-4. add one maintained real example in `examples/ecommerce`
-5. add one dedicated semantic-family packet for the new family with aligned, drift, under-specified, and unsupported-near-miss buckets
-6. repair M19 and M20 so the unsupported packs still contain genuinely unsupported shapes after the promotion
-7. update README, TODOS, and CHANGELOG in the same PR
+1. unify TypeScript target validation around recursive qualified closure
+2. unify TypeScript closure collection around recursive qualified closure
+3. extend root-family handling so M60 normalized-required-arg wrappers are legal closure members and roots in the TypeScript lane when their existing family contract is satisfied
+4. add one maintained recursive-shared example path in `examples/crosslib-app` plus `examples/shared-spec`
+5. update CLI regressions so one recursive shared path is green and the preserved red paths still fail before Bun
+6. update README, TODOS, CHANGELOG, and `examples/crosslib-app/README.md` in the same PR
 
 Anything smaller is fake done.
 
 Examples:
 
-- adding the new route without the maintained example is fake done
-- adding the example without packet truth is fake done
-- promoting the old M20 unsupported case without replacing unsupported coverage is fake done
-- updating semantic review but not family-analysis commands is fake done
+- adding qualified lookup without a maintained example is fake done
+- adding an example without generator and validator convergence is fake done
+- converting one CLI negative test to green without preserving the rejection wall is fake done
+- widening the recursive lane without handling normalized-required-arg wrappers is fake done because M60 already shipped that family
 
 ### Complexity and blast radius
 
-This milestone crosses more than 8 files. That normally smells.
+This milestone touches more than 8 files. That normally smells.
 
-It is still the right size because the extra files are proof and truth surfaces, not new infrastructure:
+It is still the right size because the extra files are proof and contract surfaces, not new infrastructure:
 
-- one core classifier file
+- one validator contract file
+- one TypeScript backend collector file
+- one semantic family inventory file only as a consumer boundary, not as a widened semantic subsystem
 - one CLI integration test file
-- two existing regression fixture trees
-- one maintained example tree
-- one new semantic-family packet directory
-- three public docs
+- one maintained cross-library example README
+- two example unit trees
+- three repo-root docs
 
-The complete version is only modestly larger than the shortcut, and the shortcut would leave the repo lying about supported versus unsupported truth. Boil the lake.
+The complete version is only modestly larger than the shortcut, and the shortcut would leave the repo lying about recursive shared support. Boil the lake.
 
 ### Search check
 
-No framework built-in replaces this work. This is repo-owned semantic classifier logic.
+No framework built-in replaces this work. This is repo-owned semantic-routing and bounded TypeScript lowering logic.
 
-- **[Layer 1]** Reuse the current supported-route architecture in `spec-core/src/semantic_review.rs`
-- **[Layer 1]** Reuse the current family packet system in `semantic-families/**`
-- **[Layer 1]** Reuse the current unsupported truth pack and stale-proof CLI assertions in `spec-cli/tests/cli.rs`
-- **[Layer 3]** The right design is not a generic expression matcher. The right design is one explicit family boundary because the repo sells truthful semantic families, not clever AST tolerance
+- **[Layer 1]** Reuse `QualifiedUnitRef` and existing cross-library dep identity concepts already in `spec-core/src/validator.rs`
+- **[Layer 1]** Reuse current supported-family routing from `spec-core/src/semantic_review.rs`
+- **[Layer 1]** Reuse the current `spec-cli/tests/cli.rs` cross-library proof scaffolding
+- **[Layer 3]** The right design is not a generic graph-policy engine. The right design is a qualified recursive closure contract over the already-supported function families
 
 ### TODOS cross-reference
 
-`TODOS.md` already tracks the remaining post-M59 TypeScript oceans. M60 must not reopen any of them.
+`TODOS.md` currently says the remaining TypeScript oceans after M59 and M60 include generic recursive cross-library function graphs.
 
-The same PR should update `TODOS.md` so it says:
+M61 should narrow that defer line, not erase all remaining oceans. After landing, `TODOS.md` should say:
 
-- normalized-required-arg wrapper support shipped in M60
-- broader required-arg normalization remains deferred
-- generic expression support remains deferred
-- arbitrary 4+ dep topology remains deferred
+- recursive closure across the current supported family set shipped in M61
+- arbitrary authored 4+ direct-dep topology parity remains out
+- new semantic-family promotion remains out
+- molecule TypeScript execution remains out
+- seam-kind TypeScript execution remains out
 
 ### Completeness and distribution check
 
 No new distributable artifact is introduced.
 
-This remains a capability widen inside the existing `spec` CLI and existing GitHub release surface. Distribution work is already in place. The complete version here is proof completeness, not packaging work.
+This remains a capability widen inside the existing `spec` CLI and existing release surface. The complete version here is proof completeness, not packaging work.
 
 ## Milestone Contract
 
 ### Exact shipped behavior
 
-After M60:
+After M61:
 
-- a `kind:function` wrapper may classify to `function.wrapper.pipeline.normalized_required_arg.v1` when:
-  - it has the same two-dep wrapper topology as the current wrapper family
-  - dep 1 is the monotone-down discount leaf
-  - dep 2 is the monotone-up tax leaf
-  - the second dep receives:
-    - the first dep's output as its primary value argument
-    - exactly one required argument derived from exactly one declared input
-    - that derivation is exactly `param.max(Decimal::ZERO)`
-- the old raw-arg wrapper family remains:
-  - `function.wrapper.pipeline.v1`
-  - still raw-arg only
-  - still rejects normalized required-arg expressions
-- broader expressions still map to `unsupported_required_argument_expression`
-- family-analysis commands still end in stop-state unless a separate future milestone produces enough new real-example pressure
+- a supported `kind:function` TypeScript root may recurse through a reachable graph that mixes local and shared units
+- every reachable unit must:
+  - resolve from the loaded unit set in owner-library context
+  - classify to one of the current supported function families
+  - author non-empty `body.typescript`
+  - satisfy its existing family-specific dep contract
+- recursive closure may cross libraries multiple times
+- recursive closure must still be finite, deduped, and limited to the loaded unit set
+- unrelated loaded units must still stay out of the emitted TypeScript tree
 
-### Exact admitted surface
+### Exact root eligibility
 
-| Shape | Outcome |
-| --- | --- |
-| `apply_tax(discounted, tax_rate)` | `function.wrapper.pipeline.v1` |
-| `apply_tax(discounted, tax_rate.max(Decimal::ZERO))` | `function.wrapper.pipeline.normalized_required_arg.v1` |
-| `apply_tax(discounted, Decimal::ZERO)` | `unsupported_required_argument_expression` |
-| `apply_tax(discounted, tax_rate + Decimal::ZERO)` | `unsupported_required_argument_expression` |
-| `apply_tax(discounted, tax_rate.max(Decimal::ZERO).round_dp(4))` | `unsupported_required_argument_expression` |
-| `apply_tax(discounted, regional_rate.max(Decimal::ZERO))` when the authored input is `tax_rate` | semantic drift or unsupported, depending on the authored/body mismatch |
+M61 widens recursive closure depth. It does not create a new "any supported function can be a root anywhere" rule.
+
+- existing local-only TypeScript roots stay legal exactly where they already work today
+- direct cross-library root handling stays limited to the root families the lane already ships, plus the M60 normalized-wrapper family
+- `function.helper.identity_passthrough.v1` remains closure-only in M61. It may appear as a reachable helper member where the existing helper rule allows it, but it is not a standalone TypeScript execution target
+- recursive shared support means a legal root may now traverse into further legal local or shared members. It does not create generic root parity across all families or authored topologies
+
+### Exact preserved boundaries
+
+These must still reject before Bun:
+
+- any reachable unit with unsupported semantic review
+- any reachable unit without `body.typescript`
+- any reachable non-`kind:function` unit
+- any dep that cannot resolve in the correct library context
+- any reachable wrapper member whose direct dep order or family mix is wrong
+- any reachable chain3 member whose direct dep order or family mix is wrong
+- any attempt to execute `.test.spec` with `--target-language typescript`
+- any attempt to imply `spec validate --target-language`
+- any attempt to imply `spec export --target-language`
+- any attempt to claim arbitrary authored 4+ direct-dep root topology support
 
 ### Exact maintained example seed
 
-Add:
+Promote a checked-in recursive-shared chain3 proof owner by turning the current temporary CLI helper shapes into maintained example specs:
 
 ```text
-examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec
+examples/shared-spec/units/pricing/calculate_total.unit.spec
+examples/shared-spec/units/pricing/base_nested_chain3.unit.spec
+examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec
 ```
 
 Authored story:
 
-- intent: return checkout total after discounting the subtotal, then apply tax using a rate normalized to nonnegative
-- deps:
-  - `pricing/apply_discount`
-  - `pricing/apply_tax`
-- body:
-  - bind discounted subtotal once
-  - call `apply_tax(discounted, tax_rate.max(Decimal::ZERO))`
+- `shared::pricing/calculate_total` remains the shared wrapper-level subtotal calculator
+- `shared::pricing/base_nested_chain3` becomes a shared recursive chain3 member that itself depends on shared supported functions
+- app-side `pricing/checkout_nested_chain3` becomes the maintained cross-library recursive root
 
-The existing `examples/ecommerce/units/pricing/calculate_total.unit.spec` stays in place as the strict raw-arg wrapper example. M60 adds a sibling example. It does not silently rewrite the old canonical family out from under existing docs.
+The current temporary helper in `spec-cli/tests/cli.rs` is the prototype. M61 promotes that shape into the maintained example tree.
 
-### Explicit non-goals
+### Exact family handling
 
-M60 does not include:
+TypeScript root and closure handling must recognize all current supported function families:
 
-- generic wrapper expression support
-- arithmetic or chained-method normalization beyond `param.max(Decimal::ZERO)`
-- multiple normalized required arguments
-- required-arg normalization composed from multiple authored inputs
-- generic fanout or reducer families
-- arbitrary 4+ dep topology parity
-- corpus-program reopen by default
-- new TypeScript execution behavior
-- seam family expansion
-- `spec validate --target-language`
-- `spec export --target-language`
+| Family | M61 role |
+| --- | --- |
+| `function.helper.identity_passthrough.v1` | closure-only helper leaf, zero deps, never a standalone TypeScript root in M61 |
+| `function.arithmetic_leaf.monotone_down_nonnegative.v1` | supported leaf, helper-free, root/member where already legal today |
+| `function.arithmetic_leaf.monotone_up.v1` | supported leaf root/member, zero deps or one helper dep under the existing helper rule |
+| `function.wrapper.pipeline.v1` | supported wrapper root/member under the existing two-dep tuple |
+| `function.wrapper.pipeline.normalized_required_arg.v1` | supported wrapper root/member under the existing M60 normalized required-arg contract |
+| `function.wrapper.pipeline.chain3.v1` | supported chain3 root/member under the existing three-dep tuple |
+
+M61 does not invent new family meaning. It only allows these current meanings to recurse across shared closure truthfully.
 
 ## Architecture Review
 
 ### Dependency graph
 
 ```text
-                     +----------------------------------+
-                     | spec-core/src/semantic_review.rs |
-                     +----------------------------------+
-                       | add compatibility key
-                       | add explicit route
-                       | add normalized-arg classifier
-                       v
-        +-----------------------------+     +-----------------------------+
-        | Supported function routing  | --> | semantic review emission    |
-        | chain3 -> normalized -> raw |     | support_status / key / body |
-        +-----------------------------+     +-----------------------------+
-                       |
-                       +--------------------+
-                                            |
-                                            v
-             +-----------------------------------------------+
-             | Proof surfaces                                |
-             | - spec-core unit tests                        |
-             | - spec-cli/tests/cli.rs                       |
-             | - semantic-families/new packet               |
-             | - M19/M20 fixture pack repair                 |
-             | - examples/ecommerce guarded-tax seed         |
-             +-----------------------------------------------+
-                                            |
-                                            v
-             +-----------------------------------------------+
-             | Read-side truth                               |
-             | - family coverage                             |
-             | - family recommend                            |
-             | - corpus decision remains stop                |
-             | - README / TODOS / CHANGELOG                  |
-             +-----------------------------------------------+
+                           +----------------------------------+
+                           | spec-core/src/semantic_review.rs |
+                           +----------------------------------+
+                                      | existing truth only
+                                      v
+ +-----------------------------+   +------------------------------------+
+ | spec-core/src/validator.rs  |-->| Recursive closure eligibility      |
+ +-----------------------------+   | - qualified dep resolution         |
+ | current local/portability   |   | - family-specific dep contracts    |
+ | split must collapse into    |   | - body.typescript required         |
+ | one recursive contract      |   | - supported semantic review only   |
+ +-----------------------------+   +------------------------------------+
+                                      |
+                                      v
+ +------------------------------------+   +------------------------------+
+ | spec-core/src/typescript_backend.rs|-->| Emitted TS member set        |
+ +------------------------------------+   | - qualified dedupe           |
+ | current raw-id + authored-key      |   | - unrelated units excluded   |
+ | lookup must become qualified       |   | - imports still callable-safe|
+ +------------------------------------+   +------------------------------+
+                                      |
+                                      v
+                   +-----------------------------------------------+
+                   | Proof surfaces                                |
+                   | - spec-cli/tests/cli.rs                       |
+                   | - examples/crosslib-app/units/**             |
+                   | - examples/shared-spec/units/**              |
+                   | - README / TODOS / CHANGELOG                 |
+                   +-----------------------------------------------+
 ```
 
-### Routing order
+### Current flaw
 
-Add a new route adjacent to the current wrapper route. Recommended order:
+Today the TypeScript lane has two separate mental models:
 
 ```text
-WrapperPipelineChain3
-WrapperPipelineNormalizedRequiredArg
-WrapperPipeline
-ArithmeticLeafMonotoneDownNonnegative
-ArithmeticLeafMonotoneUp
-HelperIdentityPassthrough
+Model A: same-tree local graph recursion
+Model B: direct cross-library portability exceptions
 ```
 
-Why this order:
+That split leaks into both validation and collection. It creates a misleading product boundary:
 
-- the normalized route is a sibling, not a post-hoc exception inside raw wrapper logic
-- keeping it adjacent to `WrapperPipeline` makes the boundary obvious to maintainers
-- evaluating it before the raw wrapper route reduces the chance of future silent widening if the raw route becomes more permissive later
+- recursion works only when everything stays local
+- cross-library works only when the root shape falls into a preserved direct exception
 
-### Core classification flow
+That is why the temporary recursive shared chain3 case still fails before Bun.
+
+### M61 target architecture
 
 ```text
-LoadedSpec
-  -> supported_surface_for_spec(...)
-    -> SupportedFunctionRoute::WrapperPipelineNormalizedRequiredArg.try_match(...)
-      -> authored wrapper topology check
-      -> dep semantic-family check
-      -> normalized required-arg surface check
-      -> body verdict:
-           aligned | semantic_drift | under_specified | unsupported
+root
+  `- recursive closure walker
+      |- resolve dep in owner library context
+      |- fetch exact loaded unit by qualified identity
+      |- require supported semantic review
+      |- require body.typescript
+      |- validate family-specific dep contract
+      |- recurse through local or shared deps
+      `- dedupe by qualified node identity
 ```
+
+### Owner-library resolution contract
+
+Validator and collector must share the same dep-resolution story. No split-brain behavior is allowed here.
+
+```text
+for each dep edge:
+  1. parse authored dep
+  2. determine owning library context of the current node
+  3. resolve the dep against that context
+  4. produce one qualified node identity
+  5. validate or collect that exact node
+```
+
+Non-negotiable rules:
+
+- local deps resolve relative to the owning library of the current node, not the CLI invocation root
+- explicit `shared::...` deps resolve to that shared library identity, never by raw-id coincidence
+- validator and collector must either call the same helper or use byte-for-byte equivalent qualified-resolution rules
+- once a qualified node is chosen, all later recursion and dedupe use that qualified identity rather than re-resolving by raw unit id
 
 ### File-by-file responsibilities
 
+- `spec-core/src/validator.rs`
+  - replace `typescript_target_uses_local_graph_lane(...)` as the root split gate
+  - add one recursive validation path for target roots and closure members
+  - extend root-family handling to include `function.wrapper.pipeline.normalized_required_arg.v1`
+  - keep helper, wrapper, normalized-wrapper, and chain3 dep contracts explicit and separate
+- `spec-core/src/typescript_backend.rs`
+  - replace raw-id-driven closure membership with qualified identity
+  - stop collecting local recursion and cross-library portability through separate top-level paths
+  - keep rendering and import emission mostly intact
 - `spec-core/src/semantic_review.rs`
-  - add the new compatibility key constant
-  - add the new `SupportedFunctionRoute`
-  - add an explicit family variant with a readable name, not another opaque `FamilyD`
-  - factor normalized required-arg classification into a small explicit helper
-  - keep the old raw wrapper classifier strict
+  - no new family work
+  - treat as truth source only
 - `spec-cli/tests/cli.rs`
-  - update whole-pack truth assertions
-  - add stale-proof coverage for the new family if needed
-  - keep unsupported-function read-side neutrality honest for the replacement unsupported cases
-- `semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/**`
-  - add `family.toml`
-  - add `candidate.md`
-  - add aligned / drift / under_specified / unsupported_near_miss packet fixtures
-- `examples/ecommerce/units/pricing/**`
-  - add the guarded-tax seed
-  - keep existing molecule coverage or add one small molecule only if needed for the example story
-- `spec-cli/tests/fixtures/m19/**` and `spec-cli/tests/fixtures/m20/**`
-  - remove newly promoted shapes from unsupported ownership
-  - replace them with still-unsupported shapes that preserve the same reason code
+  - convert the recursive shared nested chain3 helper shape from a red path into the new green path
+  - keep preserved red paths for wrong family, wrong order, missing body, unresolved dep, and molecule rejection
+- `examples/shared-spec/units/**`
+  - add maintained shared recursive members
+- `examples/crosslib-app/units/**`
+  - add maintained recursive root
+- `README.md`, `TODOS.md`, `CHANGELOG.md`, `examples/crosslib-app/README.md`
+  - update the public contract
 
 ## Code Quality Review
 
 ### Design choices
 
-1. **Add one explicit family variant, not a generic expression subsystem.**
-   This matches explicit-over-clever and minimal diff. The milestone is about truthful family naming, not AST ambition.
+1. **Use a small qualified-identity helper, not a general graph framework.**
+   This matches explicit-over-clever and minimal diff. M61 needs truthful lookup, not a new subsystem.
 
-2. **Do not rename all existing `FamilyA/B/C` internals in M60.**
-   That cleanup can happen later if it becomes valuable. Renaming everything here would mix structural cleanup with behavioral change.
+2. **Delete the local-vs-portability branch at the decision level, not just at the docs level.**
+   Keeping both code paths and sprinkling recursion onto one of them will rot immediately.
 
-3. **Name the new route and compatibility key explicitly.**
-   Example acceptable internal names:
-   - `SupportedFunctionRoute::WrapperPipelineNormalizedRequiredArg`
-   - `SupportedFunctionFamily::WrapperPipelineNormalizedRequiredArg`
+3. **Keep family-specific validators separate.**
+   Wrapper, normalized-wrapper, helper, and chain3 rules should stay obvious. Do not compress them into a generic "arity + supported deps" abstraction in this milestone.
 
-4. **Keep the normalized surface helper tiny and local.**
-   One helper that recognizes `param.max(Decimal::ZERO)` is enough. Anything broader burns an innovation token for no user value today.
+4. **Treat the M60 normalized-required-arg wrapper as a first-class supported TypeScript family.**
+   If M61 ignores it, the repo will have one supported family that semantic review knows about and the TypeScript lane silently does not.
 
-5. **Treat M19 and M20 as contract surfaces, not throwaway fixtures.**
-   If a promoted family invalidates a current unsupported fixture, that fixture must move or change in the same PR.
+5. **Promote the current CLI-only recursive shared prototype into the maintained example tree.**
+   That gives docs and tests one shared truth owner instead of duplicating logic forever.
 
-6. **Prefer in-place fixture rewrites over id churn.**
-   Keep the current M19 and M20 unsupported file paths stable and change only the required-arg expression. This minimizes CLI fixture fallout and keeps the historical test surfaces legible.
+6. **Keep doc phrasing identical everywhere.**
+   This repo already teaches through README and examples. Drift here becomes product drift.
 
 ### DRY and maintenance rules
 
-- reuse current wrapper topology helpers where possible
-- reuse current unsupported reason code plumbing
-- do not duplicate coverage logic between the new family packet and the maintained example beyond the minimum proof each surface needs
-- keep docs phrasing identical across README, CHANGELOG, and TODOS for the admitted surface
-- keep packet layout identical to the existing raw wrapper sibling unless a concrete proof failure forces divergence
+- reuse `QualifiedUnitRef` semantics rather than inventing a second qualified-id type
+- reuse the existing dep-contract validators where possible
+- do not duplicate shared recursive example logic in both docs and temporary fixtures if the example can own it
+- keep the red-path Bun-precheck pattern consistent with current CLI tests
+- keep the maintained example focused, not a new zoo of every recursive case
 
 ## Implementation Plan
 
-### Step 1. Add the new semantic family route and compatibility key
+### Implementation lockstep
+
+The implementation is only honest if these move together:
+
+1. validator root and closure rules
+2. collector root and closure rules
+3. maintained recursive-shared example proof
+4. CLI regressions and public docs
+
+Do not land a validator-only or collector-only half-state. The repo would compile, but the contract would still be ambiguous.
+
+### Step 1. Replace the validator split with recursive qualified closure validation
 
 Files:
 
-- `spec-core/src/semantic_review.rs`
+- `spec-core/src/validator.rs`
 
 Changes:
 
-1. add the new compatibility key string:
+1. stop using `typescript_target_uses_local_graph_lane(...)` as the root branch for M61 behavior
+2. replace `validate_typescript_local_graph_root_spec_with_specs(...)` and `validate_typescript_portability_target_spec_with_specs(...)` with one recursive root-validation flow
+3. add explicit dep resolution in owner-library context
+4. extend root-family handling to admit:
+   - `function.arithmetic_leaf.monotone_up.v1`
+   - `function.wrapper.pipeline.v1`
    - `function.wrapper.pipeline.normalized_required_arg.v1`
-2. add the new family enum variant
-3. add the new route immediately before the raw wrapper route
-4. emit the new key on supported aligned, drift, and under-specified reviews for that family
+   - `function.wrapper.pipeline.chain3.v1`
+5. keep closure-member family checks explicit and fail-fast before Bun
 
 Acceptance:
 
-- the new route is reachable
-- raw wrapper cases still classify to `function.wrapper.pipeline.v1`
-- normalized cases no longer fall through to unsupported by default
+- a supported local-only root still validates
+- a supported direct cross-library root still validates
+- a supported recursive shared root now validates
+- wrong family, wrong order, missing body, unresolved dep, and molecule rejection still fail before Bun
 
-### Step 2. Implement bounded normalized required-arg classification
+### Step 2. Replace raw-id closure collection with qualified recursive membership
 
 Files:
 
-- `spec-core/src/semantic_review.rs`
+- `spec-core/src/typescript_backend.rs`
 
 Changes:
 
-1. add one explicit classifier for the second dep's required argument
-2. admit exactly `param.max(Decimal::ZERO)`
-3. keep broader expressions under `unsupported_required_argument_expression`
-4. preserve aligned / drift / under-specified verdict behavior for the new family
+1. replace `build_typescript_loaded_specs_by_id(...)` and `build_typescript_spec_indices_by_key(...)` with qualified lookup structures
+2. replace `resolve_typescript_dep_spec(...)` with owner-library-qualified resolution
+3. collapse `collect_typescript_local_graph_root_closure(...)`, `collect_typescript_local_graph_member_closure(...)`, `collect_typescript_portability_root_closure(...)`, and `collect_typescript_closure_member(...)` behind one qualified recursive collector story
+4. dedupe reachable members by qualified identity, not raw id
+5. keep emitted file paths and import rendering stable unless the qualified collector proves they must change
 
 Acceptance:
 
-- aligned case returns the new family key
-- authored/body mismatch still returns semantic drift
-- vague authored truth still returns under-specified
-- unsupported expressions still map to the stable unsupported reason code
+- two units with the same local id in different libraries do not collide in closure membership
+- recursive shared closure includes only the reachable qualified members
+- unrelated loaded units remain excluded from the emitted tree
+- generated imports still resolve correctly in the emitted TS tree
+- validator and collector no longer disagree about which loaded unit a dep edge names
 
-### Step 3. Add the maintained ecommerce seed
+### Step 3. Extend TypeScript family handling to include the M60 normalized wrapper
 
 Files:
 
-- `examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec`
-- any directly related example molecule or passport refresh artifacts produced by the normal loop
+- `spec-core/src/validator.rs`
+- `spec-core/src/typescript_backend.rs`
 
 Changes:
 
-1. add the new unit spec
-2. keep the existing raw-arg `calculate_total.unit.spec` unchanged
-3. prove the new seed through the standard CLI loop
+1. add a TypeScript target compatibility constant for `function.wrapper.pipeline.normalized_required_arg.v1`
+2. teach root-family classification to recognize it as a wrapper-class family
+3. teach closure-member validation to route it through the existing wrapper-family dep contract
+4. keep broader required-arg expression widening out of scope
+
+Acceptance:
+
+- M60 normalized-wrapper specs can participate in the recursive TypeScript lane when otherwise eligible
+- raw wrapper and normalized wrapper remain distinct semantic families
+- no new required-arg expression surfaces become legal
+
+### Step 4. Promote a maintained recursive-shared example
+
+Files:
+
+- `examples/shared-spec/units/pricing/calculate_total.unit.spec`
+- `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
+- `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
+- generated artifacts refreshed by the normal `spec` loop only after source spec edits
+
+Changes:
+
+1. add checked-in shared recursive members that match the existing temporary CLI helper story
+2. add one app-side recursive shared root
+3. keep the current direct-root proof owners (`apply_tax`, `calculate_total`) intact
+4. add the new recursive root to the example README proof commands
 
 Acceptance:
 
 ```bash
-cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec --format json
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec
-cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
 ```
 
-### Step 4. Add the family packet and repair existing unsupported packs
+- all three paths pass
+- the new recursive root is maintained in repo state, not created only by test helpers
 
-Files:
-
-- `semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/**`
-- `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/**`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/**`
-
-Changes:
-
-1. create `semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/` by mirroring the sibling `function.wrapper.pipeline.v1/` packet layout:
-   - `candidate.md`
-   - `family.toml`
-   - `fixtures/aligned/**`
-   - `fixtures/drift/**`
-   - `fixtures/under_specified/**`
-   - `fixtures/unsupported_near_miss/**`
-2. keep the packet-local leaf fixture naming identical to the sibling packet:
-   - `pricing_discount_leaf_{bucket}.unit.spec`
-   - `pricing_tax_leaf_{bucket}.unit.spec`
-3. keep the wrapper fixture naming identical to the sibling packet inside the new directory:
-   - `pricing_total_wrapper_{bucket}.unit.spec`
-4. rewrite the promoted unsupported fixtures in place instead of moving ids across packs:
-   - `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/billing/checkout_net_total_unsupported_near_miss.unit.spec`
-     - keep id and file path
-     - change the tax/fee argument expression to `regional_rate.max(Decimal::ZERO).round_dp(4)`
-   - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/calculate_total.unit.spec`
-     - keep id and file path
-     - change the tax argument expression to `tax_rate + Decimal::ZERO`
-5. preserve `unsupported_required_argument_expression` ownership for both rewritten fixtures
-6. do not rename fixture files in M19 or M20 unless a test harness hard-requires it
-
-Acceptance:
-
-- the new packet proves the new family
-- M19 and M20 remain truthful unsupported packs under the same ids and file paths
-- no unsupported pack case accidentally turns green without being intentionally re-homed
-
-### Step 5. Refresh CLI truth and public docs
+### Step 5. Refresh CLI regression truth
 
 Files:
 
 - `spec-cli/tests/cli.rs`
-- `README.md`
-- `TODOS.md`
-- `CHANGELOG.md`
 
 Changes:
 
-1. update CLI integration tests for the new family and repaired unsupported packs
-2. update README supported-family inventory
-3. update TODOS to reflect M60 shipped and broader expression support still deferred
-4. update CHANGELOG unreleased entry
+1. convert the current recursive shared nested chain3 rejection helper into the new green path
+2. keep preserved red-path tests for:
+   - unsupported shared recursive member
+   - wrong dep order inside a shared recursive member
+   - missing `body.typescript` on a shared recursive member
+   - unresolved shared dep
+   - molecule TypeScript rejection
+3. add at least one regression that proves owner-library-qualified resolution when local and shared same-id units coexist
 
 Acceptance:
 
@@ -538,10 +560,37 @@ Acceptance:
 cargo test -p spec-cli --test cli
 ```
 
-- CLI truth assertions match the promoted family plus the in-place M19/M20 replacements
-- docs all use the same frozen wording for the admitted surface and the deferred boundary
+- the new recursive green path passes
+- Bun-precheck failures still happen before Bun
+- qualified identity regressions are covered
 
-### Step 6. Run the final proof wall and capture the post-change basis
+### Step 6. Update the public contract and backlog wording
+
+Files:
+
+- `README.md`
+- `examples/crosslib-app/README.md`
+- `TODOS.md`
+- `CHANGELOG.md`
+
+Changes:
+
+1. replace the M59 direct-root-only recursive defer wording with the exact M61 claim
+2. add the new recursive example command to `examples/crosslib-app/README.md`
+3. narrow the TODO backlog from "generic recursive cross-library function graphs remain out" to the smaller remaining oceans:
+   - arbitrary authored 4+ topology parity
+   - new semantic-family promotion
+   - molecule TypeScript execution
+   - seam-kind TypeScript execution
+4. update CHANGELOG with the shipped user-facing contract
+
+Acceptance:
+
+- docs all use the same frozen sentence
+- docs do not imply arbitrary graph parity
+- docs still call out molecule TypeScript rejection and additive proof
+
+### Step 7. Run the final proof wall and capture the post-change basis
 
 Files:
 
@@ -549,31 +598,30 @@ Files:
 
 Changes:
 
-1. run the maintained example proof loop
-2. run the spec-core and spec-cli proof suites
-3. run the family-analysis read-side commands
-4. record the post-change counts that replace the "Current Validated Basis" snapshot in the final landing pass
+1. run `spec-core` proof for validator and TypeScript backend paths
+2. run `spec-cli` proof for the cross-library example and regressions
+3. run the maintained recursive example commands
+4. refresh any checked-in proof artifacts produced by the standard source-spec loop
 
 Acceptance:
 
 ```bash
-cargo test -p spec-core semantic_review
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family verify-decision-contract --format json
+cargo test -p spec-core validator
+cargo test -p spec-core typescript_backend
+cargo test -p spec-cli --test cli
 
-cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec --format json
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec
-cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
+cargo run -p spec-cli -- status examples/crosslib-app/units --target-language typescript --format json
 ```
 
 Expected result:
 
-- coverage shows the new family honestly
-- recommendation still says stop
-- corpus decision still says stop
-- verify-decision-contract still passes
+- the recursive shared root passes under Bun
+- status remains target-specific and additive
+- unrelated units do not appear in the emitted TS tree
+- preserved red-path regressions still fail before Bun
 
 ## Test Review
 
@@ -581,144 +629,164 @@ Expected result:
 
 This repo's proof wall is Rust-native:
 
-- unit-style semantic-review tests in `spec-core/src/semantic_review.rs`
+- unit-style validator and collector tests in `spec-core`
 - CLI integration tests in `spec-cli/tests/cli.rs`
-- fixture-pack truth through `spec-cli/tests/fixtures/**`
-- family-analysis read-side proof through `cargo xtask family ...`
-- maintained example proof through `cargo run -p spec-cli -- validate/test/status ...`
+- maintained checked-in example proof in `examples/crosslib-app` and `examples/shared-spec`
+- read-side truth through `spec status ... --target-language typescript --format json`
 
 ### Code path coverage diagram
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] spec-core/src/semantic_review.rs
+[+] spec-core/src/validator.rs
     |
-    ├── SupportedFunctionRoute order
-    |   ├── [EXISTING] raw wrapper route
-    |   └── [ADD]      normalized-required-arg sibling route
+    ├── root target eligibility
+    |   ├── [EXISTING] local-only supported root
+    |   ├── [EXISTING] direct cross-library helper-assisted leaf root
+    |   ├── [EXISTING] direct cross-library wrapper root
+    |   ├── [EXISTING] direct cross-library chain3 root
+    |   └── [ADD]      recursive shared root
     |
-    ├── wrapper topology contract
-    |   ├── [EXISTING] raw dep pair validation
-    |   └── [ADD]      same dep pair + normalized required-arg validation
+    ├── closure-member family checks
+    |   ├── [EXISTING] helper dep contract
+    |   ├── [EXISTING] wrapper dep contract
+    |   ├── [EXISTING] chain3 dep contract
+    |   └── [ADD]      normalized-required-arg wrapper contract in TS lane
     |
-    ├── required-arg expression classifier
-    |   ├── [EXISTING] raw param accepted
-    |   ├── [ADD]      `param.max(Decimal::ZERO)` accepted
-    |   ├── [ADD]      arithmetic expression rejected
-    |   ├── [ADD]      chained method expression rejected
-    |   └── [ADD]      literal replacement rejected
-    |
-    └── verdict emission
-        ├── [EXISTING] aligned / drift / under-specified / unsupported for raw wrapper
-        └── [ADD]      aligned / drift / under-specified / unsupported for normalized sibling
+    └── rejection wall
+        ├── [ADD] unsupported shared member
+        ├── [ADD] wrong dep order in shared member
+        ├── [ADD] unresolved shared dep in owner context
+        ├── [ADD] missing body.typescript in shared member
+        └── [EXISTING] molecule TypeScript rejection
 
-READ-SIDE TRUTH COVERAGE
+[+] spec-core/src/typescript_backend.rs
+    |
+    ├── closure membership
+    |   ├── [EXISTING] local-only recursion
+    |   ├── [EXISTING] direct cross-library roots
+    |   └── [ADD]      recursive shared membership via qualified identity
+    |
+    ├── dedupe
+    |   ├── [EXISTING] raw-id/member set
+    |   └── [ADD]      qualified-identity member set
+    |
+    └── emission
+        ├── [EXISTING] import rendering
+        └── [ADD]      same-id local/shared units resolve to the correct owner
+
+USER FLOW COVERAGE
 ===========================
-[+] examples/ecommerce guarded-tax seed
-    ├── [ADD] validate JSON routes to supported family
-    ├── [ADD] spec test refreshes passport truth
-    └── [ADD] status/export surfaces stay honest
+[+] examples/crosslib-app direct proof
+    ├── [EXISTING] apply_tax direct helper path
+    ├── [EXISTING] calculate_total direct wrapper path
+    └── [ADD]      checkout_nested_chain3 recursive shared path
 
-[+] m19 semantic falsification pack
-    ├── [ADD] promoted near miss is removed or rewritten
-    └── [ADD] replacement unsupported case still emits `unsupported_required_argument_expression`
+[+] Error states
+    ├── [ADD] unsupported shared recursive member
+    ├── [ADD] missing shared body.typescript
+    ├── [ADD] unresolved shared dep alias/unit
+    └── [EXISTING] molecule target-language rejection
 
-[+] m20 unsupported truth pack
-    ├── [ADD] promoted case is removed or rewritten
-    └── [ADD] whole-pack status/export matrix stays truthful
-
-[+] family-analysis commands
-    ├── [ADD] coverage includes the new family
-    ├── [ADD] recommendation remains stop-state
-    ├── [ADD] corpus decision remains stop-state
-    └── [ADD] verify-decision-contract remains pass
+─────────────────────────────────
+COVERAGE TARGET: all new recursive closure paths covered
+CRITICAL REGRESSIONS: owner-context lookup, recursive shared green path,
+rejection-before-Bun wall, normalized-wrapper TS eligibility
+─────────────────────────────────
 ```
 
 ### Required tests
 
-Add or update the following proof:
+1. `spec-core/src/validator.rs`
+   - recursive shared root validates when all reachable members are eligible
+   - recursive shared closure rejects unsupported member before Bun
+   - recursive shared closure rejects missing `body.typescript` before Bun
+   - recursive shared chain3 member still rejects wrong slot-1 family/order
+   - normalized-required-arg wrapper is accepted as a TypeScript root and closure member when otherwise eligible
 
-1. `spec-core/src/semantic_review.rs`
-   - aligned normalized case routes to `function.wrapper.pipeline.normalized_required_arg.v1`
-   - drift normalized case stays in the new family with `semantic_drift`
-   - under-specified normalized case stays in the new family with `under_specified`
-   - old raw wrapper case still routes to `function.wrapper.pipeline.v1`
-   - arithmetic required-arg expression stays unsupported
-   - chained-method required-arg expression stays unsupported
-   - literal required-arg expression stays unsupported
+2. `spec-core/src/typescript_backend.rs`
+   - recursive shared closure includes the reachable maintained example graph
+   - qualified identity dedupes correctly when local and shared units share the same local id
+   - unrelated loaded units are excluded from the emitted tree
 
-2. `spec-cli/tests/cli.rs`
-   - guarded-tax example validate/test/status loop
-   - M19 replacement unsupported case stays unsupported on status/export/test refresh
-   - M20 whole-pack truth matrix reflects the promoted family and the replacement unsupported case
+3. `spec-cli/tests/cli.rs`
+   - `checkout_nested_chain3.unit.spec` passes under `--target-language typescript`
+   - wrong family/wrong order/missing body/unresolved shared dep still fail before Bun
+   - molecule TypeScript rejection still fails before Bun
 
-3. family packet proof
-   - aligned
-   - drift
-   - under_specified
-   - unsupported_near_miss
+4. maintained example loop
+   - cross-library example README commands stay truthful and green
 
 ### Regression rule
 
-This milestone reclassifies current repo truth. That makes regression tests mandatory.
+This milestone converts an existing red path into a green path. Regression tests are mandatory.
 
 Required regressions:
 
-- raw wrapper family still rejects normalized required args
-- unsupported packs remain unsupported after the promotion
-- coverage/recommend/corpus-decision do not silently claim a corpus reopen
+- the old negative recursive shared nested chain3 case becomes green only for the exact supported shape
+- preserved red paths still reject before Bun
+- normalized-required-arg wrappers do not stay accidentally unsupported in the TypeScript lane
+- owner-library-qualified lookup does not regress back to raw-id selection
 
 ## Failure Modes Registry
 
 | New codepath | Real production failure | Test covers it? | Error handling exists? | User-visible effect | Priority |
 | --- | --- | --- | --- | --- | --- |
-| new route insertion | route order is wrong and normalized case still falls to unsupported | must add | yes, via existing unsupported projection | maintainer sees false unsupported result | high |
-| new family classifier | old raw wrapper family silently widens too | must add | no automatic protection without regression | maintainer loses precise family boundary | critical |
-| M19 fixture repair | promoted shape remains in unsupported pack | must add | no | false negative in unsupported proof surfaces | critical |
-| M20 fixture repair | whole-pack truth matrix still expects old unsupported review | must add | no | status/export tests go red or lie | high |
-| ecommerce seed | example exists but never gets exercised in the normal loop | must add | partial | docs claim real-example backing that does not exist | high |
-| docs update | README says "computed arguments supported" too broadly | manual review + doc diff | no | users over-assume feature breadth | medium |
-| family-analysis refresh | coverage updates but recommend/corpus decision logic drifts | must add | yes via verifier | maintainers get false next-action guidance | high |
+| recursive validator rewrite | root still takes the stale local-vs-portability branch | must add | partial | user sees false rejection of a supported recursive shared graph | critical |
+| qualified lookup | local/shared same-id unit resolves to the wrong implementation | must add | no silent safeguard today | Bun runs the wrong logic and the repo lies | critical |
+| normalized wrapper TS eligibility | M60 family stays unsupported in the TypeScript lane | must add | no | shipped supported family behaves inconsistently across surfaces | high |
+| shared recursive chain3 green path | maintained example still exists only in CLI helper code | must add | no | docs claim capability without a checked-in proof owner | high |
+| emitted member set | unrelated loaded units leak into the generated TS tree | must add | partial | output no longer matches the bounded contract | high |
+| public docs | README says "cross-library recursive TypeScript graphs now work" too broadly | manual review + doc diff | no | users over-assume topology parity | medium |
+| molecule boundary | recursive widen accidentally allows `.test.spec` TS execution | must keep regression | yes via validator | users get ambiguous half-working molecule behavior | high |
 
 Critical gaps to avoid:
 
-- any path with no test, no replacement fixture, and silent public-contract drift
+- any qualified-identity path with no regression and silent wrong-unit selection
+- any recursive shared green-path claim without a checked-in proof owner
+- any M60 normalized-wrapper omission from the TypeScript lane
 
 ## Performance Review
 
-This milestone should be performance-neutral if implemented correctly.
+This milestone should be performance-neutral or near-neutral if implemented correctly.
 
 Expected characteristics:
 
-- one extra supported-function route, constant-factor only
-- no new graph traversal depth
-- no new cross-file loading behavior
-- no new read-side artifact format
+- one recursive closure walker instead of two separate walkers
+- slightly richer dep-resolution keys due to qualified identity
+- no new file discovery behavior
+- no new artifact formats
 
 Guardrails:
 
-- do not reparse broader expression trees than necessary
-- keep the normalized required-arg helper bounded to the existing wrapper classifier path
-- avoid introducing a generic expression-normalization abstraction that every supported route now pays for
+- do not introduce repeated semantic-review recomputation across the same closure members if a simple per-run cache is enough
+- do not add a generic graph-policy abstraction that every target path pays for
+- keep the closure walk bounded to reachable deps only
+- keep the maintained example small so CLI proof cost stays reasonable
 
 ## NOT in scope
 
-- generic expression-tolerant wrapper support, because M60 is one named family boundary, not an expression engine
-- any new TypeScript execution behavior, because this milestone is semantic review only
-- any corpus-program restart, because live family-analysis truth still says stop
-- any new seam family or non-function surface, because the pressure is in `kind:function`
-- any rename-only cleanup of all existing `FamilyA/B/C` internals, because that is structural churn without milestone value
-- any change to `examples/ecommerce/units/pricing/calculate_total.unit.spec`, because the raw-arg canonical example should remain the strict sibling
+- arbitrary authored 4+ direct-dep topology parity
+- new semantic-family promotion
+- generic graph-policy or portability frameworks
+- molecule TypeScript execution
+- seam-kind TypeScript execution
+- `spec validate --target-language`
+- `spec export --target-language`
+- non-Bun TypeScript toolchains
+- a rewrite of Rust proof surfaces or passport schemas
 
 ## TODOS.md updates required in the same PR
 
-1. mark the new normalized-required-arg wrapper family as shipped in the post-M59 follow-up area
+1. mark recursive local-plus-cross-library closure across the current supported family set as shipped in M61
 2. explicitly defer:
-   - broader required-arg normalization surfaces
-   - multiple normalized required args
-   - generic computed required-arg support
-3. remove any wording that still implies the specific `max(Decimal::ZERO)` wrapper shape is unsupported
+   - arbitrary authored 4+ direct-dep topology parity
+   - new semantic-family promotion
+   - molecule TypeScript execution
+   - seam-kind TypeScript execution
+3. remove wording that still implies all recursive cross-library closure is out
+4. keep wording that broader TypeScript oceans still remain
 
 ## Worktree Parallelization Strategy
 
@@ -726,90 +794,89 @@ Guardrails:
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| 1. classifier route + key | `spec-core/src/` | — |
-| 2. maintained example + packet + fixture migration | `examples/ecommerce/units/`, `semantic-families/`, `spec-cli/tests/fixtures/` | 1, exact family key and exact replacement shapes frozen |
-| 3. CLI truth assertions | `spec-cli/tests/` | 1 and 2 |
-| 4. docs and release notes | repo-root docs: `README.md`, `TODOS.md`, `CHANGELOG.md`, `PLAN.md` | 1, frozen docs sentence and replacement shapes |
-| 5. core proof refresh | `spec-core/src/`, workspace test commands | 1 and 2 |
-| 6. final proof wall and basis capture | workspace commands / generated artifacts | 2, 3, 4, 5 |
+| 1. recursive validator contract | `spec-core/src/` | — |
+| 2. recursive TS collector + qualified lookup | `spec-core/src/` | 1, exact validation contract frozen |
+| 3. maintained recursive example | `examples/shared-spec/`, `examples/crosslib-app/` | 1, exact family and rejection rules frozen |
+| 4. CLI regression refresh | `spec-cli/tests/` | 1, 2, 3 |
+| 5. docs and release notes | repo-root docs + `examples/crosslib-app/README.md` | 1, 3, frozen contract sentence |
+| 6. final proof wall and artifact refresh | workspace test commands / generated artifacts | 2, 3, 4, 5 |
 
 ### Parallel lanes
 
-- **Lane A:** Step 1, classifier route + key, sequential inside `spec-core/src/`
-- **Lane B:** Step 2, maintained example + packet + fixture migration, sequential across `examples/ecommerce/units/`, `semantic-families/`, and `spec-cli/tests/fixtures/`
-- **Lane C:** Step 4, docs and release notes, sequential inside repo-root docs after the wording and replacement shapes are frozen
-- **Lane D:** Step 3, CLI truth assertions, after Lane A and Lane B converge
-- **Lane E:** Step 5, core proof refresh, after Lane A and Lane B converge
-- **Lane F:** Step 6, final proof wall and basis capture, after C + D + E converge
+- **Lane A:** Step 1 then Step 2, sequential inside `spec-core/src/`
+- **Lane B:** Step 3, maintained recursive example work in `examples/shared-spec/` and `examples/crosslib-app/`
+- **Lane C:** Step 5, docs and release notes after the contract sentence and example file names are frozen
+- **Lane D:** Step 4, CLI regression refresh after Lane A and Lane B converge
+- **Lane E:** Step 6, final proof wall after A + B + C + D converge
 
 ### Execution order
 
-Launch **Lane A** first.
+Launch **Lane A** first. The validator and collector contract must freeze before parallel work is safe.
 
-Once the exact family key, route name, docs sentence, and admitted unsupported replacement shapes are frozen, launch **Lane B** and **Lane C** in parallel worktrees.
+Once the qualified-identity model, supported family list, and maintained example file names are frozen, launch **Lane B** and **Lane C** in parallel worktrees.
 
-After Lane B lands, run **Lane D** for CLI truth assertions and **Lane E** for core proof refresh.
+After Lane B lands and Lane A is green, run **Lane D** for CLI truth.
 
-After B, C, D, and E merge, run **Lane F** serially for the maintained-example loop, family-analysis commands, and final basis capture.
+After A, B, C, and D merge, run **Lane E** serially for the final proof wall.
 
 ### Conflict flags
 
-- **Lane B** and **Lane D** both touch the broad `spec-cli/tests/` module area, even if not the same files. Sequence D after B to avoid fixture/test expectation drift.
-- **Lane A** and **Lane E** both touch `spec-core/src/semantic_review.rs` and its proof expectations. Treat E as downstream proof-only work after A, not a parallel edit lane.
-- **Lane C** should not start before the exact compatibility key, frozen docs sentence, and unsupported replacement shapes are frozen, or the docs will drift from the code.
-- Do not split `semantic-families/**`, `spec-cli/tests/fixtures/**`, and `examples/ecommerce/units/**` into separate uncoordinated lanes. They encode the same product boundary and should move together.
+- **Lane A** is not parallelizable internally. `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs` define the same contract and will conflict if split too early.
+- **Lane B** and **Lane D** both affect the cross-library example story. Do not run them independently from stale example shapes.
+- **Lane C** must wait for the exact contract sentence and example file names. Otherwise docs will drift from code and tests.
+- Do not split `examples/shared-spec/**` and `examples/crosslib-app/**` into separate lanes. They are one proof owner.
 
 ## Definition of Done
 
-M60 is done when all of the following are true:
+M61 is done when all of the following are true:
 
-1. `spec-core/src/semantic_review.rs` classifies the new bounded wrapper shape to `function.wrapper.pipeline.normalized_required_arg.v1`
-2. the old `function.wrapper.pipeline.v1` family still rejects normalized required args
-3. the maintained ecommerce seed exists and proves through `validate`, `test`, and `status`
-4. the new semantic-family packet exists with aligned, drift, under-specified, and unsupported-near-miss buckets
-5. M19 and M20 no longer contain newly supported shapes in their unsupported packs
-6. `cargo xtask family coverage --format json` reflects the new family honestly
-7. `cargo xtask family recommend --format json` still says no new corpus action is recommended
-8. `cargo xtask family corpus-decision --format json` still says stop
-9. `cargo xtask family verify-decision-contract --format json` passes
-10. README, TODOS, and CHANGELOG all describe the exact admitted surface and exact remaining boundary
+1. a supported TypeScript root can recurse through a loaded local-plus-shared supported function graph and pass under Bun
+2. recursive shared closure resolves deps in owner library context rather than ambiguous raw-id lookup
+3. every reachable unit still requires supported semantic review and non-empty `body.typescript`
+4. helper, wrapper, normalized-wrapper, and chain3 family contracts stay frozen and enforced at recursive depth
+5. unrelated loaded units are excluded from the emitted TypeScript tree
+6. `examples/crosslib-app` contains a maintained recursive-shared green path
+7. preserved red-path regressions exist for wrong family, wrong order, missing body, unresolved shared dep, and molecule rejection
+8. target-specific proof remains additive and truthful on status and passport surfaces
+9. README, TODOS, CHANGELOG, and `examples/crosslib-app/README.md` all describe the exact M61 boundary
+10. the closeout sentence can honestly say:
+    - `recursive local-plus-cross-library closure across the current supported TypeScript family set now works`
+    - without implying arbitrary graph parity
 
 ## Verification Commands
 
 Run in this order:
 
 ```bash
-cargo test -p spec-core semantic_review
+cargo test -p spec-core validator
+cargo test -p spec-core typescript_backend
 cargo test -p spec-cli --test cli
 
-cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec --format json
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec
-cargo run -p spec-cli -- status examples/ecommerce --format json
-
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family corpus-decision --format json
-cargo xtask family verify-decision-contract --format json
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
+cargo run -p spec-cli -- status examples/crosslib-app/units --target-language typescript --format json
 ```
 
 Expected outcome:
 
-- all tests green
-- the guarded-tax example routes to the new family
-- repaired M19 and M20 packs stay truthful
-- family-analysis remains in stop-state, with no accidental "go build more corpus" drift
+- validator and collector tests are green
+- CLI regressions are green
+- the maintained recursive-shared root passes under Bun
+- status remains target-specific and additive
+- preserved red-path cases still reject before Bun
 
 ## Completion Summary
 
 - Step 0: Scope Challenge, complete
-- Architecture: one new family route, not a generic expression engine
-- Code Quality: explicit sibling family, minimal diff, no broad refactor, stable fixture ids
-- Test Review: full proof wall defined across unit, CLI, packet, example, and family-analysis surfaces
-- Performance Review: constant-factor only, no new graph traversal
+- Architecture: replace the local-vs-portability split with one recursive qualified closure contract
+- Code Quality: explicit qualified lookup, explicit family validators, no generic graph subsystem
+- Test Review: full proof wall defined across validator, collector, CLI, and maintained example surfaces
+- Performance Review: near-neutral, bounded to reachable closure and simple qualified lookup
 - NOT in scope: written
 - What already exists: written
 - TODOS.md updates: required in same PR
-- Failure modes: critical gaps identified
-- Parallelization: 6 steps, 2 early authoring lanes after the classifier freeze, 2 downstream proof lanes, 1 final convergence lane
+- Failure modes: critical gaps identified around wrong-unit selection and false product claims
+- Parallelization: 6 steps, 1 core lane, 2 parallel authoring lanes, 1 downstream CLI lane, 1 final proof lane
 
-This is the whole game. Ship one new truthful family, repair the repo surfaces that depended on it being unsupported, and stop there.
+This is the whole move. Make recursive shared closure honest, keep the family meanings frozen, prove it in the maintained example, and stop there.
