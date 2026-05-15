@@ -202,4 +202,6 @@
 
 - [x] **Normalized required-arg wrapper family in semantic review** — Completed by M60 (2026-05-15). M60 adds one supported wrapper family for apply_tax(discounted, tax_rate.max(Decimal::ZERO)); broader required-argument expressions remain unsupported.
 
-- [ ] **Remaining TypeScript oceans after M59** — After M59, the shipped lane covers same-tree local supported-function graphs plus the preserved direct cross-library helper/wrapper/chain3 portability exceptions. The remaining backlog is still real: arbitrary authored 4+ dep topology parity, new supported semantic families, and generic recursive cross-library function graphs remain out.
+- [x] **Recursive local-plus-cross-library TypeScript closure across shipped families** — Completed by M61 (2026-05-15). M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.
+
+- [ ] **Remaining TypeScript oceans after M61** — After M61, the shipped lane covers recursive local-plus-cross-library closure across the already-supported function families. The broader TypeScript oceans still explicitly deferred are arbitrary authored 4+ direct-dep topology parity, new semantic-family promotion, molecule TypeScript execution, and seam-kind TypeScript execution.

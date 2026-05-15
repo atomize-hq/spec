@@ -47,16 +47,19 @@ spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
 
-## Bounded TypeScript lane (M59)
+## Bounded TypeScript lane (M61)
 
 `spec` now exposes one bounded TypeScript execution lane. It is intentionally narrow:
 
+M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.
+
 - Bun is the only TypeScript prerequisite. The lane shells out to `bun`; no alternate Node, npm, or tsx contract is supported.
-- The new M59 lane is same-tree local only. Eligible roots are `kind: function` specs whose reachable closure resolves from the loaded unit set, stays local rather than `shared::...`, classifies to already-supported semantic-review function families, and authors non-empty `body.typescript` at every reachable unit.
-- Local graph traversal is semantic-review-driven and dep-driven. It does not hard-code a root family tuple, it dedupes shared same-tree subgraphs, and it excludes unrelated loaded units from the generated TypeScript tree.
+- Eligible roots are `kind: function` specs whose reachable closure resolves from the loaded unit set, classifies to already-supported semantic-review function families, and authors non-empty `body.typescript` at every reachable unit.
+- Closure collection is semantic-review-driven and dep-driven. It recurses across same-tree and direct sibling-library deps, dedupes repeated local-plus-cross-library subgraphs, and excludes unrelated loaded units from the generated TypeScript tree.
 - The preserved portability exceptions remain in place for direct cross-library roots. A `function.arithmetic_leaf.monotone_up.v1` root may still use exactly one direct cross-library helper dep that classifies to `function.helper.identity_passthrough.v1`, authors non-empty `body.typescript`, and resolves from the loaded unit set and generated tree.
 - The preserved direct cross-library wrapper lane remains frozen to the `function.wrapper.pipeline.v1` family with the direct dep tuple `function.arithmetic_leaf.monotone_down_nonnegative.v1` then `function.arithmetic_leaf.monotone_up.v1`.
-- The preserved direct cross-library chain3 lane remains frozen to the `function.wrapper.pipeline.chain3.v1` family with the direct dep tuple `function.wrapper.pipeline.v1` or same-tree `function.wrapper.pipeline.chain3.v1` in slot 1, then `function.arithmetic_leaf.monotone_up.v1`, then `function.arithmetic_leaf.monotone_down_nonnegative.v1`. Recursive slot-1 chain3 deps must still stay same-tree local.
+- The preserved direct cross-library chain3 lane remains frozen to the `function.wrapper.pipeline.chain3.v1` family with the direct dep tuple `function.wrapper.pipeline.v1` or `function.wrapper.pipeline.chain3.v1` in slot 1, then `function.arithmetic_leaf.monotone_up.v1`, then `function.arithmetic_leaf.monotone_down_nonnegative.v1`.
+- Family-specific direct dep contracts remain frozen even when closure collection recurses across library boundaries. The M60 required-arg wrapper family stays bounded to its current supported shape rather than widening the lane to arbitrary wrapper argument forms.
 - Rust remains the default target. TypeScript proof is additive only; it writes `target_proofs.typescript` without replacing the Rust proof surface.
 - TypeScript execution is atom-only. Only `local_tests` run in this lane; `.test.spec` molecule tests remain unsupported for `--target-language typescript` and fail before Bun runs.
 - The accepted `local_tests.expect` grammar is deliberately small: `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)`. The left-hand side must be a direct call to the current unit, and both the arguments and expected value must use integer-literal `Decimal::new(...)` forms.
@@ -70,19 +73,19 @@ spec test <path> --target-language typescript
 spec status <unit-or-root> --target-language typescript
 ```
 
-`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M59, a root-level status over a mixed example like `examples/ecommerce` or `examples/crosslib-app` may stay non-green unless every unit in scope is either freshly proven in the bounded same-tree local graph lane or preserved direct cross-library portability lane, or truthfully remains outside those lanes.
+`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M61, a root-level status over a mixed example like `examples/ecommerce` or `examples/crosslib-app` may stay non-green unless every unit in scope is either freshly proven in the bounded recursive local-plus-cross-library lane, covered by the preserved portability contracts, or truthfully remains outside those lanes.
 
-The generated helper filenames remain frozen in M59:
+The generated helper filenames remain frozen in M61:
 
 - `__spec_ts/runtime.ts`
 - `__spec_ts/build_entry.ts`
 - `__spec_ts/local_tests.ts`
 
-Commands and surfaces that do not widen for M59:
+Commands and surfaces that do not widen for M61:
 
 - `spec validate` does not accept `--target-language`
 - `spec export` does not accept `--target-language`
-- This lane does not widen to molecule execution, arbitrary authored 4+ dep topology parity, new semantic-family promotion, seam kinds, generic recursive cross-library function graphs, `spec validate --target-language`, or `spec export --target-language`.
+- The broader TypeScript oceans still explicitly deferred are arbitrary authored 4+ direct-dep topology parity, new semantic-family promotion, molecule TypeScript execution, and seam-kind TypeScript execution.
 
 ## Spec format
 

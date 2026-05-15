@@ -6,7 +6,7 @@
 
 - **Normalized required-arg wrapper routing is now a first-class supported semantic family in M60** — M60 adds one supported wrapper family for apply_tax(discounted, tax_rate.max(Decimal::ZERO)); broader required-argument expressions remain unsupported.
 
-- **The bounded TypeScript lane now admits direct cross-library wrapper and chain3 roots in M56** — eligible `kind:function` roots may still use the helper-aware monotone-up lane from M46, the wrapper lane from M52, and the chain3 lane from M54. M55's cross-library helper slot remains intact, and M56 now widens only the direct root-dep slots for `function.wrapper.pipeline.v1` and `function.wrapper.pipeline.chain3.v1` to allow bounded sibling-library deps under the exact frozen family tuples. The lane remains Bun-only, atom-only, and additive to Rust proof; it still does not widen to molecule execution, generic multi-dep execution, seam kinds, nested chain3 closure members, `spec validate --target-language`, or `spec export --target-language`.
+- **The bounded TypeScript lane now closes recursive local-plus-cross-library supported-function graphs in M61** — M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution. The broader TypeScript oceans still explicitly deferred are arbitrary authored 4+ direct-dep topology parity, new semantic-family promotion, molecule TypeScript execution, and seam-kind TypeScript execution; `spec validate --target-language` and `spec export --target-language` remain unsupported.
 
 ## 0.14.0 - 2026-05-07
 
