@@ -4418,7 +4418,7 @@ id: pricing/checkout_nested_chain3
 kind: function
 spec_version: "0.3.0"
 intent:
-  why: Reject a cross-library recursive chain3 in slot 1 before Bun runs.
+  why: Return the app checkout total by extending the shared nested chain3 with one outer surcharge and loyalty discount.
 contract:
   inputs:
     subtotal: Decimal
@@ -4448,7 +4448,7 @@ body:
     }
 local_tests:
   - id: happy_path
-    expect: checkout_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(9124275, 6)
+    expect: checkout_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(95760, 4)
 "#,
     );
 
@@ -17079,10 +17079,56 @@ fn typescript_nested_chain3_wrong_dep_order_reaches_bun_in_m59() {
 
 #[cfg(unix)]
 #[test]
-fn typescript_nested_chain3_cross_library_recursive_first_dep_rejects_before_bun_runs() {
+fn typescript_nested_chain3_cross_library_recursive_first_dep_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    let target = write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+
+    let output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "recursive cross-library nested chain3 roots should execute in the bounded TypeScript lane",
+        &output,
+    );
+
+    let passport = read_passport_json(
+        &target
+            .parent()
+            .unwrap()
+            .join("checkout_nested_chain3.spec.passport.json"),
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_recursive_cross_library_member_wrong_dep_order_rejects_before_bun_runs() {
     let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
         copy_crosslib_typescript_example();
     write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+    replace_in_file(
+        &shared_spec_dir.join("units/pricing/base_nested_chain3.unit.spec"),
+        "deps:\n  - pricing/calculate_total\n  - pricing/apply_tax\n  - pricing/apply_discount\n",
+        "deps:\n  - pricing/apply_tax\n  - pricing/calculate_total\n  - pricing/apply_discount\n",
+    );
 
     let marker_path = app_dir.join("bun-invoked.txt");
     let fake_bun = format!(
@@ -17103,18 +17149,94 @@ fn typescript_nested_chain3_cross_library_recursive_first_dep_rejects_before_bun
     );
     assert!(
         !output.status.success(),
-        "cross-library nested chain3 roots should be rejected"
+        "recursive shared members with the wrong chain3 dep order should be rejected"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains(
-            "TypeScript chain3 target requires recursive slot-1 chain3 deps to stay same-tree local in M58"
-        ),
+        stderr.contains("requires direct deps to classify as"),
         "{stderr}"
     );
     assert!(
         !marker_path.exists(),
-        "cross-library nested chain3 rejection should happen before Bun build/test execution"
+        "shared recursive wrong-order rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_recursive_cross_library_member_missing_typescript_body_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+    remove_typescript_body(&shared_spec_dir.join("units/pricing/base_nested_chain3.unit.spec"));
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "recursive shared members without body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("body.typescript"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "shared recursive missing-body rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_recursive_cross_library_member_unresolved_dep_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+    replace_in_file(
+        &shared_spec_dir.join("units/pricing/base_nested_chain3.unit.spec"),
+        "  - pricing/calculate_total\n",
+        "  - pricing/missing_total\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "recursive shared members with unresolved deps should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("pricing/missing_total"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "shared recursive unresolved-dep rejection should happen before Bun build/test execution"
     );
 }
 

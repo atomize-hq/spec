@@ -19,7 +19,7 @@ use crate::validator::{
 };
 use crate::{Result, SpecError};
 use std::collections::BTreeMap;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
 
 struct TypescriptResolvedSpecIndex {
@@ -208,25 +208,49 @@ fn collect_typescript_closure_member(
 fn build_typescript_resolved_spec_index(specs: &[&ResolvedSpec]) -> TypescriptResolvedSpecIndex {
     let mut first_indices_by_unit_id = HashMap::new();
     let mut last_indices_by_unit_id = HashMap::new();
-    let mut counts_by_unit_id = HashMap::<String, usize>::new();
-    let mut qualified_helper_keys = BTreeMap::<String, Vec<String>>::new();
+    let mut qualified_library_assignments = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut propagation_queue = VecDeque::<(String, String)>::new();
 
     for (index, spec) in specs.iter().enumerate() {
         first_indices_by_unit_id
             .entry(spec.id.clone())
             .or_insert(index);
         last_indices_by_unit_id.insert(spec.id.clone(), index);
-        *counts_by_unit_id.entry(spec.id.clone()).or_insert(0) += 1;
 
         for dep in &spec.deps {
             let Ok(parsed) = DepRef::parse(dep) else {
                 continue;
             };
-            if parsed.library_alias().is_some() {
-                qualified_helper_keys
+            if let Some(alias) = parsed.library_alias() {
+                if qualified_library_assignments
                     .entry(parsed.unit_id().to_string())
                     .or_default()
-                    .push(parsed.authored());
+                    .insert(alias.to_string())
+                {
+                    propagation_queue.push_back((alias.to_string(), parsed.unit_id().to_string()));
+                }
+            }
+        }
+    }
+
+    while let Some((alias, unit_id)) = propagation_queue.pop_front() {
+        let Some(&target_index) = last_indices_by_unit_id.get(&unit_id) else {
+            continue;
+        };
+
+        for dep in &specs[target_index].deps {
+            let Ok(parsed) = DepRef::parse(dep) else {
+                continue;
+            };
+            if parsed.library_alias().is_some() {
+                continue;
+            }
+            if qualified_library_assignments
+                .entry(parsed.unit_id().to_string())
+                .or_default()
+                .insert(alias.clone())
+            {
+                propagation_queue.push_back((alias.clone(), parsed.unit_id().to_string()));
             }
         }
     }
@@ -236,34 +260,28 @@ fn build_typescript_resolved_spec_index(specs: &[&ResolvedSpec]) -> TypescriptRe
     let mut canonical_key_by_index = vec![String::new(); specs.len()];
 
     for spec in specs {
-        let has_shared_aliases = qualified_helper_keys.contains_key(&spec.id);
-        let count = counts_by_unit_id.get(&spec.id).copied().unwrap_or_default();
-        if !has_shared_aliases || count > 1 {
-            let first_index = first_indices_by_unit_id
-                .get(&spec.id)
-                .copied()
-                .expect("first index must exist");
-            if canonical_key_by_index[first_index].is_empty() {
-                canonical_key_by_index[first_index] = spec.id.clone();
-            }
-            spec_indices_by_key
-                .entry(spec.id.clone())
-                .or_insert(first_index);
-            loaded_specs_by_key
-                .entry(spec.id.clone())
-                .or_insert_with(|| typescript_loaded_spec(spec));
-        }
+        let first_index = first_indices_by_unit_id
+            .get(&spec.id)
+            .copied()
+            .expect("first index must exist");
+        spec_indices_by_key
+            .entry(spec.id.clone())
+            .or_insert(first_index);
+        loaded_specs_by_key
+            .entry(spec.id.clone())
+            .or_insert_with(|| typescript_loaded_spec(specs[first_index]));
     }
 
-    for (unit_id, authored_keys) in &qualified_helper_keys {
+    for (unit_id, library_aliases) in &qualified_library_assignments {
         let target_index = last_indices_by_unit_id
             .get(unit_id)
             .copied()
-            .expect("last index must exist for shared alias");
-        if canonical_key_by_index[target_index].is_empty() {
-            canonical_key_by_index[target_index] = authored_keys[0].clone();
-        }
-        for authored_key in authored_keys {
+            .expect("last index must exist for qualified alias");
+        for alias in library_aliases {
+            let authored_key = format!("{alias}::{unit_id}");
+            if canonical_key_by_index[target_index].is_empty() {
+                canonical_key_by_index[target_index] = authored_key.clone();
+            }
             spec_indices_by_key
                 .entry(authored_key.clone())
                 .or_insert(target_index);
@@ -276,9 +294,7 @@ fn build_typescript_resolved_spec_index(specs: &[&ResolvedSpec]) -> TypescriptRe
     for (index, spec) in specs.iter().enumerate() {
         if canonical_key_by_index[index].is_empty() {
             canonical_key_by_index[index] = spec.id.clone();
-            spec_indices_by_key
-                .entry(spec.id.clone())
-                .or_insert(index);
+            spec_indices_by_key.entry(spec.id.clone()).or_insert(index);
             loaded_specs_by_key
                 .entry(spec.id.clone())
                 .or_insert_with(|| typescript_loaded_spec(spec));
@@ -1261,7 +1277,8 @@ mod tests {
             .get(&PathBuf::from("pricing/apply_discount.ts"))
             .expect("shared discount module should be emitted");
         assert!(
-            !discount_module.contains("Local duplicate discount that should stay out of the generated tree."),
+            !discount_module
+                .contains("Local duplicate discount that should stay out of the generated tree."),
             "local discount duplicate unexpectedly replaced the shared closure member"
         );
         let tax_module = tree
@@ -1270,6 +1287,80 @@ mod tests {
         assert!(
             !tax_module.contains("Local duplicate tax that should stay out of the generated tree."),
             "local tax duplicate unexpectedly replaced the shared closure member"
+        );
+    }
+
+    #[test]
+    fn typescript_tree_renders_recursive_cross_library_closure_members() {
+        let helper = helper_spec("money/round");
+        let shared_discount = monotone_down_spec(
+            "pricing/apply_discount",
+            vec!["money/round"],
+            "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
+        );
+        let shared_tax = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["money/round"],
+            "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
+        );
+        let mut local_total = wrapper_spec(
+            "pricing/calculate_total",
+            "pricing/apply_discount",
+            "pricing/apply_tax",
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
+        );
+        local_total.intent_why =
+            "Local duplicate wrapper that should stay out of the generated tree.".to_string();
+        let shared_total = wrapper_spec(
+            "pricing/calculate_total",
+            "pricing/apply_discount",
+            "pricing/apply_tax",
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
+        );
+        let shared_nested = chain3_spec(
+            "pricing/base_nested_chain3",
+            "pricing/calculate_total",
+            "pricing/apply_tax",
+            "pricing/apply_discount",
+            "const base_total = calculate_total(subtotal, discount_rate, tax_rate); const surcharged_total = apply_tax(base_total, surcharge_rate); return apply_discount(surcharged_total, loyalty_rate);",
+        );
+        let root = chain3_spec(
+            "pricing/checkout_nested_chain3",
+            "shared::pricing/base_nested_chain3",
+            "shared::pricing/apply_tax",
+            "shared::pricing/apply_discount",
+            "const base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate); const surcharged_total = apply_tax(base_total, surcharge_rate); return apply_discount(surcharged_total, loyalty_rate);",
+        );
+
+        let root_ids = vec![root.id.clone()];
+        let tree = generate_typescript_tree(
+            &[
+                NormalizedUnit::Function(root),
+                NormalizedUnit::Function(local_total),
+                NormalizedUnit::Function(shared_nested),
+                NormalizedUnit::Function(shared_total),
+                NormalizedUnit::Function(shared_discount),
+                NormalizedUnit::Function(shared_tax),
+                NormalizedUnit::Function(helper),
+            ],
+            &root_ids,
+        )
+        .expect("recursive cross-library closure should generate");
+
+        assert!(tree.contains_key(&PathBuf::from("pricing/checkout_nested_chain3.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/base_nested_chain3.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/calculate_total.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_discount.ts")));
+        assert!(tree.contains_key(&PathBuf::from("pricing/apply_tax.ts")));
+        assert!(tree.contains_key(&PathBuf::from("money/round.ts")));
+
+        let total_module = tree
+            .get(&PathBuf::from("pricing/calculate_total.ts"))
+            .expect("shared total module should be emitted");
+        assert!(
+            !total_module
+                .contains("Local duplicate wrapper that should stay out of the generated tree."),
+            "local calculate_total duplicate unexpectedly replaced the shared recursive member"
         );
     }
 

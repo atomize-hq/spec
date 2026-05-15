@@ -138,9 +138,7 @@ impl TypescriptQualifiedSpecIndex {
                     spec,
                     format!(
                         "TypeScript target lookup for '{}' collided across '{}' and '{}'",
-                        qualified_id,
-                        existing.source.file_path,
-                        spec.source.file_path
+                        qualified_id, existing.source.file_path, spec.source.file_path
                     ),
                 ));
             }
@@ -169,7 +167,10 @@ impl TypescriptQualifiedSpecIndex {
             return Ok(candidates[0].clone());
         }
 
-        if let Some(local) = candidates.iter().find(|candidate| candidate.library().is_none()) {
+        if let Some(local) = candidates
+            .iter()
+            .find(|candidate| candidate.library().is_none())
+        {
             return Ok(local.clone());
         }
 
@@ -178,7 +179,8 @@ impl TypescriptQualifiedSpecIndex {
             .get(&source_key)
             .and_then(|keys| keys.first())
         {
-            let parsed = DepRef::parse(authored_key).map_err(|err| semantic_error(spec, err.to_string()))?;
+            let parsed =
+                DepRef::parse(authored_key).map_err(|err| semantic_error(spec, err.to_string()))?;
             return Ok(parsed.to_qualified(None));
         }
 
@@ -699,9 +701,9 @@ fn classify_typescript_target_root_family(
         TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
             Ok(TypescriptTargetRootFamily::WrapperPipeline)
         }
-        TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY => Ok(
-            TypescriptTargetRootFamily::NormalizedRequiredArgWrapperPipeline,
-        ),
+        TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY => {
+            Ok(TypescriptTargetRootFamily::NormalizedRequiredArgWrapperPipeline)
+        }
         TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
             Ok(TypescriptTargetRootFamily::Chain3WrapperPipeline)
         }
@@ -745,8 +747,7 @@ fn validate_typescript_helper_dep_contract(
                     spec,
                     format!(
                         "{}: '{}'",
-                        TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE,
-                        helper_qualified_id
+                        TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE, helper_qualified_id
                     ),
                 ));
             };
@@ -778,8 +779,7 @@ fn validate_typescript_helper_dep_contract(
                     spec,
                     format!(
                         "{}: '{}'",
-                        TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                        helper_qualified_id
+                        TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE, helper_qualified_id
                     ),
                 ));
             }
@@ -851,8 +851,7 @@ fn validate_typescript_wrapper_dep_family(
             spec,
             format!(
                 "{}: '{}' is missing supported semantic review",
-                TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                dep_qualified_id
+                TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE, dep_qualified_id
             ),
         ));
     };
@@ -884,8 +883,7 @@ fn validate_typescript_wrapper_dep_family(
             spec,
             format!(
                 "{}: '{}'",
-                TYPESCRIPT_WRAPPER_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                dep_qualified_id
+                TYPESCRIPT_WRAPPER_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE, dep_qualified_id
             ),
         ));
     }
@@ -947,8 +945,7 @@ fn validate_typescript_chain3_first_dep_family(
             spec,
             format!(
                 "{}: '{}' is missing supported semantic review",
-                TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                dep_qualified_id
+                TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE, dep_qualified_id
             ),
         ));
     };
@@ -995,8 +992,7 @@ fn validate_typescript_chain3_first_dep_family(
             spec,
             format!(
                 "{}: '{}'",
-                TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                dep_qualified_id
+                TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE, dep_qualified_id
             ),
         ));
     }
@@ -1026,8 +1022,7 @@ fn validate_typescript_chain3_dep_family(
             spec,
             format!(
                 "{}: '{}' is missing supported semantic review",
-                TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                dep_qualified_id
+                TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE, dep_qualified_id
             ),
         ));
     };
@@ -1059,8 +1054,7 @@ fn validate_typescript_chain3_dep_family(
             spec,
             format!(
                 "{}: '{}'",
-                TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                dep_qualified_id
+                TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE, dep_qualified_id
             ),
         ));
     }
@@ -5807,18 +5801,26 @@ methods:
         shared_tax.source.file_path = "shared/units/pricing/apply_tax.unit.spec".to_string();
         let wrapper = create_typescript_wrapper_spec();
         let mut shared_wrapper = create_typescript_wrapper_spec();
-        shared_wrapper.source.file_path = "shared/units/pricing/calculate_total.unit.spec".to_string();
+        shared_wrapper.source.file_path =
+            "shared/units/pricing/calculate_total.unit.spec".to_string();
         let discount = create_typescript_discount_spec();
         let mut shared_discount = create_typescript_discount_spec();
-        shared_discount.source.file_path = "shared/units/pricing/apply_discount.unit.spec".to_string();
+        shared_discount.source.file_path =
+            "shared/units/pricing/apply_discount.unit.spec".to_string();
         let helper = create_typescript_helper_spec();
         let mut shared_helper = create_typescript_helper_spec();
         shared_helper.source.file_path = "shared/units/money/round.unit.spec".to_string();
 
         let specs_by_id = HashMap::from([
-            ("shared::pricing/calculate_total".to_string(), shared_wrapper),
+            (
+                "shared::pricing/calculate_total".to_string(),
+                shared_wrapper,
+            ),
             ("shared::pricing/apply_tax".to_string(), shared_tax),
-            ("shared::pricing/apply_discount".to_string(), shared_discount),
+            (
+                "shared::pricing/apply_discount".to_string(),
+                shared_discount,
+            ),
             ("shared::money/round".to_string(), shared_helper),
             (wrapper.spec.id.clone(), wrapper),
             (local_tax.spec.id.clone(), local_tax),

@@ -24,7 +24,7 @@
       "expect": "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
     }
   ],
-  "generated_at": "2026-05-14T01:42:43Z",
+  "generated_at": "2026-05-15T19:06:40Z",
   "source_file": "examples/crosslib-app/units/pricing/apply_tax.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -80,9 +80,9 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-14T01:42:43Z",
+        "observed_at": "2026-05-15T19:06:40Z",
         "provenance": {
-          "git_commit_sha": "cfd3ccd91c9b0031487eb41b3a14f72bbcaddeb0"
+          "git_commit_sha": "756ee6119a02a13b01623cdf5814096c3410415a"
         }
       },
       "freshness_anchor": {
