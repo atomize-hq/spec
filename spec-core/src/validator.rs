@@ -33,12 +33,16 @@ static COMPILED_TEST_SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
 
 pub const TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_up.v1";
+pub const TYPESCRIPT_MONOTONE_DOWN_TARGET_COMPATIBILITY_KEY: &str =
+    "function.arithmetic_leaf.monotone_down_nonnegative.v1";
 pub const TYPESCRIPT_TARGET_COMPATIBILITY_KEY: &str =
     TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY;
 pub const TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
+pub const TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY: &str =
+    "function.wrapper.pipeline.normalized_required_arg.v1";
 pub const TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.chain3.v1";
 pub const TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY: &str =
-    "function.arithmetic_leaf.monotone_down_nonnegative.v1";
+    TYPESCRIPT_MONOTONE_DOWN_TARGET_COMPATIBILITY_KEY;
 pub const TYPESCRIPT_WRAPPER_SECOND_DEP_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_up.v1";
 pub const TYPESCRIPT_CHAIN3_FIRST_DEP_COMPATIBILITY_KEY: &str =
@@ -68,7 +72,7 @@ pub const TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires exactly three direct deps in M56";
 pub const TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires every direct dep to resolve from the loaded unit set in M56";
-pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58";
+pub const TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE: &str = "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1, function.wrapper.pipeline.normalized_required_arg.v1, or function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M61";
 pub const TYPESCRIPT_CHAIN3_SAME_TREE_UNSUPPORTED_MESSAGE: &str =
     "TypeScript chain3 target requires recursive slot-1 chain3 deps to stay same-tree local in M58";
 pub const TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE: &str =
@@ -82,9 +86,154 @@ pub const TYPESCRIPT_EXPECT_UNSUPPORTED_MESSAGE: &str = "TypeScript target requi
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TypescriptTargetRootFamily {
+    MonotoneDown,
     MonotoneUp,
+    Helper,
     WrapperPipeline,
+    NormalizedRequiredArgWrapperPipeline,
     Chain3WrapperPipeline,
+}
+
+#[derive(Debug, Clone)]
+struct TypescriptQualifiedSpecIndex {
+    specs_by_qualified_id: HashMap<QualifiedUnitRef, LoadedSpec>,
+    qualified_ids_by_source: HashMap<(String, String), Vec<QualifiedUnitRef>>,
+    authored_keys_by_source: HashMap<(String, String), Vec<String>>,
+}
+
+impl TypescriptQualifiedSpecIndex {
+    fn build(specs_by_id: &HashMap<String, LoadedSpec>) -> Result<Self> {
+        let mut authored_keys_by_source: HashMap<(String, String), Vec<String>> = HashMap::new();
+        let mut qualified_ids_by_source: HashMap<(String, String), Vec<QualifiedUnitRef>> =
+            HashMap::new();
+        let mut specs_by_qualified_id = HashMap::new();
+
+        for (key, spec) in specs_by_id {
+            let parsed = DepRef::parse(key).map_err(|err| semantic_error(spec, err.to_string()))?;
+            if parsed.unit_id() != spec.spec.id {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "TypeScript target lookup key '{}' does not match unit id '{}'",
+                        key, spec.spec.id
+                    ),
+                ));
+            }
+
+            let source_key = (spec.source.file_path.clone(), spec.spec.id.clone());
+            authored_keys_by_source
+                .entry(source_key.clone())
+                .or_default()
+                .push(key.clone());
+            let qualified_id = parsed.to_qualified(None);
+            qualified_ids_by_source
+                .entry(source_key)
+                .or_default()
+                .push(qualified_id.clone());
+
+            if let Some(existing) = specs_by_qualified_id.insert(qualified_id.clone(), spec.clone())
+                && existing.source.file_path != spec.source.file_path
+            {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "TypeScript target lookup for '{}' collided across '{}' and '{}'",
+                        qualified_id,
+                        existing.source.file_path,
+                        spec.source.file_path
+                    ),
+                ));
+            }
+        }
+
+        Ok(Self {
+            specs_by_qualified_id,
+            qualified_ids_by_source,
+            authored_keys_by_source,
+        })
+    }
+
+    fn qualified_id_for_spec(&self, spec: &LoadedSpec) -> Result<QualifiedUnitRef> {
+        let source_key = (spec.source.file_path.clone(), spec.spec.id.clone());
+        let Some(candidates) = self.qualified_ids_by_source.get(&source_key) else {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "TypeScript target '{}' was not present in the loaded unit set",
+                    spec.spec.id
+                ),
+            ));
+        };
+
+        if candidates.len() == 1 {
+            return Ok(candidates[0].clone());
+        }
+
+        if let Some(local) = candidates.iter().find(|candidate| candidate.library().is_none()) {
+            return Ok(local.clone());
+        }
+
+        if let Some(authored_key) = self
+            .authored_keys_by_source
+            .get(&source_key)
+            .and_then(|keys| keys.first())
+        {
+            let parsed = DepRef::parse(authored_key).map_err(|err| semantic_error(spec, err.to_string()))?;
+            return Ok(parsed.to_qualified(None));
+        }
+
+        Err(semantic_error(
+            spec,
+            format!(
+                "TypeScript target '{}' had ambiguous qualified identities",
+                spec.spec.id
+            ),
+        ))
+    }
+
+    fn spec_for_qualified_id(&self, qualified_id: &QualifiedUnitRef) -> Result<&LoadedSpec> {
+        self.specs_by_qualified_id
+            .get(qualified_id)
+            .ok_or_else(|| SpecError::SemanticValidation {
+                message: format!(
+                    "TypeScript target '{}' was not present in the loaded unit set",
+                    qualified_id
+                ),
+                path: "<typescript-qualified-lookup>".to_string(),
+            })
+    }
+
+    fn resolve_dep(
+        &self,
+        spec: &LoadedSpec,
+        owner_library: Option<&str>,
+        dep: &str,
+        missing_message: &str,
+    ) -> Result<(QualifiedUnitRef, &LoadedSpec)> {
+        let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
+        let qualified_dep = parsed.to_qualified(owner_library);
+        let Some(dep_spec) = self.specs_by_qualified_id.get(&qualified_dep) else {
+            return Err(semantic_error(
+                spec,
+                format!("{missing_message}: '{}'", parsed.authored()),
+            ));
+        };
+
+        Ok((qualified_dep, dep_spec))
+    }
+
+    fn semantic_context_for(&self, owner_library: Option<&str>) -> HashMap<String, LoadedSpec> {
+        let mut context = HashMap::new();
+        for (qualified_id, spec) in &self.specs_by_qualified_id {
+            if qualified_id.library() == owner_library {
+                context.insert(spec.spec.id.clone(), spec.clone());
+            }
+            if let Some(library) = qualified_id.library() {
+                context.insert(format!("{library}::{}", spec.spec.id), spec.clone());
+            }
+        }
+        context
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -350,12 +499,15 @@ pub fn validate_typescript_execution_target_spec_with_specs(
         return Err(semantic_error(spec, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE));
     }
 
-    if typescript_target_uses_local_graph_lane(spec)? {
-        validate_typescript_local_graph_root_spec_with_specs(spec, specs_by_id)?;
-        return validate_typescript_local_test_expect_shape(spec);
-    }
-
-    validate_typescript_portability_target_spec_with_specs(spec, specs_by_id)?;
+    let qualified_specs = TypescriptQualifiedSpecIndex::build(specs_by_id)?;
+    let root_qualified_id = qualified_specs.qualified_id_for_spec(spec)?;
+    let mut visited = HashSet::new();
+    validate_typescript_recursive_closure_member_with_specs(
+        &root_qualified_id,
+        &qualified_specs,
+        &mut visited,
+        true,
+    )?;
     validate_typescript_local_test_expect_shape(spec)
 }
 
@@ -370,139 +522,13 @@ pub fn typescript_target_uses_local_graph_lane(spec: &LoadedSpec) -> Result<bool
     Ok(true)
 }
 
-fn validate_typescript_portability_target_spec_with_specs(
-    spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+fn validate_typescript_recursive_closure_member_with_specs(
+    qualified_id: &QualifiedUnitRef,
+    qualified_specs: &TypescriptQualifiedSpecIndex,
+    visited: &mut HashSet<QualifiedUnitRef>,
+    is_root: bool,
 ) -> Result<()> {
-    match spec.spec.deps.len() {
-        0 | 1 => {
-            validate_typescript_helper_dep_contract(spec, specs_by_id)?;
-            match classify_typescript_target_root_family(spec, specs_by_id)? {
-                TypescriptTargetRootFamily::MonotoneUp => {}
-                TypescriptTargetRootFamily::WrapperPipeline => {
-                    return Err(semantic_error(
-                        spec,
-                        format!(
-                            "{}; found {} direct deps",
-                            TYPESCRIPT_WRAPPER_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                            spec.spec.deps.len()
-                        ),
-                    ));
-                }
-                TypescriptTargetRootFamily::Chain3WrapperPipeline => {
-                    return Err(semantic_error(
-                        spec,
-                        format!(
-                            "{}; found {} direct deps",
-                            TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                            spec.spec.deps.len()
-                        ),
-                    ));
-                }
-            }
-        }
-        2 => {
-            validate_typescript_wrapper_dep_contract(spec, specs_by_id)?;
-            match classify_typescript_target_root_family(spec, specs_by_id)? {
-                TypescriptTargetRootFamily::WrapperPipeline => {}
-                TypescriptTargetRootFamily::MonotoneUp => {
-                    return Err(semantic_error(
-                        spec,
-                        format!(
-                            "{}; found {} direct deps",
-                            TYPESCRIPT_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                            spec.spec.deps.len()
-                        ),
-                    ));
-                }
-                TypescriptTargetRootFamily::Chain3WrapperPipeline => {
-                    return Err(semantic_error(
-                        spec,
-                        format!(
-                            "{}; found {} direct deps",
-                            TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                            spec.spec.deps.len()
-                        ),
-                    ));
-                }
-            }
-        }
-        3 => {
-            validate_typescript_chain3_dep_contract(spec, specs_by_id)?;
-            match classify_typescript_target_root_family(spec, specs_by_id)? {
-                TypescriptTargetRootFamily::Chain3WrapperPipeline => {}
-                TypescriptTargetRootFamily::MonotoneUp => {
-                    return Err(semantic_error(
-                        spec,
-                        format!(
-                            "{}; found {} direct deps",
-                            TYPESCRIPT_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                            spec.spec.deps.len()
-                        ),
-                    ));
-                }
-                TypescriptTargetRootFamily::WrapperPipeline => {
-                    return Err(semantic_error(
-                        spec,
-                        format!(
-                            "{}; found {} direct deps",
-                            TYPESCRIPT_WRAPPER_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                            spec.spec.deps.len()
-                        ),
-                    ));
-                }
-            }
-        }
-        _ => match classify_typescript_target_root_family(spec, specs_by_id)? {
-            TypescriptTargetRootFamily::MonotoneUp => {
-                return Err(semantic_error(
-                    spec,
-                    format!(
-                        "{}; found {} direct deps",
-                        TYPESCRIPT_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                        spec.spec.deps.len()
-                    ),
-                ));
-            }
-            TypescriptTargetRootFamily::WrapperPipeline => {
-                return Err(semantic_error(
-                    spec,
-                    format!(
-                        "{}; found {} direct deps",
-                        TYPESCRIPT_WRAPPER_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                        spec.spec.deps.len()
-                    ),
-                ));
-            }
-            TypescriptTargetRootFamily::Chain3WrapperPipeline => {
-                return Err(semantic_error(
-                    spec,
-                    format!(
-                        "{}; found {} direct deps",
-                        TYPESCRIPT_CHAIN3_DEP_ARITY_UNSUPPORTED_MESSAGE,
-                        spec.spec.deps.len()
-                    ),
-                ));
-            }
-        },
-    }
-
-    Ok(())
-}
-
-fn validate_typescript_local_graph_root_spec_with_specs(
-    spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
-) -> Result<()> {
-    let mut visited = HashSet::new();
-    validate_typescript_local_graph_member_spec_with_specs(spec, specs_by_id, &mut visited)
-}
-
-fn validate_typescript_local_graph_member_spec_with_specs(
-    spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
-    visited: &mut HashSet<String>,
-) -> Result<()> {
+    let spec = qualified_specs.spec_for_qualified_id(qualified_id)?;
     if spec
         .spec
         .unit_kind()
@@ -512,7 +538,7 @@ fn validate_typescript_local_graph_member_spec_with_specs(
         return Err(semantic_error(spec, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE));
     }
 
-    if !visited.insert(spec.spec.id.clone()) {
+    if !visited.insert(qualified_id.clone()) {
         return Ok(());
     }
 
@@ -529,45 +555,19 @@ fn validate_typescript_local_graph_member_spec_with_specs(
             spec,
             format!(
                 "{}: '{}'",
-                TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE, spec.spec.id
+                TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE, qualified_id
             ),
         ));
     }
 
-    for dep in &spec.spec.deps {
-        let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
-        if parsed.library_alias().is_some() {
-            return Err(semantic_error(
-                spec,
-                format!(
-                    "{}: '{}'",
-                    TYPESCRIPT_LOCAL_GRAPH_SHARED_DEP_UNSUPPORTED_MESSAGE,
-                    parsed.authored()
-                ),
-            ));
-        }
-
-        let Some(dep_spec) = specs_by_id.get(parsed.unit_id()) else {
-            return Err(semantic_error(
-                spec,
-                format!(
-                    "{}: '{}'",
-                    TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE,
-                    parsed.authored()
-                ),
-            ));
-        };
-
-        validate_typescript_local_graph_member_spec_with_specs(dep_spec, specs_by_id, visited)?;
-    }
-
-    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+    let semantic_review_specs = qualified_specs.semantic_context_for(qualified_id.library());
+    let semantic_review_context = SemanticReviewContext::new(&semantic_review_specs);
     let Some(review) = evaluate_semantic_review_with_context(spec, &semantic_review_context) else {
         return Err(semantic_error(
             spec,
             format!(
                 "{}: '{}' is missing supported semantic review",
-                TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE, spec.spec.id
+                TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE, qualified_id
             ),
         ));
     };
@@ -578,10 +578,60 @@ fn validate_typescript_local_graph_member_spec_with_specs(
             format!(
                 "{}: '{}' resolved to {}",
                 TYPESCRIPT_LOCAL_GRAPH_SEMANTIC_UNSUPPORTED_MESSAGE,
-                spec.spec.id,
+                qualified_id,
                 review.compatibility_key
             ),
         ));
+    }
+
+    match classify_typescript_target_root_family(spec, &semantic_review_specs)? {
+        TypescriptTargetRootFamily::Helper if is_root => {
+            return Err(semantic_error(
+                spec,
+                format!(
+                    "TypeScript target requires compatibility key {}, {}, {}, {}, or {} in M61; found {}",
+                    TYPESCRIPT_MONOTONE_DOWN_TARGET_COMPATIBILITY_KEY,
+                    TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
+                    TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
+                    TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY,
+                    TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY,
+                    review.compatibility_key
+                ),
+            ));
+        }
+        TypescriptTargetRootFamily::MonotoneDown | TypescriptTargetRootFamily::MonotoneUp => {
+            validate_typescript_helper_dep_contract(spec, qualified_id, qualified_specs)?;
+        }
+        TypescriptTargetRootFamily::Helper => {
+            if !spec.spec.deps.is_empty() {
+                return Err(semantic_error(
+                    spec,
+                    "TypeScript helper closure members must have deps: [] in M52",
+                ));
+            }
+        }
+        TypescriptTargetRootFamily::WrapperPipeline
+        | TypescriptTargetRootFamily::NormalizedRequiredArgWrapperPipeline => {
+            validate_typescript_wrapper_dep_contract(spec, qualified_id, qualified_specs)?;
+        }
+        TypescriptTargetRootFamily::Chain3WrapperPipeline => {
+            validate_typescript_chain3_dep_contract(spec, qualified_id, qualified_specs)?;
+        }
+    }
+
+    for dep in &spec.spec.deps {
+        let (dep_qualified_id, _) = qualified_specs.resolve_dep(
+            spec,
+            qualified_id.library(),
+            dep,
+            TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE,
+        )?;
+        validate_typescript_recursive_closure_member_with_specs(
+            &dep_qualified_id,
+            qualified_specs,
+            visited,
+            false,
+        )?;
     }
 
     Ok(())
@@ -591,57 +641,15 @@ pub fn validate_typescript_closure_member_spec_with_specs(
     spec: &LoadedSpec,
     specs_by_id: &HashMap<String, LoadedSpec>,
 ) -> Result<()> {
-    if spec
-        .spec
-        .unit_kind()
-        .map_err(|message| semantic_error(spec, message))?
-        != UnitKind::Function
-    {
-        return Err(semantic_error(spec, TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE));
-    }
-
-    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
-    let Some(review) = evaluate_semantic_review_with_context(spec, &semantic_review_context) else {
-        return Err(semantic_error(
-            spec,
-            "TypeScript closure member requires a supported semantic review in M52",
-        ));
-    };
-
-    if review.effective_support_status() != SemanticSupportStatus::Supported {
-        return Err(semantic_error(
-            spec,
-            format!(
-                "TypeScript closure member requires a supported semantic review in M52; found {}",
-                review.compatibility_key
-            ),
-        ));
-    }
-
-    match review.compatibility_key.as_str() {
-        TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
-            validate_typescript_wrapper_dep_contract(spec, specs_by_id)
-        }
-        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
-            validate_typescript_chain3_dep_contract(spec, specs_by_id)
-        }
-        TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY
-        | TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
-            validate_typescript_helper_dep_contract(spec, specs_by_id)
-        }
-        TYPESCRIPT_HELPER_COMPATIBILITY_KEY if spec.spec.deps.is_empty() => Ok(()),
-        TYPESCRIPT_HELPER_COMPATIBILITY_KEY => Err(semantic_error(
-            spec,
-            "TypeScript helper closure members must have deps: [] in M52",
-        )),
-        _ => Err(semantic_error(
-            spec,
-            format!(
-                "TypeScript closure member does not support semantic family '{}' in M52",
-                review.compatibility_key
-            ),
-        )),
-    }
+    let qualified_specs = TypescriptQualifiedSpecIndex::build(specs_by_id)?;
+    let qualified_id = qualified_specs.qualified_id_for_spec(spec)?;
+    let mut visited = HashSet::new();
+    validate_typescript_recursive_closure_member_with_specs(
+        &qualified_id,
+        &qualified_specs,
+        &mut visited,
+        false,
+    )
 }
 
 fn classify_typescript_target_root_family(
@@ -653,9 +661,12 @@ fn classify_typescript_target_root_family(
         return Err(semantic_error(
             spec,
             format!(
-                "TypeScript target requires compatibility key {}, {}, or {} in M52",
+                "TypeScript target requires compatibility key {}, {}, {}, {}, {}, or {} in M61",
+                TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
+                TYPESCRIPT_MONOTONE_DOWN_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
+                TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY
             ),
         ));
@@ -665,9 +676,12 @@ fn classify_typescript_target_root_family(
         return Err(semantic_error(
             spec,
             format!(
-                "TypeScript target requires compatibility key {}, {}, or {} in M52; found {}",
+                "TypeScript target requires compatibility key {}, {}, {}, {}, {}, or {} in M61; found {}",
+                TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
+                TYPESCRIPT_MONOTONE_DOWN_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
+                TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY,
                 review.compatibility_key
             ),
@@ -675,21 +689,31 @@ fn classify_typescript_target_root_family(
     }
 
     match review.compatibility_key.as_str() {
+        TYPESCRIPT_HELPER_COMPATIBILITY_KEY => Ok(TypescriptTargetRootFamily::Helper),
+        TYPESCRIPT_MONOTONE_DOWN_TARGET_COMPATIBILITY_KEY => {
+            Ok(TypescriptTargetRootFamily::MonotoneDown)
+        }
         TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
             Ok(TypescriptTargetRootFamily::MonotoneUp)
         }
         TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
             Ok(TypescriptTargetRootFamily::WrapperPipeline)
         }
+        TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY => Ok(
+            TypescriptTargetRootFamily::NormalizedRequiredArgWrapperPipeline,
+        ),
         TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
             Ok(TypescriptTargetRootFamily::Chain3WrapperPipeline)
         }
         _ => Err(semantic_error(
             spec,
             format!(
-                "TypeScript target requires compatibility key {}, {}, or {} in M52; found {}",
+                "TypeScript target requires compatibility key {}, {}, {}, {}, {}, or {} in M61; found {}",
+                TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
+                TYPESCRIPT_MONOTONE_DOWN_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
+                TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY,
                 TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY,
                 review.compatibility_key
             ),
@@ -699,29 +723,21 @@ fn classify_typescript_target_root_family(
 
 fn validate_typescript_helper_dep_contract(
     spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    qualified_id: &QualifiedUnitRef,
+    qualified_specs: &TypescriptQualifiedSpecIndex,
 ) -> Result<()> {
     match spec.spec.deps.as_slice() {
         [] => Ok(()),
         [dep] => {
-            let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
-            let helper_key = if parsed.library_alias().is_some() {
-                parsed.authored()
-            } else {
-                parsed.unit_id().to_string()
-            };
-            let Some(helper_spec) = specs_by_id.get(&helper_key) else {
-                return Err(semantic_error(
-                    spec,
-                    format!(
-                        "{}: '{}'",
-                        TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE,
-                        parsed.authored()
-                    ),
-                ));
-            };
-
-            let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+            let (helper_qualified_id, helper_spec) = qualified_specs.resolve_dep(
+                spec,
+                qualified_id.library(),
+                dep,
+                TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE,
+            )?;
+            let semantic_review_specs =
+                qualified_specs.semantic_context_for(helper_qualified_id.library());
+            let semantic_review_context = SemanticReviewContext::new(&semantic_review_specs);
             let Some(helper_review) =
                 evaluate_semantic_review_with_context(helper_spec, &semantic_review_context)
             else {
@@ -730,7 +746,7 @@ fn validate_typescript_helper_dep_contract(
                     format!(
                         "{}: '{}'",
                         TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE,
-                        parsed.authored()
+                        helper_qualified_id
                     ),
                 ));
             };
@@ -743,7 +759,7 @@ fn validate_typescript_helper_dep_contract(
                     format!(
                         "{}: '{}' resolved to {}",
                         TYPESCRIPT_HELPER_FAMILY_UNSUPPORTED_MESSAGE,
-                        parsed.authored(),
+                        helper_qualified_id,
                         helper_review.compatibility_key
                     ),
                 ));
@@ -763,7 +779,7 @@ fn validate_typescript_helper_dep_contract(
                     format!(
                         "{}: '{}'",
                         TYPESCRIPT_HELPER_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                        parsed.authored()
+                        helper_qualified_id
                     ),
                 ));
             }
@@ -783,7 +799,8 @@ fn validate_typescript_helper_dep_contract(
 
 fn validate_typescript_wrapper_dep_contract(
     spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    qualified_id: &QualifiedUnitRef,
+    qualified_specs: &TypescriptQualifiedSpecIndex,
 ) -> Result<()> {
     let [first_dep, second_dep] = spec.spec.deps.as_slice() else {
         return Err(semantic_error(
@@ -798,13 +815,15 @@ fn validate_typescript_wrapper_dep_contract(
 
     validate_typescript_wrapper_dep_family(
         spec,
-        specs_by_id,
+        qualified_id,
+        qualified_specs,
         first_dep,
         TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY,
     )?;
     validate_typescript_wrapper_dep_family(
         spec,
-        specs_by_id,
+        qualified_id,
+        qualified_specs,
         second_dep,
         TYPESCRIPT_WRAPPER_SECOND_DEP_COMPATIBILITY_KEY,
     )
@@ -812,24 +831,19 @@ fn validate_typescript_wrapper_dep_contract(
 
 fn validate_typescript_wrapper_dep_family(
     spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    qualified_id: &QualifiedUnitRef,
+    qualified_specs: &TypescriptQualifiedSpecIndex,
     dep: &str,
     expected_family: &str,
 ) -> Result<()> {
-    let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
-    let dep_key = typescript_dep_lookup_key(&parsed);
-    let Some(dep_spec) = specs_by_id.get(&dep_key) else {
-        return Err(semantic_error(
-            spec,
-            format!(
-                "{}: '{}'",
-                TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE,
-                parsed.authored()
-            ),
-        ));
-    };
-
-    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+    let (dep_qualified_id, dep_spec) = qualified_specs.resolve_dep(
+        spec,
+        qualified_id.library(),
+        dep,
+        TYPESCRIPT_WRAPPER_MISSING_DEP_UNSUPPORTED_MESSAGE,
+    )?;
+    let semantic_review_specs = qualified_specs.semantic_context_for(dep_qualified_id.library());
+    let semantic_review_context = SemanticReviewContext::new(&semantic_review_specs);
     let Some(dep_review) =
         evaluate_semantic_review_with_context(dep_spec, &semantic_review_context)
     else {
@@ -838,7 +852,7 @@ fn validate_typescript_wrapper_dep_family(
             format!(
                 "{}: '{}' is missing supported semantic review",
                 TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.authored()
+                dep_qualified_id
             ),
         ));
     };
@@ -851,7 +865,7 @@ fn validate_typescript_wrapper_dep_family(
             format!(
                 "{}: '{}' resolved to {}",
                 TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.authored(),
+                dep_qualified_id,
                 dep_review.compatibility_key
             ),
         ));
@@ -871,7 +885,7 @@ fn validate_typescript_wrapper_dep_family(
             format!(
                 "{}: '{}'",
                 TYPESCRIPT_WRAPPER_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                parsed.authored()
+                dep_qualified_id
             ),
         ));
     }
@@ -881,7 +895,8 @@ fn validate_typescript_wrapper_dep_family(
 
 fn validate_typescript_chain3_dep_contract(
     spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    qualified_id: &QualifiedUnitRef,
+    qualified_specs: &TypescriptQualifiedSpecIndex,
 ) -> Result<()> {
     let [first_dep, second_dep, third_dep] = spec.spec.deps.as_slice() else {
         return Err(semantic_error(
@@ -894,16 +909,18 @@ fn validate_typescript_chain3_dep_contract(
         ));
     };
 
-    validate_typescript_chain3_first_dep_family(spec, specs_by_id, first_dep)?;
+    validate_typescript_chain3_first_dep_family(spec, qualified_id, qualified_specs, first_dep)?;
     validate_typescript_chain3_dep_family(
         spec,
-        specs_by_id,
+        qualified_id,
+        qualified_specs,
         second_dep,
         TYPESCRIPT_CHAIN3_SECOND_DEP_COMPATIBILITY_KEY,
     )?;
     validate_typescript_chain3_dep_family(
         spec,
-        specs_by_id,
+        qualified_id,
+        qualified_specs,
         third_dep,
         TYPESCRIPT_CHAIN3_THIRD_DEP_COMPATIBILITY_KEY,
     )
@@ -911,23 +928,18 @@ fn validate_typescript_chain3_dep_contract(
 
 fn validate_typescript_chain3_first_dep_family(
     spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    qualified_id: &QualifiedUnitRef,
+    qualified_specs: &TypescriptQualifiedSpecIndex,
     dep: &str,
 ) -> Result<()> {
-    let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
-    let dep_key = typescript_dep_lookup_key(&parsed);
-    let Some(dep_spec) = specs_by_id.get(&dep_key) else {
-        return Err(semantic_error(
-            spec,
-            format!(
-                "{}: '{}'",
-                TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE,
-                parsed.authored()
-            ),
-        ));
-    };
-
-    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+    let (dep_qualified_id, dep_spec) = qualified_specs.resolve_dep(
+        spec,
+        qualified_id.library(),
+        dep,
+        TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE,
+    )?;
+    let semantic_review_specs = qualified_specs.semantic_context_for(dep_qualified_id.library());
+    let semantic_review_context = SemanticReviewContext::new(&semantic_review_specs);
     let Some(dep_review) =
         evaluate_semantic_review_with_context(dep_spec, &semantic_review_context)
     else {
@@ -936,7 +948,7 @@ fn validate_typescript_chain3_first_dep_family(
             format!(
                 "{}: '{}' is missing supported semantic review",
                 TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.authored()
+                dep_qualified_id
             ),
         ));
     };
@@ -947,7 +959,7 @@ fn validate_typescript_chain3_first_dep_family(
             format!(
                 "{}: '{}' resolved to {}",
                 TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.authored(),
+                dep_qualified_id,
                 dep_review.compatibility_key
             ),
         ));
@@ -955,24 +967,15 @@ fn validate_typescript_chain3_first_dep_family(
 
     match dep_review.compatibility_key.as_str() {
         TYPESCRIPT_CHAIN3_FIRST_DEP_COMPATIBILITY_KEY => {}
-        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY if parsed.library_alias().is_none() => {}
-        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
-            return Err(semantic_error(
-                spec,
-                format!(
-                    "{}: '{}'",
-                    TYPESCRIPT_CHAIN3_SAME_TREE_UNSUPPORTED_MESSAGE,
-                    parsed.authored()
-                ),
-            ));
-        }
+        TYPESCRIPT_NORMALIZED_REQUIRED_ARG_WRAPPER_TARGET_COMPATIBILITY_KEY => {}
+        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {}
         _ => {
             return Err(semantic_error(
                 spec,
                 format!(
                     "{}: '{}' resolved to {}",
                     TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                    parsed.authored(),
+                    dep_qualified_id,
                     dep_review.compatibility_key
                 ),
             ));
@@ -993,7 +996,7 @@ fn validate_typescript_chain3_first_dep_family(
             format!(
                 "{}: '{}'",
                 TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                parsed.authored()
+                dep_qualified_id
             ),
         ));
     }
@@ -1003,24 +1006,19 @@ fn validate_typescript_chain3_first_dep_family(
 
 fn validate_typescript_chain3_dep_family(
     spec: &LoadedSpec,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    qualified_id: &QualifiedUnitRef,
+    qualified_specs: &TypescriptQualifiedSpecIndex,
     dep: &str,
     expected_family: &str,
 ) -> Result<()> {
-    let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
-    let dep_key = typescript_dep_lookup_key(&parsed);
-    let Some(dep_spec) = specs_by_id.get(&dep_key) else {
-        return Err(semantic_error(
-            spec,
-            format!(
-                "{}: '{}'",
-                TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE,
-                parsed.authored()
-            ),
-        ));
-    };
-
-    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
+    let (dep_qualified_id, dep_spec) = qualified_specs.resolve_dep(
+        spec,
+        qualified_id.library(),
+        dep,
+        TYPESCRIPT_CHAIN3_MISSING_DEP_UNSUPPORTED_MESSAGE,
+    )?;
+    let semantic_review_specs = qualified_specs.semantic_context_for(dep_qualified_id.library());
+    let semantic_review_context = SemanticReviewContext::new(&semantic_review_specs);
     let Some(dep_review) =
         evaluate_semantic_review_with_context(dep_spec, &semantic_review_context)
     else {
@@ -1029,7 +1027,7 @@ fn validate_typescript_chain3_dep_family(
             format!(
                 "{}: '{}' is missing supported semantic review",
                 TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.authored()
+                dep_qualified_id
             ),
         ));
     };
@@ -1042,7 +1040,7 @@ fn validate_typescript_chain3_dep_family(
             format!(
                 "{}: '{}' resolved to {}",
                 TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE,
-                parsed.authored(),
+                dep_qualified_id,
                 dep_review.compatibility_key
             ),
         ));
@@ -1062,20 +1060,12 @@ fn validate_typescript_chain3_dep_family(
             format!(
                 "{}: '{}'",
                 TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE,
-                parsed.authored()
+                dep_qualified_id
             ),
         ));
     }
 
     Ok(())
-}
-
-fn typescript_dep_lookup_key(dep: &DepRef) -> String {
-    if dep.library_alias().is_some() {
-        dep.authored()
-    } else {
-        dep.unit_id().to_string()
-    }
 }
 
 pub fn validate_typescript_local_test_expect_shape(spec: &LoadedSpec) -> Result<()> {
@@ -2502,6 +2492,16 @@ mod tests {
                 extensions: UnitExtensions::default(),
             },
         }
+    }
+
+    fn create_typescript_normalized_required_arg_wrapper_spec() -> LoadedSpec {
+        let mut spec = create_typescript_wrapper_spec();
+        spec.spec.body.rust = "{ let discounted = apply_discount(subtotal, discount_rate); apply_tax(discounted, tax_rate.max(Decimal::ZERO)) }".to_string();
+        spec.spec.body.typescript = Some(
+            "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate.max(Decimal.zero()));"
+                .to_string(),
+        );
+        spec
     }
 
     fn create_typescript_chain3_spec() -> LoadedSpec {
@@ -5111,10 +5111,14 @@ methods:
     }
 
     #[test]
-    fn typescript_local_graph_target_accepts_helper_root() {
+    fn typescript_target_rejects_helper_root() {
         let spec = create_typescript_helper_spec();
-        validate_typescript_execution_target_spec(&spec)
-            .expect("same-tree helper roots should be eligible in M59");
+        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(TYPESCRIPT_HELPER_COMPATIBILITY_KEY),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
@@ -5148,6 +5152,23 @@ methods:
 
         validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
             .expect("one local helper dep should be eligible in M46");
+    }
+
+    #[test]
+    fn typescript_target_accepts_normalized_required_arg_wrapper_root() {
+        let spec = create_typescript_normalized_required_arg_wrapper_spec();
+        let discount = create_typescript_discount_spec();
+        let tax = create_typescript_lane_function_spec();
+        let helper = create_typescript_helper_spec();
+        let specs_by_id = HashMap::from([
+            (spec.spec.id.clone(), spec.clone()),
+            (discount.spec.id.clone(), discount),
+            (tax.spec.id.clone(), tax),
+            (helper.spec.id.clone(), helper),
+        ]);
+
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("normalized required-arg wrapper roots should be eligible in M61");
     }
 
     #[test]
@@ -5217,7 +5238,7 @@ methods:
         let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_MISSING_HELPER_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -5288,7 +5309,7 @@ methods:
     }
 
     #[test]
-    fn typescript_local_graph_target_rejects_reachable_shared_dep() {
+    fn typescript_recursive_closure_accepts_reachable_shared_dep() {
         let spec = create_typescript_wrapper_spec();
         let discount = create_typescript_discount_spec();
         let mut tax = create_typescript_lane_function_spec();
@@ -5302,13 +5323,8 @@ methods:
             ("shared::money/round".to_string(), helper),
         ]);
 
-        let err =
-            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_LOCAL_GRAPH_SHARED_DEP_UNSUPPORTED_MESSAGE),
-            "unexpected error: {err}"
-        );
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("M61 should allow recursive closure to cross into shared deps");
     }
 
     #[test]
@@ -5356,7 +5372,7 @@ methods:
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_WRAPPER_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -5409,6 +5425,7 @@ methods:
         let specs_by_id = HashMap::from([
             (spec.spec.id.clone(), spec.clone()),
             (discount.spec.id.clone(), discount),
+            (helper.spec.id.clone(), helper.clone()),
             ("shared::pricing/apply_tax".to_string(), tax),
             ("shared::money/round".to_string(), helper),
         ]);
@@ -5455,14 +5472,13 @@ methods:
         let err =
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE),
+            err.to_string().contains("unsupported.function.v1"),
             "unexpected error: {err}"
         );
     }
 
     #[test]
-    fn typescript_local_graph_target_accepts_wrapper_with_reordered_supported_local_deps() {
+    fn typescript_target_rejects_wrapper_with_reordered_direct_deps() {
         let mut spec = create_typescript_wrapper_spec();
         spec.spec.deps = vec![
             "pricing/apply_tax".to_string(),
@@ -5478,8 +5494,13 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .expect("same-tree local wrapper deps are graph-generic in M59");
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(TYPESCRIPT_WRAPPER_DEP_FAMILY_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
@@ -5569,7 +5590,7 @@ methods:
     }
 
     #[test]
-    fn typescript_local_graph_target_accepts_chain3_with_reordered_declared_deps() {
+    fn typescript_target_rejects_chain3_with_reordered_declared_deps() {
         let mut spec = create_typescript_chain3_spec();
         spec.spec.deps = vec![
             "pricing/apply_tax".to_string(),
@@ -5588,8 +5609,13 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
-            .expect("same-tree local chain3 roots should not depend on declared dep order in M59");
+        let err =
+            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
@@ -5615,8 +5641,10 @@ methods:
         let err =
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
+            err.to_string().contains("unsupported.function.v1")
+                || err
+                    .to_string()
+                    .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -5637,8 +5665,7 @@ methods:
         let err =
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE),
+            err.to_string().contains("unsupported.function.v1"),
             "unexpected error: {err}"
         );
     }
@@ -5692,7 +5719,7 @@ methods:
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }
@@ -5738,7 +5765,7 @@ methods:
     }
 
     #[test]
-    fn typescript_nested_chain3_root_rejects_cross_library_recursive_first_dep() {
+    fn typescript_nested_chain3_root_accepts_cross_library_recursive_first_dep() {
         let mut spec = create_typescript_checkout_nested_chain3_spec();
         spec.spec.deps[0] = "shared::pricing/base_nested_chain3".to_string();
         let nested = create_typescript_base_nested_chain3_spec();
@@ -5749,19 +5776,63 @@ methods:
         let specs_by_id = HashMap::from([
             (spec.spec.id.clone(), spec.clone()),
             ("shared::pricing/base_nested_chain3".to_string(), nested),
+            (
+                "shared::pricing/calculate_total".to_string(),
+                wrapper.clone(),
+            ),
+            (
+                "shared::pricing/apply_discount".to_string(),
+                discount.clone(),
+            ),
+            ("shared::pricing/apply_tax".to_string(), tax.clone()),
+            ("shared::money/round".to_string(), helper.clone()),
             (wrapper.spec.id.clone(), wrapper),
             (discount.spec.id.clone(), discount),
             (tax.spec.id.clone(), tax),
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err =
-            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_SAME_TREE_UNSUPPORTED_MESSAGE),
-            "unexpected error: {err}"
-        );
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("M61 should allow shared recursive chain3 slot-1 members");
+    }
+
+    #[test]
+    fn typescript_closure_member_prefers_owner_library_for_same_id_units() {
+        let mut local_tax = create_typescript_lane_function_spec();
+        local_tax.spec.body.rust = "{ subtotal + subtotal * rate + Decimal::ONE }".to_string();
+        local_tax.spec.body.typescript =
+            Some("return subtotal.add(subtotal.mul(rate)).add(Decimal.one());".to_string());
+
+        let mut shared_tax = create_typescript_lane_function_spec();
+        shared_tax.source.file_path = "shared/units/pricing/apply_tax.unit.spec".to_string();
+        let wrapper = create_typescript_wrapper_spec();
+        let mut shared_wrapper = create_typescript_wrapper_spec();
+        shared_wrapper.source.file_path = "shared/units/pricing/calculate_total.unit.spec".to_string();
+        let discount = create_typescript_discount_spec();
+        let mut shared_discount = create_typescript_discount_spec();
+        shared_discount.source.file_path = "shared/units/pricing/apply_discount.unit.spec".to_string();
+        let helper = create_typescript_helper_spec();
+        let mut shared_helper = create_typescript_helper_spec();
+        shared_helper.source.file_path = "shared/units/money/round.unit.spec".to_string();
+
+        let specs_by_id = HashMap::from([
+            ("shared::pricing/calculate_total".to_string(), shared_wrapper),
+            ("shared::pricing/apply_tax".to_string(), shared_tax),
+            ("shared::pricing/apply_discount".to_string(), shared_discount),
+            ("shared::money/round".to_string(), shared_helper),
+            (wrapper.spec.id.clone(), wrapper),
+            (local_tax.spec.id.clone(), local_tax),
+            (discount.spec.id.clone(), discount),
+            (helper.spec.id.clone(), helper),
+        ]);
+
+        let shared_root = specs_by_id
+            .get("shared::pricing/calculate_total")
+            .expect("shared wrapper root must be present")
+            .clone();
+
+        validate_typescript_closure_member_spec_with_specs(&shared_root, &specs_by_id)
+            .expect("shared closure members should resolve local deps inside their owner library");
     }
 
     #[test]

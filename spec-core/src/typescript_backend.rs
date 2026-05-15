@@ -7,7 +7,6 @@
 //! It does not promise generic TypeScript parity, molecule parity, seam-kind
 //! support, arbitrary dependency-bearing units, proof routing, or Bun execution.
 
-use crate::semantic_review::{SemanticReviewContext, evaluate_semantic_review_with_context};
 use crate::syntax::validate_expect_expr;
 use crate::types::{
     Body, DepRef, Intent, LoadedSpec, LocalTest, NormalizedUnit, ResolvedSpec, SpecSource,
@@ -15,16 +14,19 @@ use crate::types::{
     TYPESCRIPT_RUNTIME_HELPER_PATH, UnitExtensions,
 };
 use crate::validator::{
-    TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY, TYPESCRIPT_HELPER_COMPATIBILITY_KEY,
-    TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE, TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY,
-    TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY, TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY,
-    typescript_target_uses_local_graph_lane, validate_typescript_closure_member_spec_with_specs,
+    TYPESCRIPT_KIND_UNSUPPORTED_MESSAGE, validate_typescript_closure_member_spec_with_specs,
     validate_typescript_execution_target_spec_with_specs,
 };
 use crate::{Result, SpecError};
 use std::collections::BTreeMap;
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Component, Path, PathBuf};
+
+struct TypescriptResolvedSpecIndex {
+    spec_indices_by_key: HashMap<String, usize>,
+    loaded_specs_by_key: HashMap<String, LoadedSpec>,
+    canonical_key_by_index: Vec<String>,
+}
 
 pub fn generate_typescript_unit_module(spec: &ResolvedSpec) -> Result<String> {
     render_typescript_unit_module(spec)
@@ -39,14 +41,9 @@ pub fn generate_typescript_tree(
         .map(extract_typescript_spec)
         .collect::<Result<Vec<_>>>()?;
     specs.sort_by(|left, right| left.id.cmp(&right.id));
-    let specs_by_id = build_typescript_loaded_specs_by_id(&specs);
-    let spec_indices_by_key = build_typescript_spec_indices_by_key(&specs);
-    let included_spec_indices = collect_included_typescript_unit_ids(
-        root_unit_ids,
-        &specs,
-        &spec_indices_by_key,
-        &specs_by_id,
-    )?;
+    let resolved_spec_index = build_typescript_resolved_spec_index(&specs);
+    let included_spec_indices =
+        collect_included_typescript_unit_ids(root_unit_ids, &specs, &resolved_spec_index)?;
     let included_specs = specs
         .into_iter()
         .enumerate()
@@ -121,13 +118,12 @@ fn validate_typescript_resolved_spec_with_specs(
 fn collect_included_typescript_unit_ids(
     root_unit_ids: &[String],
     specs: &[&ResolvedSpec],
-    spec_indices_by_key: &HashMap<String, usize>,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    resolved_spec_index: &TypescriptResolvedSpecIndex,
 ) -> Result<BTreeSet<usize>> {
     let mut included = BTreeSet::new();
 
     for root_unit_id in root_unit_ids {
-        let Some(&root_index) = spec_indices_by_key.get(root_unit_id) else {
+        let Some(&root_index) = resolved_spec_index.spec_indices_by_key.get(root_unit_id) else {
             return Err(SpecError::Generator {
                 message: format!(
                     "root unit '{}' was not present in the bounded M52 TypeScript loaded unit set",
@@ -135,13 +131,7 @@ fn collect_included_typescript_unit_ids(
                 ),
             });
         };
-        collect_typescript_root_closure(
-            root_index,
-            specs,
-            spec_indices_by_key,
-            specs_by_id,
-            &mut included,
-        )?;
+        collect_typescript_root_closure(root_index, specs, resolved_spec_index, &mut included)?;
     }
 
     Ok(included)
@@ -150,152 +140,25 @@ fn collect_included_typescript_unit_ids(
 fn collect_typescript_root_closure(
     spec_index: usize,
     specs: &[&ResolvedSpec],
-    spec_indices_by_key: &HashMap<String, usize>,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    resolved_spec_index: &TypescriptResolvedSpecIndex,
     included: &mut BTreeSet<usize>,
 ) -> Result<()> {
     let spec = specs[spec_index];
-    validate_typescript_resolved_spec_with_specs(spec, specs_by_id)?;
-
-    if typescript_target_uses_local_graph_lane(&typescript_loaded_spec(spec)).map_err(|err| {
-        SpecError::Generator {
-            message: err.to_string(),
-        }
-    })? {
-        return collect_typescript_local_graph_root_closure(
-            spec_index,
-            specs,
-            spec_indices_by_key,
-            included,
-        );
-    }
-
-    collect_typescript_portability_root_closure(
-        spec_index,
-        specs,
-        spec_indices_by_key,
-        specs_by_id,
-        included,
-    )
-}
-
-fn collect_typescript_local_graph_root_closure(
-    spec_index: usize,
-    specs: &[&ResolvedSpec],
-    spec_indices_by_key: &HashMap<String, usize>,
-    included: &mut BTreeSet<usize>,
-) -> Result<()> {
-    collect_typescript_local_graph_member_closure(spec_index, specs, spec_indices_by_key, included)
-}
-
-fn collect_typescript_local_graph_member_closure(
-    spec_index: usize,
-    specs: &[&ResolvedSpec],
-    spec_indices_by_key: &HashMap<String, usize>,
-    included: &mut BTreeSet<usize>,
-) -> Result<()> {
-    if !included.insert(spec_index) {
-        return Ok(());
-    }
-
-    let spec = specs[spec_index];
-    for dep in &spec.deps {
-        let parsed = parse_typescript_dep(dep, "same-tree local dep")?;
-        if parsed.library_alias().is_some() {
-            return Err(SpecError::Generator {
-                message: format!(
-                    "unit '{}' is not eligible for the bounded M59 TypeScript lane: same-tree local traversal reached cross-library dep '{}'",
-                    spec.id,
-                    parsed.authored()
-                ),
-            });
-        }
-
-        let dep_index = resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
-        collect_typescript_local_graph_member_closure(
-            dep_index,
-            specs,
-            spec_indices_by_key,
-            included,
-        )?;
-    }
-
-    Ok(())
-}
-
-fn collect_typescript_portability_root_closure(
-    spec_index: usize,
-    specs: &[&ResolvedSpec],
-    spec_indices_by_key: &HashMap<String, usize>,
-    specs_by_id: &HashMap<String, LoadedSpec>,
-    included: &mut BTreeSet<usize>,
-) -> Result<()> {
-    let spec = specs[spec_index];
-    included.insert(spec_index);
-
-    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
-    let Some(review) = evaluate_semantic_review_with_context(
-        &typescript_loaded_spec(spec),
-        &semantic_review_context,
-    ) else {
-        return Err(SpecError::Generator {
-            message: format!(
-                "unit '{}' is not eligible for the bounded M52 TypeScript lane: missing supported semantic review",
-                spec.id
-            ),
-        });
-    };
-
-    match review.compatibility_key.as_str() {
-        TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
-            collect_typescript_helper_dep(spec, specs, spec_indices_by_key, specs_by_id, included)
-        }
-        TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
-            for dep in &spec.deps {
-                let parsed = parse_typescript_dep(dep, "wrapper direct dep")?;
-                let dep_index =
-                    resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
-                collect_typescript_closure_member(
-                    dep_index,
-                    specs,
-                    spec_indices_by_key,
-                    specs_by_id,
-                    included,
-                )?;
-            }
-            Ok(())
-        }
-        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
-            for dep in &spec.deps {
-                let parsed = parse_typescript_dep(dep, "chain3 direct dep")?;
-                let dep_index =
-                    resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
-                collect_typescript_closure_member(
-                    dep_index,
-                    specs,
-                    spec_indices_by_key,
-                    specs_by_id,
-                    included,
-                )?;
-            }
-            Ok(())
-        }
-        _ => Err(SpecError::Generator {
-            message: format!(
-                "unit '{}' is not eligible for the bounded M52 TypeScript lane: semantic family '{}' is unsupported",
-                spec.id, review.compatibility_key
-            ),
-        }),
-    }
+    validate_typescript_resolved_spec_with_specs(spec, &resolved_spec_index.loaded_specs_by_key)?;
+    collect_typescript_closure_member(spec_index, specs, resolved_spec_index, included, true)
 }
 
 fn collect_typescript_closure_member(
     spec_index: usize,
     specs: &[&ResolvedSpec],
-    spec_indices_by_key: &HashMap<String, usize>,
-    specs_by_id: &HashMap<String, LoadedSpec>,
+    resolved_spec_index: &TypescriptResolvedSpecIndex,
     included: &mut BTreeSet<usize>,
+    is_root: bool,
 ) -> Result<()> {
+    if !included.insert(spec_index) {
+        return Ok(());
+    }
+
     let spec = specs[spec_index];
     if spec
         .body_typescript
@@ -313,120 +176,47 @@ fn collect_typescript_closure_member(
     }
 
     let loaded = typescript_loaded_spec(spec);
-    validate_typescript_closure_member_spec_with_specs(&loaded, specs_by_id).map_err(|err| {
-        SpecError::Generator {
-            message: err.to_string(),
-        }
+    let validation = if is_root {
+        validate_typescript_execution_target_spec_with_specs(
+            &loaded,
+            &resolved_spec_index.loaded_specs_by_key,
+        )
+    } else {
+        validate_typescript_closure_member_spec_with_specs(
+            &loaded,
+            &resolved_spec_index.loaded_specs_by_key,
+        )
+    };
+    validation.map_err(|err| SpecError::Generator {
+        message: err.to_string(),
     })?;
 
-    included.insert(spec_index);
-
-    let semantic_review_context = SemanticReviewContext::new(specs_by_id);
-    let review = evaluate_semantic_review_with_context(&loaded, &semantic_review_context)
-        .expect("validated closure member should have a supported semantic review");
-    match review.compatibility_key.as_str() {
-        TYPESCRIPT_WRAPPER_TARGET_COMPATIBILITY_KEY => {
-            for dep in &spec.deps {
-                let parsed = parse_typescript_dep(dep, "wrapper closure dep")?;
-                let dep_index =
-                    resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
-                collect_typescript_closure_member(
-                    dep_index,
-                    specs,
-                    spec_indices_by_key,
-                    specs_by_id,
-                    included,
-                )?;
-            }
-            Ok(())
-        }
-        TYPESCRIPT_CHAIN3_TARGET_COMPATIBILITY_KEY => {
-            for dep in &spec.deps {
-                let parsed = parse_typescript_dep(dep, "chain3 closure dep")?;
-                let dep_index =
-                    resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
-                collect_typescript_closure_member(
-                    dep_index,
-                    specs,
-                    spec_indices_by_key,
-                    specs_by_id,
-                    included,
-                )?;
-            }
-            Ok(())
-        }
-        TYPESCRIPT_WRAPPER_FIRST_DEP_COMPATIBILITY_KEY
-        | TYPESCRIPT_MONOTONE_UP_TARGET_COMPATIBILITY_KEY => {
-            collect_typescript_helper_dep(spec, specs, spec_indices_by_key, specs_by_id, included)
-        }
-        TYPESCRIPT_HELPER_COMPATIBILITY_KEY => Ok(()),
-        _ => unreachable!("validated closure member should use a supported bounded family"),
+    let owner_key = &resolved_spec_index.canonical_key_by_index[spec_index];
+    for dep in &spec.deps {
+        let parsed = parse_typescript_dep(dep, "closure dep")?;
+        let dep_index = resolve_typescript_dep_spec(
+            owner_key,
+            &parsed,
+            &resolved_spec_index.spec_indices_by_key,
+        )?;
+        collect_typescript_closure_member(dep_index, specs, resolved_spec_index, included, false)?;
     }
+
+    Ok(())
 }
 
-fn collect_typescript_helper_dep(
-    spec: &ResolvedSpec,
-    specs: &[&ResolvedSpec],
-    spec_indices_by_key: &HashMap<String, usize>,
-    specs_by_id: &HashMap<String, LoadedSpec>,
-    included: &mut BTreeSet<usize>,
-) -> Result<()> {
-    let [dep] = spec.deps.as_slice() else {
-        return Ok(());
-    };
-    let parsed = parse_typescript_dep(dep, "helper dep")?;
-    let helper_index = resolve_typescript_dep_spec(&spec.id, &parsed, spec_indices_by_key)?;
-    collect_typescript_closure_member(
-        helper_index,
-        specs,
-        spec_indices_by_key,
-        specs_by_id,
-        included,
-    )
-}
-
-fn parse_typescript_dep(dep: &str, role: &str) -> Result<DepRef> {
-    DepRef::parse(dep).map_err(|err| SpecError::Generator {
-        message: format!(
-            "invalid {role} '{}' reached bounded M52 TypeScript generator: {}",
-            dep, err
-        ),
-    })
-}
-
-fn resolve_typescript_dep_spec(
-    owner_id: &str,
-    dep: &DepRef,
-    spec_indices_by_key: &HashMap<String, usize>,
-) -> Result<usize> {
-    let dep_key = if dep.library_alias().is_some() {
-        dep.authored()
-    } else {
-        dep.unit_id().to_string()
-    };
-    spec_indices_by_key
-        .get(&dep_key)
-        .copied()
-        .ok_or_else(|| SpecError::Generator {
-            message: format!(
-                "unit '{}' is not eligible for the bounded M52 TypeScript lane: required dep '{}' was not loaded",
-                owner_id,
-                dep.authored()
-            ),
-        })
-}
-
-fn build_typescript_loaded_specs_by_id(specs: &[&ResolvedSpec]) -> HashMap<String, LoadedSpec> {
-    let mut first_loaded_by_unit_id = HashMap::new();
-    let mut last_loaded_by_unit_id = HashMap::new();
+fn build_typescript_resolved_spec_index(specs: &[&ResolvedSpec]) -> TypescriptResolvedSpecIndex {
+    let mut first_indices_by_unit_id = HashMap::new();
+    let mut last_indices_by_unit_id = HashMap::new();
+    let mut counts_by_unit_id = HashMap::<String, usize>::new();
     let mut qualified_helper_keys = BTreeMap::<String, Vec<String>>::new();
 
-    for spec in specs {
-        let loaded = typescript_loaded_spec(spec);
-        first_loaded_by_unit_id
+    for (index, spec) in specs.iter().enumerate() {
+        first_indices_by_unit_id
             .entry(spec.id.clone())
-            .or_insert_with(|| loaded.clone());
-        last_loaded_by_unit_id.insert(spec.id.clone(), loaded.clone());
+            .or_insert(index);
+        last_indices_by_unit_id.insert(spec.id.clone(), index);
+        *counts_by_unit_id.entry(spec.id.clone()).or_insert(0) += 1;
 
         for dep in &spec.deps {
             let Ok(parsed) = DepRef::parse(dep) else {
@@ -441,19 +231,95 @@ fn build_typescript_loaded_specs_by_id(specs: &[&ResolvedSpec]) -> HashMap<Strin
         }
     }
 
-    let mut specs_by_id = first_loaded_by_unit_id;
-    for (unit_id, authored_keys) in qualified_helper_keys {
-        let Some(loaded) = last_loaded_by_unit_id.get(&unit_id).cloned() else {
-            continue;
-        };
-        for authored_key in authored_keys {
-            specs_by_id
-                .entry(authored_key)
-                .or_insert_with(|| loaded.clone());
+    let mut spec_indices_by_key = HashMap::new();
+    let mut loaded_specs_by_key = HashMap::new();
+    let mut canonical_key_by_index = vec![String::new(); specs.len()];
+
+    for spec in specs {
+        let has_shared_aliases = qualified_helper_keys.contains_key(&spec.id);
+        let count = counts_by_unit_id.get(&spec.id).copied().unwrap_or_default();
+        if !has_shared_aliases || count > 1 {
+            let first_index = first_indices_by_unit_id
+                .get(&spec.id)
+                .copied()
+                .expect("first index must exist");
+            if canonical_key_by_index[first_index].is_empty() {
+                canonical_key_by_index[first_index] = spec.id.clone();
+            }
+            spec_indices_by_key
+                .entry(spec.id.clone())
+                .or_insert(first_index);
+            loaded_specs_by_key
+                .entry(spec.id.clone())
+                .or_insert_with(|| typescript_loaded_spec(spec));
         }
     }
 
-    specs_by_id
+    for (unit_id, authored_keys) in &qualified_helper_keys {
+        let target_index = last_indices_by_unit_id
+            .get(unit_id)
+            .copied()
+            .expect("last index must exist for shared alias");
+        if canonical_key_by_index[target_index].is_empty() {
+            canonical_key_by_index[target_index] = authored_keys[0].clone();
+        }
+        for authored_key in authored_keys {
+            spec_indices_by_key
+                .entry(authored_key.clone())
+                .or_insert(target_index);
+            loaded_specs_by_key
+                .entry(authored_key.clone())
+                .or_insert_with(|| typescript_loaded_spec(specs[target_index]));
+        }
+    }
+
+    for (index, spec) in specs.iter().enumerate() {
+        if canonical_key_by_index[index].is_empty() {
+            canonical_key_by_index[index] = spec.id.clone();
+            spec_indices_by_key
+                .entry(spec.id.clone())
+                .or_insert(index);
+            loaded_specs_by_key
+                .entry(spec.id.clone())
+                .or_insert_with(|| typescript_loaded_spec(spec));
+        }
+    }
+
+    TypescriptResolvedSpecIndex {
+        spec_indices_by_key,
+        loaded_specs_by_key,
+        canonical_key_by_index,
+    }
+}
+
+fn parse_typescript_dep(dep: &str, role: &str) -> Result<DepRef> {
+    DepRef::parse(dep).map_err(|err| SpecError::Generator {
+        message: format!(
+            "invalid {role} '{}' reached bounded M52 TypeScript generator: {}",
+            dep, err
+        ),
+    })
+}
+
+fn resolve_typescript_dep_spec(
+    owner_key: &str,
+    dep: &DepRef,
+    spec_indices_by_key: &HashMap<String, usize>,
+) -> Result<usize> {
+    let owner_library = DepRef::parse(owner_key)
+        .ok()
+        .and_then(|parsed| parsed.library_alias().map(str::to_string));
+    let dep_key = dep.to_qualified(owner_library.as_deref()).authored();
+    spec_indices_by_key
+        .get(&dep_key)
+        .copied()
+        .ok_or_else(|| SpecError::Generator {
+            message: format!(
+                "unit '{}' is not eligible for the bounded M52 TypeScript lane: required dep '{}' was not loaded",
+                owner_key,
+                dep.authored()
+            ),
+        })
 }
 
 fn typescript_loaded_spec(spec: &ResolvedSpec) -> LoadedSpec {
@@ -534,43 +400,6 @@ fn render_typescript_dep_imports(spec: &ResolvedSpec) -> Result<String> {
     }
 
     Ok(imports.join("\n"))
-}
-
-fn build_typescript_spec_indices_by_key(specs: &[&ResolvedSpec]) -> HashMap<String, usize> {
-    let mut first_indices_by_unit_id = HashMap::new();
-    let mut last_indices_by_unit_id = HashMap::new();
-    let mut qualified_helper_keys = BTreeMap::<String, Vec<String>>::new();
-
-    for (index, spec) in specs.iter().enumerate() {
-        first_indices_by_unit_id
-            .entry(spec.id.clone())
-            .or_insert(index);
-        last_indices_by_unit_id.insert(spec.id.clone(), index);
-
-        for dep in &spec.deps {
-            let Ok(parsed) = DepRef::parse(dep) else {
-                continue;
-            };
-            if parsed.library_alias().is_some() {
-                qualified_helper_keys
-                    .entry(parsed.unit_id().to_string())
-                    .or_default()
-                    .push(parsed.authored());
-            }
-        }
-    }
-
-    let mut specs_by_id = first_indices_by_unit_id;
-    for (unit_id, authored_keys) in qualified_helper_keys {
-        let Some(index) = last_indices_by_unit_id.get(&unit_id).copied() else {
-            continue;
-        };
-        for authored_key in authored_keys {
-            specs_by_id.entry(authored_key).or_insert(index);
-        }
-    }
-
-    specs_by_id
 }
 
 fn render_typescript_signature(spec: &ResolvedSpec) -> Result<String> {
@@ -950,7 +779,7 @@ fn path_components(path: &Path) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic_review::evaluate_semantic_review_with_context;
+    use crate::semantic_review::{SemanticReviewContext, evaluate_semantic_review_with_context};
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
         AuthoredMethodLowering, AuthoredRustBackend, AuthoredRustMethodLowering, Contract,
@@ -1377,43 +1206,70 @@ mod tests {
     }
 
     #[test]
-    fn typescript_tree_rejects_same_tree_local_graph_with_reachable_shared_dep() {
-        let helper = helper_spec("money/round");
-        let discount = monotone_down_spec(
+    fn typescript_tree_prefers_shared_closure_members_when_local_same_id_duplicates_exist() {
+        let mut local_helper = helper_spec("money/round");
+        local_helper.intent_why =
+            "Local duplicate helper that should stay out of the generated tree.".to_string();
+        let shared_helper = helper_spec("money/round");
+        let mut local_discount = monotone_down_spec(
             "pricing/apply_discount",
             vec!["money/round"],
             "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
         );
-        let tax = monotone_up_spec(
+        local_discount.intent_why =
+            "Local duplicate discount that should stay out of the generated tree.".to_string();
+        let shared_discount = monotone_down_spec(
+            "pricing/apply_discount",
+            vec!["shared::money/round"],
+            "const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate))); return round(discounted);",
+        );
+        let mut local_tax = monotone_up_spec(
+            "pricing/apply_tax",
+            vec!["money/round"],
+            "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
+        );
+        local_tax.intent_why =
+            "Local duplicate tax that should stay out of the generated tree.".to_string();
+        let shared_tax = monotone_up_spec(
             "pricing/apply_tax",
             vec!["shared::money/round"],
             "const taxed = subtotal.add(subtotal.mul(rate)); return round(taxed);",
         );
         let wrapper = wrapper_spec(
             "pricing/calculate_total",
-            "pricing/apply_discount",
-            "pricing/apply_tax",
+            "shared::pricing/apply_discount",
+            "shared::pricing/apply_tax",
             "const discounted = apply_discount(subtotal, discount_rate); return apply_tax(discounted, tax_rate);",
         );
 
         let root_ids = vec![wrapper.id.clone()];
-        let err = generate_typescript_tree(
+        let tree = generate_typescript_tree(
             &[
                 NormalizedUnit::Function(wrapper),
-                NormalizedUnit::Function(discount),
-                NormalizedUnit::Function(tax),
-                NormalizedUnit::Function(helper),
+                NormalizedUnit::Function(local_discount),
+                NormalizedUnit::Function(shared_discount),
+                NormalizedUnit::Function(local_tax),
+                NormalizedUnit::Function(shared_tax),
+                NormalizedUnit::Function(local_helper),
+                NormalizedUnit::Function(shared_helper),
             ],
             &root_ids,
         )
-        .unwrap_err()
-        .to_string();
+        .expect("shared closure should win over local same-id duplicates");
 
+        let discount_module = tree
+            .get(&PathBuf::from("pricing/apply_discount.ts"))
+            .expect("shared discount module should be emitted");
         assert!(
-            err.contains(
-                "same-tree local target requires every reachable dep to stay same-tree local in M59"
-            ),
-            "unexpected error: {err}"
+            !discount_module.contains("Local duplicate discount that should stay out of the generated tree."),
+            "local discount duplicate unexpectedly replaced the shared closure member"
+        );
+        let tax_module = tree
+            .get(&PathBuf::from("pricing/apply_tax.ts"))
+            .expect("shared tax module should be emitted");
+        assert!(
+            !tax_module.contains("Local duplicate tax that should stay out of the generated tree."),
+            "local tax duplicate unexpectedly replaced the shared closure member"
         );
     }
 
