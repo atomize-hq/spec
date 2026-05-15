@@ -200,4 +200,6 @@
 
 - [x] **Semantic-review-driven same-tree local TypeScript function graph execution** — Completed by M59 (2026-05-14). The bounded Bun-backed TypeScript lane now admits same-tree local `kind:function` roots across the shipped supported semantic-review families, validates the reachable local closure graph-wide before Bun, dedupes shared same-tree subgraphs, excludes unrelated loaded units, and preserves the existing direct cross-library helper, wrapper, and chain3 portability lanes unchanged.
 
+- [x] **Normalized required-arg wrapper family in semantic review** — Completed by M60 (2026-05-15). M60 adds one supported wrapper family for apply_tax(discounted, tax_rate.max(Decimal::ZERO)); broader required-argument expressions remain unsupported.
+
 - [ ] **Remaining TypeScript oceans after M59** — After M59, the shipped lane covers same-tree local supported-function graphs plus the preserved direct cross-library helper/wrapper/chain3 portability exceptions. The remaining backlog is still real: arbitrary authored 4+ dep topology parity, new supported semantic families, and generic recursive cross-library function graphs remain out.

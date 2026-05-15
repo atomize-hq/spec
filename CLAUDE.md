@@ -16,6 +16,7 @@ Key routing rules:
 - Visual audit, design polish → invoke design-review
 - Architecture review → invoke plan-eng-review
 - "What should be next", "what next", next milestone, next wedge → invoke next-milestone
+- Full planning loop from a prior implementation closeout, or "run all planning steps" → invoke planning-session
 
 ## M20 semantic review note
 

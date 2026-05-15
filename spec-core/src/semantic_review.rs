@@ -378,8 +378,14 @@ enum SupportedDataSemanticRole {
 enum SupportedFunctionFamily {
     FamilyC,
     FamilyA(FamilyAFunctionRole),
-    FamilyB,
+    FamilyB(FamilyBVariant),
     HelperIdentityPassthrough,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FamilyBVariant {
+    Raw,
+    NormalizedRequiredArg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -403,6 +409,7 @@ enum HelperIdentityPassthroughBodyKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SupportedFunctionRoute {
     WrapperPipelineChain3,
+    WrapperPipelineNormalizedRequiredArg,
     WrapperPipeline,
     ArithmeticLeafMonotoneDownNonnegative,
     ArithmeticLeafMonotoneUp,
@@ -448,6 +455,8 @@ const SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY: &str = "sum.discount_strategy.v1"
 const DATA_PRICING_QUOTE_COMPATIBILITY_KEY: &str = "data.pricing_quote.v1";
 const FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY: &str =
     "function.wrapper.pipeline.chain3.v1";
+const FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY: &str =
+    "function.wrapper.pipeline.normalized_required_arg.v1";
 const FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_down_nonnegative.v1";
 const FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY: &str =
@@ -459,8 +468,9 @@ const UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY: &str = "unsupported.function.v1";
 const FAMILY_A_INVARIANT_OUTPUT_LE_INPUT0: &str = "output <= input0";
 const FAMILY_A_INVARIANT_OUTPUT_GE_ZERO: &str = "output >= 0";
 const FAMILY_A_INVARIANT_OUTPUT_GE_INPUT0: &str = "output >= input0";
-const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 5] = [
+const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 6] = [
     SupportedFunctionRoute::WrapperPipelineChain3,
+    SupportedFunctionRoute::WrapperPipelineNormalizedRequiredArg,
     SupportedFunctionRoute::WrapperPipeline,
     SupportedFunctionRoute::ArithmeticLeafMonotoneDownNonnegative,
     SupportedFunctionRoute::ArithmeticLeafMonotoneUp,
@@ -507,7 +517,10 @@ impl SupportedSurface {
             Self::Function(SupportedFunctionFamily::FamilyA(FamilyAFunctionRole::MonotoneUp)) => {
                 Some(FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY)
             }
-            Self::Function(SupportedFunctionFamily::FamilyB) => {
+            Self::Function(SupportedFunctionFamily::FamilyB(
+                FamilyBVariant::NormalizedRequiredArg,
+            )) => Some(FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY),
+            Self::Function(SupportedFunctionFamily::FamilyB(FamilyBVariant::Raw)) => {
                 Some(FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY)
             }
             Self::Function(SupportedFunctionFamily::HelperIdentityPassthrough) => {
@@ -537,7 +550,7 @@ impl SupportedFunctionFamily {
         match self {
             Self::FamilyC => 5,
             Self::FamilyA(_) => 2,
-            Self::FamilyB => 3,
+            Self::FamilyB(_) => 3,
             Self::HelperIdentityPassthrough => 1,
         }
     }
@@ -548,6 +561,9 @@ impl SupportedFunctionRoute {
     fn compatibility_key(self) -> &'static str {
         match self {
             Self::WrapperPipelineChain3 => FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY,
+            Self::WrapperPipelineNormalizedRequiredArg => {
+                FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY
+            }
             Self::WrapperPipeline => FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY,
             Self::ArithmeticLeafMonotoneDownNonnegative => {
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY
@@ -581,14 +597,33 @@ impl SupportedFunctionRoute {
                     None
                 }
             }
-            Self::WrapperPipeline => {
+            Self::WrapperPipelineNormalizedRequiredArg => {
                 if family_b_authored_contract_is_supported(authored, context, stack)
+                    && family_b_body_contains_normalized_required_arg(authored, executable)
                     && !matches!(
-                        classify_family_b_function_body(authored, executable),
+                        classify_family_b_function_body(
+                            authored,
+                            executable,
+                            FamilyBVariant::NormalizedRequiredArg,
+                        ),
                         FamilyBBodyClassification::Unsupported
                     )
                 {
-                    Some(SupportedFunctionFamily::FamilyB)
+                    Some(SupportedFunctionFamily::FamilyB(
+                        FamilyBVariant::NormalizedRequiredArg,
+                    ))
+                } else {
+                    None
+                }
+            }
+            Self::WrapperPipeline => {
+                if family_b_authored_contract_is_supported(authored, context, stack)
+                    && !matches!(
+                        classify_family_b_function_body(authored, executable, FamilyBVariant::Raw),
+                        FamilyBBodyClassification::Unsupported
+                    )
+                {
+                    Some(SupportedFunctionFamily::FamilyB(FamilyBVariant::Raw))
                 } else {
                     None
                 }
@@ -1008,7 +1043,11 @@ fn unsupported_function_wrapper_body_shape_diagnostic(
     let classification = if authored_function_looks_like_wrapper_contract(authored)
         && family_b_deps_are_supported(authored, context, stack)
     {
-        Some(classify_family_b_function_body(authored, executable))
+        Some(classify_family_b_function_body(
+            authored,
+            executable,
+            FamilyBVariant::Raw,
+        ))
     } else if authored_function_looks_like_chain3_wrapper_contract(authored)
         && family_c_deps_are_supported(authored, context, stack)
     {
@@ -1432,7 +1471,7 @@ fn authored_function_contract_is_supported(
                 && authored.returns.as_deref().is_some_and(type_is_decimal)
                 && family_a_authored_role(authored) == Some(role)
         }
-        SupportedFunctionFamily::FamilyB => {
+        SupportedFunctionFamily::FamilyB(_) => {
             !authored.inputs.is_empty()
                 && authored
                     .inputs
@@ -1727,11 +1766,11 @@ fn classify_supported_function_body(
         SupportedFunctionFamily::FamilyA(authored_role) => {
             classify_family_a_body(authored_role, authored, executable)
         }
-        SupportedFunctionFamily::FamilyB => {
+        SupportedFunctionFamily::FamilyB(mode) => {
             if !family_b_deps_are_supported(authored, context, stack) {
                 return SupportedBodyClassification::OutsideHonestSubset;
             }
-            match classify_family_b_function_body(authored, executable) {
+            match classify_family_b_function_body(authored, executable, mode) {
                 FamilyBBodyClassification::Aligned => SupportedBodyClassification::Aligned,
                 FamilyBBodyClassification::SemanticDrift => {
                     SupportedBodyClassification::Contradictory
@@ -3027,6 +3066,7 @@ fn expr_is_zero_expr(expr: &syn::Expr) -> bool {
 fn classify_family_b_function_body(
     authored: &SemanticAuthoredFunctionPacket,
     executable: &SemanticExecutableFunctionPacket,
+    mode: FamilyBVariant,
 ) -> FamilyBBodyClassification {
     if authored.deps.len() != 2 || executable.inputs.is_empty() {
         return FamilyBBodyClassification::Unsupported;
@@ -3048,9 +3088,9 @@ fn classify_family_b_function_body(
         return FamilyBBodyClassification::Unsupported;
     };
     match prefix {
-        [] => classify_family_b_nested_call(tail, &params, dep_a, dep_b),
+        [] => classify_family_b_nested_call(tail, &params, dep_a, dep_b, mode),
         [syn::Stmt::Local(local)] => {
-            classify_family_b_let_then_return(local, tail, &params, dep_a, dep_b)
+            classify_family_b_let_then_return(local, tail, &params, dep_a, dep_b, mode)
         }
         _ => FamilyBBodyClassification::Unsupported,
     }
@@ -3061,6 +3101,7 @@ fn classify_family_b_nested_call(
     params: &[&str],
     dep_a: &str,
     dep_b: &str,
+    mode: FamilyBVariant,
 ) -> FamilyBBodyClassification {
     let Some(outer) = expr_as_call(expr) else {
         return FamilyBBodyClassification::Unsupported;
@@ -3095,7 +3136,7 @@ fn classify_family_b_nested_call(
         &[
             classify_family_b_param_arg(&inner.args[0], params[0], params),
             classify_family_b_param_arg(&inner.args[1], params[1], params),
-            classify_family_b_param_arg(&outer.args[1], params[2], params),
+            classify_family_b_required_arg(&outer.args[1], params[2], params, mode),
         ],
         params,
         3,
@@ -3108,6 +3149,7 @@ fn classify_family_b_let_then_return(
     params: &[&str],
     dep_a: &str,
     dep_b: &str,
+    mode: FamilyBVariant,
 ) -> FamilyBBodyClassification {
     let Some(alias) = local_ident(local).map(|ident| ident.to_string()) else {
         return FamilyBBodyClassification::Unsupported;
@@ -3145,7 +3187,7 @@ fn classify_family_b_let_then_return(
             classify_family_b_param_arg(&inner.args[0], params[0], params),
             classify_family_b_param_arg(&inner.args[1], params[1], params),
             classify_family_b_threaded_alias_arg(&outer.args[0], &alias, params),
-            classify_family_b_param_arg(&outer.args[1], params[2], params),
+            classify_family_b_required_arg(&outer.args[1], params[2], params, mode),
         ],
         params,
         3,
@@ -3182,6 +3224,54 @@ fn classify_family_b_param_arg(
         return FamilyBArgClassification::UnsupportedExpr;
     };
     let syn::Expr::Path(path) = expr else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let Some(ident) = path.path.get_ident() else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let ident = ident.to_string();
+    if ident == expected_param {
+        FamilyBArgClassification::Expected
+    } else if params.contains(&ident.as_str()) {
+        FamilyBArgClassification::WrongParam
+    } else {
+        FamilyBArgClassification::UnsupportedExpr
+    }
+}
+
+fn classify_family_b_required_arg(
+    expr: &syn::Expr,
+    expected_param: &str,
+    params: &[&str],
+    mode: FamilyBVariant,
+) -> FamilyBArgClassification {
+    match mode {
+        FamilyBVariant::Raw => classify_family_b_param_arg(expr, expected_param, params),
+        FamilyBVariant::NormalizedRequiredArg => {
+            classify_family_b_normalized_required_arg(expr, expected_param, params)
+        }
+    }
+}
+
+fn classify_family_b_normalized_required_arg(
+    expr: &syn::Expr,
+    expected_param: &str,
+    params: &[&str],
+) -> FamilyBArgClassification {
+    let Some(expr) = strip_expr_wrappers(expr) else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let syn::Expr::MethodCall(call) = expr else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    if call.method != "max" || call.args.len() != 1 || !expr_is_zero_expr(&call.args[0]) {
+        return FamilyBArgClassification::UnsupportedExpr;
+    }
+
+    let Some(receiver) = strip_expr_wrappers(&call.receiver) else {
+        return FamilyBArgClassification::UnsupportedExpr;
+    };
+    let syn::Expr::Path(path) = receiver else {
         return FamilyBArgClassification::UnsupportedExpr;
     };
     let Some(ident) = path.path.get_ident() else {
@@ -3508,6 +3598,74 @@ fn unsupported_family_b_let_then_return_arg_expression(
         classify_family_b_threaded_alias_arg(&outer.args[0], &alias, params),
         classify_family_b_param_arg(&outer.args[1], params.get(2).copied().unwrap_or(""), params),
     ])
+}
+
+fn family_b_body_contains_normalized_required_arg(
+    authored: &SemanticAuthoredFunctionPacket,
+    executable: &SemanticExecutableFunctionPacket,
+) -> bool {
+    if authored.deps.len() != 2 || executable.inputs.len() < 3 {
+        return false;
+    }
+
+    let Ok(block) = syn::parse_str::<syn::Block>(&executable.body_rust) else {
+        return false;
+    };
+    let params = executable
+        .inputs
+        .iter()
+        .map(|input| input.name.as_str())
+        .collect::<Vec<_>>();
+    let dep_a = callable_name(&authored.deps[0]);
+    let dep_b = callable_name(&authored.deps[1]);
+    let Some(tail) = block_tail_expr(&block) else {
+        return false;
+    };
+
+    match block_prefix_stmts(&block) {
+        [] => {
+            let Some(outer) = expr_as_call(tail) else {
+                return false;
+            };
+            if !expr_path_is_callable_name(&outer.func, dep_b) || outer.args.len() != 2 {
+                return false;
+            }
+            let Some(inner) = expr_as_call(&outer.args[0]) else {
+                return false;
+            };
+            if !expr_path_is_callable_name(&inner.func, dep_a) || inner.args.len() != 2 {
+                return false;
+            }
+            !matches!(
+                classify_family_b_normalized_required_arg(&outer.args[1], params[2], &params),
+                FamilyBArgClassification::UnsupportedExpr
+            )
+        }
+        [syn::Stmt::Local(local)] => {
+            let Some(inner) = local
+                .init
+                .as_ref()
+                .and_then(|init| expr_as_call(init.expr.as_ref()))
+            else {
+                return false;
+            };
+            let Some(outer) = expr_as_call(tail) else {
+                return false;
+            };
+            if !expr_path_is_callable_name(&inner.func, dep_a)
+                || !expr_path_is_callable_name(&outer.func, dep_b)
+                || inner.args.len() != 2
+                || outer.args.len() != 2
+            {
+                return false;
+            }
+            !matches!(
+                classify_family_b_normalized_required_arg(&outer.args[1], params[2], &params),
+                FamilyBArgClassification::UnsupportedExpr
+            )
+        }
+        _ => false,
+    }
 }
 
 fn expr_as_call(expr: &syn::Expr) -> Option<&syn::ExprCall> {
@@ -5570,7 +5728,7 @@ mod tests {
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
             r#"{
-            apply_tax(apply_discount(subtotal, Decimal::ZERO), tax_rate)
+            apply_tax(apply_discount(subtotal, discount_rate), Decimal::ZERO)
         }"#,
         );
         let specs = family_b_context(&[
@@ -5594,7 +5752,7 @@ mod tests {
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
             r#"{
-            apply_tax(apply_discount(subtotal, discount_rate + tax_rate), tax_rate)
+            apply_tax(apply_discount(subtotal, discount_rate), tax_rate + Decimal::ZERO)
         }"#,
         );
         let specs = family_b_context(&[
@@ -5618,7 +5776,173 @@ mod tests {
             "pricing/calculate_total",
             "Return the total after discounting the subtotal and then applying tax.",
             r#"{
-            apply_tax(apply_discount(subtotal, discount_rate), tax_rate.max(Decimal::ZERO))
+            apply_tax(
+                apply_discount(subtotal, discount_rate),
+                tax_rate.max(Decimal::ZERO).round_dp(4),
+            )
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression]
+        );
+    }
+
+    #[test]
+    fn wrapper_pipeline_normalized_required_arg_classifier_aligned_fixture_routes_to_promoted_family()
+     {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total_guarded_tax",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            let discounted = apply_discount(subtotal, discount_rate);
+            apply_tax(discounted, tax_rate.max(Decimal::ZERO))
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY
+        );
+    }
+
+    #[test]
+    fn wrapper_pipeline_normalized_required_arg_classifier_drift_marks_wrong_normalized_param() {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total_guarded_tax",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            let discounted = apply_discount(subtotal, discount_rate);
+            apply_tax(discounted, discount_rate.max(Decimal::ZERO))
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::SemanticDrift);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::FunctionBodyContradictsSemanticIntent]
+        );
+    }
+
+    #[test]
+    fn wrapper_pipeline_normalized_required_arg_classifier_under_specified_marks_vague_authored_intent()
+     {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total_guarded_tax",
+            "todo",
+            r#"{
+            let discounted = apply_discount(subtotal, discount_rate);
+            apply_tax(discounted, tax_rate.max(Decimal::ZERO))
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.reason_codes,
+            vec![SemanticReasonCode::VagueUnitIntent]
+        );
+    }
+
+    #[test]
+    fn wrapper_pipeline_normalized_required_arg_classifier_literal_required_arg_stays_unsupported()
+    {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total_guarded_tax",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(apply_discount(subtotal, discount_rate), Decimal::ZERO)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression]
+        );
+    }
+
+    #[test]
+    fn wrapper_pipeline_normalized_required_arg_classifier_arithmetic_required_arg_stays_unsupported()
+     {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total_guarded_tax",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(apply_discount(subtotal, discount_rate), tax_rate + Decimal::ZERO)
+        }"#,
+        );
+        let specs = family_b_context(&[
+            apply_discount_function_spec(),
+            apply_tax_function_spec(),
+            wrapper.clone(),
+        ]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&wrapper, &context).unwrap();
+        assert_eq!(review.evaluator_scope, EvaluatorScope::UnsupportedSurface);
+        assert_eq!(
+            review.unsupported_reason_codes,
+            vec![UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression]
+        );
+    }
+
+    #[test]
+    fn wrapper_pipeline_normalized_required_arg_classifier_chained_method_required_arg_stays_unsupported()
+     {
+        let wrapper = wrapper_pipeline_spec(
+            "pricing/calculate_total_guarded_tax",
+            "Return the total after discounting the subtotal and then applying tax.",
+            r#"{
+            apply_tax(
+                apply_discount(subtotal, discount_rate),
+                tax_rate.max(Decimal::ZERO).round_dp(4),
+            )
         }"#,
         );
         let specs = family_b_context(&[
@@ -5837,6 +6161,7 @@ mod tests {
             routed_keys,
             [
                 FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY,
+                FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY,
                 FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY,
@@ -5896,6 +6221,7 @@ mod tests {
             routed_keys,
             [
                 FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY,
+                FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY,
                 FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY,
@@ -6342,6 +6668,7 @@ mod tests {
             routed_keys,
             [
                 FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY,
+                FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY,
                 FUNCTION_WRAPPER_PIPELINE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY,
                 FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY,

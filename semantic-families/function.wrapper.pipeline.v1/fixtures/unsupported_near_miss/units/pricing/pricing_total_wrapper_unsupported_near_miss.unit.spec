@@ -18,14 +18,14 @@ body:
   rust: |
     {
         let discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);
-        pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate.max(Decimal::ZERO))
+        pricing_tax_leaf_unsupported_near_miss(
+            discounted,
+            tax_rate.max(Decimal::ZERO).round_dp(4),
+        )
     }
   typescript: |
     {
         const discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);
-        if (tax_rate.eq(Decimal.new(0n, 0n))) {
-            return pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate);
-        }
         return pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate);
     }
 local_tests:

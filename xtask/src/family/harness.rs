@@ -5,12 +5,20 @@ use crate::family::report::{ArtifactKind, CertificationReport, GateId, SuiteDefi
 pub(crate) const TERMINAL_UNSUPPORTED_CATCH_ALL: &str = "unsupported.function.v1";
 
 pub const CHAIN3_PRECEDENCE: u64 = 1;
-pub const WRAPPER_PIPELINE_PRECEDENCE: u64 = 2;
-pub const MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE: u64 = 3;
-pub const MONOTONE_UP_PRECEDENCE: u64 = 4;
-pub const HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE: u64 = 5;
+pub const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_PRECEDENCE: u64 = 2;
+pub const WRAPPER_PIPELINE_PRECEDENCE: u64 = 3;
+pub const MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE: u64 = 4;
+pub const MONOTONE_UP_PRECEDENCE: u64 = 5;
+pub const HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE: u64 = 6;
 
-pub const CHAIN3_MUST_NOT_SHADOW: [&str; 4] = [
+pub const CHAIN3_MUST_NOT_SHADOW: [&str; 5] = [
+    "function.wrapper.pipeline.normalized_required_arg.v1",
+    "function.wrapper.pipeline.v1",
+    "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+    "function.arithmetic_leaf.monotone_up.v1",
+    "function.helper.identity_passthrough.v1",
+];
+pub const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_MUST_NOT_SHADOW: [&str; 4] = [
     "function.wrapper.pipeline.v1",
     "function.arithmetic_leaf.monotone_down_nonnegative.v1",
     "function.arithmetic_leaf.monotone_up.v1",
@@ -29,6 +37,8 @@ pub const WRAPPER_PIPELINE_MUST_NOT_SHADOW: [&str; 3] = [
 ];
 
 pub const CHAIN3_SUITE_SLUG: &str = "m21_chain3_";
+pub const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_SUITE_SLUG: &str =
+    "wrapper_pipeline_normalized_required_arg_";
 pub const WRAPPER_PIPELINE_SUITE_SLUG: &str = "wrapper_pipeline_";
 pub const MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG: &str = "monotone_down_nonnegative_";
 pub const MONOTONE_UP_SUITE_SLUG: &str = "monotone_up_";
@@ -36,6 +46,7 @@ pub const HELPER_IDENTITY_PASSTHROUGH_SUITE_SLUG: &str = "helper_identity_passth
 
 const CHAIN3_SUMMARY: &str =
     "Straight-line three-call wrapper pipeline over supported function deps.";
+const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_SUMMARY: &str = "Straight-line two-call wrapper pipeline over supported semantic deps with one normalized required arg.";
 const WRAPPER_PIPELINE_SUMMARY: &str =
     "Straight-line two-call wrapper pipeline over supported semantic deps.";
 const MONOTONE_DOWN_NONNEGATIVE_SUMMARY: &str =
@@ -181,6 +192,9 @@ const WRAPPER_PIPELINE_STARTER_CASES: [StarterCaseDefinition; 12] = [
         path: "fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec",
     },
 ];
+
+const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_STARTER_CASES: [StarterCaseDefinition; 12] =
+    WRAPPER_PIPELINE_STARTER_CASES;
 
 const MONOTONE_UP_STARTER_CASES: [StarterCaseDefinition; 4] = [
     StarterCaseDefinition {
@@ -467,6 +481,8 @@ pub(crate) const WRAPPER_PIPELINE_CERTIFY_SUITES: [SuiteDefinition; 1] = [SuiteD
         "wrapper_pipeline_regression_unsupported_near_miss_stays_additive_only_and_neutral",
     ],
 }];
+
+pub(crate) const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_CERTIFY_SUITES: [SuiteDefinition; 0] = [];
 
 pub(crate) const MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES: [SuiteDefinition; 3] = [
     SuiteDefinition {
@@ -774,6 +790,9 @@ const WRAPPER_PIPELINE_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 3] = [
     },
 ];
 
+const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 0] =
+    [];
+
 const MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITE_DEFINITIONS: [ProveSuiteDefinition; 3] = [
     ProveSuiteDefinition {
         suite: MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES[0],
@@ -852,6 +871,41 @@ const CHAIN3_HARNESS: FamilyHarness = FamilyHarness {
     },
     prove_suites: &CHAIN3_PROVE_SUITE_DEFINITIONS,
     certify_suites: &CHAIN3_CERTIFY_SUITES,
+};
+
+const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_HARNESS: FamilyHarness = FamilyHarness {
+    family: "function.wrapper.pipeline.normalized_required_arg.v1",
+    summary: WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_SUMMARY,
+    suite_slug: WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_SUITE_SLUG,
+    scaffold: ScaffoldDefinition {
+        unit_namespace: "pricing",
+        template: StarterTemplate::WrapperPipelineTwoStep,
+        starter_cases: &WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_STARTER_CASES,
+        smoke: SmokeContract {
+            scaffold_exact_match_paths: &DEFAULT_SCAFFOLD_EXACT_MATCH_PATHS,
+            scaffold_file_contracts: &WRAPPER_PIPELINE_SMOKE_FILE_CONTRACTS,
+        },
+    },
+    routing: LockedManifestRouting {
+        precedence: WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_PRECEDENCE,
+        must_not_shadow: &WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_MUST_NOT_SHADOW,
+    },
+    shape: LockedManifestShape {
+        dep_min: 2,
+        dep_max: 2,
+        control_flow: "straight_line_only",
+        return_style: "let_then_return_or_direct_return",
+        loops: false,
+        branching: false,
+        requires_supported_function_deps: true,
+    },
+    args: LockedManifestArgs {
+        threading: "ordered_passthrough",
+        allow_nested_argument_expressions: false,
+        allow_literal_only_extra_args: false,
+    },
+    prove_suites: &WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_PROVE_SUITE_DEFINITIONS,
+    certify_suites: &WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_CERTIFY_SUITES,
 };
 
 const WRAPPER_PIPELINE_HARNESS: FamilyHarness = FamilyHarness {
@@ -994,8 +1048,9 @@ const HELPER_IDENTITY_PASSTHROUGH_HARNESS: FamilyHarness = FamilyHarness {
     certify_suites: &HELPER_IDENTITY_PASSTHROUGH_CERTIFY_SUITES,
 };
 
-const FAMILY_REGISTRY: [FamilyHarness; 5] = [
+const FAMILY_REGISTRY: [FamilyHarness; 6] = [
     CHAIN3_HARNESS,
+    WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_HARNESS,
     WRAPPER_PIPELINE_HARNESS,
     MONOTONE_DOWN_NONNEGATIVE_HARNESS,
     MONOTONE_UP_HARNESS,

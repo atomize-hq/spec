@@ -895,6 +895,8 @@ const FUNCTION_FAMILY_A_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_down_nonnegative.v1";
 const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
 const FUNCTION_FAMILY_A_LEGACY_COMPATIBILITY_KEY: &str = "function.apply_discount.v1";
+const FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY: &str =
+    "function.wrapper.pipeline.normalized_required_arg.v1";
 const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
 const FUNCTION_FAMILY_B_LEGACY_COMPATIBILITY_KEY: &str = "function.calculate_total.v1";
 const FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.chain3.v1";
@@ -1147,7 +1149,24 @@ fn write_unsupported_function_semantic_status_project(project_dir: &Path) -> Pat
         &unit_path,
         source.replace(
             "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
-            "    {\n        apply_tax(apply_discount(subtotal, discount_rate), tax_rate.max(Decimal::ZERO))\n    }\n",
+            "    {\n        apply_tax(\n            apply_discount(subtotal, discount_rate),\n            tax_rate.max(Decimal::ZERO).round_dp(4),\n        )\n    }\n",
+        ),
+    )
+    .unwrap();
+    units_dir
+}
+
+fn write_supported_normalized_required_arg_wrapper_function_semantic_status_project(
+    project_dir: &Path,
+) -> PathBuf {
+    let units_dir = write_supported_wrapper_function_semantic_status_project(project_dir);
+    let unit_path = units_dir.join("pricing/calculate_total.unit.spec");
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replace(
+            "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
+            "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate.max(Decimal::ZERO))\n    }\n",
         ),
     )
     .unwrap();
@@ -6764,6 +6783,47 @@ fn supported_wrapper_function_semantic_review_command_matrix_preserves_or_refres
 #[test]
 fn wrapper_pipeline_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
     supported_wrapper_function_semantic_review_command_matrix_preserves_or_refreshes_by_flow();
+}
+
+#[test]
+fn normalized_required_arg_wrapper_truth_surface_command_matrix_preserves_until_spec_test_refresh()
+{
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir =
+        write_supported_normalized_required_arg_wrapper_function_semantic_status_project(
+            project_dir,
+        );
+    let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
+    let review = supported_function_semantic_review(
+        FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY,
+        SemanticVerdict::Aligned,
+        vec![],
+        "seeded supported normalized wrapper review",
+    );
+    let projected_review =
+        seed_supported_wrapper_function_semantic_status_artifacts(&units_dir, Some(review));
+    assert_eq!(
+        projected_review.unwrap().compatibility_key,
+        FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY
+    );
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_eq!(
+        seeded_review["compatibility_key"],
+        FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY
+    );
+
+    assert_supported_function_command_matrix(
+        project_dir,
+        "pricing/calculate_total",
+        &passport_path,
+        &seeded_review,
+        FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY,
+    );
 }
 
 #[test]

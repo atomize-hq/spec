@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[allow(dead_code)]
 pub const CHAIN3_PRECEDENCE: u64 = crate::family::harness::CHAIN3_PRECEDENCE;
 #[allow(dead_code)]
-pub const CHAIN3_MUST_NOT_SHADOW: [&str; 4] = crate::family::harness::CHAIN3_MUST_NOT_SHADOW;
+pub const CHAIN3_MUST_NOT_SHADOW: [&str; 5] = crate::family::harness::CHAIN3_MUST_NOT_SHADOW;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RoutingDiagnostics {

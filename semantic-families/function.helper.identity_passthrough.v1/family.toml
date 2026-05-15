@@ -5,7 +5,7 @@ compatibility_key = "function.helper.identity_passthrough.v1"
 summary = "Straight-line unary Decimal helper with no deps and either passthrough or round-like body."
 
 [routing]
-precedence = 5
+precedence = 6
 must_not_shadow = [
   "unsupported.function.v1",
 ]
