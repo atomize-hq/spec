@@ -185,3 +185,23 @@
 - [ ] **Cross-crate family-analysis shared core** — trigger: at least two non-`recommend.rs` / non-`promotion_artifacts.rs` consumers inside `xtask/src/family/` need the same kernel logic, or a non-`xtask` crate needs the same decision semantics.
 
 - [ ] **Public semantic fingerprint fields** — trigger: an external consumer needs first-class semantic fingerprint fields in emitted JSON, not just internal normalized proof gating.
+
+## Deferred from M46 /autoplan review (2026-05-10)
+
+- [x] **Wrapper TypeScript execution in `spec`** — Completed by M52 (2026-05-12). The bounded Bun-backed TypeScript lane now admits the same-tree `function.wrapper.pipeline.v1` family with the frozen direct local dep tuple `monotone_down_nonnegative -> monotone_up`, while keeping proof additive and target-specific.
+
+- [x] **Bounded same-tree chain3 TypeScript execution in `spec`** — Completed by M54 (2026-05-13). The bounded Bun-backed TypeScript lane now admits the same-tree `function.wrapper.pipeline.chain3.v1` family with the frozen direct local dep tuple `wrapper.pipeline -> monotone_up -> monotone_down_nonnegative`, while keeping proof additive, atom-only, and target-specific.
+
+- [x] **Cross-library TypeScript helper imports** — Completed by M55 (2026-05-13). The bounded Bun-backed TypeScript lane now admits cross-library helper imports in the one legal helper slot for `function.arithmetic_leaf.monotone_up.v1`, and bounded wrapper/chain3 closures may reuse that shared helper transitively once it is in the loaded tree.
+
+- [x] **Direct cross-library wrapper and chain3 TypeScript roots** — Completed by M56 (2026-05-13). The bounded Bun-backed TypeScript lane now admits direct cross-library wrapper roots, direct cross-library chain3 roots, and exact mixed local-plus-shared direct dep tuples for the frozen promoted families, while keeping closure collection bounded and broader TypeScript execution claims deferred.
+
+- [x] **Bounded same-tree nested chain3 TypeScript closure** — Completed by M58 (2026-05-14). The bounded Bun-backed TypeScript lane now admits a same-tree `function.wrapper.pipeline.chain3.v1` in chain3 slot 1, recurses through that validated nested closure inside the same loaded tree, preserves the pre-Bun rejection wall for wrong family, wrong dep order, missing nested `body.typescript`, and cross-library recursion, and leaves slot 2 plus slot 3 frozen.
+
+- [x] **Semantic-review-driven same-tree local TypeScript function graph execution** — Completed by M59 (2026-05-14). The bounded Bun-backed TypeScript lane now admits same-tree local `kind:function` roots across the shipped supported semantic-review families, validates the reachable local closure graph-wide before Bun, dedupes shared same-tree subgraphs, excludes unrelated loaded units, and preserves the existing direct cross-library helper, wrapper, and chain3 portability lanes unchanged.
+
+- [x] **Normalized required-arg wrapper family in semantic review** — Completed by M60 (2026-05-15). M60 adds one supported wrapper family for apply_tax(discounted, tax_rate.max(Decimal::ZERO)); broader required-argument expressions remain unsupported.
+
+- [x] **Recursive local-plus-cross-library TypeScript closure across shipped families** — Completed by M61 (2026-05-15). M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.
+
+- [ ] **Remaining TypeScript oceans after M61** — After M61, the shipped lane covers recursive local-plus-cross-library closure across the already-supported function families. The broader TypeScript oceans still explicitly deferred are arbitrary authored 4+ direct-dep topology parity, new semantic-family promotion, molecule TypeScript execution, and seam-kind TypeScript execution.

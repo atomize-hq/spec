@@ -1,15 +1,14 @@
 use crate::XtaskError;
-use crate::family::coverage::render_json_bytes;
-use crate::family::decision_kernel::{
-    corpus_program_basis_snapshot, derive_corpus_program_decision_contract,
+use crate::family::analysis_core::{
+    corpus_program_basis_snapshot, decision_contract_stop_state_tuple,
+    derive_corpus_program_decision_contract,
 };
+use crate::family::coverage::render_json_bytes;
 use crate::family::paths::{
     FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
 };
 use crate::family::promotion_artifacts::{
-    CorpusProgramDecisionAction, CorpusProgramDecisionArtifact, CorpusProgramDecisionBasisCode,
-    DecisionReason, DecisionStatus, EvidenceState, FamilyRecommendationAnalysisArtifact,
-    RecommendationStatus, RequiredNextAction,
+    CorpusProgramDecisionArtifact, FamilyRecommendationAnalysisArtifact,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -501,6 +500,7 @@ fn frozen_helper_surface_floor_result(
         Err(result) => return result,
     };
 
+    let floor = decision_contract_stop_state_tuple();
     let mut reasons = Vec::new();
     let mut mismatches = Vec::new();
     if !analysis.evidence_summary.missing_evidence.is_empty()
@@ -511,49 +511,49 @@ fn frozen_helper_surface_floor_result(
     push_mismatch(
         &mut mismatches,
         "recommendation_status",
-        &RecommendationStatus::NoStrongCandidate,
+        &floor.recommendation_status,
         &analysis.recommendation_status,
     );
     push_mismatch(
         &mut mismatches,
         "decision_summary.decision_status",
-        &DecisionStatus::NotRecommended,
+        &floor.decision_status,
         &analysis.decision_summary.decision_status,
     );
     push_mismatch(
         &mut mismatches,
         "decision_summary.open_blockers",
-        &vec![DecisionReason::HelperSurfaceNotPromotable],
+        &floor.open_blockers,
         &analysis.decision_summary.open_blockers,
     );
     push_mismatch(
         &mut mismatches,
         "evidence_summary.missing_evidence",
-        &Vec::<EvidenceState>::new(),
+        &floor.missing_evidence,
         &analysis.evidence_summary.missing_evidence,
     );
     push_mismatch(
         &mut mismatches,
         "evidence_summary.stale_evidence",
-        &Vec::<EvidenceState>::new(),
+        &floor.stale_evidence,
         &analysis.evidence_summary.stale_evidence,
     );
     push_mismatch(
         &mut mismatches,
         "decision_action",
-        &CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn,
+        &floor.decision_action,
         &decision.decision_action,
     );
     push_mismatch(
         &mut mismatches,
         "decision_basis_code",
-        &CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface,
+        &floor.decision_basis_code,
         &decision.decision_basis_code,
     );
     push_mismatch(
         &mut mismatches,
         "required_next_action",
-        &RequiredNextAction::AuthorArchitectureFollowOnPlan,
+        &floor.required_next_action,
         &decision.required_next_action,
     );
 
@@ -568,8 +568,7 @@ fn frozen_helper_surface_floor_result(
             status: CheckStatus::Fail,
             failure_reasons: reasons,
             detail: Some(
-                "the validated artifacts no longer satisfy the frozen helper-surface floor"
-                    .to_string(),
+                "the validated artifacts no longer satisfy the frozen verifier floor".to_string(),
             ),
             mismatches,
         }
@@ -692,30 +691,27 @@ mod tests {
         run_with_writer,
     };
     use crate::XtaskError;
-    use crate::family::coverage::render_json_bytes;
-    use crate::family::decision_kernel::{
-        corpus_program_basis_snapshot, derive_corpus_program_decision_contract,
+    use crate::family::analysis_core::{
+        corpus_program_basis_snapshot, decision_contract_stop_state_tuple,
+        derive_corpus_program_decision_contract,
     };
+    use crate::family::coverage::render_json_bytes;
     use crate::family::inventory::inventory_sha256_hex;
     use crate::family::paths::{
         FAMILY_CORPUS_PROGRAM_DECISION_LATEST_PATH, FAMILY_COVERAGE_LATEST_PATH,
         FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH,
     };
     use crate::family::promotion_artifacts::{
-        ConfidenceLevel, CorpusProgramDecisionArtifact, DecisionSummary, DifficultyTier,
-        EvidenceState, EvidenceSummary, FamilyRecommendationAnalysisArtifact, HoldReason,
-        NextStepDetail, NextStepStatus, PromotionArtifactKind, PromotionReadiness,
-        RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RecommendationCandidateEntry,
-        RecommendationConfidence, RecommendationDelta, RecommendationDifficulty,
-        RecommendationLeverage, RecommendationStatus,
+        CorpusProgramDecisionArtifact, DecisionSummary, EvidenceState, EvidenceSummary,
+        FamilyRecommendationAnalysisArtifact, PromotionArtifactKind,
+        RECOMMENDATION_ANALYSIS_SCHEMA_VERSION, RecommendationCandidateEntry, RecommendationDelta,
     };
-    use spec_core::semantic_review::UnsupportedFunctionReasonCode;
     use std::fs;
     use std::path::Path;
     use tempfile::TempDir;
 
     #[test]
-    fn verifier_passes_on_frozen_helper_surface_floor() {
+    fn verifier_passes_on_locked_stop_state_floor() {
         let workspace = seeded_workspace();
         let report = build_report(workspace.path());
 
@@ -863,7 +859,7 @@ mod tests {
     }
 
     #[test]
-    fn verifier_reports_non_current_helper_surface_evidence() {
+    fn verifier_reports_non_current_frozen_floor_evidence() {
         let workspace = seeded_workspace();
         let mut analysis = read_analysis(workspace.path());
         analysis.evidence_summary.stale_evidence = vec![EvidenceState::StaleEvidence];
@@ -880,11 +876,11 @@ mod tests {
     }
 
     #[test]
-    fn verifier_reports_frozen_helper_surface_floor_mismatch() {
+    fn verifier_reports_locked_stop_state_floor_mismatch() {
         let workspace = seeded_workspace();
         let mut decision = read_decision(workspace.path());
-        decision.decision_basis_code =
-            crate::family::promotion_artifacts::CorpusProgramDecisionBasisCode::NoActionableCandidate;
+        decision.required_next_action =
+            crate::family::promotion_artifacts::RequiredNextAction::AuthorCorpusExpansionPlan;
         write_decision(workspace.path(), &decision);
 
         let report = failing_report(workspace.path());
@@ -949,55 +945,26 @@ mod tests {
     }
 
     fn fixture_analysis_artifact() -> FamilyRecommendationAnalysisArtifact {
+        let floor = decision_contract_stop_state_tuple();
         FamilyRecommendationAnalysisArtifact {
             schema_version: RECOMMENDATION_ANALYSIS_SCHEMA_VERSION,
             artifact_kind: PromotionArtifactKind::FamilyRecommendationAnalysis,
             generated_at: "2026-05-06T00:00:00Z".to_string(),
             coverage_path: FAMILY_COVERAGE_LATEST_PATH.to_string(),
             coverage_sha256: inventory_sha256_hex(b"{\"fixture\":\"coverage\"}\n"),
-            recommendation_status: RecommendationStatus::NoStrongCandidate,
-            ranked_candidates: vec![RecommendationCandidateEntry {
-                candidate_id: "fixture/helper_surface".to_string(),
-                cluster_ids: vec!["cluster".to_string()],
-                primary_reason_code: UnsupportedFunctionReasonCode::UnsupportedFunctionSurface,
-                overlap_family: "unknown".to_string(),
-                promotion_readiness: PromotionReadiness::Hold,
-                hold_reasons: vec![HoldReason::HelperSurfaceNotPromotable],
-                next_step_status: NextStepStatus::DurableHold,
-                next_step_detail: NextStepDetail::HelperSurfaceNotPromotable,
-                leverage: RecommendationLeverage {
-                    real_example_hits: 2,
-                    promotion_relevant_regression_hits: 1,
-                    boundary_only_hits: 0,
-                    total_units_in_cluster: 3,
-                },
-                difficulty: RecommendationDifficulty {
-                    tier: DifficultyTier::Hard,
-                    why: "fixture".to_string(),
-                },
-                confidence: RecommendationConfidence {
-                    level: ConfidenceLevel::Low,
-                    why: "fixture".to_string(),
-                },
-                rationale: "fixture".to_string(),
-            }],
+            recommendation_status: floor.recommendation_status,
+            ranked_candidates: Vec::<RecommendationCandidateEntry>::new(),
             decision_summary: DecisionSummary {
-                decision_status: crate::family::promotion_artifacts::DecisionStatus::NotRecommended,
-                top_candidate_id: Some("fixture/helper_surface".to_string()),
-                open_blockers: vec![
-                    crate::family::promotion_artifacts::DecisionReason::HelperSurfaceNotPromotable,
-                ],
-                warnings: vec![
-                    crate::family::promotion_artifacts::DecisionReason::RegressionWarning,
-                ],
+                decision_status: floor.decision_status,
+                top_candidate_id: None,
+                open_blockers: floor.open_blockers,
+                warnings: Vec::new(),
                 summary: "fixture".to_string(),
             },
             evidence_summary: EvidenceSummary {
-                missing_evidence: Vec::new(),
-                stale_evidence: Vec::new(),
-                warnings: vec![
-                    crate::family::promotion_artifacts::DecisionReason::RegressionWarning,
-                ],
+                missing_evidence: floor.missing_evidence,
+                stale_evidence: floor.stale_evidence,
+                warnings: Vec::new(),
                 summary: "fixture".to_string(),
             },
             delta_from_previous: RecommendationDelta::no_previous_artifact(),

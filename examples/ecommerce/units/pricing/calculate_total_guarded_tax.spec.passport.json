@@ -1,0 +1,119 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/calculate_total_guarded_tax",
+  "intent": "Return the total after discounting the subtotal and then applying tax while clamping the tax rate at zero.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "subtotal",
+        "type": "Decimal"
+      },
+      {
+        "name": "discount_rate",
+        "type": "Decimal"
+      },
+      {
+        "name": "tax_rate",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal",
+    "invariants": [
+      "output >= 0"
+    ]
+  },
+  "deps": [
+    "pricing/apply_discount",
+    "pricing/apply_tax"
+  ],
+  "local_tests": [
+    {
+      "id": "combined_flow",
+      "expect": "calculate_total_guarded_tax(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
+    }
+  ],
+  "generated_at": "2026-05-16T04:17:49Z",
+  "source_file": "examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "combined_flow",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-05-16T03:06:41Z",
+    "provenance": {
+      "git_commit_sha": "e21dc836fb5483edc283f89bae18d7e81318632a"
+    }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:b04b0402b70cb7f962a344e1b6e74d8a685e30d68846964190c03d835d2df333"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:b04b0402b70cb7f962a344e1b6e74d8a685e30d68846964190c03d835d2df333",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "combined_flow",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-16T03:06:41Z",
+        "provenance": {
+          "git_commit_sha": "e21dc836fb5483edc283f89bae18d7e81318632a"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:b04b0402b70cb7f962a344e1b6e74d8a685e30d68846964190c03d835d2df333"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:b04b0402b70cb7f962a344e1b6e74d8a685e30d68846964190c03d835d2df333",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  },
+  "semantic_review": {
+    "verdict": "aligned",
+    "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
+    "support_status": "supported",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Return the total after discounting the subtotal and then applying tax while clamping the tax rate at zero."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "3 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "contract.invariants",
+        "summary": "1 authored invariant(s)"
+      },
+      {
+        "path": "deps",
+        "summary": "2 declared dep(s)"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function calculate_total_guarded_tax with 3 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
+  },
+  "contract_hash": "sha256:1a9cbd21251a76dccfa6e716af30ac827ae15a70bba603e56cfb932690fccc92"
+}

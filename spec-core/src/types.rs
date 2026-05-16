@@ -8,6 +8,50 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::str::FromStr;
+
+pub const TYPESCRIPT_RUNTIME_HELPER_PATH: &str = "__spec_ts/runtime.ts";
+pub const TYPESCRIPT_BUILD_ENTRY_PATH: &str = "__spec_ts/build_entry.ts";
+pub const TYPESCRIPT_LOCAL_TESTS_PATH: &str = "__spec_ts/local_tests.ts";
+pub const TARGET_PROOF_FIELD_RUST: &str = "target_proofs.rust";
+pub const TARGET_PROOF_FIELD_TYPESCRIPT: &str = "target_proofs.typescript";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetLanguage {
+    #[default]
+    Rust,
+    TypeScript,
+}
+
+impl TargetLanguage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Rust => "rust",
+            Self::TypeScript => "typescript",
+        }
+    }
+}
+
+impl fmt::Display for TargetLanguage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for TargetLanguage {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        match value {
+            "rust" => Ok(Self::Rust),
+            "typescript" => Ok(Self::TypeScript),
+            other => Err(format!(
+                "unsupported target language '{other}'; expected one of: rust, typescript"
+            )),
+        }
+    }
+}
 
 /// Raw parsed form from YAML (mirrors schema structure)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1290,5 +1334,26 @@ mod tests {
             ]
         );
         assert_eq!(normalized.rust_backend.derives, vec!["Clone", "Debug"]);
+    }
+
+    #[test]
+    fn target_language_parses_frozen_values() {
+        assert_eq!(
+            "rust".parse::<TargetLanguage>().unwrap(),
+            TargetLanguage::Rust
+        );
+        assert_eq!(
+            "typescript".parse::<TargetLanguage>().unwrap(),
+            TargetLanguage::TypeScript
+        );
+    }
+
+    #[test]
+    fn target_language_rejects_unknown_values() {
+        let err = "python".parse::<TargetLanguage>().unwrap_err();
+        assert!(
+            err.contains("expected one of: rust, typescript"),
+            "unexpected error: {err}"
+        );
     }
 }

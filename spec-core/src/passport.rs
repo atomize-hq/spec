@@ -19,7 +19,7 @@ use crate::semantic_review::{
 };
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
-    Contract, Intent, LoadedMoleculeTest, LoadedSpec, UnitKind,
+    Contract, Intent, LoadedMoleculeTest, LoadedSpec, TargetLanguage, UnitKind,
 };
 use crate::{AUTHORED_SPEC_VERSION, Result, SpecError};
 use serde::{Deserialize, Serialize};
@@ -113,6 +113,24 @@ pub struct PassportFreshness {
     pub backend_execution_status: FreshnessStatus,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct PassportTargetProof {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<PassportEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freshness_anchor: Option<PassportFreshnessSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freshness: Option<PassportFreshness>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct PassportTargetProofs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rust: Option<PassportTargetProof>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typescript: Option<PassportTargetProof>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectedPassportTruth {
     pub freshness: Option<PassportFreshness>,
@@ -196,6 +214,8 @@ pub struct Passport {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub freshness: Option<PassportFreshness>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_proofs: Option<PassportTargetProofs>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub markers: Option<Vec<PassportMarker>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proof_coverage: Option<Vec<PassportProofCoverage>>,
@@ -217,6 +237,7 @@ pub struct PassportBuildMetadata {
     pub freshness_anchor: Option<PassportFreshnessSnapshot>,
     pub contract_hash: Option<String>,
     pub freshness: Option<PassportFreshness>,
+    pub target_proofs: Option<PassportTargetProofs>,
     pub markers: Option<Vec<PassportMarker>>,
     pub proof_coverage: Option<Vec<PassportProofCoverage>>,
     pub semantic_review: Option<SemanticReview>,
@@ -237,14 +258,15 @@ pub fn build_passport_with_evidence(
     evidence: Option<PassportEvidence>,
     contract_hash: Option<String>,
 ) -> Passport {
-    let has_evidence = evidence.is_some();
-    let freshness_anchor = passport_freshness_anchor_for_write(spec, has_evidence);
-    let freshness = resolve_passport_freshness_with_anchor(
+    let rust_target_proof = target_proof_for_write(
         spec,
-        freshness_anchor.as_ref(),
-        contract_hash.as_deref(),
         None,
+        evidence.clone(),
+        TargetLanguage::Rust,
+        evidence.is_some(),
     );
+    let freshness_anchor = rust_target_proof.freshness_anchor.clone();
+    let freshness = rust_target_proof.freshness.clone();
     build_passport_with_metadata(
         spec,
         generated_at,
@@ -253,6 +275,10 @@ pub fn build_passport_with_evidence(
             freshness_anchor,
             contract_hash,
             freshness,
+            target_proofs: Some(PassportTargetProofs {
+                rust: Some(rust_target_proof),
+                typescript: None,
+            }),
             markers: compute_passport_markers(spec),
             proof_coverage: default_passport_proof_coverage(spec),
             semantic_review: None,
@@ -289,13 +315,18 @@ pub fn build_passport_preserving_proof_state_with_context(
     contract_hash: Option<String>,
     semantic_review_context: &SemanticReviewContext<'_>,
 ) -> Passport {
-    let freshness_anchor = preserved_freshness_anchor(existing);
-    let freshness = resolve_passport_freshness_with_anchor(
+    let existing_target_proofs = preserved_target_proofs(existing);
+    let rust_target_proof = target_proof_for_write(
         spec,
-        freshness_anchor.as_ref(),
-        contract_hash.as_deref(),
-        None,
+        existing_target_proofs
+            .as_ref()
+            .and_then(|proofs| proofs.rust.as_ref()),
+        existing.and_then(|passport| passport.evidence.clone()),
+        TargetLanguage::Rust,
+        false,
     );
+    let freshness_anchor = rust_target_proof.freshness_anchor.clone();
+    let freshness = rust_target_proof.freshness.clone();
     let semantic_review = project_passport_semantic_review_with_context(
         spec,
         existing.and_then(|passport| passport.semantic_review.as_ref()),
@@ -311,6 +342,20 @@ pub fn build_passport_preserving_proof_state_with_context(
             freshness_anchor,
             contract_hash,
             freshness,
+            target_proofs: Some(PassportTargetProofs {
+                rust: Some(rust_target_proof),
+                typescript: existing_target_proofs.and_then(|proofs| {
+                    proofs.typescript.map(|proof| {
+                        target_proof_for_write(
+                            spec,
+                            Some(&proof),
+                            proof.evidence.clone(),
+                            TargetLanguage::TypeScript,
+                            false,
+                        )
+                    })
+                }),
+            }),
             markers: compute_passport_markers(spec),
             proof_coverage: default_passport_proof_coverage(spec),
             semantic_review,
@@ -328,6 +373,7 @@ pub fn build_passport_with_metadata(
         freshness_anchor,
         contract_hash,
         freshness,
+        target_proofs,
         markers,
         proof_coverage,
         semantic_review,
@@ -380,6 +426,7 @@ pub fn build_passport_with_metadata(
         evidence,
         freshness_anchor,
         freshness,
+        target_proofs,
         markers,
         proof_coverage,
         escape_hatch_gate: None,
@@ -418,7 +465,8 @@ struct FunctionAuthoredTruthSurface<'a> {
     intent: &'a str,
     contract: &'a Contract,
     deps: &'a [String],
-    body_rust: &'a str,
+    #[serde(rename = "body_rust")]
+    body: &'a str,
 }
 
 /// Compute SHA-256 of the unit's top-level truth surface.
@@ -454,14 +502,28 @@ pub fn compute_contract_hash(spec: &LoadedSpec) -> Option<String> {
 
 /// Compute the M14 digest snapshot for one unit.
 pub fn compute_passport_freshness_snapshot(spec: &LoadedSpec) -> Option<PassportFreshnessSnapshot> {
+    compute_passport_freshness_snapshot_for_target(spec, TargetLanguage::Rust)
+}
+
+pub fn compute_passport_freshness_snapshot_for_target(
+    spec: &LoadedSpec,
+    target_language: TargetLanguage,
+) -> Option<PassportFreshnessSnapshot> {
     Some(PassportFreshnessSnapshot {
-        authored_truth_digest: compute_authored_truth_digest(spec),
+        authored_truth_digest: compute_authored_truth_digest_for_target(spec, target_language),
         backend_execution_digest: compute_backend_execution_digest(spec),
     })
 }
 
 /// Compute the shared authored-truth digest for one unit.
 pub fn compute_authored_truth_digest(spec: &LoadedSpec) -> Option<String> {
+    compute_authored_truth_digest_for_target(spec, TargetLanguage::Rust)
+}
+
+pub fn compute_authored_truth_digest_for_target(
+    spec: &LoadedSpec,
+    target_language: TargetLanguage,
+) -> Option<String> {
     let json = match spec.spec.unit_kind() {
         Ok(UnitKind::Data) => serde_json::to_string(&DataSeamAuthoredTruthSurface {
             intent: &spec.spec.intent.why,
@@ -479,11 +541,15 @@ pub fn compute_authored_truth_digest(spec: &LoadedSpec) -> Option<String> {
         .expect("sum seam authored-truth serialization cannot fail for well-formed spec"),
         _ => {
             let contract = spec.spec.contract.as_ref()?;
+            let body = match target_language {
+                TargetLanguage::Rust => spec.spec.body.rust.as_str(),
+                TargetLanguage::TypeScript => spec.spec.body.typescript.as_deref()?,
+            };
             serde_json::to_string(&FunctionAuthoredTruthSurface {
                 intent: &spec.spec.intent.why,
                 contract,
                 deps: spec.spec.deps.as_slice(),
-                body_rust: spec.spec.body.rust.as_str(),
+                body,
             })
             .expect("function authored-truth serialization cannot fail for well-formed spec")
         }
@@ -541,11 +607,20 @@ pub fn passport_freshness_for_write(
     spec: &LoadedSpec,
     has_evidence: bool,
 ) -> Option<PassportFreshness> {
+    passport_freshness_for_target_write(spec, has_evidence, TargetLanguage::Rust)
+}
+
+pub fn passport_freshness_for_target_write(
+    spec: &LoadedSpec,
+    has_evidence: bool,
+    target_language: TargetLanguage,
+) -> Option<PassportFreshness> {
     resolve_passport_freshness_with_anchor(
         spec,
-        passport_freshness_anchor_for_write(spec, has_evidence).as_ref(),
+        passport_freshness_anchor_for_write(spec, has_evidence, target_language).as_ref(),
         None,
         None,
+        target_language,
     )
 }
 
@@ -553,7 +628,15 @@ pub fn resolve_passport_freshness(
     spec: &LoadedSpec,
     passport: Option<&Passport>,
 ) -> Option<PassportFreshness> {
-    let anchor = stored_freshness_anchor(passport);
+    resolve_passport_freshness_for_target(spec, passport, TargetLanguage::Rust)
+}
+
+pub fn resolve_passport_freshness_for_target(
+    spec: &LoadedSpec,
+    passport: Option<&Passport>,
+    target_language: TargetLanguage,
+) -> Option<PassportFreshness> {
+    let anchor = stored_freshness_anchor_for_target(passport, target_language);
     let legacy_authored_truth_present = passport.map(|passport| {
         passport.contract.is_some()
             || passport.data.is_some()
@@ -561,7 +644,7 @@ pub fn resolve_passport_freshness(
             || !passport.constructors.is_empty()
             || !passport.methods.is_empty()
     });
-    let legacy_contract_hash = if anchor.is_some() {
+    let legacy_contract_hash = if anchor.is_some() || target_language != TargetLanguage::Rust {
         None
     } else {
         passport.and_then(|passport| passport.contract_hash.as_deref())
@@ -571,7 +654,62 @@ pub fn resolve_passport_freshness(
         anchor.as_ref(),
         legacy_contract_hash,
         legacy_authored_truth_present,
+        target_language,
     )
+}
+
+pub fn passport_target_proof(
+    passport: &Passport,
+    target_language: TargetLanguage,
+) -> Option<&PassportTargetProof> {
+    match target_language {
+        TargetLanguage::Rust => passport
+            .target_proofs
+            .as_ref()
+            .and_then(|proofs| proofs.rust.as_ref()),
+        TargetLanguage::TypeScript => passport
+            .target_proofs
+            .as_ref()
+            .and_then(|proofs| proofs.typescript.as_ref()),
+    }
+}
+
+pub fn passport_evidence_for_target(
+    passport: &Passport,
+    target_language: TargetLanguage,
+) -> Option<&PassportEvidence> {
+    match target_language {
+        TargetLanguage::Rust => passport.evidence.as_ref(),
+        TargetLanguage::TypeScript => passport_target_proof(passport, target_language)
+            .and_then(|proof| proof.evidence.as_ref()),
+    }
+}
+
+pub fn target_proof_for_write(
+    spec: &LoadedSpec,
+    existing: Option<&PassportTargetProof>,
+    evidence: Option<PassportEvidence>,
+    target_language: TargetLanguage,
+    mint_freshness_anchor: bool,
+) -> PassportTargetProof {
+    let freshness_anchor = if mint_freshness_anchor {
+        compute_passport_freshness_snapshot_for_target(spec, target_language)
+    } else {
+        stored_target_proof_anchor(existing)
+    };
+    let freshness = resolve_passport_freshness_with_anchor(
+        spec,
+        freshness_anchor.as_ref(),
+        None,
+        None,
+        target_language,
+    );
+
+    PassportTargetProof {
+        evidence: evidence.or_else(|| existing.and_then(|proof| proof.evidence.clone())),
+        freshness_anchor,
+        freshness,
+    }
 }
 
 pub fn project_passport_truth(
@@ -627,6 +765,34 @@ pub fn apply_projected_passport_truth(
     passport.semantic_review = projected_truth.semantic_review;
 }
 
+pub fn refresh_passport_target_proofs(passport: &mut Passport, spec: &LoadedSpec) {
+    let Some(mut proofs) = preserved_target_proofs(Some(passport)) else {
+        return;
+    };
+
+    if let Some(existing) = proofs.rust.as_ref().cloned() {
+        proofs.rust = Some(target_proof_for_write(
+            spec,
+            Some(&existing),
+            existing.evidence.clone(),
+            TargetLanguage::Rust,
+            false,
+        ));
+    }
+    if let Some(existing) = proofs.typescript.as_ref().cloned() {
+        proofs.typescript = Some(target_proof_for_write(
+            spec,
+            Some(&existing),
+            existing.evidence.clone(),
+            TargetLanguage::TypeScript,
+            false,
+        ));
+    }
+
+    passport.target_proofs = Some(proofs);
+    sync_rust_target_proof_fields(passport);
+}
+
 fn project_passport_semantic_review_with_context(
     spec: &LoadedSpec,
     existing: Option<&SemanticReview>,
@@ -676,8 +842,9 @@ fn resolve_passport_freshness_with_anchor(
     freshness_anchor: Option<&PassportFreshnessSnapshot>,
     legacy_contract_hash: Option<&str>,
     legacy_authored_truth_present: Option<bool>,
+    target_language: TargetLanguage,
 ) -> Option<PassportFreshness> {
-    let snapshot = compute_passport_freshness_snapshot(spec)?;
+    let snapshot = compute_passport_freshness_snapshot_for_target(spec, target_language)?;
     let authored_truth_status = resolve_authored_truth_status(
         freshness_anchor,
         legacy_contract_hash,
@@ -743,41 +910,79 @@ fn resolve_freshness_presence_status(stored_present: bool, live_present: bool) -
     }
 }
 
-fn stored_freshness_anchor(passport: Option<&Passport>) -> Option<PassportFreshnessSnapshot> {
-    passport
-        .and_then(|passport| passport.freshness_anchor.clone())
-        .or_else(|| {
-            passport.and_then(|passport| {
-                passport
-                    .freshness
-                    .as_ref()
-                    .map(|freshness| freshness.snapshot.clone())
+fn stored_freshness_anchor_for_target(
+    passport: Option<&Passport>,
+    target_language: TargetLanguage,
+) -> Option<PassportFreshnessSnapshot> {
+    match target_language {
+        TargetLanguage::Rust => passport
+            .and_then(|passport| passport.freshness_anchor.clone())
+            .or_else(|| {
+                passport.and_then(|passport| {
+                    passport
+                        .freshness
+                        .as_ref()
+                        .map(|freshness| freshness.snapshot.clone())
+                })
             })
-        })
-        .or_else(|| {
-            passport.and_then(|passport| {
-                passport
-                    .contract_hash
-                    .as_ref()
-                    .map(|contract_hash| PassportFreshnessSnapshot {
-                        authored_truth_digest: Some(contract_hash.clone()),
-                        backend_execution_digest: None,
-                    })
-            })
-        })
-}
-
-fn preserved_freshness_anchor(passport: Option<&Passport>) -> Option<PassportFreshnessSnapshot> {
-    stored_freshness_anchor(passport)
+            .or_else(|| {
+                passport.and_then(|passport| {
+                    passport
+                        .contract_hash
+                        .as_ref()
+                        .map(|contract_hash| PassportFreshnessSnapshot {
+                            authored_truth_digest: Some(contract_hash.clone()),
+                            backend_execution_digest: None,
+                        })
+                })
+            }),
+        TargetLanguage::TypeScript => passport
+            .and_then(|passport| passport_target_proof(passport, target_language))
+            .and_then(|proof| stored_target_proof_anchor(Some(proof))),
+    }
 }
 
 fn passport_freshness_anchor_for_write(
     spec: &LoadedSpec,
     has_evidence: bool,
+    target_language: TargetLanguage,
 ) -> Option<PassportFreshnessSnapshot> {
     has_evidence
-        .then(|| compute_passport_freshness_snapshot(spec))
+        .then(|| compute_passport_freshness_snapshot_for_target(spec, target_language))
         .flatten()
+}
+
+fn preserved_target_proofs(passport: Option<&Passport>) -> Option<PassportTargetProofs> {
+    passport.map(|passport| {
+        let mut proofs = passport.target_proofs.clone().unwrap_or_default();
+        if proofs.rust.is_none()
+            && (passport.evidence.is_some()
+                || passport.freshness_anchor.is_some()
+                || passport.freshness.is_some())
+        {
+            proofs.rust = Some(PassportTargetProof {
+                evidence: passport.evidence.clone(),
+                freshness_anchor: passport.freshness_anchor.clone(),
+                freshness: passport.freshness.clone(),
+            });
+        }
+        proofs
+    })
+}
+
+fn stored_target_proof_anchor(
+    proof: Option<&PassportTargetProof>,
+) -> Option<PassportFreshnessSnapshot> {
+    proof
+        .and_then(|proof| proof.freshness_anchor.clone())
+        .or_else(|| {
+            proof.and_then(|proof| {
+                proof
+                    .freshness
+                    .as_ref()
+                    .map(|freshness| freshness.snapshot.clone())
+            })
+        })
 }
 
 #[cfg(test)]
@@ -864,11 +1069,11 @@ fn project_passport_proof_coverage_from_portability(
 fn canonical_proof_coverage_definitions(
     spec: &LoadedSpec,
 ) -> Option<&'static [CanonicalProofCoverageDefinition]> {
-    if spec.spec.id != "pricing/discount_policy" {
+    if spec.spec.id != "pricing/discount_strategy" {
         return None;
     }
 
-    const DISCOUNT_POLICY_COVERAGE: &[CanonicalProofCoverageDefinition] = &[
+    const DISCOUNT_STRATEGY_COVERAGE: &[CanonicalProofCoverageDefinition] = &[
         CanonicalProofCoverageDefinition {
             id: "variant.none",
             explicit_atom_local_test_id: Some("variant_none"),
@@ -887,7 +1092,7 @@ fn canonical_proof_coverage_definitions(
         },
     ];
 
-    Some(DISCOUNT_POLICY_COVERAGE)
+    Some(DISCOUNT_STRATEGY_COVERAGE)
 }
 
 fn branch_proof_surfaces(
@@ -963,17 +1168,45 @@ pub fn read_passport(source_path: &Path) -> Result<Option<Passport>> {
         Err(err) => return Err(err.into()),
     };
 
-    Ok(Some(serde_json::from_str(&content)?))
+    let mut passport: Passport = serde_json::from_str(&content)?;
+    sync_rust_target_proof_fields(&mut passport);
+    Ok(Some(passport))
 }
 
 /// Serialize a Passport to pretty-printed JSON and write it atomically
 /// co-located with the source `.unit.spec` file.
 pub fn write_passport(passport: &Passport, source_file_path: &Path) -> Result<()> {
-    let json = serde_json::to_string_pretty(passport).map_err(|e| SpecError::Generator {
+    let mut passport = passport.clone();
+    sync_rust_target_proof_fields(&mut passport);
+    let json = serde_json::to_string_pretty(&passport).map_err(|e| SpecError::Generator {
         message: format!("Failed to serialize passport for '{}': {e}", passport.id),
     })?;
     let passport_path = passport_path_for(source_file_path)?;
     write_generated_file(&passport_path.display().to_string(), &json)
+}
+
+fn sync_rust_target_proof_fields(passport: &mut Passport) {
+    let mut target_proofs = passport.target_proofs.clone().unwrap_or_default();
+    let top_level_present = passport.evidence.is_some()
+        || passport.freshness_anchor.is_some()
+        || passport.freshness.is_some();
+    if top_level_present {
+        target_proofs.rust = Some(PassportTargetProof {
+            evidence: passport.evidence.clone(),
+            freshness_anchor: passport.freshness_anchor.clone(),
+            freshness: passport.freshness.clone(),
+        });
+    } else if let Some(rust_proof) = target_proofs.rust.as_ref() {
+        passport.evidence = rust_proof.evidence.clone();
+        passport.freshness_anchor = rust_proof.freshness_anchor.clone();
+        passport.freshness = rust_proof.freshness.clone();
+    }
+
+    passport.target_proofs = if target_proofs.rust.is_none() && target_proofs.typescript.is_none() {
+        None
+    } else {
+        Some(target_proofs)
+    };
 }
 
 fn authored_method_truth_surfaces(
@@ -1508,10 +1741,10 @@ mod tests {
         }
     }
 
-    fn make_discount_policy_sum_seam(local_test_ids: &[&str]) -> LoadedSpec {
+    fn make_discount_strategy_sum_seam(local_test_ids: &[&str]) -> LoadedSpec {
         let mut spec = make_loaded_sum_seam(
-            "pricing/discount_policy",
-            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_strategy",
+            "units/pricing/discount_strategy.unit.spec",
         );
         spec.spec.intent.why =
             "Represent mutually exclusive discount strategies for checkout pricing.".to_string();
@@ -1525,18 +1758,18 @@ mod tests {
         spec
     }
 
-    fn make_discount_policy_molecule_test() -> LoadedMoleculeTest {
+    fn make_discount_strategy_molecule_test() -> LoadedMoleculeTest {
         LoadedMoleculeTest {
             source: MoleculeTestSource {
-                file_path: "units/pricing/discount_policy_checkout_flow.test.spec".to_string(),
-                id: "pricing/discount_policy_checkout_flow".to_string(),
+                file_path: "units/pricing/discount_strategy_checkout_flow.test.spec".to_string(),
+                id: "pricing/discount_strategy_checkout_flow".to_string(),
             },
             test: MoleculeTestStruct {
-                id: "pricing/discount_policy_checkout_flow".to_string(),
+                id: "pricing/discount_strategy_checkout_flow".to_string(),
                 intent: Intent {
                     why: "Cover the discount policy seam".to_string(),
                 },
-                covers: vec!["pricing/discount_policy".to_string()],
+                covers: vec!["pricing/discount_strategy".to_string()],
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),
@@ -1692,8 +1925,8 @@ mod tests {
     #[test]
     fn build_passport_data_seam_serializes_top_level_truth_only() {
         let spec = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
 
         let passport = build_passport(&spec, "2026-04-19T00:00:00Z");
@@ -1953,8 +2186,8 @@ mod tests {
     #[test]
     fn test_contract_hash_present_for_data_seam() {
         let spec = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
 
         assert!(
@@ -1966,8 +2199,8 @@ mod tests {
     #[test]
     fn test_contract_hash_changes_on_data_seam_intent_change() {
         let spec_original = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let mut spec_changed = spec_original.clone();
         spec_changed.spec.intent.why = "Changed seam intent".to_string();
@@ -2054,8 +2287,8 @@ mod tests {
     #[test]
     fn test_contract_hash_changes_on_data_seam_method_truth_change() {
         let spec_original = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let mut spec_changed = spec_original.clone();
         spec_changed.spec.extensions.methods[1]
@@ -2128,8 +2361,8 @@ mod tests {
     #[test]
     fn test_authored_truth_digest_ignores_backend_only_seam_changes() {
         let spec_original = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let mut spec_changed = spec_original.clone();
         spec_changed.spec.extensions.methods[0]
@@ -2531,13 +2764,13 @@ mod tests {
 
     #[test]
     fn build_passport_preserving_proof_state_drops_stale_sum_review_after_kind_change() {
-        let sum_spec = make_discount_policy_sum_seam(&["variant_none"]);
+        let sum_spec = make_discount_strategy_sum_seam(&["variant_none"]);
         let mut existing = make_current_passport(&sum_spec);
         existing.semantic_review = evaluate_semantic_review(&sum_spec);
 
         let changed_spec = make_loaded_spec(
-            "pricing/discount_policy",
-            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_strategy",
+            "units/pricing/discount_strategy.unit.spec",
             Some("0.3.0"),
             Some(Contract {
                 inputs: Some(IndexMap::from([(
@@ -2562,9 +2795,10 @@ mod tests {
     }
 
     #[test]
-    fn build_passport_preserving_proof_state_keeps_supported_sum_review_when_kind_matches() {
-        let spec = make_discount_policy_sum_seam(&["variant_none"]);
+    fn build_passport_preserving_proof_state_drops_unsupported_sum_review_when_kind_matches() {
+        let spec = make_discount_strategy_sum_seam(&["variant_none"]);
         let supported_review = evaluate_semantic_review(&spec).expect("sum review expected");
+        assert_eq!(supported_review.compatibility_key, "unsupported.sum.v1");
         let mut existing = make_current_passport(&spec);
         existing.semantic_review = Some(supported_review.clone());
 
@@ -2575,18 +2809,18 @@ mod tests {
             existing.contract_hash.clone(),
         );
 
-        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+        assert!(rebuilt.semantic_review.is_none());
     }
 
     #[test]
     fn build_passport_preserving_proof_state_keeps_matching_data_compatibility_key() {
         let spec = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let supported_review =
             evaluate_semantic_review(&spec).expect("supported data review expected after Lane A");
-        assert_eq!(supported_review.compatibility_key, "data.checkout_quote.v1");
+        assert_eq!(supported_review.compatibility_key, "data.pricing_quote.v1");
         let mut existing = make_current_passport(&spec);
         existing.semantic_review = Some(supported_review.clone());
 
@@ -2760,13 +2994,13 @@ mod tests {
     #[test]
     fn build_passport_preserving_proof_state_drops_mismatched_data_compatibility_key() {
         let spec = make_loaded_data_seam(
-            "pricing/checkout_quote",
-            "units/pricing/checkout_quote.unit.spec",
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
         );
         let mut supported_review =
             evaluate_semantic_review(&spec).expect("supported data review expected after Lane A");
-        assert_eq!(supported_review.compatibility_key, "data.checkout_quote.v1");
-        supported_review.compatibility_key = "data.checkout_quote.v0".to_string();
+        assert_eq!(supported_review.compatibility_key, "data.pricing_quote.v1");
+        supported_review.compatibility_key = "data.pricing_quote.v0".to_string();
         let mut existing = make_current_passport(&spec);
         existing.semantic_review = Some(supported_review);
 
@@ -2857,8 +3091,8 @@ mod tests {
     #[test]
     fn build_passport_preserving_proof_state_drops_unsupported_review_when_kind_becomes_sum() {
         let unsupported_spec = make_loaded_spec(
-            "pricing/discount_policy",
-            "units/pricing/discount_policy.unit.spec",
+            "pricing/discount_strategy",
+            "units/pricing/discount_strategy.unit.spec",
             Some("0.3.0"),
             Some(Contract {
                 inputs: Some(IndexMap::from([(
@@ -2873,7 +3107,7 @@ mod tests {
         );
         let mut existing = make_current_passport(&unsupported_spec);
         existing.semantic_review = evaluate_semantic_review(&unsupported_spec);
-        let sum_spec = make_discount_policy_sum_seam(&["variant_none"]);
+        let sum_spec = make_discount_strategy_sum_seam(&["variant_none"]);
 
         let rebuilt = build_passport_preserving_proof_state(
             &sum_spec,
@@ -2996,14 +3230,14 @@ mod tests {
 
     #[test]
     fn project_passport_proof_coverage_reports_current_atom_and_molecule_surfaces() {
-        let spec = make_discount_policy_sum_seam(&[
+        let spec = make_discount_strategy_sum_seam(&[
             "variant_none",
             "variant_percentage",
             "variant_fixed_amount",
             "behavior_fixed_amount_capped",
         ]);
         let passport = make_current_passport(&spec);
-        let molecule_test = make_discount_policy_molecule_test();
+        let molecule_test = make_discount_strategy_molecule_test();
         let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
         let molecule_evidence = build_molecule_evidence(
             &molecule_test,
@@ -3033,7 +3267,7 @@ mod tests {
 
     #[test]
     fn project_passport_proof_coverage_drops_atom_when_passport_is_stale() {
-        let original = make_discount_policy_sum_seam(&[
+        let original = make_discount_strategy_sum_seam(&[
             "variant_none",
             "variant_percentage",
             "variant_fixed_amount",
@@ -3062,7 +3296,7 @@ mod tests {
 
     #[test]
     fn project_passport_proof_coverage_keeps_current_molecule_when_atom_is_stale() {
-        let original = make_discount_policy_sum_seam(&[
+        let original = make_discount_strategy_sum_seam(&[
             "variant_none",
             "variant_percentage",
             "variant_fixed_amount",
@@ -3071,7 +3305,7 @@ mod tests {
         let passport = make_current_passport(&original);
         let mut changed = original.clone();
         changed.spec.intent.why = "Represent revised discount policy".to_string();
-        let molecule_test = make_discount_policy_molecule_test();
+        let molecule_test = make_discount_strategy_molecule_test();
         let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
         let molecule_evidence = build_molecule_evidence(
             &molecule_test,
@@ -3101,7 +3335,7 @@ mod tests {
 
     #[test]
     fn project_passport_proof_coverage_uses_current_authored_local_test_set_per_branch() {
-        let mut changed = make_discount_policy_sum_seam(&[
+        let mut changed = make_discount_strategy_sum_seam(&[
             "variant_none",
             "variant_percentage",
             "variant_fixed_amount",
@@ -3122,7 +3356,7 @@ mod tests {
             },
         ];
         let passport = make_current_passport(&changed);
-        let molecule_test = make_discount_policy_molecule_test();
+        let molecule_test = make_discount_strategy_molecule_test();
         let specs_by_id = HashMap::from([(changed.spec.id.clone(), changed.clone())]);
         let molecule_evidence = build_molecule_evidence(
             &molecule_test,

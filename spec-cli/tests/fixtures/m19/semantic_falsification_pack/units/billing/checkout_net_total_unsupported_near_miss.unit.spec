@@ -19,7 +19,7 @@ body:
     {
         apply_regional_fee(
             apply_membership_discount(subtotal, membership_rate),
-            regional_rate.max(Decimal::ZERO),
+            regional_rate.max(Decimal::ZERO).round_dp(4),
         )
     }
 local_tests:

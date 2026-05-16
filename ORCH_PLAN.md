@@ -1,686 +1,852 @@
-# M40 Orchestration Plan
+# M61 Orchestration Plan
 
-Status: **authoritative execution contract for the M40 session**  
-Authority: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`**  
-Owned authored artifact: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`**  
-Live checkout: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
-Live branch: **`feat/corpus-expansion`**  
-Live HEAD at draft time: **`de096096e6093eaea771af1f6b95f208ca3e7e44`**  
-Review base: **`main`**  
-Last rewritten: **`2026-05-07`**  
-Run root for an executed M40 session: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m40_authority_artifact_freeze`**  
-Artifact root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts`**  
-Execution note: **M40 is an authority-artifact milestone only. It does not authorize extraction, code motion, seam implementation, corpus-run spend, schema widening, or stealth cleanup outside the authored orchestration file.**
+Status: **authoritative execution runbook**  
+Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` only**  
+Plan title: **`M61: Bounded Recursive Cross-Library TypeScript Function-Graph Execution Plan`**  
+Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
+Primary execution branch: **`feat/m40-plus`**  
+Authority validated commit in `PLAN.md`: **`96d2ee9`**  
+Base branch: **`main`**  
+Authority date: **`2026-05-15`**  
+Maximum safe worker concurrency: **2 worker lanes plus the parent integrator**  
+Worker model assumption: **`GPT-5.4` with `reasoning_effort=high`**  
+Rewrite intent: **replace the stale M60 repo-root orchestration doc with an execution-ready M61 runbook grounded only in `PLAN.md`**  
+Last rewritten: **`2026-05-15`**
 
 ## Summary
 
-- This session exists to operationalize **M40 - Family-Analysis Shared-Core Follow-On Authority Plan** without widening scope beyond authored authority.
-- `PLAN.md` is the milestone source of truth. `ORCH_PLAN.md` is the execution contract for carrying that source of truth through one honest session to completion.
-- M40 is sequential and parent-owned on purpose. There is no honest multi-lane edit split for a one-file authority artifact.
-- The parent agent is the sole:
-  - baseline capturer
-  - authority interpreter
-  - `ORCH_PLAN.md` author
-  - scope gatekeeper
-  - acceptance gatekeeper
-  - final verifier
-  - closeout author
-- Optional delegation is capped at read-only fact collection before final artifact acceptance. No delegate edits repo files, run-state, or authored authority in M40.
-- The critical path is fixed:
-  1. capture baseline and acknowledge live branch state
-  2. read `PLAN.md` and freeze the exact M40 truth that must be preserved
-  3. author `ORCH_PLAN.md`
-  4. self-audit the draft against M40 boundaries
-  5. verify diff scope and acceptance
-  6. stop
-- The semantic floor remains exactly what `PLAN.md` already froze:
-  - the repo is not yet authorized to extract a shared family-analysis core
-  - corpus run `1` remains unspent
-  - the helper-surface wedge remains a durable non-promotable hold
-  - `xtask/src/family/verify.rs` is a real consumer of the bounded decision contract
-  - no command output currently authorizes extraction
+M61 ships one bounded capability and nothing broader:
+
+`M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.`
+
+The parent agent owns the critical path and is the only integrator. The safe execution shape is fixed:
+
+1. parent freezes the M61 contract from `PLAN.md`
+2. parent runs **Lane A** locally and sequentially inside `spec-core/src/`
+3. parent integrates Lane A and freezes the qualified-identity contract, supported family list, exact docs sentence, and exact maintained example filenames
+4. **Lane B** and **Lane C** run in parallel from the post-A integration state
+5. parent integrates Lane B as soon as it is green, then launches **Lane D**
+6. parent integrates Lane C and Lane D
+7. parent runs **Lane E** serially for the final proof wall and artifact refresh
+8. parent fast-forwards `feat/m40-plus`
+
+Historical files are shape references only:
+
+- `docs/m26_orchestration_kickoff_prompt.md`
+- the current repo-root `ORCH_PLAN.md`
+
+They are not authority for milestone facts, scope, branches, worktree roots, commands, or acceptance.
 
 ## Hard Guards
 
-- `PLAN.md` wins over `ORCH_PLAN.md`, notes, memory, or stale run artifacts if they disagree.
-- `ORCH_PLAN.md` is the only repo file owned by this session.
-- This session does not edit:
-  - `PLAN.md`
-  - any code under `xtask/src/**`
-  - any file under `.semantic-family-artifacts/**`
-  - any prior `.runs/**` artifact
-- M40 must not introduce:
-  - local seam extraction
-  - cross-crate extraction
-  - a new shared crate
-  - command-wiring moves into the seam
-  - helper-surface reclassification
-  - a synthetic second consumer
-  - a synthetic second durable wedge
-  - public fingerprint-field expansion
-  - corpus run `1` activation
-  - closeout wording that implies implementation happened
-- The candidate seam remains exactly:
-  - helper-surface durable-hold classifier
-  - bounded corpus-program decision derivation
-  - normalized decision proof-fingerprint helpers
-- The following must remain local even after any future seam move:
-  - `xtask` CLI wiring
-  - artifact latest-path lookup
-  - command-specific JSON rendering
-  - proof-wall file locations
-  - milestone-specific closeout wording
-- If any newly gathered live evidence contradicts `PLAN.md` on trigger truth, extraction status, or allowed next milestones, the session stops. The fix is a new authority decision, not silent ORCH drift.
-- Existing local edits by other actors must be preserved. The parent may adapt around them or stop, but does not overwrite or revert them.
+- `PLAN.md` is the only authority source for milestone facts.
+- `docs/m26_orchestration_kickoff_prompt.md` and the stale repo-root `ORCH_PLAN.md` may be used only for structure and rigor examples.
+- Do not copy any stale milestone facts, branches, commit ids, worktree roots, acceptance gates, packet paths, or promotion mechanics from M26 or M60.
+- M61 is not a semantic-family promotion milestone.
+- Prohibited stale mechanics:
+  - no `.semantic-family-artifacts/*`
+  - no `cargo xtask family *`
+  - no approval-gate artifacts
+  - no family packet creation
+  - no corpus recommendation or promotion commands
+- The public docs sentence is frozen and must be used verbatim on every docs surface:
+  - `M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.`
+- The supported family set is frozen to the six families already listed in `PLAN.md`:
+  - `function.helper.identity_passthrough.v1`
+  - `function.arithmetic_leaf.monotone_down_nonnegative.v1`
+  - `function.arithmetic_leaf.monotone_up.v1`
+  - `function.wrapper.pipeline.v1`
+  - `function.wrapper.pipeline.normalized_required_arg.v1`
+  - `function.wrapper.pipeline.chain3.v1`
+- No lane may introduce new semantic-family meaning.
+- No lane may widen TypeScript execution to:
+  - arbitrary authored 4+ direct-dep topology parity
+  - molecule TypeScript execution
+  - seam-kind TypeScript execution
+  - `spec validate --target-language`
+  - `spec export --target-language`
+  - non-Bun TypeScript toolchains
+- `spec-core/src/semantic_review.rs` is a no-touch truth source for this milestone.
+- `spec-cli/src/commands.rs` is a no-touch surface unless the parent explicitly re-scopes after a blocker.
+- Lane A owns the `spec-core/src/` contract wall and must run Step 1 then Step 2 sequentially.
+- Lane B owns the maintained recursive cross-library example across both:
+  - `examples/shared-spec/`
+  - `examples/crosslib-app/`
+- Lane C owns docs and release-note sync only after the exact contract sentence and maintained example filenames are frozen.
+- Lane D owns `spec-cli/tests/cli.rs` only, and starts only after Lane A and Lane B converge.
+- Lane E is parent-only final proof and artifact refresh after A + B + C + D converge.
+- No lane may revert, reset, clean, stash, or overwrite unowned changes.
 
-## Closed Implementation Surface
+Stop and re-scope immediately if any of these become true:
 
-Only the following surfaces are in contract for an executed M40 session:
+1. `PLAN.md` changes materially during execution and the parent has not refreshed the freeze artifacts.
+2. Lane A requires changes to `spec-core/src/semantic_review.rs` to make M61 work.
+3. Lane A needs a new CLI surface, export schema, passport schema, or new target-language flag behavior.
+4. Lane B needs example file names different from the exact maintained example seed frozen in `PLAN.md`.
+5. Lane C cannot use the exact frozen sentence because code widened beyond the admitted M61 boundary.
+6. Lane D requires edits outside `spec-cli/tests/cli.rs` to keep the CLI regression wall truthful.
+7. Any lane needs to reopen semantic-family promotion or packet work.
+8. Any lane needs to make `.test.spec` TypeScript execution work.
+9. The final proof wall implies ambiguous raw-id selection still exists for same-id local/shared units.
+10. A worker touches files outside its frozen write scope.
 
-| Path | Role in M40 | Ownership | Allowed write mode |
-|---|---|---|---|
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` | milestone authority | read-only authority | no writes |
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md` | parent-authored orchestration contract | parent only | authored edit |
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m40_authority_artifact_freeze/**` | execution run-state, proof captures, acceptance, closeout | parent only | run-state writes only |
-| `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.semantic-family-artifacts/**` | derived proof inputs | read-only derived input | no writes |
+## Concrete Worktree And Branch Layout
 
-Rules:
+Use this exact topology.
 
-- The table above is the entire closed implementation surface for M40.
-- Any edit outside this closed surface is out of contract.
-- Writes under `.runs/m40_authority_artifact_freeze/**` are execution artifacts only. They are never treated as authored source, implementation work, or extraction evidence by themselves.
-- `.semantic-family-artifacts/**` may be read to confirm live truth, but no file under that tree may be hand-edited.
-
-## Authored Artifacts vs Run Artifacts
-
-### Authored authority
-
-Authored authority for M40 is limited to:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
-
-Rules:
-
-- `PLAN.md` already exists and is authoritative.
-- `ORCH_PLAN.md` is parent-authored only.
-- `PLAN.md` is read-only for this session.
-- `ORCH_PLAN.md` is complete only when it faithfully operationalizes `PLAN.md` without adding implementation scope.
-
-### Run artifacts
-
-Run artifacts for an executed M40 session are derived, replaceable, and non-authoritative:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m40_authority_artifact_freeze/**`
-- command stdout/stderr captures from the M40 proof floor
-- diff evidence
-- acceptance notes
-- closeout notes
-
-Rules:
-
-- Run artifacts document execution. They never override authored authority.
-- Run artifacts may confirm that the proof floor stayed green, but they do not create extraction authorization.
-- If the session is executed later, preserve the final proof-floor outputs and acceptance notes under the M40 run root. Do not treat those files as authored source.
-
-## Branch, Worktree, And Concurrency Layout
-
-Repository root:
-
-```text
-/Users/spensermcconnell/__Active_Code/atomize-hq/spec
+```bash
+PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec
+WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m61
+RUN_ROOT=$PRIMARY_ROOT/.runs/m61_recursive_cross_library_typescript
 ```
 
-M40 layout:
+### Branch inventory
 
-| Role | Branch | Worktree | Concurrency |
-|---|---|---|---|
-| Live authority authoring and acceptance | `feat/corpus-expansion` | `/Users/spensermcconnell/__Active_Code/atomize-hq/spec` | `1` |
+| Lane | Path | Branch | Owner | Purpose |
+| --- | --- | --- | --- | --- |
+| Primary authority + state | `PRIMARY_ROOT` | `feat/m40-plus` | Parent | contract freeze, durable run-state, final fast-forward |
+| `WS-INT` | `$WT_ROOT/int` | `ws/m61-int` | Parent | integration branch and final proof lane |
+| `WS-A` | `$WT_ROOT/core` | `ws/m61-core` | Parent | Lane A Step 1 then Step 2 inside `spec-core/src/` |
+| `WS-B` | `$WT_ROOT/examples` | `ws/m61-examples` | Worker | maintained recursive shared example and derived artifacts |
+| `WS-C` | `$WT_ROOT/docs` | `ws/m61-docs` | Worker | README, TODOS, CHANGELOG, and example README sync |
+| `WS-D` | `$WT_ROOT/cli` | `ws/m61-cli` | Worker | CLI regression refresh in `spec-cli/tests/cli.rs` |
 
-Rules:
+### Worktree creation rules
 
-1. M40 does not require a worktree split.
-2. M40 does not launch editing lanes.
-3. M40 does not create a merge surface separate from the live checkout because the only owned repo artifact is `ORCH_PLAN.md`.
-4. Optional read-only help, if used at all, may inspect facts in parallel but may not write files, create branches, or claim acceptance.
-5. If the live branch head moves during authoring, the parent rechecks whether `PLAN.md` still matches the intended M40 truth before finishing.
+- Do not create worker worktrees before `M61-01` contract freeze completes.
+- Create `WS-INT` and `WS-A` first.
+- `WS-B` and `WS-C` must branch from the integrated post-A state in `ws/m61-int`, not from the stale pre-A branch tip.
+- `WS-D` must branch only after Lane B is integrated into `ws/m61-int`.
+- There is no separate `WS-E`. Lane E runs only in `WS-INT`.
+- Do not split `examples/shared-spec/**` and `examples/crosslib-app/**` into different worktrees.
+- Do not let docs run before the exact sentence and exact maintained example filenames are frozen in `contract-freeze.json`.
+- Record the dirty tree at kickoff and preserve it.
 
-## Canonical Run-State
+### Recommended creation commands
 
-Canonical run root for an executed M40 session:
+```bash
+mkdir -p "$WT_ROOT"
 
-```text
-/Users/spensermcconnell/__Active_Code/atomize-hq/spec/.runs/m40_authority_artifact_freeze
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/int" -b ws/m61-int feat/m40-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/core" -b ws/m61-core feat/m40-plus
+
+# after WS-A is integrated into ws/m61-int
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/examples" -b ws/m61-examples ws/m61-int
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/docs" -b ws/m61-docs ws/m61-int
+
+# after WS-B is integrated into ws/m61-int
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/cli" -b ws/m61-cli ws/m61-int
 ```
 
-Run-state rules:
+## Durable Orchestration State
 
-- Everything in this section is execution metadata, not authored source.
-- The parent owns every canonical file in this run root.
-- Optional support lane `S1` writes none of these files.
-- If a gate fails, the parent records the failure in canonical run-state before stopping.
+All durable orchestration state lives under:
 
-Canonical parent-owned files:
+```bash
+$RUN_ROOT
+```
+
+This directory is run-state only. It is not product truth.
+
+### Required run-state artifacts
+
+| Path | Purpose | Owner |
+| --- | --- | --- |
+| `baseline.json` | kickoff branch, HEAD, dirty-tree snapshot, authority commit | Parent |
+| `contract-freeze.json` | frozen M61 contract, exact sentence, exact filenames, supported families, lane scopes | Parent |
+| `worktrees.json` | exact worktree paths, branches, heads, and lane states | Parent |
+| `file-ownership.json` | lane write scopes and global no-touch surfaces | Parent |
+| `tasks.json` | canonical task ledger, dependencies, and current states | Parent |
+| `session-log.md` | chronological launch, integration, rerun, block, and close log | Parent |
+| `acceptance-ledger.md` | final gate checklist and proof references | Parent |
+| `final-proof-manifest.json` | exact final commands, exit codes, and captured output paths | Parent |
+| `validation/kickoff/` | kickoff snapshots | Parent |
+| `validation/ws-a/` | validator and collector proof captures | Parent |
+| `validation/ws-b/` | example loop and target-language proof captures | Parent |
+| `validation/ws-c/` | docs sentence and backlog wording captures | Parent |
+| `validation/ws-d/` | CLI regression proof captures | Parent |
+| `validation/final/` | final serial proof wall captures | Parent |
+| `handoffs/` | worker briefs and worker return packets | Parent |
+| `tasks/<TASK_ID>/` | per-task sentinels and state files | Parent creates, lane updates |
+
+### Required `baseline.json` fields
+
+- `milestone`
+- `authority_plan_path`
+- `authority_plan_title`
+- `authority_plan_commit`
+- `primary_branch`
+- `primary_head_commit`
+- `dirty_tree_summary`
+- `dirty_tree_files`
+- `historical_shape_refs`
+- `observed_primary_surfaces`
+- `baseline_commands`
+- `run_started_at`
+
+### Required `contract-freeze.json` fields
+
+- `milestone`
+- `authority_plan_path`
+- `authority_plan_commit`
+- `primary_branch`
+- `frozen_scope_claim`
+- `frozen_docs_sentence`
+- `frozen_supported_families`
+- `maintained_example_paths`
+- `preserved_example_paths`
+- `lane_ownership`
+- `global_no_touch_surfaces`
+- `serialization_points`
+- `integration_order`
+- `worker_model`
+- `worker_return_contract`
+- `forbidden_mechanics`
+- `verification_commands`
+- `stop_rules`
+
+### Required `worktrees.json` fields
+
+- `milestone`
+- `updated_at`
+- `primary_root`
+- `worktree_root`
+- `lanes[]`
+  - `lane_id`
+  - `path`
+  - `branch`
+  - `owner`
+  - `state`
+  - `head_commit`
+  - `write_scope`
+  - `task_ids`
+
+### Required `tasks.json` fields
+
+- `milestone`
+- `updated_at`
+- `tasks[]`
+  - `task_id`
+  - `lane`
+  - `state`
+  - `owner`
+  - `depends_on`
+  - `write_scope`
+  - `command_wall`
+  - `acceptance_summary`
+  - `stop_rules`
+  - `sentinel_dir`
+
+## Task State And Sentinels
+
+`tasks.json` is the single source of truth for task state.
+
+Allowed states:
+
+- `queued`
+- `ready`
+- `running`
+- `blocked`
+- `submitted`
+- `integrated`
+- `closed`
+- `skipped`
+
+Only the parent may set `integrated`, `closed`, or `skipped`. Workers may move only between `running`, `blocked`, and `submitted`.
+
+Each task gets a dedicated sentinel directory:
+
+```bash
+$RUN_ROOT/tasks/<TASK_ID>/
+```
+
+Required files:
+
+- `status.json`
+- `owner.txt`
+- `branch.txt`
+- `write_scope.txt`
+- `commands.txt`
+- `changed_files.txt`
+- `acceptance.md`
+- `blocker.md`
+- `handoff.md`
+
+### Required `status.json` fields
+
+- `task_id`
+- `lane`
+- `state`
+- `owner`
+- `branch`
+- `write_scope`
+- `depends_on`
+- `started_at`
+- `updated_at`
+- `commands_run`
+- `changed_files`
+- `acceptance_status`
+- `blocker_code`
+- `blocker_summary`
+- `next_action`
+
+A task is done only after the parent integrates the lane and reruns the relevant proof wall.
+
+## Blocked-State Protocol
+
+Blocked state is explicit and durable.
+
+### Standard blocker codes
+
+- `PLAN_DRIFT`
+- `QUALIFIED_IDENTITY_DRIFT`
+- `EXAMPLE_FILENAME_DRIFT`
+- `DOC_SENTENCE_DRIFT`
+- `TS_BOUNDARY_EXPANSION`
+- `WRITE_SCOPE_VIOLATION`
+- `OWNERSHIP_CONFLICT`
+- `PROOF_WALL_FAIL`
+- `MERGE_RISK`
+- `ENVIRONMENT_MISSING`
+- `UNEXPECTED_WRITE_SCOPE`
+
+### What a lane writes when blocked
+
+If a lane cannot complete within scope, it must write all of the following before stopping:
+
+- `tasks/<TASK_ID>/blocker.md`
+- `tasks/<TASK_ID>/status.json`
+- `tasks/<TASK_ID>/commands.txt`
+- `tasks/<TASK_ID>/changed_files.txt`
+- `tasks/<TASK_ID>/handoff.md`
+
+### Required `blocker.md` contents
+
+- `Blocker code`
+- `Observed command`
+- `Observed failure`
+- `Why this is blocked within current scope`
+- `Whether existing partial edits are safe to keep`
+- `Requested parent action`
+- `Whether the lane recommends fix-forward, bounce-back, or re-scope`
+
+### Required blocked `status.json` updates
+
+When blocked, the lane sets at minimum:
+
+- `state: "blocked"`
+- `acceptance_status: "not_met"`
+- `blocker_code`
+- `blocker_summary`
+- `next_action`
+
+## Kickoff Sequence
+
+### `M61-00` — baseline snapshot
+
+Parent only, `PRIMARY_ROOT`.
+
+Run:
+
+```bash
+git -C "$PRIMARY_ROOT" branch --show-current
+git -C "$PRIMARY_ROOT" rev-parse --short HEAD
+git -C "$PRIMARY_ROOT" status --short
+```
+
+Write:
 
 - `baseline.json`
-- `authority-freeze.json`
-- `authority-snapshot/PLAN.md`
-- `authority-snapshot/ORCH_PLAN.md`
-- `run-state.json`
-- `tasks.json`
-- `queue.json`
-- `session-log.md`
-- `proof-floor/verify-decision-contract.stdout.json`
-- `proof-floor/corpus-decision.stdout.json`
-- `proof-floor/cargo-test-p-xtask.stdout.txt`
-- `proof-floor/summary.json`
-- `acceptance.md`
-- `blocked.json`
-- `closeout.md`
+- `validation/kickoff/branch.txt`
+- `validation/kickoff/head.txt`
+- `validation/kickoff/status.txt`
 
-Required contents:
+Acceptance:
 
-- `baseline.json`
-  - live branch name
-  - live HEAD SHA
-  - dirty-state summary
-  - whether `PLAN.md` is already modified
-  - whether `ORCH_PLAN.md` was empty at start
-  - whether any `.runs/m40*` path already exists
-  - current proof-input paths under `.semantic-family-artifacts`
-- `authority-freeze.json`
-  - exact authority paths
-  - closed implementation surface snapshot
-  - frozen M40 truth summary copied from `PLAN.md`
-  - explicit statement that no extraction is authorized
-  - explicit statement that only one successful closeout verdict is allowed
-- `authority-snapshot/PLAN.md`
-  - exact `PLAN.md` snapshot used for the run
-- `authority-snapshot/ORCH_PLAN.md`
-  - exact accepted `ORCH_PLAN.md` snapshot for the run
-- `run-state.json`
-  - active gate id
-  - gate status
-  - current phase
-  - whether the run is `active`, `blocked`, or `complete`
-  - latest accepted verdict if any
-- `tasks.json`
-  - canonical ordered tasks and gates with status fields
-  - owner for each item
-  - required outputs for each item
-- `queue.json`
-  - execution order
-  - current item pointer
-  - completed item list
-  - blocked item if the run stops
-- `session-log.md`
-  - ordered operator notes with timestamps
-  - baseline capture note
-  - authority-freeze note
-  - any stop or restart rationale
-- `proof-floor/verify-decision-contract.stdout.json`
-  - raw stdout capture from `cargo xtask family verify-decision-contract --format json`
-- `proof-floor/corpus-decision.stdout.json`
-  - raw stdout capture from `cargo xtask family corpus-decision --format json`
-- `proof-floor/cargo-test-p-xtask.stdout.txt`
-  - raw stdout capture from `cargo test -p xtask`
-- `proof-floor/summary.json`
-  - pass/fail summary for the three commands
-  - extracted high-signal fields needed for closeout
-- `acceptance.md`
-  - parent acceptance against M40 content and scope requirements
-  - exact statement that `ORCH_PLAN.md` is accepted or blocked
-- `blocked.json`
-  - failing gate id
-  - failing condition
-  - blocking evidence paths
-  - whether restart is required
-- `closeout.md`
-  - final outcome
-  - exact allowed verdict line
-  - proof-floor summary reference
-  - explicit statement that no implementation or extraction was authorized
+- kickoff records the real dirty tree
+- kickoff records `feat/m40-plus`
+- kickoff records the authority commit `96d2ee9`
+- kickoff records the two historical shape refs as non-authoritative
 
-## Queue And Task Model
+### `M61-01` — contract freeze
 
-The executed session must use one canonical ordered queue. No item may be skipped silently.
+Parent only, `PRIMARY_ROOT`.
 
-Canonical ordered entries:
+Freeze the following exact values into `contract-freeze.json`:
 
-| Order | ID | Kind | Owner | Required outputs on success |
-|---|---|---|---|---|
-| 1 | `gate-m40-00-baseline-capture` | gate | parent | `baseline.json`, `session-log.md`, `run-state.json` |
-| 2 | `gate-m40-10-authority-freeze` | gate | parent | `authority-freeze.json`, `authority-snapshot/PLAN.md`, `authority-snapshot/ORCH_PLAN.md`, `run-state.json` |
-| 3 | `task-m40-20-author-orch-plan` | task | parent | updated `ORCH_PLAN.md`, `tasks.json`, `session-log.md` |
-| 4 | `gate-m40-30-self-audit` | gate | parent | updated `acceptance.md`, `authority-snapshot/ORCH_PLAN.md`, `run-state.json` |
-| 5 | `gate-m40-40-proof-floor` | gate | parent, optional read-only support from `S1` | `proof-floor/*`, `proof-floor/summary.json`, `run-state.json` |
-| 6 | `gate-m40-50-final-closeout` | gate | parent | `closeout.md`, final `acceptance.md`, final `run-state.json`, final `queue.json` |
+- frozen sentence:
+  - `M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.`
+- maintained example seed:
+  - `examples/shared-spec/units/pricing/calculate_total.unit.spec`
+  - `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
+  - `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
+- preserved direct-root proof owners:
+  - `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+  - `examples/crosslib-app/units/pricing/calculate_total.unit.spec`
+- frozen supported family set from `PLAN.md`
+- frozen lane ownership
+- frozen verification commands
+- frozen parent critical path
+- prohibited stale M26/M60 mechanics
 
-Queue rules:
+Write:
 
-- `tasks.json` is the canonical task catalog.
-- `queue.json` is the canonical ordered execution pointer.
-- Gates are mandatory checkpoints. A later item cannot pass until all earlier items are complete.
-- If a gate fails, `queue.json` must mark the run blocked at that item and `blocked.json` must be written before stopping.
-- The parent is the only actor allowed to advance `queue.json`.
+- `contract-freeze.json`
+- `file-ownership.json`
+- initial `tasks.json`
 
-## Parent vs Delegated Ownership
+Acceptance:
 
-### Parent-only
+- every later lane operates from one frozen M61 contract file instead of re-reading `PLAN.md` ad hoc
+- the exact docs sentence and exact maintained example paths are durable before worker launch
 
-The parent alone may:
+### `M61-02` — create worktrees
 
-- interpret `PLAN.md`
-- decide the M40 run root naming
-- author and edit `ORCH_PLAN.md`
-- declare the candidate seam, local-only exclusions, and trigger table operationalized
-- decide whether to rerun the proof floor during execution
-- inspect final diff scope
-- declare acceptance or stop the run
+Parent only, `PRIMARY_ROOT`.
 
-### Delegation allowed only as read-only support
+Create:
 
-Optional support work may:
+- `WS-INT`
+- `WS-A`
 
-- inspect prior `.runs/` naming patterns
-- confirm current branch, head, and dirty-state facts
-- capture proof-floor outputs for parent review
+Delay:
 
-Restrictions:
+- `WS-B`
+- `WS-C`
+- `WS-D`
 
-- no delegate edits any repo file
-- no delegate writes `.runs/m40_authority_artifact_freeze/**`
-- no delegate updates orchestration truth
-- no delegate reinterprets triggers independently of the parent
-- no delegate claims the run is complete
+until their dependencies are integrated.
 
-### Optional support lane `S1`
+Write:
 
-Mission:
+- `worktrees.json`
+- `session-log.md` kickoff entry
 
-- provide read-only support while the parent authors `ORCH_PLAN.md`
+Acceptance:
 
-Allowed work:
+- no worker starts from stale pre-A state
 
-- capture prior `.runs/` naming facts
-- capture proof-floor command outputs for parent review
-- summarize only the fields the parent asks for
+## Parent Critical Path
 
-Forbidden work:
+This path is fixed and parent-owned.
 
-- editing any repo file
-- writing canonical run-state
-- changing queue order
-- declaring any gate passed
-- declaring acceptance
+1. `M61-00` baseline snapshot in `PRIMARY_ROOT`
+2. `M61-01` contract freeze in `PRIMARY_ROOT`
+3. `task/m61-a1-validator-contract` in `WS-A`
+4. `task/m61-a2-qualified-collector` in `WS-A`
+5. integrate `WS-A` into `WS-INT`
+6. create and launch `WS-B` and `WS-C` from the post-A `WS-INT` state
+7. integrate `WS-B` into `WS-INT` as soon as it is green
+8. create and launch `WS-D` from the post-B `WS-INT` state
+9. integrate `WS-C` and `WS-D`
+10. run `task/m61-e-final-proof-wall` in `WS-INT`
+11. run `task/m61-f-final-branch-handoff` in `PRIMARY_ROOT`
 
-Return contract:
-
-- findings return to the parent only
-- the parent decides whether to write those findings into canonical run-state
-
-### Honest concurrency rule
-
-M40 uses no editing lanes because there is no honest way to parallelize authorship of one authority artifact without manufacturing coordination work. `S1` is the only allowed parallel support lane, and it owns no files.
+Nothing skips step 4. Step 1 and Step 2 from `PLAN.md` stay serialized inside Lane A.
 
 ## Workstream Plan
 
-### WS0 - Baseline Capture
+### WS-A (`ws/m61-core`) — parent agent only, sequential
 
-Task and gate IDs:
+This is the contract wall. Keep it local.
 
-- `gate-m40-00-baseline-capture`
+#### `task/m61-a1-validator-contract`
 
-Purpose:
+- Own only:
+  - `spec-core/src/validator.rs`
+- Do:
+  - replace the local-vs-portability root split with one recursive qualified closure validation flow
+  - resolve deps in owner-library context
+  - admit the existing eligible TypeScript root families from `PLAN.md`
+  - explicitly include `function.wrapper.pipeline.normalized_required_arg.v1` in TypeScript root/member handling
+  - keep helper, wrapper, normalized-wrapper, and chain3 dep contracts explicit and separate
+  - preserve failure-before-Bun behavior for:
+    - unsupported semantic review
+    - wrong family
+    - wrong dep order
+    - missing `body.typescript`
+    - unresolved dep
+    - molecule TypeScript rejection
+- Do not own:
+  - `spec-core/src/typescript_backend.rs`
+  - `spec-core/src/semantic_review.rs`
+  - examples
+  - docs
+  - CLI tests
 
-- capture the live branch, head, and dirty-state context
-- confirm `PLAN.md` is present and authoritative
-- confirm `ORCH_PLAN.md` is the only intended owned output
-- record whether any pre-existing local edits overlap authored authority
-
-Expected findings for the current draft session:
-
-- branch is `feat/corpus-expansion`
-- `PLAN.md` is already modified and must be treated as current authority, not as M40-owned scope
-- `ORCH_PLAN.md` starts empty and is safe to author
-- no existing `.runs/m40*` naming collision is present
-
-Gate `M40-G0` passes only if the parent can state the live baseline without ambiguity.
-
-Required artifacts on pass:
-
-- write `baseline.json`
-- append baseline note to `session-log.md`
-- set `run-state.json` to active gate `gate-m40-10-authority-freeze`
-- mark `gate-m40-00-baseline-capture` complete in `tasks.json` and `queue.json`
-
-Stop conditions:
-
-- `PLAN.md` missing
-- another actor is concurrently editing `ORCH_PLAN.md`
-- baseline facts contradict the intended milestone identity
-
-Blocked-state behavior:
-
-- write `blocked.json` with gate id `gate-m40-00-baseline-capture`
-- set `run-state.json` to `blocked`
-- stop without editing `ORCH_PLAN.md`
-
-### WS1 - Authority Extraction From `PLAN.md`
-
-Task and gate IDs:
-
-- `gate-m40-10-authority-freeze`
-
-Purpose:
-
-- extract the exact M40 truths that must survive into the orchestration contract
-- freeze the non-goals so the session cannot slide into implementation
-- freeze the allowed M41 outcomes and trigger table
-
-The parent must carry forward all of the following without drift:
-
-- M40 is an authority artifact, not an implementation milestone
-- extraction is not yet authorized
-- the seam is limited to the three candidate elements already named in `PLAN.md`
-- the five local-only surfaces stay local even after any future seam move
-- the only future authorization triggers are:
-  - one additional non-`recommend.rs` and non-`promotion_artifacts.rs` in-tree consumer beyond `verify.rs` for local extraction
-  - one non-`xtask` crate consumer for cross-crate extraction
-  - one second durable non-promotable wedge for a multi-wedge layer
-  - one real external consumer for public fingerprint fields
-- the only allowed M41 outcomes are:
-  - local implementation milestone
-  - cross-crate implementation milestone
-  - further evidence milestone
-  - no new milestone
-
-Gate `M40-G1` passes only if the frozen boundary written into `ORCH_PLAN.md` exactly matches `PLAN.md` on these points.
-
-Stop conditions:
-
-- any trigger is widened
-- any local-only surface is pulled into the seam
-- any new next-milestone type is introduced
-
-Required artifacts on pass:
-
-- write `authority-freeze.json`
-- snapshot `PLAN.md` to `authority-snapshot/PLAN.md`
-- snapshot current `ORCH_PLAN.md` state to `authority-snapshot/ORCH_PLAN.md`
-- update `run-state.json` to active item `task-m40-20-author-orch-plan`
-- mark `gate-m40-10-authority-freeze` complete in `tasks.json` and `queue.json`
-
-Blocked-state behavior:
-
-- write `blocked.json` with gate id `gate-m40-10-authority-freeze`
-- append mismatch reason to `session-log.md`
-- set `run-state.json` to `blocked`
-- stop
-
-### WS1A - Optional Read-Only Support
-
-Task ID:
-
-- `task-m40-s1-read-only-support`
-
-Purpose:
-
-- let `S1` gather proof-floor captures or naming facts in parallel while the parent authors `ORCH_PLAN.md`
-
-Rules:
-
-- `S1` writes no canonical file
-- `S1` owns no gate
-- `S1` may be omitted entirely with no effect on M40 validity
-
-### WS2 - Author `ORCH_PLAN.md`
-
-Task and gate IDs:
-
-- `task-m40-20-author-orch-plan`
-- `gate-m40-30-self-audit`
-
-Purpose:
-
-- write a fresh execution-grade orchestration contract for M40
-- make stopping rules, validation, ownership, and future implementation orchestration explicit
-
-Required sections in the authored file:
-
-- title and current-run metadata
-- summary
-- hard guards
-- authored-artifact vs run-artifact distinction
-- branch/worktree/concurrency layout
-- parent vs delegated ownership
-- workstream plan
-- context-control rules
-- tests and acceptance
-- assumptions
-
-Required M40-specific content:
-
-- explicit statement that M40 itself is sequential
-- explicit statement that no hidden extraction work is authorized
-- explicit statement that `verify.rs` is real consumer pressure but still insufficient alone
-- explicit statement that no command output authorizes extraction yet
-- explicit future implementation parallelization section aligned to `PLAN.md`:
-  - Lane A first
-  - Lane B and Lane C in parallel after A
-  - Lane D after B
-
-Task `task-m40-20-author-orch-plan` completes when:
-
-- `ORCH_PLAN.md` reflects the current M40 execution contract
-- the file includes the closed surface, canonical run-state, queue model, and gate-writing discipline
-- `tasks.json` and `queue.json` show the authoring task complete
-
-Gate `M40-G2` passes only if the resulting file can guide the full M40 session without relying on unstated operator judgment.
-
-Required artifacts on pass:
-
-- update `authority-snapshot/ORCH_PLAN.md` to the accepted draft
-- append acceptance rationale to `acceptance.md`
-- update `run-state.json` to active gate `gate-m40-40-proof-floor`
-- mark `gate-m40-30-self-audit` complete in `tasks.json` and `queue.json`
-
-Stop conditions:
-
-- the draft reads like notes instead of an execution contract
-- the draft implies code changes are part of M40
-- the future parallelization section is omitted or contradicts `PLAN.md`
-
-Blocked-state behavior:
-
-- write `blocked.json` with gate id `gate-m40-30-self-audit`
-- append failure rationale to `acceptance.md`
-- set `run-state.json` to `blocked`
-- stop
-
-### WS3 - Validation And Completion
-
-Task and gate IDs:
-
-- `gate-m40-40-proof-floor`
-- `gate-m40-50-final-closeout`
-
-Purpose:
-
-- confirm the finished orchestration artifact still sits on the live proof floor
-- confirm authored scope stayed honest
-- stop without widening work
-
-Required proof floor for a fully executed M40 session:
+Run:
 
 ```bash
-cargo xtask family verify-decision-contract --format json
-cargo xtask family corpus-decision --format json
-cargo test -p xtask
+cargo test -p spec-core validator
 ```
 
-Expected interpretation:
+Acceptance for `task/m61-a1-validator-contract`:
 
-- `verify-decision-contract` must still pass the bounded decision contract
-- `corpus-decision` must still report planning-follow-on truth, not extraction authorization
-- `cargo test -p xtask` must stay green
+- supported local-only roots still validate
+- supported direct cross-library roots still validate
+- supported recursive shared roots now validate
+- normalized-required-arg wrappers are legal in the TypeScript lane when their existing M60 family contract is satisfied
+- preserved red paths still fail before Bun
+- `spec-core/src/validator.rs` is the only edited file in this task
 
-Required scope checks:
+#### `task/m61-a2-qualified-collector`
 
-- inspect the final diff for `ORCH_PLAN.md`
-- confirm `PLAN.md` was not edited by this session
-- confirm no code or derived artifact path was touched
+- Own only:
+  - `spec-core/src/typescript_backend.rs`
+- Do:
+  - replace raw-id collector lookup structures with qualified lookup structures
+  - replace dep resolution with owner-library-qualified resolution
+  - collapse local recursion and direct portability collection into one qualified recursive collector story
+  - dedupe reachable members by qualified identity, not raw id
+  - keep emitted file paths and import rendering stable unless the qualified collector proves a necessary change
+  - keep normalized-required-arg wrapper support truthful in the collector path
+- Do not own:
+  - `spec-core/src/validator.rs`
+  - `spec-core/src/semantic_review.rs`
+  - examples
+  - docs
+  - CLI tests
 
-Gate `M40-G3` passes only if:
+Run:
 
-- `ORCH_PLAN.md` is complete
-- proof-floor commands are green when run
-- no unauthorized file changes exist
+```bash
+cargo test -p spec-core validator
+cargo test -p spec-core typescript_backend
+```
 
-Required artifacts on proof-floor pass:
+Acceptance for `task/m61-a2-qualified-collector`:
 
-- write `proof-floor/verify-decision-contract.stdout.json`
-- write `proof-floor/corpus-decision.stdout.json`
-- write `proof-floor/cargo-test-p-xtask.stdout.txt`
-- write `proof-floor/summary.json`
-- update `run-state.json` to active gate `gate-m40-50-final-closeout`
-- mark `gate-m40-40-proof-floor` complete in `tasks.json` and `queue.json`
+- local/shared same-id units do not collide in closure membership
+- recursive shared closure includes only reachable qualified members
+- unrelated loaded units remain excluded from the emitted TS tree
+- validator and collector no longer disagree about dep-edge ownership
+- `spec-core/src/typescript_backend.rs` is the only edited file in this task
 
-Stop conditions:
+#### `task/m61-a-integrate-core`
 
-- proof-floor output contradicts `PLAN.md`
-- any source file outside `ORCH_PLAN.md` changes due to this session
-- closeout text implies M40 implemented the seam
+Parent only, `WS-INT`.
 
-Blocked-state behavior:
+Integrate `ws/m61-core` into `ws/m61-int`.
 
-- write `blocked.json` with gate id `gate-m40-40-proof-floor`
-- record failing proof path in `session-log.md`
-- set `run-state.json` to `blocked`
-- stop
+After integration:
 
-Final closeout gate requirements:
+- refresh `worktrees.json`
+- refresh `tasks.json`
+- create `WS-B` and `WS-C` from the integrated `ws/m61-int`
+- write a session-log entry that the qualified-identity model, exact supported family set, exact docs sentence, and exact maintained example filenames are frozen
 
-- `closeout.md` must contain exactly one successful verdict line:
-  - `authority artifact complete`
-- any other outcome is blocked or incomplete
-- `closeout.md` must also state:
-  - proof floor stayed within planning authority
-  - no implementation or extraction was authorized
-  - no file outside the closed implementation surface was edited
+Acceptance:
 
-Required artifacts on final closeout pass:
+- every downstream lane inherits the frozen post-A contract directly
 
-- write final `closeout.md`
-- finalize `acceptance.md`
-- set `run-state.json` to `complete`
-- mark `gate-m40-50-final-closeout` complete in `tasks.json` and `queue.json`
+### WS-B (`ws/m61-examples`) — worker 1
 
-Blocked-state behavior:
+This lane owns the maintained recursive shared example and its derived artifacts.
 
-- write `blocked.json` with gate id `gate-m40-50-final-closeout`
-- set `run-state.json` to `blocked`
-- stop without any alternate success wording
+#### `task/m61-b-maintained-example`
 
-## Future Implementation Parallelization
+- Own only:
+  - `examples/shared-spec/units/pricing/calculate_total.unit.spec`
+  - `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
+  - `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
+  - derived outputs refreshed by the normal spec loop under:
+    - `examples/shared-spec/src/generated/**`
+    - `examples/crosslib-app/src/generated/**`
+    - `examples/shared-spec/units/**/*.spec.passport.json`
+    - `examples/crosslib-app/units/**/*.spec.passport.json`
+- Do:
+  - promote the recursive shared CLI prototype into the maintained example tree
+  - keep the direct-root proof owners intact:
+    - `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
+    - `examples/crosslib-app/units/pricing/calculate_total.unit.spec`
+  - keep the maintained example filenames exactly as frozen
+  - follow the spec source-truth loop:
+    - validate source specs
+    - build the affected example trees
+    - test the exact edited source specs
+  - verify the maintained example also works through the TypeScript target lane after branching from the post-A state
+- Do not own:
+  - `examples/crosslib-app/README.md`
+  - docs
+  - `spec-core/src/**`
+  - `spec-cli/tests/cli.rs`
 
-This section is inert during M40 itself. It exists only so the first later-authorized implementation milestone starts from a frozen, honest split.
+Run:
 
-Trigger prerequisite:
+```bash
+cargo run -p spec-cli -- validate examples/shared-spec/units/pricing/calculate_total.unit.spec --format json
+cargo run -p spec-cli -- validate examples/shared-spec/units/pricing/base_nested_chain3.unit.spec --format json
+cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --format json
 
-- one of the `PLAN.md` authorization triggers must become true first
+cargo run -p spec-cli -- build examples/shared-spec/units --output examples/shared-spec/src/generated
+cargo run -p spec-cli -- build examples/crosslib-app/units --output examples/crosslib-app/src/generated
 
-Future lane contract:
+cargo run -p spec-cli -- test examples/shared-spec/units/pricing/calculate_total.unit.spec
+cargo run -p spec-cli -- test examples/shared-spec/units/pricing/base_nested_chain3.unit.spec
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec
 
-| Lane | Purpose | Ownership | Starts when | Blocks |
-|---|---|---|---|---|
-| `Lane A` | freeze local seam interface | lane-owned implementation surface only | first | everything else |
-| `Lane B` | rewire in-tree consumers | lane-owned in-tree consumer surfaces only | after `Lane A` | `Lane D` |
-| `Lane C` | docs and closeout sync | docs and closeout artifacts only | after `Lane A` | none beyond parent merge discipline |
-| `Lane D` | command-surface adoption | command-facing local surfaces only | after `Lane B` | final verification |
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
+```
 
-Execution order:
+Acceptance for `task/m61-b-maintained-example`:
 
-1. launch `Lane A`
-2. after `Lane A` lands, launch `Lane B` and `Lane C` in parallel
-3. after `Lane B` lands, run `Lane D`
+- the three maintained example source files exist at the exact frozen paths
+- the direct-root proof owners remain intact
+- the normal spec loop succeeds for the edited source specs
+- the maintained recursive shared root passes under `--target-language typescript`
+- no example filename drift occurs
+- only Lane B surfaces changed
 
-Frozen rule:
+### WS-C (`ws/m61-docs`) — worker 2
 
-- `Lane A` must freeze the local seam interface before any consumer rewiring or command-surface adoption starts.
-- The parent remains the sole integrator, stale-lane invalidator, and final verifier.
-- If the authority basis changes before that future milestone begins, every pre-launched lane is stale and must be recreated from the new freeze point.
-- No future lane may edit the authority artifact that authorizes its milestone after freeze.
+This lane is narrow and can run in parallel with Lane B after the post-A freeze.
 
-Non-negotiable boundaries for the future milestone:
+#### `task/m61-c-doc-sync`
 
-- `xtask` CLI wiring stays local
-- artifact latest-path lookup stays local
-- command-specific JSON rendering stays local
-- proof-wall file locations stay local
-- milestone-specific closeout wording stays local
+- Own only:
+  - `README.md`
+  - `TODOS.md`
+  - `CHANGELOG.md`
+  - `examples/crosslib-app/README.md`
+- Do:
+  - use the frozen M61 sentence verbatim
+  - add the new recursive example command to `examples/crosslib-app/README.md`
+  - narrow the TODO backlog exactly as `PLAN.md` requires
+  - keep broader TypeScript oceans explicitly deferred:
+    - arbitrary authored 4+ direct-dep topology parity
+    - new semantic-family promotion
+    - molecule TypeScript execution
+    - seam-kind TypeScript execution
+- Do not own:
+  - example `.unit.spec` files
+  - generated example artifacts
+  - `spec-core/src/**`
+  - `spec-cli/tests/**`
+
+Run:
+
+```bash
+SENTENCE='M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.'
+
+rg -nF "$SENTENCE" README.md TODOS.md CHANGELOG.md examples/crosslib-app/README.md
+rg -n "arbitrary authored 4\\+ direct-dep topology parity|new semantic-family promotion|molecule TypeScript execution|seam-kind TypeScript execution" TODOS.md
+rg -n "checkout_nested_chain3\\.unit\\.spec" examples/crosslib-app/README.md
+```
+
+Acceptance for `task/m61-c-doc-sync`:
+
+- all four docs surfaces use the same frozen sentence
+- `examples/crosslib-app/README.md` references the exact maintained recursive example filename
+- `TODOS.md` narrows the backlog exactly as `PLAN.md` requires
+- no docs imply arbitrary graph parity
+
+### WS-D (`ws/m61-cli`) — worker 3, starts after WS-B is integrated
+
+Do not create this lane until Lane B is integrated into `ws/m61-int`.
+
+#### `task/m61-d-cli-regressions`
+
+- Own only:
+  - `spec-cli/tests/cli.rs`
+- Do:
+  - convert the current recursive shared nested chain3 rejection helper into the new green path
+  - keep preserved red-path coverage for:
+    - unsupported shared recursive member
+    - wrong dep order inside a shared recursive member
+    - missing `body.typescript` on a shared recursive member
+    - unresolved shared dep
+    - molecule TypeScript rejection
+  - add at least one regression that proves owner-library-qualified resolution when local and shared same-id units coexist
+  - keep the Bun-precheck rejection wall consistent
+- Do not own:
+  - `spec-core/src/**`
+  - example source specs
+  - generated example artifacts
+  - docs
+
+Run:
+
+```bash
+cargo test -p spec-cli --test cli
+```
+
+Acceptance for `task/m61-d-cli-regressions`:
+
+- the new recursive shared green path passes
+- preserved red paths still fail before Bun
+- same-id owner-library-qualified lookup is covered
+- only `spec-cli/tests/cli.rs` changed in this lane
+
+## WS-INT (`ws/m61-int`) — parent agent only
+
+### `task/m61-int-integrate-b-and-launch-d`
+
+Integrate:
+
+- `ws/m61-examples`
+
+Policy:
+
+- if Lane B changed any frozen example filename, reject the lane and bounce it back
+- do not launch Lane D until Lane B is integrated into `ws/m61-int`
+
+After integration:
+
+- refresh `worktrees.json`
+- refresh `tasks.json`
+- create `WS-D` from the updated `ws/m61-int`
+- launch Lane D with the integrated example state
+
+### `task/m61-int-integrate-c-and-d`
+
+Integrate:
+
+- `ws/m61-docs`
+- `ws/m61-cli`
+
+Policy:
+
+- if docs wording disagrees with the frozen sentence, docs lose and are bounced back
+- if CLI expectations require code or example changes not already present in `ws/m61-int`, stop and bounce back rather than hot-fixing in integration
+- do not resolve semantic disagreements creatively in `WS-INT`
+
+### `task/m61-e-final-proof-wall`
+
+Parent only, `WS-INT`.
+
+Run the full proof wall in this order:
+
+```bash
+cargo fmt --all
+
+cargo test -p spec-core validator
+cargo test -p spec-core typescript_backend
+cargo test -p spec-cli --test cli
+
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
+cargo run -p spec-cli -- status examples/crosslib-app/units --target-language typescript --format json
+```
+
+Write:
+
+- `validation/final/*`
+- `final-proof-manifest.json`
+- `acceptance-ledger.md`
+
+Acceptance for `task/m61-e-final-proof-wall`:
+
+- validator tests are green
+- TypeScript backend tests are green
+- CLI regressions are green
+- the maintained recursive shared root passes under Bun
+- status remains target-specific and additive
+- preserved red-path cases still reject before Bun
+- formatting changes, if any, are limited to the integrated tree and are parent-owned
+
+### `task/m61-f-final-branch-handoff`
+
+Parent only, `PRIMARY_ROOT`.
+
+After `ws/m61-int` is green:
+
+- fast-forward `feat/m40-plus` to `ws/m61-int` if possible
+- if fast-forward is not possible, stop and inspect manually rather than performing a creative merge in the authority root
+
+Suggested command:
+
+```bash
+git -C "$PRIMARY_ROOT" merge --ff-only ws/m61-int
+```
+
+Acceptance:
+
+- the primary execution branch now contains the integrated, proven M61 result
+
+## Integration Order
+
+This order is fixed.
+
+1. kickoff and freeze on `PRIMARY_ROOT`
+2. `WS-A`
+3. integrate `WS-A` into `WS-INT`
+4. create and launch `WS-B` + `WS-C` in parallel
+5. integrate `WS-B`
+6. create and launch `WS-D`
+7. integrate `WS-C`
+8. integrate `WS-D`
+9. run final proof wall in `WS-INT`
+10. fast-forward `feat/m40-plus`
+
+If `WS-C` finishes before `WS-B`, keep it submitted and do not let it redefine the frozen sentence or filenames while waiting.
+
+## Conflict Policies
+
+- Lane A is not parallelizable internally. `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs` define one contract and stay sequential.
+- Lane B and Lane D both touch the cross-library example story. Lane D must branch from the post-B integrated state.
+- Lane C must not invent filenames, commands, or sentence variants. It consumes the freeze literally.
+- `spec-core/src/semantic_review.rs` is a global no-touch surface.
+- `spec-cli/src/commands.rs` is a global no-touch surface.
+- `PLAN.md` is a global no-touch surface during execution.
+- If a worker finds it needs another lane’s file, it stops and files a blocker instead of expanding its scope.
+- The parent is the only integrator onto `ws/m61-int` and `feat/m40-plus`.
 
 ## Context-Control Rules
 
-- Primary source set for M40 authoring is intentionally small:
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md`
-  - `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`
-  - top-level `.runs/` names for naming realism
-  - prior `ORCH_PLAN.md` files only as structure bars, not as content templates
-  - current branch/head/status facts
-- The parent should not reopen deep code inspection to write this plan. Code paths named in `PLAN.md` are boundary anchors, not M40 edit targets.
-- Do not chase optional ideas that are not required for M40 authority:
-  - no crate design
-  - no module API sketching
-  - no implementation TODO expansion
-  - no cleanup inventory
-- If proof-floor commands are rerun and reveal drift, stop and record the drift explicitly. Do not rewrite the orchestration file to hide it.
-- If another actor changes `PLAN.md` before closeout, the parent must reread it and confirm whether the drafted `ORCH_PLAN.md` is still valid.
-- Keep all acceptance reasoning tied to explicit files and commands. Narrative confidence is not a substitute for the proof floor.
+- Parent keeps only four live artifacts in working context:
+  - `PLAN.md`
+  - `ORCH_PLAN.md`
+  - `tasks.json`
+  - the latest integration diff summary
+- Each worker prompt contains only:
+  - its owned file set
+  - the exact relevant `PLAN.md` excerpt
+  - frozen values from `contract-freeze.json`
+  - required commands
+  - forbidden touch surfaces
+  - the worker model assumption `GPT-5.4 / high`
+- Each worker must return only:
+  - changed files
+  - commands run and exit codes
+  - blockers or unresolved assumptions
+- Workers do not write `RUN_ROOT` except through their assigned task sentinels.
+- The parent reviews summaries plus narrow diffs only.
+- Close each worker immediately after merge.
+- Use completion sentinels or long waits, not tight polling.
 
 ## Tests And Acceptance
 
-### Mandatory content acceptance
-
-- `ORCH_PLAN.md` exists and is non-empty.
-- It operationalizes the current `PLAN.md` rather than restating an older milestone.
-- It explicitly distinguishes authored authority from run artifacts.
-- It preserves the exact candidate seam and exact local-only exclusions.
-- It preserves the exact trigger table and exact M41 outcomes from `PLAN.md`.
-- It states that M40 itself is sequential and parent-owned.
-- It includes the future A then B+C then D split for the first later-authorized implementation milestone.
-- It defines canonical run-state files and an ordered queue model.
-
-### Mandatory scope acceptance
-
-- This session edits only `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/ORCH_PLAN.md`.
-- `PLAN.md` remains untouched by this session even if already dirty.
-- No source or derived artifact file outside `ORCH_PLAN.md` changes.
-
-### Mandatory proof-floor acceptance for a fully executed session
-
-- `cargo xtask family verify-decision-contract --format json`
-- `cargo xtask family corpus-decision --format json`
-- `cargo test -p xtask`
-
-All three are green, and none of their outputs imply extraction authorization.
-
-### Completion conditions
-
-M40 is complete only when all of the following are true:
-
-1. `ORCH_PLAN.md` is execution-grade and specific to M40.
-2. The artifact makes it obvious when to stop and what would invalidate the run.
-3. The artifact does not authorize implementation work.
-4. The proof floor remains the same planning-authority floor described in `PLAN.md`.
-5. `closeout.md` ends with the only allowed successful verdict: `authority artifact complete`.
-6. The parent can end the session without any open "might as well" follow-on edits.
+- Core contract
+  - one recursive qualified validator path exists
+  - one qualified recursive collector path exists
+  - normalized-required-arg wrapper support is truthful in the TypeScript lane
+  - `spec-core/src/semantic_review.rs` remains unchanged
+- Maintained example truth
+  - the exact three maintained example source files exist
+  - the normal spec loop is green for the edited source specs
+  - the direct-root proof owners remain intact
+  - the recursive shared root passes under `--target-language typescript`
+- Docs
+  - README, TODOS, CHANGELOG, and `examples/crosslib-app/README.md` all use the same frozen sentence
+  - docs do not imply arbitrary graph parity
+  - `TODOS.md` preserves the remaining TypeScript oceans exactly as bounded by `PLAN.md`
+- CLI truth
+  - `spec-cli/tests/cli.rs` contains the green recursive shared path
+  - preserved red-path regressions still fail before Bun
+  - same-id owner-library resolution is covered
+- Final proof wall
+  - all final commands pass in sequence
+  - the maintained recursive shared root is green
+  - status remains additive and target-specific
+  - no stale M26/M60 commands were needed anywhere in the run
 
 ## Assumptions
 
-- The current contents of `PLAN.md` are intentional and authoritative for M40 even though `PLAN.md` is already locally modified.
-- `feat/corpus-expansion` remains the live branch for this work.
-- `de096096e6093eaea771af1f6b95f208ca3e7e44` is the live head at draft time only; later execution should recapture baseline rather than rely on this line.
-- `ORCH_PLAN.md` began empty for this session.
-- No existing `.runs/m40*` artifact root currently constrains the naming chosen here.
-- No live command output currently authorizes extraction unless a fresh proof-floor run explicitly proves otherwise.
+- No human approval gate is required because `PLAN.md` does not define one for M61.
+- `cargo run -p spec-cli -- test <unit.unit.spec> --target-language typescript` remains the correct public proof surface for this milestone.
+- Generated outputs under `src/generated/**` and `*.spec.passport.json` are derived surfaces refreshed by the normal spec loop when Lane B edits source specs.
+- The current dirty tree, if any, is preserved throughout execution.
+- `spec-cli/tests/cli.rs` is the only CLI regression file Lane D needs. If the repo’s actual regression truth is split elsewhere, that is a blocker and not an implicit scope expansion.

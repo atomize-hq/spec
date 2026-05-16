@@ -1,7 +1,7 @@
 {
   "spec_version": "0.3.0",
   "id": "pricing/apply_tax",
-  "intent": "Add sales tax to a subtotal using a rate expressed as a decimal fraction.",
+  "intent": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.",
   "contract": {
     "inputs": [
       {
@@ -27,7 +27,7 @@
       "expect": "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
     }
   ],
-  "generated_at": "2026-05-04T13:19:58Z",
+  "generated_at": "2026-05-16T04:17:49Z",
   "source_file": "examples/ecommerce/units/pricing/apply_tax.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -37,18 +37,66 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-27T11:49:48Z",
+    "observed_at": "2026-05-10T23:07:06Z",
     "provenance": {
-      "git_commit_sha": "40267ec7e35053973e8e6961c5f066b2a0ad5bb1"
+      "git_commit_sha": "467ebd3bd1c2de1d932cddc47cca2ff08c93a1a5"
     }
   },
   "freshness_anchor": {
-    "authored_truth_digest": "sha256:19a30b6b1ee73d55eecf7f437a11751901157ccc41cb98a3512d5080d504dce8"
+    "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe"
   },
   "freshness": {
-    "authored_truth_digest": "sha256:19a30b6b1ee73d55eecf7f437a11751901157ccc41cb98a3512d5080d504dce8",
+    "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe",
     "authored_truth_status": "fresh",
     "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "basic_tax",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-10T23:07:06Z",
+        "provenance": {
+          "git_commit_sha": "467ebd3bd1c2de1d932cddc47cca2ff08c93a1a5"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    },
+    "typescript": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "basic_tax",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-12T23:51:29Z",
+        "provenance": {
+          "git_commit_sha": "3553c2735d1078f8d3ff9c2d93a8b44363246754"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:b6f56171141034c8a8455d90fca10ee1d2ca923c4a7210f1bdc939e538d8e1ac"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:b6f56171141034c8a8455d90fca10ee1d2ca923c4a7210f1bdc939e538d8e1ac",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
   },
   "semantic_review": {
     "verdict": "aligned",
@@ -58,7 +106,7 @@
     "authored_surfaces": [
       {
         "path": "intent.why",
-        "summary": "Add sales tax to a subtotal using a rate expressed as a decimal fraction."
+        "summary": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total."
       },
       {
         "path": "contract.inputs",
@@ -75,6 +123,10 @@
       {
         "path": "deps",
         "summary": "1 declared dep(s)"
+      },
+      {
+        "path": "body.typescript",
+        "summary": "authored TypeScript body present"
       }
     ],
     "executable_surfaces": [

@@ -15,13 +15,10 @@ use crate::AUTHORED_SPEC_VERSION;
 use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
 use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
 use crate::passport::{
-    ArtifactProvenance, Passport, PassportMarker, PassportMarkerId, PassportProjectionContext,
-    apply_projected_passport_truth, passport_path_for, project_passport_truth_with_context,
+    ArtifactProvenance, Passport, PassportProjectionContext, apply_projected_passport_truth,
+    passport_path_for, project_passport_truth_with_context, refresh_passport_target_proofs,
 };
 use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
-use crate::portability::{
-    PortabilityMarkerKind, PortabilityProjectionContext, project_portability_truth,
-};
 use crate::semantic_review::{SemanticProjectionMode, SemanticReviewContext};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
@@ -204,15 +201,11 @@ fn enrich_passports_for_export(
         specs_by_id,
         semantic_projection_mode: SemanticProjectionMode::Preserve,
     };
-    let portability_context = PortabilityProjectionContext {
-        molecule_tests,
-        molecule_evidence_by_id,
-        specs_by_id,
-    };
     passports
         .into_iter()
         .map(|mut passport| {
             if let Some(spec) = specs.iter().find(|spec| spec.spec.id == passport.id) {
+                refresh_passport_target_proofs(&mut passport, spec);
                 let projected_truth = project_passport_truth_with_context(
                     spec,
                     Some(&passport),
@@ -220,42 +213,10 @@ fn enrich_passports_for_export(
                     &semantic_review_context,
                 );
                 apply_projected_passport_truth(&mut passport, projected_truth);
-                apply_projected_portability_truth(&mut passport, spec, &portability_context);
             }
             passport
         })
         .collect()
-}
-
-fn apply_projected_portability_truth(
-    passport: &mut Passport,
-    spec: &LoadedSpec,
-    context: &PortabilityProjectionContext<'_>,
-) {
-    let portability = project_portability_truth(spec, Some(passport), context);
-    passport.markers = portability_markers_for_passport(portability.as_ref());
-    passport.escape_hatch_gate = portability.and_then(|projection| projection.escape_hatch_gate);
-}
-
-fn portability_markers_for_passport(
-    portability: Option<&crate::portability::PortabilityProjection>,
-) -> Option<Vec<PassportMarker>> {
-    let markers = portability?
-        .markers
-        .iter()
-        .map(|marker| PassportMarker {
-            id: match marker.kind {
-                PortabilityMarkerKind::DomainLowering
-                | PortabilityMarkerKind::ProofHelperLowering => {
-                    PassportMarkerId::MethodLoweringRustBody
-                }
-                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
-            },
-            path: marker.path.clone(),
-        })
-        .collect::<Vec<_>>();
-
-    (!markers.is_empty()).then_some(markers)
 }
 
 fn load_molecule_evidence_for_tests(
@@ -336,11 +297,6 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
         specs_by_id: &specs_by_id,
         semantic_projection_mode: SemanticProjectionMode::Preserve,
     };
-    let portability_context = PortabilityProjectionContext {
-        molecule_tests: empty_molecule_tests,
-        molecule_evidence_by_id: &empty_molecule_evidence,
-        specs_by_id: &specs_by_id,
-    };
     let passports = passports
         .into_iter()
         .map(|mut passport| {
@@ -352,7 +308,6 @@ pub fn load_passports_for_specs(specs: &[LoadedSpec]) -> (Vec<Passport>, Vec<Exp
                     &semantic_review_context,
                 );
                 apply_projected_passport_truth(&mut passport, projected_truth);
-                apply_projected_portability_truth(&mut passport, spec, &portability_context);
             }
             passport
         })
@@ -909,11 +864,150 @@ mod tests {
         }
     }
 
-    fn loaded_discount_policy_sum_seam(dir: &TempDir) -> LoadedSpec {
+    fn loaded_supported_discount_strategy_sum_seam(
+        dir: &TempDir,
+        rel_path: &str,
+        id: &str,
+    ) -> LoadedSpec {
+        let source_path = dir.path().join(rel_path);
+        if let Some(parent) = source_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&source_path, "placeholder").unwrap();
+
+        LoadedSpec {
+            source: SpecSource {
+                file_path: source_path.display().to_string(),
+                id: id.to_string(),
+            },
+            spec: SpecStruct {
+                id: id.to_string(),
+                kind: "sum".to_string(),
+                intent: Intent {
+                    why: "Represent discount strategies that cap fixed discounts at the subtotal."
+                        .to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![
+                    LocalTest {
+                        id: "variant_none".to_string(),
+                        expect: "true".to_string(),
+                    },
+                    LocalTest {
+                        id: "variant_percentage".to_string(),
+                        expect: "true".to_string(),
+                    },
+                    LocalTest {
+                        id: "variant_fixed_amount".to_string(),
+                        expect: "true".to_string(),
+                    },
+                    LocalTest {
+                        id: "behavior_fixed_amount_capped".to_string(),
+                        expect: "true".to_string(),
+                    },
+                ],
+                links: None,
+                spec_version: Some("9.9.9".to_string()),
+                extensions: UnitExtensions {
+                    data: None,
+                    sum: Some(AuthoredSumShape {
+                        variants: IndexMap::from([
+                            ("none".to_string(), AuthoredSumVariant::default()),
+                            (
+                                "percentage".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([(
+                                        "rate".to_string(),
+                                        AuthoredField {
+                                            type_: "Decimal".to_string(),
+                                        },
+                                    )]),
+                                },
+                            ),
+                            (
+                                "fixed_amount".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([(
+                                        "amount".to_string(),
+                                        AuthoredField {
+                                            type_: "Decimal".to_string(),
+                                        },
+                                    )]),
+                                },
+                            ),
+                        ]),
+                    }),
+                    constructors: vec![],
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "discount_amount".to_string(),
+                            intent: Intent {
+                                why: "Return the capped discount amount to subtract from the subtotal."
+                                    .to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: Some(IndexMap::from([(
+                                    "subtotal".to_string(),
+                                    "Decimal".to_string(),
+                                )])),
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: r#"{
+    match self {
+        Self::None => Decimal::ZERO,
+        Self::Percentage { rate } => subtotal * *rate,
+        Self::FixedAmount { amount } => (*amount).min(subtotal),
+    }
+}"#
+                                    .to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "discounted_subtotal".to_string(),
+                            intent: Intent {
+                                why: "Return the subtotal after applying the selected discount strategy."
+                                    .to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: Some(IndexMap::from([(
+                                    "subtotal".to_string(),
+                                    "Decimal".to_string(),
+                                )])),
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: r#"{
+    subtotal - self.discount_amount(subtotal)
+}"#
+                                    .to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: None,
+                },
+            },
+        }
+    }
+
+    fn loaded_discount_strategy_sum_seam(dir: &TempDir) -> LoadedSpec {
         let mut spec = loaded_sum_seam(
             dir,
-            "units/pricing/discount_policy.unit.spec",
-            "pricing/discount_policy",
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
         );
         spec.spec.intent.why =
             "Represent mutually exclusive discount strategies for checkout pricing.".to_string();
@@ -935,7 +1029,7 @@ mod tests {
     fn covering_molecule_test(dir: &TempDir, id: &str, cover_id: &str) -> LoadedMoleculeTest {
         let source_path = dir
             .path()
-            .join("units/pricing/discount_policy_checkout_flow.test.spec");
+            .join("units/pricing/discount_strategy_checkout_flow.test.spec");
         if let Some(parent) = source_path.parent() {
             fs::create_dir_all(parent).unwrap();
         }
@@ -1312,13 +1406,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let original_spec = loaded_sum_seam(
             &dir,
-            "units/pricing/discount_policy.unit.spec",
-            "pricing/discount_policy",
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
         );
         let mut changed_spec = loaded_spec(
             &dir,
-            "units/pricing/discount_policy.unit.spec",
-            "pricing/discount_policy",
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
             vec![],
         );
         changed_spec.spec.intent.why = "Apply a function-style discount".to_string();
@@ -1353,12 +1447,12 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let spec = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
         let supported_review =
             evaluate_semantic_review(&spec).expect("supported data review expected after Lane A");
-        assert_eq!(supported_review.compatibility_key, "data.checkout_quote.v1");
+        assert_eq!(supported_review.compatibility_key, "data.pricing_quote.v1");
 
         let mut passport = build_passport_with_evidence(
             &spec,
@@ -1388,6 +1482,188 @@ mod tests {
         assert!(warnings.is_empty());
         assert_eq!(passports.len(), 1);
         assert_eq!(passports[0].semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn load_passports_for_specs_preserve_drops_removed_legacy_seam_compatibility_keys() {
+        let dir = TempDir::new().unwrap();
+        let sum_spec = loaded_supported_discount_strategy_sum_seam(
+            &dir,
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
+        );
+        let data_spec = loaded_data_seam(
+            &dir,
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
+        );
+
+        let mut sum_review =
+            evaluate_semantic_review(&sum_spec).expect("supported sum review expected");
+        assert_eq!(sum_review.compatibility_key, "sum.discount_strategy.v1");
+        sum_review.compatibility_key = "sum.discount_policy.v1".to_string();
+
+        let mut data_review =
+            evaluate_semantic_review(&data_spec).expect("supported data review expected");
+        assert_eq!(data_review.compatibility_key, "data.pricing_quote.v1");
+        data_review.compatibility_key = "data.checkout_quote.v1".to_string();
+
+        let mut sum_passport = build_passport_with_evidence(
+            &sum_spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: sum_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&sum_spec),
+        );
+        sum_passport.semantic_review = Some(sum_review.clone());
+        write_passport(&sum_passport, Path::new(&sum_spec.source.file_path)).unwrap();
+
+        let mut data_passport = build_passport_with_evidence(
+            &data_spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: data_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&data_spec),
+        );
+        data_passport.semantic_review = Some(data_review.clone());
+        write_passport(&data_passport, Path::new(&data_spec.source.file_path)).unwrap();
+
+        let (passports, warnings) = load_passports_for_specs(&[sum_spec, data_spec]);
+
+        assert!(warnings.is_empty());
+        assert_eq!(passports.len(), 2);
+        assert!(
+            passports
+                .iter()
+                .find(|passport| passport.id == "pricing/discount_strategy")
+                .expect("sum passport")
+                .semantic_review
+                .is_none()
+        );
+        assert!(
+            passports
+                .iter()
+                .find(|passport| passport.id == "pricing/pricing_quote")
+                .expect("data passport")
+                .semantic_review
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn load_passports_for_specs_preserve_drops_cross_family_legacy_seam_compatibility_keys() {
+        let dir = TempDir::new().unwrap();
+        let sum_spec = loaded_supported_discount_strategy_sum_seam(
+            &dir,
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
+        );
+        let data_spec = loaded_data_seam(
+            &dir,
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
+        );
+
+        let mut sum_review =
+            evaluate_semantic_review(&sum_spec).expect("supported sum review expected");
+        sum_review.compatibility_key = "data.checkout_quote.v1".to_string();
+
+        let mut data_review =
+            evaluate_semantic_review(&data_spec).expect("supported data review expected");
+        data_review.compatibility_key = "sum.discount_policy.v1".to_string();
+
+        let mut sum_passport = build_passport_with_evidence(
+            &sum_spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: sum_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&sum_spec),
+        );
+        sum_passport.semantic_review = Some(sum_review);
+        write_passport(&sum_passport, Path::new(&sum_spec.source.file_path)).unwrap();
+
+        let mut data_passport = build_passport_with_evidence(
+            &data_spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: data_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&data_spec),
+        );
+        data_passport.semantic_review = Some(data_review);
+        write_passport(&data_passport, Path::new(&data_spec.source.file_path)).unwrap();
+
+        let (passports, warnings) = load_passports_for_specs(&[sum_spec, data_spec]);
+
+        assert!(warnings.is_empty());
+        assert_eq!(passports.len(), 2);
+        assert!(
+            passports
+                .iter()
+                .find(|passport| passport.id == "pricing/discount_strategy")
+                .expect("sum passport")
+                .semantic_review
+                .is_none()
+        );
+        assert!(
+            passports
+                .iter()
+                .find(|passport| passport.id == "pricing/pricing_quote")
+                .expect("data passport")
+                .semantic_review
+                .is_none()
+        );
     }
 
     #[test]
@@ -1801,8 +2077,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let spec = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
 
         let passport = build_passport_with_evidence(
@@ -1833,6 +2109,154 @@ mod tests {
         assert!(bundle.warnings.is_empty());
         assert_eq!(bundle.passports.len(), 1);
         assert!(bundle.passports[0].semantic_review.is_none());
+    }
+
+    #[test]
+    fn build_export_bundle_does_not_invent_supported_sum_semantic_review_on_preserve() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_supported_discount_strategy_sum_seam(
+            &dir,
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
+        );
+
+        let passport = build_passport_with_evidence(
+            &spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&spec),
+        );
+        assert!(passport.semantic_review.is_none());
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let bundle = build_export_bundle(&[spec], &[], "2026-04-23T01:00:00Z", None);
+
+        assert!(bundle.warnings.is_empty());
+        assert_eq!(bundle.passports.len(), 1);
+        assert!(bundle.passports[0].semantic_review.is_none());
+    }
+
+    #[test]
+    fn refresh_projection_reads_legacy_seam_reviews_back_canonically() {
+        let dir = TempDir::new().unwrap();
+        let sum_spec = loaded_supported_discount_strategy_sum_seam(
+            &dir,
+            "units/pricing/discount_strategy.unit.spec",
+            "pricing/discount_strategy",
+        );
+        let data_spec = loaded_data_seam(
+            &dir,
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
+        );
+        let specs_by_id = HashMap::from([
+            (sum_spec.spec.id.clone(), sum_spec.clone()),
+            (data_spec.spec.id.clone(), data_spec.clone()),
+        ]);
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+        let empty_molecule_tests: &[LoadedMoleculeTest] = &[];
+        let empty_molecule_evidence: HashMap<String, MoleculeEvidence> = HashMap::new();
+        let projection_context = PassportProjectionContext {
+            molecule_tests: empty_molecule_tests,
+            molecule_evidence_by_id: &empty_molecule_evidence,
+            specs_by_id: &specs_by_id,
+            semantic_projection_mode: SemanticProjectionMode::Refresh,
+        };
+
+        let mut sum_review =
+            evaluate_semantic_review(&sum_spec).expect("supported sum review expected");
+        sum_review.compatibility_key = "sum.discount_policy.v1".to_string();
+        let mut sum_passport = build_passport_with_evidence(
+            &sum_spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: sum_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&sum_spec),
+        );
+        sum_passport.semantic_review = Some(sum_review);
+
+        let mut data_review =
+            evaluate_semantic_review(&data_spec).expect("supported data review expected");
+        data_review.compatibility_key = "data.checkout_quote.v1".to_string();
+        let mut data_passport = build_passport_with_evidence(
+            &data_spec,
+            "2026-04-23T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: data_spec
+                    .spec
+                    .local_tests
+                    .iter()
+                    .map(|local_test| PassportTestResult {
+                        id: local_test.id.clone(),
+                        status: "pass".to_string(),
+                        reason: None,
+                    })
+                    .collect(),
+                observed_at: "2026-04-23T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            crate::passport::compute_contract_hash(&data_spec),
+        );
+        data_passport.semantic_review = Some(data_review);
+
+        let sum_projected = project_passport_truth_with_context(
+            &sum_spec,
+            Some(&sum_passport),
+            &projection_context,
+            &semantic_review_context,
+        );
+        apply_projected_passport_truth(&mut sum_passport, sum_projected);
+
+        let data_projected = project_passport_truth_with_context(
+            &data_spec,
+            Some(&data_passport),
+            &projection_context,
+            &semantic_review_context,
+        );
+        apply_projected_passport_truth(&mut data_passport, data_projected);
+
+        assert_eq!(
+            sum_passport
+                .semantic_review
+                .as_ref()
+                .map(|review| review.compatibility_key.as_str()),
+            Some("sum.discount_strategy.v1")
+        );
+        assert_eq!(
+            data_passport
+                .semantic_review
+                .as_ref()
+                .map(|review| review.compatibility_key.as_str()),
+            Some("data.pricing_quote.v1")
+        );
     }
 
     #[test]
@@ -1920,11 +2344,11 @@ mod tests {
     #[test]
     fn export_recomputes_escape_hatch_gate_from_current_evidence() {
         let dir = TempDir::new().unwrap();
-        let spec = loaded_discount_policy_sum_seam(&dir);
+        let spec = loaded_discount_strategy_sum_seam(&dir);
         let molecule_test = covering_molecule_test(
             &dir,
-            "pricing/discount_policy_checkout_flow",
-            "pricing/discount_policy",
+            "pricing/discount_strategy_checkout_flow",
+            "pricing/discount_strategy",
         );
         let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
 
@@ -2004,7 +2428,7 @@ mod tests {
     #[test]
     fn export_reprojects_stale_branch_proof_coverage_from_current_surfaces() {
         let dir = TempDir::new().unwrap();
-        let original_spec = loaded_discount_policy_sum_seam(&dir);
+        let original_spec = loaded_discount_strategy_sum_seam(&dir);
         let mut changed_spec = original_spec.clone();
         changed_spec.spec.intent.why = "Represent revised discount policy".to_string();
 
@@ -2119,8 +2543,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let seam = loaded_data_seam(
             &dir,
-            "units/pricing/checkout_quote.unit.spec",
-            "pricing/checkout_quote",
+            "units/pricing/pricing_quote.unit.spec",
+            "pricing/pricing_quote",
         );
 
         let bundle = build_export_bundle(&[seam], &[], "2026-04-19T00:00:00Z", None);
@@ -2142,11 +2566,11 @@ mod tests {
             bundle.graph.edges,
             vec![
                 ExportEdge::Dep {
-                    from: ExportDepRef::local("pricing/checkout_quote"),
+                    from: ExportDepRef::local("pricing/pricing_quote"),
                     to: ExportDepRef::local("pricing/apply_discount"),
                 },
                 ExportEdge::Dep {
-                    from: ExportDepRef::local("pricing/checkout_quote"),
+                    from: ExportDepRef::local("pricing/pricing_quote"),
                     to: ExportDepRef::local("pricing/apply_tax"),
                 },
             ]

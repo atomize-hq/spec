@@ -10,20 +10,16 @@ contract:
   returns: Decimal
   invariants:
     - output >= subtotal
-deps:
-  - money/round
 imports:
   - rust_decimal::Decimal
 body:
   rust: |
     {
-        let taxed = subtotal - subtotal * rate;
-        round(taxed.max(Decimal::ZERO))
+        subtotal - subtotal * rate
     }
   typescript: |
     {
-        const taxed = subtotal - subtotal * rate;
-        return round(taxed >= Decimal.ZERO ? taxed : Decimal.ZERO);
+        return subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));
     }
 local_tests:
   - id: apply_tax_drift_drift

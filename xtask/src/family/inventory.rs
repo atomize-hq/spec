@@ -14,10 +14,14 @@ use std::process::Command;
 
 const INVENTORY_SCHEMA_VERSION: u64 = 1;
 const TERMINAL_UNSUPPORTED_CATCH_ALL: &str = "unsupported.function.v1";
-const RUNTIME_ROUTE_MARKERS: [(&str, &str); 4] = [
+const RUNTIME_ROUTE_MARKERS: [(&str, &str); 6] = [
     (
         "WrapperPipelineChain3",
         "function.wrapper.pipeline.chain3.v1",
+    ),
+    (
+        "WrapperPipelineNormalizedRequiredArg",
+        "function.wrapper.pipeline.normalized_required_arg.v1",
     ),
     ("WrapperPipeline", "function.wrapper.pipeline.v1"),
     (
@@ -28,9 +32,13 @@ const RUNTIME_ROUTE_MARKERS: [(&str, &str); 4] = [
         "ArithmeticLeafMonotoneUp",
         "function.arithmetic_leaf.monotone_up.v1",
     ),
+    (
+        "HelperIdentityPassthrough",
+        "function.helper.identity_passthrough.v1",
+    ),
 ];
 
-const INVENTORY_METADATA: [InventoryFamilyMetadata; 4] = [
+const INVENTORY_METADATA: [InventoryFamilyMetadata; 6] = [
     InventoryFamilyMetadata {
         family: "function.wrapper.pipeline.chain3.v1",
         canonical_seed_paths: &[
@@ -40,17 +48,20 @@ const INVENTORY_METADATA: [InventoryFamilyMetadata; 4] = [
         supporting_packet_paths: &["semantic-families/function.wrapper.pipeline.chain3.v1"],
     },
     InventoryFamilyMetadata {
+        family: "function.wrapper.pipeline.normalized_required_arg.v1",
+        canonical_seed_paths: &[
+            "examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec",
+        ],
+        existing_wedge_paths: &["spec-core/src/semantic_review.rs"],
+        supporting_packet_paths: &[
+            "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1",
+        ],
+    },
+    InventoryFamilyMetadata {
         family: "function.wrapper.pipeline.v1",
         canonical_seed_paths: &["examples/ecommerce/units/pricing/calculate_total.unit.spec"],
         existing_wedge_paths: &["spec-cli/tests/m14_regressions.rs"],
-        supporting_packet_paths: &[
-            "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_discount_leaf_aligned.unit.spec",
-            "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_tax_leaf_aligned.unit.spec",
-            "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned/units/pricing/pricing_total_wrapper_aligned.unit.spec",
-            "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/drift/units/pricing/pricing_total_wrapper_drift.unit.spec",
-            "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/under_specified/units/pricing/pricing_total_wrapper_under_specified.unit.spec",
-            "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec",
-        ],
+        supporting_packet_paths: &["semantic-families/function.wrapper.pipeline.v1"],
     },
     InventoryFamilyMetadata {
         family: "function.arithmetic_leaf.monotone_down_nonnegative.v1",
@@ -65,6 +76,15 @@ const INVENTORY_METADATA: [InventoryFamilyMetadata; 4] = [
         canonical_seed_paths: &["examples/ecommerce/units/pricing/apply_tax.unit.spec"],
         existing_wedge_paths: &["spec-cli/tests/m14_regressions.rs"],
         supporting_packet_paths: &["semantic-families/function.arithmetic_leaf.monotone_up.v1"],
+    },
+    InventoryFamilyMetadata {
+        family: "function.helper.identity_passthrough.v1",
+        canonical_seed_paths: &[
+            "examples/ecommerce/units/money/round.unit.spec",
+            "examples/shared-spec/units/money/round.unit.spec",
+        ],
+        existing_wedge_paths: &["xtask/src/family/analysis_core/helper_surface.rs"],
+        supporting_packet_paths: &[],
     },
 ];
 

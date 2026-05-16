@@ -16,6 +16,7 @@ Key routing rules:
 - Visual audit, design polish → invoke design-review
 - Architecture review → invoke plan-eng-review
 - "What should be next", "what next", next milestone, next wedge → invoke next-milestone
+- Full planning loop from a prior implementation closeout, or "run all planning steps" → invoke planning-session
 
 ## spec Agent Workflow
 
@@ -34,10 +35,10 @@ Use this workflow when editing `.unit.spec` files or responding to validation an
 - Unsupported near-miss function shapes remain additive-only and health-neutral under `unsupported.function.v1`. Only `spec test` refreshes semantic review truth. `spec build`, `spec generate`, `spec status`, and `spec export` only project stored truth. Fresh unsupported function proof is preserved on read-side surfaces such as `spec status` and `spec export`; stale unsupported function proof is dropped there while freshness/stale health remains.
 - For seam kinds, keep shared semantics inside the seam container and nested behaviors: `kind: data` uses `data.fields`, `constructors`, and `methods`; `kind: sum` uses `sum.variants` and `methods`. Do not author top-level `contract`, `deps`, `imports`, or `body.rust` for seam kinds.
 - Canonical M14 wedge loop:
-  `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json`
+  `cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_strategy.unit.spec --format json`
   `cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated`
-  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy.unit.spec`
-  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec`
+  `cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec`
   `cargo run -p spec-cli -- status examples/ecommerce --format json`
   Single-file `spec test` uses an isolated internal output tree; do not pass `--output`.
 

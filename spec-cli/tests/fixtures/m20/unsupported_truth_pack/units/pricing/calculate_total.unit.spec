@@ -18,7 +18,7 @@ imports:
 body:
   rust: |
     {
-        apply_tax(apply_discount(subtotal, discount_rate), tax_rate.max(Decimal::ZERO))
+        apply_tax(apply_discount(subtotal, discount_rate), tax_rate + Decimal::ZERO)
     }
 local_tests:
   - id: combined_flow

@@ -305,11 +305,11 @@ mod tests {
 
         LoadedSpec {
             source: SpecSource {
-                file_path: "units/pricing/discount_policy.unit.spec".to_string(),
-                id: "pricing/discount_policy".to_string(),
+                file_path: "units/pricing/discount_strategy.unit.spec".to_string(),
+                id: "pricing/discount_strategy".to_string(),
             },
             spec: SpecStruct {
-                id: "pricing/discount_policy".to_string(),
+                id: "pricing/discount_strategy".to_string(),
                 kind: "sum".to_string(),
                 intent: Intent {
                     why: "Represent discount policy".to_string(),
@@ -350,11 +350,11 @@ mod tests {
     ) -> LoadedSpec {
         LoadedSpec {
             source: SpecSource {
-                file_path: "units/pricing/checkout_quote.unit.spec".to_string(),
-                id: "pricing/checkout_quote".to_string(),
+                file_path: "units/pricing/pricing_quote.unit.spec".to_string(),
+                id: "pricing/pricing_quote".to_string(),
             },
             spec: SpecStruct {
-                id: "pricing/checkout_quote".to_string(),
+                id: "pricing/pricing_quote".to_string(),
                 kind: "data".to_string(),
                 intent: Intent {
                     why: "Quote a checkout total from subtotal plus discount and tax rates."
@@ -535,15 +535,15 @@ mod tests {
     fn covering_test() -> LoadedMoleculeTest {
         LoadedMoleculeTest {
             source: MoleculeTestSource {
-                file_path: "units/pricing/discount_policy_checkout_flow.test.spec".to_string(),
-                id: "pricing/discount_policy_checkout_flow".to_string(),
+                file_path: "units/pricing/discount_strategy_checkout_flow.test.spec".to_string(),
+                id: "pricing/discount_strategy_checkout_flow".to_string(),
             },
             test: MoleculeTestStruct {
-                id: "pricing/discount_policy_checkout_flow".to_string(),
+                id: "pricing/discount_strategy_checkout_flow".to_string(),
                 intent: Intent {
                     why: "cover the seam".to_string(),
                 },
-                covers: vec!["pricing/discount_policy".to_string()],
+                covers: vec!["pricing/discount_strategy".to_string()],
                 imports: None,
                 body: Body {
                     rust: "{ assert!(true); }".to_string(),

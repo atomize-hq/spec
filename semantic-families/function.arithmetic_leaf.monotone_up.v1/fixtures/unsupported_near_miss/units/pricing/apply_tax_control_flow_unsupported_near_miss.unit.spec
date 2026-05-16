@@ -10,8 +10,6 @@ contract:
   returns: Decimal
   invariants:
     - output >= subtotal
-deps:
-  - money/round
 imports:
   - rust_decimal::Decimal
 body:
@@ -21,16 +19,15 @@ body:
         if rate == Decimal::ZERO {
             subtotal
         } else {
-            round(taxed)
+            taxed
         }
     }
   typescript: |
     {
-        const taxed = subtotal + subtotal * rate;
-        if (rate === Decimal.ZERO) {
+        if (rate.eq(Decimal.new(0n, 0n))) {
             return subtotal;
         }
-        return round(taxed);
+        return subtotal.add(subtotal.mul(rate));
     }
 local_tests:
   - id: apply_tax_control_flow_unsupported_near_miss_unsupported_near_miss

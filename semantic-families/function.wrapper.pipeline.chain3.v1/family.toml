@@ -7,9 +7,11 @@ summary = "Straight-line three-call wrapper pipeline over supported function dep
 [routing]
 precedence = 1
 must_not_shadow = [
+  "function.wrapper.pipeline.normalized_required_arg.v1",
   "function.wrapper.pipeline.v1",
   "function.arithmetic_leaf.monotone_down_nonnegative.v1",
   "function.arithmetic_leaf.monotone_up.v1",
+  "function.helper.identity_passthrough.v1",
 ]
 
 [shape]

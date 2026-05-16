@@ -24,7 +24,7 @@
       "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
     }
   ],
-  "generated_at": "2026-05-02T15:59:27Z",
+  "generated_at": "2026-05-15T19:06:26Z",
   "source_file": "examples/crosslib-app/units/pricing/apply_discount.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -46,6 +46,31 @@
     "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36",
     "authored_truth_status": "fresh",
     "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "happy_path",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-02T15:59:29Z",
+        "provenance": {
+          "git_commit_sha": "8577dfb5a64daaa02be54501f97131fb25459f72"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
   },
   "semantic_review": {
     "verdict": "aligned",

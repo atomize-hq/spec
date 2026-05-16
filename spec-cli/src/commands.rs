@@ -9,7 +9,8 @@ use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
 use spec_core::export::{build_export_bundle, build_plan_export_bundle};
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
-    generate_unit_code_with_options, safe_output_path_with_project_root, write_generated_file,
+    generate_typescript_output_tree, generate_unit_code_with_options,
+    safe_output_path_with_project_root, write_generated_file,
 };
 use spec_core::graph::{ProjectedUnitRef, project_unit, top_level_deps};
 use spec_core::loader::{
@@ -26,21 +27,21 @@ use spec_core::molecule_evidence::{
 };
 use spec_core::normalizer::normalize_unit;
 use spec_core::passport::{
-    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker, PassportMarkerId,
-    PassportProjectionContext, PassportTestResult, apply_projected_passport_truth,
-    build_passport_preserving_proof_state_with_context, build_passport_with_evidence,
-    compute_contract_hash, ensure_gitignore_entry, project_passport_truth_with_context,
-    read_passport, rfc3339_now, write_passport,
+    ArtifactProvenance, PassportEvidence, PassportFreshness, PassportMarker,
+    PassportProjectionContext, PassportProofCoverage, PassportTestResult,
+    apply_projected_passport_truth, build_passport_preserving_proof_state_with_context,
+    build_passport_with_evidence, compute_contract_hash, ensure_gitignore_entry,
+    passport_evidence_for_target, passport_target_proof, project_passport_truth_with_context,
+    read_passport, resolve_passport_freshness_for_target, rfc3339_now, target_proof_for_write,
+    write_passport,
 };
 use spec_core::pipeline::{
-    ParsedCargoTestResult, Verbosity, cargo_available, output_module_prefix,
-    parse_cargo_test_output, run_cargo_build, run_cargo_test, workspace_root_for, zero_tests_ran,
+    ParsedCargoTestResult, Verbosity, bun_available, cargo_available, output_module_prefix,
+    parse_cargo_test_output, run_bun_build, run_bun_test, run_cargo_build, run_cargo_test,
+    workspace_root_for, zero_tests_ran,
 };
 use spec_core::plan::{
     PlanAcceptanceClosure, PlanAcceptanceClosureStatus, PlanComputedImpact, build_plan_report,
-};
-use spec_core::portability::{
-    PortabilityMarkerKind, PortabilityProjectionContext, project_portability_truth,
 };
 use spec_core::semantic_review::{
     SemanticHealthEffect, SemanticProjectionMode, SemanticReview, SemanticReviewContext,
@@ -50,12 +51,13 @@ use spec_core::semantic_review::{
 use spec_core::types::ResolvedSpec;
 use spec_core::types::{
     DepRef, LoadedMoleculeTest, LoadedSpec, NormalizedUnit, QualifiedUnitRef, ResolvedMoleculeTest,
+    TargetLanguage,
 };
 use spec_core::validator::{
     QualifiedLoadedSpec, ValidationOptions, check_spec_versions, validate_full_with_options,
     validate_molecule_test_covers, validate_molecule_test_semantic,
     validate_no_duplicate_molecule_test_ids, validate_no_duplicate_qualified_ids,
-    validate_qualified_deps_exist_with_options,
+    validate_qualified_deps_exist_with_options, validate_typescript_molecule_target,
 };
 #[cfg(test)]
 use spec_core::validator::{validate_deps_exist_with_options, validate_no_duplicate_ids};
@@ -130,6 +132,10 @@ pub enum OutputFormat {
     Json,
 }
 
+fn parse_target_language(value: &str) -> std::result::Result<TargetLanguage, String> {
+    value.parse()
+}
+
 #[derive(Serialize)]
 struct JsonValidateResponse {
     schema_version: u8,
@@ -176,6 +182,8 @@ struct JsonStatusEntry {
     freshness: Option<PassportFreshness>,
     #[serde(skip_serializing_if = "Option::is_none")]
     markers: Option<Vec<PassportMarker>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proof_coverage: Option<Vec<PassportProofCoverage>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     escape_hatch_gate: Option<EscapeHatchGate>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -418,24 +426,32 @@ impl Command {
     pub fn run(self) -> Result<()> {
         match self {
             Self::Validate(args) => validate_command(&args.path, args.no_strict, args.format),
-            Self::Status(args) => status_command(&args.path, args.format),
-            Self::Generate(args) => generate_command(&args.path, args.output.as_deref()),
+            Self::Status(args) => {
+                status_command_for_target(&args.path, args.format, args.target_language)
+            }
+            Self::Generate(args) => generate_command_for_target(
+                &args.path,
+                args.output.as_deref(),
+                args.target_language,
+            ),
             Self::Build(args) => {
                 let context = load_workspace_context(&args.path)?;
-                build_command(
+                build_command_for_target(
                     &args.path,
                     args.output.as_deref(),
                     args.crate_root.as_deref(),
                     &context,
+                    args.target_language,
                 )
             }
             Self::Test(args) => {
                 let context = load_workspace_context(&args.path)?;
-                test_command(
+                test_command_for_target(
                     &args.path,
                     args.output.as_deref(),
                     args.crate_root.as_deref(),
                     &context,
+                    args.target_language,
                 )
             }
             Self::Export(args) => export_command(&args.path, args.output.as_deref(), args.format),
@@ -489,6 +505,8 @@ pub struct StatusArgs {
     pub path: PathBuf,
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+    #[arg(long, default_value_t = TargetLanguage::Rust, value_parser = parse_target_language)]
+    pub target_language: TargetLanguage,
 }
 
 #[derive(Args, Debug)]
@@ -500,6 +518,8 @@ pub struct GenerateArgs {
         help = "Output directory for generated Rust files (default: {crate_root}/src/generated)"
     )]
     pub output: Option<PathBuf>,
+    #[arg(long, default_value_t = TargetLanguage::Rust, value_parser = parse_target_language)]
+    pub target_language: TargetLanguage,
 }
 
 #[derive(Args, Debug)]
@@ -516,6 +536,8 @@ pub struct BuildArgs {
         help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)"
     )]
     pub crate_root: Option<PathBuf>,
+    #[arg(long, default_value_t = TargetLanguage::Rust, value_parser = parse_target_language)]
+    pub target_language: TargetLanguage,
 }
 
 #[derive(Args, Debug)]
@@ -535,6 +557,8 @@ pub struct TestArgs {
         help = "Path to the Cargo project root (overrides spec.toml and ancestor walk)"
     )]
     pub crate_root: Option<PathBuf>,
+    #[arg(long, default_value_t = TargetLanguage::Rust, value_parser = parse_target_language)]
+    pub target_language: TargetLanguage,
 }
 
 #[derive(Args, Debug)]
@@ -740,7 +764,7 @@ struct HealthStatus {
 
 fn compute_health_status(
     errors: &[JsonErrorEntry],
-    passport: Option<&spec_core::passport::Passport>,
+    evidence: Option<&PassportEvidence>,
     freshness: Option<&PassportFreshness>,
 ) -> HealthStatus {
     // 1. invalid
@@ -752,7 +776,6 @@ fn compute_health_status(
         };
     }
 
-    let evidence = passport.and_then(|p| p.evidence.as_ref());
     let evidence_at = evidence.map(|e| e.observed_at.clone());
 
     // 2. failing — build failure or any test fail (requires evidence; failing beats stale)
@@ -782,9 +805,7 @@ fn compute_health_status(
     }
 
     // 3. stale — authored/backend freshness changed since last test.
-    if passport.is_some()
-        && let Some(reason) = freshness_stale_reason(freshness)
-    {
+    if let Some(reason) = freshness_stale_reason(freshness) {
         return HealthStatus {
             status: HealthState::Stale,
             reason: Some(reason),
@@ -864,27 +885,6 @@ fn apply_semantic_review_to_health(
             health
         }
     }
-}
-
-fn passport_markers_from_portability(
-    portability: Option<&spec_core::portability::PortabilityProjection>,
-) -> Option<Vec<PassportMarker>> {
-    let markers = portability?
-        .markers
-        .iter()
-        .map(|marker| PassportMarker {
-            id: match marker.kind {
-                PortabilityMarkerKind::DomainLowering
-                | PortabilityMarkerKind::ProofHelperLowering => {
-                    PassportMarkerId::MethodLoweringRustBody
-                }
-                PortabilityMarkerKind::BackendRustDerives => PassportMarkerId::BackendRustDerives,
-            },
-            path: marker.path.clone(),
-        })
-        .collect::<Vec<_>>();
-
-    (!markers.is_empty()).then_some(markers)
 }
 
 fn freshness_stale_reason(freshness: Option<&PassportFreshness>) -> Option<String> {
@@ -1129,7 +1129,11 @@ fn zero_roots_status_entry(path: &Path) -> JsonErrorEntry {
     }
 }
 
-fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
+fn status_command_for_target(
+    path: &Path,
+    format: OutputFormat,
+    target_language: TargetLanguage,
+) -> Result<()> {
     let root_context = match load_workspace_context(path) {
         Ok(context) => context,
         Err(err) if matches!(format, OutputFormat::Json) => {
@@ -1301,11 +1305,6 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
             specs_by_id: &specs_by_id,
             semantic_projection_mode: SemanticProjectionMode::Preserve,
         };
-        let portability_context = PortabilityProjectionContext {
-            molecule_tests: &molecule_report.tests,
-            molecule_evidence_by_id: &molecule_evidence_by_id,
-            specs_by_id: &specs_by_id,
-        };
 
         let mut units = Vec::with_capacity(validation_specs.root_specs.len());
         for spec in &validation_specs.root_specs {
@@ -1328,18 +1327,24 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 &projection_context,
                 &semantic_review_context,
             );
-            let freshness = projected_truth.freshness.clone();
+            let target_evidence = passport
+                .as_ref()
+                .and_then(|passport| passport_evidence_for_target(passport, target_language));
+            let freshness =
+                resolve_passport_freshness_for_target(spec, passport.as_ref(), target_language)
+                    .filter(|_| {
+                        target_language == TargetLanguage::Rust || target_evidence.is_some()
+                    });
+            let markers = projected_truth.markers.clone();
+            let proof_coverage = projected_truth.proof_coverage.clone();
+            let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
             let semantic_review = projected_truth.semantic_review.clone();
-            let portability =
-                project_portability_truth(spec, passport.as_ref(), &portability_context);
-            let markers = passport_markers_from_portability(portability.as_ref());
-            let escape_hatch_gate = portability.and_then(|projection| projection.escape_hatch_gate);
             let errors = unit_errors_by_path
                 .remove(&spec.source.file_path)
                 .unwrap_or_default();
             let health = apply_semantic_review_to_health(
                 apply_escape_hatch_gate_to_health(
-                    compute_health_status(&errors, passport.as_ref(), freshness.as_ref()),
+                    compute_health_status(&errors, target_evidence, freshness.as_ref()),
                     escape_hatch_gate.as_ref(),
                 ),
                 semantic_review.as_ref(),
@@ -1356,6 +1361,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 evidence_at: health.evidence_at,
                 freshness,
                 markers,
+                proof_coverage,
                 escape_hatch_gate,
                 semantic_review,
             });
@@ -1381,6 +1387,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                         evidence_at: health.evidence_at,
                         freshness: None,
                         markers: None,
+                        proof_coverage: None,
                         escape_hatch_gate: None,
                         semantic_review: None,
                     });
@@ -1400,6 +1407,7 @@ fn status_command(path: &Path, format: OutputFormat) -> Result<()> {
                 evidence_at: health.evidence_at,
                 freshness: None,
                 markers: None,
+                proof_coverage: None,
                 escape_hatch_gate: None,
                 semantic_review: None,
             });
@@ -1868,7 +1876,19 @@ fn emit_plan_validate_failure(
     }
 }
 
+#[cfg(test)]
 fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    generate_command_for_target(path, output, TargetLanguage::Rust)
+}
+
+fn generate_command_for_target(
+    path: &Path,
+    output: Option<&Path>,
+    target_language: TargetLanguage,
+) -> Result<()> {
+    if target_language == TargetLanguage::TypeScript {
+        return generate_typescript_command(path, output);
+    }
     if path.is_file() {
         bail!(
             "❌ spec generate requires a directory path — pass the units directory, not a single file"
@@ -1943,6 +1963,178 @@ fn generate_command(path: &Path, output: Option<&Path>) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+fn generate_typescript_command(path: &Path, output: Option<&Path>) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec generate requires a directory path — pass the units directory, not a single file"
+        );
+    }
+
+    let context = load_workspace_context(path)?;
+    let spec_root = path;
+    let explicit_output = output.map(PathBuf::from);
+    let crate_root = match explicit_output {
+        Some(_) => resolve_default_crate_root(spec_root, &context).ok(),
+        None => Some(resolve_default_crate_root(spec_root, &context)?),
+    };
+    let project_root = context
+        .repo_root
+        .clone()
+        .or_else(|| context.workspace_root.clone())
+        .or_else(|| crate_root.clone())
+        .unwrap_or(absolutize_from_current_dir(Path::new("."))?);
+    let resolved_output = explicit_output.unwrap_or_else(|| {
+        crate_root
+            .expect("missing default crate root")
+            .join("src/generated")
+    });
+    let generated =
+        generate_typescript_specs(path, &resolved_output, &project_root, &context, "generated")?;
+    if !generated.specs.is_empty() {
+        finalize_passports(
+            &PassportWritePlan {
+                passport_root: spec_root,
+                gate_root: spec_root,
+                specs: &generated.specs,
+                gate_specs: &generated.specs,
+            },
+            &generated.generated_at,
+            None,
+            None,
+            None,
+            false,
+        )?;
+    }
+    Ok(())
+}
+
+fn generate_typescript_specs(
+    path: &Path,
+    output: &Path,
+    project_root: &Path,
+    context: &WorkspaceContext,
+    _test_name_prefix: &str,
+) -> Result<GeneratedSpecs> {
+    let mut validation_specs = collect_validation_specs(path, context)?;
+    let specs: Vec<LoadedSpec> = validation_specs.all_specs().into_iter().cloned().collect();
+    let total_files = validation_specs.total_files;
+    let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
+    let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
+
+    if total_files == 0 {
+        let mut errors = DiagnosticMap::new();
+        let mut warnings = DiagnosticMap::new();
+        for err in loader_errors {
+            push_error(&mut errors, err);
+        }
+        for warning in loader_warnings {
+            push_warning(&mut warnings, warning);
+        }
+
+        let output_base = ensure_output_marker(output, project_root)?;
+        let generated_rel_paths = HashSet::<PathBuf>::new();
+        clean_output_dir(&output_base, &generated_rel_paths, project_root).with_context(|| {
+            format!("Failed to clean output directory {}", output_base.display())
+        })?;
+
+        if !warnings.is_empty() {
+            print_diagnostics(&warnings);
+        }
+        if !errors.is_empty() {
+            print_diagnostics(&errors);
+            let file_count = count_unique_files(&errors);
+            bail!(
+                "❌ {} file{}, {} error{}",
+                file_count,
+                pluralize(file_count),
+                count_messages(&errors),
+                pluralize(count_messages(&errors))
+            );
+        }
+
+        println!("0 units found, nothing to generate.");
+        return Ok(GeneratedSpecs {
+            specs,
+            generated_at: rfc3339_now(),
+        });
+    }
+
+    let validation_options = ValidationOptions {
+        strict_deps: true,
+        allow_unsafe_local_test_expect: context.config.validation.allow_unsafe_local_test_expect,
+    };
+    let (validation_errors, validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
+    let mut errors = DiagnosticMap::new();
+    let mut warnings = DiagnosticMap::new();
+    for err in loader_errors {
+        push_error(&mut errors, err);
+    }
+    for err in validation_errors {
+        push_error(&mut errors, err);
+    }
+    for warning in loader_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    for warning in validation_warnings {
+        push_warning(&mut warnings, warning);
+    }
+    for err in validate_library_crate_aliases(validation_specs.local_specs(), path, context) {
+        push_error(&mut errors, err);
+    }
+    if !warnings.is_empty() {
+        print_diagnostics(&warnings);
+    }
+    if !errors.is_empty() {
+        print_diagnostics(&errors);
+        let file_count = count_unique_files(&errors);
+        bail!(
+            "❌ {} file{}, {} error{}",
+            file_count,
+            pluralize(file_count),
+            count_messages(&errors),
+            pluralize(count_messages(&errors))
+        );
+    }
+
+    let mut normalized_units = Vec::with_capacity(specs.len());
+    for spec in &specs {
+        let unit = normalize_unit(spec.spec.clone())
+            .with_context(|| format!("Failed to normalize {}", spec.source.file_path))?;
+        normalized_units.push(unit);
+    }
+    let root_unit_ids = validation_specs
+        .root_specs
+        .iter()
+        .map(|spec| spec.spec.id.clone())
+        .collect::<Vec<_>>();
+
+    let output_base = ensure_output_marker(output, project_root)?;
+    let generated_at = rfc3339_now();
+    let tree = generate_typescript_output_tree(&normalized_units, &root_unit_ids)
+        .with_context(|| "Failed to generate bounded TypeScript output tree")?;
+    let mut generated_rel_paths = HashSet::<PathBuf>::new();
+    for (rel_path, content) in tree {
+        let output_path = output_base.join(&rel_path);
+        write_generated_file(&output_path.display().to_string(), &content)
+            .with_context(|| format!("Failed to write {}", output_path.display()))?;
+        generated_rel_paths.insert(rel_path);
+    }
+    clean_output_dir(&output_base, &generated_rel_paths, project_root)
+        .with_context(|| format!("Failed to clean output directory {}", output_base.display()))?;
+
+    let generated_count = specs.len() + 3;
+    println!(
+        "Generated {} file{}",
+        generated_count,
+        pluralize(generated_count)
+    );
+    Ok(GeneratedSpecs {
+        specs,
+        generated_at,
+    })
 }
 
 fn generate_specs(path: &Path, output: &Path, project_root: &Path) -> Result<GeneratedSpecs> {
@@ -2488,12 +2680,77 @@ fn canonicalize_existing_dir(path: &Path) -> Result<PathBuf> {
     Ok(canonical)
 }
 
-fn build_command(
+fn build_typescript_command(
     path: &Path,
     output: Option<&Path>,
     crate_root_flag: Option<&Path>,
     context: &WorkspaceContext,
 ) -> Result<()> {
+    if path.is_file() {
+        bail!(
+            "❌ spec build requires a directory path — pass the units directory, not a single file"
+        );
+    }
+    if !bun_available() {
+        bail!("❌ bun not found — install Bun or ensure bun is on PATH");
+    }
+
+    let ctx = resolve_pipeline_context(path, crate_root_flag, context)?;
+    let resolved_output = output
+        .map(PathBuf::from)
+        .unwrap_or_else(|| ctx.crate_root.join("src/generated"));
+    let generated = generate_typescript_specs(
+        path,
+        &resolved_output,
+        &ctx.project_root,
+        context,
+        "generated",
+    )?;
+    if generated.specs.is_empty() {
+        return Ok(());
+    }
+    if !generated.specs.is_empty() {
+        finalize_passports(
+            &PassportWritePlan {
+                passport_root: path,
+                gate_root: path,
+                specs: &generated.specs,
+                gate_specs: &generated.specs,
+            },
+            &generated.generated_at,
+            None,
+            None,
+            None,
+            false,
+        )?;
+    }
+    let result = run_bun_build(
+        &resolved_output,
+        Path::new(spec_core::types::TYPESCRIPT_BUILD_ENTRY_PATH),
+        ctx.timeout,
+        Verbosity::Normal,
+    )?;
+    print!("{}", result.stdout);
+    eprint!("{}", result.stderr);
+    if result.timed_out {
+        bail!("❌ bun build timed out{}", timeout_suffix(ctx.timeout));
+    }
+    if result.exit_code != 0 {
+        bail!("❌ bun build failed");
+    }
+    Ok(())
+}
+
+fn build_command_for_target(
+    path: &Path,
+    output: Option<&Path>,
+    crate_root_flag: Option<&Path>,
+    context: &WorkspaceContext,
+    target_language: TargetLanguage,
+) -> Result<()> {
+    if target_language == TargetLanguage::TypeScript {
+        return build_typescript_command(path, output, crate_root_flag, context);
+    }
     if path.is_file() {
         bail!(
             "❌ spec build requires a directory path — pass the units directory, not a single file"
@@ -2569,12 +2826,187 @@ fn build_command(
     Ok(())
 }
 
-fn test_command(
+fn test_typescript_command(
     path: &Path,
     output: Option<&Path>,
     crate_root_flag: Option<&Path>,
     context: &WorkspaceContext,
 ) -> Result<()> {
+    if !bun_available() {
+        bail!("❌ bun not found — install Bun or ensure bun is on PATH");
+    }
+
+    if path.is_file() && output.is_some() {
+        bail!(
+            "❌ spec test does not accept --output for a single file — file-scoped tests use an isolated internal output tree"
+        );
+    }
+
+    if path.is_file() && is_molecule_test_spec(path) {
+        let test = load_molecule_test_file(path)
+            .with_context(|| format!("Failed to load {}", path.display()))?;
+        validate_typescript_molecule_target(&test)?;
+        unreachable!("typescript molecule validation always errors in M46");
+    }
+
+    let mut temp_output_root: Option<tempfile::TempDir> = None;
+    let mut target_spec: Option<LoadedSpec> = None;
+    let passport_root = if path.is_file() {
+        target_spec =
+            Some(load_file(path).with_context(|| format!("Failed to load {}", path.display()))?);
+        path.parent().unwrap_or(path).to_path_buf()
+    } else {
+        path.to_path_buf()
+    };
+
+    let (resolved_output, project_root, module_root, timeout) = if path.is_file() {
+        let temp_dir = tempfile::TempDir::new()
+            .with_context(|| "Failed to create temporary TypeScript test scope")?;
+        let output_root = temp_dir.path().join("src/generated");
+        let project_root = temp_dir.path().to_path_buf();
+        temp_output_root = Some(temp_dir);
+        (
+            output_root,
+            project_root.clone(),
+            project_root,
+            context
+                .config
+                .pipeline
+                .timeout_secs
+                .map(Duration::from_secs),
+        )
+    } else {
+        let ctx = resolve_pipeline_context(path, crate_root_flag, context)?;
+        (
+            output
+                .map(PathBuf::from)
+                .unwrap_or_else(|| ctx.crate_root.join("src/generated")),
+            ctx.project_root,
+            ctx.crate_root,
+            ctx.timeout,
+        )
+    };
+
+    let test_name_prefix = output_module_prefix(
+        &resolved_output,
+        &module_root,
+        &std::env::current_dir().context("failed to resolve current working directory")?,
+    )
+    .unwrap_or_else(|_| "generated".to_string());
+    let generated = generate_typescript_specs(
+        path,
+        &resolved_output,
+        &project_root,
+        context,
+        &test_name_prefix,
+    )?;
+    let _temp_output_root = temp_output_root;
+
+    if generated.specs.is_empty() {
+        return Ok(());
+    }
+
+    let passport_write_plan = passport_write_plan(
+        path,
+        &passport_root,
+        &passport_root,
+        &generated.specs,
+        target_spec.as_ref(),
+    );
+    let provenance = resolve_git_provenance(&passport_root);
+    let build_result = run_bun_build(
+        &resolved_output,
+        Path::new(spec_core::types::TYPESCRIPT_BUILD_ENTRY_PATH),
+        timeout,
+        Verbosity::Normal,
+    )?;
+    print!("{}", build_result.stdout);
+    eprint!("{}", build_result.stderr);
+    if build_result.timed_out {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_typescript_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+        bail!("❌ bun build timed out{}", timeout_suffix(timeout));
+    }
+    if build_result.exit_code != 0 {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_failure_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_typescript_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+        bail!("❌ bun build failed");
+    }
+
+    let test_result = run_bun_test(
+        &resolved_output,
+        Path::new(spec_core::types::TYPESCRIPT_LOCAL_TESTS_PATH),
+        timeout,
+        Verbosity::Normal,
+    )?;
+    print!("{}", test_result.stdout);
+    eprint!("{}", test_result.stderr);
+    if test_result.timed_out {
+        let observed_at = rfc3339_now();
+        let evidence_by_spec =
+            build_timeout_evidence(passport_write_plan.specs, &observed_at, provenance.as_ref());
+        let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+        finalize_typescript_test_passports(
+            &passport_write_plan,
+            &generated.generated_at,
+            &evidence_by_spec,
+            contract_hash_by_spec.as_ref(),
+        )?;
+        bail!("❌ bun test timed out{}", timeout_suffix(timeout));
+    }
+    if target_spec.is_some() && zero_tests_ran(&test_result.stdout) {
+        bail!("❌ bun test matched 0 tests");
+    }
+
+    let parsed_test_results = parse_cargo_test_output(&test_result.stdout);
+    let observed_at = rfc3339_now();
+    let evidence_by_spec = build_typescript_test_evidence(
+        passport_write_plan.specs,
+        &test_name_prefix,
+        &parsed_test_results,
+        test_result.exit_code == 0,
+        &observed_at,
+        provenance.as_ref(),
+    )?;
+    let contract_hash_by_spec = contract_hashes_for(passport_write_plan.specs);
+    finalize_typescript_test_passports(
+        &passport_write_plan,
+        &generated.generated_at,
+        &evidence_by_spec,
+        contract_hash_by_spec.as_ref(),
+    )?;
+    if test_result.exit_code != 0 {
+        bail!("❌ bun test failed");
+    }
+    Ok(())
+}
+
+fn test_command_for_target(
+    path: &Path,
+    output: Option<&Path>,
+    crate_root_flag: Option<&Path>,
+    context: &WorkspaceContext,
+    target_language: TargetLanguage,
+) -> Result<()> {
+    if target_language == TargetLanguage::TypeScript {
+        return test_typescript_command(path, output, crate_root_flag, context);
+    }
     if !cargo_available() {
         bail!("❌ cargo not found — install Rust or ensure cargo is on PATH");
     }
@@ -3155,6 +3587,67 @@ fn finalize_test_passports(
     )
 }
 
+fn finalize_typescript_test_passports(
+    plan: &PassportWritePlan<'_>,
+    generated_at: &str,
+    evidence_by_spec: &BTreeMap<String, PassportEvidence>,
+    contract_hash_by_spec: Option<&BTreeMap<String, String>>,
+) -> Result<()> {
+    let gate_context = build_live_escape_hatch_context(plan.gate_root, plan.gate_specs, None);
+    let projection_context = PassportProjectionContext {
+        molecule_tests: &gate_context.molecule_tests,
+        molecule_evidence_by_id: &gate_context.molecule_evidence_by_id,
+        specs_by_id: &gate_context.specs_by_id,
+        semantic_projection_mode: SemanticProjectionMode::Refresh,
+    };
+    let semantic_review_context = SemanticReviewContext::new(&gate_context.specs_by_id);
+
+    for spec in plan.specs {
+        let source_path = Path::new(&spec.source.file_path);
+        let existing = read_passport(source_path).ok().flatten();
+        let contract_hash = contract_hash_by_spec
+            .and_then(|map| map.get(&spec.spec.id))
+            .cloned()
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .and_then(|passport| passport.contract_hash.clone())
+            })
+            .or_else(|| compute_contract_hash(spec));
+        let mut passport = build_passport_preserving_proof_state_with_context(
+            spec,
+            generated_at,
+            existing.as_ref(),
+            contract_hash,
+            &semantic_review_context,
+        );
+        let target_proof = target_proof_for_write(
+            spec,
+            existing
+                .as_ref()
+                .and_then(|passport| passport_target_proof(passport, TargetLanguage::TypeScript)),
+            evidence_by_spec.get(&spec.spec.id).cloned(),
+            TargetLanguage::TypeScript,
+            true,
+        );
+        let mut target_proofs = passport.target_proofs.clone().unwrap_or_default();
+        target_proofs.typescript = Some(target_proof);
+        passport.target_proofs = Some(target_proofs);
+
+        let projected_truth = project_passport_truth_with_context(
+            spec,
+            Some(&passport),
+            &projection_context,
+            &semantic_review_context,
+        );
+        apply_projected_passport_truth(&mut passport, projected_truth);
+        write_passport(&passport, source_path)
+            .with_context(|| format!("Failed to write passport for {}", spec.source.id))?;
+    }
+
+    Ok(())
+}
+
 fn refresh_covered_seam_passports(
     passport_root: &Path,
     gate_root: &Path,
@@ -3312,6 +3805,66 @@ fn build_test_evidence(
             });
         }
 
+        evidence_by_spec.insert(
+            spec.spec.id.clone(),
+            PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results,
+                observed_at: observed_at.to_string(),
+                provenance: provenance.cloned(),
+            },
+        );
+    }
+
+    Ok(evidence_by_spec)
+}
+
+fn expected_typescript_test_name(
+    spec: &LoadedSpec,
+    local_test: &spec_core::types::LocalTest,
+    test_name_prefix: &str,
+) -> String {
+    let mut parts = Vec::new();
+    if !test_name_prefix.is_empty() {
+        parts.push(test_name_prefix.to_string());
+    }
+    for segment in spec.spec.id.split('/') {
+        parts.push(segment.to_string());
+    }
+    parts.push("tests".to_string());
+    parts.push(local_test.id.clone());
+    parts.join("::")
+}
+
+fn build_typescript_test_evidence(
+    specs: &[LoadedSpec],
+    test_name_prefix: &str,
+    parsed_test_results: &HashMap<String, ParsedCargoTestResult>,
+    default_success_when_unparsed: bool,
+    observed_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+) -> Result<BTreeMap<String, PassportEvidence>> {
+    let mut evidence_by_spec = BTreeMap::new();
+
+    for spec in specs {
+        let mut test_results = Vec::new();
+        for local_test in &spec.spec.local_tests {
+            let full_name = expected_typescript_test_name(spec, local_test, test_name_prefix);
+            let observed = parsed_test_results.get(&full_name);
+            let (status, reason) = match observed {
+                Some(result) => (result.status.clone(), result.reason.clone()),
+                None if default_success_when_unparsed => ("pass".to_string(), None),
+                None => (
+                    "unknown".to_string(),
+                    Some("test not found in bun output".to_string()),
+                ),
+            };
+            test_results.push(PassportTestResult {
+                id: local_test.id.clone(),
+                status,
+                reason,
+            });
+        }
         evidence_by_spec.insert(
             spec.spec.id.clone(),
             PassportEvidence {
@@ -4992,10 +5545,17 @@ fn pluralize(count: usize) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
     use std::fs;
     use std::process::Command as ProcessCommand;
     use std::time::Instant;
     use tempfile::TempDir;
+
+    #[derive(Parser, Debug)]
+    struct TestCli {
+        #[command(subcommand)]
+        command: Command,
+    }
 
     fn write_spec(dir: &Path, relative_path: &str, body: &str) {
         let path = dir.join(relative_path);
@@ -5019,6 +5579,107 @@ mod tests {
                 fs::copy(&entry_path, &dst_path).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn target_language_parser_accepts_frozen_values() {
+        assert_eq!(parse_target_language("rust").unwrap(), TargetLanguage::Rust);
+        assert_eq!(
+            parse_target_language("typescript").unwrap(),
+            TargetLanguage::TypeScript
+        );
+    }
+
+    #[test]
+    fn generate_build_test_and_status_accept_target_language() {
+        let cli = TestCli::try_parse_from([
+            "spec",
+            "generate",
+            "examples/ecommerce/units",
+            "--target-language",
+            "typescript",
+        ])
+        .expect("generate should parse typescript target");
+        assert!(matches!(
+            cli.command,
+            Command::Generate(GenerateArgs {
+                target_language: TargetLanguage::TypeScript,
+                ..
+            })
+        ));
+
+        let cli = TestCli::try_parse_from([
+            "spec",
+            "build",
+            "examples/ecommerce/units",
+            "--target-language",
+            "typescript",
+        ])
+        .expect("build should parse typescript target");
+        assert!(matches!(
+            cli.command,
+            Command::Build(BuildArgs {
+                target_language: TargetLanguage::TypeScript,
+                ..
+            })
+        ));
+
+        let cli = TestCli::try_parse_from([
+            "spec",
+            "test",
+            "examples/ecommerce/units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ])
+        .expect("test should parse typescript target");
+        assert!(matches!(
+            cli.command,
+            Command::Test(TestArgs {
+                target_language: TargetLanguage::TypeScript,
+                ..
+            })
+        ));
+
+        let cli = TestCli::try_parse_from([
+            "spec",
+            "status",
+            "examples/ecommerce",
+            "--target-language",
+            "typescript",
+        ])
+        .expect("status should parse typescript target");
+        assert!(matches!(
+            cli.command,
+            Command::Status(StatusArgs {
+                target_language: TargetLanguage::TypeScript,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn validate_and_export_do_not_accept_target_language() {
+        assert!(
+            TestCli::try_parse_from([
+                "spec",
+                "validate",
+                "examples/ecommerce/units",
+                "--target-language",
+                "typescript",
+            ])
+            .is_err()
+        );
+
+        assert!(
+            TestCli::try_parse_from([
+                "spec",
+                "export",
+                "examples/ecommerce/units",
+                "--target-language",
+                "typescript",
+            ])
+            .is_err()
+        );
     }
 
     fn benchmark_loaded_spec(index: usize, tests_per_spec: usize) -> LoadedSpec {
@@ -5252,7 +5913,7 @@ extra_field: nope
 
         let apply_tax = fs::read_to_string(output_dir.join("pricing/apply_tax.rs")).unwrap();
         assert!(apply_tax.contains(
-            "/// Add sales tax to a subtotal using a rate expressed as a decimal fraction.\n"
+            "/// Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.\n"
         ));
         assert!(apply_tax.contains("pub fn apply_tax("));
     }
@@ -5724,7 +6385,8 @@ body:
 
         let freshness =
             spec_core::passport::resolve_passport_freshness(&changed, Some(&legacy_passport));
-        let health = compute_health_status(&[], Some(&legacy_passport), freshness.as_ref());
+        let health =
+            compute_health_status(&[], legacy_passport.evidence.as_ref(), freshness.as_ref());
 
         assert_eq!(health.status, HealthState::Stale);
         assert_eq!(
@@ -5775,7 +6437,7 @@ body:
     fn semantic_review_demotes_only_otherwise_valid_units() {
         let supported_incomplete_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::UnderSpecified,
-            compatibility_key: "data.checkout_quote.v1".to_string(),
+            compatibility_key: "data.pricing_quote.v1".to_string(),
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -5789,7 +6451,7 @@ body:
         };
         let supported_failing_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::SemanticDrift,
-            compatibility_key: "data.checkout_quote.v1".to_string(),
+            compatibility_key: "data.pricing_quote.v1".to_string(),
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],

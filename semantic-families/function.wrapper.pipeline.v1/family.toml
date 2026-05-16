@@ -5,11 +5,11 @@ compatibility_key = "function.wrapper.pipeline.v1"
 summary = "Straight-line two-call wrapper pipeline over supported semantic deps."
 
 [routing]
-precedence = 2
+precedence = 3
 must_not_shadow = [
   "function.arithmetic_leaf.monotone_down_nonnegative.v1",
   "function.arithmetic_leaf.monotone_up.v1",
-  "unsupported.function.v1",
+  "function.helper.identity_passthrough.v1",
 ]
 
 [shape]

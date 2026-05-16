@@ -1,0 +1,235 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/pricing_quote",
+  "kind": "data",
+  "intent": "Quote a checkout total from subtotal plus discount and tax rates.",
+  "data": {
+    "fields": {
+      "subtotal": {
+        "type": "rust_decimal::Decimal"
+      },
+      "discount_rate": {
+        "type": "rust_decimal::Decimal"
+      },
+      "tax_rate": {
+        "type": "rust_decimal::Decimal"
+      }
+    }
+  },
+  "constructors": [
+    {
+      "id": "new",
+      "intent": {
+        "why": "Create a quote from explicit subtotal and rates."
+      },
+      "contract": {
+        "inputs": {
+          "subtotal": "rust_decimal::Decimal",
+          "discount_rate": "rust_decimal::Decimal",
+          "tax_rate": "rust_decimal::Decimal"
+        },
+        "invariants": []
+      },
+      "initializes": {
+        "subtotal": "subtotal",
+        "discount_rate": "discount_rate",
+        "tax_rate": "tax_rate"
+      }
+    }
+  ],
+  "methods": [
+    {
+      "id": "discounted_subtotal",
+      "intent": {
+        "why": "Return the discounted subtotal before tax."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [
+        "pricing/apply_discount"
+      ],
+      "lowering": {
+        "rust": {
+          "body": "{\n    apply_discount(self.subtotal, self.discount_rate)\n}\n"
+        }
+      }
+    },
+    {
+      "id": "total",
+      "intent": {
+        "why": "Return the final checkout total after discount and tax."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [
+        "pricing/apply_tax"
+      ],
+      "lowering": {
+        "rust": {
+          "body": "{\n    apply_tax(self.discounted_subtotal(), self.tax_rate)\n}\n"
+        }
+      }
+    }
+  ],
+  "backends": {
+    "rust": {
+      "derives": [
+        "Clone",
+        "Debug",
+        "PartialEq"
+      ]
+    }
+  },
+  "deps": [
+    "pricing/apply_discount",
+    "pricing/apply_tax"
+  ],
+  "local_tests": [
+    {
+      "id": "discounted_subtotal_basic",
+      "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)"
+    },
+    {
+      "id": "total_basic",
+      "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
+    }
+  ],
+  "generated_at": "2026-05-16T04:17:49Z",
+  "source_file": "examples/ecommerce/units/pricing/pricing_quote.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "discounted_subtotal_basic",
+        "status": "pass"
+      },
+      {
+        "id": "total_basic",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-05-11T19:48:16Z",
+    "provenance": {
+      "git_commit_sha": "4592dee4c57a65a877668811dfbebfbcedb8103f"
+    }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+    "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+    "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "fresh"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "discounted_subtotal_basic",
+            "status": "pass"
+          },
+          {
+            "id": "total_basic",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-11T19:48:16Z",
+        "provenance": {
+          "git_commit_sha": "4592dee4c57a65a877668811dfbebfbcedb8103f"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+        "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87",
+        "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      }
+    }
+  },
+  "markers": [
+    {
+      "id": "backend_rust_derives",
+      "path": "backends.rust.derives"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.discounted_subtotal.lowering.rust.body"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.total.lowering.rust.body"
+    }
+  ],
+  "escape_hatch_gate": {
+    "status": "closed",
+    "required_surfaces": [
+      "atom",
+      "molecule"
+    ],
+    "present_surfaces": [
+      "atom",
+      "molecule"
+    ],
+    "missing_surfaces": []
+  },
+  "semantic_review": {
+    "verdict": "backend_only_meaning_preserved",
+    "compatibility_key": "data.pricing_quote.v1",
+    "reason_codes": [
+      "backend_only_execution_marker"
+    ],
+    "summary": "backend-only execution markers are present without changing authored meaning",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Quote a checkout total from subtotal plus discount and tax rates."
+      },
+      {
+        "path": "data.fields",
+        "summary": "3 authored data field(s)"
+      },
+      {
+        "path": "constructors",
+        "summary": "1 authored constructor(s)"
+      },
+      {
+        "path": "methods",
+        "summary": "2 semantic method(s) on pricing/pricing_quote"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "data",
+        "summary": "projects to Rust struct PricingQuote"
+      },
+      {
+        "path": "constructors",
+        "summary": "1 executable constructor(s)"
+      },
+      {
+        "path": "methods.*.lowering.rust.body",
+        "summary": "2 executable semantic method(s)"
+      },
+      {
+        "path": "backends.rust.derives",
+        "summary": "Rust derives contribute backend-only execution metadata"
+      }
+    ],
+    "evaluator_scope": "supported_data_surface"
+  },
+  "contract_hash": "sha256:3eee94d33ad59e37671c4d4e2e90602dfae4f4bcb02088d11979d7e003dbda87"
+}

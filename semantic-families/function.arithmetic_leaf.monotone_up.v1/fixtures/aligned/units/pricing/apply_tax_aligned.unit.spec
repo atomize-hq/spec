@@ -2,7 +2,7 @@ id: pricing/apply_tax_aligned
 kind: function
 spec_version: "0.3.0"
 intent:
-  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.
 contract:
   inputs:
     subtotal: Decimal
@@ -22,7 +22,7 @@ body:
     }
   typescript: |
     {
-        const taxed = subtotal + subtotal * rate;
+        const taxed = subtotal.add(subtotal.mul(rate));
         return round(taxed);
     }
 local_tests:

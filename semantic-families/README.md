@@ -14,9 +14,14 @@ Packet rules for M23:
 
 ## M31 / M32 Boundary
 
-- `M31` is the shared-core extraction and escape-hatch containment milestone.
-  This README still documents promoted packet truth; it is not the place to
-  imply wider portability than the code actually proves.
+- `M31` is the explicit seam portability contract plus escape-hatch
+  containment milestone. This README still documents promoted packet truth; it
+  is not the place to imply wider portability than the code actually proves.
+- `M44` is the bounded follow-on that centralizes that seam portability policy
+  in `spec-core/src/portability_contract.rs`. Its scope is one new module,
+  consumer rewiring, regression coverage, and doc parity; it does not imply new
+  crate extraction, broader second-language execution, fresh family-choice
+  work, or schema churn by default.
 - `M32` is one bounded second-language promotion path for
   `function.arithmetic_leaf.monotone_up.v1`.
 - `function.wrapper.pipeline.v1` remains promoted Rust-family truth plus
@@ -119,13 +124,28 @@ bounded operator-action output that records what to do next with that input.
 
 M36 preserved that frozen M35 wedge exactly. M37 keeps the same wedge outcome
 while tightening the code boundary: helper-surface classification still lives
-in `xtask/src/family/helper_surface.rs`, family-analysis decision truth now
+in `xtask/src/family/analysis_core/helper_surface.rs`, family-analysis decision truth now
 lives in `xtask/src/family/decision_kernel.rs`, and
 `helper_surface_not_promotable`,
 `durable_non_promotable_helper_surface`,
 `pivot_to_architecture_shared_core_follow_on`, and
 `author_architecture_follow_on_plan` stay coupled without implying that corpus
 run `1` was spent or that the helper surface became promotable.
+
+M41 retires the visible unsupported-pressure version of that wedge without
+promoting a new packet. The runtime semantic reviewer now supports the current
+`money/round` helper shape under
+`function.helper.identity_passthrough.v1`, the checked-in shared-spec passport
+and read-side `status` / `export` surfaces preserve that supported truth, and
+`cargo xtask family inventory --format json` now publishes the helper route as
+runtime-supported but unpromoted.
+
+That means the helper wedge is no longer counted as live unsupported pressure
+by family analysis. `cargo xtask family coverage --format json` now moves the
+three current helper units into `supported_unpromoted_family_units`, and
+`cargo xtask family recommend --format json` no longer emits
+`helper_surface_not_promotable` as a visible candidate hold. This is substrate
+truth only; it does not create a new `semantic-families/function.*` packet.
 
 Maintainers should also treat artifact identity semantically, not bytewise:
 raw latest-artifact SHA is not semantic identity, and normalized semantic fingerprints are the proof surface.

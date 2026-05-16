@@ -14,4 +14,7 @@ body:
     {
         value
     }
-
+  typescript: |
+    {
+        return value;
+    }

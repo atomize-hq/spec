@@ -5,7 +5,7 @@ compatibility_key = "function.arithmetic_leaf.monotone_down_nonnegative.v1"
 summary = "Straight-line arithmetic leaf with zero-or-one helper dep and nonnegative clamp semantics."
 
 [routing]
-precedence = 3
+precedence = 4
 must_not_shadow = [
   "function.arithmetic_leaf.monotone_up.v1",
 ]

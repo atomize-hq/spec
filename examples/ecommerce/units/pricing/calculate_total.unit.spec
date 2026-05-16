@@ -22,6 +22,11 @@ body:
         let discounted = apply_discount(subtotal, discount_rate);
         apply_tax(discounted, tax_rate)
     }
+  typescript: |
+    {
+        const discounted = apply_discount(subtotal, discount_rate);
+        return apply_tax(discounted, tax_rate);
+    }
 local_tests:
   - id: combined_flow
     expect: calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)

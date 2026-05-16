@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planning Session"
+  short_description: "Run the full next-milestone to ORCH planning loop."
+  default_prompt: "Use this repo-local skill to run the full planning loop from one pasted implementation closeout. Treat the closeout text as the only required input. Run five serialized stages with fresh GPT-5.4 high subagents: next milestone memo, fresh gstack design doc, fresh PLAN.md, one more PLAN.md solidification pass, and fresh ORCH_PLAN.md. Reuse only the ORCH-stage subagent for correction rounds. Keep the stage outputs in a session artifact directory, preserve the exact next-milestone memo, resolve the created design doc path, and reject any ORCH draft that hand-waves ownership, gates, commands, or acceptance criteria."

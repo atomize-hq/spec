@@ -1,0 +1,9 @@
+[package]
+name = "function-wrapper-pipeline-normalized-required-arg-aligned"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.41", features = ["serde"] }
+
+[workspace]

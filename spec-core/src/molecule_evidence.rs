@@ -459,10 +459,10 @@ mod tests {
 
     #[test]
     fn molecule_evidence_is_stale_when_covered_data_seam_hash_changes() {
-        let test = loaded_test_covering("pricing/checkout_quote", "{ assert!(true); }");
+        let test = loaded_test_covering("pricing/pricing_quote", "{ assert!(true); }");
         let specs_by_id = HashMap::from([(
-            "pricing/checkout_quote".to_string(),
-            loaded_data_spec("pricing/checkout_quote", "updated intent"),
+            "pricing/pricing_quote".to_string(),
+            loaded_data_spec("pricing/pricing_quote", "updated intent"),
         )]);
         let mut evidence = build_molecule_evidence(
             &test,
@@ -473,7 +473,7 @@ mod tests {
             None,
         );
         evidence.covered_unit_contract_hashes = BTreeMap::from([(
-            "pricing/checkout_quote".to_string(),
+            "pricing/pricing_quote".to_string(),
             Some("sha256:old".to_string()),
         )]);
         evidence.covered_unit_freshness.clear();
@@ -483,8 +483,8 @@ mod tests {
 
     #[test]
     fn molecule_evidence_is_stale_when_covered_backend_execution_digest_changes() {
-        let test = loaded_test_covering("pricing/checkout_quote", "{ assert!(true); }");
-        let original = loaded_data_spec("pricing/checkout_quote", "original intent");
+        let test = loaded_test_covering("pricing/pricing_quote", "{ assert!(true); }");
+        let original = loaded_data_spec("pricing/pricing_quote", "original intent");
         let mut changed = original.clone();
         changed.spec.extensions.methods[0]
             .lowering
@@ -495,8 +495,8 @@ mod tests {
             .unwrap()
             .body = "{ self.subtotal + 1 }".to_string();
 
-        let original_specs = HashMap::from([("pricing/checkout_quote".to_string(), original)]);
-        let changed_specs = HashMap::from([("pricing/checkout_quote".to_string(), changed)]);
+        let original_specs = HashMap::from([("pricing/pricing_quote".to_string(), original)]);
+        let changed_specs = HashMap::from([("pricing/pricing_quote".to_string(), changed)]);
         let evidence = build_molecule_evidence(
             &test,
             MoleculeEvidenceStatus::Pass,

@@ -2,10 +2,11 @@
 
 Summary: Straight-line two-call wrapper pipeline over supported semantic deps.
 
-This packet isolates the dedicated two-step pricing wrapper shape: one monotone-down discount leaf,
-one monotone-up tax leaf, and a wrapper that is supposed to apply discount first and tax second.
-Each bucket stays packet-local and carries exactly those three pricing units, so the family does
-not depend on the chain3 checkout extension or any other external helper.
+This packet isolates the dedicated two-step raw-argument pricing wrapper shape: one
+monotone-down discount leaf, one monotone-up tax leaf, and a wrapper that is supposed to apply
+discount first and tax second with the tax rate passed through directly. Each bucket stays
+packet-local and carries exactly those three pricing units, so the family does not depend on the
+chain3 checkout extension or any other external helper.
 
 ## Aligned
 
@@ -29,4 +30,4 @@ not depend on the chain3 checkout extension or any other external helper.
 
 - `fixtures/unsupported_near_miss/units/pricing/pricing_discount_leaf_unsupported_near_miss.unit.spec`: same packet-local discount leaf shape as aligned.
 - `fixtures/unsupported_near_miss/units/pricing/pricing_tax_leaf_unsupported_near_miss.unit.spec`: same packet-local tax leaf shape as aligned.
-- `fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec`: stays semantically close to the honest wrapper, but leaves the supported subset by threading `tax_rate.max(Decimal::ZERO)` into the tax call.
+- `fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec`: stays semantically close to the honest wrapper, but leaves the supported subset by chaining beyond the admitted normalized-arg surface with `tax_rate.max(Decimal::ZERO).round_dp(4)`.

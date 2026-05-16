@@ -1,0 +1,109 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_tax_aligned",
+  "intent": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "subtotal",
+        "type": "Decimal"
+      },
+      {
+        "name": "rate",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal",
+    "invariants": [
+      "output >= subtotal"
+    ]
+  },
+  "deps": [
+    "money/round"
+  ],
+  "local_tests": [
+    {
+      "id": "apply_tax_aligned_happy_path",
+      "expect": "apply_tax_aligned(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
+    }
+  ],
+  "generated_at": "2026-05-10T23:08:41Z",
+  "source_file": "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned/units/pricing/apply_tax_aligned.unit.spec",
+  "freshness": {
+    "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "freshness": {
+        "authored_truth_digest": "sha256:2c618f123ec6666dae4be1c4cc9da04022c9985cf6bfdb7b1b2071d1c0af83fe",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    },
+    "typescript": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "apply_tax_aligned_happy_path",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-10T23:08:41Z",
+        "provenance": {
+          "git_commit_sha": "467ebd3bd1c2de1d932cddc47cca2ff08c93a1a5"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:b6f56171141034c8a8455d90fca10ee1d2ca923c4a7210f1bdc939e538d8e1ac"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:b6f56171141034c8a8455d90fca10ee1d2ca923c4a7210f1bdc939e538d8e1ac",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  },
+  "semantic_review": {
+    "verdict": "aligned",
+    "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+    "support_status": "supported",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "2 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "contract.invariants",
+        "summary": "1 authored invariant(s)"
+      },
+      {
+        "path": "deps",
+        "summary": "1 declared dep(s)"
+      },
+      {
+        "path": "body.typescript",
+        "summary": "authored TypeScript body present"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function apply_tax_aligned with 2 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
+  },
+  "contract_hash": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df"
+}

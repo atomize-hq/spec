@@ -6,6 +6,8 @@ use crate::family::paths::{FamilyId, PacketPaths, REQUIRED_BUCKETS, ensure_packe
 use std::fs;
 use std::path::Path;
 
+const HELPER_IDENTITY_PASSTHROUGH_FAMILY: &str = "function.helper.identity_passthrough.v1";
+
 pub fn run(workspace_root: &Path, raw_family: &str) -> Result<(), XtaskError> {
     let requested_family = FamilyId::parse(raw_family)?;
     let harness = require_family_harness(&requested_family, "family new")?;
@@ -255,6 +257,10 @@ fn starter_unit_spec(harness: &FamilyHarness, case: StarterCaseDefinition) -> St
         .map(|(_, name)| name)
         .unwrap_or(unit_id.as_str());
 
+    if harness.family == HELPER_IDENTITY_PASSTHROUGH_FAMILY {
+        return helper_identity_passthrough_starter(&unit_id, callable_name);
+    }
+
     match harness.scaffold.template {
         StarterTemplate::GenericPlaceholder => generic_placeholder_starter(&unit_id, callable_name),
         StarterTemplate::WrapperPipelineTwoStep => {
@@ -290,6 +296,31 @@ body:
         }} else {{
             Decimal::ZERO
         }}
+    }}
+local_tests:
+  - id: {callable_name}_placeholder
+    expect: {callable_name}(Decimal::new(10000, 2)) == Decimal::new(10000, 2)
+"#
+    )
+}
+
+fn helper_identity_passthrough_starter(unit_id: &str, callable_name: &str) -> String {
+    format!(
+        r#"id: {unit_id}
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: "TODO: replace this scaffolded helper with real authored behavior."
+contract:
+  inputs:
+    value: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {{
+        value
     }}
 local_tests:
   - id: {callable_name}_placeholder

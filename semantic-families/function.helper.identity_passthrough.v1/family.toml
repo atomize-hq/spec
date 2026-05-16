@@ -1,0 +1,40 @@
+schema_version = 2
+family = "function.helper.identity_passthrough.v1"
+kind = "function"
+compatibility_key = "function.helper.identity_passthrough.v1"
+summary = "Straight-line unary Decimal helper with no deps and either passthrough or round-like body."
+
+[routing]
+precedence = 6
+must_not_shadow = [
+  "unsupported.function.v1",
+]
+
+[shape]
+dep_min = 0
+dep_max = 0
+control_flow = "straight_line_only"
+return_style = "let_then_return_or_direct_return"
+loops = false
+branching = false
+requires_supported_function_deps = false
+
+[args]
+threading = "ordered_passthrough"
+allow_nested_argument_expressions = false
+allow_literal_only_extra_args = false
+
+[corpus]
+required_buckets = ["aligned", "drift", "under_specified", "unsupported_near_miss"]
+min_cases_per_bucket = 1
+
+[truth_surface]
+requires_refresh_via = ["spec test"]
+preserve_only_via = ["spec build", "spec generate", "spec status", "spec export"]
+requires_stale_demote = true
+
+[gates]
+gate_a = true
+gate_b = true
+gate_c = true
+gate_d = true

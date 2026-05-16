@@ -47,6 +47,46 @@ spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
 
+## Bounded TypeScript lane (M61)
+
+`spec` now exposes one bounded TypeScript execution lane. It is intentionally narrow:
+
+M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.
+
+- Bun is the only TypeScript prerequisite. The lane shells out to `bun`; no alternate Node, npm, or tsx contract is supported.
+- Eligible roots are `kind: function` specs whose reachable closure resolves from the loaded unit set, classifies to already-supported semantic-review function families, and authors non-empty `body.typescript` at every reachable unit.
+- Closure collection is semantic-review-driven and dep-driven. It recurses across same-tree and direct sibling-library deps, dedupes repeated local-plus-cross-library subgraphs, and excludes unrelated loaded units from the generated TypeScript tree.
+- The preserved portability exceptions remain in place for direct cross-library roots. A `function.arithmetic_leaf.monotone_up.v1` root may still use exactly one direct cross-library helper dep that classifies to `function.helper.identity_passthrough.v1`, authors non-empty `body.typescript`, and resolves from the loaded unit set and generated tree.
+- The preserved direct cross-library wrapper lane remains frozen to the `function.wrapper.pipeline.v1` family with the direct dep tuple `function.arithmetic_leaf.monotone_down_nonnegative.v1` then `function.arithmetic_leaf.monotone_up.v1`.
+- The preserved direct cross-library chain3 lane remains frozen to the `function.wrapper.pipeline.chain3.v1` family with the direct dep tuple `function.wrapper.pipeline.v1` or `function.wrapper.pipeline.chain3.v1` in slot 1, then `function.arithmetic_leaf.monotone_up.v1`, then `function.arithmetic_leaf.monotone_down_nonnegative.v1`.
+- Family-specific direct dep contracts remain frozen even when closure collection recurses across library boundaries. The M60 required-arg wrapper family stays bounded to its current supported shape rather than widening the lane to arbitrary wrapper argument forms.
+- Rust remains the default target. TypeScript proof is additive only; it writes `target_proofs.typescript` without replacing the Rust proof surface.
+- TypeScript execution is atom-only. Only `local_tests` run in this lane; `.test.spec` molecule tests remain unsupported for `--target-language typescript` and fail before Bun runs.
+- The accepted `local_tests.expect` grammar is deliberately small: `<current_unit>(Decimal::new(int, scale), ...) == Decimal::new(int, scale)`. The left-hand side must be a direct call to the current unit, and both the arguments and expected value must use integer-literal `Decimal::new(...)` forms.
+
+Commands available in this lane:
+
+```bash
+spec generate <units-dir> --target-language typescript
+spec build <units-dir> --target-language typescript
+spec test <path> --target-language typescript
+spec status <unit-or-root> --target-language typescript
+```
+
+`spec status <unit-or-root> --target-language typescript` reports target-specific proof only. In M61, a root-level status over a mixed example like `examples/ecommerce` or `examples/crosslib-app` may stay non-green unless every unit in scope is either freshly proven in the bounded recursive local-plus-cross-library lane, covered by the preserved portability contracts, or truthfully remains outside those lanes.
+
+The generated helper filenames remain frozen in M61:
+
+- `__spec_ts/runtime.ts`
+- `__spec_ts/build_entry.ts`
+- `__spec_ts/local_tests.ts`
+
+Commands and surfaces that do not widen for M61:
+
+- `spec validate` does not accept `--target-language`
+- `spec export` does not accept `--target-language`
+- The broader TypeScript oceans still explicitly deferred are arbitrary authored 4+ direct-dep topology parity, new semantic-family promotion, molecule TypeScript execution, and seam-kind TypeScript execution.
+
 ## Spec format
 
 Each unit is a YAML document with these common required fields:
@@ -94,10 +134,10 @@ pub fn apply_tax(subtotal: Decimal, rate: Decimal) -> Decimal {
 }
 ```
 
-For `kind: data`, one `.unit.spec` file authors a top-level data seam with shared fields plus one or more nested constructors and one or more nested methods. A minimal seam based on the canonical M12 `pricing/checkout_quote` example looks like:
+For `kind: data`, one `.unit.spec` file authors a top-level data seam with shared fields plus one or more nested constructors and one or more nested methods. A minimal seam based on the canonical M50 `pricing/pricing_quote` example looks like:
 
 ```yaml
-id: pricing/checkout_quote
+id: pricing/pricing_quote
 kind: data
 intent:
   why: Quote a checkout total from subtotal plus discount and tax rates.
@@ -204,16 +244,16 @@ The ecommerce example demonstrates the canonical M13 migration wedge alongside t
 - `pricing/apply_discount`
 - `pricing/apply_tax`
 - `pricing/calculate_total`
-- `pricing/discount_policy` (`kind: sum`)
-- `pricing/checkout_quote` (`kind: data`)
+- `pricing/discount_strategy` (`kind: sum`)
+- `pricing/pricing_quote` (`kind: data`)
 - `pricing/checkout_flow`
-- `pricing/discount_policy_checkout_flow`
+- `pricing/discount_strategy_checkout_flow`
 - `pricing/discount_plus_tax`
 - `plans/refactors/checkout-tax-refactor.plan.spec`
-- `examples/ecommerce/src/raw_baseline/pricing/discount_policy.rs` (hand-written Rust baseline for the canonical M13 seam)
-- `examples/ecommerce/src/raw_baseline/pricing/checkout_quote.rs` (hand-written Rust baseline for the canonical M12 data seam)
+- `examples/ecommerce/src/raw_baseline/pricing/discount_strategy.rs` (hand-written Rust baseline for the canonical pricing sum seam)
+- `examples/ecommerce/src/raw_baseline/pricing/pricing_quote.rs` (hand-written Rust baseline for the canonical pricing data seam)
 
-Recorded adversarial calibration for the M13 wedge is locked: `pricing/discount_policy` scored `19`, `pricing/checkout_quote` scored `16`, and `pricing/discount_plus_tax` scored `14`. Canonical wedge remains `pricing/discount_policy`.
+Recorded adversarial calibration for the canonical wedge is locked: `pricing/discount_strategy` scored `19`, `pricing/pricing_quote` scored `16`, and `pricing/discount_plus_tax` scored `14`. Canonical wedge remains `pricing/discount_strategy`.
 
 The example crate is intentionally minimal. It provides a realistic place to keep unit specs, hand-written Rust baselines for the M12 and M13 migration wedges, and a Rust project scaffold that can host generated output. The checked-in `pricing/*.test.evidence.json` files are generated artifacts for this canonical example, not hand-authored source.
 
@@ -245,13 +285,13 @@ spec plan export <file>                   # emit dedicated plan bundle to stdout
 spec plan export <file> --output <file>   # write dedicated plan bundle to file
 ```
 
-Canonical M13 example loop from the repo root:
+Canonical ecommerce example loop from the repo root:
 
 ```bash
-cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_policy.unit.spec --format json
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_strategy.unit.spec --format json
 cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_policy_checkout_flow.test.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
 cargo run -p spec-cli -- status examples/ecommerce --format json
 ```
 
@@ -259,7 +299,7 @@ cargo run -p spec-cli -- status examples/ecommerce --format json
 
 `spec build` and directory-scoped `spec test` wrap the full pipeline so you can validate, generate, and compile in one step. `spec build` is directory-scoped only. `spec test` updates each unit's `.spec.passport.json` with observed local-test evidence and writes co-located `*.test.evidence.json` artifacts for molecule tests. Passports persist a `freshness_anchor` snapshot as the proof anchor from the last unit test run, while `freshness` is a live projection against the current spec. Marked seam passports may also carry additive `escape_hatch_gate` metadata. In M14 that gate requires both `atom` and `molecule` proof; `atom` is present only when the authored local tests pass and the seam's projected freshness is still current, and an open gate uses a stable reason like `missing required escape-hatch proof: molecule`.
 
-Semantic review for `kind:function` is bounded to a small shipped family vocabulary, not arbitrary function understanding. The current supported family keys are `function.arithmetic_leaf.monotone_down_nonnegative.v1`, `function.arithmetic_leaf.monotone_up.v1`, and `function.wrapper.pipeline.v1`. In the canonical ecommerce example, `pricing/apply_discount`, `pricing/apply_tax`, and `pricing/calculate_total` refresh to those family keys when their authored and executable shapes fit honestly. M20 does not add a new supported function family.
+Semantic review for `kind:function` is bounded to a small shipped family vocabulary, not arbitrary function understanding. The current supported function family keys are `function.helper.identity_passthrough.v1`, `function.arithmetic_leaf.monotone_down_nonnegative.v1`, `function.arithmetic_leaf.monotone_up.v1`, `function.wrapper.pipeline.normalized_required_arg.v1`, `function.wrapper.pipeline.v1`, and `function.wrapper.pipeline.chain3.v1`. In the canonical ecommerce and TypeScript fixture flows, `money/round`, `pricing/apply_discount`, `pricing/apply_tax`, `pricing/calculate_total`, and the bounded chain3 forms refresh to those family keys when their authored and executable shapes fit honestly. M60 adds one supported wrapper family for apply_tax(discounted, tax_rate.max(Decimal::ZERO)); broader required-argument expressions remain unsupported.
 
 M20 also makes unsupported-function truth explicit. The public fields are exactly `semantic_review.support_status`, `semantic_review.unsupported_reason_codes`, and `semantic_review.rewrite_hints`. New supported reviews write `support_status: supported`; unsupported function reviews write `support_status: unsupported`. Consumers should branch on `semantic_review.support_status == "unsupported"` instead of inferring unsupported state from `verdict` or `evaluator_scope`, though legacy reviews without `support_status` still fall back to `evaluator_scope` plus `unsupported.*.v1` compatibility-key inference.
 

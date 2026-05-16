@@ -291,21 +291,23 @@ where
 mod tests {
     use super::*;
     use crate::family::{
-        certify, decision_kernel,
+        certify,
         harness::{
             CHAIN3_CERTIFY_SUITES, CHAIN3_MUST_NOT_SHADOW, CHAIN3_PRECEDENCE, CHAIN3_PROVE_SUITES,
-            CHAIN3_SUITE_SLUG, FamilyHarness, LockedManifestArgs, LockedManifestRouting,
-            LockedManifestShape, MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES,
-            MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW, MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE,
-            MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES, MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG,
-            MONOTONE_UP_CERTIFY_SUITES, MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE,
-            MONOTONE_UP_PROVE_SUITES, MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition,
-            ScaffoldDefinition, SmokeContract, StarterCaseDefinition, StarterTemplate,
-            TERMINAL_UNSUPPORTED_CATCH_ALL, WRAPPER_PIPELINE_CERTIFY_SUITES,
-            WRAPPER_PIPELINE_MUST_NOT_SHADOW, WRAPPER_PIPELINE_PRECEDENCE,
-            WRAPPER_PIPELINE_PROVE_SUITES, WRAPPER_PIPELINE_SUITE_SLUG, family_harness,
-            family_harness_in, registered_harnesses_in_routing_order_from,
-            require_family_harness_in, validate_suite_ownership,
+            CHAIN3_SUITE_SLUG, FamilyHarness, HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW,
+            HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE, HELPER_IDENTITY_PASSTHROUGH_SUITE_SLUG,
+            LockedManifestArgs, LockedManifestRouting, LockedManifestShape,
+            MONOTONE_DOWN_NONNEGATIVE_CERTIFY_SUITES, MONOTONE_DOWN_NONNEGATIVE_MUST_NOT_SHADOW,
+            MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE, MONOTONE_DOWN_NONNEGATIVE_PROVE_SUITES,
+            MONOTONE_DOWN_NONNEGATIVE_SUITE_SLUG, MONOTONE_UP_CERTIFY_SUITES,
+            MONOTONE_UP_MUST_NOT_SHADOW, MONOTONE_UP_PRECEDENCE, MONOTONE_UP_PROVE_SUITES,
+            MONOTONE_UP_SUITE_SLUG, ProveSuiteDefinition, ScaffoldDefinition, SmokeContract,
+            StarterCaseDefinition, StarterTemplate, TERMINAL_UNSUPPORTED_CATCH_ALL,
+            WRAPPER_PIPELINE_CERTIFY_SUITES, WRAPPER_PIPELINE_MUST_NOT_SHADOW,
+            WRAPPER_PIPELINE_PRECEDENCE, WRAPPER_PIPELINE_PROVE_SUITES,
+            WRAPPER_PIPELINE_SUITE_SLUG, family_harness, family_harness_in,
+            registered_harnesses_in_routing_order_from, require_family_harness_in,
+            validate_suite_ownership,
         },
         inventory,
         layout::validate_packet_layout,
@@ -346,7 +348,8 @@ mod tests {
     };
     use spec_core::loader::load_file;
     use spec_core::semantic_review::{
-        SemanticSupportStatus, UnsupportedFunctionReasonCode, evaluate_semantic_review,
+        SemanticSupportStatus, SemanticVerdict, UnsupportedFunctionReasonCode,
+        evaluate_semantic_review,
     };
     use spec_core::validator::validate_full;
     use std::cell::RefCell;
@@ -645,7 +648,11 @@ mod tests {
         let paths = PacketPaths::new(temp_dir.path(), family.clone());
 
         scaffold::run(temp_dir.path(), family.as_str()).unwrap();
-        rewrite_manifest(&paths.manifest, "precedence = 3", "precedence = 33");
+        rewrite_manifest(
+            &paths.manifest,
+            &format!("precedence = {MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE}"),
+            "precedence = 33",
+        );
 
         let error = smoke::run(temp_dir.path(), family.as_str()).unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(message)
@@ -751,6 +758,70 @@ mod tests {
     }
 
     #[test]
+    fn family_new_creates_locked_helper_identity_passthrough_scaffold() {
+        let temp_dir = workspace_root();
+        let family = "function.helper.identity_passthrough.v1";
+
+        assert_eq!(
+            run_from(temp_dir.path(), ["xtask", "family", "new", family]),
+            0
+        );
+
+        let family_id = FamilyId::parse(family).unwrap();
+        let harness = family_harness(&family_id).unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family_id);
+
+        let manifest = fs::read_to_string(&paths.manifest).unwrap();
+        assert!(manifest.contains("schema_version = 2"));
+        assert!(manifest.contains(&format!(
+            "precedence = {HELPER_IDENTITY_PASSTHROUGH_PRECEDENCE}"
+        )));
+        assert!(manifest.contains("dep_min = 0"));
+        assert!(manifest.contains("dep_max = 0"));
+        assert!(manifest.contains("requires_supported_function_deps = false"));
+        for family_id in HELPER_IDENTITY_PASSTHROUGH_MUST_NOT_SHADOW {
+            assert_eq!(manifest.matches(family_id).count(), 1);
+        }
+
+        let candidate = fs::read_to_string(&paths.candidate).unwrap();
+        for case in harness.scaffold.starter_cases {
+            let unit_path = paths.root.join(case.path);
+            assert!(
+                unit_path.is_file(),
+                "missing helper scaffold `{}`",
+                unit_path.display()
+            );
+            assert_candidate_lists_path_once(&candidate, case.path);
+            let loaded = load_file(&unit_path).unwrap();
+            validate_full(&loaded).unwrap();
+        }
+
+        let aligned_path = paths
+            .root
+            .join("fixtures/aligned/units/money/round.unit.spec");
+        let aligned = fs::read_to_string(&aligned_path).unwrap();
+        let aligned_review = evaluate_semantic_review(&load_file(&aligned_path).unwrap()).unwrap();
+        assert!(aligned.contains("id: money/round"));
+        assert!(aligned.contains(
+            "why: \"TODO: replace this scaffolded helper with real authored behavior.\""
+        ));
+        assert!(aligned.contains("value: Decimal"));
+        assert!(aligned.contains("returns: Decimal"));
+        assert!(aligned.contains("{\n        value\n    }"));
+        assert!(aligned.contains("round_placeholder"));
+        assert!(!aligned.contains("deps:"));
+        assert!(!aligned.contains("invariants:"));
+        assert!(!aligned.contains("if "));
+        assert!(!aligned.contains("round_dp_with_strategy"));
+        assert_eq!(aligned_review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            aligned_review.effective_support_status(),
+            SemanticSupportStatus::Supported
+        );
+        assert_eq!(harness.suite_slug, HELPER_IDENTITY_PASSTHROUGH_SUITE_SLUG);
+    }
+
+    #[test]
     fn family_smoke_accepts_committed_monotone_up_scaffold_surfaces() {
         let temp_dir = workspace_root();
         let family = "function.arithmetic_leaf.monotone_up.v1";
@@ -800,9 +871,11 @@ mod tests {
             locked_routing_order_with_terminal(),
             [
                 "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.normalized_required_arg.v1",
                 "function.wrapper.pipeline.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
+                "function.helper.identity_passthrough.v1",
                 "unsupported.function.v1",
             ]
         );
@@ -992,7 +1065,7 @@ mod tests {
             0
         );
         assert_eq!(WRAPPER_PIPELINE_PROVE_SUITES.len(), 3);
-        assert_eq!(WRAPPER_PIPELINE_CERTIFY_SUITES.len(), 1);
+        assert_eq!(WRAPPER_PIPELINE_CERTIFY_SUITES.len(), 2);
         assert_eq!(
             harness
                 .prove_suites
@@ -1723,6 +1796,7 @@ must_not_shadow = [
   "function.wrapper.pipeline.v1",
   "function.arithmetic_leaf.monotone_down_nonnegative.v1",
   "function.arithmetic_leaf.monotone_up.v1",
+  "function.helper.identity_passthrough.v1",
 ]
 
 [shape]
@@ -1899,6 +1973,37 @@ gate_d = true
         let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
         let error = validate_packet_layout(&paths.root, &manifest, harness).unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn packet_layout_validation_ignores_derived_proof_artifacts_under_units() {
+        let temp_dir = workspace_root();
+        let family = FamilyId::parse("function.wrapper.pipeline.chain3.v1").unwrap();
+        let paths = PacketPaths::new(temp_dir.path(), family.clone());
+        scaffold::run(temp_dir.path(), family.as_str()).unwrap();
+        seed_valid_manifest(&paths.manifest, family.as_str());
+        seed_valid_cases(&paths);
+        write_string(
+            &paths.fixtures.join("aligned/units/.gitignore"),
+            "*.spec.passport.json\n",
+        );
+        write_string(
+            &paths
+                .fixtures
+                .join("aligned/units/pricing/checkout_chain3_aligned.spec.passport.json"),
+            "{}\n",
+        );
+        write_string(
+            &paths
+                .fixtures
+                .join("aligned/units/pricing/checkout_chain3_flow.test.evidence.json"),
+            "{}\n",
+        );
+
+        let harness = family_harness(&family).unwrap();
+        let manifest = parse_manifest_file(&paths.manifest, &family, harness).unwrap();
+        let layout = validate_packet_layout(&paths.root, &manifest, harness).unwrap();
+        assert_eq!(layout.case_filenames.len(), 16);
     }
 
     #[cfg(unix)]
@@ -2594,24 +2699,59 @@ gate_d = true
             inventory.runtime_supported_routes,
             vec![
                 "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.normalized_required_arg.v1",
                 "function.wrapper.pipeline.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
+                "function.helper.identity_passthrough.v1",
             ]
         );
-        assert_eq!(inventory.supported_unpromoted_families.len(), 1);
+        assert_eq!(inventory.supported_unpromoted_families.len(), 3);
 
-        let wrapper = inventory.supported_unpromoted_families.first().unwrap();
+        let normalized = inventory.supported_unpromoted_families.first().unwrap();
+        assert_eq!(
+            normalized.family,
+            "function.wrapper.pipeline.normalized_required_arg.v1"
+        );
+        assert_eq!(
+            normalized.routing_predecessor.as_deref(),
+            Some("function.wrapper.pipeline.chain3.v1")
+        );
+        assert_eq!(
+            normalized.routing_successors,
+            vec![
+                "function.wrapper.pipeline.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+                "function.helper.identity_passthrough.v1",
+                "unsupported.function.v1",
+            ]
+        );
+        assert_eq!(
+            normalized.canonical_seed_paths,
+            vec!["examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec"]
+        );
+        assert_eq!(
+            normalized.existing_wedge_paths,
+            vec!["spec-core/src/semantic_review.rs"]
+        );
+        assert_eq!(
+            normalized.supporting_packet_paths,
+            vec!["semantic-families/function.wrapper.pipeline.normalized_required_arg.v1"]
+        );
+
+        let wrapper = inventory.supported_unpromoted_families.get(1).unwrap();
         assert_eq!(wrapper.family, "function.wrapper.pipeline.v1");
         assert_eq!(
             wrapper.routing_predecessor.as_deref(),
-            Some("function.wrapper.pipeline.chain3.v1")
+            Some("function.wrapper.pipeline.normalized_required_arg.v1")
         );
         assert_eq!(
             wrapper.routing_successors,
             vec![
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
+                "function.helper.identity_passthrough.v1",
                 "unsupported.function.v1",
             ]
         );
@@ -2623,7 +2763,30 @@ gate_d = true
             wrapper.existing_wedge_paths,
             vec!["spec-cli/tests/m14_regressions.rs"]
         );
-        assert_eq!(wrapper.supporting_packet_paths.len(), 6);
+        assert_eq!(
+            wrapper.supporting_packet_paths,
+            vec!["semantic-families/function.wrapper.pipeline.v1"]
+        );
+
+        let helper = inventory.supported_unpromoted_families.get(2).unwrap();
+        assert_eq!(helper.family, "function.helper.identity_passthrough.v1");
+        assert_eq!(
+            helper.routing_predecessor.as_deref(),
+            Some("function.arithmetic_leaf.monotone_up.v1")
+        );
+        assert_eq!(helper.routing_successors, vec!["unsupported.function.v1"]);
+        assert_eq!(
+            helper.canonical_seed_paths,
+            vec![
+                "examples/ecommerce/units/money/round.unit.spec",
+                "examples/shared-spec/units/money/round.unit.spec",
+            ]
+        );
+        assert_eq!(
+            helper.existing_wedge_paths,
+            vec!["xtask/src/family/analysis_core/helper_surface.rs"]
+        );
+        assert!(helper.supporting_packet_paths.is_empty());
     }
 
     #[test]
@@ -3487,7 +3650,8 @@ gate_d = true
             (2, 1, 0),
         )]);
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3520,7 +3684,8 @@ gate_d = true
         ];
         artifact.evidence_summary.missing_evidence = vec![EvidenceState::ThinRealExampleSupport];
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3541,7 +3706,8 @@ gate_d = true
         artifact.decision_summary.decision_status = DecisionStatus::BlockedForNow;
         artifact.evidence_summary.stale_evidence = vec![EvidenceState::StaleEvidence];
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3561,7 +3727,7 @@ gate_d = true
         )]);
 
         assert_eq!(
-            decision_kernel::corpus_program_basis_snapshot(&artifact),
+            family::analysis_core::corpus_program_basis_snapshot(&artifact),
             CorpusProgramBasisSnapshot {
                 recommendation_status: artifact.recommendation_status,
                 decision_status: artifact.decision_summary.decision_status,
@@ -3585,7 +3751,8 @@ gate_d = true
             )],
         );
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3617,7 +3784,8 @@ gate_d = true
             )],
         );
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(
             derived.decision_action,
@@ -3646,7 +3814,8 @@ gate_d = true
             Vec::new(),
         );
 
-        let derived = recommend::derive_corpus_program_decision_contract(&artifact).unwrap();
+        let derived =
+            family::analysis_core::derive_corpus_program_decision_contract(&artifact).unwrap();
 
         assert_eq!(derived.decision_action, CorpusProgramDecisionAction::Stop);
         assert_eq!(
@@ -3792,7 +3961,7 @@ gate_d = true
     }
 
     #[test]
-    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held()
+    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_holds_thin_wrapper_topology_candidate()
      {
         let temp_dir = workspace_root();
         seed_locked_recommendation_workspace(temp_dir.path());
@@ -3847,50 +4016,83 @@ gate_d = true
                 .iter()
                 .map(|source| source.unit_count)
                 .collect::<Vec<_>>(),
-            vec![6, 12, 9, 1, 2]
+            vec![7, 12, 9, 5, 4]
         );
-        assert_eq!(coverage.function_coverage.total_units, 28);
-        assert_eq!(coverage.function_coverage.promoted_family_units, 17);
+        assert_eq!(coverage.function_coverage.total_units, 35);
+        assert_eq!(coverage.function_coverage.promoted_family_units, 23);
         assert_eq!(
             coverage.function_coverage.supported_unpromoted_family_units,
-            0
+            3
         );
-        assert_eq!(coverage.function_coverage.unsupported_function_units, 11);
+        assert_eq!(coverage.function_coverage.unsupported_function_units, 9);
+
+        let helper_family = coverage
+            .family_coverage
+            .iter()
+            .find(|entry| entry.family == "function.helper.identity_passthrough.v1")
+            .unwrap();
+        assert_eq!(helper_family.unit_count, 3);
+        assert_eq!(
+            helper_family.source_ids,
+            vec![
+                "examples_ecommerce".to_string(),
+                "examples_shared_spec".to_string(),
+                "m20_unsupported_truth_pack".to_string(),
+            ]
+        );
+
+        let normalized_wrapper_family = coverage
+            .family_coverage
+            .iter()
+            .find(|entry| entry.family == "function.wrapper.pipeline.normalized_required_arg.v1")
+            .unwrap();
+        assert_eq!(normalized_wrapper_family.unit_count, 1);
+        assert_eq!(
+            normalized_wrapper_family.source_ids,
+            vec!["examples_ecommerce".to_string()]
+        );
+
+        let wrapper_family = coverage
+            .family_coverage
+            .iter()
+            .find(|entry| entry.family == "function.wrapper.pipeline.v1")
+            .unwrap();
+        assert_eq!(wrapper_family.unit_count, 7);
+        assert_eq!(
+            wrapper_family.source_ids,
+            vec![
+                "examples_crosslib_app".to_string(),
+                "examples_ecommerce".to_string(),
+                "examples_shared_spec".to_string(),
+                "m19_semantic_falsification_pack".to_string(),
+                "m20_unsupported_truth_pack".to_string(),
+            ]
+        );
 
         assert_eq!(recommendation.ranked_candidates.len(), 1);
-
-        let visible_candidate = &recommendation.ranked_candidates[0];
+        let candidate = &recommendation.ranked_candidates[0];
         assert_eq!(
-            visible_candidate.cluster_ids,
-            vec!["unsupported_function_surface-e40675da6fa0".to_string()]
+            candidate.candidate_id,
+            "a-unsupporteddeptopology-unsupported_dep_topology-fbecce0dbe98"
         );
         assert_eq!(
-            visible_candidate.promotion_readiness,
-            PromotionReadiness::Hold
+            candidate.cluster_ids,
+            vec!["unsupported_dep_topology-fbecce0dbe98".to_string()]
         );
         assert_eq!(
-            visible_candidate.hold_reasons,
-            vec![HoldReason::HelperSurfaceNotPromotable]
+            candidate.primary_reason_code,
+            UnsupportedFunctionReasonCode::UnsupportedDepTopology
         );
+        assert_eq!(candidate.overlap_family, "function.wrapper.pipeline*");
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Hold);
         assert_eq!(
-            visible_candidate.next_step_status,
-            NextStepStatus::DurableHold
+            candidate.hold_reasons,
+            vec![
+                HoldReason::HardDifficulty,
+                HoldReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport,
+            ]
         );
-        assert_eq!(
-            visible_candidate.next_step_detail,
-            NextStepDetail::HelperSurfaceNotPromotable
-        );
-        assert_eq!(
-            visible_candidate.leverage,
-            RecommendationLeverage {
-                real_example_hits: 2,
-                promotion_relevant_regression_hits: 1,
-                boundary_only_hits: 0,
-                total_units_in_cluster: 3,
-            }
-        );
-        assert_eq!(visible_candidate.difficulty.tier, DifficultyTier::Hard);
-        assert_eq!(visible_candidate.confidence.level, ConfidenceLevel::Low);
     }
 
     #[test]
@@ -3977,7 +4179,8 @@ gate_d = true
             "unsupported_function_surface-e40675da6fa0",
             (2, 1, 0),
         )]);
-        let baseline = coverage::normalized_coverage_proof_fingerprint(&artifact).unwrap();
+        let baseline =
+            family::analysis_core::normalized_coverage_proof_fingerprint(&artifact).unwrap();
 
         let mut churned = artifact.clone();
         churned.generated_at = "2026-05-06T03:00:00Z".to_string();
@@ -3986,7 +4189,7 @@ gate_d = true
         churned.inventory_sha256 = "different-inventory-sha".to_string();
 
         assert_eq!(
-            coverage::normalized_coverage_proof_fingerprint(&churned).unwrap(),
+            family::analysis_core::normalized_coverage_proof_fingerprint(&churned).unwrap(),
             baseline
         );
     }
@@ -3997,13 +4200,14 @@ gate_d = true
             "unsupported_function_surface-e40675da6fa0",
             (2, 1, 0),
         )]);
-        let baseline = coverage::normalized_coverage_proof_fingerprint(&artifact).unwrap();
+        let baseline =
+            family::analysis_core::normalized_coverage_proof_fingerprint(&artifact).unwrap();
 
         let mut changed = artifact.clone();
         changed.unsupported_clusters[0].real_example_hits = 3;
 
         assert_ne!(
-            coverage::normalized_coverage_proof_fingerprint(&changed).unwrap(),
+            family::analysis_core::normalized_coverage_proof_fingerprint(&changed).unwrap(),
             baseline
         );
     }
@@ -4014,7 +4218,8 @@ gate_d = true
             "unsupported_function_surface-e40675da6fa0",
             (2, 1, 0),
         )]);
-        let baseline = recommend::normalized_recommendation_proof_fingerprint(&artifact).unwrap();
+        let baseline =
+            family::analysis_core::normalized_recommendation_proof_fingerprint(&artifact).unwrap();
 
         let mut churned = artifact.clone();
         churned.generated_at = "2026-05-06T03:00:00Z".to_string();
@@ -4031,7 +4236,7 @@ gate_d = true
         };
 
         assert_eq!(
-            recommend::normalized_recommendation_proof_fingerprint(&churned).unwrap(),
+            family::analysis_core::normalized_recommendation_proof_fingerprint(&churned).unwrap(),
             baseline
         );
     }
@@ -4048,7 +4253,8 @@ gate_d = true
         )
         .unwrap();
         let baseline =
-            recommend::normalized_corpus_program_decision_proof_fingerprint(&artifact).unwrap();
+            family::analysis_core::normalized_corpus_program_decision_proof_fingerprint(&artifact)
+                .unwrap();
 
         let mut changed = artifact.clone();
         changed.decision_action = CorpusProgramDecisionAction::Stop;
@@ -4057,7 +4263,8 @@ gate_d = true
         changed.required_next_action = RequiredNextAction::RecordStopWithoutNewMilestone;
 
         assert_ne!(
-            recommend::normalized_corpus_program_decision_proof_fingerprint(&changed).unwrap(),
+            family::analysis_core::normalized_corpus_program_decision_proof_fingerprint(&changed)
+                .unwrap(),
             baseline
         );
     }
@@ -4074,13 +4281,15 @@ gate_d = true
         )
         .unwrap();
         let baseline =
-            recommend::normalized_corpus_program_decision_proof_fingerprint(&artifact).unwrap();
+            family::analysis_core::normalized_corpus_program_decision_proof_fingerprint(&artifact)
+                .unwrap();
 
         let mut churned = artifact.clone();
         churned.generated_at = "2026-05-06T03:00:00Z".to_string();
 
         assert_eq!(
-            recommend::normalized_corpus_program_decision_proof_fingerprint(&churned).unwrap(),
+            family::analysis_core::normalized_corpus_program_decision_proof_fingerprint(&churned)
+                .unwrap(),
             baseline
         );
     }
@@ -4289,7 +4498,7 @@ gate_d = true
                 generated_at: "2026-05-05T02:00:00Z".to_string(),
                 analysis_basis_path: FAMILY_RECOMMENDATION_ANALYSIS_LATEST_PATH.to_string(),
                 analysis_basis_sha256,
-                basis_snapshot: decision_kernel::corpus_program_basis_snapshot(&analysis),
+                basis_snapshot: family::analysis_core::corpus_program_basis_snapshot(&analysis),
                 decision_action: CorpusProgramDecisionAction::PivotToArchitectureSharedCoreFollowOn,
                 decision_basis_code:
                     CorpusProgramDecisionBasisCode::DurableNonPromotableHelperSurface,
@@ -4558,13 +4767,19 @@ gate_d = true
     fn seed_inventory_repo_truth(workspace_root: &Path) {
         write_string(
             &workspace_root.join("spec-core/src/semantic_review.rs"),
-            r#"const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 4] = [
+            r#"const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 6] = [
     SupportedFunctionRoute::WrapperPipelineChain3,
+    SupportedFunctionRoute::WrapperPipelineNormalizedRequiredArg,
     SupportedFunctionRoute::WrapperPipeline,
     SupportedFunctionRoute::ArithmeticLeafMonotoneDownNonnegative,
     SupportedFunctionRoute::ArithmeticLeafMonotoneUp,
+    SupportedFunctionRoute::HelperIdentityPassthrough,
 ];
 "#,
+        );
+        write_string(
+            &workspace_root.join("examples/ecommerce/units/money/round.unit.spec"),
+            "id: money/round\n",
         );
         write_string(
             &workspace_root.join("examples/ecommerce/units/pricing/apply_discount.unit.spec"),
@@ -4579,8 +4794,21 @@ gate_d = true
             "id: pricing/calculate_total\n",
         );
         write_string(
+            &workspace_root
+                .join("examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec"),
+            "id: pricing/calculate_total_guarded_tax\n",
+        );
+        write_string(
             &workspace_root.join("spec-cli/tests/m14_regressions.rs"),
             "fn wrapper_pipeline_existing_wedge() {}\n",
+        );
+        write_string(
+            &workspace_root.join("examples/shared-spec/units/money/round.unit.spec"),
+            "id: money/round\n",
+        );
+        write_string(
+            &workspace_root.join("xtask/src/family/analysis_core/helper_surface.rs"),
+            "const HELPER_SURFACE_FINGERPRINT: &str = \"fixture\";\n",
         );
         write_string(
             &workspace_root.join(
@@ -4624,6 +4852,13 @@ gate_d = true
             ),
             "kind: function\n",
         );
+        fs::create_dir_all(
+            workspace_root
+                .join("semantic-families/function.wrapper.pipeline.normalized_required_arg.v1"),
+        )
+        .unwrap();
+        fs::create_dir_all(workspace_root.join("semantic-families/function.wrapper.pipeline.v1"))
+            .unwrap();
         fs::create_dir_all(
             workspace_root
                 .join("semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1"),
@@ -5090,6 +5325,7 @@ gate_d = true
             "examples/shared-spec/units",
             "examples/crosslib-app/units",
             "semantic-families/corpus/rust-function.toml",
+            "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1",
             "semantic-families/function.wrapper.pipeline.v1",
             "semantic-families/function.wrapper.pipeline.chain3.v1",
             "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1",
@@ -5097,6 +5333,7 @@ gate_d = true
             "spec-cli/tests/fixtures/m19/semantic_falsification_pack/units",
             "spec-cli/tests/fixtures/m20/unsupported_truth_pack/units",
             "spec-cli/tests/m14_regressions.rs",
+            "xtask/src/family/analysis_core/helper_surface.rs",
             "spec-core/src/semantic_review.rs",
         ] {
             copy_path_from_repo(workspace_root, relative_path);
@@ -5174,9 +5411,11 @@ summary = "Straight-line three-call wrapper pipeline over supported function dep
 [routing]
 precedence = 1
 must_not_shadow = [
+  "function.wrapper.pipeline.normalized_required_arg.v1",
   "function.wrapper.pipeline.v1",
   "function.arithmetic_leaf.monotone_down_nonnegative.v1",
   "function.arithmetic_leaf.monotone_up.v1",
+  "function.helper.identity_passthrough.v1",
 ]
 
 [shape]

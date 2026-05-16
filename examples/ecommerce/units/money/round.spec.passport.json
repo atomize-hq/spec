@@ -13,7 +13,7 @@
   },
   "deps": [],
   "local_tests": [],
-  "generated_at": "2026-05-04T13:19:58Z",
+  "generated_at": "2026-05-16T04:17:49Z",
   "source_file": "examples/ecommerce/units/money/round.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -30,6 +30,57 @@
     "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7",
     "authored_truth_status": "fresh",
     "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [],
+        "observed_at": "2026-04-26T18:41:14Z",
+        "provenance": {
+          "git_commit_sha": "3b97e614196eb579b3c167048a57bb91f28580dd"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:3dda3c65e878f4a83e09d89cf909a238ec336dbe5f26ff4f9eaade94c42b21f7",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  },
+  "semantic_review": {
+    "verdict": "aligned",
+    "compatibility_key": "function.helper.identity_passthrough.v1",
+    "support_status": "supported",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Round monetary values (placeholder for compilation proof)."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "1 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "body.typescript",
+        "summary": "authored TypeScript body present"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function round with 1 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
   },
   "contract_hash": "sha256:5b5fe2cf748b211051a4b6a1d213a70308302ab84c6687d5f23e54cc8003ebb8"
 }

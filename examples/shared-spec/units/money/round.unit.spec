@@ -15,6 +15,10 @@ body:
     {
         value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
     }
+  typescript: |
+    {
+        return value.round(2);
+    }
 local_tests:
   - id: rounds_half_up
     expect: round(Decimal::new(12345, 3)) == Decimal::new(1235, 2)

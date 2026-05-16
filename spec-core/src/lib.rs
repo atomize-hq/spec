@@ -20,9 +20,11 @@ pub mod passport;
 pub mod pipeline;
 pub mod plan;
 pub mod portability;
+pub mod portability_contract;
 pub mod semantic_review;
 mod syntax;
 pub mod types;
+pub mod typescript_backend;
 pub mod validator;
 
 pub use graph::{ImpactSet, MoleculeTestNode, SpecEdge, SpecGraph, UnitNode};

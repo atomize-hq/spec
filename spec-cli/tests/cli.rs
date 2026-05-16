@@ -679,14 +679,14 @@ fn seed_semantic_status_artifacts(units_dir: &Path) {
     write_molecule_evidence(&molecule_evidence, &molecule_path).unwrap();
 }
 
-fn supported_checkout_quote_semantic_review(
+fn supported_pricing_quote_semantic_review(
     verdict: SemanticVerdict,
     reason_codes: Vec<SemanticReasonCode>,
     summary: &str,
 ) -> SemanticReview {
     SemanticReview {
         verdict,
-        compatibility_key: "data.checkout_quote.v1".to_string(),
+        compatibility_key: DATA_SEAM_COMPATIBILITY_KEY.to_string(),
         support_status: None,
         unsupported_reason_codes: vec![],
         rewrite_hints: vec![],
@@ -704,8 +704,8 @@ fn seed_supported_data_semantic_status_artifacts(
 ) {
     const GENERATED_AT: &str = "2026-04-21T00:00:00Z";
 
-    let unit_path = units_dir.join("pricing/checkout_quote.unit.spec");
-    let molecule_path = units_dir.join("pricing/checkout_quote_flow.test.spec");
+    let unit_path = units_dir.join("pricing/pricing_quote.unit.spec");
+    let molecule_path = units_dir.join("pricing/pricing_quote_flow.test.spec");
 
     let spec = load_file(&unit_path).unwrap();
     let molecule_test = load_molecule_test_file(&molecule_path).unwrap();
@@ -840,13 +840,72 @@ local_tests:
     units_dir
 }
 
+fn write_supported_helper_function_semantic_status_project(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "supported-helper-function-semantic-status-project"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[workspace]
+"#,
+    );
+    write_file(
+        project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    write_spec(
+        &units_dir,
+        "money/round.unit.spec",
+        r#"
+id: money/round
+kind: function
+intent:
+  why: Round a decimal value to two fractional digits for pricing flows.
+spec_version: "0.3.0"
+contract:
+  inputs:
+    value: Decimal
+  returns: Decimal
+imports:
+  - rust_decimal::Decimal
+  - rust_decimal::RoundingStrategy
+body:
+  rust: |
+    {
+        value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+    }
+local_tests:
+  - id: rounds_half_up
+    expect: "round(Decimal::new(12345, 3)) == Decimal::new(1235, 2)"
+"#,
+    );
+
+    units_dir
+}
+
 const FUNCTION_FAMILY_A_COMPATIBILITY_KEY: &str =
     "function.arithmetic_leaf.monotone_down_nonnegative.v1";
 const FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY: &str = "function.arithmetic_leaf.monotone_up.v1";
 const FUNCTION_FAMILY_A_LEGACY_COMPATIBILITY_KEY: &str = "function.apply_discount.v1";
+const FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY: &str =
+    "function.wrapper.pipeline.normalized_required_arg.v1";
 const FUNCTION_FAMILY_B_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.v1";
 const FUNCTION_FAMILY_B_LEGACY_COMPATIBILITY_KEY: &str = "function.calculate_total.v1";
 const FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY: &str = "function.wrapper.pipeline.chain3.v1";
+const FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY: &str =
+    "function.helper.identity_passthrough.v1";
+const DATA_SEAM_COMPATIBILITY_KEY: &str = "data.pricing_quote.v1";
+const DATA_SEAM_LEGACY_COMPATIBILITY_KEY: &str = "data.checkout_quote.v1";
+const SUM_SEAM_COMPATIBILITY_KEY: &str = "sum.discount_strategy.v1";
+const SUM_SEAM_LEGACY_COMPATIBILITY_KEY: &str = "sum.discount_policy.v1";
 
 fn load_unit_specs_by_id(units_dir: &Path) -> HashMap<String, spec_core::types::LoadedSpec> {
     WalkDir::new(units_dir)
@@ -1090,7 +1149,24 @@ fn write_unsupported_function_semantic_status_project(project_dir: &Path) -> Pat
         &unit_path,
         source.replace(
             "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
-            "    {\n        apply_tax(apply_discount(subtotal, discount_rate), tax_rate.max(Decimal::ZERO))\n    }\n",
+            "    {\n        apply_tax(\n            apply_discount(subtotal, discount_rate),\n            tax_rate.max(Decimal::ZERO).round_dp(4),\n        )\n    }\n",
+        ),
+    )
+    .unwrap();
+    units_dir
+}
+
+fn write_supported_normalized_required_arg_wrapper_function_semantic_status_project(
+    project_dir: &Path,
+) -> PathBuf {
+    let units_dir = write_supported_wrapper_function_semantic_status_project(project_dir);
+    let unit_path = units_dir.join("pricing/calculate_total.unit.spec");
+    let source = fs::read_to_string(&unit_path).unwrap();
+    fs::write(
+        &unit_path,
+        source.replace(
+            "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate)\n    }\n",
+            "    {\n        let discounted = apply_discount(subtotal, discount_rate);\n        apply_tax(discounted, tax_rate.max(Decimal::ZERO))\n    }\n",
         ),
     )
     .unwrap();
@@ -1239,6 +1315,73 @@ fn copy_m21_chain3_fixture(bucket: &str) -> (tempfile::TempDir, PathBuf) {
     (temp_dir, fixture_dir)
 }
 
+fn copy_m30_wrapper_fixture(bucket: &str) -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let fixture_dir = temp_dir.path().join(format!("m30_wrapper_{bucket}"));
+    copy_dir_recursive(
+        &repo_root()
+            .join("semantic-families/function.wrapper.pipeline.v1/fixtures")
+            .join(bucket),
+        &fixture_dir,
+    )
+    .expect("failed to copy M30 wrapper fixture");
+    (temp_dir, fixture_dir)
+}
+
+fn copy_typescript_local_supported_graph_fixture() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = temp_repo_dir();
+    let fixture_dir = temp_dir.path().join("typescript_local_supported_graph");
+    copy_dir_recursive(
+        &repo_root().join("spec-cli/tests/fixtures/typescript_local_supported_graph"),
+        &fixture_dir,
+    )
+    .expect("failed to copy local supported-graph fixture");
+    (temp_dir, fixture_dir)
+}
+
+fn inject_typescript_body_if_missing(unit_path: &Path, typescript_body: &str) {
+    let contents = fs::read_to_string(unit_path).unwrap();
+    if contents.contains("\n  typescript: |\n") {
+        return;
+    }
+
+    let rewritten = contents.replace(
+        "\nlocal_tests:\n",
+        &format!("\n  typescript: |\n{typescript_body}\nlocal_tests:\n"),
+    );
+    assert_ne!(
+        rewritten,
+        contents,
+        "expected to inject a typescript body into `{}`",
+        unit_path.display()
+    );
+    fs::write(unit_path, rewritten).unwrap();
+}
+
+fn remove_typescript_body(unit_path: &Path) {
+    let contents = fs::read_to_string(unit_path).unwrap();
+    let (before, after) = contents
+        .split_once("\n  typescript: |\n")
+        .expect("expected a typescript body block to remove");
+    let (_, tail) = after
+        .split_once("\nlocal_tests:\n")
+        .expect("expected local_tests after the typescript body block");
+    let rewritten = format!("{before}\nlocal_tests:\n{tail}");
+    fs::write(unit_path, rewritten).unwrap();
+}
+
+fn replace_in_file(path: &Path, from: &str, to: &str) {
+    let contents = fs::read_to_string(path).unwrap();
+    let rewritten = contents.replace(from, to);
+    assert_ne!(
+        rewritten,
+        contents,
+        "expected fixture rewrite for `{}`",
+        path.display()
+    );
+    fs::write(path, rewritten).unwrap();
+}
+
 fn setup_m12_data_seam_project() -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let project_dir = temp_dir.path().join("m12-data-seam");
@@ -1312,9 +1455,9 @@ body:
     );
     write_spec(
         &units_dir,
-        "pricing/checkout_quote.unit.spec",
+        "pricing/pricing_quote.unit.spec",
         r#"
-id: pricing/checkout_quote
+id: pricing/pricing_quote
 kind: data
 spec_version: "0.3.0"
 intent:
@@ -1371,7 +1514,7 @@ methods:
           }
 local_tests:
   - id: total_basic
-    expect: CheckoutQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
+    expect: PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)
 backends:
   rust:
     derives:
@@ -1382,17 +1525,17 @@ backends:
     );
     write_spec(
         &units_dir,
-        "pricing/checkout_quote_flow.test.spec",
+        "pricing/pricing_quote_flow.test.spec",
         r#"
-id: pricing/checkout_quote_flow
+id: pricing/pricing_quote_flow
 intent:
   why: Verify the generated checkout quote seam composes with pricing helpers.
 covers:
-  - pricing/checkout_quote
+  - pricing/pricing_quote
 body:
   rust: |
     {
-        let quote = CheckoutQuote::new(
+        let quote = PricingQuote::new(
             rust_decimal::Decimal::new(10000, 2),
             rust_decimal::Decimal::new(10, 2),
             rust_decimal::Decimal::new(725, 4),
@@ -3200,6 +3343,10 @@ fn cargo_available() -> bool {
     Command::new("cargo").arg("--version").output().is_ok()
 }
 
+fn bun_available() -> bool {
+    Command::new("bun").arg("--version").output().is_ok()
+}
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -4118,12 +4265,303 @@ fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
     (temp_dir, dst_ecommerce)
 }
 
+fn copy_crosslib_typescript_example() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let app_dir = temp_dir.path().join("crosslib-app");
+    let shared_crate_dir = temp_dir.path().join("shared-crate");
+    let shared_spec_dir = temp_dir.path().join("shared-spec");
+
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .unwrap();
+    copy_dir_recursive(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_dir_recursive(&root.join("examples/shared-crate"), &shared_crate_dir).unwrap();
+    copy_dir_recursive(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+    remove_derived_artifacts(&app_dir);
+    remove_derived_artifacts(&shared_spec_dir);
+
+    (temp_dir, app_dir, shared_crate_dir, shared_spec_dir)
+}
+
+fn write_cross_library_chain3_spec(app_dir: &Path) -> PathBuf {
+    write_spec(
+        &app_dir.join("units"),
+        "pricing/checkout_chain3.unit.spec",
+        r#"
+id: pricing/checkout_chain3
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+    surcharge_rate: Decimal
+    loyalty_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/calculate_total
+  - shared::pricing/apply_tax
+  - shared::pricing/apply_discount
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        let surcharged_total = apply_tax(base_total, surcharge_rate);
+        apply_discount(surcharged_total, loyalty_rate)
+    }
+  typescript: |
+    {
+        const base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        const surcharged_total = apply_tax(base_total, surcharge_rate);
+        return apply_discount(surcharged_total, loyalty_rate);
+    }
+local_tests:
+  - id: happy_path
+    expect: checkout_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(96045, 4)
+"#,
+    );
+
+    app_dir.join("units/pricing/checkout_chain3.unit.spec")
+}
+
+fn write_cross_library_nested_chain3_specs(app_dir: &Path, shared_spec_dir: &Path) -> PathBuf {
+    write_spec(
+        &shared_spec_dir.join("units"),
+        "pricing/calculate_total.unit.spec",
+        r#"
+id: pricing/calculate_total
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the shared checkout total after discounting the subtotal and then applying tax.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/apply_discount
+  - pricing/apply_tax
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let discounted = apply_discount(subtotal, discount_rate);
+        apply_tax(discounted, tax_rate)
+    }
+  typescript: |
+    {
+        const discounted = apply_discount(subtotal, discount_rate);
+        return apply_tax(discounted, tax_rate);
+    }
+local_tests:
+  - id: happy_path
+    expect: calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(9653, 2)
+"#,
+    );
+    write_spec(
+        &shared_spec_dir.join("units"),
+        "pricing/base_nested_chain3.unit.spec",
+        r#"
+id: pricing/base_nested_chain3
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the shared nested chain3 subtotal before the app root applies its outer surcharge and loyalty discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+    surcharge_rate: Decimal
+    loyalty_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/calculate_total
+  - pricing/apply_tax
+  - pricing/apply_discount
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        let surcharged_total = apply_tax(base_total, surcharge_rate);
+        apply_discount(surcharged_total, loyalty_rate)
+    }
+  typescript: |
+    {
+        const base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        const surcharged_total = apply_tax(base_total, surcharge_rate);
+        return apply_discount(surcharged_total, loyalty_rate);
+    }
+local_tests:
+  - id: happy_path
+    expect: base_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(96045, 4)
+"#,
+    );
+    write_spec(
+        &app_dir.join("units"),
+        "pricing/checkout_nested_chain3.unit.spec",
+        r#"
+id: pricing/checkout_nested_chain3
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the app checkout total by extending the shared nested chain3 with one outer surcharge and loyalty discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+    surcharge_rate: Decimal
+    loyalty_rate: Decimal
+  returns: Decimal
+deps:
+  - shared::pricing/base_nested_chain3
+  - shared::pricing/apply_tax
+  - shared::pricing/apply_discount
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate);
+        let surcharged_total = apply_tax(base_total, surcharge_rate);
+        apply_discount(surcharged_total, loyalty_rate)
+    }
+  typescript: |
+    {
+        const base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate);
+        const surcharged_total = apply_tax(base_total, surcharge_rate);
+        return apply_discount(surcharged_total, loyalty_rate);
+    }
+local_tests:
+  - id: happy_path
+    expect: checkout_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(95760, 4)
+"#,
+    );
+
+    app_dir.join("units/pricing/checkout_nested_chain3.unit.spec")
+}
+
 fn read_passport(passport_path: &Path) -> String {
     fs::read_to_string(passport_path).unwrap()
 }
 
 fn read_passport_json(passport_path: &Path) -> Value {
     serde_json::from_str(&read_passport(passport_path)).unwrap()
+}
+
+fn seed_passport_semantic_review_compatibility_key(
+    passport_path: &Path,
+    compatibility_key: &str,
+) -> Value {
+    let mut passport = read_passport_json(passport_path);
+    passport["semantic_review"]["compatibility_key"] = serde_json::json!(compatibility_key);
+    fs::write(
+        passport_path,
+        serde_json::to_string_pretty(&passport).unwrap(),
+    )
+    .unwrap();
+    read_passport_json(passport_path)["semantic_review"].clone()
+}
+
+fn write_bounded_typescript_apply_tax_fixture(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    let spec_path = units_dir.join("pricing/apply_tax.unit.spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Add sales tax to a subtotal using a rate expressed as a decimal fraction.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal + subtotal * rate
+    }
+  typescript: |
+    {
+        return subtotal.add(subtotal.mul(rate));
+    }
+local_tests:
+  - id: basic_tax
+    expect: apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)
+"#,
+    );
+    spec_path
+}
+
+fn write_typescript_near_miss_fixture(project_dir: &Path) -> PathBuf {
+    let units_dir = project_dir.join("units");
+    let spec_path = units_dir.join("pricing/apply_discount.unit.spec");
+    write_spec(
+        &units_dir,
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Apply a discount to a subtotal while keeping the result nonnegative.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output <= subtotal
+    - output >= 0
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        (subtotal - subtotal * rate).max(Decimal::ZERO)
+    }
+  typescript: |
+    {
+        return subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));
+    }
+local_tests:
+  - id: happy_path
+    expect: apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)
+"#,
+    );
+    spec_path
+}
+
+#[cfg(unix)]
+fn path_with_fake_bun(project_dir: &Path, script_body: &str) -> std::ffi::OsString {
+    let fake_bin_dir = project_dir.join("fake-bin");
+    write_executable_file(&fake_bin_dir, "bun", script_body);
+    let mut path_override = std::ffi::OsString::from(fake_bin_dir.as_os_str());
+    path_override.push(":");
+    path_override.push(std::env::var_os("PATH").unwrap_or_default());
+    path_override
 }
 
 fn write_pricing_project(project_dir: &Path, target_has_tests: bool) -> PathBuf {
@@ -5147,7 +5585,7 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
     fs::remove_file(ecommerce_dir.join("units/pricing/discount_plus_tax.test.evidence.json"))
         .unwrap();
     fs::remove_file(
-        ecommerce_dir.join("units/pricing/discount_policy_checkout_flow.test.evidence.json"),
+        ecommerce_dir.join("units/pricing/discount_strategy_checkout_flow.test.evidence.json"),
     )
     .unwrap();
 
@@ -5158,22 +5596,22 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
     );
 
     let json = parse_stdout_json(&output);
-    let checkout_quote = status_units(&json)
+    let pricing_quote = status_units(&json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
-    assert_eq!(checkout_quote["status"], "incomplete", "{json}");
+    assert_eq!(pricing_quote["status"], "incomplete", "{json}");
     assert_eq!(
-        checkout_quote["reason"], "missing required escape-hatch proof: molecule",
+        pricing_quote["reason"], "missing required escape-hatch proof: molecule",
         "{json}"
     );
-    let discount_policy = status_units(&json)
+    let discount_strategy = status_units(&json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
-    assert_eq!(discount_policy["status"], "incomplete", "{json}");
+    assert_eq!(discount_strategy["status"], "incomplete", "{json}");
     assert_eq!(
-        discount_policy["reason"], "missing required escape-hatch proof: molecule",
+        discount_strategy["reason"], "missing required escape-hatch proof: molecule",
         "{json}"
     );
     assert!(
@@ -5196,7 +5634,7 @@ fn spec_status_checked_in_ecommerce_example_opens_marked_seam_gates_without_mole
 #[test]
 fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
     let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
-    let passport_path = ecommerce_dir.join("units/pricing/discount_policy.spec.passport.json");
+    let passport_path = ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
     let mut seeded_passport = read_passport_json(&passport_path);
     seeded_passport["escape_hatch_gate"] = serde_json::json!({
         "status": "open",
@@ -5219,7 +5657,7 @@ fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
     let status_json = parse_stdout_json(&status_output);
     let status_unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/discount_policy")
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
         .unwrap();
     assert_eq!(status_unit["status"], "valid", "{status_json}");
     assert_eq!(
@@ -5237,7 +5675,7 @@ fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/discount_policy")
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
         .unwrap();
 
     assert_eq!(
@@ -5245,6 +5683,441 @@ fn spec_status_and_export_ignore_stale_checked_in_marked_seam_gate_claims() {
         status_unit["escape_hatch_gate"]
     );
     assert_eq!(exported_passport["escape_hatch_gate"]["status"], "closed");
+}
+
+#[test]
+fn spec_status_and_export_reproject_marked_seam_markers_and_proof_coverage_from_current_truth() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    let passport_path = ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
+    let mut seeded_passport = read_passport_json(&passport_path);
+    seeded_passport["markers"] = serde_json::json!([
+        {
+            "id": "backend_rust_derives",
+            "path": "backends.rust.derives"
+        }
+    ]);
+    seeded_passport["proof_coverage"] = serde_json::json!([
+        {
+            "id": "variant.none",
+            "surfaces": ["implicit_only"]
+        }
+    ]);
+    fs::write(
+        &passport_path,
+        serde_json::to_string_pretty(&seeded_passport).unwrap(),
+    )
+    .unwrap();
+
+    let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert_output_success(
+        "status should reproject current marked-seam markers and proof coverage",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let status_unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
+        .unwrap();
+
+    assert_ne!(
+        status_unit["markers"], seeded_passport["markers"],
+        "{status_json}"
+    );
+    assert_ne!(
+        status_unit["proof_coverage"], seeded_passport["proof_coverage"],
+        "{status_json}"
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
+    assert_output_success(
+        "export should reproject current marked-seam markers and proof coverage",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
+        .unwrap();
+
+    assert_eq!(status_unit["markers"], exported_passport["markers"]);
+    assert_eq!(
+        status_unit["proof_coverage"],
+        exported_passport["proof_coverage"]
+    );
+    assert_eq!(
+        status_unit["escape_hatch_gate"],
+        exported_passport["escape_hatch_gate"]
+    );
+}
+
+#[test]
+fn seam_cli_status_and_export_preserve_legacy_semantic_reviews() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    let data_passport_path = ecommerce_dir.join("units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path =
+        ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
+    let seeded_data_review = seed_passport_semantic_review_compatibility_key(
+        &data_passport_path,
+        DATA_SEAM_COMPATIBILITY_KEY,
+    );
+    let seeded_sum_review = seed_passport_semantic_review_compatibility_key(
+        &sum_passport_path,
+        SUM_SEAM_COMPATIBILITY_KEY,
+    );
+
+    let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert_output_success(
+        "status should preserve canonical seam semantic reviews from checked-in passports",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let pricing_quote = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
+        .unwrap();
+    assert_eq!(pricing_quote["status"], "valid", "{status_json}");
+    assert_eq!(
+        pricing_quote["semantic_review"], seeded_data_review,
+        "{status_json}"
+    );
+    let discount_strategy = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
+        .unwrap();
+    assert_eq!(discount_strategy["status"], "valid", "{status_json}");
+    assert_eq!(
+        discount_strategy["semantic_review"], seeded_sum_review,
+        "{status_json}"
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
+    assert_output_success(
+        "export should preserve canonical seam semantic reviews from checked-in passports",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_pricing_quote = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
+        .unwrap();
+    assert_eq!(
+        exported_pricing_quote["semantic_review"], seeded_data_review,
+        "{export_json}"
+    );
+    let exported_discount_strategy = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
+        .unwrap();
+    assert_eq!(
+        exported_discount_strategy["semantic_review"], seeded_sum_review,
+        "{export_json}"
+    );
+}
+
+#[test]
+fn seam_cli_legacy_semantic_reviews_preserve_incomplete_health_semantics() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    let data_passport_path = ecommerce_dir.join("units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path =
+        ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
+    let seeded_data_review = seed_passport_semantic_review_compatibility_key(
+        &data_passport_path,
+        DATA_SEAM_COMPATIBILITY_KEY,
+    );
+    let seeded_sum_review = seed_passport_semantic_review_compatibility_key(
+        &sum_passport_path,
+        SUM_SEAM_COMPATIBILITY_KEY,
+    );
+
+    fs::remove_file(ecommerce_dir.join("units/pricing/checkout_flow.test.evidence.json")).unwrap();
+    fs::remove_file(ecommerce_dir.join("units/pricing/discount_plus_tax.test.evidence.json"))
+        .unwrap();
+    fs::remove_file(
+        ecommerce_dir.join("units/pricing/discount_strategy_checkout_flow.test.evidence.json"),
+    )
+    .unwrap();
+
+    let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "open marked-seam gates should keep status non-green even when canonical reviews are preserved"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let pricing_quote = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
+        .unwrap();
+    assert_eq!(pricing_quote["status"], "incomplete", "{status_json}");
+    assert_eq!(
+        pricing_quote["reason"], "missing required escape-hatch proof: molecule",
+        "{status_json}"
+    );
+    assert_eq!(
+        pricing_quote["semantic_review"], seeded_data_review,
+        "{status_json}"
+    );
+    let discount_strategy = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
+        .unwrap();
+    assert_eq!(discount_strategy["status"], "incomplete", "{status_json}");
+    assert_eq!(
+        discount_strategy["reason"], "missing required escape-hatch proof: molecule",
+        "{status_json}"
+    );
+    assert_eq!(
+        discount_strategy["semantic_review"], seeded_sum_review,
+        "{status_json}"
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
+    assert_output_success(
+        "export should preserve canonical seam reviews while marked-seam gates are open",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_pricing_quote = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
+        .unwrap();
+    assert_eq!(
+        exported_pricing_quote["semantic_review"], seeded_data_review,
+        "{export_json}"
+    );
+    let exported_discount_strategy = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
+        .unwrap();
+    assert_eq!(
+        exported_discount_strategy["semantic_review"], seeded_sum_review,
+        "{export_json}"
+    );
+}
+
+#[test]
+fn seam_cli_legacy_semantic_reviews_preserve_stale_health_semantics() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    let data_passport_path = ecommerce_dir.join("units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path =
+        ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
+    let seeded_data_review = seed_passport_semantic_review_compatibility_key(
+        &data_passport_path,
+        DATA_SEAM_COMPATIBILITY_KEY,
+    );
+    let seeded_sum_review = seed_passport_semantic_review_compatibility_key(
+        &sum_passport_path,
+        SUM_SEAM_COMPATIBILITY_KEY,
+    );
+
+    let pricing_quote_spec_path = ecommerce_dir.join("units/pricing/pricing_quote.unit.spec");
+    let pricing_quote_source = fs::read_to_string(&pricing_quote_spec_path).unwrap();
+    fs::write(
+        &pricing_quote_spec_path,
+        pricing_quote_source.replace(
+            "Quote a checkout total from subtotal plus discount and tax rates.",
+            "Quote a checkout total from subtotal plus discount and tax rates with revised authored intent.",
+        ),
+    )
+    .unwrap();
+    let discount_strategy_spec_path =
+        ecommerce_dir.join("units/pricing/discount_strategy.unit.spec");
+    let discount_strategy_source = fs::read_to_string(&discount_strategy_spec_path).unwrap();
+    fs::write(
+        &discount_strategy_spec_path,
+        discount_strategy_source.replace(
+            "Represent mutually exclusive discount strategies for checkout pricing.",
+            "Represent mutually exclusive discount strategies for checkout pricing with revised authored intent.",
+        ),
+    )
+    .unwrap();
+
+    let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "stale authored truth should keep status non-green even when canonical reviews are preserved"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let pricing_quote = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
+        .unwrap();
+    assert_eq!(pricing_quote["status"], "stale", "{status_json}");
+    assert_eq!(
+        pricing_quote["reason"], "authored truth changed since last test",
+        "{status_json}"
+    );
+    assert_eq!(
+        pricing_quote["semantic_review"], seeded_data_review,
+        "{status_json}"
+    );
+    let discount_strategy = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
+        .unwrap();
+    assert_eq!(discount_strategy["status"], "stale", "{status_json}");
+    assert_eq!(
+        discount_strategy["reason"], "authored truth changed since last test",
+        "{status_json}"
+    );
+    assert_eq!(
+        discount_strategy["semantic_review"], seeded_sum_review,
+        "{status_json}"
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
+    assert_output_success(
+        "export should preserve canonical seam reviews when authored seam truth is stale",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_pricing_quote = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
+        .unwrap();
+    assert_eq!(
+        exported_pricing_quote["freshness"]["authored_truth_status"],
+        "stale"
+    );
+    assert_eq!(
+        exported_pricing_quote["semantic_review"], seeded_data_review,
+        "{export_json}"
+    );
+    let exported_discount_strategy = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
+        .unwrap();
+    assert_eq!(
+        exported_discount_strategy["freshness"]["authored_truth_status"],
+        "stale"
+    );
+    assert_eq!(
+        exported_discount_strategy["semantic_review"], seeded_sum_review,
+        "{export_json}"
+    );
+}
+
+#[test]
+fn seam_cli_test_refresh_rewrites_legacy_semantic_review_keys_canonically() {
+    if !cargo_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example_preserving_artifacts();
+    let data_passport_path = ecommerce_dir.join("units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path =
+        ecommerce_dir.join("units/pricing/discount_strategy.spec.passport.json");
+    let seeded_data_review = seed_passport_semantic_review_compatibility_key(
+        &data_passport_path,
+        DATA_SEAM_LEGACY_COMPATIBILITY_KEY,
+    );
+    let seeded_sum_review = seed_passport_semantic_review_compatibility_key(
+        &sum_passport_path,
+        SUM_SEAM_LEGACY_COMPATIBILITY_KEY,
+    );
+
+    let data_test_output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/pricing_quote.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file data seam test should rewrite the legacy compatibility key canonically",
+        &data_test_output,
+    );
+    let sum_test_output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/discount_strategy.unit.spec",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "single-file sum seam test should rewrite the legacy compatibility key canonically",
+        &sum_test_output,
+    );
+
+    let refreshed_data_review = read_passport_json(&data_passport_path)["semantic_review"].clone();
+    assert_ne!(refreshed_data_review, seeded_data_review);
+    assert_eq!(
+        refreshed_data_review["compatibility_key"],
+        DATA_SEAM_COMPATIBILITY_KEY
+    );
+    let refreshed_sum_review = read_passport_json(&sum_passport_path)["semantic_review"].clone();
+    assert_ne!(refreshed_sum_review, seeded_sum_review);
+    assert_eq!(
+        refreshed_sum_review["compatibility_key"],
+        SUM_SEAM_COMPATIBILITY_KEY
+    );
+
+    let status_output = run_in(&ecommerce_dir, &["status", ".", "--format", "json"]);
+    assert_output_success(
+        "status should surface canonical seam semantic reviews after refresh",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let pricing_quote = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
+        .unwrap();
+    assert_eq!(
+        pricing_quote["semantic_review"]["compatibility_key"],
+        DATA_SEAM_COMPATIBILITY_KEY
+    );
+    let discount_strategy = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/discount_strategy")
+        .unwrap();
+    assert_eq!(
+        discount_strategy["semantic_review"]["compatibility_key"],
+        SUM_SEAM_COMPATIBILITY_KEY
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", ".", "--format", "json"]);
+    assert_output_success(
+        "export should surface canonical seam semantic reviews after refresh",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_pricing_quote = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
+        .unwrap();
+    assert_eq!(
+        exported_pricing_quote["semantic_review"]["compatibility_key"],
+        DATA_SEAM_COMPATIBILITY_KEY
+    );
+    let exported_discount_strategy = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/discount_strategy")
+        .unwrap();
+    assert_eq!(
+        exported_discount_strategy["semantic_review"]["compatibility_key"],
+        SUM_SEAM_COMPATIBILITY_KEY
+    );
 }
 
 #[test]
@@ -5291,12 +6164,15 @@ fn spec_status_text_stays_neutral_for_unsupported_surface_in_preserve_mode() {
 fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_review() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let passport_path = units_dir.join("pricing/checkout_quote.spec.passport.json");
+    let passport_path = units_dir.join("pricing/pricing_quote.spec.passport.json");
 
     seed_supported_data_semantic_status_artifacts(&units_dir, None);
     let seeded_passport = read_passport_json(&passport_path);
     let seeded_review = seeded_passport["semantic_review"].clone();
-    assert_eq!(seeded_review["compatibility_key"], "data.checkout_quote.v1");
+    assert_eq!(
+        seeded_review["compatibility_key"],
+        DATA_SEAM_COMPATIBILITY_KEY
+    );
 
     let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
     assert!(
@@ -5307,7 +6183,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
     assert_eq!(status_json["schema_version"], 3);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "valid", "{status_json}");
     assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
@@ -5320,7 +6196,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/checkout_quote")
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(passport["semantic_review"], seeded_review, "{export_json}");
 }
@@ -5329,7 +6205,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
 fn spec_status_demotes_supported_data_review_to_incomplete() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let review = supported_checkout_quote_semantic_review(
+    let review = supported_pricing_quote_semantic_review(
         SemanticVerdict::UnderSpecified,
         vec![SemanticReasonCode::MissingSemanticMethods],
         "authored semantic surfaces are too weak for honest evaluation",
@@ -5344,7 +6220,7 @@ fn spec_status_demotes_supported_data_review_to_incomplete() {
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "incomplete", "{status_json}");
     assert_eq!(
@@ -5354,7 +6230,7 @@ fn spec_status_demotes_supported_data_review_to_incomplete() {
     );
     assert_eq!(
         unit["semantic_review"]["compatibility_key"],
-        "data.checkout_quote.v1"
+        DATA_SEAM_COMPATIBILITY_KEY
     );
     assert_eq!(unit["semantic_review"]["verdict"], "under_specified");
 }
@@ -5363,7 +6239,7 @@ fn spec_status_demotes_supported_data_review_to_incomplete() {
 fn spec_status_demotes_supported_data_review_to_failing() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let review = supported_checkout_quote_semantic_review(
+    let review = supported_pricing_quote_semantic_review(
         SemanticVerdict::SemanticDrift,
         vec![SemanticReasonCode::MethodBodyMissingCapBehavior],
         "executable lowering contradicts authored semantic claims",
@@ -5378,7 +6254,7 @@ fn spec_status_demotes_supported_data_review_to_failing() {
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "failing", "{status_json}");
     assert_eq!(
@@ -5387,7 +6263,7 @@ fn spec_status_demotes_supported_data_review_to_failing() {
     );
     assert_eq!(
         unit["semantic_review"]["compatibility_key"],
-        "data.checkout_quote.v1"
+        DATA_SEAM_COMPATIBILITY_KEY
     );
     assert_eq!(unit["semantic_review"]["verdict"], "semantic_drift");
 }
@@ -5396,8 +6272,8 @@ fn spec_status_demotes_supported_data_review_to_failing() {
 fn spec_status_keeps_stale_base_health_over_supported_data_semantic_review() {
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let passport_path = units_dir.join("pricing/checkout_quote.spec.passport.json");
-    let review = supported_checkout_quote_semantic_review(
+    let passport_path = units_dir.join("pricing/pricing_quote.spec.passport.json");
+    let review = supported_pricing_quote_semantic_review(
         SemanticVerdict::SemanticDrift,
         vec![SemanticReasonCode::MethodBodyMissingCapBehavior],
         "executable lowering contradicts authored semantic claims",
@@ -5405,7 +6281,7 @@ fn spec_status_keeps_stale_base_health_over_supported_data_semantic_review() {
     seed_supported_data_semantic_status_artifacts(&units_dir, Some(review));
     let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
 
-    let unit_path = units_dir.join("pricing/checkout_quote.unit.spec");
+    let unit_path = units_dir.join("pricing/pricing_quote.unit.spec");
     let source = fs::read_to_string(&unit_path).unwrap();
     fs::write(
         &unit_path,
@@ -5421,7 +6297,7 @@ fn spec_status_keeps_stale_base_health_over_supported_data_semantic_review() {
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "stale", "{status_json}");
     assert_eq!(
@@ -5439,8 +6315,8 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
 
     let (_temp_dir, project_dir) = setup_m12_data_seam_project();
     let units_dir = project_dir.join("units");
-    let passport_path = units_dir.join("pricing/checkout_quote.spec.passport.json");
-    let review = supported_checkout_quote_semantic_review(
+    let passport_path = units_dir.join("pricing/pricing_quote.spec.passport.json");
+    let review = supported_pricing_quote_semantic_review(
         SemanticVerdict::Aligned,
         vec![],
         "seeded supported data review",
@@ -5456,7 +6332,7 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
     let status_json = parse_stdout_json(&status_output);
     let unit = status_units(&status_json)
         .iter()
-        .find(|unit| unit["id"] == "pricing/checkout_quote")
+        .find(|unit| unit["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(unit["status"], "valid", "{status_json}");
     assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
@@ -5468,7 +6344,7 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
         .as_array()
         .unwrap()
         .iter()
-        .find(|passport| passport["id"] == "pricing/checkout_quote")
+        .find(|passport| passport["id"] == "pricing/pricing_quote")
         .unwrap();
     assert_eq!(
         exported_passport["semantic_review"], seeded_review,
@@ -5518,7 +6394,7 @@ fn supported_data_semantic_review_command_matrix_preserves_or_refreshes_by_flow(
     assert_ne!(refreshed_review, seeded_review);
     assert_eq!(
         refreshed_review["compatibility_key"],
-        "data.checkout_quote.v1"
+        DATA_SEAM_COMPATIBILITY_KEY
     );
     assert_eq!(
         refreshed_review["evaluator_scope"],
@@ -5907,6 +6783,110 @@ fn supported_wrapper_function_semantic_review_command_matrix_preserves_or_refres
 #[test]
 fn wrapper_pipeline_truth_surface_command_matrix_preserves_until_spec_test_refresh() {
     supported_wrapper_function_semantic_review_command_matrix_preserves_or_refreshes_by_flow();
+}
+
+#[test]
+fn normalized_required_arg_wrapper_truth_surface_command_matrix_preserves_until_spec_test_refresh()
+{
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir =
+        write_supported_normalized_required_arg_wrapper_function_semantic_status_project(
+            project_dir,
+        );
+    let passport_path = units_dir.join("pricing/calculate_total.spec.passport.json");
+    let review = supported_function_semantic_review(
+        FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY,
+        SemanticVerdict::Aligned,
+        vec![],
+        "seeded supported normalized wrapper review",
+    );
+    let projected_review =
+        seed_supported_wrapper_function_semantic_status_artifacts(&units_dir, Some(review));
+    assert_eq!(
+        projected_review.unwrap().compatibility_key,
+        FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY
+    );
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_eq!(
+        seeded_review["compatibility_key"],
+        FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY
+    );
+
+    assert_supported_function_command_matrix(
+        project_dir,
+        "pricing/calculate_total",
+        &passport_path,
+        &seeded_review,
+        FUNCTION_FAMILY_B_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY,
+    );
+}
+
+#[test]
+fn helper_identity_passthrough_truth_surfaces_preserve_supported_semantic_review() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let units_dir = write_supported_helper_function_semantic_status_project(project_dir);
+    let passport_path = units_dir.join("money/round.spec.passport.json");
+
+    let test_output = run_in(
+        project_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success("helper semantic review test should succeed", &test_output);
+
+    let seeded_review = read_passport_json(&passport_path)["semantic_review"].clone();
+    assert_supported_function_semantic_review(
+        &seeded_review,
+        FUNCTION_HELPER_IDENTITY_PASSTHROUGH_COMPATIBILITY_KEY,
+    );
+    assert_eq!(seeded_review["verdict"], "aligned");
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert_output_success(
+        "fresh helper semantic review status should stay green",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "money/round")
+        .unwrap();
+    assert_eq!(unit["status"], "valid", "{status_json}");
+    assert!(unit["reason"].is_null(), "{status_json}");
+    assert_eq!(unit["semantic_review"], seeded_review, "{status_json}");
+
+    let export_output = run_in(project_dir, &["export", "units"]);
+    assert_output_success(
+        "helper semantic review export should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "money/round")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], seeded_review,
+        "{export_json}"
+    );
 }
 
 #[test]
@@ -7485,8 +8465,8 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
 
     let output = run_in(temp_dir.path(), &["status", ".", "--format", "json"]);
     assert!(
-        output.status.success(),
-        "repo status should stay green when copied example roots are healthy"
+        !output.status.success(),
+        "repo status should stay non-green when copied roots include an unproven wrapper unit"
     );
 
     let json = parse_stdout_json(&output);
@@ -7496,7 +8476,7 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         .find(|root| root["root"] == "crosslib-app")
         .expect("expected crosslib-app root in repo status");
     let units = crosslib_root["units"].as_array().unwrap();
-    assert_eq!(units.len(), 2, "{json}");
+    assert_eq!(units.len(), 4, "{json}");
     assert_eq!(units[0]["id"], "pricing/apply_discount");
     assert_eq!(units[0]["status"], "valid", "{json}");
     assert_eq!(
@@ -7509,6 +8489,10 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         units[1]["semantic_review"]["compatibility_key"], FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
         "{json}"
     );
+    assert_eq!(units[2]["id"], "pricing/calculate_total");
+    assert_eq!(units[2]["status"], "untested", "{json}");
+    assert_eq!(units[3]["id"], "pricing/checkout_nested_chain3");
+    assert_eq!(units[3]["status"], "untested", "{json}");
     assert!(
         units.iter().all(|unit| {
             !unit["errors"]
@@ -8397,7 +9381,7 @@ fn single_file_test_preserves_unrelated_generated_files() {
         &ecommerce_dir,
         &[
             "test",
-            "units/pricing/checkout_quote.unit.spec",
+            "units/pricing/pricing_quote.unit.spec",
             "--crate-root",
             ".",
         ],
@@ -8435,7 +9419,7 @@ fn single_file_test_rejects_explicit_output() {
         &ecommerce_dir,
         &[
             "test",
-            "units/pricing/checkout_quote.unit.spec",
+            "units/pricing/pricing_quote.unit.spec",
             "--output",
             "src/generated",
             "--crate-root",
@@ -9318,7 +10302,7 @@ fn export_ecommerce_example_includes_authored_molecule_test_imports() {
             "rust_decimal::Decimal",
             "crate::pricing::apply_discount::apply_discount",
             "crate::pricing::calculate_total::calculate_total",
-            "crate::pricing::checkout_quote::CheckoutQuote"
+            "crate::pricing::pricing_quote::PricingQuote"
         ])
     );
 
@@ -9463,7 +10447,7 @@ fn single_file_generate_with_local_deps_is_rejected() {
     );
     assert!(!output_dir.join("pricing/apply_tax.rs").exists());
     assert!(!output_dir.join("money/round.rs").exists());
-    assert!(!output_dir.join("pricing/checkout_quote.rs").exists());
+    assert!(!output_dir.join("pricing/pricing_quote.rs").exists());
 }
 
 #[test]
@@ -9488,7 +10472,7 @@ fn single_file_generate_does_not_rewrite_existing_generated_tree() {
         &ecommerce_dir,
         &[
             "generate",
-            "units/pricing/checkout_quote.unit.spec",
+            "units/pricing/pricing_quote.unit.spec",
             "--output",
             "src/generated",
         ],
@@ -12995,11 +13979,12 @@ changes:
       validate:
         - pricing/apply_tax
         - pricing/calculate_total
-        - pricing/checkout_quote
+        - pricing/calculate_total_guarded_tax
+        - pricing/pricing_quote
       molecule_tests:
         - pricing/checkout_flow
         - pricing/discount_plus_tax
-        - pricing/discount_policy_checkout_flow
+        - pricing/discount_strategy_checkout_flow
       notes:
         - "current blast radius stays fully covered"
 notes:
@@ -13040,11 +14025,12 @@ changes:
       validate:
         - pricing/apply_tax
         - pricing/calculate_total
-        - pricing/checkout_quote
+        - pricing/calculate_total_guarded_tax
+        - pricing/pricing_quote
       molecule_tests:
         - pricing/checkout_flow
         - pricing/discount_plus_tax
-        - pricing/discount_policy_checkout_flow
+        - pricing/discount_strategy_checkout_flow
 "#;
 
 fn setup_m10_plan_fixture(
@@ -13203,7 +14189,7 @@ fn plan_validate_remove_plan_uses_current_graph_impact() {
         serde_json::json!([
             "pricing/checkout_flow",
             "pricing/discount_plus_tax",
-            "pricing/discount_policy_checkout_flow"
+            "pricing/discount_strategy_checkout_flow"
         ])
     );
 }
@@ -13672,7 +14658,7 @@ fn validate_json_accepts_kind_data_without_placeholder_body() {
         &project_dir,
         &[
             "validate",
-            "units/pricing/checkout_quote.unit.spec",
+            "units/pricing/pricing_quote.unit.spec",
             "--format",
             "json",
         ],
@@ -13887,14 +14873,14 @@ fn data_seam_single_file_test_writes_passport_and_leaves_gate_open_without_molec
         &project_dir,
         &[
             "test",
-            "units/pricing/checkout_quote.unit.spec",
+            "units/pricing/pricing_quote.unit.spec",
             "--crate-root",
             ".",
         ],
     );
     assert_output_success("single-file data seam test should succeed", &output);
 
-    let passport_path = project_dir.join("units/pricing/checkout_quote.spec.passport.json");
+    let passport_path = project_dir.join("units/pricing/pricing_quote.spec.passport.json");
     assert!(passport_path.exists(), "expected data seam passport");
     let passport = read_passport_json(&passport_path);
     assert_eq!(passport["kind"], "data");
@@ -13919,13 +14905,13 @@ fn data_seam_single_file_test_writes_passport_and_leaves_gate_open_without_molec
     let status_output = run_in(&project_dir, &["status", "units", "--format", "json"]);
     let status_json = parse_stdout_json(&status_output);
     let units = status_units(&status_json);
-    let checkout_quote = units
+    let pricing_quote = units
         .iter()
-        .find(|entry| entry["id"] == "pricing/checkout_quote")
-        .expect("expected checkout_quote status row");
-    assert_eq!(checkout_quote["status"], "incomplete");
+        .find(|entry| entry["id"] == "pricing/pricing_quote")
+        .expect("expected pricing_quote status row");
+    assert_eq!(pricing_quote["status"], "incomplete");
     assert_eq!(
-        checkout_quote["reason"],
+        pricing_quote["reason"],
         "missing required escape-hatch proof: molecule"
     );
 }
@@ -13942,14 +14928,14 @@ fn data_seam_status_stale_after_intent_change() {
         &project_dir,
         &[
             "test",
-            "units/pricing/checkout_quote.unit.spec",
+            "units/pricing/pricing_quote.unit.spec",
             "--crate-root",
             ".",
         ],
     );
     assert_output_success("single-file data seam test should succeed", &output);
 
-    let spec_path = project_dir.join("units/pricing/checkout_quote.unit.spec");
+    let spec_path = project_dir.join("units/pricing/pricing_quote.unit.spec");
     let updated = fs::read_to_string(&spec_path).unwrap().replace(
         "Quote a checkout total from subtotal plus discount and tax rates.",
         "Quote a checkout total with updated intent wording.",
@@ -13964,13 +14950,13 @@ fn data_seam_status_stale_after_intent_change() {
 
     let status_json = parse_stdout_json(&status_output);
     let units = status_units(&status_json);
-    let checkout_quote = units
+    let pricing_quote = units
         .iter()
-        .find(|entry| entry["id"] == "pricing/checkout_quote")
-        .expect("expected checkout_quote status row");
-    assert_eq!(checkout_quote["status"], "stale");
+        .find(|entry| entry["id"] == "pricing/pricing_quote")
+        .expect("expected pricing_quote status row");
+    assert_eq!(pricing_quote["status"], "stale");
     assert_eq!(
-        checkout_quote["reason"],
+        pricing_quote["reason"],
         "authored truth changed since last test"
     );
 }
@@ -14548,16 +15534,1818 @@ fn export_additively_includes_data_seam_truth() {
 
     let json = parse_stdout_json(&output);
     let units = json["units"].as_array().unwrap();
-    let checkout_quote = units
+    let pricing_quote = units
         .iter()
-        .find(|entry| entry["id"] == "pricing/checkout_quote")
-        .expect("expected checkout_quote export unit");
-    assert_eq!(checkout_quote["kind"], "data");
+        .find(|entry| entry["id"] == "pricing/pricing_quote")
+        .expect("expected pricing_quote export unit");
+    assert_eq!(pricing_quote["kind"], "data");
     assert_eq!(
-        checkout_quote["data"]["fields"]["subtotal"]["type"],
+        pricing_quote["data"]["fields"]["subtotal"]["type"],
         "rust_decimal::Decimal"
     );
-    assert_eq!(checkout_quote["constructors"][0]["id"], "new");
-    assert_eq!(checkout_quote["methods"][0]["id"], "discounted_subtotal");
-    assert_eq!(checkout_quote["backends"]["rust"]["derives"][0], "Clone");
+    assert_eq!(pricing_quote["constructors"][0]["id"], "new");
+    assert_eq!(pricing_quote["methods"][0]["id"], "discounted_subtotal");
+    assert_eq!(pricing_quote["backends"]["rust"]["derives"][0], "Clone");
+}
+
+#[test]
+fn validate_does_not_accept_target_language_flag() {
+    let output = run(&[
+        "validate",
+        "examples/ecommerce/units",
+        "--target-language",
+        "typescript",
+    ]);
+    assert!(
+        !output.status.success(),
+        "validate should reject --target-language"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--target-language"), "{stderr}");
+}
+
+#[test]
+fn typescript_aligned_fixture_single_file_test_succeeds_and_status_is_target_specific() {
+    if !bun_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_bounded_typescript_apply_tax_fixture(temp_dir.path());
+
+    let test_output = run_in(
+        temp_dir.path(),
+        &[
+            "test",
+            spec_path
+                .strip_prefix(temp_dir.path())
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "bounded TypeScript fixture should pass end-to-end",
+        &test_output,
+    );
+
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+    let passport = read_passport_json(&passport_path);
+    assert!(passport.get("evidence").is_none(), "{passport}");
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+
+    let rust_status_output = run_in(temp_dir.path(), &["status", "units", "--format", "json"]);
+    assert!(
+        !rust_status_output.status.success(),
+        "rust status should remain non-green without rust proof"
+    );
+    let rust_status_json = parse_stdout_json(&rust_status_output);
+    let rust_unit = status_units(&rust_status_json)
+        .iter()
+        .find(|entry| entry["id"] == "pricing/apply_tax")
+        .expect("expected apply_tax rust status row");
+    assert_eq!(rust_unit["status"], "untested");
+
+    let typescript_status_output = run_in(
+        temp_dir.path(),
+        &[
+            "status",
+            "units",
+            "--target-language",
+            "typescript",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success(
+        "TypeScript status should use the TypeScript target proof",
+        &typescript_status_output,
+    );
+    let typescript_status_json = parse_stdout_json(&typescript_status_output);
+    let typescript_unit = status_units(&typescript_status_json)
+        .iter()
+        .find(|entry| entry["id"] == "pricing/apply_tax")
+        .expect("expected apply_tax typescript status row");
+    assert_eq!(typescript_unit["status"], "valid");
+}
+
+#[test]
+fn typescript_status_detects_drift_after_typescript_body_change() {
+    if !bun_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_bounded_typescript_apply_tax_fixture(temp_dir.path());
+
+    let test_output = run_in(
+        temp_dir.path(),
+        &[
+            "test",
+            spec_path
+                .strip_prefix(temp_dir.path())
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "bounded TypeScript fixture should pass before drift",
+        &test_output,
+    );
+
+    let updated = fs::read_to_string(&spec_path).unwrap().replace(
+        "return subtotal.add(subtotal.mul(rate));",
+        "return subtotal.add(subtotal.mul(rate)).add(Decimal.new(1, 2));",
+    );
+    fs::write(&spec_path, updated).unwrap();
+
+    let status_output = run_in(
+        temp_dir.path(),
+        &[
+            "status",
+            "units",
+            "--target-language",
+            "typescript",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !status_output.status.success(),
+        "drifted TypeScript proof should be non-green"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let unit = status_units(&status_json)
+        .iter()
+        .find(|entry| entry["id"] == "pricing/apply_tax")
+        .expect("expected apply_tax status row after drift");
+    assert_eq!(unit["status"], "stale");
+    assert!(
+        unit["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("changed since last test"),
+        "{status_json}"
+    );
+}
+
+#[test]
+fn typescript_monotone_down_fixture_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let spec_path = write_typescript_near_miss_fixture(temp_dir.path());
+
+    let output = run_in(
+        temp_dir.path(),
+        &[
+            "test",
+            spec_path
+                .strip_prefix(temp_dir.path())
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "monotone-down roots should execute in the M59 lane",
+        &output,
+    );
+}
+
+#[test]
+fn typescript_example_apply_tax_single_file_test_succeeds() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "example apply_tax should succeed in the bounded TypeScript lane",
+        &output,
+    );
+
+    let passport =
+        read_passport_json(&ecommerce_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_helper_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/money/round.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success("local helper root should pass in the M59 lane", &output);
+
+    let passport = read_passport_json(&fixture_dir.join("units/money/round.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_monotone_down_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/apply_discount.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "local monotone-down root should pass in the M59 lane",
+        &output,
+    );
+
+    let passport =
+        read_passport_json(&fixture_dir.join("units/pricing/apply_discount.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_monotone_up_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "local monotone-up root should pass in the M59 lane",
+        &output,
+    );
+
+    let passport =
+        read_passport_json(&fixture_dir.join("units/pricing/apply_tax.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_wrapper_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success("local wrapper root should pass in the M59 lane", &output);
+
+    let passport =
+        read_passport_json(&fixture_dir.join("units/pricing/calculate_total.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_local_supported_graph_chain3_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success("local chain3 root should pass in the M59 lane", &output);
+
+    let passport =
+        read_passport_json(&fixture_dir.join("units/pricing/checkout_total.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+    assert!(
+        !fixture_dir
+            .join("src/generated/pricing/display_total.rs")
+            .exists(),
+        "unrelated supported units should stay out of the generated local graph"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_reachable_shared_dep_rejects_before_bun_runs() {
+    let temp_dir = tempfile::TempDir::new_in(repo_root().join("target")).unwrap();
+    let fixture_dir = temp_dir.path().join("typescript_local_supported_graph");
+    copy_dir_recursive(
+        &repo_root().join("spec-cli/tests/fixtures/typescript_local_supported_graph"),
+        &fixture_dir,
+    )
+    .expect("failed to copy local supported-graph fixture");
+    copy_dir_recursive(
+        &repo_root().join("examples/shared-crate"),
+        &temp_dir.path().join("shared-crate"),
+    )
+    .expect("failed to copy shared crate for local-graph rejection coverage");
+    copy_dir_recursive(
+        &repo_root().join("examples/shared-spec"),
+        &temp_dir.path().join("shared-spec"),
+    )
+    .expect("failed to copy shared spec for local-graph rejection coverage");
+    fs::write(
+        fixture_dir.join("spec.toml"),
+        "[libraries]\nshared = \"../shared-spec\"\n",
+    )
+    .unwrap();
+    fs::write(
+        fixture_dir.join("Cargo.toml"),
+        "[package]\nname = \"typescript-local-supported-graph\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nrust_decimal = { version = \"1.36\", features = [\"serde\"] }\nshared = { path = \"../shared-crate\" }\n\n[workspace]\n",
+    )
+    .unwrap();
+    replace_in_file(
+        &fixture_dir.join("units/pricing/apply_tax.unit.spec"),
+        "deps:\n  - money/round\n",
+        "deps:\n  - shared::money/round\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "reachable shared deps in the local graph should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript same-tree local target requires every reachable dep to stay same-tree local in M59"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "same-tree local shared-dep rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_reachable_unsupported_member_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    replace_in_file(
+        &fixture_dir.join("units/pricing/apply_discount.unit.spec"),
+        "        let discounted = subtotal - subtotal * rate;\n        round(discounted.max(Decimal::ZERO))\n",
+        "        let discounted = subtotal - subtotal * rate;\n        if discounted < Decimal::ZERO {\n            Decimal::ZERO\n        } else {\n            round(discounted)\n        }\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "reachable unsupported local members should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript same-tree local target requires every reachable unit to classify to a supported semantic review in M59"
+        ),
+        "{stderr}"
+    );
+    assert!(stderr.contains("unsupported.function.v1"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "unsupported-member rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_missing_typescript_body_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    remove_typescript_body(&fixture_dir.join("units/pricing/apply_tax.unit.spec"));
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "reachable missing body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript same-tree local target requires every reachable unit to author body.typescript in M59"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "missing body.typescript rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_unsupported_topology_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    replace_in_file(
+        &fixture_dir.join("units/pricing/checkout_total.unit.spec"),
+        "deps:\n  - pricing/calculate_total\n  - pricing/apply_tax\n  - pricing/apply_discount\n",
+        "deps:\n  - pricing/calculate_total\n  - pricing/apply_tax\n  - pricing/apply_discount\n  - pricing/display_total\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "unsupported local dep topology should still be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unsupported.function.v1"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "unsupported-topology rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_local_supported_graph_cycle_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_typescript_local_supported_graph_fixture();
+    replace_in_file(
+        &fixture_dir.join("units/pricing/apply_tax.unit.spec"),
+        "deps:\n  - money/round\n",
+        "deps:\n  - money/round\n  - pricing/checkout_total\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "local cycles should be rejected before Bun"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("cycle detected"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "cycle rejection should happen before Bun"
+    );
+}
+
+#[test]
+fn typescript_cross_library_example_status_marks_apply_tax_valid_after_proof() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+
+    let test_output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "cross-library apply_tax should pass in the bounded TypeScript lane",
+        &test_output,
+    );
+
+    let status_output = run_in(
+        &app_dir,
+        &[
+            "status",
+            "units",
+            "--target-language",
+            "typescript",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !status_output.status.success(),
+        "status should stay non-green while other cross-library units remain untested"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let apply_tax = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/apply_tax")
+        .expect("expected pricing/apply_tax status row");
+    assert_eq!(apply_tax["status"], "valid", "{status_json}");
+    assert_eq!(
+        apply_tax["semantic_review"]["compatibility_key"], FUNCTION_FAMILY_A_UP_COMPATIBILITY_KEY,
+        "{status_json}"
+    );
+    assert_eq!(
+        apply_tax["freshness"]["authored_truth_status"], "fresh",
+        "{status_json}"
+    );
+}
+
+#[test]
+fn typescript_cross_library_wrapper_example_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    let output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "cross-library wrapper example should pass in the bounded TypeScript lane",
+        &output,
+    );
+
+    let passport =
+        read_passport_json(&app_dir.join("units/pricing/calculate_total.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_chain3_root_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_chain3_spec(&app_dir);
+    let output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "cross-library chain3 root should pass in the bounded TypeScript lane",
+        &output,
+    );
+
+    let passport =
+        read_passport_json(&app_dir.join("units/pricing/checkout_chain3.spec.passport.json"));
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_wrong_dep_order_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    replace_in_file(
+        &app_dir.join("units/pricing/calculate_total.unit.spec"),
+        "deps:\n  - shared::pricing/apply_discount\n  - shared::pricing/apply_tax\n",
+        "deps:\n  - shared::pricing/apply_tax\n  - shared::pricing/apply_discount\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with wrong dep order should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper dep-order rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_chain3_wrong_dep_order_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_chain3_spec(&app_dir);
+    replace_in_file(
+        &app_dir.join("units/pricing/checkout_chain3.unit.spec"),
+        "deps:\n  - pricing/calculate_total\n  - shared::pricing/apply_tax\n  - shared::pricing/apply_discount\n",
+        "deps:\n  - shared::pricing/apply_tax\n  - pricing/calculate_total\n  - shared::pricing/apply_discount\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library chain3 with wrong dep order should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1, function.wrapper.pipeline.normalized_required_arg.v1, or function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M61"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library chain3 dep-order rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_wrong_family_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    replace_in_file(
+        &app_dir.join("units/pricing/calculate_total.unit.spec"),
+        "deps:\n  - shared::pricing/apply_discount\n  - shared::pricing/apply_tax\n",
+        "deps:\n  - shared::money/round\n  - shared::pricing/apply_tax\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with wrong dep family should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsupported.function.v1")
+            || stderr.contains(
+                "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56"
+            ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper family rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_chain3_wrong_family_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_chain3_spec(&app_dir);
+    replace_in_file(
+        &app_dir.join("units/pricing/checkout_chain3.unit.spec"),
+        "deps:\n  - pricing/calculate_total\n  - shared::pricing/apply_tax\n  - shared::pricing/apply_discount\n",
+        "deps:\n  - pricing/calculate_total\n  - shared::money/round\n  - shared::pricing/apply_discount\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library chain3 with wrong dep family should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1, function.wrapper.pipeline.normalized_required_arg.v1, or function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M61"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library chain3 family rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_missing_typescript_body_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    remove_typescript_body(&shared_spec_dir.join("units/pricing/apply_tax.unit.spec"));
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with missing imported body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript wrapper target requires direct deps to author body.typescript in M56"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper missing-body rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_chain3_missing_typescript_body_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_chain3_spec(&app_dir);
+    remove_typescript_body(&shared_spec_dir.join("units/pricing/apply_tax.unit.spec"));
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library chain3 with missing imported body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript chain3 target requires direct deps to author body.typescript in M56"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library chain3 missing-body rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_unresolved_alias_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    replace_in_file(
+        &app_dir.join("units/pricing/calculate_total.unit.spec"),
+        "shared::pricing/apply_discount",
+        "missing::pricing/apply_discount",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with unresolved alias should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown library namespace 'missing'"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper unresolved-alias rejection should happen before Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_wrapper_missing_imported_unit_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, _shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    replace_in_file(
+        &app_dir.join("units/pricing/calculate_total.unit.spec"),
+        "shared::pricing/apply_tax",
+        "shared::pricing/missing_tax",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library wrapper with missing imported unit should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cross-library dep 'shared::pricing/missing_tax' not found"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "cross-library wrapper missing-imported-unit rejection should happen before Bun"
+    );
+}
+
+#[test]
+fn typescript_example_calculate_total_single_file_test_succeeds() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/calculate_total.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "example calculate_total should succeed in the bounded TypeScript wrapper lane",
+        &output,
+    );
+
+    let wrapper_passport =
+        read_passport_json(&ecommerce_dir.join("units/pricing/calculate_total.spec.passport.json"));
+    assert_eq!(
+        wrapper_passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        wrapper_passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[test]
+fn typescript_aligned_wrapper_fixture_single_file_test_succeeds() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m30_wrapper_fixture("aligned");
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/pricing_total_wrapper_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "aligned wrapper fixture should pass in the bounded TypeScript wrapper lane",
+        &output,
+    );
+
+    let wrapper_passport = read_passport_json(
+        &fixture_dir.join("units/pricing/pricing_total_wrapper_aligned.spec.passport.json"),
+    );
+    assert_eq!(
+        wrapper_passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        wrapper_passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_molecule_test_is_rejected_before_bun_runs() {
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+    let marker_path = ecommerce_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&ecommerce_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/discount_plus_tax.test.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "TypeScript molecule tests should be rejected in M52"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            ".test.spec is not supported for --target-language typescript in M52; molecule tests remain Rust-only"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "molecule rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_chain3_wrapper_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "aligned chain3 fixture should pass in the bounded same-tree TypeScript lane",
+        &output,
+    );
+
+    let passport = read_passport_json(
+        &fixture_dir.join("units/pricing/checkout_chain3_aligned.spec.passport.json"),
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_nested_chain3_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    let output = run_in(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "aligned nested chain3 fixture should pass in the bounded same-tree TypeScript lane",
+        &output,
+    );
+
+    let passport = read_passport_json(
+        &fixture_dir.join("units/pricing/checkout_nested_chain3_aligned.spec.passport.json"),
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_chain3_wrong_family_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("unsupported_near_miss");
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/checkout_chain3_unsupported_near_miss.unit.spec"),
+        "    {\n        const base_total = pricing_total_wrapper_unsupported_near_miss(subtotal, discount_rate, tax_rate);\n        const surcharged_total = pricing_tax_leaf_unsupported_near_miss(base_total, surcharge_rate);\n        return pricing_discount_leaf_unsupported_near_miss(surcharged_total, loyalty_rate);\n    }",
+    );
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec"),
+        "    {\n        const discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);\n        return pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate);\n    }",
+    );
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/pricing_tax_leaf_unsupported_near_miss.unit.spec"),
+        "    {\n        return subtotal.add(subtotal.mul(rate));\n    }",
+    );
+    inject_typescript_body_if_missing(
+        &fixture_dir.join("units/pricing/pricing_discount_leaf_unsupported_near_miss.unit.spec"),
+        "    {\n        const discounted = subtotal.add(subtotal.mul(Decimal.new(-1n, 0n).mul(rate)));\n        return discounted;\n    }",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3_unsupported_near_miss.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "unsupported chain3-like TypeScript target should be rejected before Bun"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unsupported.function.v1"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "chain3 wrong-family rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_nested_chain3_wrong_first_slot_family_reaches_bun_in_m59() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    write_spec(
+        &fixture_dir.join("units"),
+        "pricing/wrong_first_slot_tax_like_aligned.unit.spec",
+        r#"
+id: pricing/wrong_first_slot_tax_like_aligned
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Provide a distinct monotone-up leaf so nested chain3 slot-1 family rejection is exercised without duplicate dep collisions.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal + subtotal * rate
+    }
+  typescript: |
+    {
+        return subtotal.add(subtotal.mul(rate));
+    }
+local_tests:
+  - id: wrong_first_slot_tax_like_aligned_basic
+    expect: wrong_first_slot_tax_like_aligned(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(11000, 2)
+"#,
+    );
+    replace_in_file(
+        &fixture_dir.join("units/pricing/checkout_nested_chain3_aligned.unit.spec"),
+        "deps:\n  - pricing/base_nested_chain3_aligned\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+        "deps:\n  - pricing/wrong_first_slot_tax_like_aligned\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "nested chain3 targets with rewritten local deps should still fail under the fake Bun"
+    );
+    assert!(
+        marker_path.exists(),
+        "M59 same-tree local graph validation should allow this case far enough to reach Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_chain3_missing_typescript_body_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    remove_typescript_body(
+        &fixture_dir.join("units/pricing/pricing_total_wrapper_aligned.unit.spec"),
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "chain3 targets with missing direct-dep TypeScript bodies should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript same-tree local target requires every reachable unit to author body.typescript in M59"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "missing body.typescript rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_nested_chain3_missing_nested_typescript_body_rejects_before_bun_runs() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    remove_typescript_body(&fixture_dir.join("units/pricing/base_nested_chain3_aligned.unit.spec"));
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "nested chain3 targets with a missing nested body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("TypeScript same-tree local target requires every reachable unit to author body.typescript in M59"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "nested chain3 missing-body rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_chain3_wrong_dep_order_reaches_bun_in_m59() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    replace_in_file(
+        &fixture_dir.join("units/pricing/checkout_chain3_aligned.unit.spec"),
+        "deps:\n  - pricing/pricing_total_wrapper_aligned\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+        "deps:\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_total_wrapper_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "chain3 targets with reordered local deps should still fail under the fake Bun"
+    );
+    assert!(
+        marker_path.exists(),
+        "M59 same-tree local graph validation should allow reordered local deps to reach Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_nested_chain3_wrong_dep_order_reaches_bun_in_m59() {
+    let (_temp_dir, fixture_dir) = copy_m21_chain3_fixture("aligned");
+    replace_in_file(
+        &fixture_dir.join("units/pricing/checkout_nested_chain3_aligned.unit.spec"),
+        "deps:\n  - pricing/base_nested_chain3_aligned\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+        "deps:\n  - pricing/pricing_tax_leaf_aligned\n  - pricing/base_nested_chain3_aligned\n  - pricing/pricing_discount_leaf_aligned\n",
+    );
+
+    let marker_path = fixture_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(&fixture_dir, &fake_bun);
+
+    let output = run_in_with_env(
+        &fixture_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3_aligned.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "nested chain3 targets with reordered local deps should still fail under the fake Bun"
+    );
+    assert!(
+        marker_path.exists(),
+        "M59 same-tree local graph validation should allow reordered nested local deps to reach Bun"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_nested_chain3_cross_library_recursive_first_dep_executes_with_bun() {
+    if !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    let target = write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+
+    let output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "recursive cross-library nested chain3 roots should execute in the bounded TypeScript lane",
+        &output,
+    );
+
+    let passport = read_passport_json(
+        &target
+            .parent()
+            .unwrap()
+            .join("checkout_nested_chain3.spec.passport.json"),
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["test_results"][0]["status"],
+        "pass"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_recursive_cross_library_member_wrong_dep_order_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+    replace_in_file(
+        &shared_spec_dir.join("units/pricing/base_nested_chain3.unit.spec"),
+        "deps:\n  - pricing/calculate_total\n  - pricing/apply_tax\n  - pricing/apply_discount\n",
+        "deps:\n  - pricing/apply_tax\n  - pricing/calculate_total\n  - pricing/apply_discount\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "recursive shared members with the wrong chain3 dep order should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("requires direct deps to classify as"),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "shared recursive wrong-order rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_recursive_cross_library_member_missing_typescript_body_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+    remove_typescript_body(&shared_spec_dir.join("units/pricing/base_nested_chain3.unit.spec"));
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "recursive shared members without body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("body.typescript"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "shared recursive missing-body rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_recursive_cross_library_member_unresolved_dep_rejects_before_bun_runs() {
+    let (temp_dir, app_dir, _shared_crate_dir, shared_spec_dir) =
+        copy_crosslib_typescript_example();
+    write_cross_library_nested_chain3_specs(&app_dir, &shared_spec_dir);
+    replace_in_file(
+        &shared_spec_dir.join("units/pricing/base_nested_chain3.unit.spec"),
+        "  - pricing/calculate_total\n",
+        "  - pricing/missing_total\n",
+    );
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/checkout_nested_chain3.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "recursive shared members with unresolved deps should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("pricing/missing_total"), "{stderr}");
+    assert!(
+        !marker_path.exists(),
+        "shared recursive unresolved-dep rejection should happen before Bun build/test execution"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn typescript_cross_library_helper_missing_typescript_body_rejects_before_bun_runs() {
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let app_dir = temp_dir.path().join("crosslib-app");
+    let shared_crate_dir = temp_dir.path().join("shared-crate");
+    let shared_spec_dir = temp_dir.path().join("shared-spec");
+
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .unwrap();
+    copy_git_tracked_dir(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-crate"), &shared_crate_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+
+    remove_typescript_body(&shared_spec_dir.join("units/money/round.unit.spec"));
+
+    let marker_path = app_dir.join("bun-invoked.txt");
+    let fake_bun = format!(
+        "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.15'\n  exit 0\nfi\necho invoked > \"{}\"\nexit 99\n",
+        marker_path.display()
+    );
+    let path_override = path_with_fake_bun(temp_dir.path(), &fake_bun);
+
+    let output = run_in_with_env(
+        &app_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+        &[("PATH", path_override.as_os_str())],
+    );
+    assert!(
+        !output.status.success(),
+        "cross-library helper without body.typescript should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "TypeScript target requires the direct helper dep to author body.typescript in M55"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        !marker_path.exists(),
+        "shared-helper body rejection should happen before Bun build/test execution"
+    );
+}
+
+#[test]
+fn export_additively_preserves_rust_proof_and_includes_typescript_proof() {
+    if !cargo_available() || !bun_available() {
+        return;
+    }
+
+    let (_temp_dir, ecommerce_dir) = copy_ecommerce_example();
+
+    let rust_test_output = run_in(
+        &ecommerce_dir,
+        &["test", "units/pricing/apply_tax.unit.spec"],
+    );
+    assert_output_success("rust proof should succeed before export", &rust_test_output);
+
+    let typescript_test_output = run_in(
+        &ecommerce_dir,
+        &[
+            "test",
+            "units/pricing/apply_tax.unit.spec",
+            "--target-language",
+            "typescript",
+        ],
+    );
+    assert_output_success(
+        "TypeScript proof should succeed before export",
+        &typescript_test_output,
+    );
+
+    let export_output = run_in(&ecommerce_dir, &["export", "units", "--format", "json"]);
+    assert_output_success(
+        "export should include additive TypeScript target proofs",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == "pricing/apply_tax")
+        .expect("expected apply_tax passport in export");
+    assert_eq!(passport["evidence"]["build_status"], "pass");
+    assert_eq!(
+        passport["target_proofs"]["rust"]["evidence"]["build_status"],
+        "pass"
+    );
+    assert_eq!(
+        passport["target_proofs"]["typescript"]["evidence"]["build_status"],
+        "pass"
+    );
 }
