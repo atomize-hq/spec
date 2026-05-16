@@ -1,94 +1,114 @@
-# M61 Orchestration Plan
+# M62 Orchestration Plan
 
 Status: **authoritative execution runbook**  
 Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` only**  
-Plan title: **`M61: Bounded Recursive Cross-Library TypeScript Function-Graph Execution Plan`**  
+Plan title: **`M62: Bounded Corpus Run 1 for the Unsupported Callable-Triple Wrapper Dep-Topology Candidate`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
-Primary execution branch: **`feat/m40-plus`**  
-Authority validated commit in `PLAN.md`: **`96d2ee9`**  
+Primary execution branch: **`feat/m60-plus`**  
+Authority validated commit in `PLAN.md`: **`0518c7a`**  
 Base branch: **`main`**  
-Authority date: **`2026-05-15`**  
-Maximum safe worker concurrency: **2 worker lanes plus the parent integrator**  
+Authority date: **`2026-05-16`**  
+Maximum safe worker concurrency: **2 parallel workers plus the parent integrator**  
 Worker model assumption: **`GPT-5.4` with `reasoning_effort=high`**  
-Rewrite intent: **replace the stale M60 repo-root orchestration doc with an execution-ready M61 runbook grounded only in `PLAN.md`**  
-Last rewritten: **`2026-05-15`**
+Rewrite intent: **replace the stale M61 repo-root orchestration doc with an execution-ready M62 runbook grounded only in `PLAN.md`**  
+Last rewritten: **`2026-05-16`**
 
 ## Summary
 
-M61 ships one bounded capability and nothing broader:
+M62 is a bounded corpus-and-analysis run.
 
-`M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.`
+It does not widen backend capability, semantic-review support, manifest source
+inventory, or recommendation policy.
 
-The parent agent owns the critical path and is the only integrator. The safe execution shape is fixed:
+It adds the smallest exact authored corpus slice needed to move the
+callable-triple wrapper dep-topology candidate around
+`examples_crosslib_app::pricing/checkout_nested_chain3` off the current
+`1 real / 0 regression` floor, then reruns the existing proof wall and accepts
+the truthful next decision.
 
-1. parent freezes the M61 contract from `PLAN.md`
-2. parent runs **Lane A** locally and sequentially inside `spec-core/src/`
-3. parent integrates Lane A and freezes the qualified-identity contract, supported family list, exact docs sentence, and exact maintained example filenames
-4. **Lane B** and **Lane C** run in parallel from the post-A integration state
-5. parent integrates Lane B as soon as it is green, then launches **Lane D**
-6. parent integrates Lane C and Lane D
-7. parent runs **Lane E** serially for the final proof wall and artifact refresh
-8. parent fast-forwards `feat/m40-plus`
+The parent agent owns the critical path and remains the only integrator. The
+safe execution shape is fixed:
+
+1. parent freezes the M62 contract from `PLAN.md`
+2. parent captures the pre-run analysis basis and dirty-tree baseline
+3. **Lane A** and **Lane B** run in parallel because they do not share files
+4. parent integrates A + B into one post-authoring baseline
+5. **Lane C** runs serially from the integrated baseline for CLI truth-surface
+   assertions only
+6. parent integrates Lane C
+7. parent runs the final proof wall, analysis refresh, decision classification,
+   and minimal docs truth-maintenance
+8. parent writes the post-run delta and closes only if the result lands in an
+   allowed post-run bucket
 
 Historical files are shape references only:
 
 - `docs/m26_orchestration_kickoff_prompt.md`
-- the current repo-root `ORCH_PLAN.md`
+- the superseded M61 repo-root `ORCH_PLAN.md`
 
-They are not authority for milestone facts, scope, branches, worktree roots, commands, or acceptance.
+They are not authority for milestone facts, branch names, worktree paths,
+acceptance logic, or stop conditions.
 
 ## Hard Guards
 
-- `PLAN.md` is the only authority source for milestone facts.
-- `docs/m26_orchestration_kickoff_prompt.md` and the stale repo-root `ORCH_PLAN.md` may be used only for structure and rigor examples.
-- Do not copy any stale milestone facts, branches, commit ids, worktree roots, acceptance gates, packet paths, or promotion mechanics from M26 or M60.
-- M61 is not a semantic-family promotion milestone.
-- Prohibited stale mechanics:
-  - no `.semantic-family-artifacts/*`
-  - no `cargo xtask family *`
-  - no approval-gate artifacts
-  - no family packet creation
-  - no corpus recommendation or promotion commands
-- The public docs sentence is frozen and must be used verbatim on every docs surface:
-  - `M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.`
-- The supported family set is frozen to the six families already listed in `PLAN.md`:
-  - `function.helper.identity_passthrough.v1`
-  - `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-  - `function.arithmetic_leaf.monotone_up.v1`
-  - `function.wrapper.pipeline.v1`
-  - `function.wrapper.pipeline.normalized_required_arg.v1`
-  - `function.wrapper.pipeline.chain3.v1`
-- No lane may introduce new semantic-family meaning.
-- No lane may widen TypeScript execution to:
-  - arbitrary authored 4+ direct-dep topology parity
-  - molecule TypeScript execution
-  - seam-kind TypeScript execution
-  - `spec validate --target-language`
-  - `spec export --target-language`
-  - non-Bun TypeScript toolchains
-- `spec-core/src/semantic_review.rs` is a no-touch truth source for this milestone.
-- `spec-cli/src/commands.rs` is a no-touch surface unless the parent explicitly re-scopes after a blocker.
-- Lane A owns the `spec-core/src/` contract wall and must run Step 1 then Step 2 sequentially.
-- Lane B owns the maintained recursive cross-library example across both:
-  - `examples/shared-spec/`
-  - `examples/crosslib-app/`
-- Lane C owns docs and release-note sync only after the exact contract sentence and maintained example filenames are frozen.
-- Lane D owns `spec-cli/tests/cli.rs` only, and starts only after Lane A and Lane B converge.
-- Lane E is parent-only final proof and artifact refresh after A + B + C + D converge.
+- `PLAN.md` is the only authority source for milestone scope and facts.
+- M62 is not a backend-capability milestone.
+- M62 is not a recommendation-policy rewrite milestone.
+- M62 is not a semantic-family promotion milestone.
+- Prohibited broadening:
+  - no edits to `spec-core/src/semantic_review.rs`
+  - no edits to `xtask/src/family/coverage.rs`
+  - no edits to `xtask/src/family/recommend.rs`
+  - no edits to `xtask/src/lib.rs`
+  - no edits to `semantic-families/corpus/rust-function.toml`
+  - no edits under `semantic-families/**`
+  - no new corpus source bucket
+  - no units under `examples/ecommerce/units`
+  - no widening of TypeScript validator or backend rules
+  - no molecule TypeScript execution work
+  - no seam-kind TypeScript execution work
+- The authored corpus slice is frozen up front:
+  - exactly one new maintained real-example unit:
+    - `examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
+  - exactly two new promotion-relevant regression units:
+    - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/base_nested_chain3_bad_dep_topology.unit.spec`
+    - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_nested_chain3_bad_dep_topology.unit.spec`
+- The only pre-authorized existing source file edit is:
+  - `spec-cli/tests/cli.rs`
+- Docs may change only after the proof wall and only if an existing surface
+  would otherwise become misleading.
+- Docs are limited to:
+  - `examples/crosslib-app/README.md`
+  - `CHANGELOG.md`
+  - `TODOS.md`
+- Derived artifact rule:
+  - `.semantic-family-artifacts/family-promotion/analysis/*.json`
+  - `examples/shared-crate/src/generated/**`
+  - `examples/crosslib-app/src/generated/**`
+  - co-located generated `.rs`
+  - `.spec.passport.json`
+  - `.test.evidence.json`
+  are proof surfaces, not hand-authored source
+- Preserve any pre-existing dirty tree exactly as found at kickoff.
 - No lane may revert, reset, clean, stash, or overwrite unowned changes.
+- No lane may improvise new files to "help" the analysis story beyond the three
+  frozen authored additions.
 
 Stop and re-scope immediately if any of these become true:
 
-1. `PLAN.md` changes materially during execution and the parent has not refreshed the freeze artifacts.
-2. Lane A requires changes to `spec-core/src/semantic_review.rs` to make M61 work.
-3. Lane A needs a new CLI surface, export schema, passport schema, or new target-language flag behavior.
-4. Lane B needs example file names different from the exact maintained example seed frozen in `PLAN.md`.
-5. Lane C cannot use the exact frozen sentence because code widened beyond the admitted M61 boundary.
-6. Lane D requires edits outside `spec-cli/tests/cli.rs` to keep the CLI regression wall truthful.
-7. Any lane needs to reopen semantic-family promotion or packet work.
-8. Any lane needs to make `.test.spec` TypeScript execution work.
-9. The final proof wall implies ambiguous raw-id selection still exists for same-id local/shared units.
-10. A worker touches files outside its frozen write scope.
+1. `PLAN.md` changes materially after the parent wrote the authority freeze.
+2. Any worker needs to touch a file outside its frozen write scope.
+3. The proof wall implies `xtask` or `spec-core` logic must change for M62 to
+   land.
+4. The target corpus run needs a sixth source, packet leverage, or manifest
+   change to move the candidate.
+5. `spec-cli/tests/cli.rs` is insufficient and another CLI or backend surface
+   needs code edits to keep the public truth wall honest.
+6. The final analysis basis still reports `1 real / 0 regression`.
+7. The final analysis basis keeps missing-evidence blockers without an exact,
+   unit-level explanation of what missed the target cluster.
+8. `cargo xtask family corpus-decision --format json` fails on a refreshed valid
+   basis.
 
 ## Concrete Worktree And Branch Layout
 
@@ -96,46 +116,43 @@ Use this exact topology.
 
 ```bash
 PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec
-WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m61
-RUN_ROOT=$PRIMARY_ROOT/.runs/m61_recursive_cross_library_typescript
+WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m62
+RUN_ROOT=$PRIMARY_ROOT/.runs/m62_bounded_corpus_run1
 ```
 
 ### Branch inventory
 
 | Lane | Path | Branch | Owner | Purpose |
 | --- | --- | --- | --- | --- |
-| Primary authority + state | `PRIMARY_ROOT` | `feat/m40-plus` | Parent | contract freeze, durable run-state, final fast-forward |
-| `WS-INT` | `$WT_ROOT/int` | `ws/m61-int` | Parent | integration branch and final proof lane |
-| `WS-A` | `$WT_ROOT/core` | `ws/m61-core` | Parent | Lane A Step 1 then Step 2 inside `spec-core/src/` |
-| `WS-B` | `$WT_ROOT/examples` | `ws/m61-examples` | Worker | maintained recursive shared example and derived artifacts |
-| `WS-C` | `$WT_ROOT/docs` | `ws/m61-docs` | Worker | README, TODOS, CHANGELOG, and example README sync |
-| `WS-D` | `$WT_ROOT/cli` | `ws/m61-cli` | Worker | CLI regression refresh in `spec-cli/tests/cli.rs` |
+| Primary authority + state | `PRIMARY_ROOT` | `feat/m60-plus` | Parent | durable run-state, authority docs, final fast-forward target |
+| `WS-INT` | `$WT_ROOT/int` | `ws/m62-int` | Parent | integration branch and final proof wall |
+| `WS-A` | `$WT_ROOT/real-example` | `ws/m62-real-example` | Worker | maintained cross-library variant authoring |
+| `WS-B` | `$WT_ROOT/regressions` | `ws/m62-regressions` | Worker | two M20 nested bad-topology regressions |
+| `WS-C` | `$WT_ROOT/cli` | `ws/m62-cli` | Worker | CLI truth-surface assertion widening only |
 
 ### Worktree creation rules
 
-- Do not create worker worktrees before `M61-01` contract freeze completes.
-- Create `WS-INT` and `WS-A` first.
-- `WS-B` and `WS-C` must branch from the integrated post-A state in `ws/m61-int`, not from the stale pre-A branch tip.
-- `WS-D` must branch only after Lane B is integrated into `ws/m61-int`.
-- There is no separate `WS-E`. Lane E runs only in `WS-INT`.
-- Do not split `examples/shared-spec/**` and `examples/crosslib-app/**` into different worktrees.
-- Do not let docs run before the exact sentence and exact maintained example filenames are frozen in `contract-freeze.json`.
+- Do not create worker worktrees before `task/m62-00-baseline-freeze` completes.
+- Create `WS-INT`, `WS-A`, and `WS-B` first.
+- `WS-C` must branch from the integrated post-A+B state in `ws/m62-int`, not
+  from the stale primary branch tip.
+- There is no separate docs worktree.
+- There is no separate proof-artifact worktree.
+- Final proof, artifact refresh, decision classification, and minimal docs
+  updates all happen in `WS-INT`.
 - Record the dirty tree at kickoff and preserve it.
 
 ### Recommended creation commands
 
 ```bash
-mkdir -p "$WT_ROOT"
+mkdir -p "$WT_ROOT" "$RUN_ROOT"
 
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/int" -b ws/m61-int feat/m40-plus
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/core" -b ws/m61-core feat/m40-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/int" -b ws/m62-int feat/m60-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/real-example" -b ws/m62-real-example feat/m60-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/regressions" -b ws/m62-regressions feat/m60-plus
 
-# after WS-A is integrated into ws/m61-int
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/examples" -b ws/m61-examples ws/m61-int
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/docs" -b ws/m61-docs ws/m61-int
-
-# after WS-B is integrated into ws/m61-int
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/cli" -b ws/m61-cli ws/m61-int
+# after WS-A and WS-B are integrated into ws/m62-int
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/cli" -b ws/m62-cli ws/m62-int
 ```
 
 ## Durable Orchestration State
@@ -153,21 +170,27 @@ This directory is run-state only. It is not product truth.
 | Path | Purpose | Owner |
 | --- | --- | --- |
 | `baseline.json` | kickoff branch, HEAD, dirty-tree snapshot, authority commit | Parent |
-| `contract-freeze.json` | frozen M61 contract, exact sentence, exact filenames, supported families, lane scopes | Parent |
-| `worktrees.json` | exact worktree paths, branches, heads, and lane states | Parent |
+| `authority-freeze.json` | frozen M62 authored contract, file ownership, command wall, stop rules | Parent |
+| `worktrees.json` | exact worktree paths, branches, heads, and states | Parent |
 | `file-ownership.json` | lane write scopes and global no-touch surfaces | Parent |
-| `tasks.json` | canonical task ledger, dependencies, and current states | Parent |
+| `tasks.json` | canonical task ledger, dependencies, and states | Parent |
 | `session-log.md` | chronological launch, integration, rerun, block, and close log | Parent |
 | `acceptance-ledger.md` | final gate checklist and proof references | Parent |
-| `final-proof-manifest.json` | exact final commands, exit codes, and captured output paths | Parent |
-| `validation/kickoff/` | kickoff snapshots | Parent |
-| `validation/ws-a/` | validator and collector proof captures | Parent |
-| `validation/ws-b/` | example loop and target-language proof captures | Parent |
-| `validation/ws-c/` | docs sentence and backlog wording captures | Parent |
-| `validation/ws-d/` | CLI regression proof captures | Parent |
-| `validation/final/` | final serial proof wall captures | Parent |
+| `analysis/pre/coverage.latest.json` | pre-run coverage basis snapshot | Parent |
+| `analysis/pre/recommendation.latest.json` | pre-run recommendation basis snapshot | Parent |
+| `analysis/pre/corpus-program-decision.latest.json` | pre-run corpus-decision basis snapshot | Parent |
+| `analysis/post/coverage.latest.json` | post-run coverage snapshot | Parent |
+| `analysis/post/recommendation.latest.json` | post-run recommendation snapshot | Parent |
+| `analysis/post/corpus-program-decision.latest.json` | post-run corpus-decision snapshot | Parent |
+| `post-run-delta.md` | exact pre/post leverage, blockers, cluster members, and next action | Parent |
+| `blocked-summary.md` | exact blocked-state explanation if M62 cannot close | Parent |
+| `validation/kickoff/` | kickoff captures and baseline commands | Parent |
+| `validation/ws-a/` | maintained-example proof captures | Parent |
+| `validation/ws-b/` | M20 regression validate captures | Parent |
+| `validation/ws-c/` | CLI assertion proof captures | Parent |
+| `validation/final/` | final proof wall captures | Parent |
 | `handoffs/` | worker briefs and worker return packets | Parent |
-| `tasks/<TASK_ID>/` | per-task sentinels and state files | Parent creates, lane updates |
+| `tasks/<TASK_ID>/` | per-task sentinels and task-local notes | Parent creates, lane updates |
 
 ### Required `baseline.json` fields
 
@@ -181,29 +204,65 @@ This directory is run-state only. It is not product truth.
 - `dirty_tree_files`
 - `historical_shape_refs`
 - `observed_primary_surfaces`
+- `pre_run_artifact_paths`
 - `baseline_commands`
 - `run_started_at`
 
-### Required `contract-freeze.json` fields
+### Required `authority-freeze.json` fields
 
 - `milestone`
 - `authority_plan_path`
 - `authority_plan_commit`
 - `primary_branch`
 - `frozen_scope_claim`
-- `frozen_docs_sentence`
-- `frozen_supported_families`
-- `maintained_example_paths`
-- `preserved_example_paths`
-- `lane_ownership`
+- `frozen_authored_additions`
+- `frozen_contracts`
+- `frozen_cli_assertions`
+- `allowed_doc_surfaces`
 - `global_no_touch_surfaces`
+- `lane_ownership`
 - `serialization_points`
 - `integration_order`
 - `worker_model`
 - `worker_return_contract`
-- `forbidden_mechanics`
 - `verification_commands`
+- `decision_matrix`
 - `stop_rules`
+
+### Required `frozen_contracts` contents
+
+- `pricing/checkout_nested_chain3_variant`
+  - exact path
+  - exact five-input contract names
+  - exact dep tuple
+  - exact expected local-test output `Decimal::new(970290, 4)`
+- `pricing/base_nested_chain3_bad_dep_topology`
+  - exact path
+  - exact five-input contract names
+  - exact dep tuple
+  - exact expected local-test output `Decimal::new(9801, 2)`
+- `pricing/checkout_nested_chain3_bad_dep_topology`
+  - exact path
+  - exact five-input contract names
+  - exact dep tuple
+  - exact expected local-test output `Decimal::new(970290, 4)`
+
+### Required `frozen_cli_assertions` contents
+
+- test name:
+  - `m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix`
+- required new unsupported ids:
+  - `pricing/base_nested_chain3_bad_dep_topology`
+  - `pricing/checkout_nested_chain3_bad_dep_topology`
+- required reason code for both:
+  - `unsupported_dep_topology`
+- test name:
+  - `spec_status_repo_root_honors_each_root_workspace_config`
+- required crosslib root expectation:
+  - 5 units
+  - explicit `pricing/checkout_nested_chain3_variant` row
+  - status `untested`
+  - no `SPEC_UNKNOWN_LIBRARY_NAMESPACE` noise
 
 ### Required `worktrees.json` fields
 
@@ -252,7 +311,8 @@ Allowed states:
 - `closed`
 - `skipped`
 
-Only the parent may set `integrated`, `closed`, or `skipped`. Workers may move only between `running`, `blocked`, and `submitted`.
+Only the parent may set `integrated`, `closed`, or `skipped`.
+Workers may move only between `running`, `blocked`, and `submitted`.
 
 Each task gets a dedicated sentinel directory:
 
@@ -260,593 +320,355 @@ Each task gets a dedicated sentinel directory:
 $RUN_ROOT/tasks/<TASK_ID>/
 ```
 
-Required files:
+Each sentinel directory should contain:
 
-- `status.json`
-- `owner.txt`
-- `branch.txt`
-- `write_scope.txt`
+- `started-at.txt`
+- `write-scope.txt`
 - `commands.txt`
-- `changed_files.txt`
-- `acceptance.md`
-- `blocker.md`
-- `handoff.md`
-
-### Required `status.json` fields
-
-- `task_id`
-- `lane`
-- `state`
-- `owner`
-- `branch`
-- `write_scope`
-- `depends_on`
-- `started_at`
-- `updated_at`
-- `commands_run`
-- `changed_files`
-- `acceptance_status`
-- `blocker_code`
-- `blocker_summary`
-- `next_action`
-
-A task is done only after the parent integrates the lane and reruns the relevant proof wall.
-
-## Blocked-State Protocol
-
-Blocked state is explicit and durable.
-
-### Standard blocker codes
-
-- `PLAN_DRIFT`
-- `QUALIFIED_IDENTITY_DRIFT`
-- `EXAMPLE_FILENAME_DRIFT`
-- `DOC_SENTENCE_DRIFT`
-- `TS_BOUNDARY_EXPANSION`
-- `WRITE_SCOPE_VIOLATION`
-- `OWNERSHIP_CONFLICT`
-- `PROOF_WALL_FAIL`
-- `MERGE_RISK`
-- `ENVIRONMENT_MISSING`
-- `UNEXPECTED_WRITE_SCOPE`
-
-### What a lane writes when blocked
-
-If a lane cannot complete within scope, it must write all of the following before stopping:
-
-- `tasks/<TASK_ID>/blocker.md`
-- `tasks/<TASK_ID>/status.json`
-- `tasks/<TASK_ID>/commands.txt`
-- `tasks/<TASK_ID>/changed_files.txt`
-- `tasks/<TASK_ID>/handoff.md`
-
-### Required `blocker.md` contents
-
-- `Blocker code`
-- `Observed command`
-- `Observed failure`
-- `Why this is blocked within current scope`
-- `Whether existing partial edits are safe to keep`
-- `Requested parent action`
-- `Whether the lane recommends fix-forward, bounce-back, or re-scope`
-
-### Required blocked `status.json` updates
-
-When blocked, the lane sets at minimum:
-
-- `state: "blocked"`
-- `acceptance_status: "not_met"`
-- `blocker_code`
-- `blocker_summary`
-- `next_action`
-
-## Kickoff Sequence
-
-### `M61-00` — baseline snapshot
-
-Parent only, `PRIMARY_ROOT`.
-
-Run:
-
-```bash
-git -C "$PRIMARY_ROOT" branch --show-current
-git -C "$PRIMARY_ROOT" rev-parse --short HEAD
-git -C "$PRIMARY_ROOT" status --short
-```
-
-Write:
-
-- `baseline.json`
-- `validation/kickoff/branch.txt`
-- `validation/kickoff/head.txt`
-- `validation/kickoff/status.txt`
-
-Acceptance:
-
-- kickoff records the real dirty tree
-- kickoff records `feat/m40-plus`
-- kickoff records the authority commit `96d2ee9`
-- kickoff records the two historical shape refs as non-authoritative
-
-### `M61-01` — contract freeze
-
-Parent only, `PRIMARY_ROOT`.
-
-Freeze the following exact values into `contract-freeze.json`:
-
-- frozen sentence:
-  - `M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.`
-- maintained example seed:
-  - `examples/shared-spec/units/pricing/calculate_total.unit.spec`
-  - `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
-  - `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
-- preserved direct-root proof owners:
-  - `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
-  - `examples/crosslib-app/units/pricing/calculate_total.unit.spec`
-- frozen supported family set from `PLAN.md`
-- frozen lane ownership
-- frozen verification commands
-- frozen parent critical path
-- prohibited stale M26/M60 mechanics
-
-Write:
-
-- `contract-freeze.json`
-- `file-ownership.json`
-- initial `tasks.json`
-
-Acceptance:
-
-- every later lane operates from one frozen M61 contract file instead of re-reading `PLAN.md` ad hoc
-- the exact docs sentence and exact maintained example paths are durable before worker launch
-
-### `M61-02` — create worktrees
-
-Parent only, `PRIMARY_ROOT`.
-
-Create:
-
-- `WS-INT`
-- `WS-A`
-
-Delay:
-
-- `WS-B`
-- `WS-C`
-- `WS-D`
-
-until their dependencies are integrated.
-
-Write:
-
-- `worktrees.json`
-- `session-log.md` kickoff entry
-
-Acceptance:
-
-- no worker starts from stale pre-A state
-
-## Parent Critical Path
-
-This path is fixed and parent-owned.
-
-1. `M61-00` baseline snapshot in `PRIMARY_ROOT`
-2. `M61-01` contract freeze in `PRIMARY_ROOT`
-3. `task/m61-a1-validator-contract` in `WS-A`
-4. `task/m61-a2-qualified-collector` in `WS-A`
-5. integrate `WS-A` into `WS-INT`
-6. create and launch `WS-B` and `WS-C` from the post-A `WS-INT` state
-7. integrate `WS-B` into `WS-INT` as soon as it is green
-8. create and launch `WS-D` from the post-B `WS-INT` state
-9. integrate `WS-C` and `WS-D`
-10. run `task/m61-e-final-proof-wall` in `WS-INT`
-11. run `task/m61-f-final-branch-handoff` in `PRIMARY_ROOT`
-
-Nothing skips step 4. Step 1 and Step 2 from `PLAN.md` stay serialized inside Lane A.
+- `result-summary.md`
+- `blocker.md` only when blocked
 
 ## Workstream Plan
 
-### WS-A (`ws/m61-core`) — parent agent only, sequential
+### WS-BASELINE (`feat/m60-plus` + `ws/m62-int`) — parent agent only, sequential
 
-This is the contract wall. Keep it local.
+1. `task/m62-00-baseline-freeze`
+- Capture kickoff truth:
+  - `git branch --show-current`
+  - `git rev-parse --short HEAD`
+  - `git status --short`
+- Copy the current analysis basis into run-state:
+  - `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+  - `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+  - `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+- Write `baseline.json`, `authority-freeze.json`, `file-ownership.json`,
+  `tasks.json`, and `worktrees.json`.
+- Freeze exact write scopes:
+  - `WS-A`: one maintained real-example spec file only
+  - `WS-B`: two M20 regression spec files only
+  - `WS-C`: `spec-cli/tests/cli.rs` only
+  - `WS-INT`: artifact refresh, integration mechanics, and minimal docs
+- Create `WS-INT`, `WS-A`, and `WS-B`.
+- Record the current dirty tree as preserved baseline, not as lane work.
 
-#### `task/m61-a1-validator-contract`
+Acceptance for `task/m62-00-baseline-freeze`:
+- every frozen authored addition from `PLAN.md` is present in
+  `authority-freeze.json`
+- every global no-touch surface from `PLAN.md` is recorded
+- pre-run analysis artifacts are snapshotted before any worker edits begin
+- the lane write scopes make the A/B parallel split mechanically unambiguous
 
+### Parallel workers after WS-BASELINE is green
+
+2. `task/m62-a-real-example` on `ws/m62-real-example` — worker 1
 - Own only:
-  - `spec-core/src/validator.rs`
-- Do:
-  - replace the local-vs-portability root split with one recursive qualified closure validation flow
-  - resolve deps in owner-library context
-  - admit the existing eligible TypeScript root families from `PLAN.md`
-  - explicitly include `function.wrapper.pipeline.normalized_required_arg.v1` in TypeScript root/member handling
-  - keep helper, wrapper, normalized-wrapper, and chain3 dep contracts explicit and separate
-  - preserve failure-before-Bun behavior for:
-    - unsupported semantic review
-    - wrong family
-    - wrong dep order
-    - missing `body.typescript`
-    - unresolved dep
-    - molecule TypeScript rejection
-- Do not own:
-  - `spec-core/src/typescript_backend.rs`
-  - `spec-core/src/semantic_review.rs`
-  - examples
-  - docs
-  - CLI tests
-
-Run:
-
-```bash
-cargo test -p spec-core validator
-```
-
-Acceptance for `task/m61-a1-validator-contract`:
-
-- supported local-only roots still validate
-- supported direct cross-library roots still validate
-- supported recursive shared roots now validate
-- normalized-required-arg wrappers are legal in the TypeScript lane when their existing M60 family contract is satisfied
-- preserved red paths still fail before Bun
-- `spec-core/src/validator.rs` is the only edited file in this task
-
-#### `task/m61-a2-qualified-collector`
-
-- Own only:
-  - `spec-core/src/typescript_backend.rs`
-- Do:
-  - replace raw-id collector lookup structures with qualified lookup structures
-  - replace dep resolution with owner-library-qualified resolution
-  - collapse local recursion and direct portability collection into one qualified recursive collector story
-  - dedupe reachable members by qualified identity, not raw id
-  - keep emitted file paths and import rendering stable unless the qualified collector proves a necessary change
-  - keep normalized-required-arg wrapper support truthful in the collector path
-- Do not own:
-  - `spec-core/src/validator.rs`
-  - `spec-core/src/semantic_review.rs`
-  - examples
-  - docs
-  - CLI tests
-
-Run:
-
-```bash
-cargo test -p spec-core validator
-cargo test -p spec-core typescript_backend
-```
-
-Acceptance for `task/m61-a2-qualified-collector`:
-
-- local/shared same-id units do not collide in closure membership
-- recursive shared closure includes only reachable qualified members
-- unrelated loaded units remain excluded from the emitted TS tree
-- validator and collector no longer disagree about dep-edge ownership
-- `spec-core/src/typescript_backend.rs` is the only edited file in this task
-
-#### `task/m61-a-integrate-core`
-
-Parent only, `WS-INT`.
-
-Integrate `ws/m61-core` into `ws/m61-int`.
-
-After integration:
-
-- refresh `worktrees.json`
-- refresh `tasks.json`
-- create `WS-B` and `WS-C` from the integrated `ws/m61-int`
-- write a session-log entry that the qualified-identity model, exact supported family set, exact docs sentence, and exact maintained example filenames are frozen
-
-Acceptance:
-
-- every downstream lane inherits the frozen post-A contract directly
-
-### WS-B (`ws/m61-examples`) — worker 1
-
-This lane owns the maintained recursive shared example and its derived artifacts.
-
-#### `task/m61-b-maintained-example`
-
-- Own only:
-  - `examples/shared-spec/units/pricing/calculate_total.unit.spec`
-  - `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
-  - `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
-  - derived outputs refreshed by the normal spec loop under:
-    - `examples/shared-spec/src/generated/**`
-    - `examples/crosslib-app/src/generated/**`
-    - `examples/shared-spec/units/**/*.spec.passport.json`
-    - `examples/crosslib-app/units/**/*.spec.passport.json`
-- Do:
-  - promote the recursive shared CLI prototype into the maintained example tree
-  - keep the direct-root proof owners intact:
-    - `examples/crosslib-app/units/pricing/apply_tax.unit.spec`
-    - `examples/crosslib-app/units/pricing/calculate_total.unit.spec`
-  - keep the maintained example filenames exactly as frozen
-  - follow the spec source-truth loop:
-    - validate source specs
-    - build the affected example trees
-    - test the exact edited source specs
-  - verify the maintained example also works through the TypeScript target lane after branching from the post-A state
-- Do not own:
+  - `examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
+- Author the maintained cross-library variant using the frozen contract
+  literally:
+  - exact id
+  - same five-input `Decimal` contract names
+  - exact dep tuple:
+    - `shared::pricing/base_nested_chain3`
+    - `shared::pricing/apply_tax`
+    - `shared::pricing/apply_discount`
+  - both `body.rust` and `body.typescript`
+  - exact expected local-test output `Decimal::new(970290, 4)`
+- Do not edit:
+  - `examples/shared-spec/**`
   - `examples/crosslib-app/README.md`
-  - docs
-  - `spec-core/src/**`
-  - `spec-cli/tests/cli.rs`
+  - any CLI or backend file
+- Verify with:
+  - `cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --format json`
+  - `cargo run -p spec-cli -- generate examples/shared-spec/units --output examples/shared-crate/src/generated`
+  - `cargo run -p spec-cli -- generate examples/crosslib-app/units --output examples/crosslib-app/src/generated`
+  - `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
+  - `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --target-language typescript`
 
-Run:
+Acceptance for `task/m62-a-real-example`:
+- the new maintained unit validates
+- the new maintained unit proves in both Rust and TypeScript
+- no shared-spec source unit was touched
+- the authored body still expresses the target wrapper-like callable-triple
+  pressure, not a neighboring supported shape
+
+3. `task/m62-b-regressions` on `ws/m62-regressions` — worker 2
+- Own only:
+  - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/base_nested_chain3_bad_dep_topology.unit.spec`
+  - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_nested_chain3_bad_dep_topology.unit.spec`
+- Author both units using the frozen contract literally:
+  - exact ids
+  - exact five-input contract names
+  - exact dep tuples
+  - exact expected local-test outputs
+- Keep both units inside the existing M20 pack vocabulary and field order.
+- Do not edit:
+  - `spec-cli/tests/cli.rs`
+  - any `xtask` file
+  - any maintained example file
+- Verify with:
+  - `cargo run -p spec-cli -- validate spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --format json`
+
+Acceptance for `task/m62-b-regressions`:
+- both new M20 regression units validate inside the existing pack
+- the units remain in the unsupported callable-triple wrapper neighborhood
+- the lane did not widen the pack beyond the two frozen additions
+
+### WS-INT (`ws/m62-int`) — parent agent only, post-A+B integration
+
+4. `task/m62-int-ab`
+- Merge `ws/m62-real-example` and `ws/m62-regressions` into `ws/m62-int`.
+- Resolve only straightforward merge mechanics.
+- If a lane changed an unowned file, reject the lane and bounce it back.
+- After merge, verify the integrated authored delta is still exactly:
+  - one new maintained real-example file
+  - two new M20 regression files
+- Create `WS-C` from the integrated `ws/m62-int` tip only after this check
+  passes.
+
+Acceptance for `task/m62-int-ab`:
+- the integrated tree contains exactly the three frozen authored additions
+- no forbidden surface changed
+- `ws/m62-cli` forks from the integrated A+B baseline, not from stale primary
+
+### WS-C (`ws/m62-cli`) — worker 3, serialized after A+B integration
+
+5. `task/m62-c-cli`
+- Own only:
+  - `spec-cli/tests/cli.rs`
+- Update only the frozen public truth surfaces:
+  - extend
+    `m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix`
+    with:
+    - `pricing/base_nested_chain3_bad_dep_topology`
+    - `pricing/checkout_nested_chain3_bad_dep_topology`
+    - reason `unsupported_dep_topology` for both
+  - update
+    `spec_status_repo_root_honors_each_root_workspace_config`
+    so the copied `crosslib-app` root expects:
+    - 5 units
+    - explicit `pricing/checkout_nested_chain3_variant`
+    - status `untested`
+    - no `SPEC_UNKNOWN_LIBRARY_NAMESPACE` noise
+- Do not edit:
+  - fixture specs
+  - backend code
+  - docs
+  - analysis artifacts
+- Verify with:
+  - `cargo test -p spec-cli --test cli m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix -- --exact`
+  - `cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact`
+  - `cargo test -p spec-cli --test cli`
+
+Acceptance for `task/m62-c-cli`:
+- `spec-cli/tests/cli.rs` explicitly names the two new M20 ids and the new
+  maintained crosslib row
+- both targeted exact tests pass
+- the broader `spec-cli` CLI truth-surface file stays green
+
+### WS-FINAL (`ws/m62-int`) — parent agent only
+
+6. `task/m62-d-proof-closeout`
+- Merge `ws/m62-cli` into `ws/m62-int`.
+- Run the full proof wall in this order:
 
 ```bash
-cargo run -p spec-cli -- validate examples/shared-spec/units/pricing/calculate_total.unit.spec --format json
-cargo run -p spec-cli -- validate examples/shared-spec/units/pricing/base_nested_chain3.unit.spec --format json
-cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --format json
+cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --format json
+cargo run -p spec-cli -- generate examples/shared-spec/units --output examples/shared-crate/src/generated
+cargo run -p spec-cli -- generate examples/crosslib-app/units --output examples/crosslib-app/src/generated
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --target-language typescript
 
-cargo run -p spec-cli -- build examples/shared-spec/units --output examples/shared-spec/src/generated
-cargo run -p spec-cli -- build examples/crosslib-app/units --output examples/crosslib-app/src/generated
+cargo run -p spec-cli -- validate spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --format json
+cargo test -p spec-cli --test cli m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix -- --exact
+cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact
+cargo test -p spec-cli --test cli
 
-cargo run -p spec-cli -- test examples/shared-spec/units/pricing/calculate_total.unit.spec
-cargo run -p spec-cli -- test examples/shared-spec/units/pricing/base_nested_chain3.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family corpus-decision --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
+jq '.unsupported_clusters[] | select(.cluster_id=="unsupported_dep_topology-fbecce0dbe98") | {cluster_id, representative_unit_ids, source_ids, real_example_hits, promotion_relevant_regression_hits, boundary_only_hits}' .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+jq '{recommendation_status, decision_summary, top_candidate:(.ranked_candidates[0] | {candidate_id, promotion_readiness, hold_reasons, confidence, leverage})}' .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+jq '{decision_action, decision_basis_code, required_next_action, summary}' .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 ```
 
-Acceptance for `task/m61-b-maintained-example`:
-
-- the three maintained example source files exist at the exact frozen paths
-- the direct-root proof owners remain intact
-- the normal spec loop succeeds for the edited source specs
-- the maintained recursive shared root passes under `--target-language typescript`
-- no example filename drift occurs
-- only Lane B surfaces changed
-
-### WS-C (`ws/m61-docs`) — worker 2
-
-This lane is narrow and can run in parallel with Lane B after the post-A freeze.
-
-#### `task/m61-c-doc-sync`
-
-- Own only:
-  - `README.md`
-  - `TODOS.md`
+- Copy refreshed analysis artifacts into `analysis/post/`.
+- Write `post-run-delta.md` with:
+  - pre-run and post-run leverage counts
+  - pre-run and post-run blocker lists
+  - pre-run and post-run corpus-decision action
+  - post-run cluster member ids
+  - exact next-action sentence
+  - final bucket classification
+- Apply docs edits only if the refreshed proof wall makes a current surface
+  misleading:
+  - `examples/crosslib-app/README.md`
   - `CHANGELOG.md`
-  - `examples/crosslib-app/README.md`
-- Do:
-  - use the frozen M61 sentence verbatim
-  - add the new recursive example command to `examples/crosslib-app/README.md`
-  - narrow the TODO backlog exactly as `PLAN.md` requires
-  - keep broader TypeScript oceans explicitly deferred:
-    - arbitrary authored 4+ direct-dep topology parity
-    - new semantic-family promotion
-    - molecule TypeScript execution
-    - seam-kind TypeScript execution
-- Do not own:
-  - example `.unit.spec` files
-  - generated example artifacts
-  - `spec-core/src/**`
-  - `spec-cli/tests/**`
+  - `TODOS.md`
+- If docs do not need truth maintenance, leave them untouched.
 
-Run:
+Blocked-state behavior for `task/m62-d-proof-closeout`:
 
-```bash
-SENTENCE='M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.'
+- If the maintained example fails Rust or TypeScript proof:
+  - stop
+  - record failure in `blocked-summary.md`
+  - reopen `task/m62-a-real-example`
+- If the M20 pack validate step fails:
+  - stop
+  - record failure in `blocked-summary.md`
+  - reopen `task/m62-b-regressions`
+- If the targeted or broad CLI truth-surface tests fail:
+  - stop
+  - record failure in `blocked-summary.md`
+  - reopen `task/m62-c-cli`
+- If coverage does not show the target cluster at `2 real / 2 regression`:
+  - stop
+  - record which new unit appears to have missed the target cluster
+  - do not close M62
+- If refreshed recommendation still keeps missing-evidence blockers:
+  - stop
+  - record the blocker list and the suspected missed unit or route
+  - do not close M62
+- If refreshed `corpus-decision` still returns `spend_corpus_run1`:
+  - stop
+  - record the exact decision payload
+  - do not close M62
+- If refreshed `corpus-decision` returns `stop`:
+  - stop
+  - close only if the post-run evidence proves the candidate genuinely fell out
+    of the actionable set
+  - otherwise treat as red
+- If the refreshed basis implies `xtask` or backend code changes are required:
+  - stop
+  - do not patch around it under M62
+  - escalate as a re-scope
 
-rg -nF "$SENTENCE" README.md TODOS.md CHANGELOG.md examples/crosslib-app/README.md
-rg -n "arbitrary authored 4\\+ direct-dep topology parity|new semantic-family promotion|molecule TypeScript execution|seam-kind TypeScript execution" TODOS.md
-rg -n "checkout_nested_chain3\\.unit\\.spec" examples/crosslib-app/README.md
-```
+Acceptance for `task/m62-d-proof-closeout`:
+- the maintained variant proves in both Rust and TypeScript
+- the M20 pack stays green
+- `spec-cli/tests/cli.rs` proves the new maintained row and both new M20 ids
+- all three refreshed analysis artifacts validate
+- the target candidate is no longer judged from a `1 real / 0 regression`
+  floor
+- the final result lands in one of the allowed post-run buckets from `PLAN.md`
 
-Acceptance for `task/m61-c-doc-sync`:
+7. `task/m62-e-close`
+- Close M62 only after the parent classifies the outcome into exactly one
+  bucket:
 
-- all four docs surfaces use the same frozen sentence
-- `examples/crosslib-app/README.md` references the exact maintained recursive example filename
-- `TODOS.md` narrows the backlog exactly as `PLAN.md` requires
-- no docs imply arbitrary graph parity
+1. **Expected green path**
+   - coverage shows `2 real / 2 regression`
+   - recommendation becomes `ranked` plus `recommended`
+   - corpus decision becomes `pivot_to_family_promotion_run`
+   - outcome: M62 succeeded and the next plan, if needed, is a bounded family
+     promotion plan
 
-### WS-D (`ws/m61-cli`) — worker 3, starts after WS-B is integrated
+2. **Yellow but acceptable diagnosis**
+   - coverage shows `2 real / 2 regression`
+   - missing-evidence blockers clear
+   - corpus decision pivots to `recommendation_policy_run`
+   - outcome: M62 still succeeded as a corpus run, but the follow-up is policy,
+     not more corpus spend
 
-Do not create this lane until Lane B is integrated into `ws/m61-int`.
+3. **Red, do not close**
+   - coverage fails to reach `2 real / 2 regression`
+   - or the recommendation still reports missing evidence
+   - or `decision_action` stays `spend_corpus_run1`
 
-#### `task/m61-d-cli-regressions`
+4. **Unexpected stop path**
+   - `decision_action = "stop"`
+   - close only if the run proves why the candidate is no longer actionable
 
-- Own only:
-  - `spec-cli/tests/cli.rs`
-- Do:
-  - convert the current recursive shared nested chain3 rejection helper into the new green path
-  - keep preserved red-path coverage for:
-    - unsupported shared recursive member
-    - wrong dep order inside a shared recursive member
-    - missing `body.typescript` on a shared recursive member
-    - unresolved shared dep
-    - molecule TypeScript rejection
-  - add at least one regression that proves owner-library-qualified resolution when local and shared same-id units coexist
-  - keep the Bun-precheck rejection wall consistent
-- Do not own:
-  - `spec-core/src/**`
-  - example source specs
-  - generated example artifacts
-  - docs
+- Update `acceptance-ledger.md` with the exact bucket and proof references.
+- Close worker tasks immediately after merge. Do not keep completed workers
+  alive.
 
-Run:
-
-```bash
-cargo test -p spec-cli --test cli
-```
-
-Acceptance for `task/m61-d-cli-regressions`:
-
-- the new recursive shared green path passes
-- preserved red paths still fail before Bun
-- same-id owner-library-qualified lookup is covered
-- only `spec-cli/tests/cli.rs` changed in this lane
-
-## WS-INT (`ws/m61-int`) — parent agent only
-
-### `task/m61-int-integrate-b-and-launch-d`
-
-Integrate:
-
-- `ws/m61-examples`
-
-Policy:
-
-- if Lane B changed any frozen example filename, reject the lane and bounce it back
-- do not launch Lane D until Lane B is integrated into `ws/m61-int`
-
-After integration:
-
-- refresh `worktrees.json`
-- refresh `tasks.json`
-- create `WS-D` from the updated `ws/m61-int`
-- launch Lane D with the integrated example state
-
-### `task/m61-int-integrate-c-and-d`
-
-Integrate:
-
-- `ws/m61-docs`
-- `ws/m61-cli`
-
-Policy:
-
-- if docs wording disagrees with the frozen sentence, docs lose and are bounced back
-- if CLI expectations require code or example changes not already present in `ws/m61-int`, stop and bounce back rather than hot-fixing in integration
-- do not resolve semantic disagreements creatively in `WS-INT`
-
-### `task/m61-e-final-proof-wall`
-
-Parent only, `WS-INT`.
-
-Run the full proof wall in this order:
-
-```bash
-cargo fmt --all
-
-cargo test -p spec-core validator
-cargo test -p spec-core typescript_backend
-cargo test -p spec-cli --test cli
-
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
-cargo run -p spec-cli -- status examples/crosslib-app/units --target-language typescript --format json
-```
-
-Write:
-
-- `validation/final/*`
-- `final-proof-manifest.json`
-- `acceptance-ledger.md`
-
-Acceptance for `task/m61-e-final-proof-wall`:
-
-- validator tests are green
-- TypeScript backend tests are green
-- CLI regressions are green
-- the maintained recursive shared root passes under Bun
-- status remains target-specific and additive
-- preserved red-path cases still reject before Bun
-- formatting changes, if any, are limited to the integrated tree and are parent-owned
-
-### `task/m61-f-final-branch-handoff`
-
-Parent only, `PRIMARY_ROOT`.
-
-After `ws/m61-int` is green:
-
-- fast-forward `feat/m40-plus` to `ws/m61-int` if possible
-- if fast-forward is not possible, stop and inspect manually rather than performing a creative merge in the authority root
-
-Suggested command:
-
-```bash
-git -C "$PRIMARY_ROOT" merge --ff-only ws/m61-int
-```
-
-Acceptance:
-
-- the primary execution branch now contains the integrated, proven M61 result
-
-## Integration Order
-
-This order is fixed.
-
-1. kickoff and freeze on `PRIMARY_ROOT`
-2. `WS-A`
-3. integrate `WS-A` into `WS-INT`
-4. create and launch `WS-B` + `WS-C` in parallel
-5. integrate `WS-B`
-6. create and launch `WS-D`
-7. integrate `WS-C`
-8. integrate `WS-D`
-9. run final proof wall in `WS-INT`
-10. fast-forward `feat/m40-plus`
-
-If `WS-C` finishes before `WS-B`, keep it submitted and do not let it redefine the frozen sentence or filenames while waiting.
-
-## Conflict Policies
-
-- Lane A is not parallelizable internally. `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs` define one contract and stay sequential.
-- Lane B and Lane D both touch the cross-library example story. Lane D must branch from the post-B integrated state.
-- Lane C must not invent filenames, commands, or sentence variants. It consumes the freeze literally.
-- `spec-core/src/semantic_review.rs` is a global no-touch surface.
-- `spec-cli/src/commands.rs` is a global no-touch surface.
-- `PLAN.md` is a global no-touch surface during execution.
-- If a worker finds it needs another lane’s file, it stops and files a blocker instead of expanding its scope.
-- The parent is the only integrator onto `ws/m61-int` and `feat/m40-plus`.
+Acceptance for `task/m62-e-close`:
+- closeout cites exact proof paths, not impressions
+- the next action is explicit and consistent with the observed bucket
+- no hidden follow-up work is smuggled into M62 after the bucket is known
 
 ## Context-Control Rules
 
-- Parent keeps only four live artifacts in working context:
+- Parent agent keeps only these live artifacts in working context:
   - `PLAN.md`
   - `ORCH_PLAN.md`
-  - `tasks.json`
+  - `$RUN_ROOT/tasks.json`
+  - `authority-freeze.json`
   - the latest integration diff summary
 - Each worker prompt contains only:
   - its owned file set
   - the exact relevant `PLAN.md` excerpt
-  - frozen values from `contract-freeze.json`
   - required commands
   - forbidden touch surfaces
-  - the worker model assumption `GPT-5.4 / high`
+  - the worker return contract
 - Each worker must return only:
   - changed files
   - commands run and exit codes
   - blockers or unresolved assumptions
-- Workers do not write `RUN_ROOT` except through their assigned task sentinels.
-- The parent reviews summaries plus narrow diffs only.
+- Workers must not dump full artifact JSON back into the parent context.
+- Workers do not write `analysis/pre/*`, `analysis/post/*`, or acceptance
+  ledgers.
+- The parent reviews narrow diffs and proof summaries only.
 - Close each worker immediately after merge.
 - Use completion sentinels or long waits, not tight polling.
 
 ## Tests And Acceptance
 
-- Core contract
-  - one recursive qualified validator path exists
-  - one qualified recursive collector path exists
-  - normalized-required-arg wrapper support is truthful in the TypeScript lane
-  - `spec-core/src/semantic_review.rs` remains unchanged
-- Maintained example truth
-  - the exact three maintained example source files exist
-  - the normal spec loop is green for the edited source specs
-  - the direct-root proof owners remain intact
-  - the recursive shared root passes under `--target-language typescript`
-- Docs
-  - README, TODOS, CHANGELOG, and `examples/crosslib-app/README.md` all use the same frozen sentence
-  - docs do not imply arbitrary graph parity
-  - `TODOS.md` preserves the remaining TypeScript oceans exactly as bounded by `PLAN.md`
-- CLI truth
-  - `spec-cli/tests/cli.rs` contains the green recursive shared path
-  - preserved red-path regressions still fail before Bun
-  - same-id owner-library resolution is covered
-- Final proof wall
-  - all final commands pass in sequence
-  - the maintained recursive shared root is green
-  - status remains additive and target-specific
-  - no stale M26/M60 commands were needed anywhere in the run
+- Maintained real-example lane
+  - `cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --format json`
+  - `cargo run -p spec-cli -- generate examples/shared-spec/units --output examples/shared-crate/src/generated`
+  - `cargo run -p spec-cli -- generate examples/crosslib-app/units --output examples/crosslib-app/src/generated`
+  - `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
+  - `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --target-language typescript`
+- M20 regression lane
+  - `cargo run -p spec-cli -- validate spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --format json`
+- CLI truth-surface lane
+  - `cargo test -p spec-cli --test cli m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix -- --exact`
+  - `cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact`
+  - `cargo test -p spec-cli --test cli`
+- Analysis wall
+  - `cargo xtask family coverage --format json`
+  - `cargo xtask family recommend --format json`
+  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+  - `cargo xtask family corpus-decision --format json`
+  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+- Inspection wall
+  - `jq '.unsupported_clusters[] | select(.cluster_id=="unsupported_dep_topology-fbecce0dbe98") | {cluster_id, representative_unit_ids, source_ids, real_example_hits, promotion_relevant_regression_hits, boundary_only_hits}' .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+  - `jq '{recommendation_status, decision_summary, top_candidate:(.ranked_candidates[0] | {candidate_id, promotion_readiness, hold_reasons, confidence, leverage})}' .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+  - `jq '{decision_action, decision_basis_code, required_next_action, summary}' .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+
+Final acceptance requires all of the following:
+
+1. exactly three new authored source-spec files landed
+2. no sixth corpus source or backend-capability widening was introduced
+3. `spec-cli/tests/cli.rs` explicitly asserts the new maintained row and the
+   two new unsupported regression ids
+4. the target candidate is no longer judged from a `1 real / 0 regression`
+   floor
+5. `coverage.latest.json` reaches `2 real / 2 regression`
+6. missing-evidence blockers are gone
+7. `corpus-program-decision.latest.json` is no longer `spend_corpus_run1`
+8. the final result is classified into an allowed post-run bucket
+9. docs remain truthful and do not overclaim M62 as a product-capability
+   milestone
+10. `post-run-delta.md` preserves the exact leverage, blocker, and next-action
+    delta
 
 ## Assumptions
 
-- No human approval gate is required because `PLAN.md` does not define one for M61.
-- `cargo run -p spec-cli -- test <unit.unit.spec> --target-language typescript` remains the correct public proof surface for this milestone.
-- Generated outputs under `src/generated/**` and `*.spec.passport.json` are derived surfaces refreshed by the normal spec loop when Lane B edits source specs.
-- The current dirty tree, if any, is preserved throughout execution.
-- `spec-cli/tests/cli.rs` is the only CLI regression file Lane D needs. If the repo’s actual regression truth is split elsewhere, that is a blocker and not an implicit scope expansion.
+- `feat/m60-plus` remains the live primary branch for M62 execution.
+- The validated commit in `PLAN.md` remains `0518c7a` until the run begins.
+- The current analysis artifact paths already exist and remain the canonical
+  read-side outputs for this milestone.
+- Existing `cargo xtask family validate-artifact` support is sufficient for the
+  three refreshed analysis artifacts.
+- The repo's existing `spec-cli` and `xtask` commands remain the proof owners;
+  no browser, UI, or external-service loop is part of M62.
+- The only intended concurrency is the two-lane authored corpus split. Adding
+  more workers would increase coordination cost without shortening the critical
+  path.
