@@ -18,7 +18,7 @@
       "expect": "round(Decimal::new(12345, 3)) == Decimal::new(1235, 2)"
     }
   ],
-  "generated_at": "2026-05-15T19:06:26Z",
+  "generated_at": "2026-05-15T19:14:33Z",
   "source_file": "examples/shared-spec/units/money/round.unit.spec",
   "evidence": {
     "build_status": "pass",
