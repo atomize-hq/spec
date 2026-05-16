@@ -8,6 +8,7 @@ changes:
       validate:
         - pricing/apply_tax
         - pricing/calculate_total
+        - pricing/calculate_total_guarded_tax
         - pricing/pricing_quote
       molecule_tests:
         - pricing/checkout_flow

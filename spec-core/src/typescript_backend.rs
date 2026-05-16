@@ -221,14 +221,13 @@ fn build_typescript_resolved_spec_index(specs: &[&ResolvedSpec]) -> TypescriptRe
             let Ok(parsed) = DepRef::parse(dep) else {
                 continue;
             };
-            if let Some(alias) = parsed.library_alias() {
-                if qualified_library_assignments
+            if let Some(alias) = parsed.library_alias()
+                && qualified_library_assignments
                     .entry(parsed.unit_id().to_string())
                     .or_default()
                     .insert(alias.to_string())
-                {
-                    propagation_queue.push_back((alias.to_string(), parsed.unit_id().to_string()));
-                }
+            {
+                propagation_queue.push_back((alias.to_string(), parsed.unit_id().to_string()));
             }
         }
     }

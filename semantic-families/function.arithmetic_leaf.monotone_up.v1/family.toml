@@ -7,7 +7,7 @@ summary = "Straight-line arithmetic leaf with zero-or-one helper dep and monoton
 [routing]
 precedence = 5
 must_not_shadow = [
-  "unsupported.function.v1",
+  "function.helper.identity_passthrough.v1",
 ]
 
 [shape]

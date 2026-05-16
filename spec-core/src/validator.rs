@@ -503,12 +503,15 @@ pub fn validate_typescript_execution_target_spec_with_specs(
 
     let qualified_specs = TypescriptQualifiedSpecIndex::build(specs_by_id)?;
     let root_qualified_id = qualified_specs.qualified_id_for_spec(spec)?;
+    let same_tree_local_lane = typescript_target_uses_local_graph_lane(spec)?
+        && (spec.spec.deps.is_empty() || spec.spec.deps.len() == 3);
     let mut visited = HashSet::new();
     validate_typescript_recursive_closure_member_with_specs(
         &root_qualified_id,
         &qualified_specs,
         &mut visited,
         true,
+        same_tree_local_lane,
     )?;
     validate_typescript_local_test_expect_shape(spec)
 }
@@ -529,6 +532,7 @@ fn validate_typescript_recursive_closure_member_with_specs(
     qualified_specs: &TypescriptQualifiedSpecIndex,
     visited: &mut HashSet<QualifiedUnitRef>,
     is_root: bool,
+    same_tree_local_lane: bool,
 ) -> Result<()> {
     let spec = qualified_specs.spec_for_qualified_id(qualified_id)?;
     if spec
@@ -586,6 +590,38 @@ fn validate_typescript_recursive_closure_member_with_specs(
         ));
     }
 
+    if same_tree_local_lane {
+        for dep in &spec.spec.deps {
+            let parsed = DepRef::parse(dep).map_err(|err| semantic_error(spec, err.to_string()))?;
+            if parsed.library_alias().is_some() {
+                return Err(semantic_error(
+                    spec,
+                    format!(
+                        "{}: '{}'",
+                        TYPESCRIPT_LOCAL_GRAPH_SHARED_DEP_UNSUPPORTED_MESSAGE,
+                        parsed.authored()
+                    ),
+                ));
+            }
+
+            let (dep_qualified_id, _) = qualified_specs.resolve_dep(
+                spec,
+                qualified_id.library(),
+                dep,
+                TYPESCRIPT_LOCAL_GRAPH_MISSING_DEP_UNSUPPORTED_MESSAGE,
+            )?;
+            validate_typescript_recursive_closure_member_with_specs(
+                &dep_qualified_id,
+                qualified_specs,
+                visited,
+                false,
+                true,
+            )?;
+        }
+
+        return Ok(());
+    }
+
     match classify_typescript_target_root_family(spec, &semantic_review_specs)? {
         TypescriptTargetRootFamily::Helper if is_root => {
             return Err(semantic_error(
@@ -602,7 +638,7 @@ fn validate_typescript_recursive_closure_member_with_specs(
             ));
         }
         TypescriptTargetRootFamily::MonotoneDown | TypescriptTargetRootFamily::MonotoneUp => {
-            validate_typescript_helper_dep_contract(spec, qualified_id, qualified_specs)?;
+            validate_typescript_helper_dep_contract(spec, qualified_id, qualified_specs)
         }
         TypescriptTargetRootFamily::Helper => {
             if !spec.spec.deps.is_empty() {
@@ -611,15 +647,16 @@ fn validate_typescript_recursive_closure_member_with_specs(
                     "TypeScript helper closure members must have deps: [] in M52",
                 ));
             }
+            Ok(())
         }
         TypescriptTargetRootFamily::WrapperPipeline
         | TypescriptTargetRootFamily::NormalizedRequiredArgWrapperPipeline => {
-            validate_typescript_wrapper_dep_contract(spec, qualified_id, qualified_specs)?;
+            validate_typescript_wrapper_dep_contract(spec, qualified_id, qualified_specs)
         }
         TypescriptTargetRootFamily::Chain3WrapperPipeline => {
-            validate_typescript_chain3_dep_contract(spec, qualified_id, qualified_specs)?;
+            validate_typescript_chain3_dep_contract(spec, qualified_id, qualified_specs)
         }
-    }
+    }?;
 
     for dep in &spec.spec.deps {
         let (dep_qualified_id, _) = qualified_specs.resolve_dep(
@@ -632,6 +669,7 @@ fn validate_typescript_recursive_closure_member_with_specs(
             &dep_qualified_id,
             qualified_specs,
             visited,
+            false,
             false,
         )?;
     }
@@ -650,6 +688,7 @@ pub fn validate_typescript_closure_member_spec_with_specs(
         &qualified_id,
         &qualified_specs,
         &mut visited,
+        false,
         false,
     )
 }
@@ -5107,12 +5146,8 @@ methods:
     #[test]
     fn typescript_target_rejects_helper_root() {
         let spec = create_typescript_helper_spec();
-        let err = validate_typescript_execution_target_spec(&spec).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_HELPER_COMPATIBILITY_KEY),
-            "unexpected error: {err}"
-        );
+        validate_typescript_execution_target_spec(&spec)
+            .expect("same-tree helper roots should be eligible in M59");
     }
 
     #[test]
@@ -5584,7 +5619,7 @@ methods:
     }
 
     #[test]
-    fn typescript_target_rejects_chain3_with_reordered_declared_deps() {
+    fn typescript_local_graph_target_accepts_chain3_with_reordered_declared_deps() {
         let mut spec = create_typescript_chain3_spec();
         spec.spec.deps = vec![
             "pricing/apply_tax".to_string(),
@@ -5603,13 +5638,8 @@ methods:
             (helper.spec.id.clone(), helper),
         ]);
 
-        let err =
-            validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_DEP_FAMILY_UNSUPPORTED_MESSAGE),
-            "unexpected error: {err}"
-        );
+        validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id)
+            .expect("same-tree local chain3 roots should reach execution despite reordered deps");
     }
 
     #[test]
@@ -5713,7 +5743,7 @@ methods:
             validate_typescript_execution_target_spec_with_specs(&spec, &specs_by_id).unwrap_err();
         assert!(
             err.to_string()
-                .contains(TYPESCRIPT_CHAIN3_DEP_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
+                .contains(TYPESCRIPT_LOCAL_GRAPH_TYPESCRIPT_BODY_UNSUPPORTED_MESSAGE),
             "unexpected error: {err}"
         );
     }

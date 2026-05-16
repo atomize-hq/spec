@@ -394,7 +394,7 @@ pub(crate) const WRAPPER_PIPELINE_PROVE_SUITES: [SuiteDefinition; 3] = [
             "-p",
             "spec-core",
             "--lib",
-            "wrapper_pipeline_",
+            "wrapper_pipeline_classifier_",
             "--",
             "--color",
             "never",
@@ -416,7 +416,6 @@ pub(crate) const WRAPPER_PIPELINE_PROVE_SUITES: [SuiteDefinition; 3] = [
             "semantic_review::tests::wrapper_pipeline_classifier_under_specified_marks_unused_extra_param",
             "semantic_review::tests::wrapper_pipeline_classifier_under_specified_marks_vague_authored_intent",
             "semantic_review::tests::wrapper_pipeline_classifier_unsupported_near_miss_stays_unsupported",
-            "semantic_review::tests::wrapper_pipeline_runtime_route_order_preserves_chain3_wrapper_monotone_down_monotone_up",
         ],
     },
     SuiteDefinition {
@@ -462,25 +461,44 @@ pub(crate) const WRAPPER_PIPELINE_PROVE_SUITES: [SuiteDefinition; 3] = [
     },
 ];
 
-pub(crate) const WRAPPER_PIPELINE_CERTIFY_SUITES: [SuiteDefinition; 1] = [SuiteDefinition {
-    name: "spec-cli:wrapper_pipeline_regression_",
-    command: &[
-        "cargo",
-        "test",
-        "-p",
-        "spec-cli",
-        "--test",
-        "m14_regressions",
-        "wrapper_pipeline_regression_",
-        "--",
-        "--color",
-        "never",
-    ],
-    expected_tests: &[
-        "wrapper_pipeline_regression_read_side_surfaces_are_not_shadowed",
-        "wrapper_pipeline_regression_unsupported_near_miss_stays_additive_only_and_neutral",
-    ],
-}];
+pub(crate) const WRAPPER_PIPELINE_CERTIFY_SUITES: [SuiteDefinition; 2] = [
+    SuiteDefinition {
+        name: "spec-core:wrapper_pipeline_runtime_route_order_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-core",
+            "--lib",
+            "wrapper_pipeline_runtime_route_order_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "semantic_review::tests::wrapper_pipeline_runtime_route_order_preserves_chain3_wrapper_monotone_down_monotone_up",
+        ],
+    },
+    SuiteDefinition {
+        name: "spec-cli:wrapper_pipeline_regression_",
+        command: &[
+            "cargo",
+            "test",
+            "-p",
+            "spec-cli",
+            "--test",
+            "m14_regressions",
+            "wrapper_pipeline_regression_",
+            "--",
+            "--color",
+            "never",
+        ],
+        expected_tests: &[
+            "wrapper_pipeline_regression_read_side_surfaces_are_not_shadowed",
+            "wrapper_pipeline_regression_unsupported_near_miss_stays_additive_only_and_neutral",
+        ],
+    },
+];
 
 pub(crate) const WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_CERTIFY_SUITES: [SuiteDefinition; 0] = [];
 

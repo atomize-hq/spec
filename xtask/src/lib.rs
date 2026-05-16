@@ -648,7 +648,11 @@ mod tests {
         let paths = PacketPaths::new(temp_dir.path(), family.clone());
 
         scaffold::run(temp_dir.path(), family.as_str()).unwrap();
-        rewrite_manifest(&paths.manifest, "precedence = 3", "precedence = 33");
+        rewrite_manifest(
+            &paths.manifest,
+            &format!("precedence = {MONOTONE_DOWN_NONNEGATIVE_PRECEDENCE}"),
+            "precedence = 33",
+        );
 
         let error = smoke::run(temp_dir.path(), family.as_str()).unwrap_err();
         assert!(matches!(error, XtaskError::InvalidInput(message)
@@ -867,6 +871,7 @@ mod tests {
             locked_routing_order_with_terminal(),
             [
                 "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.normalized_required_arg.v1",
                 "function.wrapper.pipeline.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
@@ -1060,7 +1065,7 @@ mod tests {
             0
         );
         assert_eq!(WRAPPER_PIPELINE_PROVE_SUITES.len(), 3);
-        assert_eq!(WRAPPER_PIPELINE_CERTIFY_SUITES.len(), 1);
+        assert_eq!(WRAPPER_PIPELINE_CERTIFY_SUITES.len(), 2);
         assert_eq!(
             harness
                 .prove_suites
@@ -2694,19 +2699,52 @@ gate_d = true
             inventory.runtime_supported_routes,
             vec![
                 "function.wrapper.pipeline.chain3.v1",
+                "function.wrapper.pipeline.normalized_required_arg.v1",
                 "function.wrapper.pipeline.v1",
                 "function.arithmetic_leaf.monotone_down_nonnegative.v1",
                 "function.arithmetic_leaf.monotone_up.v1",
                 "function.helper.identity_passthrough.v1",
             ]
         );
-        assert_eq!(inventory.supported_unpromoted_families.len(), 2);
+        assert_eq!(inventory.supported_unpromoted_families.len(), 3);
 
-        let wrapper = inventory.supported_unpromoted_families.first().unwrap();
+        let normalized = inventory.supported_unpromoted_families.first().unwrap();
+        assert_eq!(
+            normalized.family,
+            "function.wrapper.pipeline.normalized_required_arg.v1"
+        );
+        assert_eq!(
+            normalized.routing_predecessor.as_deref(),
+            Some("function.wrapper.pipeline.chain3.v1")
+        );
+        assert_eq!(
+            normalized.routing_successors,
+            vec![
+                "function.wrapper.pipeline.v1",
+                "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+                "function.arithmetic_leaf.monotone_up.v1",
+                "function.helper.identity_passthrough.v1",
+                "unsupported.function.v1",
+            ]
+        );
+        assert_eq!(
+            normalized.canonical_seed_paths,
+            vec!["examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec"]
+        );
+        assert_eq!(
+            normalized.existing_wedge_paths,
+            vec!["spec-core/src/semantic_review.rs"]
+        );
+        assert_eq!(
+            normalized.supporting_packet_paths,
+            vec!["semantic-families/function.wrapper.pipeline.normalized_required_arg.v1"]
+        );
+
+        let wrapper = inventory.supported_unpromoted_families.get(1).unwrap();
         assert_eq!(wrapper.family, "function.wrapper.pipeline.v1");
         assert_eq!(
             wrapper.routing_predecessor.as_deref(),
-            Some("function.wrapper.pipeline.chain3.v1")
+            Some("function.wrapper.pipeline.normalized_required_arg.v1")
         );
         assert_eq!(
             wrapper.routing_successors,
@@ -2725,9 +2763,12 @@ gate_d = true
             wrapper.existing_wedge_paths,
             vec!["spec-cli/tests/m14_regressions.rs"]
         );
-        assert_eq!(wrapper.supporting_packet_paths.len(), 6);
+        assert_eq!(
+            wrapper.supporting_packet_paths,
+            vec!["semantic-families/function.wrapper.pipeline.v1"]
+        );
 
-        let helper = inventory.supported_unpromoted_families.get(1).unwrap();
+        let helper = inventory.supported_unpromoted_families.get(2).unwrap();
         assert_eq!(helper.family, "function.helper.identity_passthrough.v1");
         assert_eq!(
             helper.routing_predecessor.as_deref(),
@@ -3920,7 +3961,7 @@ gate_d = true
     }
 
     #[test]
-    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_is_ranked_with_arithmetic_ready_and_unknown_overlap_held()
+    fn recommendation_command_path_writes_same_bytes_and_locked_corpus_holds_thin_wrapper_topology_candidate()
      {
         let temp_dir = workspace_root();
         seed_locked_recommendation_workspace(temp_dir.path());
@@ -3953,7 +3994,7 @@ gate_d = true
 
         assert_eq!(
             recommendation.recommendation_status,
-            RecommendationStatus::InsufficientRealCorpus
+            RecommendationStatus::NoStrongCandidate
         );
         assert_eq!(
             coverage
@@ -3975,15 +4016,15 @@ gate_d = true
                 .iter()
                 .map(|source| source.unit_count)
                 .collect::<Vec<_>>(),
-            vec![6, 12, 9, 3, 3]
+            vec![7, 12, 9, 5, 4]
         );
-        assert_eq!(coverage.function_coverage.total_units, 31);
-        assert_eq!(coverage.function_coverage.promoted_family_units, 20);
+        assert_eq!(coverage.function_coverage.total_units, 35);
+        assert_eq!(coverage.function_coverage.promoted_family_units, 23);
         assert_eq!(
             coverage.function_coverage.supported_unpromoted_family_units,
             3
         );
-        assert_eq!(coverage.function_coverage.unsupported_function_units, 8);
+        assert_eq!(coverage.function_coverage.unsupported_function_units, 9);
 
         let helper_family = coverage
             .family_coverage
@@ -4000,7 +4041,58 @@ gate_d = true
             ]
         );
 
-        assert!(recommendation.ranked_candidates.is_empty());
+        let normalized_wrapper_family = coverage
+            .family_coverage
+            .iter()
+            .find(|entry| entry.family == "function.wrapper.pipeline.normalized_required_arg.v1")
+            .unwrap();
+        assert_eq!(normalized_wrapper_family.unit_count, 1);
+        assert_eq!(
+            normalized_wrapper_family.source_ids,
+            vec!["examples_ecommerce".to_string()]
+        );
+
+        let wrapper_family = coverage
+            .family_coverage
+            .iter()
+            .find(|entry| entry.family == "function.wrapper.pipeline.v1")
+            .unwrap();
+        assert_eq!(wrapper_family.unit_count, 7);
+        assert_eq!(
+            wrapper_family.source_ids,
+            vec![
+                "examples_crosslib_app".to_string(),
+                "examples_ecommerce".to_string(),
+                "examples_shared_spec".to_string(),
+                "m19_semantic_falsification_pack".to_string(),
+                "m20_unsupported_truth_pack".to_string(),
+            ]
+        );
+
+        assert_eq!(recommendation.ranked_candidates.len(), 1);
+        let candidate = &recommendation.ranked_candidates[0];
+        assert_eq!(
+            candidate.candidate_id,
+            "a-unsupporteddeptopology-unsupported_dep_topology-fbecce0dbe98"
+        );
+        assert_eq!(
+            candidate.cluster_ids,
+            vec!["unsupported_dep_topology-fbecce0dbe98".to_string()]
+        );
+        assert_eq!(
+            candidate.primary_reason_code,
+            UnsupportedFunctionReasonCode::UnsupportedDepTopology
+        );
+        assert_eq!(candidate.overlap_family, "function.wrapper.pipeline*");
+        assert_eq!(candidate.promotion_readiness, PromotionReadiness::Hold);
+        assert_eq!(
+            candidate.hold_reasons,
+            vec![
+                HoldReason::HardDifficulty,
+                HoldReason::ThinRealExampleSupport,
+                HoldReason::ThinRegressionSupport,
+            ]
+        );
     }
 
     #[test]
@@ -4675,8 +4767,9 @@ gate_d = true
     fn seed_inventory_repo_truth(workspace_root: &Path) {
         write_string(
             &workspace_root.join("spec-core/src/semantic_review.rs"),
-            r#"const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 5] = [
+            r#"const SUPPORTED_FUNCTION_ROUTING_ORDER: [SupportedFunctionRoute; 6] = [
     SupportedFunctionRoute::WrapperPipelineChain3,
+    SupportedFunctionRoute::WrapperPipelineNormalizedRequiredArg,
     SupportedFunctionRoute::WrapperPipeline,
     SupportedFunctionRoute::ArithmeticLeafMonotoneDownNonnegative,
     SupportedFunctionRoute::ArithmeticLeafMonotoneUp,
@@ -4699,6 +4792,11 @@ gate_d = true
         write_string(
             &workspace_root.join("examples/ecommerce/units/pricing/calculate_total.unit.spec"),
             "id: pricing/calculate_total\n",
+        );
+        write_string(
+            &workspace_root
+                .join("examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec"),
+            "id: pricing/calculate_total_guarded_tax\n",
         );
         write_string(
             &workspace_root.join("spec-cli/tests/m14_regressions.rs"),
@@ -4754,6 +4852,13 @@ gate_d = true
             ),
             "kind: function\n",
         );
+        fs::create_dir_all(
+            workspace_root
+                .join("semantic-families/function.wrapper.pipeline.normalized_required_arg.v1"),
+        )
+        .unwrap();
+        fs::create_dir_all(workspace_root.join("semantic-families/function.wrapper.pipeline.v1"))
+            .unwrap();
         fs::create_dir_all(
             workspace_root
                 .join("semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1"),
@@ -5220,6 +5325,7 @@ gate_d = true
             "examples/shared-spec/units",
             "examples/crosslib-app/units",
             "semantic-families/corpus/rust-function.toml",
+            "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1",
             "semantic-families/function.wrapper.pipeline.v1",
             "semantic-families/function.wrapper.pipeline.chain3.v1",
             "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1",
@@ -5305,6 +5411,7 @@ summary = "Straight-line three-call wrapper pipeline over supported function dep
 [routing]
 precedence = 1
 must_not_shadow = [
+  "function.wrapper.pipeline.normalized_required_arg.v1",
   "function.wrapper.pipeline.v1",
   "function.arithmetic_leaf.monotone_down_nonnegative.v1",
   "function.arithmetic_leaf.monotone_up.v1",

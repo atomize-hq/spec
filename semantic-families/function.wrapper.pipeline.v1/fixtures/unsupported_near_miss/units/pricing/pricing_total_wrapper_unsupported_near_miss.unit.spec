@@ -26,6 +26,9 @@ body:
   typescript: |
     {
         const discounted = pricing_discount_leaf_unsupported_near_miss(subtotal, discount_rate);
+        if (tax_rate.eq(Decimal.new(0n, 0n))) {
+            return pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate);
+        }
         return pricing_tax_leaf_unsupported_near_miss(discounted, tax_rate);
     }
 local_tests:

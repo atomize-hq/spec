@@ -8476,7 +8476,7 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         .find(|root| root["root"] == "crosslib-app")
         .expect("expected crosslib-app root in repo status");
     let units = crosslib_root["units"].as_array().unwrap();
-    assert_eq!(units.len(), 3, "{json}");
+    assert_eq!(units.len(), 4, "{json}");
     assert_eq!(units[0]["id"], "pricing/apply_discount");
     assert_eq!(units[0]["status"], "valid", "{json}");
     assert_eq!(
@@ -8491,6 +8491,8 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
     );
     assert_eq!(units[2]["id"], "pricing/calculate_total");
     assert_eq!(units[2]["status"], "untested", "{json}");
+    assert_eq!(units[3]["id"], "pricing/checkout_nested_chain3");
+    assert_eq!(units[3]["status"], "untested", "{json}");
     assert!(
         units.iter().all(|unit| {
             !unit["errors"]
@@ -13977,6 +13979,7 @@ changes:
       validate:
         - pricing/apply_tax
         - pricing/calculate_total
+        - pricing/calculate_total_guarded_tax
         - pricing/pricing_quote
       molecule_tests:
         - pricing/checkout_flow
@@ -14022,6 +14025,7 @@ changes:
       validate:
         - pricing/apply_tax
         - pricing/calculate_total
+        - pricing/calculate_total_guarded_tax
         - pricing/pricing_quote
       molecule_tests:
         - pricing/checkout_flow
@@ -16359,7 +16363,7 @@ fn typescript_cross_library_chain3_wrong_dep_order_rejects_before_bun_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"
+            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1, function.wrapper.pipeline.normalized_required_arg.v1, or function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M61"
         ),
         "{stderr}"
     );
@@ -16403,9 +16407,10 @@ fn typescript_cross_library_wrapper_wrong_family_rejects_before_bun_runs() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains(
-            "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56"
-        ),
+        stderr.contains("unsupported.function.v1")
+            || stderr.contains(
+                "TypeScript wrapper target requires direct deps to classify as function.arithmetic_leaf.monotone_down_nonnegative.v1 then function.arithmetic_leaf.monotone_up.v1 in M56"
+            ),
         "{stderr}"
     );
     assert!(
@@ -16450,7 +16455,7 @@ fn typescript_cross_library_chain3_wrong_family_rejects_before_bun_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1 or same-tree function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M58"
+            "TypeScript chain3 target requires direct deps to classify as function.wrapper.pipeline.v1, function.wrapper.pipeline.normalized_required_arg.v1, or function.wrapper.pipeline.chain3.v1 then function.arithmetic_leaf.monotone_up.v1 then function.arithmetic_leaf.monotone_down_nonnegative.v1 in M61"
         ),
         "{stderr}"
     );

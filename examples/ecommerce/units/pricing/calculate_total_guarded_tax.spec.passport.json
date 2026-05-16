@@ -1,7 +1,7 @@
 {
   "spec_version": "0.3.0",
-  "id": "pricing/calculate_total",
-  "intent": "Combine discount and tax so a checkout flow can produce the final price.",
+  "id": "pricing/calculate_total_guarded_tax",
+  "intent": "Return the total after discounting the subtotal and then applying tax while clamping the tax rate at zero.",
   "contract": {
     "inputs": [
       {
@@ -29,11 +29,11 @@
   "local_tests": [
     {
       "id": "combined_flow",
-      "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
+      "expect": "calculate_total_guarded_tax(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
     }
   ],
   "generated_at": "2026-05-16T03:44:05Z",
-  "source_file": "examples/ecommerce/units/pricing/calculate_total.unit.spec",
+  "source_file": "examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
@@ -42,16 +42,16 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-04-27T11:49:51Z",
+    "observed_at": "2026-05-16T03:06:41Z",
     "provenance": {
-      "git_commit_sha": "40267ec7e35053973e8e6961c5f066b2a0ad5bb1"
+      "git_commit_sha": "e21dc836fb5483edc283f89bae18d7e81318632a"
     }
   },
   "freshness_anchor": {
-    "authored_truth_digest": "sha256:d5f36faa2c6c498fa5ddd78719759ea1434d8e025b06c592b3296562e3bc5e60"
+    "authored_truth_digest": "sha256:b04b0402b70cb7f962a344e1b6e74d8a685e30d68846964190c03d835d2df333"
   },
   "freshness": {
-    "authored_truth_digest": "sha256:d5f36faa2c6c498fa5ddd78719759ea1434d8e025b06c592b3296562e3bc5e60",
+    "authored_truth_digest": "sha256:b04b0402b70cb7f962a344e1b6e74d8a685e30d68846964190c03d835d2df333",
     "authored_truth_status": "fresh",
     "backend_execution_status": "unknown"
   },
@@ -65,39 +65,16 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-04-27T11:49:51Z",
+        "observed_at": "2026-05-16T03:06:41Z",
         "provenance": {
-          "git_commit_sha": "40267ec7e35053973e8e6961c5f066b2a0ad5bb1"
+          "git_commit_sha": "e21dc836fb5483edc283f89bae18d7e81318632a"
         }
       },
       "freshness_anchor": {
-        "authored_truth_digest": "sha256:d5f36faa2c6c498fa5ddd78719759ea1434d8e025b06c592b3296562e3bc5e60"
+        "authored_truth_digest": "sha256:b04b0402b70cb7f962a344e1b6e74d8a685e30d68846964190c03d835d2df333"
       },
       "freshness": {
-        "authored_truth_digest": "sha256:d5f36faa2c6c498fa5ddd78719759ea1434d8e025b06c592b3296562e3bc5e60",
-        "authored_truth_status": "fresh",
-        "backend_execution_status": "unknown"
-      }
-    },
-    "typescript": {
-      "evidence": {
-        "build_status": "pass",
-        "test_results": [
-          {
-            "id": "combined_flow",
-            "status": "pass"
-          }
-        ],
-        "observed_at": "2026-05-15T13:04:19Z",
-        "provenance": {
-          "git_commit_sha": "48c225838dd24adbc6e1c834a4abe34ca199a17d"
-        }
-      },
-      "freshness_anchor": {
-        "authored_truth_digest": "sha256:53c5a2a2d43b283fd5d04804e30690c945897ea9cffe477119357dc8253faca0"
-      },
-      "freshness": {
-        "authored_truth_digest": "sha256:53c5a2a2d43b283fd5d04804e30690c945897ea9cffe477119357dc8253faca0",
+        "authored_truth_digest": "sha256:b04b0402b70cb7f962a344e1b6e74d8a685e30d68846964190c03d835d2df333",
         "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
@@ -105,13 +82,13 @@
   },
   "semantic_review": {
     "verdict": "aligned",
-    "compatibility_key": "function.wrapper.pipeline.v1",
+    "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
     "support_status": "supported",
     "summary": "authored semantics and executable lowering agree on the supported function surface",
     "authored_surfaces": [
       {
         "path": "intent.why",
-        "summary": "Combine discount and tax so a checkout flow can produce the final price."
+        "summary": "Return the total after discounting the subtotal and then applying tax while clamping the tax rate at zero."
       },
       {
         "path": "contract.inputs",
@@ -128,16 +105,12 @@
       {
         "path": "deps",
         "summary": "2 declared dep(s)"
-      },
-      {
-        "path": "body.typescript",
-        "summary": "authored TypeScript body present"
       }
     ],
     "executable_surfaces": [
       {
         "path": "body.rust",
-        "summary": "projects to Rust function calculate_total with 3 input(s)"
+        "summary": "projects to Rust function calculate_total_guarded_tax with 3 input(s)"
       }
     ],
     "evaluator_scope": "supported_function_surface"
