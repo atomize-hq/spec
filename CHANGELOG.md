@@ -2,11 +2,24 @@
 
 ## Unreleased
 
+## 0.15.0 - 2026-05-15
+
+### Added
+
+- **Helper and wrapper semantic-family coverage now ships as real packet truth** — the repo now includes the helper identity passthrough packet, the normalized required-arg wrapper packet, expanded committed fixtures, and fresh prove/certify surfaces across the promoted family workflow.
+- **Recursive bounded TypeScript execution now covers the shipped function-family graph** — local, same-tree, nested chain3, and direct sibling-library closures can now execute in the Bun-backed lane for the supported function families while keeping molecule execution and broader topology oceans explicitly out of scope.
+- **Repo-native planning operator tooling grew beyond milestone selection** — `next-milestone` is now joined by a first-class `planning-session` skill, with repo-local prompts, references, and scripts for running the planning loop against the current design and orchestration artifacts.
+
 ### Changed
 
-- **Normalized required-arg wrapper routing is now a first-class supported semantic family in M60** — M60 adds one supported wrapper family for apply_tax(discounted, tax_rate.max(Decimal::ZERO)); broader required-argument expressions remain unsupported.
+- **Semantic review, portability, export, and status surfaces now agree on the current family and target-language truth** — backend execution, preserve-mode projection, plan/export fixtures, cross-library examples, and family inventory/reporting all now share one consistent picture of what is supported, fresh, stale, and target-specific.
+- **The bounded TypeScript lane tightened around explicit family contracts instead of ad hoc topology checks** — helper, wrapper, chain3, and normalized required-arg execution stay frozen to the supported family vocabulary and direct-dependency contracts even as recursive closure support expands across local and sibling-library graphs.
+- **Checked-in project docs and planning artifacts now reflect the current M40-M61 product surface** — README, plans, orchestration docs, skill routing docs, and example walkthroughs now describe the shipped helper, wrapper, recursive TypeScript, and planning-operator behavior instead of older intermediate milestones.
 
-- **The bounded TypeScript lane now closes recursive local-plus-cross-library supported-function graphs in M61** — M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution. The broader TypeScript oceans still explicitly deferred are arbitrary authored 4+ direct-dep topology parity, new semantic-family promotion, molecule TypeScript execution, and seam-kind TypeScript execution; `spec validate --target-language` and `spec export --target-language` remain unsupported.
+### Fixed
+
+- **The ship gate is green again on the real branch state** — validator routing, family harness attestation, monotone-up packet routing, ecommerce passports, plan fixtures, and wrapper unsupported-near-miss fixtures were aligned so `cargo test --workspace` and the family prove/certify loops pass without hand-waving.
+- **Canonical example proof artifacts are fresh for the current bounded execution story** — the ecommerce and shared example passports now match the supported family graph, including the guarded-tax wrapper surfaces that the plan/export/status tests expect.
 
 ## 0.14.0 - 2026-05-07
 
