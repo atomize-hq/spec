@@ -1,0 +1,103 @@
+{
+  "benchmarks": [
+    {
+      "id": "BENCH-ECOM",
+      "kind": "positive",
+      "lifecycle": "active",
+      "root": "examples/ecommerce/units",
+      "generated_root": "examples/ecommerce/src/generated",
+      "required_molecules": [
+        "pricing/checkout_flow",
+        "pricing/discount_plus_tax",
+        "pricing/discount_strategy_checkout_flow"
+      ],
+      "cases": [
+        {
+          "case_id": "money/round",
+          "carrier_kind": "unit",
+          "carrier_id": "money/round",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/apply_discount",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/apply_discount",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/apply_tax",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/apply_tax",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/calculate_total",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/calculate_total",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/calculate_total_guarded_tax",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/calculate_total_guarded_tax",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/discount_strategy",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/discount_strategy",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/pricing_quote",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/pricing_quote",
+          "classification": "supported"
+        }
+      ]
+    },
+    {
+      "id": "BENCH-CROSSLIB",
+      "kind": "companion_negative_proof",
+      "lifecycle": "active",
+      "root": "examples/crosslib-app/units",
+      "generated_root": "examples/crosslib-app/src/generated",
+      "required_molecules": [],
+      "cases": [
+        {
+          "case_id": "pricing/apply_discount",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/apply_discount",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/apply_tax",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/apply_tax",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/calculate_total",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/calculate_total",
+          "classification": "supported"
+        },
+        {
+          "case_id": "pricing/checkout_nested_chain3",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/checkout_nested_chain3",
+          "classification": "companion_negative_proof"
+        }
+      ]
+    },
+    {
+      "id": "BENCH-SERVICE",
+      "kind": "positive",
+      "lifecycle": "reserved",
+      "root": "examples/service/units",
+      "generated_root": "examples/service/src/generated",
+      "required_molecules": [],
+      "cases": []
+    }
+  ]
+}
