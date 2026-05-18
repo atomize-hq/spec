@@ -9,6 +9,7 @@
 pub const AUTHORED_SPEC_VERSION: &str = "0.3.0";
 
 pub mod backend_execution;
+pub mod benchmarks;
 pub mod escape_hatch;
 pub mod export;
 pub mod generator;
@@ -29,8 +30,8 @@ pub mod validator;
 
 pub use graph::{ImpactSet, MoleculeTestNode, SpecEdge, SpecGraph, UnitNode};
 pub use semantic_review::{
-    UnsupportedFunctionShapeFingerprint, unsupported_function_shape_fingerprint,
-    unsupported_function_shape_fingerprint_with_context,
+    unsupported_function_shape_fingerprint, unsupported_function_shape_fingerprint_with_context,
+    UnsupportedFunctionShapeFingerprint,
 };
 
 use thiserror::Error;
@@ -251,6 +252,9 @@ pub enum SpecError {
 
     #[error("failed to parse molecule evidence JSON at {path}: {message}")]
     MoleculeEvidenceMalformed { path: String, message: String },
+
+    #[error("SPEC_BENCHMARK_REGISTRY_ERROR: {message} at {path}")]
+    BenchmarkRegistry { path: String, message: String },
 }
 
 impl From<walkdir::Error> for SpecError {

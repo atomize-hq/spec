@@ -11,12 +11,15 @@
 //! Consumers must handle the `kind` field: `"dep"` edges have structured `from`/`to` refs;
 //! `"covers"` edges have `test`/`unit` string fields.
 
-use crate::AUTHORED_SPEC_VERSION;
-use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
-use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
+use crate::benchmarks::{
+    build_benchmark_molecule_truth_map, build_benchmark_unit_truth_map, project_benchmarks,
+    BenchmarkProjection, BenchmarkProjectionInput, BenchmarkRegistry,
+};
+use crate::graph::{top_level_deps, SpecEdge, SpecGraph};
+use crate::molecule_evidence::{read_molecule_evidence, MoleculeEvidence};
 use crate::passport::{
-    ArtifactProvenance, Passport, PassportProjectionContext, apply_projected_passport_truth,
-    passport_path_for, project_passport_truth_with_context, refresh_passport_target_proofs,
+    apply_projected_passport_truth, passport_path_for, project_passport_truth_with_context,
+    refresh_passport_target_proofs, ArtifactProvenance, Passport, PassportProjectionContext,
 };
 use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
 use crate::semantic_review::{SemanticProjectionMode, SemanticReviewContext};
@@ -24,6 +27,8 @@ use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
 };
+use crate::Result;
+use crate::AUTHORED_SPEC_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -44,6 +49,8 @@ pub struct ExportBundle {
     pub molecule_tests: Vec<ExportMoleculeTest>,
     pub passports: Vec<Passport>,
     pub graph: ExportGraph,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub benchmarks: Vec<BenchmarkProjection>,
     pub warnings: Vec<ExportWarning>,
 }
 
@@ -132,12 +139,29 @@ pub struct PlanExportBundle {
     pub warnings: Vec<String>,
 }
 
+pub struct ExportBenchmarkContext<'a> {
+    pub registry: &'a BenchmarkRegistry,
+    pub repo_root: &'a Path,
+    pub scope_path: &'a Path,
+}
+
 pub fn build_export_bundle(
     specs: &[LoadedSpec],
     molecule_tests: &[LoadedMoleculeTest],
     exported_at: &str,
     provenance: Option<&ArtifactProvenance>,
 ) -> ExportBundle {
+    build_export_bundle_with_benchmarks(specs, molecule_tests, exported_at, provenance, None)
+        .expect("benchmark-less export bundle construction must not fail")
+}
+
+pub fn build_export_bundle_with_benchmarks(
+    specs: &[LoadedSpec],
+    molecule_tests: &[LoadedMoleculeTest],
+    exported_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+    benchmark_context: Option<&ExportBenchmarkContext<'_>>,
+) -> Result<ExportBundle> {
     let (passports, warnings) = read_passports_for_specs(specs);
     let specs_by_id: HashMap<String, LoadedSpec> = specs
         .iter()
@@ -151,6 +175,11 @@ pub fn build_export_bundle(
         &specs_by_id,
         passports,
     );
+    let passports_by_id: HashMap<String, Passport> = passports
+        .iter()
+        .cloned()
+        .map(|passport| (passport.id.clone(), passport))
+        .collect();
 
     // Project graph edges through the public SpecGraph surface.
     let graph = SpecGraph::build(specs, molecule_tests);
@@ -173,8 +202,29 @@ pub fn build_export_bundle(
         .iter()
         .map(ExportMoleculeTest::from)
         .collect();
+    let benchmarks = if let Some(context) = benchmark_context {
+        let unit_truth_by_id = build_benchmark_unit_truth_map(specs, &passports_by_id)?;
+        let molecule_truth_by_id = build_benchmark_molecule_truth_map(
+            molecule_tests,
+            &molecule_evidence_by_id,
+            &specs_by_id,
+        )?;
+        project_benchmarks(
+            context.registry,
+            BenchmarkProjectionInput {
+                repo_root: context.repo_root,
+                scope_path: context.scope_path,
+                specs,
+                molecule_tests,
+                unit_truth_by_id: &unit_truth_by_id,
+                molecule_truth_by_id: &molecule_truth_by_id,
+            },
+        )?
+    } else {
+        Vec::new()
+    };
 
-    ExportBundle {
+    Ok(ExportBundle {
         schema_version: EXPORT_SCHEMA_VERSION,
         spec_version: AUTHORED_SPEC_VERSION.to_string(),
         exported_at: exported_at.to_string(),
@@ -183,8 +233,9 @@ pub fn build_export_bundle(
         molecule_tests: export_molecule_tests,
         passports,
         graph: ExportGraph { edges },
+        benchmarks,
         warnings,
-    }
+    })
 }
 
 fn enrich_passports_for_export(
@@ -391,20 +442,24 @@ impl From<&LoadedMoleculeTest> for ExportMoleculeTest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::benchmarks::{
+        BenchmarkCaseLabel, BenchmarkClassification, BenchmarkKind, BenchmarkLabel,
+        BenchmarkLifecycle, BenchmarkRegistry,
+    };
     use crate::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus, EscapeHatchProofSurface};
     use crate::molecule_evidence::{
-        MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
+        build_molecule_evidence, write_molecule_evidence, MoleculeEvidenceStatus,
     };
     use crate::passport::{
-        PassportEvidence, PassportTestResult, ProofSurface, build_passport_with_evidence,
-        write_passport,
+        build_passport_with_evidence, write_passport, PassportEvidence, PassportTestResult,
+        ProofSurface,
     };
     use crate::plan::{
         LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
         PlanComputedImpactStatus, PlanReport, PlanSource, PlanStruct,
     };
     use crate::semantic_review::{
-        SemanticReviewContext, evaluate_semantic_review, evaluate_semantic_review_with_context,
+        evaluate_semantic_review, evaluate_semantic_review_with_context, SemanticReviewContext,
     };
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
@@ -1209,6 +1264,65 @@ mod tests {
     }
 
     #[test]
+    fn build_export_bundle_with_benchmarks_adds_top_level_benchmark_projection() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_supported_apply_discount_function(
+            &dir,
+            "examples/ecommerce/units/pricing/apply_discount.unit.spec",
+        );
+        let passport = build_passport_with_evidence(
+            &spec,
+            "2026-05-18T00:00:00Z",
+            Some(PassportEvidence {
+                build_status: "pass".to_string(),
+                test_results: vec![PassportTestResult {
+                    id: "happy_path".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                }],
+                observed_at: "2026-05-18T00:00:00Z".to_string(),
+                provenance: None,
+            }),
+            None,
+        );
+        write_passport(&passport, Path::new(&spec.source.file_path)).unwrap();
+
+        let registry = BenchmarkRegistry {
+            benchmarks: vec![BenchmarkLabel {
+                id: "BENCH-ECOM".to_string(),
+                kind: BenchmarkKind::Positive,
+                lifecycle: BenchmarkLifecycle::Active,
+                root: "examples/ecommerce/units/pricing".to_string(),
+                generated_root: "examples/ecommerce/src/generated".to_string(),
+                required_molecules: vec![],
+                cases: vec![BenchmarkCaseLabel {
+                    case_id: "discount".to_string(),
+                    carrier_id: "pricing/apply_discount".to_string(),
+                    classification: BenchmarkClassification::Supported,
+                }],
+            }],
+        };
+
+        let bundle = build_export_bundle_with_benchmarks(
+            &[spec],
+            &[],
+            "2026-05-18T00:00:00Z",
+            None,
+            Some(&ExportBenchmarkContext {
+                registry: &registry,
+                repo_root: dir.path(),
+                scope_path: &dir.path().join("examples/ecommerce"),
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(bundle.schema_version, 3);
+        assert_eq!(bundle.benchmarks.len(), 1);
+        assert_eq!(bundle.benchmarks[0].id, "BENCH-ECOM");
+        assert_eq!(bundle.benchmarks[0].cases.len(), 1);
+    }
+
+    #[test]
     fn export_molecule_test_preserves_non_empty_imports() {
         let dir = TempDir::new().unwrap();
         let molecule_test = loaded_molecule_test(
@@ -1286,11 +1400,9 @@ mod tests {
         assert!(passports.is_empty());
         assert_eq!(warnings.len(), 1);
         assert_eq!(warnings[0].code, "passport_malformed");
-        assert!(
-            warnings[0]
-                .message
-                .contains("Failed to parse passport JSON")
-        );
+        assert!(warnings[0]
+            .message
+            .contains("Failed to parse passport JSON"));
     }
 
     #[test]
@@ -1558,22 +1670,18 @@ mod tests {
 
         assert!(warnings.is_empty());
         assert_eq!(passports.len(), 2);
-        assert!(
-            passports
-                .iter()
-                .find(|passport| passport.id == "pricing/discount_strategy")
-                .expect("sum passport")
-                .semantic_review
-                .is_none()
-        );
-        assert!(
-            passports
-                .iter()
-                .find(|passport| passport.id == "pricing/pricing_quote")
-                .expect("data passport")
-                .semantic_review
-                .is_none()
-        );
+        assert!(passports
+            .iter()
+            .find(|passport| passport.id == "pricing/discount_strategy")
+            .expect("sum passport")
+            .semantic_review
+            .is_none());
+        assert!(passports
+            .iter()
+            .find(|passport| passport.id == "pricing/pricing_quote")
+            .expect("data passport")
+            .semantic_review
+            .is_none());
     }
 
     #[test]
@@ -1648,22 +1756,18 @@ mod tests {
 
         assert!(warnings.is_empty());
         assert_eq!(passports.len(), 2);
-        assert!(
-            passports
-                .iter()
-                .find(|passport| passport.id == "pricing/discount_strategy")
-                .expect("sum passport")
-                .semantic_review
-                .is_none()
-        );
-        assert!(
-            passports
-                .iter()
-                .find(|passport| passport.id == "pricing/pricing_quote")
-                .expect("data passport")
-                .semantic_review
-                .is_none()
-        );
+        assert!(passports
+            .iter()
+            .find(|passport| passport.id == "pricing/discount_strategy")
+            .expect("sum passport")
+            .semantic_review
+            .is_none());
+        assert!(passports
+            .iter()
+            .find(|passport| passport.id == "pricing/pricing_quote")
+            .expect("data passport")
+            .semantic_review
+            .is_none());
     }
 
     #[test]
@@ -1871,8 +1975,8 @@ mod tests {
     }
 
     #[test]
-    fn load_passports_for_specs_preserve_does_not_promote_unsupported_additive_review_into_supported_family_truth()
-     {
+    fn load_passports_for_specs_preserve_does_not_promote_unsupported_additive_review_into_supported_family_truth(
+    ) {
         let dir = TempDir::new().unwrap();
         let apply_discount = loaded_supported_apply_discount_function(
             &dir,
