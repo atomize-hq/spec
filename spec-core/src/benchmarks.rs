@@ -600,15 +600,14 @@ fn benchmark_carrier_status_from_passport(passport: Option<&Passport>) -> Benchm
         return BenchmarkCarrierStatus::Untested;
     };
     let evidence = passport.evidence.as_ref();
-    if let Some(evidence) = evidence {
-        if evidence.build_status != "pass"
+    if let Some(evidence) = evidence
+        && (evidence.build_status != "pass"
             || evidence
                 .test_results
                 .iter()
-                .any(|result| result.status == "fail")
-        {
-            return BenchmarkCarrierStatus::Failing;
-        }
+                .any(|result| result.status == "fail"))
+    {
+        return BenchmarkCarrierStatus::Failing;
     }
     if passport
         .freshness
@@ -617,14 +616,13 @@ fn benchmark_carrier_status_from_passport(passport: Option<&Passport>) -> Benchm
     {
         return BenchmarkCarrierStatus::Stale;
     }
-    if let Some(evidence) = evidence {
-        if evidence
+    if let Some(evidence) = evidence
+        && evidence
             .test_results
             .iter()
             .any(|result| result.status == "unknown")
-        {
-            return BenchmarkCarrierStatus::Incomplete;
-        }
+    {
+        return BenchmarkCarrierStatus::Incomplete;
     }
     if evidence.is_none() {
         return BenchmarkCarrierStatus::Untested;
@@ -751,9 +749,8 @@ fn derive_rollup_status(
                 .iter()
                 .any(|case| case.carrier_status == BenchmarkCarrierStatus::Missing)
                 || cases.len() != benchmark.cases.len()
+                || cases.iter().any(|case| case.counts_as_supported_positive)
             {
-                BenchmarkStatus::Failing
-            } else if cases.iter().any(|case| case.counts_as_supported_positive) {
                 BenchmarkStatus::Failing
             } else {
                 BenchmarkStatus::Passing
