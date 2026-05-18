@@ -4455,6 +4455,188 @@ local_tests:
     app_dir.join("units/pricing/checkout_nested_chain3.unit.spec")
 }
 
+fn write_same_tree_nested_chain3_specs(project_dir: &Path) -> PathBuf {
+    write_file(
+        project_dir,
+        "Cargo.toml",
+        r#"[package]
+name = "same-tree-chain3-project"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[workspace]
+"#,
+    );
+    write_file(
+        project_dir,
+        "src/main.rs",
+        "mod generated;\npub use generated::*;\nfn main() {}\n",
+    );
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/apply_discount.unit.spec",
+        r#"
+id: pricing/apply_discount
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the running checkout subtotal after applying the loyalty discount rate and clamping at zero.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output <= subtotal
+    - output >= 0
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        (subtotal - subtotal * rate).max(Decimal::ZERO)
+    }
+local_tests:
+  - id: happy_path
+    expect: apply_discount(Decimal::new(1000, 2), Decimal::new(10, 2)) == Decimal::new(900, 2)
+"#,
+    );
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/apply_tax.unit.spec",
+        r#"
+id: pricing/apply_tax
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the running checkout subtotal after applying the surcharge rate.
+contract:
+  inputs:
+    subtotal: Decimal
+    rate: Decimal
+  returns: Decimal
+  invariants:
+    - output >= subtotal
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        subtotal + subtotal * rate
+    }
+local_tests:
+  - id: happy_path
+    expect: apply_tax(Decimal::new(1000, 2), Decimal::new(5, 2)) == Decimal::new(1050, 2)
+"#,
+    );
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/calculate_total.unit.spec",
+        r#"
+id: pricing/calculate_total
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the checkout total after discounting the subtotal and then applying tax.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/apply_discount
+  - pricing/apply_tax
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let discounted = apply_discount(subtotal, discount_rate);
+        apply_tax(discounted, tax_rate)
+    }
+local_tests:
+  - id: happy_path
+    expect: calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)
+"#,
+    );
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/base_nested_chain3.unit.spec",
+        r#"
+id: pricing/base_nested_chain3
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the shared nested chain3 subtotal before the root applies its outer surcharge and loyalty discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+    surcharge_rate: Decimal
+    loyalty_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/calculate_total
+  - pricing/apply_tax
+  - pricing/apply_discount
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let base_total = calculate_total(subtotal, discount_rate, tax_rate);
+        let surcharged_total = apply_tax(base_total, surcharge_rate);
+        apply_discount(surcharged_total, loyalty_rate)
+    }
+local_tests:
+  - id: happy_path
+    expect: base_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(9605925, 6)
+"#,
+    );
+    write_spec(
+        &project_dir.join("units"),
+        "pricing/checkout_nested_chain3.unit.spec",
+        r#"
+id: pricing/checkout_nested_chain3
+kind: function
+spec_version: "0.3.0"
+intent:
+  why: Return the outer checkout total by reusing the inner chain3 checkout total, then applying a surcharge, then applying a loyalty discount.
+contract:
+  inputs:
+    subtotal: Decimal
+    discount_rate: Decimal
+    tax_rate: Decimal
+    surcharge_rate: Decimal
+    loyalty_rate: Decimal
+  returns: Decimal
+deps:
+  - pricing/base_nested_chain3
+  - pricing/apply_tax
+  - pricing/apply_discount
+imports:
+  - rust_decimal::Decimal
+body:
+  rust: |
+    {
+        let base_total = base_nested_chain3(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate);
+        let surcharged_total = apply_tax(base_total, surcharge_rate);
+        apply_discount(surcharged_total, loyalty_rate)
+    }
+local_tests:
+  - id: happy_path
+    expect: checkout_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(95819101875, 10)
+"#,
+    );
+
+    project_dir.join("units/pricing/checkout_nested_chain3.unit.spec")
+}
+
 fn read_passport(passport_path: &Path) -> String {
     fs::read_to_string(passport_path).unwrap()
 }
@@ -8447,6 +8629,216 @@ body:
 }
 
 #[test]
+fn nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    let project_dir = temp_dir.path();
+    let outer_target = write_same_tree_nested_chain3_specs(project_dir);
+
+    let test_output = run_in(
+        project_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "same-tree nested chain3 project test should succeed",
+        &test_output,
+    );
+
+    let inner_passport_path =
+        project_dir.join("units/pricing/base_nested_chain3.spec.passport.json");
+    let outer_passport_path = outer_target
+        .parent()
+        .unwrap()
+        .join("checkout_nested_chain3.spec.passport.json");
+    let inner_review = read_passport_json(&inner_passport_path)["semantic_review"].clone();
+    let outer_review = read_passport_json(&outer_passport_path)["semantic_review"].clone();
+
+    assert_supported_function_semantic_review(
+        &inner_review,
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+    );
+    assert_eq!(inner_review["verdict"], "aligned");
+    assert_supported_function_semantic_review(
+        &outer_review,
+        FUNCTION_FAMILY_CHAIN3_COMPATIBILITY_KEY,
+    );
+    assert_eq!(outer_review["verdict"], "under_specified");
+    assert_eq!(
+        outer_review["reason_codes"],
+        serde_json::json!(["outside_honest_supported_subset"])
+    );
+    assert!(
+        inner_review["unsupported_reason_codes"]
+            .as_array()
+            .is_none_or(|codes| codes.is_empty()),
+        "{inner_review}"
+    );
+    assert!(
+        outer_review["unsupported_reason_codes"]
+            .as_array()
+            .is_none_or(|codes| codes.is_empty()),
+        "{outer_review}"
+    );
+
+    let status_output = run_in(project_dir, &["status", "units", "--format", "json"]);
+    assert!(
+        !status_output.status.success(),
+        "same-tree status should stay non-green because the outer unit is honestly under-specified"
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let inner_status = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/base_nested_chain3")
+        .unwrap();
+    let outer_status = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/checkout_nested_chain3")
+        .unwrap();
+    assert_eq!(inner_status["status"], "valid", "{status_json}");
+    assert_eq!(
+        inner_status["semantic_review"], inner_review,
+        "{status_json}"
+    );
+    assert_eq!(outer_status["status"], "incomplete", "{status_json}");
+    assert_eq!(
+        outer_status["semantic_review"], outer_review,
+        "{status_json}"
+    );
+
+    let export_output = run_in(project_dir, &["export", "units"]);
+    assert_output_success(
+        "same-tree nested chain3 export should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_inner = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/base_nested_chain3")
+        .unwrap();
+    let exported_outer = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/checkout_nested_chain3")
+        .unwrap();
+    assert_eq!(
+        exported_inner["semantic_review"], inner_review,
+        "{export_json}"
+    );
+    assert_eq!(
+        exported_outer["semantic_review"], outer_review,
+        "{export_json}"
+    );
+}
+
+#[test]
+fn direct_crosslib_nested_chain3_unsupported_truth_stays_pinned() {
+    if !cargo_available() {
+        return;
+    }
+
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let app_dir = temp_dir.path().join("crosslib-app");
+    let shared_crate_dir = temp_dir.path().join("shared-crate");
+    let shared_spec_dir = temp_dir.path().join("shared-spec");
+
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .unwrap();
+    copy_git_tracked_dir(&root.join("examples/crosslib-app"), &app_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-crate"), &shared_crate_dir).unwrap();
+    copy_git_tracked_dir(&root.join("examples/shared-spec"), &shared_spec_dir).unwrap();
+
+    let shared_output = run_in(
+        temp_dir.path(),
+        &[
+            "generate",
+            "shared-spec/units",
+            "--output",
+            "shared-crate/src/generated",
+        ],
+    );
+    assert_output_success(
+        "shared-spec generate should succeed before direct-root cross-library proof",
+        &shared_output,
+    );
+
+    let test_output = run_in(
+        &app_dir,
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
+    );
+    assert_output_success(
+        "direct-root cross-library nested chain3 test should succeed",
+        &test_output,
+    );
+
+    let status_output = run_in(&app_dir, &["status", "units", "--format", "json"]);
+    assert_output_success(
+        "direct-root cross-library nested chain3 status should succeed",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let direct_status = status_units(&status_json)
+        .iter()
+        .find(|unit| unit["id"] == "pricing/checkout_nested_chain3")
+        .unwrap();
+    assert_eq!(direct_status["status"], "valid", "{status_json}");
+    assert!(direct_status["reason"].is_null(), "{status_json}");
+    assert_eq!(
+        direct_status["semantic_review"]["compatibility_key"], "unsupported.function.v1",
+        "{status_json}"
+    );
+    assert_eq!(
+        direct_status["semantic_review"]["support_status"], "unsupported",
+        "{status_json}"
+    );
+    assert_eq!(
+        direct_status["semantic_review"]["unsupported_reason_codes"],
+        serde_json::json!(["unsupported_dep_topology"]),
+        "{status_json}"
+    );
+
+    let export_output = run_in(&app_dir, &["export", "units"]);
+    assert_output_success(
+        "direct-root cross-library nested chain3 export should succeed",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let exported_passport = export_json["passports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|passport| passport["id"] == "pricing/checkout_nested_chain3")
+        .unwrap();
+    assert_eq!(
+        exported_passport["semantic_review"], direct_status["semantic_review"],
+        "{export_json}"
+    );
+}
+
+#[test]
 fn spec_status_repo_root_honors_each_root_workspace_config() {
     let root = repo_root();
     let temp_dir = temp_repo_dir();
@@ -8477,6 +8869,19 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         .expect("expected crosslib-app root in repo status");
     let units = crosslib_root["units"].as_array().unwrap();
     assert_eq!(units.len(), 4, "{json}");
+    assert_eq!(
+        units
+            .iter()
+            .map(|unit| unit["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec![
+            "pricing/apply_discount",
+            "pricing/apply_tax",
+            "pricing/calculate_total",
+            "pricing/checkout_nested_chain3",
+        ],
+        "{json}"
+    );
     assert_eq!(units[0]["id"], "pricing/apply_discount");
     assert_eq!(units[0]["status"], "valid", "{json}");
     assert_eq!(

@@ -6153,6 +6153,99 @@ mod tests {
     }
 
     #[test]
+    fn same_tree_nested_chain3_inner_routes_to_supported_chain3() {
+        let (discount_leaf, tax_leaf, total_wrapper, inner) = m21_chain3_fixture_specs(
+            "pricing/pricing_total_wrapper_same_tree_nested_inner",
+            "pricing/pricing_tax_leaf_same_tree_nested_inner",
+            "pricing/pricing_discount_leaf_same_tree_nested_inner",
+            "pricing/checkout_chain3_same_tree_nested_inner",
+            "Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount.",
+            r#"{
+            let base_total = pricing_total_wrapper_same_tree_nested_inner(subtotal, discount_rate, tax_rate);
+            let surcharged_total = pricing_tax_leaf_same_tree_nested_inner(base_total, surcharge_rate);
+            pricing_discount_leaf_same_tree_nested_inner(surcharged_total, loyalty_rate)
+        }"#,
+        );
+        let outer = wrapper_pipeline_chain3_spec(
+            "pricing/checkout_chain3_same_tree_nested_outer",
+            "Return the outer checkout total by reusing the inner chain3 checkout total, then applying a surcharge, then applying a loyalty discount.",
+            &[
+                "pricing/checkout_chain3_same_tree_nested_inner",
+                "pricing/pricing_tax_leaf_same_tree_nested_inner",
+                "pricing/pricing_discount_leaf_same_tree_nested_inner",
+            ],
+            r#"{
+            let inner_total = checkout_chain3_same_tree_nested_inner(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate);
+            let surcharged_total = pricing_tax_leaf_same_tree_nested_inner(inner_total, surcharge_rate);
+            pricing_discount_leaf_same_tree_nested_inner(surcharged_total, loyalty_rate)
+        }"#,
+        );
+        let specs =
+            family_b_context(&[discount_leaf, tax_leaf, total_wrapper, inner.clone(), outer]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&inner, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::Aligned);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+    }
+
+    #[test]
+    fn same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified() {
+        let (discount_leaf, tax_leaf, total_wrapper, inner) = m21_chain3_fixture_specs(
+            "pricing/pricing_total_wrapper_same_tree_nested_outer",
+            "pricing/pricing_tax_leaf_same_tree_nested_outer",
+            "pricing/pricing_discount_leaf_same_tree_nested_outer",
+            "pricing/checkout_chain3_same_tree_nested_inner_for_outer",
+            "Return the final checkout total by computing the taxed discounted subtotal, then applying a surcharge, then applying a loyalty discount.",
+            r#"{
+            let base_total = pricing_total_wrapper_same_tree_nested_outer(subtotal, discount_rate, tax_rate);
+            let surcharged_total = pricing_tax_leaf_same_tree_nested_outer(base_total, surcharge_rate);
+            pricing_discount_leaf_same_tree_nested_outer(surcharged_total, loyalty_rate)
+        }"#,
+        );
+        let outer = wrapper_pipeline_chain3_spec(
+            "pricing/checkout_chain3_same_tree_nested_outer",
+            "Return the outer checkout total by reusing the inner chain3 checkout total, then applying a surcharge, then applying a loyalty discount.",
+            &[
+                "pricing/checkout_chain3_same_tree_nested_inner_for_outer",
+                "pricing/pricing_tax_leaf_same_tree_nested_outer",
+                "pricing/pricing_discount_leaf_same_tree_nested_outer",
+            ],
+            r#"{
+            let inner_total = checkout_chain3_same_tree_nested_inner_for_outer(subtotal, discount_rate, tax_rate, surcharge_rate, loyalty_rate);
+            let surcharged_total = pricing_tax_leaf_same_tree_nested_outer(inner_total, surcharge_rate);
+            pricing_discount_leaf_same_tree_nested_outer(surcharged_total, loyalty_rate)
+        }"#,
+        );
+        let specs =
+            family_b_context(&[discount_leaf, tax_leaf, total_wrapper, inner, outer.clone()]);
+        let context = SemanticReviewContext::new(&specs);
+
+        let review = evaluate_semantic_review_with_context(&outer, &context).unwrap();
+        assert_eq!(review.verdict, SemanticVerdict::UnderSpecified);
+        assert_eq!(
+            review.compatibility_key,
+            FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY
+        );
+        assert_eq!(
+            review.support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
+        assert!(
+            review
+                .reason_codes
+                .contains(&SemanticReasonCode::OutsideHonestSupportedSubset)
+        );
+    }
+
+    #[test]
     fn m21_chain3_classifier_runtime_order_is_explicit() {
         let routed_keys =
             SUPPORTED_FUNCTION_ROUTING_ORDER.map(SupportedFunctionRoute::compatibility_key);

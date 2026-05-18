@@ -1,741 +1,506 @@
-# M62: Bounded Corpus Run 1 for the Unsupported Callable-Triple Wrapper Dep-Topology Candidate
+# M64: Retire the False Same-Tree Nested Chain3 Regression Thesis, Preserve the Honest Cross-Library Candidate, and Refresh Truthful Family Analysis
 
-Status: **authoritative implementation plan**
-Milestone: **M62**
-Milestone family: **bounded corpus expansion**
-Implementation readiness: **ready for bounded execution**
-Plan scope: **add one maintained real-example unit and two promotion-relevant M20 regression units for the unsupported callable-triple wrapper dep-topology candidate centered on `examples_crosslib_app::pricing/checkout_nested_chain3`, then rerun the family-analysis proof wall and accept the truthful next decision without widening backend capability, manifest semantics, or recommendation policy**
-Base branch: **main**
-Working branch: **feat/m60-plus**
-Validated at commit: **`0518c7a`**
-Last rewritten: **2026-05-16**
+Status: **authoritative implementation plan**  
+Milestone: **M64**  
+Milestone family: **truth reset and analysis correction**  
+Implementation readiness: **ready for execution**  
+Plan scope: **lock the attempted M63 same-tree nested regression pair as supported `chain3` truth, lock the maintained cross-library nested example as the remaining honest `unsupported_dep_topology` pressure, then refresh coverage, recommendation, and corpus-decision from that corrected split**  
+Base branch: **main**  
+Working branch: **feat/m60-plus**  
+Validated at commit: **`a761e28`**  
+Last rewritten: **2026-05-17**
 
 Supersedes:
 
-- the shipped M61 authority plan previously maintained at this path
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260516-131722.md`
+- the previous repo-root M63 authority plan formerly kept at this path
+- the broad retirement thesis in `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-134358.md` that treated the whole candidate as retired
 
 Primary source artifacts:
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260516-131722.md`
-- `README.md`
-- `TODOS.md`
-- `CHANGELOG.md`
-- `examples/crosslib-app/README.md`
-- `docs/semantic_family_capability_corpus_guide_v0.1.md`
-- `docs/recommendation_corpus_expansion_program_v0.1.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-134358.md`
+- `.runs/m63_truth_correction_run1/blocked-summary.md`
+- `spec-core/src/semantic_review.rs`
+- `spec-cli/tests/cli.rs`
+- `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
+- `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
 - `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
 - `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
 - `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+- `TODOS.md`
 
-Primary repo surfaces:
+## Primary Decision
 
-- `semantic-families/corpus/rust-function.toml`
-- `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
-- `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_total_bad_dep_topology.unit.spec`
-- `spec-cli/tests/cli.rs`
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/family/paths.rs`
-- `xtask/src/lib.rs`
+M64 does not widen semantic review and does not retire the whole unsupported
+callable-triple story.
+
+M64 does one narrower thing:
+
+```text
+same-tree nested regression pair     -> prove supported chain3 truth
+cross-library maintained real example -> preserve unsupported dep topology truth
+analysis artifacts                    -> refresh from that corrected split
+```
+
+That is the whole milestone.
 
 ## Executive Summary
 
-M61 already shipped the bounded recursive local-plus-cross-library TypeScript lane.
+M63 died for the right reason and almost taught the wrong lesson.
 
-That is not the open problem anymore.
+The right lesson:
 
-The open problem is that the family-analysis surfaces still rank the same
-authored pressure shape around `pricing/checkout_nested_chain3` as a top
-unsupported dep-topology candidate with thin evidence:
+- the attempted same-tree nested regression pair does **not** publish as
+  `unsupported_dep_topology`
+- the reviewer routes the inner shape to supported `function.wrapper.pipeline.chain3.v1`
+  with verdict `aligned`
+- the reviewer routes the outer shape to supported `function.wrapper.pipeline.chain3.v1`
+  with verdict `under_specified`
 
-- `real_example_hits = 1`
-- `promotion_relevant_regression_hits = 0`
-- hold reasons:
-  - `hard_difficulty`
-  - `thin_real_example_support`
-  - `thin_regression_support`
-- decision action:
-  - `spend_corpus_run1`
+The wrong lesson:
 
-M62 spends exactly that run.
+- that result does **not** retire the whole callable-triple candidate
+- the maintained cross-library example
+  `examples_crosslib_app::pricing/checkout_nested_chain3`
+  still publishes `unsupported.function.v1`
+  with `unsupported_reason_codes = ["unsupported_dep_topology"]`
+- the checked-in analysis artifacts still rank that cross-library example as the
+  live thin candidate
 
-It does not widen TypeScript execution. It does not promote a new family. It
-does not rewrite recommendation policy. It does not add a sixth corpus source.
+So M64 is not "retire everything."
 
-It does one bounded thing:
+M64 is the smaller honest move:
 
 ```text
-add the smallest exact set of maintained real-example and regression units
-needed to move the callable-triple wrapper candidate off the current
-1-real / 0-regression floor, then rerun coverage, recommendation,
-artifact validation, and corpus-decision and keep whatever truthful answer
-the updated read-side surfaces produce
+retire the fake same-tree unsupported regression thesis
+keep the honest cross-library unsupported callable-triple truth
+prove both sides in the real read-side surfaces that actually carry those truths
+refresh analysis from the corrected basis
+accept whatever truthful next recommendation remains
 ```
 
-Under the current recommender thresholds, if the three new units land in the
-target cluster exactly as intended, the post-run basis should move to:
+No backend widening. No new family key. No manifest churn. No fake regression
+pack. No mixed-truth fixture folder with a lying name.
 
-- `real_example_hits = 2`
-- `promotion_relevant_regression_hits = 2`
-- no remaining `hard_difficulty`, `thin_real_example_support`, or
-  `thin_regression_support` holds
-- `confidence.level = "medium"`
-- `decision_status = "recommended"`
-- `decision_action = "pivot_to_family_promotion_run"`
+## Current Validated Truth
 
-That is the expected happy-path contract for M62 on today's code, not a vague
-"looks better" aspiration.
+Validated on `feat/m60-plus` at `a761e28`.
 
-## Frozen Implementation Decisions
+### 1. The M63 blocked-state evidence is real
 
-These decisions are locked for M62. If any of them changes, the milestone scope
-changed and this plan must be rewritten before implementation continues.
+`.runs/m63_truth_correction_run1/blocked-summary.md` proves:
 
-1. **This is a corpus-and-analysis milestone, not a backend milestone.**
-   - Do not touch `spec-core/src/semantic_review.rs`, TypeScript backend
-     contracts, validator semantics, or CLI target-language behavior unless the
-     proof wall exposes a release-blocking defect in an existing read-side
-     command path.
+- `pricing/base_nested_chain3_bad_dep_topology`
+  published as supported `function.wrapper.pipeline.chain3.v1`
+  with verdict `aligned`
+- `pricing/checkout_nested_chain3_bad_dep_topology`
+  published as supported `function.wrapper.pipeline.chain3.v1`
+  with verdict `under_specified`
+- making `spec-cli/tests/cli.rs` assert those units as
+  `unsupported_dep_topology` would have been a lie
 
-2. **Keep the corpus manifest frozen.**
-   - Reuse the existing five sources in `semantic-families/corpus/rust-function.toml`.
-   - Do not add a new source bucket, packet-fixture leverage source, or scratch
-     analysis path.
+That part stays.
 
-3. **Add exactly one maintained real-example unit.**
-   - The only new maintained real-example file is:
-     - `examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
-   - Do not add a second maintained example root in this milestone.
+### 2. The maintained cross-library example is still unsupported today
 
-4. **Add exactly two promotion-relevant regression units.**
-   - The only new M20 regression files are:
-     - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/base_nested_chain3_bad_dep_topology.unit.spec`
-     - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_nested_chain3_bad_dep_topology.unit.spec`
+Direct root status truth from:
 
-5. **Mirror the target unsupported pressure shape exactly.**
-   - All three new units must stay in the same callable-triple wrapper
-     neighborhood as `pricing/checkout_nested_chain3`:
-     - dep arity `3`
-     - callable dep topology class `unsupported_callable_triple`
-     - contract input count `5`
-     - return-bearing wrapper-like body
-   - Do not spend this run on a nearby but different unsupported shape.
+```bash
+cargo run -p spec-cli -- status examples/crosslib-app --format json
+```
 
-6. **Treat analysis artifacts as derived output only.**
-   - `coverage.latest.json`, `recommendation.latest.json`, and
-     `corpus-program-decision.latest.json` are refreshed outputs, not hand-edited
-     inputs.
-   - `examples/shared-crate/src/generated/**` and
-     `examples/crosslib-app/src/generated/**` are derived proof surfaces for the
-     maintained cross-library example, not hand-authored source.
+Current result for `pricing/checkout_nested_chain3`:
 
-7. **Keep docs edits minimal and truth-maintaining only.**
-   - If existing docs remain accurate after the corpus additions, leave them
-     alone.
-   - If the maintained example set or proof commands become misleading, update
-     only the minimum affected docs in the same PR.
+- `status: valid`
+- `semantic_review.verdict: under_specified`
+- `semantic_review.compatibility_key: unsupported.function.v1`
+- `semantic_review.support_status: unsupported`
+- `semantic_review.unsupported_reason_codes: ["unsupported_dep_topology"]`
 
-## Current Validated Basis
+Direct root export truth from:
 
-Validated on `feat/m60-plus` at `0518c7a`.
+```bash
+cargo run -p spec-cli -- export examples/crosslib-app
+```
 
-Observed live branch truth:
+Current result:
 
-- `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
-  already passes:
-  - `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
-  - `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript`
-- `semantic-families/corpus/rust-function.toml` already includes exactly these
-  recommendation-counting sources:
-  - `examples_ecommerce`
-  - `m19_semantic_falsification_pack`
-  - `m20_unsupported_truth_pack`
-  - `examples_shared_spec`
-  - `examples_crosslib_app`
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-  currently reports:
-  - `cluster_id = "unsupported_dep_topology-fbecce0dbe98"`
-  - `overlap_family = "function.wrapper.pipeline*"`
-  - `real_example_hits = 1`
-  - `promotion_relevant_regression_hits = 0`
-  - `boundary_only_hits = 0`
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-  currently reports:
-  - `recommendation_status = "no_strong_candidate"`
-  - `decision_status = "blocked_for_now"`
-  - `top_candidate_id = "a-unsupporteddeptopology-unsupported_dep_topology-fbecce0dbe98"`
-  - hold reasons:
-    - `hard_difficulty`
-    - `thin_real_example_support`
-    - `thin_regression_support`
-- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-  currently records:
-  - `decision_action = "spend_corpus_run1"`
-  - `decision_basis_code = "plausible_candidate_missing_evidence"`
-  - `required_next_action = "author_corpus_expansion_plan"`
+- `units[].semantic_review` is not the authority here
+- the authoritative read-side review lives on
+  `passports[].semantic_review`
+- the passport for `pricing/checkout_nested_chain3` still carries the same
+  unsupported dep-topology review
 
-The repo is therefore in a truthful but thin state: the product already executes
-the maintained example shape, but the recommendation surface still cannot tell
-whether that shape is genuinely not ready or merely under-evidenced.
+That distinction matters. Status rows and exported passports are the truthful
+surfaces here. Exported `units[]` is not the surface to assert against for this
+milestone.
+
+### 3. The copied repo-root status path is a different proof surface
+
+`spec_status_repo_root_honors_each_root_workspace_config` in `spec-cli/tests/cli.rs`
+copies tracked example roots into a temp repo and asserts multi-root discovery
+and workspace-config behavior.
+
+That test currently proves:
+
+- cross-library namespace loading works
+- copied roots are discovered correctly
+- `crosslib-app` still has exactly `4` units
+- copied repo-root status stays non-green because the copied crosslib wrapper
+  unit is `untested`
+
+That test is still useful, but it is **not** the authority for the direct-root
+`valid + unsupported_dep_topology` truth above. M64 must keep those surfaces
+separate instead of blurring them.
+
+### 4. The checked-in analysis artifacts still point at the cross-library candidate
+
+Current `coverage.latest.json` includes:
+
+- `cluster_id = "unsupported_dep_topology-fbecce0dbe98"`
+- `shape_fingerprint = unsupported_callable_triple`
+- `representative_unit_ids = ["examples_crosslib_app::pricing/checkout_nested_chain3"]`
+- `real_example_hits = 1`
+- `promotion_relevant_regression_hits = 0`
+
+Current `recommendation.latest.json` and
+`corpus-program-decision.latest.json` still say:
+
+- `recommendation_status = "no_strong_candidate"`
+- `top_candidate_id = "a-unsupporteddeptopology-unsupported_dep_topology-fbecce0dbe98"`
+- `decision_action = "spend_corpus_run1"`
+
+So the honest live story is:
+
+```text
+same-tree attempted regression pair -> supported chain3
+cross-library maintained example    -> unsupported dep topology
+analysis basis                      -> still built from the cross-library example
+```
+
+## Problem Statement
+
+The repo currently has two different nested callable-triple stories, and M63
+treated them like one problem.
+
+They are not one problem.
+
+1. **Same-tree nested callable-triple shapes**
+   already route through supported `function.wrapper.pipeline.chain3.v1`
+   when all three deps are supported and the body is a straight-line let-threaded
+   chain.
+
+2. **The maintained cross-library nested example**
+   `pricing/checkout_nested_chain3`
+   still routes to `unsupported.function.v1`
+   with `unsupported_dep_topology`.
+
+M63 tried to use a same-tree regression pair to strengthen a cross-library
+unsupported candidate. That is why it blocked. The regression pair was proving
+the opposite thesis.
+
+M64 fixes that category error.
 
 ## Step 0: Scope Challenge
 
 ### Premise correction
 
-The problem is not "TypeScript still needs more support."
+The design doc was right about one crucial point:
 
-The real problem is smaller:
+- the M63 same-tree regression pair cannot truthfully count as
+  `unsupported_dep_topology`
+
+But it overreached on the repo-wide conclusion.
+
+The complete truthful premise is:
 
 ```text
-the repo already ships and proves the checkout_nested_chain3 execution shape,
-but the recommendation surfaces still only see one maintained real example
-and zero promotion-relevant regressions for that same callable-triple wrapper
-pressure
+retire the same-tree regression pair as unsupported evidence
+do not retire the maintained cross-library unsupported example
+refresh analysis from that split
 ```
 
-If M62 expands beyond that sentence, it is overbuilt.
+Anything broader is sloppy.
 
 ### What already exists
 
-| Sub-problem | Existing owner | M62 action |
+| Sub-problem | Existing owner | M64 action |
 | --- | --- | --- |
-| maintained real example for the target cluster | `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec` | add one second maintained unit in the same source bucket and same pressure class |
-| supported nested shared callable in slot 1 | `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec` | reuse as-is, do not edit shared-spec source |
-| local unsupported wrapper baseline in M20 | `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_total_bad_dep_topology.unit.spec` | extend the same pack with two nested callable-triple variants |
-| corpus source inventory | `semantic-families/corpus/rust-function.toml` | reuse unchanged |
-| read-side coverage output | `cargo xtask family coverage --format json` | rerun and compare leverage counts |
-| read-side recommendation output | `cargo xtask family recommend --format json` | rerun and compare blocker simplification |
-| bounded next-step decision output | `cargo xtask family corpus-decision --format json` | rerun and require a truthful next action |
+| same-tree supported `chain3` routing logic | `spec-core/src/semantic_review.rs` | reuse shipped routing and add exact tests before considering any production logic change |
+| semantic-review chain3 fixture builders | `wrapper_pipeline_chain3_spec`, `family_b_context`, `m21_chain3_fixture_specs` in `spec-core/src/semantic_review.rs` | reuse the existing fixture style instead of inventing a new test harness |
+| CLI command/test helpers | `cargo_available`, `temp_repo_dir`, `write_spec`, `run_in`, `parse_stdout_json`, `read_passport_json` in `spec-cli/tests/cli.rs` | reuse for temp-fixture proof instead of adding committed fixture files |
+| copied multi-root repo proof | `spec_status_repo_root_honors_each_root_workspace_config` in `spec-cli/tests/cli.rs` | strengthen only for root-discovery invariants, not as the sole semantic truth authority |
+| maintained cross-library nested example | `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec` plus `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec` | preserve as the current honest unsupported real example |
+| M63 blocked-state evidence | `.runs/m63_truth_correction_run1/blocked-summary.md` | treat as the authority explaining why same-tree regression pressure must be retired |
+| family-analysis decision wall | `cargo xtask family coverage/recommend/validate-artifact/corpus-decision` | rerun unchanged after truth surfaces are corrected |
 
 ### Minimum complete slice
 
-The minimum honest M62 slice is:
+The minimum complete M64 slice is:
 
-1. add one maintained `examples_crosslib_app` unit that lands in the same target
-   unsupported cluster as `pricing/checkout_nested_chain3`
-2. add two promotion-relevant nested bad-topology units to the existing
-   `m20_unsupported_truth_pack`
-3. validate the exact new units and re-run the existing M20 pack truth loop
-4. rerun `coverage`, `recommend`, artifact validation, and `corpus-decision`
-5. capture the pre/post delta and update docs only if the maintained example or
-   proof commands became misleading
+1. add focused semantic-review proof for the exact same-tree inner and outer
+   shapes that blocked M63
+2. add focused CLI truth-surface proof that those same-tree shapes publish
+   honest supported `chain3` truth through status and exported passports
+3. add or strengthen direct cross-library CLI proof so the maintained example is
+   explicitly asserted as still `unsupported_dep_topology` in direct-root status
+   and exported passports
+4. keep the repo-root workspace-config proof honest and separate
+5. rerun the family-analysis wall and validate the refreshed artifacts
+6. capture the before/after delta so the next milestone is chosen from truth,
+   not memory
 
 Anything smaller is fake done.
 
 Examples:
 
-- adding the real-example variant without regression pressure is fake done
-- adding only one regression unit keeps the candidate on a suspiciously thin
-  evidence story
-- rerunning `coverage` and `recommend` without `corpus-decision` is fake done
-- refreshing artifacts without checking whether the blocker list actually got
-  simpler is fake done
+- proving the same-tree pair only in `spec-core` but not in public CLI surfaces
+  is fake done
+- asserting the cross-library example only in the copied repo-root test while
+  never pinning the direct-root `valid` truth is fake done
+- asserting export `units[]` instead of export `passports[]` is fake done,
+  because that is not the truthful surface today
+- refreshing analysis without explicitly pinning the cross-library example's
+  current unsupported truth is fake done
 
-### Complexity and blast radius
+### Complexity, blast radius, distribution, completeness
 
-This milestone is small enough to stay boring:
+This plan stays boring on purpose.
 
-- 3 new source-spec files
-- 1 existing CLI truth-surface file updated on purpose
-- 0 new source buckets
-- 0 backend capability changes
-- 0 policy rewrites
-- 0 new classes, services, or abstractions
+- authored code surfaces changed: `2`
+  - `spec-core/src/semantic_review.rs`
+  - `spec-cli/tests/cli.rs`
+- derived artifact surfaces refreshed: `3`
+  - `coverage.latest.json`
+  - `recommendation.latest.json`
+  - `corpus-program-decision.latest.json`
+- optional docs truth-maintenance: at most `1`
+  - `TODOS.md`
+- new classes or services: `0`
+- new committed `.unit.spec` fixtures: `0`
+- new distributable artifacts: `0`
 
-Likely touched authored files:
+Minimal diff. Explicit over clever. Full proof over shortcut.
 
-- `examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/base_nested_chain3_bad_dep_topology.unit.spec`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_nested_chain3_bad_dep_topology.unit.spec`
-- `spec-cli/tests/cli.rs`
-- possibly `examples/crosslib-app/README.md`, `CHANGELOG.md`, and `TODOS.md` if
-  the proof wall changes public truth
+There is no distribution work here because M64 creates no new binary, package,
+container, or external artifact type beyond the already-existing analysis JSON.
 
-That is a minimal diff for the user outcome we want: better decision quality on
-an already product-relevant shape.
+## Authority Contract
 
-### Search check
+This plan is the only authority for M64.
 
-No framework built-in replaces this work. The repo already owns the corpus and
-analysis surfaces.
+Everything else is context unless it is brought into alignment with this file.
 
-- **[Layer 1]** Reuse the current five-source manifest in `semantic-families/corpus/rust-function.toml`
-- **[Layer 1]** Reuse the existing maintained cross-library root
-  `pricing/checkout_nested_chain3`
-- **[Layer 1]** Reuse the existing M20 pricing pack naming, field ordering, and
-  unsupported-truth authoring style
-- **[Layer 1]** Reuse the current `cargo xtask family coverage/recommend/corpus-decision`
-  commands and artifact paths
-- **[Layer 3]** Do not invent a new recommendation corpus source just to make
-  one candidate look stronger
-
-### TODOS cross-reference
-
-`TODOS.md` already tracks the remaining TypeScript oceans after M61. M62 does
-not change that backlog.
-
-What M62 may add, but only if the post-run truth demands it:
-
-- a family-focused follow-up if thin-evidence blockers clear and only the
-  harder family decision remains
-- a read-side recommendation follow-up if the evidence spend fails to improve
-  decision quality at all
-
-Do not silently grow TODOs before the new analysis basis exists.
-
-### Completeness and distribution check
-
-No new distributable artifact is introduced.
-
-The complete version here is not packaging work. It is truth-completeness:
-
-- exact corpus additions
-- exact proof wall
-- exact delta capture
-- exact next-step decision
-
-AI makes the full read-side rerun cheap. Do the whole thing.
-
-## Milestone Contract
-
-### Exact shipped behavior
-
-After M62 lands, the repo should be able to say this and nothing broader:
-
-```text
-the callable-triple wrapper dep-topology candidate around
-examples_crosslib_app::pricing/checkout_nested_chain3 is no longer judged
-from a 1-real / 0-regression evidence floor; the family-analysis surfaces
-now reflect one bounded evidence spend and return a clearer next step
-```
-
-This is a recommendation-quality claim, not a backend-capability claim.
+- `PLAN.md` is the implementation authority.
+- `ORCH_PLAN.md` is stale M63 orchestration context until rewritten later.
+- M64 does **not** retire the whole unsupported callable-triple problem.
+- M64 **does** retire the attempted same-tree regression pair as unsupported
+  evidence.
+- M64 preserves the current cross-library unsupported example as live truth
+  unless the reviewer itself changes, which is out of scope here.
+- M64 is a truth reset and read-side correction milestone, not a backend or
+  family-promotion milestone.
 
 ### Exact source eligibility
 
-M62 may use only the current recommendation-counting sources:
+M64 may modify only these authored source surfaces during core implementation:
 
-- `examples_ecommerce`
-- `m19_semantic_falsification_pack`
-- `m20_unsupported_truth_pack`
-- `examples_shared_spec`
-- `examples_crosslib_app`
+| Surface | Responsibility | Required outcome |
+| --- | --- | --- |
+| `spec-core/src/semantic_review.rs` | semantic-review truth proof | new focused tests prove the same-tree pair routes to supported `chain3`; no production routing change unless a failing proof forces one |
+| `spec-cli/tests/cli.rs` | public read-side truth proof | new focused same-tree CLI truth test; direct cross-library unsupported truth assertion; repo-root config proof kept honest and separate |
 
-It may not add a sixth source.
+Derived outputs refreshed after proof:
 
-### Exact authored additions
+- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
+- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
+- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
 
-#### Maintained real-example addition
+Optional truth-maintenance after proof:
 
-Add exactly:
+- `TODOS.md` only if the refreshed analysis reveals a new follow-up that would
+  otherwise be lost
 
-- `examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
+### Explicit no-touch surfaces
 
-Frozen authored contract:
+M64 does **not** edit:
 
-- `id = pricing/checkout_nested_chain3_variant`
-- same 5-input `Decimal` contract as `pricing/checkout_nested_chain3`
-- same three-dep callable tuple as `pricing/checkout_nested_chain3`:
-  - `shared::pricing/base_nested_chain3`
-  - `shared::pricing/apply_tax`
-  - `shared::pricing/apply_discount`
-- same wrapper-like three-stage body shape:
-  - call shared nested chain3 first
-  - apply one outer surcharge through `apply_tax`
-  - apply one outer loyalty discount through `apply_discount`
-- include both `body.rust` and `body.typescript`
-- local test fixture should use the already-proven aligned chain3 numbers to
-  avoid arithmetic ambiguity:
-  - `checkout_nested_chain3_variant(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(970290, 4)`
+- `examples/crosslib-app/units/**`
+- `examples/shared-spec/units/**`
+- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/**`
+- `semantic-families/**`
+- `xtask/src/family/**`
+- `spec-core/src/typescript_backend.rs`
+- `spec-core/src/validator.rs`
 
-No shared-spec source edits are part of this step.
-
-#### Promotion-relevant regression additions
-
-Add exactly:
-
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/base_nested_chain3_bad_dep_topology.unit.spec`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_nested_chain3_bad_dep_topology.unit.spec`
-
-Frozen authored contract for `base_nested_chain3_bad_dep_topology`:
-
-- `id = pricing/base_nested_chain3_bad_dep_topology`
-- inputs:
-  - `subtotal`
-  - `discount_rate`
-  - `tax_rate`
-  - `surcharge_rate`
-  - `loyalty_rate`
-- deps:
-  - `pricing/checkout_total`
-  - `pricing/apply_tax`
-  - `pricing/apply_discount`
-- wrapper-like body:
-  - compute `checkout_total(subtotal, discount_rate, tax_rate)`
-  - apply outer surcharge through `apply_tax`
-  - apply loyalty discount through `apply_discount`
-- local test fixture:
-  - `base_nested_chain3_bad_dep_topology(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(9801, 2)`
-
-Frozen authored contract for `checkout_nested_chain3_bad_dep_topology`:
-
-- `id = pricing/checkout_nested_chain3_bad_dep_topology`
-- same 5-input contract
-- deps:
-  - `pricing/base_nested_chain3_bad_dep_topology`
-  - `pricing/apply_tax`
-  - `pricing/apply_discount`
-- wrapper-like body:
-  - call `base_nested_chain3_bad_dep_topology(...)`
-  - apply outer surcharge through `apply_tax`
-  - apply loyalty discount through `apply_discount`
-- local test fixture:
-  - `checkout_nested_chain3_bad_dep_topology(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(10, 2), Decimal::new(10, 2), Decimal::new(10, 2)) == Decimal::new(970290, 4)`
-
-These two units exist to give the target cluster a real regression story, not a
-single accidental-looking point.
-
-### Exact preserved boundaries
-
-M62 must not:
-
-- change `semantic-families/corpus/rust-function.toml` semantics
-- widen the supported-family vocabulary
-- change TypeScript validator or backend rules
-- add units under `examples/ecommerce/units`
-- add units under `semantic-families/**` as recommendation leverage
-- reopen arbitrary authored 4+ topology parity
-- reopen molecule TypeScript execution
-- reopen seam-kind TypeScript execution
-- treat packet fixtures as corpus leverage
-- turn this run into a policy rewrite
-
-### Exact expected output delta
-
-The post-run analysis basis is acceptable only if it becomes mechanically more
-informative than the current floor and matches the current recommender logic.
-
-Required coverage delta:
-
-- the target cluster still exists as `unsupported_dep_topology-fbecce0dbe98` or
-  a truthfully more precise successor with the same shape fingerprint:
-  - `function_dep_arity = 3`
-  - `callable_dep_topology_class = unsupported_callable_triple`
-  - `contract_input_count = 5`
-  - `authored_body_kind = wrapper_like`
-- `real_example_hits = 2`
-- `promotion_relevant_regression_hits = 2`
-- `boundary_only_hits = 0`
-- `source_ids` for the cluster include both:
-  - `examples_crosslib_app`
-  - `m20_unsupported_truth_pack`
-
-Required recommendation delta on the current code path:
-
-- the top candidate remains the same target candidate or a truthfully renamed
-  direct successor for the same cluster
-- `hold_reasons = []`
-- `recommendation_status = "ranked"`
-- `decision_summary.decision_status = "recommended"`
-- `confidence.level = "medium"` or stronger
-
-Required corpus-program decision delta on the current code path:
-
-- `decision_action = "pivot_to_family_promotion_run"`
-- `decision_basis_code = "promotion_ready_candidate"`
-- `required_next_action = "author_family_promotion_plan"`
-
-What does not count:
-
-- the same candidate with the same `hard_difficulty`,
-  `thin_real_example_support`, and `thin_regression_support` blocker trio
-- `real_example_hits = 2` paired with `promotion_relevant_regression_hits < 2`
-  because that means one or both M20 additions did not land as intended
-- larger raw unsupported totals with no recommendation-state change
-- a refreshed artifact set that still says `decision_action = "spend_corpus_run1"`
-- any closeout that cannot explain which new unit missed the target cluster when
-  the expected counts do not materialize
-
-### Exact post-run decision matrix
-
-The closeout must classify the result into exactly one bucket:
-
-1. **Expected green path**
-   - coverage shows `2 real / 2 regression`
-   - recommendation becomes `ranked` + `recommended`
-   - corpus decision becomes `pivot_to_family_promotion_run`
-   - outcome: M62 succeeded and the next plan, if needed, is a bounded family
-     promotion plan
-
-2. **Yellow but acceptable diagnosis**
-   - coverage shows the expected `2 real / 2 regression`
-   - missing-evidence blockers clear
-   - but the corpus decision pivots to `recommendation_policy_run` instead of a
-     promotion run
-   - outcome: M62 still succeeded as a corpus run, but the follow-up is policy,
-     not more corpus spend
-
-3. **Red, do not close**
-   - coverage fails to reach `2 real / 2 regression`
-   - or the recommendation still reports missing evidence
-   - or `decision_action` stays `spend_corpus_run1`
-   - outcome: at least one new unit did not count the way the plan expected, or
-     the read-side logic regressed; inspect cluster membership before closeout
-
-4. **Unexpected stop path**
-   - `decision_action = "stop"`
-   - outcome: only acceptable if the target candidate genuinely disappears from
-     the actionable set and the closeout proves why; otherwise treat as red
+If M64 needs any of those, stop and re-scope.
 
 ## Architecture Review
+
+### System direction
+
+```text
+CURRENT
+  same-tree attempted regression pair -> supported chain3
+  cross-library maintained example    -> unsupported dep topology
+  analysis artifacts                  -> still rank the cross-library example
+
+M64
+  prove the same-tree pair as supported chain3 in semantic-review tests
+  prove the same-tree pair as supported chain3 in CLI status/export passport surfaces
+  prove the cross-library example still stays unsupported in direct-root status/export passport surfaces
+  keep repo-root copied example coverage focused on workspace-config and discovery behavior
+  rerun coverage/recommend/corpus-decision from that split
+
+AFTER M64
+  no fake same-tree unsupported pressure remains
+  only honest cross-library pressure feeds the candidate analysis
+  next wedge comes from refreshed truth, even if the answer is still "blocked"
+```
 
 ### Dependency graph
 
 ```text
-CURRENT CORPUS / ANALYSIS FLOW
-==============================
+spec-core/src/semantic_review.rs
+  └── semantic reviewer truth
+      ├── same-tree nested pair -> supported chain3
+      └── cross-library nested example -> unsupported dep topology
 
-examples_crosslib_app
-  └── pricing/checkout_nested_chain3                [existing real example]
-        ├── shared::pricing/base_nested_chain3      [existing supported nested chain3]
-        ├── shared::pricing/apply_tax               [existing shared leaf]
-        └── shared::pricing/apply_discount          [existing shared leaf]
+spec-cli/tests/cli.rs
+  ├── temp same-tree proof project
+  │   ├── spec test
+  │   ├── status --format json
+  │   └── export (passport semantic_review assertions)
+  ├── direct copied example proof
+  │   ├── status examples/crosslib-app --format json semantics
+  │   └── export examples/crosslib-app passport semantics
+  └── repo-root copied example proof
+      └── workspace-config discovery, unit counts, and namespace hygiene
 
-m20_unsupported_truth_pack
-  └── pricing/checkout_total_bad_dep_topology       [existing 2-dep unsupported regression]
-
-semantic-families/corpus/rust-function.toml         [frozen 5-source manifest]
-  ├── cargo xtask family coverage --format json
-  ├── cargo xtask family recommend --format json
-  └── cargo xtask family corpus-decision --format json
-
-CURRENT RESULT
-  └── unsupported_dep_topology-fbecce0dbe98
-        = 1 real example / 0 promotion-relevant regressions
+.semantic-family-artifacts/family-promotion/analysis/*.json
+  └── refreshed only after the truth wall above is green
 ```
 
-```text
-M62 TARGET FLOW
-===============
+### Production-style failure scenarios
 
-examples_crosslib_app
-  ├── pricing/checkout_nested_chain3                [existing]
-  └── pricing/checkout_nested_chain3_variant        [new]
-        ├── shared::pricing/base_nested_chain3
-        ├── shared::pricing/apply_tax
-        └── shared::pricing/apply_discount
-
-m20_unsupported_truth_pack
-  ├── pricing/checkout_total_bad_dep_topology       [existing]
-  ├── pricing/base_nested_chain3_bad_dep_topology   [new]
-  │     ├── pricing/checkout_total
-  │     ├── pricing/apply_tax
-  │     └── pricing/apply_discount
-  └── pricing/checkout_nested_chain3_bad_dep_topology [new]
-        ├── pricing/base_nested_chain3_bad_dep_topology
-        ├── pricing/apply_tax
-        └── pricing/apply_discount
-
-ANALYSIS
-  ├── coverage.latest.json                          [refresh]
-  ├── recommendation.latest.json                    [refresh]
-  └── corpus-program-decision.latest.json           [refresh]
-
-TARGET RESULT
-  └── same candidate, but no longer judged from a 1 real / 0 regression floor
-```
-
-### Current flaw
-
-The current read-side architecture is not broken in the backend sense.
-
-The flaw is evidence scarcity around a now-product-relevant unsupported shape.
-One maintained example and zero promotion-relevant regressions is too thin to
-trust either a promotion push or a durable hold.
-
-### M62 target architecture
-
-M62 should change corpus content, not repo architecture.
-
-The stable architecture after M62 is:
-
-- same five-source manifest
-- same existing analysis commands
-- richer target-cluster leverage
-- clearer stop/spend/pivot decision
-
-If implementation starts drifting into `xtask` logic changes before the new
-corpus truth is observed, that is a smell. Stop and re-scope.
-
-### File-by-file responsibilities
-
-| Path | Responsibility |
-| --- | --- |
-| `examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec` | second maintained real-example hit for the target cluster |
-| `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/base_nested_chain3_bad_dep_topology.unit.spec` | intermediate nested unsupported regression pressure |
-| `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_nested_chain3_bad_dep_topology.unit.spec` | outer nested unsupported regression pressure matching the target cluster |
-| `spec-cli/tests/cli.rs` | public truth-surface assertions for the new maintained example count and the expanded M20 unsupported matrix |
-| `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json` | refreshed leverage counts and cluster membership |
-| `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json` | refreshed blocker list and next-step status |
-| `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json` | refreshed stop/spend/pivot decision |
-| `examples/crosslib-app/README.md`, `CHANGELOG.md`, `TODOS.md` | minimal truth maintenance only if the new maintained example set or analysis loop would otherwise be misleading |
-
-Read-only unless a proof-wall defect forces escalation:
-
-- `xtask/src/family/coverage.rs`
-- `xtask/src/family/recommend.rs`
-- `xtask/src/lib.rs`
-
-## Code Quality Review
-
-### Design choices
-
-1. **Reuse existing shapes instead of inventing new ones.**
-   - The maintained variant reuses the existing `checkout_nested_chain3` dep
-     tuple.
-   - The M20 additions reuse the current pricing pack vocabulary and extend it
-     by one intermediate nested wrapper plus one outer nested wrapper.
-
-2. **Keep the analysis story explicit.**
-   - The unit additions exist to move exact leverage counters and blocker
-     states, not to "generally improve corpus quality."
-
-3. **Keep the diff small.**
-   - This should be authored-spec work plus derived artifact refresh.
-   - No generic helper extraction, manifest redesign, or policy abstraction.
-
-### DRY and maintenance rules
-
-- Keep field order aligned with existing pricing unit specs:
-  - `id`, `kind`, `intent`, `spec_version`, `contract`, `deps`, `imports`,
-    `body`, `local_tests`
-- Reuse the same five-argument pricing contract names everywhere:
-  - `subtotal`
-  - `discount_rate`
-  - `tax_rate`
-  - `surcharge_rate`
-  - `loyalty_rate`
-- Reuse the same aligned fixture numbers for all three new nested units so the
-  milestone does not burn time on arithmetic drift.
-- Do not duplicate doc text across README, CHANGELOG, and TODOs unless the
-  public truth actually changed on that surface.
-- Do not hand-edit generated artifacts outside the standard command outputs.
+- If same-tree routing silently flips back to unsupported, analysis will
+  overcount fake pressure and the next milestone will chase the wrong wedge.
+- If the cross-library example silently flips to supported, the repo will
+  pretend a live unsupported boundary no longer exists and promote from a false
+  clean state.
+- If repo-root copied tests are treated as the only authority, direct-root truth
+  can drift without anyone noticing because `untested` and `valid` are not the
+  same proof surface.
 
 ## Implementation Plan
 
-### Implementation lockstep
+### Step 1: Lock the same-tree truth in `spec-core`
 
-This milestone is simplest when done in this order:
+Add focused semantic-review tests in `spec-core/src/semantic_review.rs`.
 
-1. author the maintained real-example variant
-2. author the two M20 nested bad-topology regressions
-3. update the CLI truth-surface assertions that hard-code the current example and
-   M20 unsupported matrices
-4. validate the exact new units and the focused CLI truth wall
-5. rerun the family-analysis proof wall
-6. update only the docs that became misleading
-7. capture the pre/post delta and decide the truthful next milestone
+Required exact tests:
 
-### Step 1. Add the maintained cross-library variant
+1. `same_tree_nested_chain3_inner_routes_to_supported_chain3`
+   - constructs the exact inner M63 shape
+   - uses the existing semantic-review fixture style already present in this
+     file, not a one-off ad hoc builder
+   - asserts:
+     - `verdict == aligned`
+     - `compatibility_key == function.wrapper.pipeline.chain3.v1`
+     - `support_status == supported`
 
-Create:
+2. `same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified`
+   - constructs the exact outer M63 shape
+   - asserts:
+     - `verdict == under_specified`
+     - `compatibility_key == function.wrapper.pipeline.chain3.v1`
+     - `support_status == supported`
+     - `reason_codes` contains `OutsideHonestSupportedSubset`
 
-- `examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
+Guardrail:
 
-Requirements:
+- if these tests pass without production code changes, keep the diff test-only
+- if they fail, change only the smallest semantic-review surface needed to make
+  the shipped behavior match the already observed M63 blocked-state truth
+- no routing reorder, no new family, no cross-library widening
 
-- keep the same contract, dep tuple, and wrapper-like shape as
-  `checkout_nested_chain3.unit.spec`
-- include `body.rust` and `body.typescript`
-- use the aligned 10% fixture and expected `Decimal::new(970290, 4)` local test
-- do not add or modify any `examples/shared-spec` source unit
-- treat `examples/shared-crate/src/generated/**` and
-  `examples/crosslib-app/src/generated/**` as derived proof surfaces and
-  refresh them before the maintained Rust proof commands
+### Step 2: Lock the public CLI truth surfaces in `spec-cli`
 
-Why this step exists:
+M64 needs three separate proof surfaces in `spec-cli/tests/cli.rs`.
 
-- it is the smallest honest move that can push `real_example_hits` above `1`
+#### Step 2A: Temp same-tree truth project
 
-### Step 2. Add the two M20 nested bad-topology regressions
+Add one new focused CLI integration test:
 
-Create:
+- `nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth`
 
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/base_nested_chain3_bad_dep_topology.unit.spec`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_nested_chain3_bad_dep_topology.unit.spec`
+Implementation contract:
 
-Requirements:
+- guard with `if !cargo_available() { return; }`
+- use existing helpers:
+  - `temp_repo_dir`
+  - `write_spec`
+  - `run_in`
+  - `parse_stdout_json`
+  - `read_passport_json`
+- author the same-tree inner and outer units in a temp project inside the test
+- run:
+  - `spec test units --output src/generated --crate-root .`
+  - `spec status units --format json`
+  - `spec export units`
+- assert:
+  - the inner unit publishes supported `chain3` truth
+  - the outer unit publishes supported `chain3` plus `under_specified` truth
+  - neither unit publishes `unsupported_dep_topology`
+  - `export` assertions read from `passports[]`, not from `units[]`
 
-- both units stay inside the existing M20 pack
-- both units use the same five-input pricing contract
-- the intermediate unit wraps `checkout_total` with outer surcharge and loyalty
-  stages
-- the outer unit wraps the intermediate unit with the same two outer stages
-- use the aligned fixture outputs:
-  - base: `Decimal::new(9801, 2)`
-  - outer: `Decimal::new(970290, 4)`
+This test is the public proof that the retired same-tree thesis is actually
+retired in read-side surfaces, not just inside semantic-review unit tests.
 
-Why this step exists:
+#### Step 2B: Direct cross-library maintained-example proof
 
-- it is the smallest honest move that can push
-  `promotion_relevant_regression_hits` above `0` without inventing a new source
+Add one direct-root CLI proof that pins the live unsupported candidate in the
+surface that currently carries it.
 
-### Step 3. Update the CLI truth surfaces before rerunning proof
+Preferred test shape:
 
-Edit:
+- add a new focused test in `spec-cli/tests/cli.rs` that copies
+  `examples/crosslib-app` and `examples/shared-spec` into a temp area, then
+  runs the same direct-root commands the operator would run against
+  `examples/crosslib-app`
 
-- `spec-cli/tests/cli.rs`
+Required assertions:
 
-Required assertion updates:
+- `status examples/crosslib-app --format json`
+  - `pricing/checkout_nested_chain3`
+    - `status == valid`
+    - `semantic_review.compatibility_key == unsupported.function.v1`
+    - `semantic_review.support_status == unsupported`
+    - `semantic_review.unsupported_reason_codes == ["unsupported_dep_topology"]`
+- `export examples/crosslib-app`
+  - assert the same review on the passport for
+    `pricing/checkout_nested_chain3`
 
-- extend
-  `m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix`
-  so `unsupported_cases` also includes:
-  - `pricing/base_nested_chain3_bad_dep_topology`
-  - `pricing/checkout_nested_chain3_bad_dep_topology`
-  - expected reason code for both: `unsupported_dep_topology`
-- update `spec_status_repo_root_honors_each_root_workspace_config` so the copied
-  `crosslib-app` root expects 5 units instead of 4 and explicitly includes:
-  - `pricing/checkout_nested_chain3_variant`
-  - status `untested`
-  - no `SPEC_UNKNOWN_LIBRARY_NAMESPACE` noise
+Do not assert this truth from export `units[]`. That would be the wrong surface.
 
-Why this step exists:
+#### Step 2C: Keep repo-root copied proof honest
 
-- broad green CLI output is not enough if the repo's public truth-surface tests
-  never assert the two new M20 ids or the new maintained example row
+Keep `spec_status_repo_root_honors_each_root_workspace_config`, but tighten its
+role.
 
-### Step 4. Re-run the unit and pack proof wall
+Required assertions:
 
-Run:
+- `crosslib-app` still has exactly `4` units
+- `pricing/checkout_nested_chain3` still appears
+- copied repo-root status remains `untested` for that unit
+- `SPEC_UNKNOWN_LIBRARY_NAMESPACE` remains absent
 
-```bash
-cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --format json
-cargo run -p spec-cli -- generate examples/shared-spec/units --output examples/shared-crate/src/generated
-cargo run -p spec-cli -- generate examples/crosslib-app/units --output examples/crosslib-app/src/generated
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --target-language typescript
+Do **not** use this test as the only proof of the maintained unsupported
+candidate. Its job is workspace-config discovery and namespace hygiene, not the
+direct-root semantic truth contract.
 
-cargo run -p spec-cli -- validate spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --format json
-cargo test -p spec-cli --test cli m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix -- --exact
-cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact
-cargo test -p spec-cli --test cli
-```
+### Step 3: Refresh the analysis wall
 
-Requirements:
-
-- the maintained variant validates and passes in both Rust and TypeScript
-- the M20 pack stays green as a pack
-- the public unsupported reason/status matrix in CLI tests explicitly covers the
-  two new M20 ids
-- the repo-root crosslib status test explicitly covers the new maintained
-  example row
-
-### Step 5. Re-run coverage, recommendation, and corpus-decision
-
-Run:
+After Steps 1 and 2 are green, rerun:
 
 ```bash
 cargo xtask family coverage --format json
@@ -746,356 +511,259 @@ cargo xtask family corpus-decision --format json
 cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
 ```
 
-Requirements:
+Required read-side comparison:
 
-- refreshed artifacts validate
-- the target cluster reaches exactly `2 real / 2 regression`
-- the recommendation and corpus-decision outputs match one of the allowed
-  buckets in the decision matrix above
+- before M64:
+  - same-tree pair was informally treated as unsupported regression pressure
+  - checked-in artifacts still ranked the cross-library example as the thin
+    unsupported callable-triple candidate
+- after M64:
+  - no same-tree regression proof remains in the public truth story
+  - the analysis either:
+    - still ranks the cross-library candidate honestly, or
+    - moves to a different truthful next wedge
 
-If `corpus-decision` still fails on a refreshed valid basis, stop and treat that
-as a release-blocking read-side defect for this milestone.
+Both outcomes are acceptable. Lying is not.
 
-### Step 6. Apply minimal truth-maintenance docs edits
+### Step 4: Close out the truthful next action
 
-Touch docs only if the proof wall makes an existing surface misleading.
+If the refreshed analysis still lands on:
 
-Allowed doc edits:
+- `a-unsupporteddeptopology-unsupported_dep_topology-fbecce0dbe98`
+- `no_strong_candidate`
+- `spend_corpus_run1`
 
-- `examples/crosslib-app/README.md` if it should name the new maintained variant
-  or updated proof command
-- `CHANGELOG.md` for the M62 corpus-run closeout
-- `TODOS.md` only if the refreshed analysis basis clearly creates the next
-  follow-up
+then the closeout must say that plainly and capture only the honest next move:
 
-Default posture:
+- author a truthful **cross-library** regression if one exists, or
+- open a separate reviewer-widening design if the product truly wants to admit
+  this cross-library nested topology as supported
 
-- leave `README.md` root-level M61 capability wording alone unless it becomes
-  factually incomplete or misleading
+Do **not** carry forward the retired same-tree regression thesis into `TODOS.md`.
 
-### Step 7. Capture the post-run basis
+## Code Quality Review
 
-The implementation closeout must preserve:
+This is a small-scope truth correction. The code-quality bar is therefore
+simple and strict:
 
-- pre-run and post-run leverage counts for the target cluster
-- pre-run and post-run blocker lists
-- pre-run and post-run `corpus-decision` action
-- the exact next-action sentence after M62
-- the exact cluster member ids counted after the run
-- whether the result landed in the expected green path, acceptable diagnosis, or
-  red path
-
-Capture this as a small delta table in the implementation closeout and any
-follow-on design artifact.
+- **No duplicate harnesses unless the second call site earns it.**
+  Reuse existing builders and helpers first. If the new CLI proof needs local
+  temp-project authoring, keep that helper narrow and colocated in
+  `spec-cli/tests/cli.rs`.
+- **No committed fixture churn for an uncommitted thesis.**
+  Do not repurpose `spec-cli/tests/fixtures/m20/unsupported_truth_pack/**`.
+  That fixture pack would become semantically dishonest.
+- **Assert against the right surface.**
+  In export JSON, the semantic review authority for this milestone is
+  `passports[].semantic_review`, not `units[].semantic_review`.
+- **Prefer explicit assertions over broad snapshot noise.**
+  Pin the exact unit ids, compatibility keys, support status, and reason-code
+  vectors that matter. Do not add loose "contains string" assertions.
+- **Keep the diff test-first unless proof fails.**
+  A production semantic-review code change is allowed only if the new exact
+  tests reveal that current behavior no longer matches the already observed M63
+  blocked truth.
 
 ## Test Review
 
-### Test framework and proof owners
+100% coverage is the goal for the new truth split.
 
-This repo’s truth loop for M62 is command-driven, not UI-driven.
-
-Proof owners:
-
-- `spec validate --format json` for authored-spec truth
-- `spec test` for Rust and TypeScript maintained-example proof
-- focused `cargo test -p spec-cli --test cli ... -- --exact` runs plus a final
-  whole-file `cargo test -p spec-cli --test cli` for the public unsupported and
-  example-root truth surfaces
-- `cargo xtask family * --format json` for read-side analysis and decision truth
-
-No E2E browser work. No eval suite. No new backend unit-test surface unless the
-proof wall exposes a defect in existing analysis logic.
-
-### Code path coverage diagram
+### Code path coverage
 
 ```text
-CORPUS AUTHORING COVERAGE
-=========================
-
-[+] examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec
-    ├── [MUST PROVE] validate --format json
-    ├── [MUST PROVE] spec test (Rust)
-    └── [MUST PROVE] spec test --target-language typescript
-
-[+] spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/base_nested_chain3_bad_dep_topology.unit.spec
-    ├── [MUST PROVE] whole-pack validate
-    └── [MUST PROVE] retained unsupported truth surfaces through cli.rs
-
-[+] spec-cli/tests/fixtures/m20/unsupported_truth_pack/units/pricing/checkout_nested_chain3_bad_dep_topology.unit.spec
-    ├── [MUST PROVE] whole-pack validate
-    └── [MUST PROVE] retained unsupported truth surfaces through cli.rs
-
-CLI TRUTH-SURFACE COVERAGE
-==========================
+CODE PATH COVERAGE
+==================
+[+] spec-core/src/semantic_review.rs
+    │
+    ├── evaluate_semantic_review_with_context()
+    │   ├── family_c_deps_are_supported()
+    │   │   ├── [ADD TEST] same_tree_nested_chain3_inner_routes_to_supported_chain3
+    │   │   └── [ADD TEST] same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified
+    │   │
+    │   └── unsupported_function_dep_topology_diagnostic()
+    │       └── [PROVE VIA CLI] cross-library checkout_nested_chain3 remains unsupported_dep_topology
+    │
+    └── supported route precedence
+        └── [EXISTING] chain3 precedence tests already lock chain3 before lower families
 
 [+] spec-cli/tests/cli.rs
-    ├── [MUST PROVE] M20 whole-pack matrix asserts both new unsupported ids with reason `unsupported_dep_topology`
-    ├── [MUST PROVE] repo-root crosslib status test asserts the new maintained example row
-    └── [GAP = FAIL] broad CLI green run without new-id assertions
+    │
+    ├── temp same-tree truth project
+    │   ├── spec test
+    │   ├── status units --format json
+    │   └── export units
+    │       └── [ADD TEST] nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth
+    │
+    ├── direct cross-library maintained example
+    │   ├── status examples/crosslib-app --format json
+    │   └── export examples/crosslib-app
+    │       └── [ADD TEST] direct crosslib nested chain3 unsupported truth stays pinned
+    │
+    └── copied repo-root example status
+        └── [STRENGTHEN TEST] spec_status_repo_root_honors_each_root_workspace_config
 
-ANALYSIS SURFACE COVERAGE
-=========================
-
-[+] cargo xtask family coverage --format json
-    ├── [MUST PROVE] target cluster remains visible or becomes a more precise successor
-    ├── [MUST PROVE] real_example_hits = 2
-    └── [MUST PROVE] promotion_relevant_regression_hits = 2
-
-[+] cargo xtask family recommend --format json
-    ├── [MUST PROVE] hold_reasons clear completely on the current code path
-    ├── [MUST PROVE] confidence rises to `medium` or stronger
-    └── [GAP = FAIL] same three-part blocker list after evidence spend
-
-[+] cargo xtask family corpus-decision --format json
-    ├── [MUST PROVE] refreshed decision artifact writes and validates
-    ├── [MUST PROVE] green path becomes `pivot_to_family_promotion_run`
-    └── [CRITICAL] command-path failure or `spend_corpus_run1` after updated valid basis
-
-─────────────────────────────────
-COVERAGE TARGET: 12/12 proof paths green
-  Authored source + CLI truth paths: 8/8
-  Analysis / decision paths: 4/4
-QUALITY BAR: no silent artifact refresh, no vague "looks better" closeout
-─────────────────────────────────
+[+] family analysis
+    │
+    ├── coverage
+    ├── recommendation
+    └── corpus-decision
+        └── [REFRESH] validate the new basis instead of assuming the old one
 ```
 
-### Required tests
+### Verification command matrix
 
-Required proof commands:
+Use focused selectors while iterating, then run the broader wall once the exact
+targets are green.
 
-- `cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --format json`
-- `cargo run -p spec-cli -- generate examples/shared-spec/units --output examples/shared-crate/src/generated`
-- `cargo run -p spec-cli -- generate examples/crosslib-app/units --output examples/crosslib-app/src/generated`
-- `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec`
-- `cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --target-language typescript`
-- `cargo run -p spec-cli -- validate spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --format json`
-- `cargo test -p spec-cli --test cli m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix -- --exact`
-- `cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact`
-- `cargo test -p spec-cli --test cli`
-- `cargo xtask family coverage --format json`
-- `cargo xtask family recommend --format json`
-- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `cargo xtask family corpus-decision --format json`
-- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-- `jq '.unsupported_clusters[] | select(.cluster_id=="unsupported_dep_topology-fbecce0dbe98") | {cluster_id, representative_unit_ids, source_ids, real_example_hits, promotion_relevant_regression_hits, boundary_only_hits}' .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `jq '{recommendation_status, decision_summary, top_candidate:(.ranked_candidates[0] | {candidate_id, promotion_readiness, hold_reasons, confidence, leverage})}' .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `jq '{decision_action, decision_basis_code, required_next_action, summary}' .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+```bash
+# Step 1
+cargo test -p spec-core same_tree_nested_chain3_inner_routes_to_supported_chain3 -- --exact
+cargo test -p spec-core same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified -- --exact
 
-No new harness family is authorized up front, but existing harnesses must be
-widened where they currently hard-code the old example or M20 matrices. If those
-harnesses break or stay too loose to prove the new ids, that is a defect, not
-optional follow-up coverage.
+# Step 2A
+cargo test -p spec-cli --test cli nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth -- --exact
 
-### Regression rule
+# Step 2B
+cargo test -p spec-cli --test cli direct_crosslib_nested_chain3_unsupported_truth_stays_pinned -- --exact
 
-This milestone is a recommendation-quality regression wall.
+# Step 2C
+cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact
 
-Required regressions:
+# Broad local proof after focused tests pass
+cargo test -p spec-core semantic_review
+cargo test -p spec-cli --test cli
 
-- the new maintained variant must not accidentally classify outside the target
-  unsupported callable-triple cluster
-- the two new M20 units must count as promotion-relevant regression pressure,
-  not boundary-only noise
-- the refreshed recommendation basis must not silently keep the same
-  `hard_difficulty`, `thin_real_example_support`, and
-  `thin_regression_support` story after the run
-- `corpus-decision` must keep working on the updated basis
-- the repo's public CLI truth surfaces must explicitly name the three new rows
-  they are supposed to prove, not just pass green by omission
+# Analysis wall
+cargo xtask family coverage --format json
+cargo xtask family recommend --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
+cargo xtask family corpus-decision --format json
+cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+```
 
-If the evidence spend lands but the old blocker story survives unchanged,
-consider M62 failed until the repo explains why.
+### Failure modes registry
 
-## Failure Modes Registry
+| Codepath | Real production-style failure | Test covers it? | Error handling exists? | Silent if missed? |
+| --- | --- | --- | --- | --- |
+| same-tree inner routing | reviewer accidentally regresses this shape back to unsupported | yes, Step 1 exact test | yes, semantic review surfaces expose it | yes, analysis would lie again |
+| same-tree outer routing | reviewer flips the outer shape to aligned or unsupported instead of under_specified supported chain3 | yes, Step 1 + Step 2A | yes, semantic review surfaces expose it | yes, public proof would claim the wrong family |
+| cross-library maintained example | cleanup work accidentally retires the live unsupported candidate | yes, Step 2B | yes, status JSON and exported passport expose it | yes, refreshed analysis would pick the wrong next wedge |
+| repo-root copied proof | engineers treat copied repo-root `untested` status as equivalent to direct-root `valid` status | yes, Step 2C plus plan-level separation of surfaces | no automatic guard outside tests | yes, future plan writers could assert the wrong thing |
+| export assertion surface | test reads `units[].semantic_review` and reports false negative or false clean result | yes, Step 2A and 2B require passport assertions | no | yes, wrong surface means wrong truth |
+| analysis refresh | tests pass but artifacts stay stale | yes, validate-artifact commands | yes, validators fail | yes, next planning step would be based on old data |
+| fixture honesty | same-tree proof gets shoved into `m20_unsupported_truth_pack` anyway | covered by no-touch guard, not by runtime | no | yes, the fixture name would lie to future readers |
 
-| New codepath | Real production failure | Test covers it? | Error handling exists? | User-visible effect | Priority |
-| --- | --- | --- | --- | --- | --- |
-| maintained variant authoring | new real-example unit classifies into the wrong cluster or a supported family | must add | partial via coverage output | maintainers think evidence improved when it did not | critical |
-| intermediate M20 nested unit | `base_nested_chain3_bad_dep_topology` fails to count as promotion-relevant regression leverage | must add | no direct guard beyond analysis outputs | regression count rises incorrectly or not at all | critical |
-| outer M20 nested unit | the outer nested bad-topology unit lands in a neighboring unsupported shape | must add | partial | blocker reasoning stays muddy | high |
-| CLI truth-surface refresh | the repo-level tests stay green but never assert the new maintained example row or new M20 ids | must add | no | false confidence that public status/export truth stayed correct | critical |
-| artifact refresh | coverage/recommendation artifacts refresh but `corpus-decision` still points at stale or incompatible basis | must add | partial via validate-artifact commands | operator loop breaks at the last step | critical |
-| doc truth maintenance | docs imply M62 shipped a new backend capability instead of a better evidence basis | manual review | no | users over-assume product scope | medium |
-| TODO follow-up capture | the refreshed basis clearly implies a next milestone but no TODO or closeout note records it | manual review | no | next planning cycle loses context | medium |
+Critical gap rule:
 
-Critical gaps to avoid:
-
-- any outcome where the target cluster still shows `1 real / 0 regression`
-- any outcome where both thin-evidence blockers survive and no explanation is
-  captured
-- any outcome where `corpus-decision` is broken and the milestone tries to
-  close anyway
+- if any same-tree shape still publishes `unsupported_dep_topology` after Step 2A,
+  stop the milestone
+- if the cross-library maintained example stops publishing
+  `unsupported_dep_topology` in Step 2B without an intentional reviewer change,
+  stop the milestone
+- if a test can only be made green by asserting export `units[].semantic_review`,
+  stop and re-scope because the proof surface is wrong
 
 ## Performance Review
 
-This milestone should be near-zero performance risk.
+No product runtime changes. This is proof and analysis work.
 
-Expected characteristics:
+The only performance risk is needless local and CI drag.
 
-- three additional corpus units
-- the same five-source manifest
-- the same analysis commands
-- small constant-factor work increase in coverage/recommendation passes
+Rules:
 
-Guardrails:
-
-- do not widen source discovery
-- do not add packet-fixture leverage
-- do not add expensive new command loops or duplicate proof commands
-- do not introduce code changes in `xtask` unless the proof wall proves a real defect
+- land targeted exact tests first
+- use exact selectors while iterating
+- do not run the full CLI integration wall on every edit
+- refresh the three analysis artifacts only after the exact semantic-review and
+  CLI truth tests are green
+- prefer copied-example and temp-project proof over broad repo-root command
+  matrices during iteration
 
 ## NOT in scope
 
-- any TypeScript backend widening
-- any validator or semantic-review capability widening
-- new supported-family promotion
-- recommendation policy rewrites
-- manifest source additions
-- packet-fixture recommendation leverage
-- new maintained real-example roots beyond `checkout_nested_chain3_variant`
-- units under `examples/ecommerce/units`
-- molecule TypeScript execution
-- seam-kind TypeScript execution
-- repo-wide docs rewrite beyond truth maintenance
-- ORCH plan rewrite in the same change
-
-## TODOS.md updates required in the same PR
-
-No unconditional TODO addition is authorized up front.
-
-If the post-run truth is decisive, do exactly one of these:
-
-1. add a follow-up TODO for the next family-focused milestone if thin-evidence
-   blockers cleared and the next question is now capability/promotion-specific
-2. add a follow-up TODO for recommendation-surface investigation if the evidence
-   spend fails to improve decision quality
-3. add nothing if the implementation closeout itself already captures a clean,
-   unambiguous next action and `TODOS.md` would only duplicate it
-
-Do not add vague "investigate later" bullets.
+- making `examples_crosslib_app::pricing/checkout_nested_chain3` supported
+  `chain3`
+- widening semantic review to support cross-library nested callable-triple
+  topologies
+- reviving the M63 worktree-only regression specs as committed repo fixtures
+- changing `spec-cli/tests/fixtures/m20/unsupported_truth_pack` into a mixed
+  supported-and-unsupported pack
+- backend, validator, or TypeScript execution changes
+- manifest, family packet, or promotion-registry changes
+- a new corpus rerun story that still depends on the retired same-tree thesis
 
 ## Worktree Parallelization Strategy
+
+This plan has two implementation lanes, then one integration lane.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| 1. maintained real-example variant | `examples/crosslib-app/` | — |
-| 2. M20 nested bad-topology regressions | `spec-cli/tests/fixtures/m20/unsupported_truth_pack/` | — |
-| 3. CLI truth-surface assertion updates | `spec-cli/tests/` | 1, 2 |
-| 4. proof wall rerun and artifact refresh | `.semantic-family-artifacts/`, command outputs | 1, 2, 3 |
-| 5. minimal truth-maintenance docs | `examples/crosslib-app/`, repo-root docs | 4 |
+| semantic-review proof | `spec-core/src/` | — |
+| CLI truth-surface proof | `spec-cli/tests/` | — |
+| analysis refresh and closeout | `.semantic-family-artifacts/`, `TODOS.md` | semantic-review proof, CLI truth-surface proof |
 
 ### Parallel lanes
 
-- **Lane A:** Step 1, `examples/crosslib-app/` maintained real-example authoring
-- **Lane B:** Step 2, M20 nested bad-topology regression authoring
-- **Lane C:** Step 3 then Step 4 then Step 5, sequential CLI assertion updates,
-  proof-wall rerun, and any required docs cleanup after A + B converge
+- `Lane A`: semantic-review proof in `spec-core/src/semantic_review.rs`
+- `Lane B`: CLI truth-surface proof in `spec-cli/tests/cli.rs`
+- `Lane C`: analysis refresh, delta capture, and optional `TODOS.md` truth maintenance after A + B merge
 
 ### Execution order
 
-Launch **Lane A** and **Lane B** in parallel worktrees. They do not share
-modules and can be authored independently.
+Launch `Lane A` and `Lane B` in parallel worktrees.
 
-After both land, run **Lane C** serially:
+Merge both.
 
-1. update `spec-cli/tests/cli.rs` to assert the new maintained-example and M20
-   truth rows
-2. rerun validate/test/analysis commands
-3. inspect the refreshed artifacts against the exact decision matrix
-4. update docs only if the outputs changed the user-facing truth
+Then run `Lane C` on the integrated state.
 
 ### Conflict flags
 
-- **Lane C** must own `examples/crosslib-app/README.md` if it changes. Do not
-  let Lane A edit the README before the proof wall says it is necessary.
-- **Lane C** must own `spec-cli/tests/cli.rs`. Do not split the M20 matrix
-  assertion update and crosslib status assertion update across parallel lanes.
-- **Lane B** and **Lane C** both affect the M20 analysis story, but only Lane B
-  should author fixtures. Lane C only reads them through the proof wall.
-- There is no value in splitting the two new M20 nested units across separate
-  lanes. They share the same module and should land together.
+- `Lane A` and `Lane B` touch different module directories, so merge conflict
+  risk is low
+- `Lane B` itself should stay sequential inside one worktree because the same
+  file owns the temp same-tree proof, the direct cross-library proof, and the
+  repo-root copied proof
+- `Lane C` must be sequential because analysis artifacts must be generated from
+  the merged final truth wall, not from partial state
 
-## Definition of Done
+## Exit Criteria
 
-M62 is done when all of the following are true:
+M64 is successful only if all of the following are true:
 
-1. the exact three new unit-spec files exist and validate
-2. `checkout_nested_chain3_variant.unit.spec` passes under both Rust and
-   TypeScript `spec test`
-3. `spec-cli/tests/cli.rs` explicitly asserts the two new M20 unsupported ids
-   and the new crosslib maintained-example row
-4. the M20 unsupported truth pack stays green as a pack
-5. the refreshed coverage artifact shows exactly `2 real / 2 regression` for
-   the target candidate, not just "better than before"
-6. the refreshed recommendation artifact matches one of the allowed post-run
-   buckets and does not silently keep missing-evidence blockers
-7. `cargo xtask family corpus-decision --format json` succeeds on the refreshed
-   basis, its artifact validates, and its action is no longer `spend_corpus_run1`
-8. no new corpus source, backend capability, or policy rewrite was smuggled in
-9. docs remain truthful and do not overclaim M62 as a product-capability
-   milestone
-10. the implementation closeout preserves a pre/post delta table for leverage,
-    blockers, cluster members, and next action
-
-## Verification Commands
-
-Run in this order:
-
-```bash
-cargo run -p spec-cli -- validate examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --format json
-cargo run -p spec-cli -- generate examples/shared-spec/units --output examples/shared-crate/src/generated
-cargo run -p spec-cli -- generate examples/crosslib-app/units --output examples/crosslib-app/src/generated
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3_variant.unit.spec --target-language typescript
-
-cargo run -p spec-cli -- validate spec-cli/tests/fixtures/m20/unsupported_truth_pack/units --format json
-cargo test -p spec-cli --test cli m20_unsupported_truth_pack_whole_pack_status_and_export_cover_public_reason_matrix -- --exact
-cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact
-cargo test -p spec-cli --test cli
-
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-cargo xtask family corpus-decision --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-
-jq '.unsupported_clusters[] | select(.cluster_id=="unsupported_dep_topology-fbecce0dbe98") | {cluster_id, representative_unit_ids, source_ids, real_example_hits, promotion_relevant_regression_hits, boundary_only_hits}' .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-jq '{recommendation_status, decision_summary, top_candidate:(.ranked_candidates[0] | {candidate_id, promotion_readiness, hold_reasons, confidence, leverage})}' .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-jq '{decision_action, decision_basis_code, required_next_action, summary}' .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-```
-
-Expected outcome:
-
-- the maintained variant proves in both targets
-- the M20 pack and repo-root example status stay truthful
-- the target cluster lands at `2 real / 2 regression`
-- the recommendation becomes `ranked` + `recommended` on the current code path
-- `corpus-decision` pivots away from `spend_corpus_run1`
+1. `spec-core/src/semantic_review.rs` has focused exact tests proving the
+   same-tree nested pair publishes supported `chain3` truth.
+2. `spec-cli/tests/cli.rs` has a focused temp-project truth test proving the
+   same-tree pair publishes supported `chain3` truth through CLI status and
+   exported passports.
+3. `spec-cli/tests/cli.rs` has a direct cross-library truth test proving
+   `pricing/checkout_nested_chain3` remains `unsupported_dep_topology` in
+   direct-root status and exported passports.
+4. `spec_status_repo_root_honors_each_root_workspace_config` remains explicit
+   about repo-root discovery and namespace hygiene without pretending to be the
+   direct-root semantic authority.
+5. The three family-analysis artifacts are rerun and pass validation.
+6. The closeout records whether the same cross-library candidate remains live or
+   whether a different truthful next wedge emerged.
+7. No same-tree unsupported regression thesis survives in code, tests, docs, or
+   artifacts.
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, complete
-- Architecture: corpus pressure enrichment only, no backend or policy widening
-- Code Quality: explicit reuse of existing pricing shapes and manifest sources,
-  plus required CLI truth-surface widening where the repo hard-codes old rows
-- Implementation Plan: 3 new units, 1 existing CLI truth-surface file, existing
-  proof wall, minimal doc cleanup
-- Test Review: 12/12 proof paths required, no optional half-refresh
-- Performance Review: near-neutral
+- Step 0: Scope Challenge, resolved to a narrower and more truthful split
+- Architecture Review: no new architecture, just a corrected truth wall and a
+  clearer separation of proof surfaces
+- Code Quality Review: minimal diff, no new committed fixtures, assert against
+  exported passports instead of the wrong export unit surface
+- Test Review: exact semantic-review proof, exact temp CLI proof, exact direct
+  cross-library proof, explicit repo-root config proof, refreshed analysis wall
+- Performance Review: targeted test execution only, no runtime impact
 - NOT in scope: written
 - What already exists: written
-- TODOS.md updates: conditional, outcome-driven only
-- Failure modes: critical gaps identified around wrong-cluster landing, silent
-  CLI assertion drift, and stale decision output
-- Parallelization: 5 steps, 2 independent authoring lanes, 1 serial
-  assertion/proof/docs lane
-
-This is the whole move.
-
-Spend one bounded evidence run on the exact callable-triple wrapper candidate,
-make the analysis answer sharper, and stop before this turns into backend work
-or policy theater.
+- Failure modes: explicit, with stop conditions
+- Parallelization: 3 lanes total, 2 parallel then 1 sequential
+- Lake Score: the complete option wins, because skipping the direct cross-library
+  proof or the analysis refresh would save minutes and cost the next milestone
+  its truth
