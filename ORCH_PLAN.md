@@ -1,129 +1,134 @@
-# M64 Orchestration Plan
+# I1 Orchestration Plan
 
 Status: **authoritative execution runbook**  
 Authority source: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec/PLAN.md` only**  
-Plan title: **`M64: Retire the False Same-Tree Nested Chain3 Regression Thesis, Preserve the Honest Cross-Library Candidate, and Refresh Truthful Family Analysis`**  
+Plan title: **`I1: Benchmark Registry + Shared Projection Core`**  
 Repo root: **`/Users/spensermcconnell/__Active_Code/atomize-hq/spec`**  
 Primary execution branch: **`feat/m60-plus`**  
-Authority validated commit in `PLAN.md`: **`a761e28`**  
 Base branch: **`main`**  
-Authority date: **`2026-05-17`**  
-Maximum safe worker concurrency: **2 parallel workers plus the parent integrator**  
-Worker model assumption: **`GPT-5.4` with `reasoning_effort=high`**  
-Rewrite intent: **replace the stale M63 runbook with an execution-ready M64 orchestration plan grounded only in `PLAN.md`**  
-Last rewritten: **`2026-05-17`**
+Authority commit in `PLAN.md`: **`3561bd1`**  
+Milestone: **`I1 Benchmark Registry + Shared Projection Core`**  
+Last rewritten: **`2026-05-18`**  
+Concurrency cap: **2 parallel workers maximum, plus exactly 1 parent integrator**  
+Worker model: **`GPT-5.4` with `reasoning_effort=high`**  
+Parent ownership: **the parent is the only integrator and the only owner of run-state, merges, proof wall, and closeout**  
+Rewrite intent: **replace the stale M64 orchestration doc with a frozen I1 runbook grounded only in `PLAN.md`**
 
 ## Summary
 
-- Execute from the current checked-out branch `feat/m60-plus` because that is
-  the live workspace baseline and the branch named in `PLAN.md`.
-- Keep the critical path local to the parent agent for baseline freeze,
-  worktree setup, integration, the proof wall, analysis refresh, and final
-  closeout.
-- Use workers only for the two isolated authored lanes:
-  - semantic-review proof in `spec-core/src/semantic_review.rs`
-  - CLI truth-surface proof in `spec-cli/tests/cli.rs`
-- Use dedicated worktrees under
-  `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m64/{int,semantic-review,cli}`
-  with branches `ws/m64-int`, `ws/m64-semantic-review`, and `ws/m64-cli`.
-- Keep one durable orchestration source of truth:
-  - run root: `.runs/m64_truth_reset_run1/`
-  - task ledger: `.runs/m64_truth_reset_run1/tasks.json`
-  - session log: `.runs/m64_truth_reset_run1/session-log.md`
-  - per-task sentinels: `.runs/m64_truth_reset_run1/tasks/<TASK_ID>/`
-- Historical orchestration docs are shape references only.
-  - They are not authority for M64 facts, worktree layout, commands,
-    acceptance, or stop conditions.
-- Treat `.semantic-family-artifacts/family-promotion/analysis/*.json`,
-  generated `.rs`, `.spec.passport.json`, and `.test.evidence.json` as derived
-  proof surfaces, not authored source.
+- Execute from the current checked-out branch `feat/m60-plus`.
+- Treat `PLAN.md` as the sole authority for I1 facts, scope, ordering, and
+  acceptance. `ORCH_PLAN.md` owns execution mechanics only.
+- Use this exact worktree root:
+  - `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-i1`
+- Use these exact execution branches:
+  - parent integration: `ws/i1-int`
+  - worker A registry: `ws/i1-registry`
+  - worker B core: `ws/i1-core`
+  - worker C cli: `ws/i1-cli`
+  - worker D tests: `ws/i1-tests`
+- Keep the critical path local to the parent:
+  - kickoff and authority freeze
+  - worktree creation
+  - merge/integration order
+  - projector API freeze
+  - schema-v4 shape freeze
+  - proof wall
+  - green closeout or blocked closeout
+- Allow exactly one safe parallel start:
+  - `LANE-A`: benchmark registry authoring
+  - `LANE-B`: shared `spec-core` benchmark projector and export integration
+- Launch `LANE-C` only after the parent freezes the shared projector API.
+- Launch `LANE-D` only after the parent freezes the final schema-v4 machine
+  shape.
+- Benchmark rules live once in `spec-core`. `status` and `export` must share
+  one projector. There is no second benchmark-rule implementation anywhere in
+  the run.
 
 ## Hard Guards
 
-- `PLAN.md` is the only authority for M64 scope, order, and acceptance.
-- Preserve the current dirty tree exactly as found at kickoff.
-  - `PLAN.md` is already modified in the primary workspace and must not be
-    reverted, reformatted, or rewritten by execution of this runbook.
-- M64 is a truth-reset and read-side correction milestone.
-  - no backend widening
-  - no semantic-review widening beyond the smallest fix forced by failing proof
-  - no new family key
-  - no route-precedence reorder
-  - no manifest or packet changes
-  - no new committed `.unit.spec` or `.test.spec` fixtures
-  - no recommendation-policy rewrite
-- Core authored source scope is frozen to exactly these two surfaces:
-  - `spec-core/src/semantic_review.rs`
-  - `spec-cli/tests/cli.rs`
-- Optional truth-maintenance scope is frozen to exactly one surface and only
-  after proof plus analysis refresh:
-  - `TODOS.md`
-- Explicit no-touch authored surfaces:
-  - `examples/crosslib-app/units/**`
-  - `examples/shared-spec/units/**`
-  - `spec-cli/tests/fixtures/m20/unsupported_truth_pack/**`
-  - `semantic-families/**`
-  - `xtask/src/family/**`
-  - `spec-core/src/typescript_backend.rs`
-  - `spec-core/src/validator.rs`
-- Worker lanes must not author or refresh analysis artifacts.
-  - the parent integrator is the only lane allowed to rerun
-    `coverage/recommend/corpus-decision`
-  - the parent integrator is the only lane allowed to touch `TODOS.md`
-- No human approval gates exist in M64.
-  - all gates are proof-based and must be satisfied from the merged repo state
+- `PLAN.md` is the only authority for I1 milestone facts.
+- The working branch remains `feat/m60-plus`.
+- The authority commit recorded in the run state remains `3561bd1`.
+- The parent is the only integrator. Workers do not merge, rebase, or close
+  each other.
+- The parent is the only owner of:
+  - `.runs/i1_benchmark_registry_run1/**`
+  - worktree lifecycle
+  - cherry-picks / merges
+  - proof-wall execution
+  - acceptance ledger
+  - final green or blocked closeout
+- Scope is frozen to the I1 wedge from `PLAN.md`:
+  - benchmark registry
+  - shared `spec-core` projection core
+  - schema-v4 additive `benchmarks[]` on `status` and `export`
+  - full-vs-partial scope honesty
+  - explicit reserved `BENCH-SERVICE` projection
+  - no new proof writers
+- Architectural hard rule:
+  - benchmark validation, scope classification, case projection,
+    anti-laundering, benchmark status derivation, and reserved-gate semantics
+    live once in `spec-core`
+  - `status` and `export` must consume that one projector
+- No worker may widen scope.
+- No worker may touch files outside its frozen write scope.
+- Preserve any pre-existing dirty tree exactly as found. Never revert unrelated
+  changes.
 
-Stop immediately and write a blocked summary if any of these occur:
+Stop immediately and mark the run blocked if any of these occur:
 
-1. `PLAN.md` changes materially after the baseline freeze is written.
-2. Any worker needs to edit a file outside its frozen write scope.
-3. `spec-core/src/semantic_review.rs` proof requires cross-library widening,
-   a new family, or route-order changes to go green.
-4. `spec-cli/tests/cli.rs` proves insufficient and another CLI or backend file
-   would need edits for the public truth wall to stay honest.
-5. Any attempt to prove the same-tree thesis depends on committed fixture work
-   under `examples/**` or `spec-cli/tests/fixtures/**`.
-6. The analysis wall cannot be refreshed cleanly after the proof wall is green.
-7. A green outcome depends on asserting export `units[].semantic_review`
-   instead of exported `passports[].semantic_review`.
+1. `PLAN.md` changes materially after the authority freeze.
+2. Any worker needs to touch a file outside its assigned ownership.
+3. The `spec-core` API cannot serve both `status` and `export` without
+   duplicating benchmark rules.
+4. `spec-cli/src/commands.rs` would require concurrent authorship.
+5. A green I1 outcome would require a new proof writer, snapshot surface,
+   readability surface, or `projection_digest`.
+6. The benchmark registry requires facts not already derivable from `PLAN.md`
+   and the current example roots.
+7. The final proof wall cannot demonstrate full-scope, partial-scope,
+   reserved, and companion-negative behavior together.
 
-## Concrete Worktree And Branch Layout
+## Concrete Worktree And Branch Topology
 
 Use this exact topology.
 
 ```bash
 PRIMARY_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/spec
-WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-m64
-RUN_ROOT=$PRIMARY_ROOT/.runs/m64_truth_reset_run1
+WT_ROOT=/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/spec-i1
+RUN_ROOT=$PRIMARY_ROOT/.runs/i1_benchmark_registry_run1
 ```
 
 ### Branch inventory
 
-| Lane | Path | Branch | Owner | Purpose |
+| Lane | Path | Branch | Owner | Write scope |
 | --- | --- | --- | --- | --- |
-| Primary authority + state | `PRIMARY_ROOT` | `feat/m60-plus` | Parent | durable run-state, authority docs, final fast-forward target |
-| `WS-INT` | `$WT_ROOT/int` | `ws/m64-int` | Parent | integration branch, proof wall, analysis refresh, closeout |
-| `WS-A` | `$WT_ROOT/semantic-review` | `ws/m64-semantic-review` | Worker | semantic-review proof in `spec-core/src/semantic_review.rs` |
-| `WS-B` | `$WT_ROOT/cli` | `ws/m64-cli` | Worker | CLI truth-surface proof in `spec-cli/tests/cli.rs` |
+| Primary authority | `PRIMARY_ROOT` | `feat/m60-plus` | Parent | run-state only, no product edits |
+| `LANE-INT` | `$WT_ROOT/int` | `ws/i1-int` | Parent | integration, proof wall, closeout |
+| `LANE-A` | `$WT_ROOT/registry` | `ws/i1-registry` | Worker A | `benchmarks/labels.json` |
+| `LANE-B` | `$WT_ROOT/core` | `ws/i1-core` | Worker B | `spec-core/src/benchmarks.rs`, `spec-core/src/lib.rs`, `spec-core/src/export.rs` |
+| `LANE-C` | `$WT_ROOT/cli` | `ws/i1-cli` | Worker C | `spec-cli/src/commands.rs` |
+| `LANE-D` | `$WT_ROOT/tests` | `ws/i1-tests` | Worker D | `spec-cli/tests/cli.rs`, `spec-cli/tests/fixtures/` |
 
 ### Worktree creation rules
 
-- Do not create worker worktrees until `task/m64-00-baseline-freeze` is green.
-- Create `WS-INT`, `WS-A`, and `WS-B` from `feat/m60-plus`.
-- There is no separate docs worktree.
-- There is no separate analysis-artifact worktree.
-- Final formatting, proof, artifact validation, and optional `TODOS.md`
-  truth-maintenance happen only in `WS-INT`.
-- Record the dirty tree at kickoff and preserve it.
+- Do not create worker worktrees until `TASK-I1-00` is closed.
+- Create every execution worktree from `feat/m60-plus`.
+- Do not edit product files in the primary workspace.
+- Workers operate only in their assigned worktree.
+- The parent integrates only in `LANE-INT`.
 
 ### Recommended creation commands
 
 ```bash
 mkdir -p "$WT_ROOT" "$RUN_ROOT"
 
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/int" -b ws/m64-int feat/m60-plus
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/semantic-review" -b ws/m64-semantic-review feat/m60-plus
-git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/cli" -b ws/m64-cli feat/m60-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/int" -b ws/i1-int feat/m60-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/registry" -b ws/i1-registry feat/m60-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/core" -b ws/i1-core feat/m60-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/cli" -b ws/i1-cli feat/m60-plus
+git -C "$PRIMARY_ROOT" worktree add "$WT_ROOT/tests" -b ws/i1-tests feat/m60-plus
 ```
 
 ## Durable Orchestration State
@@ -136,31 +141,44 @@ $RUN_ROOT
 
 This directory is run-state only. It is not product truth.
 
-### Required run-state artifacts
+### Required top-level run-state artifacts
 
 | Path | Purpose | Owner |
 | --- | --- | --- |
 | `baseline.json` | kickoff branch, HEAD, dirty-tree snapshot, authority commit | Parent |
-| `authority-freeze.json` | frozen M64 scope, truth contracts, file ownership, stop rules | Parent |
-| `worktrees.json` | exact worktree paths, branches, heads, and lifecycle state | Parent |
-| `file-ownership.json` | lane write scopes and global no-touch surfaces | Parent |
-| `tasks.json` | canonical task ledger, dependencies, and states | Parent |
-| `session-log.md` | chronological kickoff, launch, integration, proof, and close log | Parent |
-| `acceptance-ledger.md` | final gate checklist and proof references | Parent |
-| `analysis/pre/coverage.latest.json` | pre-run coverage basis snapshot | Parent |
-| `analysis/pre/recommendation.latest.json` | pre-run recommendation basis snapshot | Parent |
-| `analysis/pre/corpus-program-decision.latest.json` | pre-run corpus-decision basis snapshot | Parent |
-| `analysis/post/coverage.latest.json` | post-run coverage snapshot | Parent |
-| `analysis/post/recommendation.latest.json` | post-run recommendation snapshot | Parent |
-| `analysis/post/corpus-program-decision.latest.json` | post-run corpus-decision snapshot | Parent |
-| `post-run-delta.md` | exact pre/post truth delta, blockers, candidate status, and next action | Parent |
-| `blocked-summary.md` | exact blocked-state explanation if M64 cannot close cleanly | Parent |
-| `validation/kickoff/` | kickoff captures and baseline commands | Parent |
-| `validation/ws-a/` | semantic-review proof captures | Parent |
-| `validation/ws-b/` | CLI truth-surface proof captures | Parent |
-| `validation/final/` | final merged proof wall and artifact refresh captures | Parent |
-| `handoffs/` | worker briefs and worker return packets | Parent |
-| `tasks/<TASK_ID>/` | per-task sentinels and task-local notes | Parent creates, lane updates |
+| `authority-freeze.json` | frozen I1 facts, stop rules, ownership, gates | Parent |
+| `worktrees.json` | exact worktree paths, branches, heads, lifecycle | Parent |
+| `file-ownership.json` | authoritative write scopes and no-touch surfaces | Parent |
+| `tasks.json` | canonical task ledger and state machine | Parent |
+| `session-log.md` | chronological orchestration log | Parent |
+| `acceptance-ledger.md` | final gate ledger and proof references | Parent |
+| `validation/kickoff/` | kickoff command captures | Parent |
+| `validation/lanes/` | lane-specific captures and worker return packets | Parent |
+| `validation/final/` | merged proof-wall captures | Parent |
+| `handoffs/` | worker briefs and returned summaries | Parent |
+| `blocked-summary.md` | required only on blocked closeout | Parent |
+
+### Required per-task sentinel directories
+
+Every task has a sentinel directory here:
+
+```bash
+$RUN_ROOT/tasks/<TASK_ID>/
+```
+
+Each task directory must contain:
+
+| Path | Required contents |
+| --- | --- |
+| `status.json` | task id, lane, owner, current state, dependency state, head commit, updated-at timestamp |
+| `notes.md` | compact running notes, decisions, scope reminders |
+| `commands.log` | exact commands run for that task with exit codes |
+| `started-at.txt` | start timestamp |
+| `finished-at.txt` | finish timestamp; empty until task closes |
+| `acceptance.md` | task-local acceptance checklist and pass/fail result |
+| `inputs.md` | exact inputs given to the lane |
+| `outputs.md` | exact outputs returned by the lane |
+| `handoff.md` | required for worker tasks only; brief + return packet + blocker summary |
 
 ### Required `authority-freeze.json` contents
 
@@ -168,63 +186,18 @@ This directory is run-state only. It is not product truth.
 - `authority_plan_path`
 - `authority_plan_commit`
 - `primary_branch`
+- `base_branch`
 - `frozen_scope_claim`
-- `truth_contracts`
-- `allowed_source_surfaces`
-- `allowed_optional_surfaces`
-- `global_no_touch_surfaces`
+- `architectural_rules`
+- `core_authored_surfaces`
 - `lane_ownership`
-- `serialization_points`
 - `integration_order`
-- `worker_model`
-- `worker_return_contract`
-- `verification_commands`
-- `closeout_matrix`
+- `proof_wall_commands`
+- `closeout_gates`
 - `stop_rules`
-
-### Required `truth_contracts` contents
-
-- `same_tree_inner_supported_chain3`
-  - test name:
-    `same_tree_nested_chain3_inner_routes_to_supported_chain3`
-  - required assertions:
-    - `verdict == aligned`
-    - `compatibility_key == function.wrapper.pipeline.chain3.v1`
-    - `support_status == supported`
-- `same_tree_outer_supported_chain3_under_specified`
-  - test name:
-    `same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified`
-  - required assertions:
-    - `verdict == under_specified`
-    - `compatibility_key == function.wrapper.pipeline.chain3.v1`
-    - `support_status == supported`
-    - `reason_codes` contains `OutsideHonestSupportedSubset`
-- `cli_same_tree_truth_surfaces`
-  - test name:
-    `nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth`
-  - required assertions:
-    - inner unit publishes supported `chain3`
-    - outer unit publishes supported `chain3` with `under_specified`
-    - neither unit publishes `unsupported_dep_topology`
-    - export assertions read from `passports[]`
-- `direct_crosslib_truth_surface`
-  - test name:
-    `direct_crosslib_nested_chain3_unsupported_truth_stays_pinned`
-  - required assertions:
-    - `status == valid`
-    - `compatibility_key == unsupported.function.v1`
-    - `support_status == unsupported`
-    - `unsupported_reason_codes == ["unsupported_dep_topology"]`
-    - export assertions read from the passport for
-      `pricing/checkout_nested_chain3`
-- `repo_root_copied_truth_surface`
-  - strengthened existing test:
-    `spec_status_repo_root_honors_each_root_workspace_config`
-  - required assertions:
-    - `crosslib-app` still has exactly `4` units
-    - `pricing/checkout_nested_chain3` still appears
-    - copied repo-root status remains `untested` for that unit
-    - `SPEC_UNKNOWN_LIBRARY_NAMESPACE` remains absent
+- `worker_model`
+- `concurrency_cap`
+- `worker_return_contract`
 
 ### Required `tasks.json` states
 
@@ -240,404 +213,500 @@ Allowed states:
 - `skipped`
 
 Only the parent may set `integrated`, `closed`, or `skipped`.
-Workers may move only between `running`, `blocked`, and `submitted`.
 
-Each task sentinel directory must contain:
+## Lane Ownership And Task Map
 
-- `status.json`
-- `notes.md`
-- `commands.log`
-- `started-at.txt`
-- `finished-at.txt`
-- `handoff.md` for worker-owned tasks
+### Parent-owned orchestration tasks
 
-## Workstream Plan
+| Task ID | Lane | Owner | Purpose | Depends on |
+| --- | --- | --- | --- | --- |
+| `TASK-I1-00` | `LANE-P` | Parent | baseline freeze and authority capture | - |
+| `TASK-I1-01` | `LANE-P` | Parent | create run-state and worktrees | `TASK-I1-00` |
+| `TASK-I1-02` | `LANE-P` | Parent | launch worker briefs for `LANE-A` and `LANE-B` | `TASK-I1-01` |
+| `TASK-I1-50` | `LANE-INT` | Parent | integrate `LANE-A` and `LANE-B` | `TASK-I1-10`, `TASK-I1-20` |
+| `TASK-I1-60` | `LANE-INT` | Parent | freeze projector API and launch `LANE-C` | `TASK-I1-50` |
+| `TASK-I1-70` | `LANE-INT` | Parent | integrate `LANE-C` and freeze schema-v4 shape | `TASK-I1-30` |
+| `TASK-I1-80` | `LANE-INT` | Parent | launch and integrate `LANE-D` | `TASK-I1-70`, `TASK-I1-10` |
+| `TASK-I1-90` | `LANE-INT` | Parent | merged proof wall and acceptance ledger | `TASK-I1-40` |
+| `TASK-I1-99` | `LANE-INT` | Parent | green closeout or blocked closeout | `TASK-I1-90` |
 
-### WS-PARENT (`feat/m60-plus` then `ws/m64-int`) - parent agent only
+### Worker-owned implementation tasks
 
-#### 1. `task/m64-00-baseline-freeze`
-
-- Record the live baseline before any worker launch.
-- Snapshot:
-  - current branch `feat/m60-plus`
-  - `HEAD = a761e28`
-  - dirty tree summary
-  - current `PLAN.md` authority facts
-  - current `ORCH_PLAN.md` replacement timestamp
-  - pre-run analysis artifact paths and copies
-- Write:
-  - `baseline.json`
-  - `authority-freeze.json`
-  - `file-ownership.json`
-  - initial `tasks.json`
-  - initial `session-log.md`
-- Copy the current analysis basis into `analysis/pre/`.
-
-Acceptance:
-
-- baseline captures the live dirty-tree state exactly
-- all frozen truth contracts and file scopes match `PLAN.md`
-- pre-run analysis snapshots exist before any authored edits begin
-
-#### 2. `task/m64-01-worktree-setup`
-
-- Create `WS-INT`, `WS-A`, and `WS-B`.
-- Record their branch names, paths, and starting commits in `worktrees.json`.
-- Create worker handoff packets under `handoffs/`.
-
-Acceptance:
-
-- all three worktrees exist at the expected paths
-- both worker branches start from `feat/m60-plus`
-- worker briefs contain only owned surfaces, relevant `PLAN.md` excerpts, and
-  required commands
-
-### Parallel workers after WS-PARENT freeze is green
-
-#### 3. `task/m64-a-semantic-review-proof` on `ws/m64-semantic-review` - worker 1
-
-Own only:
-
-- `spec-core/src/semantic_review.rs`
-
-Required work:
-
-- add exact test
-  `same_tree_nested_chain3_inner_routes_to_supported_chain3`
-- add exact test
-  `same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified`
-- reuse the existing fixture style already present in the file
-  - specifically the existing `chain3`-family semantic-review helpers instead
-    of inventing a new one-off builder
-- keep the diff test-only if both tests pass without production changes
-- if proof fails, change only the smallest semantic-review surface needed to
-  make shipped behavior match the already observed blocked-state truth
-- do not reorder routes
-- do not add a family
-- do not widen cross-library support
-
-Required commands:
-
-- `cargo test -p spec-core same_tree_nested_chain3_inner_routes_to_supported_chain3 -- --exact`
-- `cargo test -p spec-core same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified -- --exact`
-- `cargo test -p spec-core semantic_review`
-
-Acceptance:
-
-- the inner same-tree shape proves supported `chain3` with `aligned`
-- the outer same-tree shape proves supported `chain3` with `under_specified`
-- `OutsideHonestSupportedSubset` is pinned on the outer test
-- no authored file outside `spec-core/src/semantic_review.rs` changes
-
-#### 4. `task/m64-b-cli-truth-proof` on `ws/m64-cli` - worker 2
-
-Own only:
-
-- `spec-cli/tests/cli.rs`
-
-Required work:
-
-- add exact test
-  `nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth`
-  - guard with `if !cargo_available() { return; }`
-  - use existing helpers:
-    - `temp_repo_dir`
-    - `write_spec`
-    - `run_in`
-    - `parse_stdout_json`
-    - `read_passport_json`
-  - author the same-tree inner and outer units in a temp project inside the
-    test
-  - run:
-    - `spec test units --output src/generated --crate-root .`
-    - `spec status units --format json`
-    - `spec export units`
-  - assert:
-    - inner publishes supported `chain3`
-    - outer publishes supported `chain3` plus `under_specified`
-    - neither unit publishes `unsupported_dep_topology`
-    - export assertions read from `passports[]`, not `units[]`
-- add exact test
-  `direct_crosslib_nested_chain3_unsupported_truth_stays_pinned`
-  - copy `examples/crosslib-app` and `examples/shared-spec` into a temp area
-  - run direct-root commands against copied `examples/crosslib-app`
-  - assert direct-root status and exported passport truth for
-    `pricing/checkout_nested_chain3`
-- strengthen existing test
-  `spec_status_repo_root_honors_each_root_workspace_config`
-  - keep it focused on workspace-config discovery and namespace hygiene
-  - do not let it become the only proof of direct-root semantic truth
-- do not touch:
-  - `spec-cli/tests/fixtures/**`
-  - `examples/**`
-  - `spec-core/**`
-
-Required commands:
-
-- `cargo test -p spec-cli --test cli nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth -- --exact`
-- `cargo test -p spec-cli --test cli direct_crosslib_nested_chain3_unsupported_truth_stays_pinned -- --exact`
-- `cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact`
-- `cargo test -p spec-cli --test cli`
-
-Acceptance:
-
-- same-tree CLI test proves honest supported truth through status plus passports
-- direct cross-library CLI test pins the maintained unsupported candidate
-- repo-root copied proof stays explicit about `4` units, `untested`, and absent
-  `SPEC_UNKNOWN_LIBRARY_NAMESPACE`
-- no authored file outside `spec-cli/tests/cli.rs` changes
-
-### WS-INT (`ws/m64-int`) - parent agent only
-
-#### 5. `task/m64-c-integrate-and-proof-wall`
-
-- Merge `ws/m64-semantic-review` into `ws/m64-int`.
-- Merge `ws/m64-cli` into `ws/m64-int`.
-- Resolve only straightforward merge mechanics in integration-owned surfaces.
-- If either worker diff tries to pull in scope beyond its frozen file set:
-  - stop
-  - bounce the lane back to its owner, or
-  - apply the `PLAN.md` contract literally
-- After merging, run:
-  - `cargo fmt --all`
-  - `cargo test -p spec-core same_tree_nested_chain3_inner_routes_to_supported_chain3 -- --exact`
-  - `cargo test -p spec-core same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified -- --exact`
-  - `cargo test -p spec-cli --test cli nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth -- --exact`
-  - `cargo test -p spec-cli --test cli direct_crosslib_nested_chain3_unsupported_truth_stays_pinned -- --exact`
-  - `cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact`
-  - `cargo test -p spec-core semantic_review`
-  - `cargo test -p spec-cli --test cli`
-- If any proof stays red:
-  - write `blocked-summary.md`
-  - capture failing commands under `validation/final/`
-  - stop
-
-Acceptance:
-
-- merged state contains only the two authorized authored source diffs
-- exact selectors are green in the merged state
-- broad `spec-core semantic_review` and `spec-cli --test cli` are green before
-  analysis refresh begins
-
-#### 6. `task/m64-d-analysis-refresh-and-closeout`
-
-- After the proof wall is green, rerun:
-  - `cargo xtask family coverage --format json`
-  - `cargo xtask family recommend --format json`
-  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-  - `cargo xtask family corpus-decision --format json`
-  - `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-- Copy refreshed artifacts into `analysis/post/`.
-- Compare pre/post truth for:
-  - `cluster_id = unsupported_dep_topology-fbecce0dbe98`
-  - representative unit ids
-  - `real_example_hits`
-  - `promotion_relevant_regression_hits`
-  - `recommendation_status`
-  - `top_candidate_id`
-  - `decision_action`
-- Write `post-run-delta.md` with one of two allowed conclusions:
-  - the same cross-library unsupported candidate remains the live honest wedge,
-    or
-  - analysis moved to a different truthful next wedge
-- Update `TODOS.md` only if the refreshed analysis reveals a follow-up that
-  would otherwise be lost.
-  - do not carry forward the retired same-tree regression thesis
-- Write `acceptance-ledger.md` and close the run.
-
-Acceptance:
-
-- all three analysis artifacts refresh and pass `validate-artifact`
-- pre/post delta is explicit and references real artifact paths
-- closeout states the truthful next action without reviving the retired
-  same-tree thesis
-- `TODOS.md` changes only if needed and only for the truthful next wedge
+| Task ID | Lane | Owner | Write scope | Deliverable | Depends on |
+| --- | --- | --- | --- | --- | --- |
+| `TASK-I1-10` | `LANE-A` | Worker A | `benchmarks/labels.json` | authored benchmark registry matching `PLAN.md` roster | `TASK-I1-02` |
+| `TASK-I1-20` | `LANE-B` | Worker B | `spec-core/src/benchmarks.rs`, `spec-core/src/lib.rs`, `spec-core/src/export.rs` | shared benchmark types, registry validation, projector, export bundle field | `TASK-I1-02` |
+| `TASK-I1-30` | `LANE-C` | Worker C | `spec-cli/src/commands.rs` | schema-v4 CLI wiring using the frozen shared projector | `TASK-I1-60` |
+| `TASK-I1-40` | `LANE-D` | Worker D | `spec-cli/tests/cli.rs`, `spec-cli/tests/fixtures/` | benchmark-aware contract tests and fixtures | `TASK-I1-80` |
 
 ## Context-Control Rules
 
-- Parent agent keeps only five live artifacts in working context:
-  - `PLAN.md`
-  - `ORCH_PLAN.md`
-  - `.runs/m64_truth_reset_run1/tasks.json`
-  - the acceptance checklist
-  - the latest integration diff summary
-- Each worker prompt contains only:
-  - its owned file set
-  - the exact relevant `PLAN.md` excerpt
-  - required commands
-  - forbidden touch surfaces
-- Each worker must return only:
+- The parent keeps only a minimal active context set:
+  - current gate
+  - task ledger state
+  - blockers
+  - integration order
+  - proof-wall status
+- The parent does not carry full file contents from worker threads unless
+  needed to resolve a blocker.
+- Workers may read broadly for context but write only inside frozen ownership.
+- Workers return only:
   - changed files
-  - commands run and exit codes
+  - commands run with exit codes
   - blockers or unresolved assumptions
-- The parent agent reviews summaries plus narrow diffs only.
-  - it does not ingest full worker transcripts into the main context
-- Close each worker immediately after merge.
-- Use sentinels or bounded waits, not tight polling.
+  - compact diff summary
+- Workers do not return large prose summaries, pasted file bodies, or repeated
+  plan restatements.
+- Workers are closed immediately after the parent integrates or rejects their
+  task output. They are not kept alive for follow-up polling.
+- Prefer long waits and sentinel-based check-ins over tight polling loops.
+  The parent checks task sentinel state at explicit orchestration boundaries
+  only.
 
-## Tests And Acceptance
+## Worker Brief And Return Contract
 
-### Focused proof wall
+### Required worker brief
 
-- Step 1:
-  - `cargo test -p spec-core same_tree_nested_chain3_inner_routes_to_supported_chain3 -- --exact`
-  - `cargo test -p spec-core same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified -- --exact`
-- Step 2A:
-  - `cargo test -p spec-cli --test cli nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth -- --exact`
-- Step 2B:
-  - `cargo test -p spec-cli --test cli direct_crosslib_nested_chain3_unsupported_truth_stays_pinned -- --exact`
-- Step 2C:
-  - `cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact`
+Every worker brief must contain exactly:
 
-### Broad local proof after focused tests pass
+- task id
+- lane id
+- worktree path
+- branch name
+- frozen write scope
+- explicit no-touch surfaces
+- local acceptance criteria
+- required commands
+- worker return contract
+- blocked-return rule
 
-- `cargo test -p spec-core semantic_review`
-- `cargo test -p spec-cli --test cli`
+### Required worker return packet
 
-### Analysis wall
+Every worker return packet must contain exactly:
 
-- `cargo xtask family coverage --format json`
-- `cargo xtask family recommend --format json`
-- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `cargo xtask family corpus-decision --format json`
-- `cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+- `task_id`
+- `state`: `submitted` or `blocked`
+- `head_commit`
+- `changed_files`
+- `commands_run`
+- `exit_codes`
+- `compact_diff_summary`
+- `blockers_or_unresolved_assumptions`
 
-### Acceptance checklist
+If `state = blocked`, the packet must also contain:
 
-- same-tree inner proof stays supported `chain3`
-- same-tree outer proof stays supported `chain3` and `under_specified`
-- no same-tree read-side surface publishes `unsupported_dep_topology`
-- direct-root cross-library proof still publishes unsupported dep-topology truth
-- repo-root copied proof remains separate and honest about `untested`
-- all three analysis artifacts are refreshed from the merged green state
-- closeout names the truthful next wedge without smuggling the retired thesis
+- the first forbidden file or surface encountered
+- why current ownership is insufficient
+- the narrowest safe next action
 
-## Failure Modes Registry
+## Formal Gate Ledger
 
-| Codepath | Real production-style failure | Test covers it? | Error handling exists? | Silent if missed? |
-| --- | --- | --- | --- | --- |
-| same-tree inner routing | reviewer silently regresses this shape back to unsupported | yes, Step 1 exact test | yes, semantic-review surfaces expose it | yes, analysis would lie again |
-| same-tree outer routing | outer shape flips to aligned or unsupported instead of supported `under_specified` | yes, Step 1 + Step 2A | yes, public surfaces expose it | yes, public proof would claim the wrong family |
-| direct cross-library example | maintained unsupported candidate silently flips to supported | yes, Step 2B | yes, status JSON and exported passports expose it | yes, the next milestone would chase the wrong wedge |
-| repo-root copied proof | `untested` copied-root status gets mistaken for direct-root semantic authority | yes, Step 2C | no automatic guard outside tests | yes, future planning could drift again |
-| export assertion surface | tests assert `units[]` instead of `passports[]` and report false truth | yes, Step 2A and 2B require passport reads | no | yes, the wrong read-side surface would pass |
-| analysis refresh | proof passes but the checked-in artifacts stay stale or invalid | yes, validate-artifact commands | yes, validators fail | yes, the closeout would be based on old data |
-| scope control | same-tree proof work leaks into fixtures, packets, or example units | guarded by frozen file ownership | no | yes, the milestone would claim a broader change than it made |
+| Gate | Owner | Opens when | Closes when |
+| --- | --- | --- | --- |
+| `G0 authority-freeze` | Parent | run starts | baseline is captured and authority commit `3561bd1` is frozen |
+| `G1 topology-freeze` | Parent | `G0` green | worktrees, file ownership, and run-state scaffolding exist |
+| `G2 core-freeze` | Parent | `TASK-I1-10` and `TASK-I1-20` submitted | registry + `spec-core` projector integrate cleanly and projector API is frozen |
+| `G3 schema-freeze` | Parent | `TASK-I1-30` submitted | schema version `4` and additive `benchmarks[]` are live on both machine surfaces |
+| `G4 contract-wall` | Parent | `TASK-I1-40` submitted | benchmark contract tests and fixtures merge cleanly and pass |
+| `G5 proof-wall` | Parent | `G4` green | merged repo satisfies all final I1 acceptance criteria |
+| `G6 closeout` | Parent | `G5` green or blocked | green closeout written or blocked summary written |
 
-Critical gap rule:
+## Workstream Plan
 
-- if any same-tree shape still publishes `unsupported_dep_topology` after the
-  Step 2A test, stop the milestone
-- if the cross-library maintained example stops publishing
-  `unsupported_dep_topology` in Step 2B without an intentional reviewer change,
-  stop the milestone
-- if a green test requires asserting export `units[].semantic_review`, stop and
-  re-scope because the proof surface is wrong
+### Phase 0: Kickoff And Freeze
 
-## Performance Review
+#### `TASK-I1-00` - baseline freeze
 
-No product runtime changes. This is proof and analysis work.
+Owner: Parent  
+Worktree: primary authority workspace
 
-The only performance risk is avoidable local and CI drag.
+Run:
 
-Rules:
+```bash
+git rev-parse --abbrev-ref HEAD
+git rev-parse HEAD
+git status --short
+git merge-base --is-ancestor 3561bd1 HEAD
+```
 
-- land targeted exact tests first
-- use exact selectors while iterating
-- do not run the full CLI wall on every edit
-- refresh the three analysis artifacts only after the semantic-review and CLI
-  truth tests are green
-- prefer temp-project proof and copied-example proof over broad committed-fixture
-  churn
+Record in `baseline.json`:
 
-## NOT in scope
+- current branch
+- current `HEAD`
+- dirty-tree snapshot
+- authority commit `3561bd1`
+- freeze timestamp
 
-- making `examples_crosslib_app::pricing/checkout_nested_chain3` supported
-  `chain3`
-- widening semantic review to support cross-library nested callable-triple
-  topology
-- reviving the M63 same-tree regression idea as committed corpus or fixture
-  pressure
-- changing `spec-cli/tests/fixtures/m20/unsupported_truth_pack` into a mixed
-  supported-and-unsupported pack
-- backend, validator, or TypeScript execution changes
-- manifest, family packet, or promotion-registry changes
-- a new corpus-rerun story that still depends on the retired same-tree thesis
+Acceptance:
 
-## Worktree Parallelization Strategy
+1. branch is `feat/m60-plus`
+2. `3561bd1` is recorded as the authority commit from `PLAN.md`
+3. dirty-tree state is preserved exactly
 
-This plan has two implementation lanes, then one integration lane.
+#### `TASK-I1-01` - run-state and worktree setup
 
-### Dependency table
+Owner: Parent  
+Worktree: primary authority workspace
 
-| Step | Modules touched | Depends on |
-| --- | --- | --- |
-| semantic-review proof | `spec-core/src/semantic_review.rs` | — |
-| CLI truth-surface proof | `spec-cli/tests/cli.rs` | — |
-| analysis refresh and closeout | `.semantic-family-artifacts/`, `TODOS.md` | semantic-review proof, CLI truth-surface proof |
+Create:
 
-### Parallel lanes
+- `RUN_ROOT`
+- top-level run-state files
+- `tasks/<TASK_ID>/` sentinel directories
+- all execution worktrees
 
-- `Lane A`: semantic-review proof in `spec-core/src/semantic_review.rs`
-- `Lane B`: CLI truth-surface proof in `spec-cli/tests/cli.rs`
-- `Lane C`: integration, proof wall, artifact refresh, delta capture, and
-  optional `TODOS.md` truth maintenance after A + B merge
+Acceptance:
 
-### Execution order
+1. all worktree paths exist
+2. all branches match this runbook exactly
+3. `file-ownership.json` matches this runbook exactly
+4. no product file was edited in the primary workspace
 
-1. Parent freezes baseline and launches `Lane A` plus `Lane B` in parallel.
-2. Parent integrates both lanes into `ws/m64-int`.
-3. Parent reruns the merged proof wall.
-4. Parent refreshes the analysis wall from the merged green state only.
-5. Parent closes with a truthful next-action delta.
+#### `TASK-I1-02` - launch worker briefs
 
-### Conflict flags
+Owner: Parent  
+Worktree: primary authority workspace
 
-- `Lane A` and `Lane B` touch different module directories, so merge conflict
-  risk is low
-- `Lane B` itself must stay sequential inside one worker because the same file
-  owns the temp same-tree proof, direct cross-library proof, and repo-root
-  copied proof
-- `Lane C` must stay sequential because analysis artifacts must be generated
-  from merged final truth, not partial state
+Launch exactly:
 
-## Exit Criteria
+- `TASK-I1-10` in `LANE-A`
+- `TASK-I1-20` in `LANE-B`
 
-M64 is successful only if all of the following are true:
+Acceptance:
 
-1. `spec-core/src/semantic_review.rs` has focused exact tests proving the
-   same-tree nested pair publishes supported `chain3` truth.
-2. `spec-cli/tests/cli.rs` has a focused temp-project truth test proving the
-   same-tree pair publishes supported `chain3` truth through CLI status and
-   exported passports.
-3. `spec-cli/tests/cli.rs` has a direct cross-library truth test proving
-   `pricing/checkout_nested_chain3` remains `unsupported_dep_topology` in
-   direct-root status and exported passports.
-4. `spec_status_repo_root_honors_each_root_workspace_config` remains explicit
-   about repo-root discovery and namespace hygiene without pretending to be the
-   direct-root semantic authority.
-5. The three family-analysis artifacts are rerun from the merged green state
-   and pass validation.
-6. The closeout records whether the same cross-library candidate remains live or
-   whether a different truthful next wedge emerged.
-7. No same-tree unsupported regression thesis survives in code, tests, docs, or
-   artifacts.
+1. both briefs are written under `handoffs/`
+2. both worker task sentinel directories are initialized
+3. no other worker lane is launched
+
+### Phase 1: Safe Parallel Start
+
+#### `TASK-I1-10` - `LANE-A` benchmark registry authoring
+
+Owner: Worker A  
+Worktree: `LANE-A`  
+Write scope: `benchmarks/labels.json`
+
+Required implementation:
+
+- `BENCH-ECOM` active positive benchmark
+- `BENCH-CROSSLIB` active companion negative-proof benchmark
+- `BENCH-SERVICE` reserved positive benchmark
+- required molecules and labeled cases exactly as specified in `PLAN.md`
+
+Required commands:
+
+```bash
+rg -n "BENCH-ECOM|BENCH-CROSSLIB|BENCH-SERVICE|examples/ecommerce|examples/crosslib-app" PLAN.md
+```
+
+Acceptance:
+
+1. registry roster matches `PLAN.md` exactly
+2. paths are repo-relative and resolve to the intended roots
+3. active benchmark carriers correspond to authored unit ids already in repo
+4. reserved benchmark starts with empty cases
+5. no file outside `benchmarks/labels.json` is edited
+
+#### `TASK-I1-20` - `LANE-B` shared `spec-core` projection core
+
+Owner: Worker B  
+Worktree: `LANE-B`  
+Write scope:
+
+- `spec-core/src/benchmarks.rs`
+- `spec-core/src/lib.rs`
+- `spec-core/src/export.rs`
+
+Required implementation:
+
+- benchmark enums and projection structs
+- registry parsing and validation
+- full-vs-partial scope classification
+- case projection and required molecule projection
+- anti-laundering rules
+- benchmark status and gate-status derivation
+- additive `benchmarks[]` in export bundle
+
+Required commands:
+
+```bash
+cargo test -p spec-core benchmark
+```
+
+Acceptance:
+
+1. one shared projector can serve both `status` and `export`
+2. reserved `BENCH-SERVICE` state is representable
+3. partial entries omit whole-benchmark rollup fields as required by `PLAN.md`
+4. export bundle exposes additive top-level `benchmarks[]`
+5. no file outside the frozen `spec-core` surfaces is edited
+
+### Phase 2: Parent Integration Barrier
+
+#### `TASK-I1-50` - integrate `LANE-A` and `LANE-B`
+
+Owner: Parent  
+Worktree: `LANE-INT`
+
+Integration order:
+
+1. integrate `TASK-I1-10`
+2. integrate `TASK-I1-20`
+3. run narrow proof to confirm the registry and shared projector compile
+
+Required commands:
+
+```bash
+git cherry-pick <registry-commit>
+git cherry-pick <core-commit>
+cargo test -p spec-core benchmark
+```
+
+Acceptance:
+
+1. registry and `spec-core` surfaces merge cleanly
+2. shared projector API is frozen and written into task notes
+3. no CLI or fixture files are touched yet
+4. `G2 core-freeze` closes green
+
+#### `TASK-I1-60` - freeze projector API and launch `LANE-C`
+
+Owner: Parent  
+Worktree: `LANE-INT`
+
+Launch `TASK-I1-30` only after `G2` closes.
+
+Acceptance:
+
+1. `LANE-C` brief explicitly states the frozen projector API
+2. `spec-cli/src/commands.rs` is single-owned by `LANE-C`
+3. any requested API change from `LANE-C` is treated as a blocker, not an ad
+   hoc scope drift
+
+### Phase 3: Serialized CLI Wiring
+
+#### `TASK-I1-30` - `LANE-C` status/export integration
+
+Owner: Worker C  
+Worktree: `LANE-C`  
+Write scope: `spec-cli/src/commands.rs`
+
+Required implementation:
+
+- load `benchmarks/labels.json` once per invocation
+- bump `STATUS_JSON_SCHEMA_VERSION` to `4`
+- wire shared projector into `spec status --format json`
+- wire shared projector into `spec export --format json`
+- keep text mode unchanged
+
+Required commands:
+
+```bash
+cargo run -p spec-cli -- status . --format json
+cargo run -p spec-cli -- export examples/crosslib-app --format json
+```
+
+Acceptance:
+
+1. `status` and `export` call the same shared projector
+2. full-scope repo-root and benchmark-root behavior is live
+3. partial-scope behavior is live without positive-credit laundering
+4. reserved `BENCH-SERVICE` appears only on broad enough scope
+5. no file outside `spec-cli/src/commands.rs` is edited
+
+#### `TASK-I1-70` - integrate CLI wiring and freeze schema shape
+
+Owner: Parent  
+Worktree: `LANE-INT`
+
+Required commands:
+
+```bash
+git cherry-pick <cli-commit>
+cargo run -p spec-cli -- status . --format json
+cargo run -p spec-cli -- export examples/crosslib-app --format json
+```
+
+Acceptance:
+
+1. schema version `4` is live on both machine surfaces
+2. additive top-level `benchmarks[]` is present on both surfaces
+3. shared projector path remains singular
+4. fixture files remain untouched at this point
+5. `G3 schema-freeze` closes green
+
+### Phase 4: Contract Tests And Fixtures
+
+#### `TASK-I1-80` - launch `LANE-D`
+
+Owner: Parent  
+Worktree: `LANE-INT`
+
+Launch `TASK-I1-40` only after `G3` closes.
+
+Acceptance:
+
+1. `LANE-D` brief pins the schema-v4 shape frozen by the parent
+2. `LANE-D` owns only `spec-cli/tests/cli.rs` and `spec-cli/tests/fixtures/`
+
+#### `TASK-I1-40` - `LANE-D` benchmark contract tests
+
+Owner: Worker D  
+Worktree: `LANE-D`  
+Write scope:
+
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/fixtures/`
+
+Required coverage:
+
+- repo-root full-scope benchmark projection
+- benchmark-root full-scope benchmark projection
+- nested-directory partial-scope projection
+- single-file partial-scope projection
+- export benchmark projection
+- reserved `BENCH-SERVICE` broad-scope visibility only
+- unlabeled active-carrier invalidation
+- companion-negative visibility and zero positive credit
+- schema version `4` fixtures for status and export
+
+Required commands:
+
+```bash
+cargo test -p spec-cli --test cli benchmark
+```
+
+Acceptance:
+
+1. tests prove full, partial, reserved, and companion-negative semantics
+2. fixtures pin additive `benchmarks[]` without weakening unrelated surfaces
+3. `spec-cli/tests/cli.rs` asserts schema version `4`
+4. no production files are edited
+
+#### `TASK-I1-85` - integrate tests and fixtures
+
+Owner: Parent  
+Worktree: `LANE-INT`
+
+Required commands:
+
+```bash
+git cherry-pick <tests-commit>
+cargo test -p spec-cli --test cli benchmark
+```
+
+Acceptance:
+
+1. fixture updates merge cleanly against the frozen schema shape
+2. benchmark-focused CLI tests pass
+3. no worker had to widen scope to close the contract wall
+4. `G4 contract-wall` closes green
+
+## Tests, Proof Wall, And Final Acceptance
+
+The proof wall is parent-owned and runs only from merged `LANE-INT`.
+
+### Required proof commands
+
+Run these in `LANE-INT` and capture stdout/stderr plus exit codes under
+`validation/final/`:
+
+```bash
+cargo test -p spec-core benchmark
+cargo test -p spec-cli --test cli benchmark
+cargo run -p spec-cli -- status . --format json
+cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json
+cargo run -p spec-cli -- status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json
+cargo run -p spec-cli -- export examples/crosslib-app --format json
+```
+
+### Final acceptance criteria
+
+`G5 proof-wall` closes only when all are true:
+
+1. `benchmarks/labels.json` exists and matches the I1 roster from `PLAN.md`.
+2. benchmark rules live once and only once in `spec-core`.
+3. `spec status --format json` reports `schema_version: 4`.
+4. `spec export --format json` reports `schema_version: 4`.
+5. both surfaces emit additive top-level `benchmarks[]`.
+6. repo-root or benchmark-root full-scope queries produce benchmark status and
+   gate status.
+7. partial-scope queries produce only honest partial entries and zero positive
+   credit.
+8. `BENCH-SERVICE` appears as reserved only on broad enough queries.
+9. `BENCH-CROSSLIB` remains visible as companion negative proof and never
+   counts positive.
+10. no new proof writers, snapshot surfaces, readability surfaces, or digest
+    surfaces were introduced.
+11. benchmark-focused `spec-core` and CLI tests pass from the merged state.
+
+## Failure And Blocked Behavior
+
+If any lane blocks, the worker returns immediately with the required blocked
+packet and stops. The parent then chooses exactly one response:
+
+1. reassign the blocked file or decision to the parent and continue serially
+2. relaunch the blocked lane with corrected frozen scope
+3. stop the run and write `blocked-summary.md`
+
+`blocked-summary.md` must include:
+
+- failed gate
+- last green task
+- smallest unresolved scope expansion
+- whether the blocker is architectural, fixture-related, or proof-related
+- exact `PLAN.md` clause forcing the stop
+- next valid restart point
+
+## Final Closeout
+
+### Green path closeout
+
+If `G5` is green:
+
+1. parent records final proof references in `acceptance-ledger.md`
+2. parent marks `TASK-I1-90` closed
+3. parent marks `TASK-I1-99` closed
+4. parent closes all worker lanes and records final integrated head commits
+5. run ends green
+
+### Blocked path closeout
+
+If any stop rule trips before `G5`:
+
+1. parent writes `blocked-summary.md`
+2. parent marks the active task blocked
+3. parent marks `TASK-I1-99` closed as blocked closeout
+4. worker lanes are closed immediately
+5. run ends blocked without silent scope widening
+
+## Assumptions
+
+- `PLAN.md` at commit `3561bd1` remains the authority throughout execution.
+- The branch remains `feat/m60-plus`.
+- The live repo already contains the example roots named in `PLAN.md`:
+  - `examples/ecommerce/units`
+  - `examples/crosslib-app/units`
+- The authored I1 file set remains:
+  - `benchmarks/labels.json`
+  - `spec-core/src/benchmarks.rs`
+  - `spec-core/src/lib.rs`
+  - `spec-core/src/export.rs`
+  - `spec-cli/src/commands.rs`
+  - `spec-cli/tests/cli.rs`
+  - `spec-cli/tests/fixtures/*` as needed
+- The final I1 run stays inside the reader-side boundary:
+  - benchmark projection only
+  - no new proof-writing behavior
+  - no snapshot or readability closure
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, resolved to a narrower and more truthful split
-- Architecture Review: no new architecture, just a corrected truth wall and a
-  clearer separation of proof surfaces
-- Code Quality Review: minimal diff, no new committed fixtures, assert against
-  exported passports instead of the wrong export unit surface
-- Test Review: exact semantic-review proof, exact temp CLI proof, exact direct
-  cross-library proof, explicit repo-root config proof, refreshed analysis wall
-- Performance Review: targeted test execution only, no runtime impact
-- NOT in scope: written
-- Failure modes: explicit, with stop conditions
-- Parallelization: 3 lanes total, 2 parallel then 1 sequential
-- Lake Score: the complete option wins, because skipping the direct
-  cross-library proof or the analysis refresh would save minutes and cost the
-  next milestone its truth
+- Fresh kickoff from current workspace state
+- Frozen authority from `PLAN.md` only
+- Exact worktree root and branch topology
+- Parent-only integration, proof wall, and closeout
+- One serialized architecture barrier around the shared `spec-core` projector
+- Strong per-task sentinels and worker return packets
+- Formal gate ledger from kickoff through final closeout

@@ -31,7 +31,7 @@ Primary source artifacts:
 
 ## Primary Decision
 
-I1 lands one narrow but complete wedge:
+I1 lands exactly one narrow but complete wedge:
 
 ```text
 authoritative benchmark registry
@@ -49,122 +49,91 @@ That is the whole milestone.
 
 I1 does **not** add a benchmark writer, snapshot command, readability review
 loading, `projection_digest`, or generated-file readability closure. Those stay
-in `I2`, exactly where the ladder puts them.
+in `I2` and later, exactly where the ladder puts them.
 
 ## Executive Summary
 
-`M65` split the Rust V1 work into clean artifacts. `M66` froze the support
-claim. `M67` froze the benchmark roster and the write-vs-read truth boundary.
-`M68` closed the mechanics enough to code from.
+The planning stack is frozen enough to code. The repo is not.
 
-The repo still has a hole between those frozen docs and the product:
+Today, `spec status --format json` and `spec export --format json` know unit
+truth and molecule truth, but they cannot project benchmark truth. That leaves
+three product holes:
 
-- `spec status --format json` and `spec export` know unit truth and molecule
-  truth, but they cannot project benchmark truth
-- `BENCH-SERVICE` is a planning requirement, not a machine-visible gate
-- path-scoped commands have no benchmark honesty boundary yet
-- there is no label-driven anti-laundering wall for positive, deferred,
-  fallback-backed, companion-negative, and reserved benchmark states
+1. downstream tooling cannot ask benchmark-level questions from public JSON
+2. reserved required proof like `BENCH-SERVICE` is not machine-visible
+3. path-scoped commands can accidentally launder a narrow query into apparent
+   whole-benchmark green
 
-I1 fixes that hole without widening scope. It keeps the current proof writers
-unchanged and adds one shared read-side benchmark projection engine that both
-`status` and `export` call.
+I1 fixes those holes with one shared read-side projector. It does not widen the
+proof-writing surface. It does not invent new benchmark storage. It does not
+split status logic and export logic into parallel implementations.
 
 ## Current Validated Baseline
 
 Validated on `feat/m60-plus` at `3561bd1`.
 
-### 1. Current machine surfaces are still schema version 3
-
-Current code facts:
+### Machine contract baseline
 
 - `STATUS_JSON_SCHEMA_VERSION` is `3` in `spec-cli/src/commands.rs`
 - `EXPORT_SCHEMA_VERSION` is `3` in `spec-core/src/export.rs`
 - `spec-cli/tests/cli.rs` still asserts schema version `3` for both surfaces
 
-So any benchmark landing that changes the public machine contract must bump both
-surfaces together in the same milestone.
+I1 therefore must bump both machine surfaces together in the same milestone.
 
-### 2. The repo already has the proof truth I1 needs to read
+### Writer vs reader baseline
 
-Current read/write wall:
-
-- authored workload lives in `.unit.spec` and `.test.spec`
+- authored workload truth lives in `.unit.spec` and `.test.spec`
 - unit proof truth lives in `.spec.passport.json`
 - molecule proof truth lives in `*.test.evidence.json`
-- `spec status` and `spec export` already project those truths but do not mint
-  new proof
+- `spec status` and `spec export` already project read-side truth without
+  minting new proof
 
-That means I1 does not need a new writer. It only needs a new reader-side
-projection layer.
+That means I1 needs a new shared reader-side layer, not a new writer.
 
-### 3. `examples/ecommerce` is already a real positive benchmark candidate
+### Live benchmark candidate baseline
 
-Current direct status truth from:
+`examples/ecommerce/units` already contains:
 
-```bash
-cargo run -p spec-cli -- status examples/ecommerce --format json
-```
+- 7 unit specs
+- 3 molecule tests
+- current green proof on the benchmark-candidate workload
 
-Current result:
+`examples/crosslib-app/units` already contains:
 
-- all seven authored ecommerce units are `valid`
-- all three ecommerce molecule tests are `valid`
-- every ecommerce unit currently projects supported narrow-core truth
-- there is no benchmark projection today
+- the companion negative-proof `pricing/checkout_nested_chain3`
+- 3 supported carrier units that still need explicit benchmark accounting
 
-That makes `examples/ecommerce` the right active positive benchmark root for I1.
-
-### 4. `examples/crosslib-app` already contains the companion negative-proof case
-
-Current direct status truth from:
-
-```bash
-cargo run -p spec-cli -- status examples/crosslib-app --format json
-```
-
-Current result:
-
-- `pricing/checkout_nested_chain3` is `valid`
-- its semantic review projects `support_status: unsupported`
-- its `unsupported_reason_codes` include `unsupported_dep_topology`
-- the other authored cross-library units remain visible alongside it
-
-That makes `examples/crosslib-app` the right companion benchmark root for I1.
-
-### 5. Scope logic already exists, but benchmark logic does not
+### Existing scope-resolution baseline
 
 Current code already has:
 
 - `resolve_status_roots()` in `spec-cli/src/commands.rs`
-- existing file-vs-directory-vs-root scope behavior for `status`
+- existing file-vs-directory-vs-root status behavior
 - existing path-scoped `export` behavior
 
 Current code does **not** have:
 
 - benchmark registry loading
-- benchmark classification validation
-- benchmark-level enums
-- full-vs-partial benchmark scope projection
+- benchmark-level projection structs
+- benchmark path-scope classification
 - additive top-level `benchmarks[]`
+- reserved benchmark gate projection
 
-So the correct move is to extend current scope logic, not replace it.
+So the correct move is to extend the existing scope model, not replace it.
 
 ## Problem Statement
 
-The Rust V1 docs now know what the benchmark layer should mean, but the machine
+The Rust V1 docs know what the benchmark layer should mean. The machine
 surfaces do not expose it yet.
 
-That gap creates three bad outcomes:
+That gap creates fake confidence:
 
-1. downstream tooling cannot ask benchmark-level questions from the public JSON
-   surfaces
-2. reserved required proof like `BENCH-SERVICE` can disappear from machine
-   output and get forgotten
-3. once benchmarks exist, path-scoped commands can easily lie by implying
-   whole-benchmark green state from a single-unit query
+- a benchmark can exist in docs but disappear from machine output
+- a partial query can look greener than it should
+- deferred, fallback-backed, or companion-negative cases can be mistaken for
+  native positive credit
 
-I1 closes those gaps by making benchmark truth label-driven, shared, additive,
+I1 closes that gap by making benchmark truth label-driven, shared, additive,
 and scope-honest.
 
 ## Step 0: Scope Challenge
@@ -174,13 +143,13 @@ and scope-honest.
 | Sub-problem | Existing owner | I1 action |
 | --- | --- | --- |
 | status scope resolution | `resolve_status_roots()` in `spec-cli/src/commands.rs` | reuse and extend with benchmark root intersection plus full/partial benchmark scope classification |
-| unit health projection | `compute_health_status()`, `apply_semantic_review_to_health()`, escape-hatch projection in `spec-cli/src/commands.rs` | reuse as the case-level proof truth source |
-| export bundle projection | `spec-core/src/export.rs` | reuse and extend with additive top-level `benchmarks[]` |
-| passport + molecule truth projection | `spec-core/src/passport.rs`, `spec-core/src/molecule_evidence.rs` | reuse for case proof refs and required-molecule proof state |
+| unit health projection | `compute_health_status()` and `apply_semantic_review_to_health()` in `spec-cli/src/commands.rs` | reuse as case-level proof truth input |
+| export bundle assembly | `spec-core/src/export.rs` | extend additively with top-level `benchmarks[]` |
+| passport and molecule proof loading | `spec-core/src/passport.rs` and `spec-core/src/molecule_evidence.rs` | reuse for case proof refs and required molecule proof state |
 | semantic support truth | `spec-core/src/semantic_review.rs` and projected passport truth | reuse for `semantic_support_status` and anti-laundering credit rules |
-| positive workload example | `examples/ecommerce/units` | use as active `BENCH-ECOM` benchmark root |
-| companion negative-proof example | `examples/crosslib-app/units` | use as active `BENCH-CROSSLIB` benchmark root |
-| JSON contract coverage | `spec-cli/tests/cli.rs` plus fixture JSON under `spec-cli/tests/fixtures/` | bump to schema version 4 and add benchmark assertions in the same wedge |
+| positive benchmark candidate | `examples/ecommerce/units` | use as active `BENCH-ECOM` root |
+| companion negative-proof candidate | `examples/crosslib-app/units` | use as active `BENCH-CROSSLIB` root |
+| JSON contract coverage | `spec-cli/tests/cli.rs` plus fixture JSON under `spec-cli/tests/fixtures/` | bump to schema version `4` and add benchmark assertions in the same wedge |
 
 ### Minimum complete slice
 
@@ -193,21 +162,14 @@ The minimum honest I1 slice is:
 4. project full vs partial benchmark scope honestly for both `status` and
    `export`
 5. emit additive top-level `benchmarks[]` from `spec status --format json`
-6. emit additive top-level `benchmarks[]` from `spec export`
+6. emit additive top-level `benchmarks[]` from `spec export --format json`
 7. surface `BENCH-SERVICE` as explicit `reserved` machine state at broad
    full-scope queries
-8. add anti-laundering rules so partial, deferred, fallback-backed,
+8. enforce anti-laundering rules so partial, deferred, fallback-backed,
    companion-negative, and reserved cases never mint positive benchmark credit
-9. update contract tests and fixtures in the same milestone
+9. update schema assertions, fixtures, and contract tests in the same milestone
 
 Anything smaller is fake done.
-
-Examples:
-
-- adding benchmark logic only to `status` but not `export` is fake done
-- adding `benchmarks[]` without full-vs-partial honesty is fake done
-- adding labels without unlabeled-root invalidation is fake done
-- projecting `BENCH-SERVICE` only in docs and not in machine JSON is fake done
 
 ### Complexity check
 
@@ -215,56 +177,59 @@ This wedge touches more than one production surface, but it is still the
 minimum engineered slice:
 
 - one new shared production module in `spec-core`
-- one existing status path in `spec-cli`
-- one existing export path in `spec-core` plus export command wiring
+- one existing CLI status path in `spec-cli`
+- one existing export path in `spec-core`
 - one authored registry file
-- one test surface
+- one existing test surface
 
-That is acceptable. It is not spending an innovation token on a new subsystem.
-It is boring extension work on the right seams.
+That is acceptable. It is boring extension work on existing seams, not a new
+subsystem.
 
 ### Search check
 
-I1 should stay Layer 1 and Layer 3, not Layer 2 novelty:
+I1 should stay Layer 1 and Layer 3:
 
-- **[Layer 1]** Reuse existing `status` root resolution, passport projection,
+- **[Layer 1]** Reuse current status scope resolution, passport projection,
   molecule evidence loading, and export bundle assembly.
-- **[Layer 1]** Keep serialization on existing `serde`/`serde_json` machinery.
-- **[Layer 3]** Do not infer benchmark truth from directory discovery. Use the
+- **[Layer 1]** Keep serialization on existing `serde` and `serde_json`.
+- **[Layer 3]** Do not infer benchmark truth from directory discovery. Use an
   explicit authored registry because benchmark accounting is product truth, not
   filesystem folklore.
 
-No new config layer, no background cache, no benchmark-specific database, no
-auto-discovery magic.
+No benchmark cache, no discovery magic, no second registry format, no benchmark
+database.
 
 ### TODOS cross-reference
 
 Current `TODOS.md` has no blocking item for this wedge.
 
-Important non-blocking consequence:
+The follow-on work is already owned by the implementation ladder:
 
-- I2, I3, and I4 already exist in the implementation ladder and should remain
-  ladder-owned follow-ons rather than new ad hoc TODOs
+- I2 owns snapshot and readability surfaces
+- I3 owns broader anti-laundering closure
+- I4 owns the wider schema-v4 fixture/test closure
+
+Do not create new ad hoc TODOs for those.
 
 ### Completeness check
 
-The complete I1 version is still cheap enough to do now:
+The complete I1 version is still cheap enough to land now:
 
 - both JSON surfaces move together
 - full and partial benchmark scope land together
 - reserved gate visibility lands together
-- anti-laundering rules land together
-- fixtures and tests move in the same commit
+- anti-laundering lands together
+- fixtures and tests land in the same commit
 
-Trying to land a half-version would only save minutes and would create a second
-contract migration later. Not worth it.
+Splitting that into two milestones would save minutes and create a second
+public-contract migration. Not worth it.
 
 ### Distribution check
 
-No new artifact type is introduced for end users.
+No new end-user artifact is introduced.
 
 `benchmarks/labels.json` is authored repo input, not a distributable product
-artifact. Distribution pipeline changes are out of scope.
+artifact. Release pipeline work is out of scope.
 
 ## Architecture Review
 
@@ -283,29 +248,34 @@ authored specs (.unit.spec / .test.spec)
                 - validate registry
                 - classify scope as full/partial
                 - project case truth
+                - project required molecules
                 - apply anti-laundering
-                - project benchmark/gate status
+                - derive benchmark + gate state
                      /                       \
                     v                         v
      spec status --format json         spec export --format json
        top-level benchmarks[]            top-level benchmarks[]
 ```
 
-That shared projector is the whole architecture move. Do not duplicate
-benchmark logic separately in `commands.rs` and `export.rs`.
+That shared projector is the whole architecture move.
+
+Hard rule: benchmark validation, scope classification, case projection,
+anti-laundering, benchmark status derivation, and reserved-gate projection live
+once in `spec-core`. `spec-cli` wires inputs and serializes output. Nothing
+else gets to reinterpret benchmark rules.
 
 ### Module boundaries
 
 | Module / surface | Ownership in I1 | Notes |
 | --- | --- | --- |
 | `benchmarks/labels.json` | new authored source of benchmark-accounting truth | repo-root, checked in |
-| `spec-core/src/benchmarks.rs` | new shared benchmark registry + projection engine | the only place allowed to know benchmark accounting rules |
-| `spec-core/src/lib.rs` | export the benchmark module publicly to the CLI crate | thin wiring only |
+| `spec-core/src/benchmarks.rs` | new shared registry + projection engine | the only place allowed to know benchmark accounting rules |
+| `spec-core/src/lib.rs` | export the new benchmark module | thin wiring only |
 | `spec-core/src/export.rs` | add additive top-level `benchmarks[]` to `ExportBundle` | reuse shared projector, do not fork rules |
-| `spec-cli/src/commands.rs` | load registry, call projector for status JSON, bump schema version | text mode remains non-blocking and unchanged |
-| `spec-cli/tests/cli.rs` + fixtures | contract coverage for schema v4 and benchmark projection | full + partial + reserved + invalid cases |
+| `spec-cli/src/commands.rs` | load registry, call projector for status JSON, bump schema version | text mode remains unchanged |
+| `spec-cli/tests/cli.rs` and `spec-cli/tests/fixtures/` | schema-v4 contract coverage | full, partial, reserved, and invalid cases |
 
-### Concrete shared types
+### Shared types and exact public shape
 
 I1 should add explicit shared benchmark types in `spec-core`, not anonymous JSON
 maps in `spec-cli`.
@@ -332,29 +302,55 @@ Required projection structs:
 - `BenchmarkCaseProjection`
 - `BenchmarkRequiredMoleculeProjection`
 
-### Exact benchmark registry for I1
+Required `BenchmarkProjection` fields for I1:
 
-`benchmarks/labels.json` should be added at repo root with three benchmark
-entries.
+- `id`
+- `kind`
+- `lifecycle`
+- `root`
+- `generated_root`
+- `path_scope`
+- `accounting_status`
+- `label_digest` for full-scope entries only
+- `benchmark_status` for full-scope active/reserved entries only
+- `gate_status` for full-scope active/reserved positive benchmarks only
+- `cases`
+- `required_molecule_proofs`
 
-#### 1. `BENCH-ECOM`
+Required `BenchmarkCaseProjection` fields for I1:
 
-Role:
+- `case_id`
+- `carrier_kind`
+- `carrier_id`
+- `classification`
+- `carrier_status`
+- `semantic_support_status`
+- `passport_path`
+- `counts_as_supported_positive`
 
-- active positive benchmark
+Required `BenchmarkRequiredMoleculeProjection` fields for I1:
 
-Roots:
+- `id`
+- `status`
+- `evidence_path`
 
-- `root = "examples/ecommerce/units"`
-- `generated_root = "examples/ecommerce/src/generated"`
+No other benchmark summary object should appear in I1. If a field implies
+whole-benchmark rollup beyond the items above, it belongs in a later milestone.
 
-Required molecules:
+### Authoritative benchmark registry for I1
 
-- `pricing/checkout_flow`
-- `pricing/discount_plus_tax`
-- `pricing/discount_strategy_checkout_flow`
+`benchmarks/labels.json` is the sole benchmark-accounting input for I1.
 
-Initial labeled unit cases:
+#### `BENCH-ECOM`
+
+| Field | Value |
+| --- | --- |
+| role | active positive benchmark |
+| `root` | `examples/ecommerce/units` |
+| `generated_root` | `examples/ecommerce/src/generated` |
+| required molecules | `pricing/checkout_flow`, `pricing/discount_plus_tax`, `pricing/discount_strategy_checkout_flow` |
+
+Labeled unit cases:
 
 - `money/round` -> `supported`
 - `pricing/apply_discount` -> `supported`
@@ -364,90 +360,60 @@ Initial labeled unit cases:
 - `pricing/discount_strategy` -> `supported`
 - `pricing/pricing_quote` -> `supported`
 
-#### 2. `BENCH-CROSSLIB`
+#### `BENCH-CROSSLIB`
 
-Role:
+| Field | Value |
+| --- | --- |
+| role | active companion negative-proof benchmark |
+| `root` | `examples/crosslib-app/units` |
+| `generated_root` | `examples/crosslib-app/src/generated` |
+| required molecules | none |
 
-- active companion negative-proof benchmark
-
-Roots:
-
-- `root = "examples/crosslib-app/units"`
-- `generated_root = "examples/crosslib-app/src/generated"`
-
-Required molecules:
-
-- none
-
-Initial labeled unit cases:
+Labeled unit cases:
 
 - `pricing/apply_discount` -> `supported`
 - `pricing/apply_tax` -> `supported`
 - `pricing/calculate_total` -> `supported`
 - `pricing/checkout_nested_chain3` -> `companion_negative_proof`
 
-Why label the supported cross-library carriers too:
+Why the supported carriers must still be labeled:
 
-- because `BENCH-CROSSLIB` is an active benchmark root
-- because unlabeled authored carriers under an active benchmark root must make
-  accounting invalid
-- because only the nested chain3 unit is the companion-negative case, but the
-  other carriers still have to be explicitly accounted for
+- `BENCH-CROSSLIB` is an active benchmark root
+- unlabeled authored carriers under an active root must invalidate accounting
+- only the nested chain3 unit is the companion-negative case, but the other
+  authored carriers still need explicit accounting
 
-#### 3. `BENCH-SERVICE`
+#### `BENCH-SERVICE`
 
-Role:
+| Field | Value |
+| --- | --- |
+| role | reserved positive benchmark required for final V1 closure |
+| `root` | `examples/service/units` |
+| `generated_root` | `examples/service/src/generated` |
+| required molecules | none |
+| initial cases | empty, because the benchmark is reserved |
 
-- reserved positive benchmark required for final V1 closure
+### Registry validation contract
 
-Roots:
+`benchmarks/labels.json` validation must fail clearly for:
 
-- `root = "examples/service/units"`
-- `generated_root = "examples/service/src/generated"`
+- duplicate benchmark ids
+- duplicate `case_id` within a benchmark
+- duplicate carrier mappings within a benchmark
+- unknown classification values
+- active benchmarks with malformed roots or generated roots
+- active benchmark carriers that do not resolve to authored unit ids
 
-Required molecules:
+Reserved benchmarks may reference a root that does not exist yet. That is legal
+only when `lifecycle == reserved`.
 
-- none
-
-Initial labeled unit cases:
-
-- empty, because the benchmark is reserved
-
-### Exact read-surface contract for I1
-
-I1 is the shared projection wedge, not the snapshot/readability wedge.
-
-So the benchmark JSON contract for I1 is:
-
-- **yes now**:
-  - top-level `benchmarks[]`
-  - benchmark kind/lifecycle/path-scope/accounting status
-  - benchmark status and gate status where full scope makes them honest
-  - case projection with proof refs and anti-laundering credit bit
-  - required molecule proof projection
-  - reserved `BENCH-SERVICE` state
-  - schema version bump to 4
-- **not yet in I1**:
-  - `spec benchmark snapshot`
-  - `projection_digest`
-  - readability review loading
-  - readability verdict/status
-  - `readability_generated_files[]`
-
-That means:
-
-- I1 should compute and emit `label_digest` for full-scope entries because it
-  is purely registry-owned and audit-friendly
-- I1 should **not** emit `projection_digest` yet because the locked digest
-  contract includes readability closure that I2 owns
-
-### Exact path-scope behavior
+### Exact path-scope contract
 
 Use the existing command scope and add benchmark intersection rules on top.
 
 Full-scope examples:
 
-- repo-root `spec status . --format json`
+- `spec status . --format json`
 - `spec status examples/ecommerce --format json`
 - `spec status examples/ecommerce/units --format json`
 - `spec export examples/crosslib-app --format json`
@@ -460,20 +426,70 @@ Partial-scope examples:
 
 Required rules:
 
-1. benchmarks are emitted only when the command scope intersects their declared
+1. emit benchmark entries only when the command scope intersects the benchmark
    `root`
-2. full scope means the command loaded the entire declared benchmark root
-3. partial scope means the command intersects but did not load the whole root
-4. every partial case emits `counts_as_supported_positive: false`
-5. partial entries omit benchmark-level green-state claims:
-   `benchmark_status`, `gate_status`, benchmark summary
+2. `path_scope = full` only when the command loaded the benchmark's entire
+   declared root
+3. `path_scope = partial` when the command intersects the root without loading
+   the whole root
+4. every partial case must emit `counts_as_supported_positive: false`
+5. partial entries must omit `benchmark_status`, `gate_status`, and
+   `label_digest`
 6. `BENCH-SERVICE` appears only when the query scope is broad enough to contain
    its declared root, which means repo-root or repo-ancestor queries, not
    narrow ecommerce-only queries
 
-### Reserved benchmark state
+### Benchmark accounting and anti-laundering rules
 
-At full scope, `BENCH-SERVICE` must project:
+Full-scope accounting:
+
+- `valid` when every authored unit under the active benchmark root is
+  explicitly labeled and the registry shape itself is valid
+- `invalid` when any authored unit under the active root is unlabeled or the
+  registry is internally contradictory
+- `reserved_missing_cases` only for reserved benchmarks
+
+Partial-scope accounting:
+
+- `partial_valid` when the intersecting authored carriers are all labeled and
+  the projection is honest about being partial
+- `partial_invalid` when the intersecting query reveals unlabeled carriers or
+  other accounting contradictions
+
+Case-level credit rules:
+
+- `supported` may count positive only when `path_scope = full` and the case
+  itself projects supported/native truth
+- `deferred` never counts positive
+- `fallback_backed` never counts positive
+- `explicitly_out` never counts positive
+- `companion_negative_proof` never counts positive
+
+### Benchmark status and gate-status derivation
+
+Positive benchmarks at full scope:
+
+- `benchmark_status = invalid` when `accounting_status = invalid`
+- `benchmark_status = failing` when any supported case or required molecule
+  projects `failing` or `invalid`
+- `benchmark_status = incomplete` when any supported case or required molecule
+  projects `stale`, `untested`, or `incomplete`
+- `benchmark_status = passing` only when every supported case and every
+  required molecule projects `valid`
+- `gate_status = satisfied` only when `benchmark_status = passing`
+- `gate_status = open` for active positive benchmarks in every other full-scope
+  non-reserved state
+
+Companion benchmarks at full scope:
+
+- `benchmark_status = invalid` when accounting is invalid
+- `benchmark_status = failing` when a required carrier fails to project
+  benchmark truth at all
+- `benchmark_status = passing` when all labeled cases project and none of them
+  counts positive
+- `gate_status = not_applicable`
+
+Reserved benchmarks at full scope:
 
 - `lifecycle: reserved`
 - `path_scope: full`
@@ -483,15 +499,12 @@ At full scope, `BENCH-SERVICE` must project:
 - `cases: []`
 - `required_molecule_proofs: []`
 
-That state must be machine-visible. It is not green, not open-by-implication,
-and not droppable.
+That state must be machine-visible. It is not green, not implied, and not
+droppable.
 
 ## Code Quality Review
 
-### DRY requirements
-
-I1 must avoid the classic trap where `status` and `export` each grow their own
-slightly different benchmark logic.
+### DRY guardrails
 
 Hard rule:
 
@@ -499,15 +512,15 @@ Hard rule:
   rules live once in `spec-core`
 - `spec-cli` only adapts command scope and serializes the shared output
 
-### Minimal-diff requirements
+### Minimal-diff guardrails
 
 Keep the diff boring:
 
-- one new module for benchmark logic
+- one new shared module for benchmark logic
 - one new authored registry file
 - one additive field on status JSON
 - one additive field on export JSON
-- one schema version bump
+- one schema-version bump across both surfaces
 
 Do **not** add:
 
@@ -515,24 +528,143 @@ Do **not** add:
 - benchmark-specific CLI flags
 - a benchmark cache
 - a second registry format
-- text-mode benchmark UI in the first wedge
+- text-mode benchmark UI in I1
 
-### Explicit-over-clever requirements
+### Explicit-over-clever guardrails
 
-Prefer explicit label accounting over inferred heuristics:
+Prefer explicit label accounting over heuristics:
 
-- validate duplicate benchmark ids explicitly
-- validate duplicate `case_id` and duplicate carrier mapping explicitly
-- validate unknown carrier ids explicitly
-- validate active-root unlabeled carriers explicitly
+- validate duplicate ids explicitly
+- validate unknown carriers explicitly
+- validate unlabeled active-root carriers explicitly
+- derive status and gate state from explicit enums, not ad hoc booleans
 
-Do not try to infer benchmark health from directory names or proof timestamps
-alone.
+## Implementation Plan
+
+### Step 1: Add the registry and shared benchmark types
+
+Touch:
+
+- `benchmarks/labels.json`
+- `spec-core/src/benchmarks.rs`
+- `spec-core/src/lib.rs`
+
+Implement:
+
+- registry structs
+- enum definitions
+- registry parsing and validation
+- repo-relative root and generated-root normalization
+- canonical `label_digest` generation for full-scope entries
+
+Exit condition:
+
+- the registry loads from repo root
+- malformed or contradictory registry data fails with clear diagnostics
+
+### Step 2: Build the shared projection engine
+
+Touch:
+
+- `spec-core/src/benchmarks.rs`
+
+Implement:
+
+- benchmark root intersection logic
+- full-vs-partial scope classification
+- case projection from loaded specs and projected unit truth
+- required-molecule projection from loaded molecule evidence
+- anti-laundering credit rules
+- benchmark status and gate-status derivation
+
+Hard rule:
+
+- the engine takes already loaded specs, molecule tests, passports, molecule
+  evidence, and scope metadata as input
+- the engine must not re-read passports or molecule evidence on its own
+
+Exit condition:
+
+- one caller contract can serve both `status` and `export`
+
+### Step 3: Wire `spec status --format json`
+
+Touch:
+
+- `spec-cli/src/commands.rs`
+
+Implement:
+
+- bump `STATUS_JSON_SCHEMA_VERSION` from `3` to `4`
+- add top-level `benchmarks: Vec<BenchmarkProjection>` to the JSON response
+- load `benchmarks/labels.json` once per invocation
+- call the shared projector using resolved scope plus current loaded truth
+- keep text mode unchanged
+
+Exit condition:
+
+- status JSON emits additive `benchmarks[]` with honest full/partial behavior
+
+### Step 4: Wire `spec export --format json`
+
+Touch:
+
+- `spec-core/src/export.rs`
+- `spec-cli/src/commands.rs`
+
+Implement:
+
+- bump export schema version from `3` to `4`
+- add top-level additive `benchmarks[]` to `ExportBundle`
+- call the same shared projector used by status
+- preserve all existing export fields unchanged aside from the additive field
+
+Exit condition:
+
+- status and export project the same benchmark truth for the same scope
+
+### Step 5: Lock reserved, companion, and partial semantics
+
+Touch:
+
+- `spec-core/src/benchmarks.rs`
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/fixtures/`
+
+Implement targeted coverage for:
+
+- full-scope `BENCH-SERVICE` reserved projection
+- companion benchmark visibility
+- companion benchmark supported carriers that still never count positive
+- partial-scope zero-credit behavior
+- unlabeled-carrier accounting invalidation
+
+Exit condition:
+
+- the fake-green paths are blocked by tests before the schema-v4 contract ships
+
+### Step 6: Update fixtures and schema assertions
+
+Touch:
+
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/fixtures/status-*.json`
+- any new benchmark-aware fixture variants that make the contract clearer
+
+Implement:
+
+- benchmark-aware status fixture coverage
+- benchmark-aware export fixture coverage
+- schema version `4` assertions in `spec-cli/tests/cli.rs`
+
+Exit condition:
+
+- production code does not land without green schema-v4 fixture coverage
 
 ## Test Review
 
-100 percent coverage is the goal for the new benchmark logic because this is a
-public machine contract wedge.
+One hundred percent coverage is the goal for this wedge because it changes a
+public machine contract.
 
 ### Test framework
 
@@ -551,7 +683,7 @@ CODE PATH COVERAGE
     ├── [GAP] Duplicate benchmark id fails validation
     ├── [GAP] Duplicate case id or duplicate carrier mapping fails validation
     ├── [GAP] Unknown classification fails validation
-    └── [GAP] Missing / malformed labels file surfaces command failure clearly
+    └── [GAP] Missing or malformed labels file surfaces command failure clearly
 
 [+] Full-scope benchmark projection
     |
@@ -565,35 +697,36 @@ CODE PATH COVERAGE
     |
     ├── [GAP] Pricing-subdir status emits BENCH-ECOM partial only
     ├── [GAP] Single-file status emits only intersecting partial case(s)
-    ├── [GAP] Partial entries omit benchmark_status, gate_status, and summary
+    ├── [GAP] Partial entries omit benchmark_status, gate_status, and label_digest
     └── [GAP] Partial cases always emit counts_as_supported_positive=false
 
 [+] Anti-laundering
     |
-    ├── [GAP] Unlabeled active positive unit => accounting_status=invalid, no positive credit
+    ├── [GAP] Unlabeled active unit => accounting_status=invalid, no positive credit
     ├── [GAP] Unlabeled active partial scope => accounting_status=partial_invalid
     ├── [GAP] Deferred case stays visible but never counts green
     ├── [GAP] Fallback-backed case stays visible but never counts green
     ├── [GAP] Companion-negative case stays visible and never counts green
-    └── [GAP] Companion benchmark can contain supported carriers without entering positive credit
+    └── [GAP] Companion benchmark can contain supported carriers without becoming positive credit
 
-[+] Benchmark status / gate status
+[+] Benchmark status and gate status
     |
     ├── [GAP] Positive full benchmark passing when supported cases + required molecules are valid
     ├── [GAP] Positive full benchmark incomplete when a supported case is stale/untested/incomplete
+    ├── [GAP] Positive full benchmark failing when a supported case or required molecule fails
     ├── [GAP] Positive full benchmark invalid on accounting failure
-    ├── [GAP] Companion benchmark passing when all cases emit and none count positive
+    ├── [GAP] Companion benchmark passing when all cases emit and none counts positive
     └── [GAP] Reserved BENCH-SERVICE emits reserved gate state
 
 [+] Public schema contract
     |
     ├── [GAP] status JSON fixture(s) bump to schema_version 4 with top-level benchmarks[]
     ├── [GAP] export JSON fixture(s) bump to schema_version 4 with top-level benchmarks[]
-    └── [GAP] existing units/passports/graph surfaces remain unchanged aside from additive benchmarks[]
+    └── [GAP] existing units, passports, molecule_tests, and graph surfaces remain unchanged aside from additive benchmarks[]
 
 ---------------------------------
-COVERAGE: 0/23 benchmark paths tested today
-GAPS: 23 benchmark paths need tests
+COVERAGE: 0/24 benchmark paths tested today
+GAPS: 24 benchmark paths need tests
 CRITICAL: schema-v4 contract is entirely untested until I1 lands
 ---------------------------------
 ```
@@ -602,17 +735,17 @@ CRITICAL: schema-v4 contract is entirely untested until I1 lands
 
 #### `spec-core` unit tests
 
-Add focused tests in the new benchmark module for:
+Add focused tests for:
 
 - registry normalization and validation
 - active-root unlabeled invalidation
 - partial-valid vs partial-invalid classification
 - case-level `counts_as_supported_positive` rules
-- benchmark status and gate status transitions
+- benchmark status and gate-status transitions
 
 #### `spec-cli` integration tests
 
-Add CLI coverage in `spec-cli/tests/cli.rs` for:
+Add CLI coverage for:
 
 - repo-root full-scope status benchmark projection
 - benchmark-root full-scope status benchmark projection
@@ -624,14 +757,14 @@ Add CLI coverage in `spec-cli/tests/cli.rs` for:
 
 #### Fixture updates
 
-Update or add JSON fixtures so the public machine contract is locked at
+Update or add fixture coverage so the public machine contract is locked at
 `schema_version: 4` for:
 
 - status valid
-- status untested or incomplete
+- status incomplete or stale
 - export valid
 
-If existing generic fixtures become too awkward to retrofit, add benchmark-aware
+If current generic fixtures become too awkward to retrofit, add benchmark-aware
 fixture variants instead of weakening assertions.
 
 ### Regression rule
@@ -655,15 +788,16 @@ cargo run -p spec-cli -- export examples/crosslib-app --format json
 
 ### Watchpoints
 
-1. **Do not rescan the filesystem per benchmark case.**
-   The projector should operate on already loaded specs, already read passports,
-   already read molecule evidence, and already projected semantic truth.
+1. Do not rescan the filesystem per benchmark case.
+   The projector should operate on already loaded specs, already read
+   passports, already read molecule evidence, and already projected semantic
+   truth.
 
-2. **Do not duplicate registry parsing inside status and export.**
+2. Do not duplicate registry parsing inside status and export.
    Parse once per command invocation, then pass the shared registry into the
    projector.
 
-3. **Keep lookups map-based.**
+3. Keep lookups map-based.
    Benchmark case matching should use normalized hash maps keyed by carrier id
    and benchmark id, not nested linear scans across every loaded spec and every
    benchmark case.
@@ -681,7 +815,7 @@ is a bug in the implementation shape.
 | Code path | Real failure | Test required | Error handling required | User-visible outcome |
 | --- | --- | --- | --- | --- |
 | registry load | missing or malformed `benchmarks/labels.json` silently drops benchmark truth | yes | yes, fail command with clear benchmark-registry diagnostic | clear failure, never silent omission |
-| active benchmark accounting | unlabeled authored carrier under active root still yields `valid` accounting | yes | yes, benchmark `invalid` / `partial_invalid` | clear invalid benchmark projection |
+| active benchmark accounting | unlabeled authored carrier under active root still yields `valid` accounting | yes | yes, benchmark `invalid` or `partial_invalid` | clear invalid benchmark projection |
 | partial scope | single-file query implies whole benchmark green | yes | yes, force `partial` and zero positive credit | honest partial projection |
 | companion benchmark | companion-negative case disappears from projection | yes | yes | explicit non-native visibility |
 | reserved benchmark | `BENCH-SERVICE` omitted from broad scope | yes | yes | explicit reserved gate state |
@@ -692,116 +826,37 @@ Critical gap definition for I1:
 - any path that can silently grant positive benchmark credit without full scope
   or without valid accounting is a critical gap
 
-This plan closes those gaps by construction.
+## NOT in Scope
 
-## Not in Scope
-
-- `spec benchmark snapshot <benchmark-id>`
-- `benchmarks/snapshots/*.snapshot.json`
-- `benchmarks/reviews/*.readability.review.json`
-- readability review loading on `status` / `export`
-- `projection_digest`
-- `readability_review_status`
-- `readability_verdict`
-- `readability_generated_files[]`
-- text-mode benchmark summaries
-- authored `BENCH-SERVICE` workload content
-- benchmark scoring, history, or reporting dashboards
-
-Rationale:
-
-- those belong to `I2` and later by the locked ladder
-- forcing them into I1 would turn a clean read-surface wedge into a subsystem
-  rewrite
-
-## Implementation Plan
-
-### Step 1: Add the benchmark registry and shared types
-
-Add:
-
-- `benchmarks/labels.json`
-- `spec-core/src/benchmarks.rs`
-- `pub mod benchmarks;` in `spec-core/src/lib.rs`
-
-Implement:
-
-- registry structs
-- enum definitions
-- registry parsing and validation
-- repo-relative root and generated-root normalization
-- `label_digest` canonicalization for full-scope entries
-
-### Step 2: Build the shared projection engine
-
-In `spec-core/src/benchmarks.rs`, implement:
-
-- benchmark root intersection logic
-- full vs partial scope classification
-- case projection from loaded specs and projected proof truth
-- required-molecule proof projection from loaded molecule evidence
-- anti-laundering rules
-- benchmark status and gate status derivation
-
-Hard rule:
-
-- this engine must take already loaded specs/tests/passports/evidence as input
-- it must not re-read passports or molecule evidence on its own
-
-### Step 3: Wire `spec status --format json`
-
-In `spec-cli/src/commands.rs`:
-
-- bump `STATUS_JSON_SCHEMA_VERSION` from `3` to `4`
-- add top-level `benchmarks: Vec<BenchmarkProjection>` to the JSON response
-- load `benchmarks/labels.json` once for the invocation
-- call the shared projector using the resolved scope plus currently loaded truth
-- keep text mode unchanged in I1
-
-### Step 4: Wire `spec export`
-
-In `spec-core/src/export.rs` and `spec-cli/src/commands.rs`:
-
-- bump export schema version from `3` to `4`
-- add additive top-level `benchmarks[]` to `ExportBundle`
-- call the same shared projector used by `status`
-- keep all existing export surfaces stable aside from the additive field
-
-### Step 5: Lock reserved and companion semantics
-
-Add targeted coverage for:
-
-- full-scope `BENCH-SERVICE` reserved projection
-- companion benchmark visibility
-- companion benchmark supported carriers that still never count positive
-- partial-scope zero-credit behavior
-
-### Step 6: Update fixtures and contract tests
-
-Update:
-
-- benchmark-aware status fixture coverage
-- benchmark-aware export fixture coverage
-- schema version assertions in `spec-cli/tests/cli.rs`
-
-Do not land production code before fixture and schema tests are green.
+| Deferred item | Why it is deferred |
+| --- | --- |
+| `spec benchmark snapshot <benchmark-id>` | belongs to I2, not the shared projection wedge |
+| `benchmarks/snapshots/*.snapshot.json` | snapshot write surface is not part of I1 |
+| `benchmarks/reviews/*.readability.review.json` | readability observation surface is I2 work |
+| readability review loading on `status` and `export` | same reason, do not widen the read-side contract now |
+| `projection_digest` | locked digest contract depends on snapshot/readability closure |
+| `readability_review_status`, `readability_verdict`, `readability_generated_files[]` | all belong to the readability surface, not I1 |
+| text-mode benchmark summaries | JSON contract first, text UI later |
+| authored `BENCH-SERVICE` workload content | the reserved gate must be visible before the workload exists |
+| benchmark scoring, history, or reporting dashboards | product stretch work, not contract foundation |
 
 ## What Already Exists
 
-- The current status health engine already knows how to compute unit and
-  molecule truth. Reuse it.
-- The current export bundle already carries units, passports, molecule tests,
-  and graph edges. Extend it additively.
-- The current example roots already provide the positive and companion workloads
-  I1 needs. Do not invent a new fixture corpus.
-- The current path-scoped command behavior already separates file, directory,
-  and repo-root queries. Extend it with benchmark scope classification instead
-  of writing a second scope model.
+- the current status health engine already knows how to compute unit and
+  molecule truth, reuse it
+- the current export bundle already carries units, passports, molecule tests,
+  and graph edges, extend it additively
+- the current example roots already provide the positive and companion
+  workloads I1 needs, do not invent a new fixture corpus
+- the current path-scoped command behavior already separates file, directory,
+  and repo-root queries, extend it with benchmark scope classification instead
+  of writing a second scope model
 
 ## Worktree Parallelization Strategy
 
-This plan does have bounded parallelization room once the shared benchmark
-contract is frozen.
+This plan has bounded parallelization room once the shared benchmark contract is
+frozen. The shared `spec-core` benchmark API is the barrier. Everything before
+that barrier can move in parallel only if it does not also touch `spec-core/src/`.
 
 ### Dependency table
 
@@ -809,41 +864,48 @@ contract is frozen.
 | --- | --- | --- |
 | Registry authoring | `benchmarks/`, `examples/` | - |
 | Shared benchmark projection core | `spec-core/src/` | - |
-| Status JSON wiring | `spec-cli/src/` | Shared benchmark projection core |
-| Export JSON wiring | `spec-core/src/`, `spec-cli/src/` | Shared benchmark projection core |
-| Contract tests and fixtures | `spec-cli/tests/`, `spec-cli/tests/fixtures/` | Registry authoring, Status JSON wiring, Export JSON wiring |
+| Export bundle integration | `spec-core/src/`, `spec-cli/src/` | Shared benchmark projection core |
+| Status JSON integration | `spec-cli/src/` | Shared benchmark projection core |
+| Contract tests and fixtures | `spec-cli/tests/`, `spec-cli/tests/fixtures/` | Registry authoring, Export bundle integration, Status JSON integration |
 
 ### Parallel lanes
 
 - **Lane A:** Registry authoring  
-  `benchmarks/labels.json` plus final case roster validation against live
-  example truth.
+  Owns `benchmarks/` plus validation of the final roster against live example
+  units and molecule IDs.
 
-- **Lane B:** Shared projection core -> Export JSON wiring  
-  Sequential because both touch `spec-core/src/`.
+- **Lane B:** Shared benchmark projection core -> export bundle integration  
+  Sequential in one lane because both steps touch `spec-core/src/` and should
+  freeze one benchmark API before anything else depends on it.
 
-- **Lane C:** Status JSON wiring  
-  Can run after Lane B exposes the shared projection API. Mostly `spec-cli/src/`
-  ownership.
+- **Lane C:** Status JSON integration  
+  Starts only after Lane B freezes the shared projector API. Mostly
+  `spec-cli/src/` ownership.
 
 - **Lane D:** Contract tests and fixtures  
-  Launch after B + C stabilize the machine shape.
+  Starts after A, B, and C have stabilized the final schema-v4 shape.
 
 ### Execution order
 
 1. Launch **Lane A** and the first half of **Lane B** in parallel:
-   registry authoring plus shared `spec-core` projection core.
-2. Once the shared projection API is stable, launch **Lane C**.
-3. Finish **Lane B** export wiring.
-4. Launch **Lane D** after B + C are both green enough to freeze schema v4.
+   registry authoring plus the shared `spec-core` benchmark projector.
+2. Finish **Lane B** export-bundle integration and freeze the shared benchmark
+   projection API.
+3. Launch **Lane C** after that API is stable.
+4. Launch **Lane D** after A, B, and C are green enough to lock schema-v4
+   fixtures.
 
 ### Conflict flags
 
-- Lanes B and C both depend on the exact benchmark projection type shape.
-  Freeze the `spec-core` interface before deep CLI assertions.
-- Lane A must settle the final case roster before Lane D golden fixtures lock.
-- Export wiring shares `spec-core/src/` with the shared projection core, so keep
-  those two steps in the same lane to avoid merge churn.
+- Lanes B and C both depend on the exact `BenchmarkProjection` shape. Do not
+  let Lane C guess the API before Lane B freezes it.
+- Lane A must settle the final case roster before Lane D writes golden
+  fixtures.
+- Export bundle integration touches both `spec-core/src/` and `spec-cli/src/`.
+  Keep it with Lane B so the status-only lane stays narrow.
+
+If the team only has one worker, run sequentially in the same order. That is
+still fine.
 
 ## Acceptance Criteria
 
@@ -868,11 +930,11 @@ I1 is done only when all of these are true:
 - Step 0: Scope Challenge - scope accepted as-is, no widening beyond the locked I1 wedge
 - Architecture Review: one shared benchmark projection core, no duplicated status/export logic
 - Code Quality Review: explicit enums plus one shared module, no new subsystem
-- Test Review: coverage diagram produced, 23 benchmark paths must be locked by tests
+- Test Review: coverage diagram produced, 24 benchmark paths must be locked by tests
 - Performance Review: keep projection map-based and reuse loaded truth
 - NOT in scope: written
 - What already exists: written
 - TODOS.md updates: none, the ladder already owns I2-I4 follow-ons
 - Failure modes: all critical laundering paths explicitly covered in plan
-- Parallelization: 4 lanes, with bounded overlap after the shared core freezes
+- Parallelization: 4 lanes, 2 launchable in parallel at the start, then sequential convergence
 - Lake Score: 5/5 decisions chose the complete version over a fake smaller shortcut
