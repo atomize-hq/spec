@@ -455,6 +455,26 @@ fn status_molecule_tests(json: &Value) -> &Vec<Value> {
     status_roots(json)[0]["molecule_tests"].as_array().unwrap()
 }
 
+fn status_benchmarks(json: &Value) -> &Vec<Value> {
+    json["benchmarks"].as_array().unwrap()
+}
+
+fn benchmark_with_id<'a>(json: &'a Value, id: &str) -> &'a Value {
+    status_benchmarks(json)
+        .iter()
+        .find(|benchmark| benchmark["id"] == id)
+        .unwrap_or_else(|| panic!("expected benchmark {id} in {json}"))
+}
+
+fn benchmark_case_with_carrier_id<'a>(benchmark: &'a Value, carrier_id: &str) -> &'a Value {
+    benchmark["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["carrier_id"] == carrier_id)
+        .unwrap_or_else(|| panic!("expected carrier {carrier_id} in {benchmark}"))
+}
+
 fn fixture_json(name: &str) -> Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
@@ -2618,7 +2638,7 @@ local_tests:
     assert!(output.status.success());
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 3);
+    assert_eq!(bundle["schema_version"], 4);
     assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
     assert!(bundle.get("graph").is_some());
     assert!(bundle.get("molecule_tests").is_some());
@@ -4263,6 +4283,71 @@ fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
     let (temp_dir, dst_ecommerce) = copy_ecommerce_example_preserving_artifacts();
     remove_derived_artifacts(&dst_ecommerce);
     (temp_dir, dst_ecommerce)
+}
+
+fn copy_benchmark_fixture_repo() -> (tempfile::TempDir, PathBuf) {
+    let root = repo_root();
+    let temp_dir =
+        tempfile::TempDir::new_in(root.join("target")).expect("failed to create temp dir");
+    let repo_dir = temp_dir.path().join("repo");
+
+    fs::create_dir_all(repo_dir.join("examples")).unwrap();
+    fs::write(repo_dir.join(".git"), "gitdir: .git/modules/spec-tests\n").unwrap();
+    copy_git_tracked_dir(
+        &root.join("examples/ecommerce"),
+        &repo_dir.join("examples/ecommerce"),
+    )
+    .unwrap();
+    copy_git_tracked_dir(
+        &root.join("examples/crosslib-app"),
+        &repo_dir.join("examples/crosslib-app"),
+    )
+    .unwrap();
+    copy_git_tracked_dir(
+        &root.join("examples/shared-crate"),
+        &repo_dir.join("examples/shared-crate"),
+    )
+    .unwrap();
+    copy_git_tracked_dir(
+        &root.join("examples/shared-spec"),
+        &repo_dir.join("examples/shared-spec"),
+    )
+    .unwrap();
+    fs::create_dir_all(repo_dir.join("benchmarks")).unwrap();
+    fs::copy(
+        root.join("benchmarks/labels.json"),
+        repo_dir.join("benchmarks/labels.json"),
+    )
+    .unwrap();
+
+    (temp_dir, repo_dir)
+}
+
+fn remove_benchmark_case_label(repo_dir: &Path, benchmark_id: &str, carrier_id: &str) {
+    let registry_path = repo_dir.join("benchmarks/labels.json");
+    let mut registry: Value = serde_json::from_str(&fs::read_to_string(&registry_path).unwrap())
+        .expect("benchmark registry should be valid JSON");
+    let benchmarks = registry["benchmarks"]
+        .as_array_mut()
+        .expect("benchmark registry should contain benchmarks");
+    let benchmark = benchmarks
+        .iter_mut()
+        .find(|benchmark| benchmark["id"] == benchmark_id)
+        .unwrap_or_else(|| panic!("expected benchmark {benchmark_id} in registry"));
+    let cases = benchmark["cases"]
+        .as_array_mut()
+        .expect("benchmark should contain cases");
+    let original_len = cases.len();
+    cases.retain(|case| case["carrier_id"] != carrier_id);
+    assert!(
+        cases.len() + 1 == original_len,
+        "expected to remove carrier {carrier_id} from benchmark {benchmark_id}"
+    );
+    fs::write(
+        &registry_path,
+        serde_json::to_string_pretty(&registry).unwrap(),
+    )
+    .unwrap();
 }
 
 fn copy_crosslib_typescript_example() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
@@ -6362,7 +6447,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
         "status stays non-green because sibling helper units remain untested"
     );
     let status_json = parse_stdout_json(&status_output);
-    assert_eq!(status_json["schema_version"], 3);
+    assert_eq!(status_json["schema_version"], 4);
     let unit = status_units(&status_json)
         .iter()
         .find(|unit| unit["id"] == "pricing/pricing_quote")
@@ -6373,7 +6458,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
     let export_output = run_in(&project_dir, &["export", "units"]);
     assert_output_success("supported data export should succeed", &export_output);
     let export_json = parse_stdout_json(&export_output);
-    assert_eq!(export_json["schema_version"], 3);
+    assert_eq!(export_json["schema_version"], 4);
     let passport = export_json["passports"]
         .as_array()
         .unwrap()
@@ -8240,7 +8325,7 @@ body:
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     let units = status_units(&json);
     assert_eq!(units.len(), 1);
     assert_eq!(units[0]["id"], "pricing/bad");
@@ -8276,7 +8361,7 @@ fn spec_status_json_loader_error_surfaces_in_response() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert!(
         !loader_errors.is_empty(),
@@ -8575,7 +8660,7 @@ fn spec_status_zero_roots_is_non_green() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     assert_eq!(json["roots"], serde_json::json!([]));
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert_eq!(loader_errors[0]["code"], "SPEC_NO_LIBRARY_ROOTS");
@@ -13351,7 +13436,7 @@ fn export_emits_schema_v3_bundle_for_valid_cross_library_dep() {
     assert!(output.status.success(), "export should succeed");
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 3);
+    assert_eq!(bundle["schema_version"], 4);
     let edges = bundle["graph"]["edges"].as_array().unwrap();
     assert!(
         edges.iter().any(|edge| {
@@ -14099,7 +14184,7 @@ fn status_json_surfaces_missing_library_path_as_loader_error() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     assert_eq!(json["units"], serde_json::json!([]));
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert_eq!(loader_errors.len(), 1);
@@ -15016,7 +15101,7 @@ fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
     let spec_export = run_in(&ecommerce_dir, &["export", "units"]);
     assert_output_success("spec export should remain unchanged", &spec_export);
     let spec_export_json = parse_stdout_json(&spec_export);
-    assert_eq!(spec_export_json["schema_version"], 3);
+    assert_eq!(spec_export_json["schema_version"], 4);
     assert!(spec_export_json.get("plan").is_none(), "{spec_export_json}");
     assert!(
         spec_export_json.get("units").is_some(),
@@ -17753,4 +17838,229 @@ fn export_additively_preserves_rust_proof_and_includes_typescript_proof() {
         passport["target_proofs"]["typescript"]["evidence"]["build_status"],
         "pass"
     );
+}
+
+#[test]
+fn spec_status_repo_root_json_includes_i1_benchmarks() {
+    let (_temp_dir, repo_dir) = copy_benchmark_fixture_repo();
+
+    let output = run_in(&repo_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "repo-root status should stay non-green for the benchmark fixture repo"
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 4);
+
+    let benchmarks = status_benchmarks(&json);
+    assert_eq!(benchmarks.len(), 3, "{json}");
+    let ids = benchmarks
+        .iter()
+        .map(|benchmark| benchmark["id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, vec!["BENCH-ECOM", "BENCH-CROSSLIB", "BENCH-SERVICE"]);
+
+    let service = benchmark_with_id(&json, "BENCH-SERVICE");
+    assert_eq!(service["path_scope"], "full");
+    assert_eq!(service["lifecycle"], "reserved");
+    assert_eq!(service["benchmark_status"], "reserved");
+    assert_eq!(service["gate_status"], "reserved");
+    assert_eq!(service["cases"], serde_json::json!([]));
+
+    let crosslib = benchmark_with_id(&json, "BENCH-CROSSLIB");
+    assert_eq!(crosslib["kind"], "companion_negative_proof");
+    assert_eq!(crosslib["path_scope"], "full");
+    assert_eq!(crosslib["gate_status"], "not_applicable");
+    assert!(
+        crosslib["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|case| case["counts_as_supported_positive"] == Value::Bool(false)),
+        "{crosslib}"
+    );
+}
+
+#[test]
+fn spec_status_benchmark_root_json_reports_full_scope_rollup() {
+    let (_temp_dir, repo_dir) = copy_benchmark_fixture_repo();
+
+    let output = run_in(
+        &repo_dir,
+        &["status", "examples/ecommerce", "--format", "json"],
+    );
+    assert_output_success(
+        "benchmark-root status should succeed for the ecommerce example",
+        &output,
+    );
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 4);
+
+    let benchmark = benchmark_with_id(&json, "BENCH-ECOM");
+    assert_eq!(status_benchmarks(&json).len(), 1, "{json}");
+    assert_eq!(benchmark["path_scope"], "full");
+    assert_eq!(benchmark["accounting_status"], "valid");
+    assert!(benchmark["label_digest"].as_str().is_some(), "{benchmark}");
+    assert!(
+        benchmark["benchmark_status"].as_str().is_some(),
+        "{benchmark}"
+    );
+    assert!(benchmark["gate_status"].as_str().is_some(), "{benchmark}");
+    assert_eq!(
+        benchmark["required_molecule_proofs"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+}
+
+#[test]
+fn spec_status_partial_directory_json_omits_benchmark_rollup_credit() {
+    let (_temp_dir, repo_dir) = copy_benchmark_fixture_repo();
+
+    let output = run_in(
+        &repo_dir,
+        &[
+            "status",
+            "examples/ecommerce/units/pricing",
+            "--format",
+            "json",
+        ],
+    );
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 4);
+
+    let benchmark = benchmark_with_id(&json, "BENCH-ECOM");
+    assert_eq!(benchmark["path_scope"], "partial");
+    assert_eq!(benchmark["accounting_status"], "partial_valid");
+    assert!(benchmark["benchmark_status"].is_null(), "{benchmark}");
+    assert!(benchmark["gate_status"].is_null(), "{benchmark}");
+    assert!(
+        benchmark["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|case| case["counts_as_supported_positive"] == Value::Bool(false)),
+        "{benchmark}"
+    );
+}
+
+#[test]
+fn spec_status_single_file_json_reports_partial_benchmark_case_only() {
+    let (_temp_dir, repo_dir) = copy_benchmark_fixture_repo();
+
+    let output = run_in(
+        &repo_dir,
+        &[
+            "status",
+            "examples/ecommerce/units/pricing/apply_discount.unit.spec",
+            "--format",
+            "json",
+        ],
+    );
+    assert_output_success("single-file benchmark status should succeed", &output);
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 4);
+
+    let benchmark = benchmark_with_id(&json, "BENCH-ECOM");
+    assert_eq!(benchmark["path_scope"], "partial");
+    assert_eq!(benchmark["cases"].as_array().unwrap().len(), 1);
+    let case = benchmark_case_with_carrier_id(benchmark, "pricing/apply_discount");
+    assert_eq!(case["classification"], "supported");
+    assert_eq!(case["counts_as_supported_positive"], false);
+}
+
+#[test]
+fn spec_export_json_includes_companion_negative_benchmark_projection() {
+    let (_temp_dir, repo_dir) = copy_benchmark_fixture_repo();
+
+    let output = run_in(
+        &repo_dir,
+        &["export", "examples/crosslib-app", "--format", "json"],
+    );
+    assert_output_success("cross-library export should succeed", &output);
+
+    let json = parse_stdout_json(&output);
+    assert_eq!(json["schema_version"], 4);
+    let benchmarks = json["benchmarks"].as_array().unwrap();
+    assert_eq!(benchmarks.len(), 1, "{json}");
+
+    let benchmark = &benchmarks[0];
+    assert_eq!(benchmark["id"], "BENCH-CROSSLIB");
+    assert_eq!(benchmark["kind"], "companion_negative_proof");
+    assert_eq!(benchmark["path_scope"], "full");
+    assert_eq!(benchmark["gate_status"], "not_applicable");
+    assert!(
+        benchmark["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|case| case["counts_as_supported_positive"] == Value::Bool(false)),
+        "{benchmark}"
+    );
+
+    let companion_case =
+        benchmark_case_with_carrier_id(benchmark, "pricing/checkout_nested_chain3");
+    assert_eq!(companion_case["classification"], "companion_negative_proof");
+    assert_eq!(companion_case["counts_as_supported_positive"], false);
+}
+
+#[test]
+fn spec_status_reserved_benchmark_is_visible_only_on_broad_scope() {
+    let (_temp_dir, repo_dir) = copy_benchmark_fixture_repo();
+
+    let repo_output = run_in(&repo_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !repo_output.status.success(),
+        "repo-root status should stay non-green for the benchmark fixture repo"
+    );
+    let repo_json = parse_stdout_json(&repo_output);
+    assert!(
+        status_benchmarks(&repo_json)
+            .iter()
+            .any(|benchmark| benchmark["id"] == "BENCH-SERVICE"),
+        "{repo_json}"
+    );
+
+    let ecommerce_output = run_in(
+        &repo_dir,
+        &["status", "examples/ecommerce", "--format", "json"],
+    );
+    assert_output_success(
+        "benchmark-root status should succeed for the ecommerce example",
+        &ecommerce_output,
+    );
+    let ecommerce_json = parse_stdout_json(&ecommerce_output);
+    assert!(
+        status_benchmarks(&ecommerce_json)
+            .iter()
+            .all(|benchmark| benchmark["id"] != "BENCH-SERVICE"),
+        "{ecommerce_json}"
+    );
+}
+
+#[test]
+fn spec_status_full_scope_benchmark_is_invalid_when_active_carrier_is_unlabeled() {
+    let (_temp_dir, repo_dir) = copy_benchmark_fixture_repo();
+    remove_benchmark_case_label(&repo_dir, "BENCH-ECOM", "pricing/pricing_quote");
+
+    let output = run_in(
+        &repo_dir,
+        &["status", "examples/ecommerce", "--format", "json"],
+    );
+    assert!(
+        output.status.success(),
+        "benchmark invalidation is additive and should not flip the overall status exit code here"
+    );
+
+    let json = parse_stdout_json(&output);
+    let benchmark = benchmark_with_id(&json, "BENCH-ECOM");
+    assert_eq!(benchmark["path_scope"], "full");
+    assert_eq!(benchmark["accounting_status"], "invalid");
+    assert_eq!(benchmark["benchmark_status"], "invalid");
+    assert_eq!(benchmark["gate_status"], "open");
 }

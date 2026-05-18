@@ -2,11 +2,11 @@
 
 use crate::escape_hatch::EscapeHatchGateStatus;
 use crate::molecule_evidence::{
-    molecule_evidence_is_current_pass, molecule_evidence_is_stale, molecule_evidence_path_for,
-    MoleculeEvidence, MoleculeEvidenceStatus,
+    MoleculeEvidence, MoleculeEvidenceStatus, molecule_evidence_is_current_pass,
+    molecule_evidence_is_stale, molecule_evidence_path_for,
 };
-use crate::passport::{passport_path_for, Passport};
-use crate::semantic_review::{semantic_health_effect, SemanticHealthEffect, SemanticSupportStatus};
+use crate::passport::{Passport, passport_path_for};
+use crate::semantic_review::{SemanticHealthEffect, SemanticSupportStatus, semantic_health_effect};
 use crate::types::{LoadedMoleculeTest, LoadedSpec};
 use crate::{Result, SpecError};
 use serde::{Deserialize, Serialize};
@@ -1128,9 +1128,11 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(error
-            .to_string()
-            .contains("duplicate carrier mapping 'pricing/apply_discount'"));
+        assert!(
+            error
+                .to_string()
+                .contains("duplicate carrier mapping 'pricing/apply_discount'")
+        );
     }
 
     #[test]
@@ -1201,10 +1203,12 @@ mod tests {
         assert_eq!(benchmark.benchmark_status, Some(BenchmarkStatus::Passing));
         assert_eq!(benchmark.gate_status, Some(BenchmarkGateStatus::Satisfied));
         assert!(benchmark.label_digest.is_some());
-        assert!(benchmark
-            .cases
-            .iter()
-            .all(|case| case.counts_as_supported_positive));
+        assert!(
+            benchmark
+                .cases
+                .iter()
+                .all(|case| case.counts_as_supported_positive)
+        );
     }
 
     #[test]
@@ -1343,10 +1347,12 @@ mod tests {
             companion.gate_status,
             Some(BenchmarkGateStatus::NotApplicable)
         );
-        assert!(companion
-            .cases
-            .iter()
-            .all(|case| !case.counts_as_supported_positive));
+        assert!(
+            companion
+                .cases
+                .iter()
+                .all(|case| !case.counts_as_supported_positive)
+        );
 
         let reserved = projections
             .iter()

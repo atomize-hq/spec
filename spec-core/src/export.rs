@@ -11,15 +11,17 @@
 //! Consumers must handle the `kind` field: `"dep"` edges have structured `from`/`to` refs;
 //! `"covers"` edges have `test`/`unit` string fields.
 
+use crate::AUTHORED_SPEC_VERSION;
+use crate::Result;
 use crate::benchmarks::{
-    build_benchmark_molecule_truth_map, build_benchmark_unit_truth_map, project_benchmarks,
     BenchmarkProjection, BenchmarkProjectionInput, BenchmarkRegistry,
+    build_benchmark_molecule_truth_map, build_benchmark_unit_truth_map, project_benchmarks,
 };
-use crate::graph::{top_level_deps, SpecEdge, SpecGraph};
-use crate::molecule_evidence::{read_molecule_evidence, MoleculeEvidence};
+use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
+use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
 use crate::passport::{
-    apply_projected_passport_truth, passport_path_for, project_passport_truth_with_context,
-    refresh_passport_target_proofs, ArtifactProvenance, Passport, PassportProjectionContext,
+    ArtifactProvenance, Passport, PassportProjectionContext, apply_projected_passport_truth,
+    passport_path_for, project_passport_truth_with_context, refresh_passport_target_proofs,
 };
 use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
 use crate::semantic_review::{SemanticProjectionMode, SemanticReviewContext};
@@ -27,8 +29,6 @@ use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
 };
-use crate::Result;
-use crate::AUTHORED_SPEC_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -448,18 +448,18 @@ mod tests {
     };
     use crate::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus, EscapeHatchProofSurface};
     use crate::molecule_evidence::{
-        build_molecule_evidence, write_molecule_evidence, MoleculeEvidenceStatus,
+        MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
     };
     use crate::passport::{
-        build_passport_with_evidence, write_passport, PassportEvidence, PassportTestResult,
-        ProofSurface,
+        PassportEvidence, PassportTestResult, ProofSurface, build_passport_with_evidence,
+        write_passport,
     };
     use crate::plan::{
         LoadedPlan, PlanAcceptance, PlanChange, PlanChangeAction, PlanComputedImpact,
         PlanComputedImpactStatus, PlanReport, PlanSource, PlanStruct,
     };
     use crate::semantic_review::{
-        evaluate_semantic_review, evaluate_semantic_review_with_context, SemanticReviewContext,
+        SemanticReviewContext, evaluate_semantic_review, evaluate_semantic_review_with_context,
     };
     use crate::types::{
         AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredField, AuthoredMethod,
@@ -1400,9 +1400,11 @@ mod tests {
         assert!(passports.is_empty());
         assert_eq!(warnings.len(), 1);
         assert_eq!(warnings[0].code, "passport_malformed");
-        assert!(warnings[0]
-            .message
-            .contains("Failed to parse passport JSON"));
+        assert!(
+            warnings[0]
+                .message
+                .contains("Failed to parse passport JSON")
+        );
     }
 
     #[test]
@@ -1670,18 +1672,22 @@ mod tests {
 
         assert!(warnings.is_empty());
         assert_eq!(passports.len(), 2);
-        assert!(passports
-            .iter()
-            .find(|passport| passport.id == "pricing/discount_strategy")
-            .expect("sum passport")
-            .semantic_review
-            .is_none());
-        assert!(passports
-            .iter()
-            .find(|passport| passport.id == "pricing/pricing_quote")
-            .expect("data passport")
-            .semantic_review
-            .is_none());
+        assert!(
+            passports
+                .iter()
+                .find(|passport| passport.id == "pricing/discount_strategy")
+                .expect("sum passport")
+                .semantic_review
+                .is_none()
+        );
+        assert!(
+            passports
+                .iter()
+                .find(|passport| passport.id == "pricing/pricing_quote")
+                .expect("data passport")
+                .semantic_review
+                .is_none()
+        );
     }
 
     #[test]
@@ -1756,18 +1762,22 @@ mod tests {
 
         assert!(warnings.is_empty());
         assert_eq!(passports.len(), 2);
-        assert!(passports
-            .iter()
-            .find(|passport| passport.id == "pricing/discount_strategy")
-            .expect("sum passport")
-            .semantic_review
-            .is_none());
-        assert!(passports
-            .iter()
-            .find(|passport| passport.id == "pricing/pricing_quote")
-            .expect("data passport")
-            .semantic_review
-            .is_none());
+        assert!(
+            passports
+                .iter()
+                .find(|passport| passport.id == "pricing/discount_strategy")
+                .expect("sum passport")
+                .semantic_review
+                .is_none()
+        );
+        assert!(
+            passports
+                .iter()
+                .find(|passport| passport.id == "pricing/pricing_quote")
+                .expect("data passport")
+                .semantic_review
+                .is_none()
+        );
     }
 
     #[test]
@@ -1975,8 +1985,8 @@ mod tests {
     }
 
     #[test]
-    fn load_passports_for_specs_preserve_does_not_promote_unsupported_additive_review_into_supported_family_truth(
-    ) {
+    fn load_passports_for_specs_preserve_does_not_promote_unsupported_additive_review_into_supported_family_truth()
+     {
         let dir = TempDir::new().unwrap();
         let apply_discount = loaded_supported_apply_discount_function(
             &dir,

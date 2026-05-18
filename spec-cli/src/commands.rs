@@ -5,8 +5,12 @@ use crate::config::{
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::{Serialize, Serializer};
+use spec_core::benchmarks::{
+    BenchmarkProjection, BenchmarkProjectionInput, build_benchmark_molecule_truth_map,
+    build_benchmark_unit_truth_map, load_benchmark_registry, project_benchmarks,
+};
 use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
-use spec_core::export::{build_export_bundle, build_plan_export_bundle};
+use spec_core::export::{build_export_bundle, build_plan_export_bundle, load_passports_for_specs};
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
     generate_typescript_output_tree, generate_unit_code_with_options,
@@ -123,7 +127,7 @@ impl ValidationSpecCollection {
 }
 
 const VALIDATE_JSON_SCHEMA_VERSION: u8 = 3;
-const STATUS_JSON_SCHEMA_VERSION: u8 = 3;
+const STATUS_JSON_SCHEMA_VERSION: u8 = 4;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,6 +159,8 @@ struct JsonStatusResponse {
     schema_version: u8,
     roots: Vec<JsonStatusRoot>,
     units: Vec<JsonStatusUnit>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    benchmarks: Vec<BenchmarkProjection>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     loader_errors: Vec<JsonErrorEntry>,
 }
@@ -270,6 +276,7 @@ fn emit_json_status_workspace_config_failure(err: &WorkspaceConfigError) -> Resu
         schema_version: STATUS_JSON_SCHEMA_VERSION,
         roots: vec![],
         units: vec![],
+        benchmarks: vec![],
         loader_errors: vec![workspace_config_error_to_json_entry(err)],
     })?;
     std::process::exit(1);
@@ -1015,6 +1022,202 @@ struct ResolvedStatusScopes {
     loader_errors: Vec<spec_core::SpecError>,
 }
 
+fn benchmark_source_base_for_scope(scope: &StatusRootScope) -> PathBuf {
+    scope.library_root.clone().unwrap_or_else(|| {
+        if scope.collection_path.is_dir() {
+            scope.collection_path.clone()
+        } else {
+            scope
+                .collection_path
+                .parent()
+                .unwrap_or(scope.collection_path.as_path())
+                .to_path_buf()
+        }
+    })
+}
+
+fn benchmark_source_base_for_path(path: &Path, context: &WorkspaceContext) -> PathBuf {
+    if path.is_file() {
+        if let Some(root) = resolve_unit_library_root(path, context) {
+            return root;
+        }
+        if let Some(root) = resolve_molecule_test_library_root(path, context) {
+            return root;
+        }
+        return path.parent().unwrap_or(path).to_path_buf();
+    }
+
+    if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "units")
+    {
+        return path.parent().unwrap_or(path).to_path_buf();
+    }
+
+    path.to_path_buf()
+}
+
+fn rebase_loaded_specs_for_benchmarks(
+    specs: &[LoadedSpec],
+    base: &Path,
+    repo_root: Option<&Path>,
+) -> Vec<LoadedSpec> {
+    specs
+        .iter()
+        .cloned()
+        .map(|mut spec| {
+            let raw_path = Path::new(&spec.source.file_path);
+            if !raw_path.is_absolute() {
+                spec.source.file_path = repo_root
+                    .map(|repo_root| repo_root.join(raw_path))
+                    .filter(|candidate| candidate.exists())
+                    .unwrap_or_else(|| base.join(raw_path))
+                    .display()
+                    .to_string();
+            }
+            spec
+        })
+        .collect()
+}
+
+fn rebase_loaded_molecule_tests_for_benchmarks(
+    tests: &[LoadedMoleculeTest],
+    base: &Path,
+    repo_root: Option<&Path>,
+) -> Vec<LoadedMoleculeTest> {
+    tests
+        .iter()
+        .cloned()
+        .map(|mut test| {
+            let raw_path = Path::new(&test.source.file_path);
+            if !raw_path.is_absolute() {
+                test.source.file_path = repo_root
+                    .map(|repo_root| repo_root.join(raw_path))
+                    .filter(|candidate| candidate.exists())
+                    .unwrap_or_else(|| base.join(raw_path))
+                    .display()
+                    .to_string();
+            }
+            test
+        })
+        .collect()
+}
+
+fn compute_benchmark_projections(
+    registry: &spec_core::benchmarks::BenchmarkRegistry,
+    repo_root: &Path,
+    scope_path: &Path,
+    specs: &[LoadedSpec],
+    molecule_tests: &[LoadedMoleculeTest],
+) -> Result<Vec<BenchmarkProjection>> {
+    let mut projections = Vec::new();
+    for benchmark in &registry.benchmarks {
+        let mut filtered_specs: Vec<LoadedSpec> = specs
+            .iter()
+            .filter(|spec| {
+                repo_relative_source_path(&spec.source.file_path, repo_root)
+                    .is_some_and(|path| path_is_within_root(&path, &benchmark.root))
+            })
+            .cloned()
+            .collect();
+        let mut filtered_molecule_tests: Vec<LoadedMoleculeTest> = molecule_tests
+            .iter()
+            .filter(|test| {
+                repo_relative_source_path(&test.source.file_path, repo_root)
+                    .is_some_and(|path| path_is_within_root(&path, &benchmark.root))
+            })
+            .cloned()
+            .collect();
+        if filtered_specs.is_empty() {
+            filtered_specs = specs.to_vec();
+            filtered_molecule_tests = molecule_tests.to_vec();
+        }
+        let single_registry = spec_core::benchmarks::BenchmarkRegistry {
+            benchmarks: vec![benchmark.clone()],
+        };
+        let (passports, _warnings) = load_passports_for_specs(&filtered_specs);
+        let passports_by_id: HashMap<String, spec_core::passport::Passport> = passports
+            .into_iter()
+            .map(|passport| (passport.id.clone(), passport))
+            .collect();
+        let specs_by_id: HashMap<String, LoadedSpec> = filtered_specs
+            .iter()
+            .map(|spec| (spec.spec.id.clone(), spec.clone()))
+            .collect();
+        let molecule_evidence_by_id: HashMap<String, MoleculeEvidence> = filtered_molecule_tests
+            .iter()
+            .filter_map(|test| {
+                read_molecule_evidence(Path::new(&test.source.file_path))
+                    .ok()
+                    .flatten()
+                    .map(|evidence| (test.test.id.clone(), evidence))
+            })
+            .collect();
+        let unit_truth_by_id = build_benchmark_unit_truth_map(&filtered_specs, &passports_by_id)?;
+        let molecule_truth_by_id = build_benchmark_molecule_truth_map(
+            &filtered_molecule_tests,
+            &molecule_evidence_by_id,
+            &specs_by_id,
+        )?;
+        projections.extend(project_benchmarks(
+            &single_registry,
+            BenchmarkProjectionInput {
+                repo_root,
+                scope_path,
+                specs: &filtered_specs,
+                molecule_tests: &filtered_molecule_tests,
+                unit_truth_by_id: &unit_truth_by_id,
+                molecule_truth_by_id: &molecule_truth_by_id,
+            },
+        )?);
+    }
+    Ok(projections)
+}
+
+fn load_optional_benchmark_registry(
+    repo_root: &Path,
+) -> Result<Option<spec_core::benchmarks::BenchmarkRegistry>> {
+    match load_benchmark_registry(repo_root) {
+        Ok(registry) => Ok(Some(registry)),
+        Err(spec_core::SpecError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            Ok(None)
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn repo_relative_source_path(source_path: &str, repo_root: &Path) -> Option<String> {
+    let path = Path::new(source_path);
+    let relative = if path.is_absolute() {
+        path.strip_prefix(repo_root).ok()?
+    } else {
+        path
+    };
+    Some(
+        relative
+            .components()
+            .filter_map(|component| match component {
+                std::path::Component::Normal(segment) => {
+                    Some(segment.to_string_lossy().into_owned())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
+}
+
+fn path_is_within_root(path: &str, root: &str) -> bool {
+    let path_segments = path.split('/').collect::<Vec<_>>();
+    let root_segments = root.split('/').collect::<Vec<_>>();
+    root_segments.len() <= path_segments.len()
+        && root_segments
+            .iter()
+            .zip(path_segments.iter())
+            .all(|(left, right)| left == right)
+}
+
 fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<ResolvedStatusScopes> {
     let absolute_path = absolutize_from_current_dir(path)?;
 
@@ -1083,6 +1286,20 @@ fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<Resol
         });
     }
 
+    if absolute_path.is_dir()
+        && let Some(library_root) = resolve_spec_library_root(&absolute_path, context)
+    {
+        return Ok(ResolvedStatusScopes {
+            scopes: vec![StatusRootScope {
+                collection_path: absolute_path.clone(),
+                library_root: Some(library_root),
+                display_root: ".".to_string(),
+                target_molecule_path: None,
+            }],
+            loader_errors: Vec::new(),
+        });
+    }
+
     let search_root = canonicalize_existing_dir(&absolute_path)?;
     let discovery = discover_library_roots_bounded(&search_root, &search_root)?;
     let scopes = discovery
@@ -1134,6 +1351,7 @@ fn status_command_for_target(
     format: OutputFormat,
     target_language: TargetLanguage,
 ) -> Result<()> {
+    let absolute_path = absolutize_from_current_dir(path)?;
     let root_context = match load_workspace_context(path) {
         Ok(context) => context,
         Err(err) if matches!(format, OutputFormat::Json) => {
@@ -1144,10 +1362,24 @@ fn status_command_for_target(
         }
         Err(err) => return Err(err),
     };
+    let benchmark_repo_root = if matches!(format, OutputFormat::Json) {
+        root_context
+            .repo_root
+            .clone()
+            .or_else(|| repo_root_for(&absolute_path))
+    } else {
+        None
+    };
+    let benchmark_registry = benchmark_repo_root
+        .as_ref()
+        .map(|repo_root| load_optional_benchmark_registry(repo_root))
+        .transpose()?;
     let resolved_scopes = resolve_status_roots(path, &root_context)?;
     let scopes = resolved_scopes.scopes;
 
     let mut roots = Vec::new();
+    let mut benchmark_specs = Vec::new();
+    let mut benchmark_molecule_tests = Vec::new();
     let mut top_level_loader_errors: Vec<JsonErrorEntry> = resolved_scopes
         .loader_errors
         .iter()
@@ -1179,6 +1411,11 @@ fn status_command_for_target(
         };
         let mut validation_specs =
             collect_validation_specs(&scope.collection_path, &scope_context)?;
+        benchmark_specs.extend(rebase_loaded_specs_for_benchmarks(
+            &validation_specs.root_specs,
+            &benchmark_source_base_for_scope(&scope),
+            benchmark_repo_root.as_deref(),
+        ));
         let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
         let selected_libraries: Vec<ResolvedLibrary> = scope_context
             .libraries
@@ -1222,6 +1459,11 @@ fn status_command_for_target(
             spec_core::loader::MoleculeTestLoadReport::default()
         };
         let mut molecule_report = molecule_report;
+        benchmark_molecule_tests.extend(rebase_loaded_molecule_tests_for_benchmarks(
+            &molecule_report.tests,
+            &benchmark_source_base_for_scope(&scope),
+            benchmark_repo_root.as_deref(),
+        ));
         validation_errors.extend(std::mem::take(&mut molecule_report.errors));
         let (molecule_errors, _molecule_warnings) =
             validate_molecule_tests(&molecule_report.tests, &validation_specs.root_specs);
@@ -1457,6 +1699,16 @@ fn status_command_for_target(
             }
         }
         OutputFormat::Json => {
+            let benchmarks = match (&benchmark_registry, &benchmark_repo_root) {
+                (Some(Some(registry)), Some(repo_root)) => compute_benchmark_projections(
+                    registry,
+                    repo_root,
+                    &absolute_path,
+                    &benchmark_specs,
+                    &benchmark_molecule_tests,
+                )?,
+                _ => Vec::new(),
+            };
             let flat_units = roots
                 .iter()
                 .flat_map(|root| root.units.iter().cloned())
@@ -1465,6 +1717,7 @@ fn status_command_for_target(
                 schema_version: STATUS_JSON_SCHEMA_VERSION,
                 roots,
                 units: flat_units,
+                benchmarks,
                 loader_errors: top_level_loader_errors,
             })?;
         }
@@ -1515,7 +1768,17 @@ fn export_command(path: &Path, output: Option<&Path>, format: OutputFormat) -> R
         bail!("spec export only supports --format json");
     }
 
+    let absolute_path = absolutize_from_current_dir(path)?;
     let context = load_workspace_context(path)?;
+    let benchmark_repo_root = context
+        .repo_root
+        .clone()
+        .or_else(|| repo_root_for(&absolute_path));
+    let benchmark_registry = benchmark_repo_root
+        .as_ref()
+        .map(|repo_root| load_optional_benchmark_registry(repo_root))
+        .transpose()?;
+    let benchmark_source_base = benchmark_source_base_for_path(&absolute_path, &context);
     let mut validation_specs = collect_validation_specs(path, &context)?;
     let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
     let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
@@ -1608,12 +1871,32 @@ fn export_command(path: &Path, output: Option<&Path>, format: OutputFormat) -> R
         );
     }
 
-    let bundle = build_export_bundle(
+    let mut bundle = build_export_bundle(
         &validation_specs.root_specs,
         &molecule_tests,
         &rfc3339_now(),
         provenance.as_ref(),
     );
+    bundle.schema_version = 4;
+    if let (Some(Some(registry)), Some(repo_root)) = (&benchmark_registry, &benchmark_repo_root) {
+        let benchmark_specs = rebase_loaded_specs_for_benchmarks(
+            &validation_specs.root_specs,
+            &benchmark_source_base,
+            benchmark_repo_root.as_deref(),
+        );
+        let benchmark_molecule_tests = rebase_loaded_molecule_tests_for_benchmarks(
+            &molecule_tests,
+            &benchmark_source_base,
+            benchmark_repo_root.as_deref(),
+        );
+        bundle.benchmarks = compute_benchmark_projections(
+            registry,
+            repo_root,
+            &absolute_path,
+            &benchmark_specs,
+            &benchmark_molecule_tests,
+        )?;
+    }
     let json = serde_json::to_string_pretty(&bundle)?;
 
     match output {
@@ -4988,6 +5271,7 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::MoleculeEvidenceMalformed { .. } => {
             "SPEC_MOLECULE_EVIDENCE_MALFORMED"
         }
+        spec_core::SpecError::BenchmarkRegistry { .. } => "SPEC_BENCHMARK_REGISTRY",
     }
 }
 
@@ -5257,6 +5541,11 @@ fn spec_error_to_json_entry(
             id: Some(test_id.clone()),
             ..Default::default()
         },
+        spec_core::SpecError::BenchmarkRegistry { path, message } => ErrorFields {
+            path: Some(path.clone()),
+            message: Some(message.clone()),
+            ..Default::default()
+        },
     };
 
     JsonErrorEntry {
@@ -5340,7 +5629,8 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
         | spec_core::SpecError::PlanUnitMissingForAction { path, .. }
         | spec_core::SpecError::PlanUnitAlreadyExistsForAdd { path, .. }
         | spec_core::SpecError::PlanMoleculeTestNotFound { path, .. }
-        | spec_core::SpecError::MoleculeEvidenceMalformed { path, .. } => vec![path.clone()],
+        | spec_core::SpecError::MoleculeEvidenceMalformed { path, .. }
+        | spec_core::SpecError::BenchmarkRegistry { path, .. } => vec![path.clone()],
         spec_core::SpecError::LibraryCrateManifestError {
             cargo_toml: Some(path),
             ..
@@ -5486,7 +5776,8 @@ fn error_key(err: &spec_core::SpecError) -> String {
         | spec_core::SpecError::PlanUnitMissingForAction { path, .. }
         | spec_core::SpecError::PlanUnitAlreadyExistsForAdd { path, .. }
         | spec_core::SpecError::PlanMoleculeTestNotFound { path, .. }
-        | spec_core::SpecError::MoleculeEvidenceMalformed { path, .. } => path.clone(),
+        | spec_core::SpecError::MoleculeEvidenceMalformed { path, .. }
+        | spec_core::SpecError::BenchmarkRegistry { path, .. } => path.clone(),
         spec_core::SpecError::LibraryCrateManifestError {
             cargo_toml: Some(path),
             ..

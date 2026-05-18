@@ -30,8 +30,8 @@ pub mod validator;
 
 pub use graph::{ImpactSet, MoleculeTestNode, SpecEdge, SpecGraph, UnitNode};
 pub use semantic_review::{
-    unsupported_function_shape_fingerprint, unsupported_function_shape_fingerprint_with_context,
-    UnsupportedFunctionShapeFingerprint,
+    UnsupportedFunctionShapeFingerprint, unsupported_function_shape_fingerprint,
+    unsupported_function_shape_fingerprint_with_context,
 };
 
 use thiserror::Error;

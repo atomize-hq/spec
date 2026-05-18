@@ -14,43 +14,36 @@
       "cases": [
         {
           "case_id": "money/round",
-          "carrier_kind": "unit",
           "carrier_id": "money/round",
           "classification": "supported"
         },
         {
           "case_id": "pricing/apply_discount",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/apply_discount",
           "classification": "supported"
         },
         {
           "case_id": "pricing/apply_tax",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/apply_tax",
           "classification": "supported"
         },
         {
           "case_id": "pricing/calculate_total",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/calculate_total",
           "classification": "supported"
         },
         {
           "case_id": "pricing/calculate_total_guarded_tax",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/calculate_total_guarded_tax",
           "classification": "supported"
         },
         {
           "case_id": "pricing/discount_strategy",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/discount_strategy",
           "classification": "supported"
         },
         {
           "case_id": "pricing/pricing_quote",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/pricing_quote",
           "classification": "supported"
         }
@@ -66,25 +59,21 @@
       "cases": [
         {
           "case_id": "pricing/apply_discount",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/apply_discount",
           "classification": "supported"
         },
         {
           "case_id": "pricing/apply_tax",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/apply_tax",
           "classification": "supported"
         },
         {
           "case_id": "pricing/calculate_total",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/calculate_total",
           "classification": "supported"
         },
         {
           "case_id": "pricing/checkout_nested_chain3",
-          "carrier_kind": "unit",
           "carrier_id": "pricing/checkout_nested_chain3",
           "classification": "companion_negative_proof"
         }
