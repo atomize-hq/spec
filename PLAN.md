@@ -1,792 +1,985 @@
-# M61: Bounded Recursive Cross-Library TypeScript Function-Graph Execution Plan
+<!-- /autoplan restore point: /home/azureuser/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260518-191503.md -->
+# I2: Rust V1 Contract Stack Mechanics Landing Plan
 
 Status: **authoritative implementation plan**  
-Milestone: **M61**  
-Milestone family: **bounded TypeScript execution**  
-Implementation readiness: **ready for bounded execution**  
-Plan scope: **extend the existing Bun-backed TypeScript lane from same-tree local supported-function graphs plus direct cross-library portability exceptions to recursive local-plus-cross-library closure across the already-supported function families; preserve family-specific direct-dep contracts, additive proof, atom-only execution, and all broader non-goals**  
+Iteration: **I2**  
+Milestone family: **Rust V1 benchmark and truth-surface mechanics**  
+Implementation readiness: **ready for implementation**  
+Plan scope: **land the full M68 mechanics surface on top of the locked M65-M67 contract stack: benchmark registry, shared benchmark projection, schema-v4 `spec status --format json`, schema-v4 `spec export`, benchmark snapshots, readability review anchoring, reserved-gate projection for `BENCH-SERVICE`, and the exact anti-laundering/path-scope rules. Preserve all M66 support boundaries and defer supported-core expansion to M69.**  
 Base branch: **main**  
-Working branch: **feat/m40-plus**  
-Validated at commit: **`96d2ee9`**  
-Last rewritten: **2026-05-15**
+Working branch: **main**  
+Validated at commit: **`aca0307`**  
+Last rewritten: **2026-05-18**
 
 Supersedes:
 
-- the shipped M60 authority plan previously maintained at this path
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260515-113145.md`
+- the stale M61 TypeScript authority plan previously maintained at this path
+- `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-rust-completion-execution-plan-20260517-161417.md` as execution context only
 
-Primary source artifacts:
+Locked authority inputs:
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m40-plus-design-20260515-113145.md`
-- `README.md`
+- `M65`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-200036.md`
+- `M66`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-213928.md`
+- `M67`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-220646.md`
+- `M68`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-225503.md`
+
+Historical context, not authority:
+
+- `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-rust-completion-execution-plan-20260517-161417.md`
+- `CLAUDE.md`
 - `TODOS.md`
-- `CHANGELOG.md`
-- `examples/crosslib-app/README.md`
 
 Primary repo surfaces:
 
-- `spec-core/src/validator.rs`
-- `spec-core/src/typescript_backend.rs`
-- `spec-core/src/semantic_review.rs`
+- `spec-cli/src/commands.rs`
 - `spec-cli/tests/cli.rs`
+- `spec-cli/tests/fixtures/*.json`
+- `spec-core/src/lib.rs`
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
+- `spec-core/src/molecule_evidence.rs`
+- `spec-core/src/types.rs`
+- `spec-core/src/graph.rs`
+- `benchmarks/**`
+- `examples/ecommerce/units/**`
 - `examples/crosslib-app/units/**`
 - `examples/shared-spec/units/**`
 - `README.md`
-- `TODOS.md`
 - `CHANGELOG.md`
-- `examples/crosslib-app/README.md`
+- `TODOS.md`
 
 ## Executive Summary
 
-M59 shipped the same-tree local TypeScript graph lane.
+The repo already has the hard parts of proof truth.
 
-M55 and M56 preserved three narrow cross-library exceptions:
+It can author specs, validate them, build them, test them, persist unit proof in
+`.spec.passport.json`, persist molecule proof in `*.test.evidence.json`, and
+project current truth through `spec status --format json` and `spec export`.
+What it does not have is the benchmark-accounting layer that turns those proof
+surfaces into an honest Rust V1 product claim.
 
-- one direct helper import for `function.arithmetic_leaf.monotone_up.v1`
-- one direct wrapper-root path for `function.wrapper.pipeline.v1`
-- one direct chain3-root path for `function.wrapper.pipeline.chain3.v1`
+That is the whole I2 job.
 
-M58 widened same-tree recursive chain3 closure, but it kept recursive shared closure out.
+I2 does not widen M66 support rows. It does not re-open bounded generics,
+async, IO, traits, lifetimes, or macro-heavy authored surfaces. It does not add
+benchmark fields to `.unit.spec`, `.test.spec`, passports, or molecule
+evidence. It adds one benchmark registry, one shared read-side projection core,
+one snapshot writer, one readability review anchor, and one schema-v4 machine
+surface for `status` and `export`.
 
-That leaves the next real product gap:
-
-```text
-the repo can already execute direct cross-library roots,
-but it still cannot recurse truthfully through a shared function graph
-once a supported TypeScript root depends on another shared supported function
-that itself has deps
-```
-
-M61 fixes exactly that gap.
-
-It does not claim generic cross-library parity. It does not claim arbitrary authored 4+ topology support. It does not claim molecule TypeScript execution. It does not change semantic-family meaning.
-
-It ships one bounded contract:
+After I2, the repo can finally say this truthfully:
 
 ```text
-recursive local-plus-cross-library closure across the current supported
-function families, with owner-library-qualified dep resolution and the
-same frozen family-specific dep contracts at every recursive depth
+the Rust V1 contract stack has an explicit benchmark roster,
+explicit writer-vs-reader boundaries,
+explicit anti-laundering rules,
+explicit reserved-gate projection for BENCH-SERVICE,
+and one machine-readable read-side benchmark surface shared by status and export
 ```
+
+That closes M68.
+
+It does not close M69.
 
 ## Frozen Implementation Decisions
 
-These decisions are locked for M61. If any of them changes, the milestone scope changed and this plan must be rewritten before implementation continues.
+These are inherited from M65-M68 and are locked for I2.
 
-1. **Unify the validator and generator around one recursive closure story.**
-   - Replace the current split between same-tree local recursion and direct portability exceptions.
-   - Do not keep two separate closure models and bolt recursion onto only one of them.
+1. **M66 remains the only source of truth for supported, deferred, and explicitly-out Rust rows and interactions.**
+   - I2 may not widen or narrow those rows.
+   - I2 may not reinterpret fallback policy.
 
-2. **Resolve closure membership by qualified identity, not raw unit id.**
-   - Reuse library-qualified identity concepts already present in `spec-core/src/validator.rs`.
-   - Do not allow the TypeScript collector to choose a shared unit by first-loaded or last-loaded raw-id coincidence.
+2. **M67 remains the only source of truth for benchmark roles.**
+   - `BENCH-ECOM` is the only active positive benchmark in I2.
+   - `BENCH-SERVICE` remains `reserved` and required for final V1 proof.
+   - `BENCH-CROSSLIB` remains `companion_negative_proof`, never positive credit.
 
-3. **Keep the supported family set frozen to what the repo already ships today.**
-   - `function.helper.identity_passthrough.v1`
-   - `function.arithmetic_leaf.monotone_down_nonnegative.v1`
-   - `function.arithmetic_leaf.monotone_up.v1`
-   - `function.wrapper.pipeline.v1`
-   - `function.wrapper.pipeline.normalized_required_arg.v1`
-   - `function.wrapper.pipeline.chain3.v1`
+3. **Benchmark accounting is label-driven, not discovered ad hoc.**
+   - `benchmarks/labels.json` is authoritative for benchmark membership and classification.
+   - Unlabeled or duplicated carriers under an active benchmark root are benchmark-accounting failures.
 
-4. **Preserve family-specific dep contracts exactly.**
-   - Helper family rules stay helper-family rules.
-   - Wrapper family rules stay wrapper-family rules.
-   - Chain3 family rules stay chain3-family rules.
-   - Normalized-required-arg wrapper rules stay the M60 rules.
-   - Recursive shared closure widens location, not semantics.
+4. **Proof writers stay where they already are.**
+   - `.spec.passport.json` remains the authoritative unit proof write surface.
+   - `*.test.evidence.json` remains the authoritative molecule proof write surface.
+   - `spec status`, `spec export`, and benchmark snapshotting stay read/projection surfaces only.
 
-5. **Promote one maintained recursive-shared proof owner in the cross-library example.**
-   - Use checked-in example specs under `examples/crosslib-app/units/` and `examples/shared-spec/units/`.
-   - Do not leave the only green proof inside temporary CLI test scaffolding.
+5. **No benchmark metadata is authored inside workload specs or proof artifacts in I2.**
+   - no benchmark fields in `.unit.spec`
+   - no benchmark fields in `.test.spec`
+   - no benchmark fields in passports
+   - no benchmark fields in molecule evidence
 
-6. **Keep the public contract sentence tight and identical across docs.**
-   - Use this exact sentence:
-     - `M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.`
+6. **Path scope is explicit.**
+   - benchmark projection is `full` only when the command scope loads the entire benchmark root
+   - otherwise it is `partial`
+   - partial projections never mint positive credit
+
+7. **Reserved-state visibility is mandatory.**
+   - repo-broad `spec status . --format json` and repo-broad `spec export` must surface `BENCH-SERVICE`
+   - reserved state may not collapse into silence or “missing data”
+
+8. **Readability is benchmark-scoped human observation, not proof truth.**
+   - positive benchmarks only
+   - tied to `projection_digest`
+   - never stored in passports or molecule evidence
+
+9. **The shared generated tree stays shared.**
+   - readability scope includes shared `mod.rs` and benchmark-relevant `molecule_tests.rs`
+   - there is no fake per-benchmark generated tree split
+
+10. **Schema bumps are part of the milestone.**
+    - `spec status --format json`: `schema_version 3 -> 4`
+    - `spec export`: `schema_version 3 -> 4`
 
 ## Current Validated Basis
 
-Validated on `feat/m40-plus` at `96d2ee9`.
+Validated on `main` at `aca0307`.
 
-Observed live branch truth:
+Observed repo truth:
 
-- `spec-core/src/validator.rs` still splits target validation between:
-  - `validate_typescript_local_graph_root_spec_with_specs(...)`
-  - `validate_typescript_portability_target_spec_with_specs(...)`
-- `typescript_target_uses_local_graph_lane(...)` still rejects any root with a `shared::...` dep from the local recursive lane.
-- `validate_typescript_chain3_first_dep_family(...)` still enforces the M58 same-tree-only slot-1 recursive chain3 rule for shared deps.
-- `spec-core/src/typescript_backend.rs` still splits closure collection between:
-  - `collect_typescript_local_graph_member_closure(...)`
-  - `collect_typescript_portability_root_closure(...)`
-- `build_typescript_loaded_specs_by_id(...)`, `build_typescript_spec_indices_by_key(...)`, and `resolve_typescript_dep_spec(...)` still rely on raw unit ids plus a limited authored-key exception path rather than first-class qualified node identity.
-- `spec-cli/tests/cli.rs` already contains:
-  - passing proof for direct cross-library helper, wrapper, and chain3 roots
-  - a negative regression for recursive cross-library nested chain3 in slot 1
-- `README.md` and `TODOS.md` still explicitly defer generic recursive cross-library function graphs.
+- `spec-cli/src/commands.rs` already owns both `spec status --format json` and
+  `spec export --format json` shape emission.
+- `spec-core/src/export.rs` already builds the export bundle from authored
+  specs, passports, molecule evidence, and graph edges.
+- `spec-core/src/passport.rs` already projects current unit truth from authored
+  specs plus stored proof.
+- `spec-core/src/molecule_evidence.rs` already persists and reads molecule proof
+  truth.
+- `spec-cli/tests/fixtures/` already carries JSON fixture baselines for status
+  and export schema contracts.
+- `examples/ecommerce/units/**` already gives one positive benchmark candidate
+  with current unit passports and checked-in molecule evidence for
+  `pricing/checkout_flow` and `pricing/discount_plus_tax`.
+- `examples/crosslib-app/units/**` already gives one maintained companion
+  negative-proof workload root.
+- `examples/service/units` does not exist today, which is acceptable only
+  because `BENCH-SERVICE` is still a reserved benchmark and must remain
+  machine-visible without pretending the workload exists yet.
+- there is no `benchmarks/` directory today
+- there is no benchmark registry today
+- there is no shared benchmark projection module today
+- there is no benchmark snapshot command today
+- there is no readability review artifact today
+- `spec status --format json` and `spec export` have no benchmark surface today
 
-The repo is therefore in a truthful but awkward state: the direct-root exceptions are real, but the next natural recursive shared case still fails before Bun.
+The gap is therefore structural, not speculative.
 
 ## Step 0: Scope Challenge
 
 ### Premise correction
 
-The problem is not "TypeScript support needs to be broader."
+The problem is not “finish Rust V1.”
 
-The real problem is smaller:
+The problem is narrower:
 
 ```text
-the bounded TypeScript lane already knows enough semantic truth to execute
-recursive supported function graphs, but the cross-library closure contract
-still stops at direct root exceptions
+the repo already has workload truth and proof truth,
+but it still lacks the benchmark-accounting and projection layer
+that makes the Rust V1 contract observable without laundering fallback,
+partial scope, or reserved gates into fake green state
 ```
 
-If M61 expands beyond that sentence, it is overbuilt.
+If I2 expands beyond that sentence, it is overbuilt.
 
 ### What already exists
 
-| Sub-problem | Existing owner | M61 action |
+| Sub-problem | Existing owner | I2 action |
 | --- | --- | --- |
-| target-language CLI surface | `spec-cli/src/commands.rs` | reuse existing `--target-language typescript` flow |
-| pre-Bun target validation | `spec-core/src/validator.rs` | replace the root-depth split with recursive qualified closure validation |
-| TypeScript closure collection | `spec-core/src/typescript_backend.rs` | replace raw-id collection with qualified closure membership and dedupe |
-| semantic family truth | `spec-core/src/semantic_review.rs` | reuse as-is, no new family promotion |
-| direct cross-library example | `examples/crosslib-app/units/**`, `examples/shared-spec/units/**` | extend into one maintained recursive-shared proof path |
-| regression harness | `spec-cli/tests/cli.rs` | convert one current red path into green, keep the other red paths |
-| public contract wording | `README.md`, `TODOS.md`, `CHANGELOG.md`, `examples/crosslib-app/README.md` | replace the generic recursive-cross-library defer line with the exact M61 claim |
+| authored workload discovery | `spec-core::loader`, `spec-cli/src/commands.rs` | reuse; do not add a second discovery model |
+| unit proof persistence | `spec-core/src/passport.rs` | reuse as-is; benchmark code only reads projected truth |
+| molecule proof persistence | `spec-core/src/molecule_evidence.rs` | reuse as-is; benchmark code only reads current molecule evidence |
+| semantic truth projection | `spec-core/src/passport.rs`, `spec-core/src/export.rs` | reuse; benchmark projection consumes projected semantic support status, it does not re-evaluate semantics separately |
+| status JSON emission | `spec-cli/src/commands.rs` | extend to schema v4 with additive `benchmarks[]` |
+| export JSON emission | `spec-core/src/export.rs` plus `spec-cli/src/commands.rs` | extend to schema v4 with additive `benchmarks[]` |
+| current canonical positive workload | `examples/ecommerce/units/**` | reuse as `BENCH-ECOM`; add label accounting, readability scope, and snapshot support |
+| current canonical cross-library pressure workload | `examples/crosslib-app/units/**` | reuse as `BENCH-CROSSLIB`; project as companion negative proof only |
+| JSON fixture contract testing | `spec-cli/tests/cli.rs`, `spec-cli/tests/fixtures/*.json` | extend; do not invent a second snapshot-only test harness |
 
 ### Minimum complete slice
 
-The minimum honest M61 slice is:
+The minimum honest I2 slice is:
 
-1. unify TypeScript target validation around recursive qualified closure
-2. unify TypeScript closure collection around recursive qualified closure
-3. extend root-family handling so M60 normalized-required-arg wrappers are legal closure members and roots in the TypeScript lane when their existing family contract is satisfied
-4. add one maintained recursive-shared example path in `examples/crosslib-app` plus `examples/shared-spec`
-5. update CLI regressions so one recursive shared path is green and the preserved red paths still fail before Bun
-6. update README, TODOS, CHANGELOG, and `examples/crosslib-app/README.md` in the same PR
+1. add `benchmarks/labels.json` and strict registry validation
+2. add one shared benchmark projection core in `spec-core`
+3. add canonical `label_digest` and `projection_digest`
+4. add path-scope `full` versus `partial` behavior with explicit anti-laundering
+5. add schema-v4 additive `benchmarks[]` to both `spec status --format json`
+   and `spec export`
+6. add `spec benchmark snapshot <benchmark-id>` as a read-only derived writer
+7. add readability review artifact loading and projection for positive
+   full-scope benchmarks
+8. add the reserved `BENCH-SERVICE` gate state and keep it visible at broad
+   scope
+9. add fixture-backed CLI coverage for full, partial, invalid, reserved, and
+   companion-negative cases
+10. seed the repo with the initial benchmark registry and initial readability
+    review anchor for `BENCH-ECOM`
 
 Anything smaller is fake done.
 
 Examples:
 
-- adding qualified lookup without a maintained example is fake done
-- adding an example without generator and validator convergence is fake done
-- converting one CLI negative test to green without preserving the rejection wall is fake done
-- widening the recursive lane without handling normalized-required-arg wrappers is fake done because M60 already shipped that family
+- adding `benchmarks/labels.json` without path-scope rules is fake done
+- adding path-scope rules without shared projection code is fake done
+- adding schema-v4 output without digest stability is fake done
+- adding a snapshot command without a strict writer-vs-reader wall is fake done
+- adding benchmark JSON without reserved `BENCH-SERVICE` projection is fake done
 
 ### Complexity and blast radius
 
-This milestone touches more than 8 files. That normally smells.
+This plan crosses the 8-file smell threshold.
 
-It is still the right size because the extra files are proof and contract surfaces, not new infrastructure:
+That is acceptable here because the extra files are contract surfaces, not
+infrastructure vanity:
 
-- one validator contract file
-- one TypeScript backend collector file
-- one semantic family inventory file only as a consumer boundary, not as a widened semantic subsystem
+- one new benchmark registry under `benchmarks/`
+- one new core projection module
+- one core export integration surface
+- one CLI status/export/snapshot surface
 - one CLI integration test file
-- one maintained cross-library example README
-- two example unit trees
-- three repo-root docs
+- multiple JSON fixture baselines
+- one benchmark review artifact
+- one doc-surface refresh for `README.md`, `TODOS.md`, and `CHANGELOG.md`
 
-The complete version is only modestly larger than the shortcut, and the shortcut would leave the repo lying about recursive shared support. Boil the lake.
+The smaller shortcut would leave the repo with yet another half-contract.
+Boil the lake.
 
 ### Search check
 
-No framework built-in replaces this work. This is repo-owned semantic-routing and bounded TypeScript lowering logic.
+No framework built-in replaces this work.
 
-- **[Layer 1]** Reuse `QualifiedUnitRef` and existing cross-library dep identity concepts already in `spec-core/src/validator.rs`
-- **[Layer 1]** Reuse current supported-family routing from `spec-core/src/semantic_review.rs`
-- **[Layer 1]** Reuse the current `spec-cli/tests/cli.rs` cross-library proof scaffolding
-- **[Layer 3]** The right design is not a generic graph-policy engine. The right design is a qualified recursive closure contract over the already-supported function families
+- **[Layer 1]** Reuse the existing authored-spec loaders
+- **[Layer 1]** Reuse the existing passport and molecule-evidence truth writers
+- **[Layer 1]** Reuse the existing status/export JSON fixture harness
+- **[Layer 3]** The right architecture is not a benchmark subsystem rewrite, it
+  is one shared projection layer that reads authoritative proof truth and emits
+  benchmark truth without writing any new proof
 
 ### TODOS cross-reference
 
-`TODOS.md` currently says the remaining TypeScript oceans after M59 and M60 include generic recursive cross-library function graphs.
+`TODOS.md` already carries the long-term Rust-completion direction, but it does
+not yet name the benchmark registry or benchmark-projection mechanics as a
+separate closure step.
 
-M61 should narrow that defer line, not erase all remaining oceans. After landing, `TODOS.md` should say:
+I2 should end with:
 
-- recursive closure across the current supported family set shipped in M61
-- arbitrary authored 4+ direct-dep topology parity remains out
-- new semantic-family promotion remains out
-- molecule TypeScript execution remains out
-- seam-kind TypeScript execution remains out
+- `M68 mechanics landing` closed
+- `M69 supported-core closure` still open
+- `BENCH-SERVICE` still explicitly reserved
 
 ### Completeness and distribution check
 
-No new distributable artifact is introduced.
+No new repo-external artifact is introduced.
 
-This remains a capability widen inside the existing `spec` CLI and existing release surface. The complete version here is proof completeness, not packaging work.
+This remains a CLI and JSON-contract milestone inside the existing `spec`
+distribution surface. Completeness here means:
+
+- every benchmark role is explicit
+- every broad-scope and narrow-scope projection is honest
+- every schema change is fixture-tested
+- every writer-versus-reader boundary is enforced
 
 ## Milestone Contract
 
-### Exact shipped behavior
+### Exact shipped behavior after I2
 
-After M61:
+After I2:
 
-- a supported `kind:function` TypeScript root may recurse through a reachable graph that mixes local and shared units
-- every reachable unit must:
-  - resolve from the loaded unit set in owner-library context
-  - classify to one of the current supported function families
-  - author non-empty `body.typescript`
-  - satisfy its existing family-specific dep contract
-- recursive closure may cross libraries multiple times
-- recursive closure must still be finite, deduped, and limited to the loaded unit set
-- unrelated loaded units must still stay out of the emitted TypeScript tree
+- `benchmarks/labels.json` exists and is the authoritative benchmark-accounting file
+- `benchmarks/snapshots/<BENCHMARK_ID>.snapshot.json` exists as a derived
+  artifact written only by `spec benchmark snapshot <benchmark-id>`
+- `benchmarks/reviews/<BENCHMARK_ID>.readability.review.json` exists as the
+  benchmark-scoped readability verdict surface
+- `spec status --format json` emits `schema_version: 4` with additive
+  top-level `benchmarks[]`
+- `spec export` emits `schema_version: 4` with additive top-level
+  `benchmarks[]`
+- both surfaces use the same projection engine, the same enums, the same
+  path-scope rules, and the same anti-laundering rules
+- `BENCH-ECOM` can project `full` or `partial` benchmark truth depending on
+  command scope
+- `BENCH-CROSSLIB` stays visible but never contributes positive credit
+- `BENCH-SERVICE` stays visible at broad scope as `reserved`, never positive
+  and never silently omitted
+- readability review status is benchmark-scoped and projection-digest-bound
+- `status`, `export`, and snapshotting remain read/projection surfaces only
 
-### Exact root eligibility
+### Exact initial benchmark roster
 
-M61 widens recursive closure depth. It does not create a new "any supported function can be a root anywhere" rule.
+I2 seeds exactly this roster:
 
-- existing local-only TypeScript roots stay legal exactly where they already work today
-- direct cross-library root handling stays limited to the root families the lane already ships, plus the M60 normalized-wrapper family
-- `function.helper.identity_passthrough.v1` remains closure-only in M61. It may appear as a reachable helper member where the existing helper rule allows it, but it is not a standalone TypeScript execution target
-- recursive shared support means a legal root may now traverse into further legal local or shared members. It does not create generic root parity across all families or authored topologies
+| Benchmark id | Kind | Lifecycle | Required for V1 | Root | Generated root | Readability scope |
+| --- | --- | --- | --- | --- | --- | --- |
+| `BENCH-ECOM` | `positive` | `active` | `true` | `examples/ecommerce/units` | `examples/ecommerce/src/generated` | `supported_closure` |
+| `BENCH-SERVICE` | `positive` | `reserved` | `true` | `examples/service/units` | `examples/service/src/generated` | `supported_closure` |
+| `BENCH-CROSSLIB` | `companion_negative_proof` | `active` | `false` | `examples/crosslib-app/units` | `examples/crosslib-app/src/generated` | `none` |
+
+Initial `BENCH-ECOM` required molecule proofs:
+
+- `pricing/checkout_flow`
+- `pricing/discount_plus_tax`
+
+Initial `BENCH-ECOM` supported unit carriers:
+
+- `money/round`
+- `pricing/apply_discount`
+- `pricing/apply_tax`
+- `pricing/calculate_total`
+- `pricing/calculate_total_guarded_tax`
+- `pricing/discount_strategy`
+- `pricing/pricing_quote`
+
+Initial `BENCH-CROSSLIB` companion-negative unit carriers:
+
+- `pricing/apply_discount`
+- `pricing/apply_tax`
+- `pricing/calculate_total`
+- `pricing/checkout_nested_chain3`
 
 ### Exact preserved boundaries
 
-These must still reject before Bun:
+These must still be true after I2:
 
-- any reachable unit with unsupported semantic review
-- any reachable unit without `body.typescript`
-- any reachable non-`kind:function` unit
-- any dep that cannot resolve in the correct library context
-- any reachable wrapper member whose direct dep order or family mix is wrong
-- any reachable chain3 member whose direct dep order or family mix is wrong
-- any attempt to execute `.test.spec` with `--target-language typescript`
-- any attempt to imply `spec validate --target-language`
-- any attempt to imply `spec export --target-language`
-- any attempt to claim arbitrary authored 4+ direct-dep root topology support
+- no benchmark fields in authored workload specs
+- no benchmark fields in passports
+- no benchmark fields in molecule evidence
+- `spec build` does not mint benchmark truth
+- `spec generate` does not mint benchmark truth
+- `spec status` does not mint proof truth
+- `spec export` does not mint proof truth
+- benchmark snapshots do not refresh proof truth
+- `M66` support rows do not change
+- `BENCH-SERVICE` does not become implemented
+- `BENCH-CROSSLIB` never becomes positive-credit workload proof
+- partial-scope benchmark queries never emit positive supported credit
 
-### Exact maintained example seed
+### Exact machine contract
 
-Promote a checked-in recursive-shared chain3 proof owner by turning the current temporary CLI helper shapes into maintained example specs:
+This plan is the implementation contract.
 
-```text
-examples/shared-spec/units/pricing/calculate_total.unit.spec
-examples/shared-spec/units/pricing/base_nested_chain3.unit.spec
-examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec
-```
+An implementer should not need to reopen the upstream M68 design doc to know
+what the JSON and enum surfaces have to do.
 
-Authored story:
+#### Registry contract
 
-- `shared::pricing/calculate_total` remains the shared wrapper-level subtotal calculator
-- `shared::pricing/base_nested_chain3` becomes a shared recursive chain3 member that itself depends on shared supported functions
-- app-side `pricing/checkout_nested_chain3` becomes the maintained cross-library recursive root
+`benchmarks/labels.json` is `schema_version: 1` and each benchmark entry must
+declare:
 
-The current temporary helper in `spec-cli/tests/cli.rs` is the prototype. M61 promotes that shape into the maintained example tree.
+- `id`
+- `kind`
+- `lifecycle`
+- `required_for_v1`
+- `root`
+- `generated_root`
+- `readability_scope`
+- `required_molecule_ids[]`
+- `cases[]`
 
-### Exact family handling
+Exact allowed values:
 
-TypeScript root and closure handling must recognize all current supported function families:
+- `kind`: `positive`, `companion_negative_proof`
+- `lifecycle`: `active`, `reserved`
+- `classification`: `supported`, `deferred`, `fallback_backed`,
+  `explicitly_out`, `companion_negative_proof`
+- `readability_scope`: `supported_closure`, `none`
 
-| Family | M61 role |
-| --- | --- |
-| `function.helper.identity_passthrough.v1` | closure-only helper leaf, zero deps, never a standalone TypeScript root in M61 |
-| `function.arithmetic_leaf.monotone_down_nonnegative.v1` | supported leaf, helper-free, root/member where already legal today |
-| `function.arithmetic_leaf.monotone_up.v1` | supported leaf root/member, zero deps or one helper dep under the existing helper rule |
-| `function.wrapper.pipeline.v1` | supported wrapper root/member under the existing two-dep tuple |
-| `function.wrapper.pipeline.normalized_required_arg.v1` | supported wrapper root/member under the existing M60 normalized required-arg contract |
-| `function.wrapper.pipeline.chain3.v1` | supported chain3 root/member under the existing three-dep tuple |
+Hard rules:
 
-M61 does not invent new family meaning. It only allows these current meanings to recurse across shared closure truthfully.
+- `cases[]` may contain only unit carriers in I2
+- molecule tests are benchmark obligations only through
+  `required_molecule_ids[]`, never through `cases[]`
+- `BENCH-ECOM` and `BENCH-SERVICE` are `kind: positive`
+- `BENCH-CROSSLIB` is `kind: companion_negative_proof`
+- a `reserved` benchmark may legally have `cases: []` and a missing on-disk
+  root
+- an `active` benchmark may not silently rely on unlabeled authored units under
+  its root
+
+#### Projection contract
+
+Every full-scope benchmark projection in `status`, `export`, and snapshotting
+uses one shared shape with these fields:
+
+- `benchmark_id`
+- `kind`
+- `lifecycle`
+- `required_for_v1`
+- `path_scope`
+- `accounting_status`
+- `benchmark_status`
+- `gate_status`
+- `readability_review_status`
+- `readability_verdict` when a review exists
+- `label_digest`
+- `projection_digest`
+- `summary`
+- `required_molecule_proofs[]`
+- `cases[]`
+- `readability_generated_files[]` when readability applies
+
+Each projected case must carry:
+
+- `case_id`
+- `carrier_kind`
+- `carrier_id`
+- `classification`
+- `status`
+- `reason`
+- `semantic_support_status` when present
+- `proof_refs.passport` when present
+- `proof_refs.covering_molecule_evidence[]` when present
+- `counts_as_supported_positive`
+
+`counts_as_supported_positive` is true only when all of these are true:
+
+1. parent benchmark kind is `positive`
+2. parent benchmark lifecycle is `active`
+3. `path_scope == full`
+4. `accounting_status == valid`
+5. case classification is `supported`
+6. case status is `valid`
+7. semantic support status is absent or exactly `supported`
+
+Otherwise it is false. No exceptions.
+
+#### Enum contract
+
+Exact benchmark-level enums:
+
+- `accounting_status`: `valid`, `invalid`, `reserved_missing_cases`,
+  `partial_valid`, `partial_invalid`
+- `benchmark_status`: `passing`, `failing`, `incomplete`, `invalid`,
+  `reserved`
+- `gate_status`: `satisfied`, `open`, `reserved`, `not_applicable`
+- `readability_review_status`: `current`, `stale`, `missing`,
+  `not_applicable`
+
+The reserved `BENCH-SERVICE` full-scope state is locked:
+
+- `lifecycle: reserved`
+- `accounting_status: reserved_missing_cases`
+- `benchmark_status: reserved`
+- `gate_status: reserved`
+
+That state must never be collapsed into “missing”, omitted from broad scope, or
+coerced into green.
+
+#### Path-scope contract
+
+Benchmark projection is in scope when the command path equals the benchmark
+root, is an ancestor of it, is a descendant inside it, or is a single
+`.unit.spec` / `.test.spec` file under it.
+
+`path_scope: full` is allowed only when the command loaded the entire benchmark
+root.
+
+`path_scope: partial` is required for namespace and single-file projections and
+must omit:
+
+- `benchmark_status`
+- `gate_status`
+- `label_digest`
+- `projection_digest`
+- `summary`
+- `readability_review_status`
+- `readability_verdict`
+- `readability_generated_files[]`
+
+Partial scope may emit only `partial_valid` or `partial_invalid`, and every
+partial-scope case must emit `counts_as_supported_positive: false`.
+
+#### Digest contract
+
+`label_digest` and `projection_digest` must both be deterministic SHA-256 over
+canonical JSON payloads.
+
+Implementation rules:
+
+- no hashing pretty JSON
+- no hashing map iteration order
+- no hashing temp paths
+- sort `required_molecule_ids[]`, case lists, proof-ref lists, and readability
+  file lists before canonical encoding
+- `projection_digest` excludes `generated_at`, readability review verdict
+  fields, snapshot output location, and any ambient runtime-only path detail
+
+#### Snapshot and readability contract
+
+`spec benchmark snapshot <benchmark-id>` is full-scope only.
+
+It may read authored specs, labels, passports, molecule evidence, readability
+review files, and generated output. It writes only:
+
+- `benchmarks/snapshots/<BENCHMARK_ID>.snapshot.json`
+
+It may not write:
+
+- passports
+- molecule evidence
+- semantic review
+- readability review files
+
+For active positive benchmarks it must validate that every path listed in
+`readability_generated_files[]` exists. For `BENCH-SERVICE`, it must write the
+reserved snapshot state without trying to fake generated-file freshness.
 
 ## Architecture Review
+
+### Chosen architecture
+
+One shared projection core.
+
+Not one benchmark implementation for `status`, one for `export`, and one for
+snapshotting. That would drift immediately.
+
+The implementation should introduce exactly one new `spec-core` module for
+benchmark accounting, projection, digesting, and snapshot assembly. CLI
+commands own parsing arguments and writing files. Core owns truth.
 
 ### Dependency graph
 
 ```text
-                           +----------------------------------+
-                           | spec-core/src/semantic_review.rs |
-                           +----------------------------------+
-                                      | existing truth only
-                                      v
- +-----------------------------+   +------------------------------------+
- | spec-core/src/validator.rs  |-->| Recursive closure eligibility      |
- +-----------------------------+   | - qualified dep resolution         |
- | current local/portability   |   | - family-specific dep contracts    |
- | split must collapse into    |   | - body.typescript required         |
- | one recursive contract      |   | - supported semantic review only   |
- +-----------------------------+   +------------------------------------+
-                                      |
-                                      v
- +------------------------------------+   +------------------------------+
- | spec-core/src/typescript_backend.rs|-->| Emitted TS member set        |
- +------------------------------------+   | - qualified dedupe           |
- | current raw-id + authored-key      |   | - unrelated units excluded   |
- | lookup must become qualified       |   | - imports still callable-safe|
- +------------------------------------+   +------------------------------+
-                                      |
-                                      v
-                   +-----------------------------------------------+
-                   | Proof surfaces                                |
-                   | - spec-cli/tests/cli.rs                       |
-                   | - examples/crosslib-app/units/**             |
-                   | - examples/shared-spec/units/**              |
-                   | - README / TODOS / CHANGELOG                 |
-                   +-----------------------------------------------+
+                           authored inputs
+                    +---------------------------+
+                    | benchmarks/labels.json    |
+                    | .unit.spec / .test.spec   |
+                    +-------------+-------------+
+                                  |
+                                  v
+                       +----------------------+
+                       | loader + scope set   |
+                       | existing commands.rs |
+                       +----------+-----------+
+                                  |
+                +-----------------+------------------+
+                |                                    |
+                v                                    v
+   +---------------------------+         +---------------------------+
+   | passport projected truth  |         | molecule evidence truth   |
+   | spec-core/passport.rs     |         | spec-core/molecule_*.rs   |
+   +-------------+-------------+         +-------------+-------------+
+                 \                               /
+                  \                             /
+                   \                           /
+                    v                         v
+                +-----------------------------------+
+                | spec-core benchmark projection    |
+                | - label validation                |
+                | - path_scope full/partial         |
+                | - case accounting                 |
+                | - digest computation              |
+                | - reserved gate projection        |
+                | - readability file selection      |
+                +----------------+------------------+
+                                 |
+                +----------------+-----------------+
+                |                                  |
+                v                                  v
+     +-------------------------+      +------------------------------+
+     | spec status --format    |      | spec export / benchmark      |
+     | schema v4 benchmarks[]  |      | snapshot writer              |
+     +-------------------------+      +------------------------------+
 ```
 
-### Current flaw
+### Module layout
 
-Today the TypeScript lane has two separate mental models:
+Preferred minimal-diff layout:
 
-```text
-Model A: same-tree local graph recursion
-Model B: direct cross-library portability exceptions
-```
+| Surface | Ownership | Change |
+| --- | --- | --- |
+| `spec-core/src/benchmark.rs` | new | benchmark label schema, enums, projection structs, digest helpers, readability file selection, snapshot struct |
+| `spec-core/src/lib.rs` | existing | export new benchmark module |
+| `spec-core/src/export.rs` | existing | thread benchmark projections into export bundle and schema v4 |
+| `spec-cli/src/commands.rs` | existing | load registry, compute benchmark scope, emit schema v4 `benchmarks[]`, add `spec benchmark snapshot <benchmark-id>` |
+| `spec-cli/tests/cli.rs` | existing | full/partial/reserved/invalid benchmark integration tests |
+| `spec-cli/tests/fixtures/*.json` | existing | schema-v4 benchmark fixtures |
+| `benchmarks/labels.json` | new | initial authoritative benchmark registry |
+| `benchmarks/reviews/BENCH-ECOM.readability.review.json` | new | initial readability review anchor |
 
-That split leaks into both validation and collection. It creates a misleading product boundary:
+Avoid introducing both `benchmark.rs` and `benchmark_projection.rs` unless the
+single module becomes unreadable during implementation. Minimal diff wins here.
 
-- recursion works only when everything stays local
-- cross-library works only when the root shape falls into a preserved direct exception
+### File-by-file change map
 
-That is why the temporary recursive shared chain3 case still fails before Bun.
+This is the concrete ownership map for the implementation, not just a module
+wishlist.
 
-### M61 target architecture
+| File or directory | Exact responsibility | Must not do |
+| --- | --- | --- |
+| `spec-core/src/benchmark.rs` | own label parsing, validation, full/partial projection, enums, digests, readability file selection, snapshot assembly structs | duplicate CLI path parsing or write files |
+| `spec-core/src/lib.rs` | export the new benchmark module cleanly | add side effects |
+| `spec-core/src/export.rs` | append shared benchmark projections into export bundle schema v4 | reimplement benchmark logic locally |
+| `spec-cli/src/commands.rs` | compute command scope, call shared projection core, serialize schema v4 output, own snapshot subcommand file writing | classify cases or compute digests inline |
+| `spec-cli/tests/cli.rs` | own end-to-end repo-root, root-path, subtree, single-file, reserved, invalid-registry, and snapshot behavior coverage | become the only place benchmark rules are specified |
+| `spec-cli/tests/fixtures/*.json` | lock the exact schema-v4 machine surfaces | drift from the shared projection contract |
+| `benchmarks/labels.json` | seed the canonical roster and case classifications | encode proof truth or readability verdicts |
+| `benchmarks/reviews/BENCH-ECOM.readability.review.json` | seed the initial human readability anchor for one projection digest | masquerade as generated data |
+| `benchmarks/snapshots/` | hold derived snapshot artifacts only | become source-of-truth inputs |
+| `README.md`, `CHANGELOG.md`, `TODOS.md` | document the benchmark roster, reserved gate behavior, and M68 closure/M69 deferral clearly | widen the product claim beyond this exact contract |
 
-```text
-root
-  `- recursive closure walker
-      |- resolve dep in owner library context
-      |- fetch exact loaded unit by qualified identity
-      |- require supported semantic review
-      |- require body.typescript
-      |- validate family-specific dep contract
-      |- recurse through local or shared deps
-      `- dedupe by qualified node identity
-```
+### Security and trust boundaries
 
-### Owner-library resolution contract
+The critical trust wall is simple:
 
-Validator and collector must share the same dep-resolution story. No split-brain behavior is allowed here.
+- authored specs define workload truth
+- passports and molecule evidence define proof truth
+- benchmark labels define accounting truth
+- readability review defines readability truth
+- status/export/snapshot only read and project those truths
 
-```text
-for each dep edge:
-  1. parse authored dep
-  2. determine owning library context of the current node
-  3. resolve the dep against that context
-  4. produce one qualified node identity
-  5. validate or collect that exact node
-```
-
-Non-negotiable rules:
-
-- local deps resolve relative to the owning library of the current node, not the CLI invocation root
-- explicit `shared::...` deps resolve to that shared library identity, never by raw-id coincidence
-- validator and collector must either call the same helper or use byte-for-byte equivalent qualified-resolution rules
-- once a qualified node is chosen, all later recursion and dedupe use that qualified identity rather than re-resolving by raw unit id
-
-### File-by-file responsibilities
-
-- `spec-core/src/validator.rs`
-  - replace `typescript_target_uses_local_graph_lane(...)` as the root split gate
-  - add one recursive validation path for target roots and closure members
-  - extend root-family handling to include `function.wrapper.pipeline.normalized_required_arg.v1`
-  - keep helper, wrapper, normalized-wrapper, and chain3 dep contracts explicit and separate
-- `spec-core/src/typescript_backend.rs`
-  - replace raw-id-driven closure membership with qualified identity
-  - stop collecting local recursion and cross-library portability through separate top-level paths
-  - keep rendering and import emission mostly intact
-- `spec-core/src/semantic_review.rs`
-  - no new family work
-  - treat as truth source only
-- `spec-cli/tests/cli.rs`
-  - convert the recursive shared nested chain3 helper shape from a red path into the new green path
-  - keep preserved red paths for wrong family, wrong order, missing body, unresolved dep, and molecule rejection
-- `examples/shared-spec/units/**`
-  - add maintained shared recursive members
-- `examples/crosslib-app/units/**`
-  - add maintained recursive root
-- `README.md`, `TODOS.md`, `CHANGELOG.md`, `examples/crosslib-app/README.md`
-  - update the public contract
+If any implementation path lets `status`, `export`, or snapshotting write
+passports, molecule evidence, or benchmark labels, the milestone failed.
 
 ## Code Quality Review
 
-### Design choices
-
-1. **Use a small qualified-identity helper, not a general graph framework.**
-   This matches explicit-over-clever and minimal diff. M61 needs truthful lookup, not a new subsystem.
-
-2. **Delete the local-vs-portability branch at the decision level, not just at the docs level.**
-   Keeping both code paths and sprinkling recursion onto one of them will rot immediately.
-
-3. **Keep family-specific validators separate.**
-   Wrapper, normalized-wrapper, helper, and chain3 rules should stay obvious. Do not compress them into a generic "arity + supported deps" abstraction in this milestone.
-
-4. **Treat the M60 normalized-required-arg wrapper as a first-class supported TypeScript family.**
-   If M61 ignores it, the repo will have one supported family that semantic review knows about and the TypeScript lane silently does not.
-
-5. **Promote the current CLI-only recursive shared prototype into the maintained example tree.**
-   That gives docs and tests one shared truth owner instead of duplicating logic forever.
-
-6. **Keep doc phrasing identical everywhere.**
-   This repo already teaches through README and examples. Drift here becomes product drift.
-
-### DRY and maintenance rules
-
-- reuse `QualifiedUnitRef` semantics rather than inventing a second qualified-id type
-- reuse the existing dep-contract validators where possible
-- do not duplicate shared recursive example logic in both docs and temporary fixtures if the example can own it
-- keep the red-path Bun-precheck pattern consistent with current CLI tests
-- keep the maintained example focused, not a new zoo of every recursive case
-
-## Implementation Plan
-
-### Implementation lockstep
-
-The implementation is only honest if these move together:
-
-1. validator root and closure rules
-2. collector root and closure rules
-3. maintained recursive-shared example proof
-4. CLI regressions and public docs
-
-Do not land a validator-only or collector-only half-state. The repo would compile, but the contract would still be ambiguous.
-
-### Step 1. Replace the validator split with recursive qualified closure validation
-
-Files:
-
-- `spec-core/src/validator.rs`
-
-Changes:
-
-1. stop using `typescript_target_uses_local_graph_lane(...)` as the root branch for M61 behavior
-2. replace `validate_typescript_local_graph_root_spec_with_specs(...)` and `validate_typescript_portability_target_spec_with_specs(...)` with one recursive root-validation flow
-3. add explicit dep resolution in owner-library context
-4. extend root-family handling to admit:
-   - `function.arithmetic_leaf.monotone_up.v1`
-   - `function.wrapper.pipeline.v1`
-   - `function.wrapper.pipeline.normalized_required_arg.v1`
-   - `function.wrapper.pipeline.chain3.v1`
-5. keep closure-member family checks explicit and fail-fast before Bun
-
-Acceptance:
-
-- a supported local-only root still validates
-- a supported direct cross-library root still validates
-- a supported recursive shared root now validates
-- wrong family, wrong order, missing body, unresolved dep, and molecule rejection still fail before Bun
-
-### Step 2. Replace raw-id closure collection with qualified recursive membership
-
-Files:
-
-- `spec-core/src/typescript_backend.rs`
-
-Changes:
-
-1. replace `build_typescript_loaded_specs_by_id(...)` and `build_typescript_spec_indices_by_key(...)` with qualified lookup structures
-2. replace `resolve_typescript_dep_spec(...)` with owner-library-qualified resolution
-3. collapse `collect_typescript_local_graph_root_closure(...)`, `collect_typescript_local_graph_member_closure(...)`, `collect_typescript_portability_root_closure(...)`, and `collect_typescript_closure_member(...)` behind one qualified recursive collector story
-4. dedupe reachable members by qualified identity, not raw id
-5. keep emitted file paths and import rendering stable unless the qualified collector proves they must change
-
-Acceptance:
-
-- two units with the same local id in different libraries do not collide in closure membership
-- recursive shared closure includes only the reachable qualified members
-- unrelated loaded units remain excluded from the emitted tree
-- generated imports still resolve correctly in the emitted TS tree
-- validator and collector no longer disagree about which loaded unit a dep edge names
-
-### Step 3. Extend TypeScript family handling to include the M60 normalized wrapper
-
-Files:
-
-- `spec-core/src/validator.rs`
-- `spec-core/src/typescript_backend.rs`
-
-Changes:
-
-1. add a TypeScript target compatibility constant for `function.wrapper.pipeline.normalized_required_arg.v1`
-2. teach root-family classification to recognize it as a wrapper-class family
-3. teach closure-member validation to route it through the existing wrapper-family dep contract
-4. keep broader required-arg expression widening out of scope
-
-Acceptance:
-
-- M60 normalized-wrapper specs can participate in the recursive TypeScript lane when otherwise eligible
-- raw wrapper and normalized wrapper remain distinct semantic families
-- no new required-arg expression surfaces become legal
-
-### Step 4. Promote a maintained recursive-shared example
-
-Files:
-
-- `examples/shared-spec/units/pricing/calculate_total.unit.spec`
-- `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
-- `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
-- generated artifacts refreshed by the normal `spec` loop only after source spec edits
-
-Changes:
-
-1. add checked-in shared recursive members that match the existing temporary CLI helper story
-2. add one app-side recursive shared root
-3. keep the current direct-root proof owners (`apply_tax`, `calculate_total`) intact
-4. add the new recursive root to the example README proof commands
-
-Acceptance:
-
-```bash
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
-```
-
-- all three paths pass
-- the new recursive root is maintained in repo state, not created only by test helpers
-
-### Step 5. Refresh CLI regression truth
-
-Files:
-
-- `spec-cli/tests/cli.rs`
-
-Changes:
-
-1. convert the current recursive shared nested chain3 rejection helper into the new green path
-2. keep preserved red-path tests for:
-   - unsupported shared recursive member
-   - wrong dep order inside a shared recursive member
-   - missing `body.typescript` on a shared recursive member
-   - unresolved shared dep
-   - molecule TypeScript rejection
-3. add at least one regression that proves owner-library-qualified resolution when local and shared same-id units coexist
-
-Acceptance:
-
-```bash
-cargo test -p spec-cli --test cli
-```
-
-- the new recursive green path passes
-- Bun-precheck failures still happen before Bun
-- qualified identity regressions are covered
-
-### Step 6. Update the public contract and backlog wording
-
-Files:
-
-- `README.md`
-- `examples/crosslib-app/README.md`
-- `TODOS.md`
-- `CHANGELOG.md`
-
-Changes:
-
-1. replace the M59 direct-root-only recursive defer wording with the exact M61 claim
-2. add the new recursive example command to `examples/crosslib-app/README.md`
-3. narrow the TODO backlog from "generic recursive cross-library function graphs remain out" to the smaller remaining oceans:
-   - arbitrary authored 4+ topology parity
-   - new semantic-family promotion
-   - molecule TypeScript execution
-   - seam-kind TypeScript execution
-4. update CHANGELOG with the shipped user-facing contract
-
-Acceptance:
-
-- docs all use the same frozen sentence
-- docs do not imply arbitrary graph parity
-- docs still call out molecule TypeScript rejection and additive proof
-
-### Step 7. Run the final proof wall and capture the post-change basis
-
-Files:
-
-- none authored; verification and generated artifacts only
-
-Changes:
-
-1. run `spec-core` proof for validator and TypeScript backend paths
-2. run `spec-cli` proof for the cross-library example and regressions
-3. run the maintained recursive example commands
-4. refresh any checked-in proof artifacts produced by the standard source-spec loop
-
-Acceptance:
-
-```bash
-cargo test -p spec-core validator
-cargo test -p spec-core typescript_backend
-cargo test -p spec-cli --test cli
-
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
-cargo run -p spec-cli -- status examples/crosslib-app/units --target-language typescript --format json
-```
-
-Expected result:
-
-- the recursive shared root passes under Bun
-- status remains target-specific and additive
-- unrelated units do not appear in the emitted TS tree
-- preserved red-path regressions still fail before Bun
+### Non-negotiable code quality rules
+
+1. **One projection implementation, many consumers.**
+   - `status`, `export`, and snapshotting must not each implement their own
+     benchmark case classification logic.
+
+2. **Enums, not string soup.**
+   - `accounting_status`
+   - `benchmark_status`
+   - `gate_status`
+   - `readability_review_status`
+   - `classification`
+   must be typed in core code, then serialized.
+
+3. **Digest code must be isolated and deterministic.**
+   - no hashing pretty JSON
+   - no hashing map iteration order
+   - no hashing temp paths
+
+4. **Label validation must fail loudly.**
+   - duplicate cases
+   - unknown classification
+   - carrier outside root
+   - required molecule id not under benchmark root
+   - unlabeled loaded carrier under active benchmark root
+   must produce explicit benchmark-accounting failure, not silent omission
+
+5. **Readability selection logic stays benchmark-local.**
+   - shared `mod.rs` reuse is expected
+   - do not invent fake ownership splits
+
+6. **Reserved-state logic stays explicit.**
+   - no “if root missing, drop benchmark”
+   - reserved is a first-class state, not an error shortcut
+
+### Naming and API guidance
+
+Use names that describe the contract, not the implementation accident.
+
+Good:
+
+- `BenchmarkLabelRegistry`
+- `BenchmarkProjection`
+- `BenchmarkCaseProjection`
+- `BenchmarkPathScope`
+- `BenchmarkAccountingStatus`
+- `BenchmarkSnapshot`
+
+Bad:
+
+- `BenchData`
+- `ScopeInfo`
+- `MaybeGreen`
+- `ProjectionHelper2`
+
+### Diagram maintenance
+
+This plan introduces new benchmark concepts, not just code.
+
+If implementation adds or updates nearby ASCII diagrams in `commands.rs`,
+`export.rs`, or the new benchmark module, those diagrams must ship accurate in
+the same change. Stale diagrams are worse than none.
 
 ## Test Review
 
-### Test framework and proof owners
+Rust test framework is already present and authoritative in-repo:
 
-This repo's proof wall is Rust-native:
+- unit tests in `spec-core`
+- integration tests in `spec-cli/tests/cli.rs`
+- JSON fixture baselines in `spec-cli/tests/fixtures/*.json`
 
-- unit-style validator and collector tests in `spec-core`
-- CLI integration tests in `spec-cli/tests/cli.rs`
-- maintained checked-in example proof in `examples/crosslib-app` and `examples/shared-spec`
-- read-side truth through `spec status ... --target-language typescript --format json`
+I2 must land with full benchmark-projection coverage from the start.
 
-### Code path coverage diagram
+### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] spec-core/src/validator.rs
+[+] spec-core/src/benchmark.rs
     |
-    ├── root target eligibility
-    |   ├── [EXISTING] local-only supported root
-    |   ├── [EXISTING] direct cross-library helper-assisted leaf root
-    |   ├── [EXISTING] direct cross-library wrapper root
-    |   ├── [EXISTING] direct cross-library chain3 root
-    |   └── [ADD]      recursive shared root
+    ├── load_labels()
+    │   ├── [GAP] valid registry parse
+    │   ├── [GAP] duplicate benchmark id rejection
+    │   ├── [GAP] duplicate case id rejection within one benchmark
+    │   ├── [GAP] unknown classification rejection
+    │   └── [GAP] reserved benchmark with non-empty cases rejection
     |
-    ├── closure-member family checks
-    |   ├── [EXISTING] helper dep contract
-    |   ├── [EXISTING] wrapper dep contract
-    |   ├── [EXISTING] chain3 dep contract
-    |   └── [ADD]      normalized-required-arg wrapper contract in TS lane
+    ├── project_benchmark(scope = full)
+    │   ├── [GAP] active positive benchmark passes
+    │   ├── [GAP] active positive benchmark incomplete
+    │   ├── [GAP] active positive benchmark invalid accounting
+    │   ├── [GAP] companion-negative benchmark passes without positive credit
+    │   └── [GAP] reserved benchmark emits reserved gate state
     |
-    └── rejection wall
-        ├── [ADD] unsupported shared member
-        ├── [ADD] wrong dep order in shared member
-        ├── [ADD] unresolved shared dep in owner context
-        ├── [ADD] missing body.typescript in shared member
-        └── [EXISTING] molecule TypeScript rejection
+    ├── project_benchmark(scope = partial)
+    │   ├── [GAP] partial_valid when selected carriers are fully labeled
+    │   ├── [GAP] partial_invalid when selected carrier is unlabeled
+    │   └── [GAP] partial projections always emit counts_as_supported_positive = false
+    |
+    ├── compute_label_digest()
+    │   ├── [GAP] stable across outer benchmark ordering
+    │   └── [GAP] stable across case ordering
+    |
+    ├── compute_projection_digest()
+    │   ├── [GAP] excludes generated_at
+    │   ├── [GAP] excludes readability verdict
+    │   └── [GAP] changes when cases/summary/proof refs change
+    |
+    └── readability_generated_files()
+        ├── [GAP] includes supported case files
+        ├── [GAP] includes ancestor mod.rs chain
+        ├── [GAP] includes benchmark-required molecule_tests.rs
+        └── [GAP] excludes deferred/fallback/companion files
 
-[+] spec-core/src/typescript_backend.rs
+[+] spec-cli/src/commands.rs
     |
-    ├── closure membership
-    |   ├── [EXISTING] local-only recursion
-    |   ├── [EXISTING] direct cross-library roots
-    |   └── [ADD]      recursive shared membership via qualified identity
+    ├── status --format json
+    │   ├── [GAP] repo-root full BENCH-ECOM + reserved BENCH-SERVICE + BENCH-CROSSLIB
+    │   ├── [GAP] benchmark root full projection
+    │   ├── [GAP] subtree partial projection
+    │   └── [GAP] single-file partial projection
     |
-    ├── dedupe
-    |   ├── [EXISTING] raw-id/member set
-    |   └── [ADD]      qualified-identity member set
+    ├── export
+    │   ├── [GAP] schema_version 4
+    │   ├── [GAP] same benchmark projection as status
+    │   └── [GAP] reserved benchmark visible at broad scope only
     |
-    └── emission
-        ├── [EXISTING] import rendering
-        └── [ADD]      same-id local/shared units resolve to the correct owner
-
-USER FLOW COVERAGE
-===========================
-[+] examples/crosslib-app direct proof
-    ├── [EXISTING] apply_tax direct helper path
-    ├── [EXISTING] calculate_total direct wrapper path
-    └── [ADD]      checkout_nested_chain3 recursive shared path
-
-[+] Error states
-    ├── [ADD] unsupported shared recursive member
-    ├── [ADD] missing shared body.typescript
-    ├── [ADD] unresolved shared dep alias/unit
-    └── [EXISTING] molecule target-language rejection
-
-─────────────────────────────────
-COVERAGE TARGET: all new recursive closure paths covered
-CRITICAL REGRESSIONS: owner-context lookup, recursive shared green path,
-rejection-before-Bun wall, normalized-wrapper TS eligibility
-─────────────────────────────────
+    └── benchmark snapshot <benchmark-id>
+        ├── [GAP] writes snapshot only
+        ├── [GAP] full-scope active benchmark snapshot
+        ├── [GAP] reserved benchmark snapshot
+        └── [GAP] fails when readability-generated files are missing for active benchmark
 ```
 
-### Required tests
+### Developer-flow coverage
 
-1. `spec-core/src/validator.rs`
-   - recursive shared root validates when all reachable members are eligible
-   - recursive shared closure rejects unsupported member before Bun
-   - recursive shared closure rejects missing `body.typescript` before Bun
-   - recursive shared chain3 member still rejects wrong slot-1 family/order
-   - normalized-required-arg wrapper is accepted as a TypeScript root and closure member when otherwise eligible
+```text
+DEVELOPER FLOW COVERAGE
+===========================
+[+] Registry authoring
+    ├── [GAP] invalid label file produces machine-readable failure
+    └── [GAP] valid label file projects through both status and export
 
-2. `spec-core/src/typescript_backend.rs`
-   - recursive shared closure includes the reachable maintained example graph
-   - qualified identity dedupes correctly when local and shared units share the same local id
-   - unrelated loaded units are excluded from the emitted tree
+[+] Broad-scope proof query
+    ├── [GAP] repo-root status shows BENCH-SERVICE reserved gate
+    ├── [GAP] repo-root export shows same benchmark truth
+    └── [GAP] companion-negative benchmark stays visible without positive credit
 
-3. `spec-cli/tests/cli.rs`
-   - `checkout_nested_chain3.unit.spec` passes under `--target-language typescript`
-   - wrong family/wrong order/missing body/unresolved shared dep still fail before Bun
-   - molecule TypeScript rejection still fails before Bun
+[+] Narrow-scope proof query
+    ├── [GAP] benchmark root path gets full projection
+    ├── [GAP] namespace path gets partial projection
+    └── [GAP] single-unit path gets partial projection with no positive credit
 
-4. maintained example loop
-   - cross-library example README commands stay truthful and green
+[+] Snapshot maintenance
+    ├── [GAP] BENCH-ECOM snapshot generation
+    ├── [GAP] BENCH-CROSSLIB snapshot generation
+    └── [GAP] BENCH-SERVICE reserved snapshot generation
+
+[+] Readability review anchoring
+    ├── [GAP] matching projection_digest => current
+    ├── [GAP] mismatched projection_digest => stale
+    └── [GAP] missing review => missing
+```
+
+### Required test files and assertions
+
+1. `spec-core` unit tests for:
+   - registry parsing and validation
+   - digest determinism
+   - full/partial projection rules
+   - reserved-state projection
+   - readability file set selection
+
+2. `spec-cli/tests/cli.rs` integration tests for:
+   - repo-root full-scope `status --format json`
+   - benchmark-root full-scope `status --format json`
+   - subtree partial `status --format json`
+   - single-file partial `export`
+   - snapshot command write behavior
+   - invalid registry failure path
+
+3. JSON fixture updates for:
+   - full-scope positive benchmark
+   - partial-scope positive benchmark
+   - reserved benchmark projection
+   - companion-negative benchmark projection
+   - schema-v4 export bundle
 
 ### Regression rule
 
-This milestone converts an existing red path into a green path. Regression tests are mandatory.
+Any divergence between `status` and `export` benchmark projection for the same
+scope is a regression and requires a regression test in the same milestone.
 
-Required regressions:
+Same rule for:
 
-- the old negative recursive shared nested chain3 case becomes green only for the exact supported shape
-- preserved red paths still reject before Bun
-- normalized-required-arg wrappers do not stay accidentally unsupported in the TypeScript lane
-- owner-library-qualified lookup does not regress back to raw-id selection
-
-## Failure Modes Registry
-
-| New codepath | Real production failure | Test covers it? | Error handling exists? | User-visible effect | Priority |
-| --- | --- | --- | --- | --- | --- |
-| recursive validator rewrite | root still takes the stale local-vs-portability branch | must add | partial | user sees false rejection of a supported recursive shared graph | critical |
-| qualified lookup | local/shared same-id unit resolves to the wrong implementation | must add | no silent safeguard today | Bun runs the wrong logic and the repo lies | critical |
-| normalized wrapper TS eligibility | M60 family stays unsupported in the TypeScript lane | must add | no | shipped supported family behaves inconsistently across surfaces | high |
-| shared recursive chain3 green path | maintained example still exists only in CLI helper code | must add | no | docs claim capability without a checked-in proof owner | high |
-| emitted member set | unrelated loaded units leak into the generated TS tree | must add | partial | output no longer matches the bounded contract | high |
-| public docs | README says "cross-library recursive TypeScript graphs now work" too broadly | manual review + doc diff | no | users over-assume topology parity | medium |
-| molecule boundary | recursive widen accidentally allows `.test.spec` TS execution | must keep regression | yes via validator | users get ambiguous half-working molecule behavior | high |
-
-Critical gaps to avoid:
-
-- any qualified-identity path with no regression and silent wrong-unit selection
-- any recursive shared green-path claim without a checked-in proof owner
-- any M60 normalized-wrapper omission from the TypeScript lane
+- reserved benchmark omission
+- partial-scope positive credit leakage
+- companion-negative positive credit leakage
+- digest instability from ordering-only changes
 
 ## Performance Review
 
-This milestone should be performance-neutral or near-neutral if implemented correctly.
+This is not a throughput milestone, but there are still real footguns.
 
-Expected characteristics:
+### Expected hot paths
 
-- one recursive closure walker instead of two separate walkers
-- slightly richer dep-resolution keys due to qualified identity
-- no new file discovery behavior
-- no new artifact formats
+1. loading and validating the benchmark registry
+2. mapping loaded authored carriers to label entries
+3. computing digests for full-scope projections
+4. assembling readability-generated file sets
+5. emitting large schema-v4 JSON fixtures
 
-Guardrails:
+### Performance decisions
 
-- do not introduce repeated semantic-review recomputation across the same closure members if a simple per-run cache is enough
-- do not add a generic graph-policy abstraction that every target path pays for
-- keep the closure walk bounded to reachable deps only
-- keep the maintained example small so CLI proof cost stays reasonable
+1. Build carrier lookups once per command scope.
+   - Do not rescan labels benchmark-by-benchmark with repeated path walks.
 
-## NOT in scope
+2. Keep projection assembly in-memory and map-backed.
+   - The repo size is small now, but O(n^2) benchmark-case matching is still
+     needless churn.
 
-- arbitrary authored 4+ direct-dep topology parity
-- new semantic-family promotion
-- generic graph-policy or portability frameworks
-- molecule TypeScript execution
-- seam-kind TypeScript execution
-- `spec validate --target-language`
-- `spec export --target-language`
-- non-Bun TypeScript toolchains
-- a rewrite of Rust proof surfaces or passport schemas
+3. Compute `projection_digest` only for full-scope entries.
+   - Partial scope explicitly omits it. Use that.
 
-## TODOS.md updates required in the same PR
+4. Resolve readability files from projected supported cases, not by walking the
+   generated tree blindly.
+   - This is both faster and more truthful.
 
-1. mark recursive local-plus-cross-library closure across the current supported family set as shipped in M61
-2. explicitly defer:
-   - arbitrary authored 4+ direct-dep topology parity
-   - new semantic-family promotion
-   - molecule TypeScript execution
-   - seam-kind TypeScript execution
-3. remove wording that still implies all recursive cross-library closure is out
-4. keep wording that broader TypeScript oceans still remain
+5. Snapshot command may validate file existence, but it must not rebuild
+   generated output or rerun proof commands.
+
+### Production failure scenario
+
+If projection assembly silently recomputes benchmark membership from directory
+layout instead of labels, a new spec file under `examples/ecommerce/units` can
+start counting toward V1 without any explicit benchmark classification.
+
+That is a correctness bug disguised as convenience.
+
+## Failure Modes Registry
+
+| Failure mode | Where it happens | User-visible impact | Test required | Error handling required | Critical |
+| --- | --- | --- | --- | --- | --- |
+| unlabeled unit under active benchmark root | registry validation / full projection | benchmark turns fake green or silently drops workload | yes | yes, `accounting_status: invalid` plus explicit error | yes |
+| duplicate case id or duplicate carrier mapping | registry validation | benchmark accounting becomes ambiguous | yes | yes, hard validation failure | yes |
+| partial path leaks positive credit | partial projection | single green unit looks like benchmark closure | yes | yes, force `counts_as_supported_positive: false` | yes |
+| `BENCH-SERVICE` omitted at repo-root scope | broad status/export | reserved final gate disappears | yes | yes, explicit reserved projection | yes |
+| `BENCH-CROSSLIB` counts toward positive denominator | benchmark summary | negative fixture launders into product claim | yes | yes, hard classification wall | yes |
+| readability review matches wrong generated file set | full positive benchmark | stale review looks current | yes | yes, `projection_digest` gate and exact path set match | yes |
+| snapshot command refreshes passports or molecule evidence | snapshot CLI | reader becomes writer and mutates proof truth | yes | yes, write-surface wall in tests | yes |
+| export and status diverge on same benchmark scope | read-side consumers | machine clients see conflicting truth | yes | yes, shared core and integration regression tests | yes |
+
+There are no acceptable silent failures in this milestone.
+
+## Implementation Plan
+
+### Phase 1: Registry and core projection types
+
+Deliver:
+
+- `spec-core/src/benchmark.rs`
+- registry loader and validator
+- typed enums and structs
+- carrier-to-label matching
+- benchmark scope intersection logic
+
+Acceptance:
+
+- full parse/validation unit tests pass
+- invalid registry surfaces explicit machine-readable failure
+
+### Phase 2: Shared projection engine and digests
+
+Deliver:
+
+- full/partial projection builder
+- case projection with anti-laundering
+- summary computation
+- `label_digest`
+- `projection_digest`
+- readability-generated file selection
+
+Acceptance:
+
+- full positive, companion-negative, and reserved benchmark unit tests pass
+- digest stability tests pass
+
+### Phase 3: `status` and `export` schema-v4 integration
+
+Deliver:
+
+- additive top-level `benchmarks[]` in `spec status --format json`
+- additive top-level `benchmarks[]` in `spec export`
+- shared projection core wired into both
+- repo-root and path-scoped scope handling
+
+Acceptance:
+
+- schema-v4 fixture baselines pass
+- repo-root full scope and single-file partial scope behave exactly as locked
+
+### Phase 4: Snapshot writer and readability review loading
+
+Deliver:
+
+- `spec benchmark snapshot <benchmark-id>`
+- snapshot artifact writing under `benchmarks/snapshots/`
+- readability review file loading
+- full-scope readability status and verdict projection
+
+Acceptance:
+
+- snapshot command writes only snapshot files
+- matching and stale readability review states are test-covered
+
+### Phase 5: Repo seeding and docs sync
+
+Deliver:
+
+- initial `benchmarks/labels.json`
+- initial `BENCH-ECOM` readability review record
+- generated snapshots for seeded benchmarks
+- README, TODOS, and CHANGELOG updates
+
+Acceptance:
+
+- fresh repo commands show benchmark truth without manual spelunking
+- docs describe benchmark roles and schema-v4 change accurately
+
+### Phase handoff contract
+
+The milestone is sequential until the shared projection contract freezes.
+
+The exact freeze point is the end of Phase 2. Before any parallel lane starts,
+the branch must have these stable and reviewed:
+
+- the benchmark enums
+- the full versus partial projection field set
+- the digest payload rules
+- the reserved benchmark state contract
+- the case-level anti-laundering rule
+
+After that freeze:
+
+- Phase 3 may wire schema-v4 `status` and `export`
+- Phase 4 may wire snapshot writing and readability loading
+- neither phase may mutate the shared core contract without rebasing on a
+  deliberate Phase-2 contract change
 
 ## Worktree Parallelization Strategy
 
@@ -794,89 +987,114 @@ Guardrails:
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| 1. recursive validator contract | `spec-core/src/` | — |
-| 2. recursive TS collector + qualified lookup | `spec-core/src/` | 1, exact validation contract frozen |
-| 3. maintained recursive example | `examples/shared-spec/`, `examples/crosslib-app/` | 1, exact family and rejection rules frozen |
-| 4. CLI regression refresh | `spec-cli/tests/` | 1, 2, 3 |
-| 5. docs and release notes | repo-root docs + `examples/crosslib-app/README.md` | 1, 3, frozen contract sentence |
-| 6. final proof wall and artifact refresh | workspace test commands / generated artifacts | 2, 3, 4, 5 |
+| Phase 1 registry types | `spec-core/`, `benchmarks/` | — |
+| Phase 2 projection core | `spec-core/` | Phase 1 |
+| Phase 3 status/export integration | `spec-cli/`, `spec-core/` | Phase 2 |
+| Phase 4 snapshot + readability | `spec-cli/`, `benchmarks/`, `spec-core/` | Phase 2 |
+| Phase 5 fixtures and docs | `spec-cli/tests/`, `spec-cli/tests/fixtures/`, repo-root docs | Phase 3 for schema shape, Phase 4 for snapshot/readability wording |
 
 ### Parallel lanes
 
-- **Lane A:** Step 1 then Step 2, sequential inside `spec-core/src/`
-- **Lane B:** Step 3, maintained recursive example work in `examples/shared-spec/` and `examples/crosslib-app/`
-- **Lane C:** Step 5, docs and release notes after the contract sentence and example file names are frozen
-- **Lane D:** Step 4, CLI regression refresh after Lane A and Lane B converge
-- **Lane E:** Step 6, final proof wall after A + B + C + D converge
+Lane A: Phase 1 -> Phase 2  
+Sequential, shared `spec-core/`
+
+Lane B: Phase 3  
+Depends on Lane A, owns `spec-cli/` command integration and schema-v4 read surfaces
+
+Lane C: Phase 4  
+Depends on Lane A, owns snapshot mechanics, readability review loading, and benchmark artifact IO
+
+Lane D: Phase 5  
+Depends on Lane B and Lane C, owns fixtures and docs sync
 
 ### Execution order
 
-Launch **Lane A** first. The validator and collector contract must freeze before parallel work is safe.
-
-Once the qualified-identity model, supported family list, and maintained example file names are frozen, launch **Lane B** and **Lane C** in parallel worktrees.
-
-After Lane B lands and Lane A is green, run **Lane D** for CLI truth.
-
-After A, B, C, and D merge, run **Lane E** serially for the final proof wall.
+1. Launch Lane A first and finish it completely.
+2. Launch Lane B and Lane C in parallel from the post-A integration state.
+3. Merge B and C.
+4. Launch Lane D after both are green.
 
 ### Conflict flags
 
-- **Lane A** is not parallelizable internally. `spec-core/src/validator.rs` and `spec-core/src/typescript_backend.rs` define the same contract and will conflict if split too early.
-- **Lane B** and **Lane D** both affect the cross-library example story. Do not run them independently from stale example shapes.
-- **Lane C** must wait for the exact contract sentence and example file names. Otherwise docs will drift from code and tests.
-- Do not split `examples/shared-spec/**` and `examples/crosslib-app/**` into separate lanes. They are one proof owner.
+- Lanes B and C both touch `spec-cli/src/commands.rs` if snapshot subcommand and
+  status/export integration live in one file. That is a merge-conflict hotspot.
+  To keep them parallel, freeze a narrow ownership split:
+  - Lane B owns `status` and `export` wiring plus schema-v4 emission
+  - Lane C owns new `benchmark snapshot` argument parsing and file-writing path
+- Lanes B and C both consume shared `spec-core` benchmark types. Do not let
+  either lane mutate core projection contracts after A freezes them.
 
-## Definition of Done
+## NOT in scope
 
-M61 is done when all of the following are true:
+These were considered and are explicitly deferred:
 
-1. a supported TypeScript root can recurse through a loaded local-plus-shared supported function graph and pass under Bun
-2. recursive shared closure resolves deps in owner library context rather than ambiguous raw-id lookup
-3. every reachable unit still requires supported semantic review and non-empty `body.typescript`
-4. helper, wrapper, normalized-wrapper, and chain3 family contracts stay frozen and enforced at recursive depth
-5. unrelated loaded units are excluded from the emitted TypeScript tree
-6. `examples/crosslib-app` contains a maintained recursive-shared green path
-7. preserved red-path regressions exist for wrong family, wrong order, missing body, unresolved shared dep, and molecule rejection
-8. target-specific proof remains additive and truthful on status and passport surfaces
-9. README, TODOS, CHANGELOG, and `examples/crosslib-app/README.md` all describe the exact M61 boundary
-10. the closeout sentence can honestly say:
-    - `recursive local-plus-cross-library closure across the current supported TypeScript family set now works`
-    - without implying arbitrary graph parity
+- M69 supported-core closure
+  - Why: I2 lands mechanics only. It must not reopen row-support arguments.
+- bounded generics admission into V1
+  - Why: still a forced later scope decision from M65/M66.
+- async / IO admission into V1
+  - Why: still a forced later scope decision from M65/M66.
+- `BENCH-SERVICE` implementation
+  - Why: reserved gate must stay visible, not silently faked closed.
+- benchmark score reports or historical benchmark dashboards
+  - Why: M68 needs projection truth, not a reporting subsystem.
+- text-mode benchmark summaries as a gating surface
+  - Why: M68 explicitly makes JSON the contract surface.
+- benchmark metadata inside workload specs, passports, or molecule evidence
+  - Why: violates the writer-vs-reader wall.
+- generated-tree isolation per benchmark
+  - Why: the repo already uses shared generated trees and M68 freezes that choice.
 
-## Verification Commands
+## Acceptance Commands
 
-Run in this order:
+The implementation is not done until all of these pass on the landing branch:
 
 ```bash
-cargo test -p spec-core validator
-cargo test -p spec-core typescript_backend
-cargo test -p spec-cli --test cli
-
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec --target-language typescript
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --target-language typescript
-cargo run -p spec-cli -- status examples/crosslib-app/units --target-language typescript --format json
+cargo test -p spec-core
+cargo test -p spec-cli
+cargo run -p spec-cli -- status . --format json
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+cargo run -p spec-cli -- export examples/ecommerce/units/pricing/apply_discount.unit.spec
+cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM
+cargo run -p spec-cli -- benchmark snapshot BENCH-CROSSLIB
+cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE
 ```
 
-Expected outcome:
+Verification expectations:
 
-- validator and collector tests are green
-- CLI regressions are green
-- the maintained recursive-shared root passes under Bun
-- status remains target-specific and additive
-- preserved red-path cases still reject before Bun
+- repo-root status/export show `BENCH-ECOM`, `BENCH-CROSSLIB`, and reserved `BENCH-SERVICE`
+- benchmark-root status/export show full-scope `BENCH-ECOM`
+- namespace and single-file status/export show partial-scope `BENCH-ECOM`
+- partial scope never emits positive supported credit
+- companion-negative scope never emits positive supported credit
+- snapshots write only under `benchmarks/snapshots/`
+
+## Exit Criteria
+
+I2 is done only when all of these are true:
+
+1. `benchmarks/labels.json` exists and validates
+2. shared benchmark projection core exists in `spec-core`
+3. `status` and `export` both emit schema-v4 additive `benchmarks[]`
+4. path-scoped `full` versus `partial` rules match M68 exactly
+5. `BENCH-SERVICE` reserved projection is visible at broad scope
+6. companion-negative cases stay visible but never count as positive
+7. readability review state projects correctly for full positive benchmarks
+8. benchmark snapshots can be written without mutating proof truth
+9. JSON fixtures cover full, partial, invalid, reserved, and companion-negative states
+10. docs explain the benchmark roster and writer-vs-reader wall truthfully
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, complete
-- Architecture: replace the local-vs-portability split with one recursive qualified closure contract
-- Code Quality: explicit qualified lookup, explicit family validators, no generic graph subsystem
-- Test Review: full proof wall defined across validator, collector, CLI, and maintained example surfaces
-- Performance Review: near-neutral, bounded to reachable closure and simple qualified lookup
+- Step 0: Scope Challenge — scope accepted as the full M68 mechanics landing, not M69 support expansion
+- Architecture Review: one shared projection core, one registry, one snapshot writer, one schema-v4 benchmark surface
+- Code Quality Review: typed enums, deterministic digests, strict label validation, no duplicate read-side logic
+- Test Review: full benchmark projection matrix required across core and CLI layers
+- Performance Review: map-backed projection, full-scope digesting only, no generated-tree blind scans
 - NOT in scope: written
 - What already exists: written
-- TODOS.md updates: required in same PR
-- Failure modes: critical gaps identified around wrong-unit selection and false product claims
-- Parallelization: 6 steps, 1 core lane, 2 parallel authoring lanes, 1 downstream CLI lane, 1 final proof lane
-
-This is the whole move. Make recursive shared closure honest, keep the family meanings frozen, prove it in the maintained example, and stop there.
+- Failure modes: eight critical gaps explicitly blocked
+- Parallelization: four lanes, two parallel after core freeze
+- Lake Score: every recommendation chooses the complete mechanics landing over the shortcut
