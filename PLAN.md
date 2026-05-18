@@ -1,769 +1,878 @@
-# M64: Retire the False Same-Tree Nested Chain3 Regression Thesis, Preserve the Honest Cross-Library Candidate, and Refresh Truthful Family Analysis
+# I1: Benchmark Registry + Shared Projection Core
 
 Status: **authoritative implementation plan**  
-Milestone: **M64**  
-Milestone family: **truth reset and analysis correction**  
+Milestone: **I1**  
+Milestone family: **Rust V1 benchmark projection foundation**  
 Implementation readiness: **ready for execution**  
-Plan scope: **lock the attempted M63 same-tree nested regression pair as supported `chain3` truth, lock the maintained cross-library nested example as the remaining honest `unsupported_dep_topology` pressure, then refresh coverage, recommendation, and corpus-decision from that corrected split**  
+Plan scope: **land the benchmark registry, shared read-side benchmark projection core, schema-v4 `status`/`export` surfaces, full-vs-partial benchmark scope honesty, and explicit reserved `BENCH-SERVICE` gate projection without adding new proof writers**  
 Base branch: **main**  
 Working branch: **feat/m60-plus**  
-Validated at commit: **`a761e28`**  
-Last rewritten: **2026-05-17**
+Validated at commit: **`3561bd1`**  
+Last rewritten: **2026-05-18**
 
 Supersedes:
 
-- the previous repo-root M63 authority plan formerly kept at this path
-- the broad retirement thesis in `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-134358.md` that treated the whole candidate as retired
+- the previous repo-root M64 authority plan formerly kept at this path
 
 Primary source artifacts:
 
-- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-134358.md`
-- `.runs/m63_truth_correction_run1/blocked-summary.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/spec/docs/rust_v1_contract_stack.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-200036.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-213928.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-220646.md`
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-225503.md`
+- `spec-cli/src/commands.rs`
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
 - `spec-core/src/semantic_review.rs`
 - `spec-cli/tests/cli.rs`
-- `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`
-- `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec`
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
-- `TODOS.md`
+- `examples/ecommerce/units`
+- `examples/crosslib-app/units`
 
 ## Primary Decision
 
-M64 does not widen semantic review and does not retire the whole unsupported
-callable-triple story.
-
-M64 does one narrower thing:
+I1 lands one narrow but complete wedge:
 
 ```text
-same-tree nested regression pair     -> prove supported chain3 truth
-cross-library maintained real example -> preserve unsupported dep topology truth
-analysis artifacts                    -> refresh from that corrected split
+authoritative benchmark registry
+        +
+shared benchmark projection engine
+        +
+schema-v4 additive benchmarks[] on status/export
+        +
+full-vs-partial scope honesty
+        +
+explicit reserved BENCH-SERVICE gate state
 ```
 
 That is the whole milestone.
 
+I1 does **not** add a benchmark writer, snapshot command, readability review
+loading, `projection_digest`, or generated-file readability closure. Those stay
+in `I2`, exactly where the ladder puts them.
+
 ## Executive Summary
 
-M63 died for the right reason and almost taught the wrong lesson.
+`M65` split the Rust V1 work into clean artifacts. `M66` froze the support
+claim. `M67` froze the benchmark roster and the write-vs-read truth boundary.
+`M68` closed the mechanics enough to code from.
 
-The right lesson:
+The repo still has a hole between those frozen docs and the product:
 
-- the attempted same-tree nested regression pair does **not** publish as
-  `unsupported_dep_topology`
-- the reviewer routes the inner shape to supported `function.wrapper.pipeline.chain3.v1`
-  with verdict `aligned`
-- the reviewer routes the outer shape to supported `function.wrapper.pipeline.chain3.v1`
-  with verdict `under_specified`
+- `spec status --format json` and `spec export` know unit truth and molecule
+  truth, but they cannot project benchmark truth
+- `BENCH-SERVICE` is a planning requirement, not a machine-visible gate
+- path-scoped commands have no benchmark honesty boundary yet
+- there is no label-driven anti-laundering wall for positive, deferred,
+  fallback-backed, companion-negative, and reserved benchmark states
 
-The wrong lesson:
+I1 fixes that hole without widening scope. It keeps the current proof writers
+unchanged and adds one shared read-side benchmark projection engine that both
+`status` and `export` call.
 
-- that result does **not** retire the whole callable-triple candidate
-- the maintained cross-library example
-  `examples_crosslib_app::pricing/checkout_nested_chain3`
-  still publishes `unsupported.function.v1`
-  with `unsupported_reason_codes = ["unsupported_dep_topology"]`
-- the checked-in analysis artifacts still rank that cross-library example as the
-  live thin candidate
+## Current Validated Baseline
 
-So M64 is not "retire everything."
+Validated on `feat/m60-plus` at `3561bd1`.
 
-M64 is the smaller honest move:
+### 1. Current machine surfaces are still schema version 3
 
-```text
-retire the fake same-tree unsupported regression thesis
-keep the honest cross-library unsupported callable-triple truth
-prove both sides in the real read-side surfaces that actually carry those truths
-refresh analysis from the corrected basis
-accept whatever truthful next recommendation remains
+Current code facts:
+
+- `STATUS_JSON_SCHEMA_VERSION` is `3` in `spec-cli/src/commands.rs`
+- `EXPORT_SCHEMA_VERSION` is `3` in `spec-core/src/export.rs`
+- `spec-cli/tests/cli.rs` still asserts schema version `3` for both surfaces
+
+So any benchmark landing that changes the public machine contract must bump both
+surfaces together in the same milestone.
+
+### 2. The repo already has the proof truth I1 needs to read
+
+Current read/write wall:
+
+- authored workload lives in `.unit.spec` and `.test.spec`
+- unit proof truth lives in `.spec.passport.json`
+- molecule proof truth lives in `*.test.evidence.json`
+- `spec status` and `spec export` already project those truths but do not mint
+  new proof
+
+That means I1 does not need a new writer. It only needs a new reader-side
+projection layer.
+
+### 3. `examples/ecommerce` is already a real positive benchmark candidate
+
+Current direct status truth from:
+
+```bash
+cargo run -p spec-cli -- status examples/ecommerce --format json
 ```
 
-No backend widening. No new family key. No manifest churn. No fake regression
-pack. No mixed-truth fixture folder with a lying name.
+Current result:
 
-## Current Validated Truth
+- all seven authored ecommerce units are `valid`
+- all three ecommerce molecule tests are `valid`
+- every ecommerce unit currently projects supported narrow-core truth
+- there is no benchmark projection today
 
-Validated on `feat/m60-plus` at `a761e28`.
+That makes `examples/ecommerce` the right active positive benchmark root for I1.
 
-### 1. The M63 blocked-state evidence is real
+### 4. `examples/crosslib-app` already contains the companion negative-proof case
 
-`.runs/m63_truth_correction_run1/blocked-summary.md` proves:
-
-- `pricing/base_nested_chain3_bad_dep_topology`
-  published as supported `function.wrapper.pipeline.chain3.v1`
-  with verdict `aligned`
-- `pricing/checkout_nested_chain3_bad_dep_topology`
-  published as supported `function.wrapper.pipeline.chain3.v1`
-  with verdict `under_specified`
-- making `spec-cli/tests/cli.rs` assert those units as
-  `unsupported_dep_topology` would have been a lie
-
-That part stays.
-
-### 2. The maintained cross-library example is still unsupported today
-
-Direct root status truth from:
+Current direct status truth from:
 
 ```bash
 cargo run -p spec-cli -- status examples/crosslib-app --format json
 ```
 
-Current result for `pricing/checkout_nested_chain3`:
-
-- `status: valid`
-- `semantic_review.verdict: under_specified`
-- `semantic_review.compatibility_key: unsupported.function.v1`
-- `semantic_review.support_status: unsupported`
-- `semantic_review.unsupported_reason_codes: ["unsupported_dep_topology"]`
-
-Direct root export truth from:
-
-```bash
-cargo run -p spec-cli -- export examples/crosslib-app
-```
-
 Current result:
 
-- `units[].semantic_review` is not the authority here
-- the authoritative read-side review lives on
-  `passports[].semantic_review`
-- the passport for `pricing/checkout_nested_chain3` still carries the same
-  unsupported dep-topology review
+- `pricing/checkout_nested_chain3` is `valid`
+- its semantic review projects `support_status: unsupported`
+- its `unsupported_reason_codes` include `unsupported_dep_topology`
+- the other authored cross-library units remain visible alongside it
 
-That distinction matters. Status rows and exported passports are the truthful
-surfaces here. Exported `units[]` is not the surface to assert against for this
-milestone.
+That makes `examples/crosslib-app` the right companion benchmark root for I1.
 
-### 3. The copied repo-root status path is a different proof surface
+### 5. Scope logic already exists, but benchmark logic does not
 
-`spec_status_repo_root_honors_each_root_workspace_config` in `spec-cli/tests/cli.rs`
-copies tracked example roots into a temp repo and asserts multi-root discovery
-and workspace-config behavior.
+Current code already has:
 
-That test currently proves:
+- `resolve_status_roots()` in `spec-cli/src/commands.rs`
+- existing file-vs-directory-vs-root scope behavior for `status`
+- existing path-scoped `export` behavior
 
-- cross-library namespace loading works
-- copied roots are discovered correctly
-- `crosslib-app` still has exactly `4` units
-- copied repo-root status stays non-green because the copied crosslib wrapper
-  unit is `untested`
+Current code does **not** have:
 
-That test is still useful, but it is **not** the authority for the direct-root
-`valid + unsupported_dep_topology` truth above. M64 must keep those surfaces
-separate instead of blurring them.
+- benchmark registry loading
+- benchmark classification validation
+- benchmark-level enums
+- full-vs-partial benchmark scope projection
+- additive top-level `benchmarks[]`
 
-### 4. The checked-in analysis artifacts still point at the cross-library candidate
-
-Current `coverage.latest.json` includes:
-
-- `cluster_id = "unsupported_dep_topology-fbecce0dbe98"`
-- `shape_fingerprint = unsupported_callable_triple`
-- `representative_unit_ids = ["examples_crosslib_app::pricing/checkout_nested_chain3"]`
-- `real_example_hits = 1`
-- `promotion_relevant_regression_hits = 0`
-
-Current `recommendation.latest.json` and
-`corpus-program-decision.latest.json` still say:
-
-- `recommendation_status = "no_strong_candidate"`
-- `top_candidate_id = "a-unsupporteddeptopology-unsupported_dep_topology-fbecce0dbe98"`
-- `decision_action = "spend_corpus_run1"`
-
-So the honest live story is:
-
-```text
-same-tree attempted regression pair -> supported chain3
-cross-library maintained example    -> unsupported dep topology
-analysis basis                      -> still built from the cross-library example
-```
+So the correct move is to extend current scope logic, not replace it.
 
 ## Problem Statement
 
-The repo currently has two different nested callable-triple stories, and M63
-treated them like one problem.
+The Rust V1 docs now know what the benchmark layer should mean, but the machine
+surfaces do not expose it yet.
 
-They are not one problem.
+That gap creates three bad outcomes:
 
-1. **Same-tree nested callable-triple shapes**
-   already route through supported `function.wrapper.pipeline.chain3.v1`
-   when all three deps are supported and the body is a straight-line let-threaded
-   chain.
+1. downstream tooling cannot ask benchmark-level questions from the public JSON
+   surfaces
+2. reserved required proof like `BENCH-SERVICE` can disappear from machine
+   output and get forgotten
+3. once benchmarks exist, path-scoped commands can easily lie by implying
+   whole-benchmark green state from a single-unit query
 
-2. **The maintained cross-library nested example**
-   `pricing/checkout_nested_chain3`
-   still routes to `unsupported.function.v1`
-   with `unsupported_dep_topology`.
-
-M63 tried to use a same-tree regression pair to strengthen a cross-library
-unsupported candidate. That is why it blocked. The regression pair was proving
-the opposite thesis.
-
-M64 fixes that category error.
+I1 closes those gaps by making benchmark truth label-driven, shared, additive,
+and scope-honest.
 
 ## Step 0: Scope Challenge
 
-### Premise correction
-
-The design doc was right about one crucial point:
-
-- the M63 same-tree regression pair cannot truthfully count as
-  `unsupported_dep_topology`
-
-But it overreached on the repo-wide conclusion.
-
-The complete truthful premise is:
-
-```text
-retire the same-tree regression pair as unsupported evidence
-do not retire the maintained cross-library unsupported example
-refresh analysis from that split
-```
-
-Anything broader is sloppy.
-
 ### What already exists
 
-| Sub-problem | Existing owner | M64 action |
+| Sub-problem | Existing owner | I1 action |
 | --- | --- | --- |
-| same-tree supported `chain3` routing logic | `spec-core/src/semantic_review.rs` | reuse shipped routing and add exact tests before considering any production logic change |
-| semantic-review chain3 fixture builders | `wrapper_pipeline_chain3_spec`, `family_b_context`, `m21_chain3_fixture_specs` in `spec-core/src/semantic_review.rs` | reuse the existing fixture style instead of inventing a new test harness |
-| CLI command/test helpers | `cargo_available`, `temp_repo_dir`, `write_spec`, `run_in`, `parse_stdout_json`, `read_passport_json` in `spec-cli/tests/cli.rs` | reuse for temp-fixture proof instead of adding committed fixture files |
-| copied multi-root repo proof | `spec_status_repo_root_honors_each_root_workspace_config` in `spec-cli/tests/cli.rs` | strengthen only for root-discovery invariants, not as the sole semantic truth authority |
-| maintained cross-library nested example | `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec` plus `examples/shared-spec/units/pricing/base_nested_chain3.unit.spec` | preserve as the current honest unsupported real example |
-| M63 blocked-state evidence | `.runs/m63_truth_correction_run1/blocked-summary.md` | treat as the authority explaining why same-tree regression pressure must be retired |
-| family-analysis decision wall | `cargo xtask family coverage/recommend/validate-artifact/corpus-decision` | rerun unchanged after truth surfaces are corrected |
+| status scope resolution | `resolve_status_roots()` in `spec-cli/src/commands.rs` | reuse and extend with benchmark root intersection plus full/partial benchmark scope classification |
+| unit health projection | `compute_health_status()`, `apply_semantic_review_to_health()`, escape-hatch projection in `spec-cli/src/commands.rs` | reuse as the case-level proof truth source |
+| export bundle projection | `spec-core/src/export.rs` | reuse and extend with additive top-level `benchmarks[]` |
+| passport + molecule truth projection | `spec-core/src/passport.rs`, `spec-core/src/molecule_evidence.rs` | reuse for case proof refs and required-molecule proof state |
+| semantic support truth | `spec-core/src/semantic_review.rs` and projected passport truth | reuse for `semantic_support_status` and anti-laundering credit rules |
+| positive workload example | `examples/ecommerce/units` | use as active `BENCH-ECOM` benchmark root |
+| companion negative-proof example | `examples/crosslib-app/units` | use as active `BENCH-CROSSLIB` benchmark root |
+| JSON contract coverage | `spec-cli/tests/cli.rs` plus fixture JSON under `spec-cli/tests/fixtures/` | bump to schema version 4 and add benchmark assertions in the same wedge |
 
 ### Minimum complete slice
 
-The minimum complete M64 slice is:
+The minimum honest I1 slice is:
 
-1. add focused semantic-review proof for the exact same-tree inner and outer
-   shapes that blocked M63
-2. add focused CLI truth-surface proof that those same-tree shapes publish
-   honest supported `chain3` truth through status and exported passports
-3. add or strengthen direct cross-library CLI proof so the maintained example is
-   explicitly asserted as still `unsupported_dep_topology` in direct-root status
-   and exported passports
-4. keep the repo-root workspace-config proof honest and separate
-5. rerun the family-analysis wall and validate the refreshed artifacts
-6. capture the before/after delta so the next milestone is chosen from truth,
-   not memory
+1. add repo-root `benchmarks/labels.json` and validate it as authoritative
+   benchmark-accounting input
+2. add one shared benchmark projection module in `spec-core`
+3. add explicit benchmark enums and projection structs in that shared module
+4. project full vs partial benchmark scope honestly for both `status` and
+   `export`
+5. emit additive top-level `benchmarks[]` from `spec status --format json`
+6. emit additive top-level `benchmarks[]` from `spec export`
+7. surface `BENCH-SERVICE` as explicit `reserved` machine state at broad
+   full-scope queries
+8. add anti-laundering rules so partial, deferred, fallback-backed,
+   companion-negative, and reserved cases never mint positive benchmark credit
+9. update contract tests and fixtures in the same milestone
 
 Anything smaller is fake done.
 
 Examples:
 
-- proving the same-tree pair only in `spec-core` but not in public CLI surfaces
-  is fake done
-- asserting the cross-library example only in the copied repo-root test while
-  never pinning the direct-root `valid` truth is fake done
-- asserting export `units[]` instead of export `passports[]` is fake done,
-  because that is not the truthful surface today
-- refreshing analysis without explicitly pinning the cross-library example's
-  current unsupported truth is fake done
+- adding benchmark logic only to `status` but not `export` is fake done
+- adding `benchmarks[]` without full-vs-partial honesty is fake done
+- adding labels without unlabeled-root invalidation is fake done
+- projecting `BENCH-SERVICE` only in docs and not in machine JSON is fake done
 
-### Complexity, blast radius, distribution, completeness
+### Complexity check
 
-This plan stays boring on purpose.
+This wedge touches more than one production surface, but it is still the
+minimum engineered slice:
 
-- authored code surfaces changed: `2`
-  - `spec-core/src/semantic_review.rs`
-  - `spec-cli/tests/cli.rs`
-- derived artifact surfaces refreshed: `3`
-  - `coverage.latest.json`
-  - `recommendation.latest.json`
-  - `corpus-program-decision.latest.json`
-- optional docs truth-maintenance: at most `1`
-  - `TODOS.md`
-- new classes or services: `0`
-- new committed `.unit.spec` fixtures: `0`
-- new distributable artifacts: `0`
+- one new shared production module in `spec-core`
+- one existing status path in `spec-cli`
+- one existing export path in `spec-core` plus export command wiring
+- one authored registry file
+- one test surface
 
-Minimal diff. Explicit over clever. Full proof over shortcut.
+That is acceptable. It is not spending an innovation token on a new subsystem.
+It is boring extension work on the right seams.
 
-There is no distribution work here because M64 creates no new binary, package,
-container, or external artifact type beyond the already-existing analysis JSON.
+### Search check
 
-## Authority Contract
+I1 should stay Layer 1 and Layer 3, not Layer 2 novelty:
 
-This plan is the only authority for M64.
+- **[Layer 1]** Reuse existing `status` root resolution, passport projection,
+  molecule evidence loading, and export bundle assembly.
+- **[Layer 1]** Keep serialization on existing `serde`/`serde_json` machinery.
+- **[Layer 3]** Do not infer benchmark truth from directory discovery. Use the
+  explicit authored registry because benchmark accounting is product truth, not
+  filesystem folklore.
 
-Everything else is context unless it is brought into alignment with this file.
+No new config layer, no background cache, no benchmark-specific database, no
+auto-discovery magic.
 
-- `PLAN.md` is the implementation authority.
-- `ORCH_PLAN.md` is stale M63 orchestration context until rewritten later.
-- M64 does **not** retire the whole unsupported callable-triple problem.
-- M64 **does** retire the attempted same-tree regression pair as unsupported
-  evidence.
-- M64 preserves the current cross-library unsupported example as live truth
-  unless the reviewer itself changes, which is out of scope here.
-- M64 is a truth reset and read-side correction milestone, not a backend or
-  family-promotion milestone.
+### TODOS cross-reference
 
-### Exact source eligibility
+Current `TODOS.md` has no blocking item for this wedge.
 
-M64 may modify only these authored source surfaces during core implementation:
+Important non-blocking consequence:
 
-| Surface | Responsibility | Required outcome |
-| --- | --- | --- |
-| `spec-core/src/semantic_review.rs` | semantic-review truth proof | new focused tests prove the same-tree pair routes to supported `chain3`; no production routing change unless a failing proof forces one |
-| `spec-cli/tests/cli.rs` | public read-side truth proof | new focused same-tree CLI truth test; direct cross-library unsupported truth assertion; repo-root config proof kept honest and separate |
+- I2, I3, and I4 already exist in the implementation ladder and should remain
+  ladder-owned follow-ons rather than new ad hoc TODOs
 
-Derived outputs refreshed after proof:
+### Completeness check
 
-- `.semantic-family-artifacts/family-promotion/analysis/coverage.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json`
-- `.semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json`
+The complete I1 version is still cheap enough to do now:
 
-Optional truth-maintenance after proof:
+- both JSON surfaces move together
+- full and partial benchmark scope land together
+- reserved gate visibility lands together
+- anti-laundering rules land together
+- fixtures and tests move in the same commit
 
-- `TODOS.md` only if the refreshed analysis reveals a new follow-up that would
-  otherwise be lost
+Trying to land a half-version would only save minutes and would create a second
+contract migration later. Not worth it.
 
-### Explicit no-touch surfaces
+### Distribution check
 
-M64 does **not** edit:
+No new artifact type is introduced for end users.
 
-- `examples/crosslib-app/units/**`
-- `examples/shared-spec/units/**`
-- `spec-cli/tests/fixtures/m20/unsupported_truth_pack/**`
-- `semantic-families/**`
-- `xtask/src/family/**`
-- `spec-core/src/typescript_backend.rs`
-- `spec-core/src/validator.rs`
-
-If M64 needs any of those, stop and re-scope.
+`benchmarks/labels.json` is authored repo input, not a distributable product
+artifact. Distribution pipeline changes are out of scope.
 
 ## Architecture Review
 
-### System direction
+### Core design
+
+I1 adds one shared projection engine and keeps every writer unchanged.
 
 ```text
-CURRENT
-  same-tree attempted regression pair -> supported chain3
-  cross-library maintained example    -> unsupported dep topology
-  analysis artifacts                  -> still rank the cross-library example
-
-M64
-  prove the same-tree pair as supported chain3 in semantic-review tests
-  prove the same-tree pair as supported chain3 in CLI status/export passport surfaces
-  prove the cross-library example still stays unsupported in direct-root status/export passport surfaces
-  keep repo-root copied example coverage focused on workspace-config and discovery behavior
-  rerun coverage/recommend/corpus-decision from that split
-
-AFTER M64
-  no fake same-tree unsupported pressure remains
-  only honest cross-library pressure feeds the candidate analysis
-  next wedge comes from refreshed truth, even if the answer is still "blocked"
+authored specs (.unit.spec / .test.spec)
+           |
+           |      passports / molecule evidence / semantic truth
+           |                     |
+           v                     v
+                spec-core benchmark projector
+                - load labels.json
+                - validate registry
+                - classify scope as full/partial
+                - project case truth
+                - apply anti-laundering
+                - project benchmark/gate status
+                     /                       \
+                    v                         v
+     spec status --format json         spec export --format json
+       top-level benchmarks[]            top-level benchmarks[]
 ```
 
-### Dependency graph
+That shared projector is the whole architecture move. Do not duplicate
+benchmark logic separately in `commands.rs` and `export.rs`.
 
-```text
-spec-core/src/semantic_review.rs
-  └── semantic reviewer truth
-      ├── same-tree nested pair -> supported chain3
-      └── cross-library nested example -> unsupported dep topology
+### Module boundaries
 
-spec-cli/tests/cli.rs
-  ├── temp same-tree proof project
-  │   ├── spec test
-  │   ├── status --format json
-  │   └── export (passport semantic_review assertions)
-  ├── direct copied example proof
-  │   ├── status examples/crosslib-app --format json semantics
-  │   └── export examples/crosslib-app passport semantics
-  └── repo-root copied example proof
-      └── workspace-config discovery, unit counts, and namespace hygiene
+| Module / surface | Ownership in I1 | Notes |
+| --- | --- | --- |
+| `benchmarks/labels.json` | new authored source of benchmark-accounting truth | repo-root, checked in |
+| `spec-core/src/benchmarks.rs` | new shared benchmark registry + projection engine | the only place allowed to know benchmark accounting rules |
+| `spec-core/src/lib.rs` | export the benchmark module publicly to the CLI crate | thin wiring only |
+| `spec-core/src/export.rs` | add additive top-level `benchmarks[]` to `ExportBundle` | reuse shared projector, do not fork rules |
+| `spec-cli/src/commands.rs` | load registry, call projector for status JSON, bump schema version | text mode remains non-blocking and unchanged |
+| `spec-cli/tests/cli.rs` + fixtures | contract coverage for schema v4 and benchmark projection | full + partial + reserved + invalid cases |
 
-.semantic-family-artifacts/family-promotion/analysis/*.json
-  └── refreshed only after the truth wall above is green
-```
+### Concrete shared types
 
-### Production-style failure scenarios
+I1 should add explicit shared benchmark types in `spec-core`, not anonymous JSON
+maps in `spec-cli`.
 
-- If same-tree routing silently flips back to unsupported, analysis will
-  overcount fake pressure and the next milestone will chase the wrong wedge.
-- If the cross-library example silently flips to supported, the repo will
-  pretend a live unsupported boundary no longer exists and promote from a false
-  clean state.
-- If repo-root copied tests are treated as the only authority, direct-root truth
-  can drift without anyone noticing because `untested` and `valid` are not the
-  same proof surface.
+Required enums:
 
-## Implementation Plan
+- `BenchmarkKind` = `positive | companion_negative_proof`
+- `BenchmarkLifecycle` = `active | reserved`
+- `BenchmarkClassification` =
+  `supported | deferred | fallback_backed | explicitly_out | companion_negative_proof`
+- `BenchmarkPathScope` = `full | partial`
+- `BenchmarkAccountingStatus` =
+  `valid | invalid | reserved_missing_cases | partial_valid | partial_invalid`
+- `BenchmarkStatus` =
+  `passing | failing | incomplete | invalid | reserved`
+- `BenchmarkGateStatus` = `satisfied | open | reserved | not_applicable`
 
-### Step 1: Lock the same-tree truth in `spec-core`
+Required projection structs:
 
-Add focused semantic-review tests in `spec-core/src/semantic_review.rs`.
+- `BenchmarkRegistry`
+- `BenchmarkLabel`
+- `BenchmarkCaseLabel`
+- `BenchmarkProjection`
+- `BenchmarkCaseProjection`
+- `BenchmarkRequiredMoleculeProjection`
 
-Required exact tests:
+### Exact benchmark registry for I1
 
-1. `same_tree_nested_chain3_inner_routes_to_supported_chain3`
-   - constructs the exact inner M63 shape
-   - uses the existing semantic-review fixture style already present in this
-     file, not a one-off ad hoc builder
-   - asserts:
-     - `verdict == aligned`
-     - `compatibility_key == function.wrapper.pipeline.chain3.v1`
-     - `support_status == supported`
+`benchmarks/labels.json` should be added at repo root with three benchmark
+entries.
 
-2. `same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified`
-   - constructs the exact outer M63 shape
-   - asserts:
-     - `verdict == under_specified`
-     - `compatibility_key == function.wrapper.pipeline.chain3.v1`
-     - `support_status == supported`
-     - `reason_codes` contains `OutsideHonestSupportedSubset`
+#### 1. `BENCH-ECOM`
 
-Guardrail:
+Role:
 
-- if these tests pass without production code changes, keep the diff test-only
-- if they fail, change only the smallest semantic-review surface needed to make
-  the shipped behavior match the already observed M63 blocked-state truth
-- no routing reorder, no new family, no cross-library widening
+- active positive benchmark
 
-### Step 2: Lock the public CLI truth surfaces in `spec-cli`
+Roots:
 
-M64 needs three separate proof surfaces in `spec-cli/tests/cli.rs`.
+- `root = "examples/ecommerce/units"`
+- `generated_root = "examples/ecommerce/src/generated"`
 
-#### Step 2A: Temp same-tree truth project
+Required molecules:
 
-Add one new focused CLI integration test:
+- `pricing/checkout_flow`
+- `pricing/discount_plus_tax`
+- `pricing/discount_strategy_checkout_flow`
 
-- `nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth`
+Initial labeled unit cases:
 
-Implementation contract:
+- `money/round` -> `supported`
+- `pricing/apply_discount` -> `supported`
+- `pricing/apply_tax` -> `supported`
+- `pricing/calculate_total` -> `supported`
+- `pricing/calculate_total_guarded_tax` -> `supported`
+- `pricing/discount_strategy` -> `supported`
+- `pricing/pricing_quote` -> `supported`
 
-- guard with `if !cargo_available() { return; }`
-- use existing helpers:
-  - `temp_repo_dir`
-  - `write_spec`
-  - `run_in`
-  - `parse_stdout_json`
-  - `read_passport_json`
-- author the same-tree inner and outer units in a temp project inside the test
-- run:
-  - `spec test units --output src/generated --crate-root .`
-  - `spec status units --format json`
-  - `spec export units`
-- assert:
-  - the inner unit publishes supported `chain3` truth
-  - the outer unit publishes supported `chain3` plus `under_specified` truth
-  - neither unit publishes `unsupported_dep_topology`
-  - `export` assertions read from `passports[]`, not from `units[]`
+#### 2. `BENCH-CROSSLIB`
 
-This test is the public proof that the retired same-tree thesis is actually
-retired in read-side surfaces, not just inside semantic-review unit tests.
+Role:
 
-#### Step 2B: Direct cross-library maintained-example proof
+- active companion negative-proof benchmark
 
-Add one direct-root CLI proof that pins the live unsupported candidate in the
-surface that currently carries it.
+Roots:
 
-Preferred test shape:
+- `root = "examples/crosslib-app/units"`
+- `generated_root = "examples/crosslib-app/src/generated"`
 
-- add a new focused test in `spec-cli/tests/cli.rs` that copies
-  `examples/crosslib-app` and `examples/shared-spec` into a temp area, then
-  runs the same direct-root commands the operator would run against
-  `examples/crosslib-app`
+Required molecules:
 
-Required assertions:
+- none
 
-- `status examples/crosslib-app --format json`
-  - `pricing/checkout_nested_chain3`
-    - `status == valid`
-    - `semantic_review.compatibility_key == unsupported.function.v1`
-    - `semantic_review.support_status == unsupported`
-    - `semantic_review.unsupported_reason_codes == ["unsupported_dep_topology"]`
-- `export examples/crosslib-app`
-  - assert the same review on the passport for
-    `pricing/checkout_nested_chain3`
+Initial labeled unit cases:
 
-Do not assert this truth from export `units[]`. That would be the wrong surface.
+- `pricing/apply_discount` -> `supported`
+- `pricing/apply_tax` -> `supported`
+- `pricing/calculate_total` -> `supported`
+- `pricing/checkout_nested_chain3` -> `companion_negative_proof`
 
-#### Step 2C: Keep repo-root copied proof honest
+Why label the supported cross-library carriers too:
 
-Keep `spec_status_repo_root_honors_each_root_workspace_config`, but tighten its
-role.
+- because `BENCH-CROSSLIB` is an active benchmark root
+- because unlabeled authored carriers under an active benchmark root must make
+  accounting invalid
+- because only the nested chain3 unit is the companion-negative case, but the
+  other carriers still have to be explicitly accounted for
 
-Required assertions:
+#### 3. `BENCH-SERVICE`
 
-- `crosslib-app` still has exactly `4` units
-- `pricing/checkout_nested_chain3` still appears
-- copied repo-root status remains `untested` for that unit
-- `SPEC_UNKNOWN_LIBRARY_NAMESPACE` remains absent
+Role:
 
-Do **not** use this test as the only proof of the maintained unsupported
-candidate. Its job is workspace-config discovery and namespace hygiene, not the
-direct-root semantic truth contract.
+- reserved positive benchmark required for final V1 closure
 
-### Step 3: Refresh the analysis wall
+Roots:
 
-After Steps 1 and 2 are green, rerun:
+- `root = "examples/service/units"`
+- `generated_root = "examples/service/src/generated"`
 
-```bash
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-cargo xtask family corpus-decision --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
-```
+Required molecules:
 
-Required read-side comparison:
+- none
 
-- before M64:
-  - same-tree pair was informally treated as unsupported regression pressure
-  - checked-in artifacts still ranked the cross-library example as the thin
-    unsupported callable-triple candidate
-- after M64:
-  - no same-tree regression proof remains in the public truth story
-  - the analysis either:
-    - still ranks the cross-library candidate honestly, or
-    - moves to a different truthful next wedge
+Initial labeled unit cases:
 
-Both outcomes are acceptable. Lying is not.
+- empty, because the benchmark is reserved
 
-### Step 4: Close out the truthful next action
+### Exact read-surface contract for I1
 
-If the refreshed analysis still lands on:
+I1 is the shared projection wedge, not the snapshot/readability wedge.
 
-- `a-unsupporteddeptopology-unsupported_dep_topology-fbecce0dbe98`
-- `no_strong_candidate`
-- `spend_corpus_run1`
+So the benchmark JSON contract for I1 is:
 
-then the closeout must say that plainly and capture only the honest next move:
+- **yes now**:
+  - top-level `benchmarks[]`
+  - benchmark kind/lifecycle/path-scope/accounting status
+  - benchmark status and gate status where full scope makes them honest
+  - case projection with proof refs and anti-laundering credit bit
+  - required molecule proof projection
+  - reserved `BENCH-SERVICE` state
+  - schema version bump to 4
+- **not yet in I1**:
+  - `spec benchmark snapshot`
+  - `projection_digest`
+  - readability review loading
+  - readability verdict/status
+  - `readability_generated_files[]`
 
-- author a truthful **cross-library** regression if one exists, or
-- open a separate reviewer-widening design if the product truly wants to admit
-  this cross-library nested topology as supported
+That means:
 
-Do **not** carry forward the retired same-tree regression thesis into `TODOS.md`.
+- I1 should compute and emit `label_digest` for full-scope entries because it
+  is purely registry-owned and audit-friendly
+- I1 should **not** emit `projection_digest` yet because the locked digest
+  contract includes readability closure that I2 owns
+
+### Exact path-scope behavior
+
+Use the existing command scope and add benchmark intersection rules on top.
+
+Full-scope examples:
+
+- repo-root `spec status . --format json`
+- `spec status examples/ecommerce --format json`
+- `spec status examples/ecommerce/units --format json`
+- `spec export examples/crosslib-app --format json`
+
+Partial-scope examples:
+
+- `spec status examples/ecommerce/units/pricing --format json`
+- `spec status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json`
+- `spec export examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec --format json`
+
+Required rules:
+
+1. benchmarks are emitted only when the command scope intersects their declared
+   `root`
+2. full scope means the command loaded the entire declared benchmark root
+3. partial scope means the command intersects but did not load the whole root
+4. every partial case emits `counts_as_supported_positive: false`
+5. partial entries omit benchmark-level green-state claims:
+   `benchmark_status`, `gate_status`, benchmark summary
+6. `BENCH-SERVICE` appears only when the query scope is broad enough to contain
+   its declared root, which means repo-root or repo-ancestor queries, not
+   narrow ecommerce-only queries
+
+### Reserved benchmark state
+
+At full scope, `BENCH-SERVICE` must project:
+
+- `lifecycle: reserved`
+- `path_scope: full`
+- `accounting_status: reserved_missing_cases`
+- `benchmark_status: reserved`
+- `gate_status: reserved`
+- `cases: []`
+- `required_molecule_proofs: []`
+
+That state must be machine-visible. It is not green, not open-by-implication,
+and not droppable.
 
 ## Code Quality Review
 
-This is a small-scope truth correction. The code-quality bar is therefore
-simple and strict:
+### DRY requirements
 
-- **No duplicate harnesses unless the second call site earns it.**
-  Reuse existing builders and helpers first. If the new CLI proof needs local
-  temp-project authoring, keep that helper narrow and colocated in
-  `spec-cli/tests/cli.rs`.
-- **No committed fixture churn for an uncommitted thesis.**
-  Do not repurpose `spec-cli/tests/fixtures/m20/unsupported_truth_pack/**`.
-  That fixture pack would become semantically dishonest.
-- **Assert against the right surface.**
-  In export JSON, the semantic review authority for this milestone is
-  `passports[].semantic_review`, not `units[].semantic_review`.
-- **Prefer explicit assertions over broad snapshot noise.**
-  Pin the exact unit ids, compatibility keys, support status, and reason-code
-  vectors that matter. Do not add loose "contains string" assertions.
-- **Keep the diff test-first unless proof fails.**
-  A production semantic-review code change is allowed only if the new exact
-  tests reveal that current behavior no longer matches the already observed M63
-  blocked truth.
+I1 must avoid the classic trap where `status` and `export` each grow their own
+slightly different benchmark logic.
+
+Hard rule:
+
+- benchmark validation, case projection, anti-laundering, and full-vs-partial
+  rules live once in `spec-core`
+- `spec-cli` only adapts command scope and serializes the shared output
+
+### Minimal-diff requirements
+
+Keep the diff boring:
+
+- one new module for benchmark logic
+- one new authored registry file
+- one additive field on status JSON
+- one additive field on export JSON
+- one schema version bump
+
+Do **not** add:
+
+- a new config layer
+- benchmark-specific CLI flags
+- a benchmark cache
+- a second registry format
+- text-mode benchmark UI in the first wedge
+
+### Explicit-over-clever requirements
+
+Prefer explicit label accounting over inferred heuristics:
+
+- validate duplicate benchmark ids explicitly
+- validate duplicate `case_id` and duplicate carrier mapping explicitly
+- validate unknown carrier ids explicitly
+- validate active-root unlabeled carriers explicitly
+
+Do not try to infer benchmark health from directory names or proof timestamps
+alone.
 
 ## Test Review
 
-100% coverage is the goal for the new truth split.
+100 percent coverage is the goal for the new benchmark logic because this is a
+public machine contract wedge.
+
+### Test framework
+
+- runtime: Rust
+- unit tests: `cargo test -p spec-core`
+- CLI integration tests: `cargo test -p spec-cli --test cli`
 
 ### Code path coverage
 
 ```text
 CODE PATH COVERAGE
-==================
-[+] spec-core/src/semantic_review.rs
-    │
-    ├── evaluate_semantic_review_with_context()
-    │   ├── family_c_deps_are_supported()
-    │   │   ├── [ADD TEST] same_tree_nested_chain3_inner_routes_to_supported_chain3
-    │   │   └── [ADD TEST] same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified
-    │   │
-    │   └── unsupported_function_dep_topology_diagnostic()
-    │       └── [PROVE VIA CLI] cross-library checkout_nested_chain3 remains unsupported_dep_topology
-    │
-    └── supported route precedence
-        └── [EXISTING] chain3 precedence tests already lock chain3 before lower families
+===========================
+[+] benchmarks/labels.json loading
+    |
+    ├── [GAP] Valid registry loads from repo root and normalizes roots/cases
+    ├── [GAP] Duplicate benchmark id fails validation
+    ├── [GAP] Duplicate case id or duplicate carrier mapping fails validation
+    ├── [GAP] Unknown classification fails validation
+    └── [GAP] Missing / malformed labels file surfaces command failure clearly
 
-[+] spec-cli/tests/cli.rs
-    │
-    ├── temp same-tree truth project
-    │   ├── spec test
-    │   ├── status units --format json
-    │   └── export units
-    │       └── [ADD TEST] nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth
-    │
-    ├── direct cross-library maintained example
-    │   ├── status examples/crosslib-app --format json
-    │   └── export examples/crosslib-app
-    │       └── [ADD TEST] direct crosslib nested chain3 unsupported truth stays pinned
-    │
-    └── copied repo-root example status
-        └── [STRENGTHEN TEST] spec_status_repo_root_honors_each_root_workspace_config
+[+] Full-scope benchmark projection
+    |
+    ├── [GAP] Repo-root status emits BENCH-ECOM full
+    ├── [GAP] Repo-root status emits BENCH-CROSSLIB full
+    ├── [GAP] Repo-root status emits BENCH-SERVICE reserved full
+    ├── [GAP] Ecommerce-root status emits BENCH-ECOM full but not BENCH-SERVICE
+    └── [GAP] Export mirrors the same full-scope benchmark entries
 
-[+] family analysis
-    │
-    ├── coverage
-    ├── recommendation
-    └── corpus-decision
-        └── [REFRESH] validate the new basis instead of assuming the old one
+[+] Partial-scope benchmark projection
+    |
+    ├── [GAP] Pricing-subdir status emits BENCH-ECOM partial only
+    ├── [GAP] Single-file status emits only intersecting partial case(s)
+    ├── [GAP] Partial entries omit benchmark_status, gate_status, and summary
+    └── [GAP] Partial cases always emit counts_as_supported_positive=false
+
+[+] Anti-laundering
+    |
+    ├── [GAP] Unlabeled active positive unit => accounting_status=invalid, no positive credit
+    ├── [GAP] Unlabeled active partial scope => accounting_status=partial_invalid
+    ├── [GAP] Deferred case stays visible but never counts green
+    ├── [GAP] Fallback-backed case stays visible but never counts green
+    ├── [GAP] Companion-negative case stays visible and never counts green
+    └── [GAP] Companion benchmark can contain supported carriers without entering positive credit
+
+[+] Benchmark status / gate status
+    |
+    ├── [GAP] Positive full benchmark passing when supported cases + required molecules are valid
+    ├── [GAP] Positive full benchmark incomplete when a supported case is stale/untested/incomplete
+    ├── [GAP] Positive full benchmark invalid on accounting failure
+    ├── [GAP] Companion benchmark passing when all cases emit and none count positive
+    └── [GAP] Reserved BENCH-SERVICE emits reserved gate state
+
+[+] Public schema contract
+    |
+    ├── [GAP] status JSON fixture(s) bump to schema_version 4 with top-level benchmarks[]
+    ├── [GAP] export JSON fixture(s) bump to schema_version 4 with top-level benchmarks[]
+    └── [GAP] existing units/passports/graph surfaces remain unchanged aside from additive benchmarks[]
+
+---------------------------------
+COVERAGE: 0/23 benchmark paths tested today
+GAPS: 23 benchmark paths need tests
+CRITICAL: schema-v4 contract is entirely untested until I1 lands
+---------------------------------
 ```
 
-### Verification command matrix
+### Required tests to add
 
-Use focused selectors while iterating, then run the broader wall once the exact
-targets are green.
+#### `spec-core` unit tests
+
+Add focused tests in the new benchmark module for:
+
+- registry normalization and validation
+- active-root unlabeled invalidation
+- partial-valid vs partial-invalid classification
+- case-level `counts_as_supported_positive` rules
+- benchmark status and gate status transitions
+
+#### `spec-cli` integration tests
+
+Add CLI coverage in `spec-cli/tests/cli.rs` for:
+
+- repo-root full-scope status benchmark projection
+- benchmark-root full-scope status benchmark projection
+- nested-directory partial-scope status benchmark projection
+- single-file partial-scope status benchmark projection
+- full-scope export benchmark projection
+- reserved `BENCH-SERVICE` visibility at broad scope only
+- malformed or incomplete labels registry failure
+
+#### Fixture updates
+
+Update or add JSON fixtures so the public machine contract is locked at
+`schema_version: 4` for:
+
+- status valid
+- status untested or incomplete
+- export valid
+
+If existing generic fixtures become too awkward to retrofit, add benchmark-aware
+fixture variants instead of weakening assertions.
+
+### Regression rule
+
+Any test proving that a previously green JSON consumer no longer sees a stable
+shape is a regression test and is mandatory. No debate.
+
+### Test execution commands
+
+Use these during implementation:
 
 ```bash
-# Step 1
-cargo test -p spec-core same_tree_nested_chain3_inner_routes_to_supported_chain3 -- --exact
-cargo test -p spec-core same_tree_nested_chain3_outer_routes_to_supported_chain3_under_specified -- --exact
-
-# Step 2A
-cargo test -p spec-cli --test cli nested_same_tree_chain3_truth_surfaces_publish_honest_supported_truth -- --exact
-
-# Step 2B
-cargo test -p spec-cli --test cli direct_crosslib_nested_chain3_unsupported_truth_stays_pinned -- --exact
-
-# Step 2C
-cargo test -p spec-cli --test cli spec_status_repo_root_honors_each_root_workspace_config -- --exact
-
-# Broad local proof after focused tests pass
-cargo test -p spec-core semantic_review
-cargo test -p spec-cli --test cli
-
-# Analysis wall
-cargo xtask family coverage --format json
-cargo xtask family recommend --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/coverage.latest.json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/recommendation.latest.json
-cargo xtask family corpus-decision --format json
-cargo xtask family validate-artifact .semantic-family-artifacts/family-promotion/analysis/corpus-program-decision.latest.json
+cargo test -p spec-core benchmark
+cargo test -p spec-cli --test cli benchmark
+cargo run -p spec-cli -- status . --format json
+cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json
+cargo run -p spec-cli -- export examples/crosslib-app --format json
 ```
-
-### Failure modes registry
-
-| Codepath | Real production-style failure | Test covers it? | Error handling exists? | Silent if missed? |
-| --- | --- | --- | --- | --- |
-| same-tree inner routing | reviewer accidentally regresses this shape back to unsupported | yes, Step 1 exact test | yes, semantic review surfaces expose it | yes, analysis would lie again |
-| same-tree outer routing | reviewer flips the outer shape to aligned or unsupported instead of under_specified supported chain3 | yes, Step 1 + Step 2A | yes, semantic review surfaces expose it | yes, public proof would claim the wrong family |
-| cross-library maintained example | cleanup work accidentally retires the live unsupported candidate | yes, Step 2B | yes, status JSON and exported passport expose it | yes, refreshed analysis would pick the wrong next wedge |
-| repo-root copied proof | engineers treat copied repo-root `untested` status as equivalent to direct-root `valid` status | yes, Step 2C plus plan-level separation of surfaces | no automatic guard outside tests | yes, future plan writers could assert the wrong thing |
-| export assertion surface | test reads `units[].semantic_review` and reports false negative or false clean result | yes, Step 2A and 2B require passport assertions | no | yes, wrong surface means wrong truth |
-| analysis refresh | tests pass but artifacts stay stale | yes, validate-artifact commands | yes, validators fail | yes, next planning step would be based on old data |
-| fixture honesty | same-tree proof gets shoved into `m20_unsupported_truth_pack` anyway | covered by no-touch guard, not by runtime | no | yes, the fixture name would lie to future readers |
-
-Critical gap rule:
-
-- if any same-tree shape still publishes `unsupported_dep_topology` after Step 2A,
-  stop the milestone
-- if the cross-library maintained example stops publishing
-  `unsupported_dep_topology` in Step 2B without an intentional reviewer change,
-  stop the milestone
-- if a test can only be made green by asserting export `units[].semantic_review`,
-  stop and re-scope because the proof surface is wrong
 
 ## Performance Review
 
-No product runtime changes. This is proof and analysis work.
+### Watchpoints
 
-The only performance risk is needless local and CI drag.
+1. **Do not rescan the filesystem per benchmark case.**
+   The projector should operate on already loaded specs, already read passports,
+   already read molecule evidence, and already projected semantic truth.
 
-Rules:
+2. **Do not duplicate registry parsing inside status and export.**
+   Parse once per command invocation, then pass the shared registry into the
+   projector.
 
-- land targeted exact tests first
-- use exact selectors while iterating
-- do not run the full CLI integration wall on every edit
-- refresh the three analysis artifacts only after the exact semantic-review and
-  CLI truth tests are green
-- prefer copied-example and temp-project proof over broad repo-root command
-  matrices during iteration
+3. **Keep lookups map-based.**
+   Benchmark case matching should use normalized hash maps keyed by carrier id
+   and benchmark id, not nested linear scans across every loaded spec and every
+   benchmark case.
 
-## NOT in scope
+### Expected cost profile
 
-- making `examples_crosslib_app::pricing/checkout_nested_chain3` supported
-  `chain3`
-- widening semantic review to support cross-library nested callable-triple
-  topologies
-- reviving the M63 worktree-only regression specs as committed repo fixtures
-- changing `spec-cli/tests/fixtures/m20/unsupported_truth_pack` into a mixed
-  supported-and-unsupported pack
-- backend, validator, or TypeScript execution changes
-- manifest, family packet, or promotion-registry changes
-- a new corpus rerun story that still depends on the retired same-tree thesis
+`benchmarks/labels.json` is small and static. The new cost should be dominated
+by existing proof loading, not by benchmark projection itself.
+
+If benchmark projection adds noticeable latency to `status` or `export`, that
+is a bug in the implementation shape.
+
+## Failure Modes Registry
+
+| Code path | Real failure | Test required | Error handling required | User-visible outcome |
+| --- | --- | --- | --- | --- |
+| registry load | missing or malformed `benchmarks/labels.json` silently drops benchmark truth | yes | yes, fail command with clear benchmark-registry diagnostic | clear failure, never silent omission |
+| active benchmark accounting | unlabeled authored carrier under active root still yields `valid` accounting | yes | yes, benchmark `invalid` / `partial_invalid` | clear invalid benchmark projection |
+| partial scope | single-file query implies whole benchmark green | yes | yes, force `partial` and zero positive credit | honest partial projection |
+| companion benchmark | companion-negative case disappears from projection | yes | yes | explicit non-native visibility |
+| reserved benchmark | `BENCH-SERVICE` omitted from broad scope | yes | yes | explicit reserved gate state |
+| status/export divergence | same benchmark root projects differently between `status` and `export` | yes | yes, one shared projector | one consistent machine contract |
+
+Critical gap definition for I1:
+
+- any path that can silently grant positive benchmark credit without full scope
+  or without valid accounting is a critical gap
+
+This plan closes those gaps by construction.
+
+## Not in Scope
+
+- `spec benchmark snapshot <benchmark-id>`
+- `benchmarks/snapshots/*.snapshot.json`
+- `benchmarks/reviews/*.readability.review.json`
+- readability review loading on `status` / `export`
+- `projection_digest`
+- `readability_review_status`
+- `readability_verdict`
+- `readability_generated_files[]`
+- text-mode benchmark summaries
+- authored `BENCH-SERVICE` workload content
+- benchmark scoring, history, or reporting dashboards
+
+Rationale:
+
+- those belong to `I2` and later by the locked ladder
+- forcing them into I1 would turn a clean read-surface wedge into a subsystem
+  rewrite
+
+## Implementation Plan
+
+### Step 1: Add the benchmark registry and shared types
+
+Add:
+
+- `benchmarks/labels.json`
+- `spec-core/src/benchmarks.rs`
+- `pub mod benchmarks;` in `spec-core/src/lib.rs`
+
+Implement:
+
+- registry structs
+- enum definitions
+- registry parsing and validation
+- repo-relative root and generated-root normalization
+- `label_digest` canonicalization for full-scope entries
+
+### Step 2: Build the shared projection engine
+
+In `spec-core/src/benchmarks.rs`, implement:
+
+- benchmark root intersection logic
+- full vs partial scope classification
+- case projection from loaded specs and projected proof truth
+- required-molecule proof projection from loaded molecule evidence
+- anti-laundering rules
+- benchmark status and gate status derivation
+
+Hard rule:
+
+- this engine must take already loaded specs/tests/passports/evidence as input
+- it must not re-read passports or molecule evidence on its own
+
+### Step 3: Wire `spec status --format json`
+
+In `spec-cli/src/commands.rs`:
+
+- bump `STATUS_JSON_SCHEMA_VERSION` from `3` to `4`
+- add top-level `benchmarks: Vec<BenchmarkProjection>` to the JSON response
+- load `benchmarks/labels.json` once for the invocation
+- call the shared projector using the resolved scope plus currently loaded truth
+- keep text mode unchanged in I1
+
+### Step 4: Wire `spec export`
+
+In `spec-core/src/export.rs` and `spec-cli/src/commands.rs`:
+
+- bump export schema version from `3` to `4`
+- add additive top-level `benchmarks[]` to `ExportBundle`
+- call the same shared projector used by `status`
+- keep all existing export surfaces stable aside from the additive field
+
+### Step 5: Lock reserved and companion semantics
+
+Add targeted coverage for:
+
+- full-scope `BENCH-SERVICE` reserved projection
+- companion benchmark visibility
+- companion benchmark supported carriers that still never count positive
+- partial-scope zero-credit behavior
+
+### Step 6: Update fixtures and contract tests
+
+Update:
+
+- benchmark-aware status fixture coverage
+- benchmark-aware export fixture coverage
+- schema version assertions in `spec-cli/tests/cli.rs`
+
+Do not land production code before fixture and schema tests are green.
+
+## What Already Exists
+
+- The current status health engine already knows how to compute unit and
+  molecule truth. Reuse it.
+- The current export bundle already carries units, passports, molecule tests,
+  and graph edges. Extend it additively.
+- The current example roots already provide the positive and companion workloads
+  I1 needs. Do not invent a new fixture corpus.
+- The current path-scoped command behavior already separates file, directory,
+  and repo-root queries. Extend it with benchmark scope classification instead
+  of writing a second scope model.
 
 ## Worktree Parallelization Strategy
 
-This plan has two implementation lanes, then one integration lane.
+This plan does have bounded parallelization room once the shared benchmark
+contract is frozen.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| semantic-review proof | `spec-core/src/` | — |
-| CLI truth-surface proof | `spec-cli/tests/` | — |
-| analysis refresh and closeout | `.semantic-family-artifacts/`, `TODOS.md` | semantic-review proof, CLI truth-surface proof |
+| Registry authoring | `benchmarks/`, `examples/` | - |
+| Shared benchmark projection core | `spec-core/src/` | - |
+| Status JSON wiring | `spec-cli/src/` | Shared benchmark projection core |
+| Export JSON wiring | `spec-core/src/`, `spec-cli/src/` | Shared benchmark projection core |
+| Contract tests and fixtures | `spec-cli/tests/`, `spec-cli/tests/fixtures/` | Registry authoring, Status JSON wiring, Export JSON wiring |
 
 ### Parallel lanes
 
-- `Lane A`: semantic-review proof in `spec-core/src/semantic_review.rs`
-- `Lane B`: CLI truth-surface proof in `spec-cli/tests/cli.rs`
-- `Lane C`: analysis refresh, delta capture, and optional `TODOS.md` truth maintenance after A + B merge
+- **Lane A:** Registry authoring  
+  `benchmarks/labels.json` plus final case roster validation against live
+  example truth.
+
+- **Lane B:** Shared projection core -> Export JSON wiring  
+  Sequential because both touch `spec-core/src/`.
+
+- **Lane C:** Status JSON wiring  
+  Can run after Lane B exposes the shared projection API. Mostly `spec-cli/src/`
+  ownership.
+
+- **Lane D:** Contract tests and fixtures  
+  Launch after B + C stabilize the machine shape.
 
 ### Execution order
 
-Launch `Lane A` and `Lane B` in parallel worktrees.
-
-Merge both.
-
-Then run `Lane C` on the integrated state.
+1. Launch **Lane A** and the first half of **Lane B** in parallel:
+   registry authoring plus shared `spec-core` projection core.
+2. Once the shared projection API is stable, launch **Lane C**.
+3. Finish **Lane B** export wiring.
+4. Launch **Lane D** after B + C are both green enough to freeze schema v4.
 
 ### Conflict flags
 
-- `Lane A` and `Lane B` touch different module directories, so merge conflict
-  risk is low
-- `Lane B` itself should stay sequential inside one worktree because the same
-  file owns the temp same-tree proof, the direct cross-library proof, and the
-  repo-root copied proof
-- `Lane C` must be sequential because analysis artifacts must be generated from
-  the merged final truth wall, not from partial state
+- Lanes B and C both depend on the exact benchmark projection type shape.
+  Freeze the `spec-core` interface before deep CLI assertions.
+- Lane A must settle the final case roster before Lane D golden fixtures lock.
+- Export wiring shares `spec-core/src/` with the shared projection core, so keep
+  those two steps in the same lane to avoid merge churn.
 
-## Exit Criteria
+## Acceptance Criteria
 
-M64 is successful only if all of the following are true:
+I1 is done only when all of these are true:
 
-1. `spec-core/src/semantic_review.rs` has focused exact tests proving the
-   same-tree nested pair publishes supported `chain3` truth.
-2. `spec-cli/tests/cli.rs` has a focused temp-project truth test proving the
-   same-tree pair publishes supported `chain3` truth through CLI status and
-   exported passports.
-3. `spec-cli/tests/cli.rs` has a direct cross-library truth test proving
-   `pricing/checkout_nested_chain3` remains `unsupported_dep_topology` in
-   direct-root status and exported passports.
-4. `spec_status_repo_root_honors_each_root_workspace_config` remains explicit
-   about repo-root discovery and namespace hygiene without pretending to be the
-   direct-root semantic authority.
-5. The three family-analysis artifacts are rerun and pass validation.
-6. The closeout records whether the same cross-library candidate remains live or
-   whether a different truthful next wedge emerged.
-7. No same-tree unsupported regression thesis survives in code, tests, docs, or
-   artifacts.
+1. `benchmarks/labels.json` exists at repo root and validates
+2. `spec status --format json` emits top-level `benchmarks[]` at
+   `schema_version: 4`
+3. `spec export --format json` emits top-level `benchmarks[]` at
+   `schema_version: 4`
+4. both commands share the same benchmark projection rules
+5. full-scope benchmark queries emit honest benchmark status and gate status
+6. partial-scope benchmark queries emit only partial entries and never positive
+   credit
+7. `BENCH-SERVICE` appears as reserved state at broad full scope
+8. active-root unlabeled carriers force invalid accounting
+9. companion-negative cases remain visible and never count positive
+10. all new benchmark contract tests pass
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, resolved to a narrower and more truthful split
-- Architecture Review: no new architecture, just a corrected truth wall and a
-  clearer separation of proof surfaces
-- Code Quality Review: minimal diff, no new committed fixtures, assert against
-  exported passports instead of the wrong export unit surface
-- Test Review: exact semantic-review proof, exact temp CLI proof, exact direct
-  cross-library proof, explicit repo-root config proof, refreshed analysis wall
-- Performance Review: targeted test execution only, no runtime impact
+- Step 0: Scope Challenge - scope accepted as-is, no widening beyond the locked I1 wedge
+- Architecture Review: one shared benchmark projection core, no duplicated status/export logic
+- Code Quality Review: explicit enums plus one shared module, no new subsystem
+- Test Review: coverage diagram produced, 23 benchmark paths must be locked by tests
+- Performance Review: keep projection map-based and reuse loaded truth
 - NOT in scope: written
 - What already exists: written
-- Failure modes: explicit, with stop conditions
-- Parallelization: 3 lanes total, 2 parallel then 1 sequential
-- Lake Score: the complete option wins, because skipping the direct cross-library
-  proof or the analysis refresh would save minutes and cost the next milestone
-  its truth
+- TODOS.md updates: none, the ladder already owns I2-I4 follow-ons
+- Failure modes: all critical laundering paths explicitly covered in plan
+- Parallelization: 4 lanes, with bounded overlap after the shared core freezes
+- Lake Score: 5/5 decisions chose the complete version over a fake smaller shortcut
