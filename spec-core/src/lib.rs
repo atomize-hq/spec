@@ -9,6 +9,7 @@
 pub const AUTHORED_SPEC_VERSION: &str = "0.3.0";
 
 pub mod backend_execution;
+pub mod benchmark;
 pub mod escape_hatch;
 pub mod export;
 pub mod generator;
@@ -160,6 +161,18 @@ pub enum SpecError {
 
     #[error("Traversal error: {message} at {path}")]
     Traversal { message: String, path: String },
+
+    #[error("{code}: {message} at {path}")]
+    BenchmarkRegistryInvalid {
+        code: String,
+        path: String,
+        message: String,
+        benchmark_id: Option<String>,
+        case_id: Option<String>,
+        carrier_id: Option<String>,
+        molecule_id: Option<String>,
+        value: Option<String>,
+    },
 
     #[error("Generator error: {message}")]
     Generator { message: String },
