@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- **Rust V1 benchmark mechanics now ship as a real repo-root contract surface** — the repo now includes a seeded `benchmarks/labels.json` roster, anchored readability review input for `BENCH-ECOM`, committed benchmark snapshots for `BENCH-ECOM`, `BENCH-CROSSLIB`, and reserved `BENCH-SERVICE`, plus CLI fixtures that lock the shipped benchmark truth.
+
+### Changed
+
+- **`spec status` and `spec export` now emit `schema_version: 4` when projecting benchmark-aware read surfaces** — both commands additively expose top-level `benchmarks[]`, share one projection core, distinguish full versus partial scope, keep companion-negative cases visible without positive credit, and preserve reserved `BENCH-SERVICE` visibility without inventing a workload tree.
+- **Benchmark writes are now explicitly separated from proof truth** — benchmark projection stays read-only over passports and molecule evidence, while `spec benchmark snapshot <id>` writes only under `benchmarks/snapshots/` and readability review anchoring remains a repo-root artifact instead of authored spec truth.
+
+### Fixed
+
+- **Repo-facing benchmark regression coverage now matches the landed mechanics contract** — CLI tests and docs now lock the full, partial, reserved, companion-negative, and invalid-registry benchmark surfaces against the current branch behavior instead of the older pre-benchmark schema.
+
 ## 0.15.0 - 2026-05-15
 
 ### Added

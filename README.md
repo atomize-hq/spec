@@ -47,6 +47,30 @@ spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
 
+## Benchmarks (M68)
+
+Rust V1 benchmark mechanics are repo-root read surfaces, not authored spec truth. The authored benchmark registry lives in `benchmarks/labels.json`; readability review anchors live in `benchmarks/reviews/*.readability.review.json`; and `spec benchmark snapshot <benchmark-id>` writes derived snapshots under `benchmarks/snapshots/`.
+
+The seeded roster is:
+
+- `BENCH-ECOM`: active positive benchmark rooted at `examples/ecommerce/units`
+- `BENCH-CROSSLIB`: active companion-negative benchmark rooted at `examples/crosslib-app/units`
+- `BENCH-SERVICE`: reserved positive benchmark that stays machine-visible without an `examples/service/units` tree
+
+Path scope is intentional:
+
+- Broad repo-root and exact benchmark-root scopes emit full projections with digests, benchmark status, gate status, and readability review state.
+- Namespace and single-file scopes emit partial projections only. Partial scope never emits positive supported credit, even when the covered carrier is individually `valid`.
+- Companion-negative cases stay visible but never count as positive supported credit.
+
+Writer versus reader wall:
+
+- `spec status` and `spec export` only project benchmark truth; they do not write passports, molecule evidence, or benchmark proof.
+- `spec benchmark snapshot <id>` writes only snapshot artifacts under `benchmarks/snapshots/`.
+- `.spec.passport.json` and `*.test.evidence.json` remain the read-only proof inputs for benchmark accounting during M68.
+
+`spec export` now emits `schema_version: 4` and additively includes top-level `benchmarks[]` under the same contract as `spec status` for the same scope.
+
 ## Bounded TypeScript lane (M61)
 
 `spec` now exposes one bounded TypeScript execution lane. It is intentionally narrow:
